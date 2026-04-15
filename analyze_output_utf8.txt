@@ -1,0 +1,78 @@
+﻿Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 93.0.0 (98.0.0 available)
+  analyzer 10.0.1 (12.0.0 available)
+  meta 1.17.0 (1.18.2 available)
+  test 1.30.0 (1.31.0 available)
+  test_api 0.7.10 (0.7.11 available)
+  test_core 0.6.16 (0.6.17 available)
+  vector_math 2.2.0 (2.3.0 available)
+  win32 5.15.0 (6.0.0 available)
+  win32_registry 2.1.0 (3.0.2 available)
+Got dependencies!
+9 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing arguello_events...                                    
+
+   info - The imported package 'path' isn't a dependency of the importing package - scripts\check_student_data.dart:3:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:12:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:18:3 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:24:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:27:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:28:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:29:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:30:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:31:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:32:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:33:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:35:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:40:9 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data.dart:42:7 - avoid_print
+   info - The imported package 'path' isn't a dependency of the importing package - scripts\check_student_data2.dart:3:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:12:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:20:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:21:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:22:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:23:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:27:3 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data2.dart:29:5 - avoid_print
+   info - The imported package 'path' isn't a dependency of the importing package - scripts\check_student_data3.dart:3:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - scripts\check_student_data3.dart:12:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\check_student_data3.dart:28:3 - avoid_print
+   info - The imported package 'path' isn't a dependency of the importing package - scripts\restore_insaurralde.dart:3:8 - depend_on_referenced_packages
+warning - Unused import: 'package:uuid/uuid.dart' - scripts\restore_insaurralde.dart:5:8 - unused_import
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:14:5 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:46:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:47:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:48:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:49:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:50:7 - avoid_print
+   info - Don't invoke 'print' in production code - scripts\restore_insaurralde.dart:52:7 - avoid_print
+   info - Don't invoke 'print' in production code - test\query_supabase_id_test.dart:12:5 - avoid_print
+   info - Don't invoke 'print' in production code - test\query_supabase_id_test.dart:19:7 - avoid_print
+   info - Don't invoke 'print' in production code - test\query_supabase_id_test.dart:22:7 - avoid_print
+   info - Don't invoke 'print' in production code - test\query_supabase_id_test.dart:23:7 - avoid_print
+   info - Don't invoke 'print' in production code - test\search_supabase_broad_test.dart:11:5 - avoid_print
+   info - Don't invoke 'print' in production code - test\search_supabase_broad_test.dart:18:7 - avoid_print
+   info - Don't invoke 'print' in production code - test\search_supabase_broad_test.dart:21:9 - avoid_print
+   info - Don't invoke 'print' in production code - test\verify_supabase_content_test.dart:11:5 - avoid_print
+   info - Don't invoke 'print' in production code - test\verify_supabase_content_test.dart:18:7 - avoid_print
+   info - Don't invoke 'print' in production code - test\verify_supabase_content_test.dart:21:9 - avoid_print
+
+flutter : 44 issues 
+found. (ran in 4.3s)
+En línea: 1 Carácter: 1
++ flutter analyze > 
+analyze_output.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo      
+        : NotSpecified: 
+(44     issues found. 
+(ran in     
+4.3s):String) [], Remo  
+  teException
+    + 
+FullyQualifiedErrorI    
+d : NativeCommandError
+ 

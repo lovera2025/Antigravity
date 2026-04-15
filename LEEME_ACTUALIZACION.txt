@@ -1,0 +1,12 @@
+PASOS PARA ACTUALIZAR EL PROYECTO:
+
+1. Descomprimir este archivo y reemplazar la carpeta "arguello_events" original.
+2. Abrir una terminal en la nueva carpeta.
+3. Ejecutar: flutter pub get (esto descargará las librerías necesarias).
+4. Ejecutar: flutter run (para probar la aplicación corregida).
+
+CAMBIOS INCLUIDOS (Versión 1.2.0):
+- Buscador en tiempo real en la sección de Gestión de Eventos.
+- Visualización discreta de la fecha de registro de cada alumno en eventos masivos.
+- Preparación de instalador VTOP 1.2.
+- Mejoras generales en recibos PDF y estabilidad.

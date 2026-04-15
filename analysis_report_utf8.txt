@@ -1,0 +1,37 @@
+﻿Analyzing arguello_events...                                    
+
+   info - The imported package 'supabase' isn't a dependency of the importing package - bin\create_admin.dart:1:8 - depend_on_referenced_packages
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:8:3 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:15:5 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:22:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:23:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:24:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:25:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:26:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:27:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:29:9 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:30:9 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:31:9 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:34:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:38:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:39:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:40:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:41:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:42:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:43:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:45:7 - avoid_print
+   info - Don't invoke 'print' in production code - bin\create_admin.dart:48:5 - avoid_print
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\catalogo\catalogo_screen.dart:345:17 - deprecated_member_use
+   info - Empty catch block - lib\features\common\services\pdf_service.dart:21:17 - empty_catches
+   info - Empty catch block - lib\features\common\services\pdf_service.dart:127:17 - empty_catches
+   info - Unnecessary use of multiple underscores - lib\features\cotizacion\widgets\generar_qr_dialog.dart:50:50 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\cotizacion\widgets\generar_qr_dialog.dart:173:46 - use_build_context_synchronously
+   info - 'Share' is deprecated and shouldn't be used. Use SharePlus instead - lib\features\cotizacion\widgets\generar_qr_dialog.dart:205:38 - deprecated_member_use
+   info - 'share' is deprecated and shouldn't be used. Use SharePlus.instance.share() instead - lib\features\cotizacion\widgets\generar_qr_dialog.dart:205:44 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\features\dashboard\dashboard_screen.dart:171:36 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\egresos\egresos_screen.dart:201:15 - use_build_context_synchronously
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\egresos\widgets\registrar_egreso_global_dialog.dart:160:17 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\features\eventos\detalle_evento_screen.dart:230:42 - use_build_context_synchronously
+   info - Unnecessary 'const' keyword - lib\features\eventos\selector_servicios_screen.dart:463:27 - unnecessary_const
+   info - The imported package 'flutter_web_plugins' isn't a dependency of the importing package - lib\main.dart:3:8 - depend_on_referenced_packages
+

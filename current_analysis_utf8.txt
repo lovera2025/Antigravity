@@ -1,0 +1,28 @@
+﻿Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 93.0.0 (98.0.0 available)
+  analyzer 10.0.1 (12.0.0 available)
+  app_links 6.4.1 (7.0.0 available)
+  meta 1.17.0 (1.18.2 available)
+  native_toolchain_c 0.17.5 (0.17.6 available)
+  win32 5.15.0 (6.0.0 available)
+Got dependencies!
+6 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing arguello_events...                                    
+
+   info - The imported package 'supabase' isn't a dependency of the importing package - bin\create_admin.dart:1:8 - depend_on_referenced_packages
+  error - Spread elements in list or set literals must implement 'Iterable' - lib\features\eventos\detalle_evento_screen.dart:647:15 - not_iterable_spread
+warning - The '!' will have no effect because the receiver can't be null - lib\features\eventos\detalle_evento_screen.dart:913:37 - unnecessary_non_null_assertion
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\features\eventos\widgets\registrar_pago_dialog.dart:224:15 - use_null_aware_elements
+  error - The argument type 'String' can't be assigned to the parameter type 'ShareParams'.  - lib\features\mi_empresa\mi_empresa_screen.dart:1110:37 - argument_type_not_assignable
+   info - Unnecessary use of multiple underscores - lib\features\recepcion\testing_screen.dart:213:18 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_checkin_screen.dart:260:41 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_display.dart:386:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_display.dart:386:43 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_display.dart:904:20 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_panel.dart:476:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_panel.dart:476:43 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\totem\totem_panel.dart:924:20 - unnecessary_underscores
+   info - The imported package 'flutter_web_plugins' isn't a dependency of the importing package - lib\main.dart:3:8 - depend_on_referenced_packages
+

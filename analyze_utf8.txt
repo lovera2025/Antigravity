@@ -1,0 +1,35 @@
+Analyzing arguello_events...                                    
+
+   info - The imported package 'sqflite_common' isn't a dependency of the importing package - lib\core\database\sync_queue.dart:4:8 - depend_on_referenced_packages
+warning - Unused import: '../totem/totem_launcher_screen.dart' - lib\features\dashboard\dashboard_screen.dart:18:8 - unused_import
+warning - The declaration '_mostrarNotificacionDeuda' isn't referenced - lib\features\eventos\detalle_evento_masivo_screen.dart:82:8 - unused_element
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2032:38 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2033:28 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2044:38 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2045:28 - curly_braces_in_flow_control_structures
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\eventos\detalle_evento_masivo_screen.dart:2074:72 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\eventos\detalle_evento_masivo_screen.dart:2074:103 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\eventos\detalle_evento_masivo_screen.dart:2076:64 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\features\eventos\detalle_evento_masivo_screen.dart:2122:85 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\eventos\detalle_evento_masivo_screen.dart:2176:85 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\eventos\detalle_evento_masivo_screen.dart:2231:85 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\eventos\detalle_evento_masivo_screen.dart:2270:62 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\eventos\detalle_evento_masivo_screen.dart:2289:72 - deprecated_member_use
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2318:72 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2318:119 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2319:72 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2319:119 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2320:74 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\features\eventos\detalle_evento_masivo_screen.dart:2320:125 - curly_braces_in_flow_control_structures
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\eventos\detalle_evento_masivo_screen.dart:2878:54 - deprecated_member_use
+warning - The '!' will have no effect because the receiver can't be null - lib\features\eventos\detalle_evento_particular_screen.dart:671:47 - unnecessary_non_null_assertion
+warning - Unused import: 'dart:async' - lib\features\recepcion\providers\recepcion_provider.dart:1:8 - unused_import
+warning - Unused import: 'package:path_provider/path_provider.dart' - lib\features\recepcion\recepcion_unified_screen.dart:9:8 - unused_import
+warning - Unused import: '../totem/totem_launcher_screen.dart' - lib\features\recepcion\recepcion_unified_screen.dart:13:8 - unused_import
+warning - Unused import: '../../../main.dart' - lib\features\recepcion\recepcion_unified_screen.dart:16:8 - unused_import
+warning - Unused import: 'package:url_launcher/url_launcher.dart' - lib\features\recepcion\recepcion_unified_screen.dart:17:8 - unused_import
+  error - The method 'setWindowMethodHandler' isn't defined for the type 'DesktopMultiWindow' - lib\main.dart:46:24 - undefined_method
+  error - The return value is missing after 'return' - lib\main.dart:50:11 - return_without_value
+  error - The return value is missing after 'return' - lib\main.dart:53:11 - return_without_value
+  error - The return value is missing after 'return' - lib\main.dart:56:11 - return_without_value
+

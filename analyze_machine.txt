@@ -1,0 +1,17 @@
+
+   info - Unnecessary use of multiple underscores - lib\features\auth\login_screen.dart:220:51 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\auth\login_screen.dart:220:55 - unnecessary_underscores
+   info - 'Share' is deprecated and shouldn't be used. Use SharePlus instead - lib\features\cotizacion\widgets\generar_qr_dialog.dart:183:38 - deprecated_member_use
+   info - 'share' is deprecated and shouldn't be used. Use SharePlus.instance.share() instead - lib\features\cotizacion\widgets\generar_qr_dialog.dart:183:44 - deprecated_member_use
+   info - 'Share' is deprecated and shouldn't be used. Use SharePlus instead - lib\features\mi_empresa\finanzas_view.dart:920:41 - deprecated_member_use
+   info - 'share' is deprecated and shouldn't be used. Use SharePlus.instance.share() instead - lib\features\mi_empresa\finanzas_view.dart:920:47 - deprecated_member_use
+warning - Dead code - lib\features\mi_empresa\finanzas_view.dart:1103:35 - dead_code
+warning - The left operand can't be null, so the right operand is never executed - lib\features\mi_empresa\finanzas_view.dart:1103:38 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed - lib\features\mi_empresa\finanzas_view.dart:1107:79 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed - lib\features\mi_empresa\finanzas_view.dart:1160:62 - dead_null_aware_expression
+warning - The left operand can't be null, so the right operand is never executed - lib\features\mi_empresa\finanzas_view.dart:1161:70 - dead_null_aware_expression
+   info - Don't use 'BuildContext's across async gaps - lib\features\recepcion\testing_screen.dart:628:52 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\recepcion\testing_screen.dart:631:7 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\recepcion\testing_screen.dart:649:21 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\features\recepcion\testing_screen.dart:659:21 - use_build_context_synchronously
+

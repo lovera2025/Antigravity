@@ -1,0 +1,8 @@
+Analyzing arguello_events...                                    
+
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\eventos\crear_evento_screen.dart:223:29 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\features\eventos\detalle_evento_masivo_screen.dart:785:43 - unnecessary_underscores
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\features\eventos\detalle_evento_particular_screen.dart:608:11 - use_null_aware_elements
+   info - Use the null-aware marker '?' rather than a null check via an 'if' - lib\features\eventos\widgets\registrar_pago_dialog.dart:240:15 - use_null_aware_elements
+   info - The local variable '_egresos' starts with an underscore - lib\features\mi_empresa\finanzas_view.dart:582:78 - no_leading_underscores_for_local_identifiers
+
