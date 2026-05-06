@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common/sqlite_api.dart';
+import 'package:sqflite_common/sqflite.dart' show databaseFactory;
+import 'package:sqflite/sqflite.dart' as sqflite_mobile;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/pago_interes_mora.dart';
@@ -34,22 +37,26 @@ class LocalDatabase {
   }
 
   static Future<Database> _initDb() async {
-    // ── BLINDAJE WEB/MOBILE ──────────────────────────────────────────────────
-    // sqflite_common_ffi es SOLO para escritorio (Windows/Linux/macOS).
-    // En Web o Móvil (Android/iOS) no se debe inicializar.
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+    if (kIsWeb) {
+      throw UnsupportedError('SQLite local no está soportado en entorno Web.');
     }
 
     final path = await dbPath;
     debugPrint('📦 SQLite DB path: $path');
 
-    if (kIsWeb) {
-      throw UnsupportedError('SQLite local no está soportado en entorno Web.');
+    // Escritorio: FFI. Android/iOS: plugin nativo `sqflite` (misma API que en PC).
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      sqflite_ffi.sqfliteFfiInit();
+      databaseFactory = sqflite_ffi.databaseFactoryFfi;
+      return sqflite_ffi.openDatabase(
+        path,
+        version: _version,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
     }
 
-    return openDatabase(
+    return sqflite_mobile.openDatabase(
       path,
       version: _version,
       onCreate: _onCreate,
@@ -1195,7 +1202,7 @@ class LocalDatabase {
           "DELETE FROM $table WHERE evento_id IS NOT NULL AND evento_id NOT IN (SELECT id FROM eventos)"
         );
         if (count > 0) {
-          orfanosBorrados += count;
+          orfanosBorrados += count.toInt();
           debugPrint('  ☢️ Purga Nuclear: Eliminados $count huérfanos de $table (evento inexistente)');
         }
       }
@@ -1205,7 +1212,7 @@ class LocalDatabase {
         "DELETE FROM pagos_contrato_alumno WHERE contrato_alumno_id NOT IN (SELECT id FROM contratos_alumnos)"
       );
       if (pBorrados > 0) {
-        orfanosBorrados += pBorrados;
+        orfanosBorrados += pBorrados.toInt();
         debugPrint('  ☢️ Purga Nuclear: Eliminados $pBorrados pagos sin contrato');
       }
 
@@ -1214,7 +1221,7 @@ class LocalDatabase {
         "DELETE FROM _sync_queue WHERE tabla = 'contratos_alumnos' AND registro_id NOT IN (SELECT id FROM contratos_alumnos)"
       );
       if (qBorrados > 0) {
-         orfanosBorrados += qBorrados;
+         orfanosBorrados += qBorrados.toInt();
          debugPrint('  ☢️ Purga Nuclear: Eliminadas $qBorrados operaciones de sync huérfanas');
       }
 
@@ -1227,7 +1234,7 @@ class LocalDatabase {
       if (bQueue > 0) {
         debugPrint('  🧼 Saneada la cola de sync: $bQueue operaciones con IDs malformados eliminadas');
       }
-      totalBorrados += (bQueue + orfanosBorrados);
+      totalBorrados += (bQueue.toInt() + orfanosBorrados);
     });
     
     if (totalBorrados > 0) {

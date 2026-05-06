@@ -64,6 +64,8 @@ dependencies:
   excel: ^4.0.6
   desktop_multi_window: ^0.2.0
   http: ^1.2.2
+  # SQLite nativo en Android/iOS (la PC usa sqflite_common_ffi en local_database.dart).
+  sqflite: ^2.4.2
 
 
 dev_dependencies:
