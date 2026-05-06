@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../main.dart';
 import '../../../models/servicio.dart';
 import '../common/widgets/animated_background.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
+import '../common/providers/user_role_provider.dart';
 import '../common/utils/currency_extensions.dart';
-import '../cotizacion/widgets/generar_qr_dialog.dart';
 import '../eventos/repositories/eventos_repository.dart';
 
 class CatalogoServiciosScreen extends ConsumerStatefulWidget {
@@ -327,7 +326,11 @@ class _EliteGridCardState extends State<_EliteGridCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
-        transform: Matrix4.identity()..scale(_isHovered ? 1.03 : 1.0),
+        transform: Matrix4.diagonal3Values(
+          _isHovered ? 1.03 : 1.0,
+          _isHovered ? 1.03 : 1.0,
+          1.0,
+        ),
         transformAlignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -436,8 +439,7 @@ class _EliteGridCardState extends State<_EliteGridCard> {
                         ),
                         const Spacer(),
                         // Información
-                        if (widget.srv.categoria != null)
-                          AnimatedContainer(
+                        AnimatedContainer(
                             duration: const Duration(milliseconds: 300),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
@@ -445,7 +447,7 @@ class _EliteGridCardState extends State<_EliteGridCard> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              widget.srv.categoria!.replaceAll('_', ' ').toUpperCase(),
+                              widget.srv.categoria.replaceAll('_', ' ').toUpperCase(),
                               style: TextStyle(
                                 color: isDark ? Colors.white70 : Colors.black54,
                                 fontSize: 9,
@@ -593,6 +595,7 @@ class _EditarServicioDialogState extends ConsumerState<EditarServicioDialog> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.servicio != null;
+    final puedeFinanzas = ref.watch(userRoleProvider).maybeWhen(data: (d) => d.permisos.puedeFinanzas, orElse: () => false);
 
     return AlertDialog(
       title: Text(isEdit ? 'Editar: ${widget.servicio!.nombre}' : 'Nuevo Servicio'),
@@ -612,7 +615,8 @@ class _EditarServicioDialogState extends ConsumerState<EditarServicioDialog> {
                 const SizedBox(height: 16),
               ],
               DropdownButtonFormField<String>(
-                value: _categoriaSeleccionada,
+                key: ValueKey(_categoriaSeleccionada),
+                initialValue: _categoriaSeleccionada,
                 decoration: const InputDecoration(labelText: 'Categoría de Evento'),
                 items: _categorias.map((cat) => DropdownMenuItem(
                   value: cat,
@@ -640,39 +644,40 @@ class _EditarServicioDialogState extends ConsumerState<EditarServicioDialog> {
                 ],
               ),
               const SizedBox(height: 16),
-              Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  title: const Text('CONFIGURACIÓN AVANZADA (ADMIN)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  children: [
-                    TextFormField(
-                      controller: _costoInternoController,
-                      decoration: const InputDecoration(
-                        labelText: 'Costo de Adquisición / Interno (\$)',
-                        hintText: 'Lo que te sale a vos',
-                        labelStyle: TextStyle(color: Colors.orange),
+              if (puedeFinanzas)
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    title: const Text('CONFIGURACIÓN AVANZADA (ADMIN)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    children: [
+                      TextFormField(
+                        controller: _costoInternoController,
+                        decoration: const InputDecoration(
+                          labelText: 'Costo de Adquisición / Interno (\$)',
+                          hintText: 'Lo que te sale a vos',
+                          labelStyle: TextStyle(color: Colors.orange),
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          TextInputFormatter.withFunction((oldValue, newValue) {
+                            if (newValue.text.isEmpty) return newValue;
+                            final double val = double.parse(newValue.text) / 100;
+                            final String newText = val.toFormattedNumber();
+                            return newValue.copyWith(text: newText, selection: TextSelection.collapsed(offset: newText.length));
+                          }),
+                        ],
                       ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        TextInputFormatter.withFunction((oldValue, newValue) {
-                          if (newValue.text.isEmpty) return newValue;
-                          final double val = double.parse(newValue.text) / 100;
-                          final String newText = val.toFormattedNumber();
-                          return newValue.copyWith(text: newText, selection: TextSelection.collapsed(offset: newText.length));
-                        }),
-                      ],
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        'Este valor se usa para alertarte discretamente si el presupuesto total baja mucho.',
-                        style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          'Este valor se usa para alertarte discretamente si el presupuesto total baja mucho.',
+                          style: TextStyle(fontSize: 10, color: Colors.grey, fontStyle: FontStyle.italic),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),

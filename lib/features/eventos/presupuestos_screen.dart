@@ -4,15 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/presupuesto.dart';
-import '../../models/evento.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/widgets/animated_background.dart';
 import '../common/services/pdf_service.dart';
 import 'repositories/presupuestos_repository.dart';
 import 'selector_servicios_screen.dart';
+import '../rentabilidad/calculador_rentabilidad_screen.dart';
 
 class PresupuestosScreen extends ConsumerStatefulWidget {
-  const PresupuestosScreen({super.key});
+  /// Si es true, se muestra solo el cuerpo (sin [Scaffold] propio) para incrustar en un [TabBarView].
+  final bool embedded;
+
+  const PresupuestosScreen({super.key, this.embedded = false});
 
   @override
   ConsumerState<PresupuestosScreen> createState() => _PresupuestosScreenState();
@@ -21,14 +24,61 @@ class PresupuestosScreen extends ConsumerStatefulWidget {
 class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
   late Timer _timer;
   bool _showSuccessAnimation = false;
+  final Set<EstadoPresupuesto> _filtrosEstado = {EstadoPresupuesto.borrador, EstadoPresupuesto.enviado};
+  String _filtroFecha = 'Todos';
+
+  List<Presupuesto> _lista = const [];
+  bool _cargandoInicial = true;
+  Object? _errorCarga;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _cargarInicial());
     // Actualizar el cronómetro visual cada minuto
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) setState(() {});
     });
+  }
+
+  Future<void> _cargarInicial() async {
+    setState(() {
+      _cargandoInicial = true;
+      _errorCarga = null;
+    });
+    try {
+      final repo = ref.read(presupuestosRepositoryProvider);
+      final list = await repo.getAll(pullRemoteWhenOnline: true);
+      if (mounted) {
+        setState(() {
+          _lista = list;
+          _cargandoInicial = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorCarga = e;
+          _cargandoInicial = false;
+        });
+      }
+    }
+  }
+
+  /// Refresco tras acciones locales: SQLite rápido; pull opcional al tirar hacia abajo.
+  Future<void> _refrescarLista({bool pullRemote = false}) async {
+    try {
+      final repo = ref.read(presupuestosRepositoryProvider);
+      final list = await repo.getAll(pullRemoteWhenOnline: pullRemote);
+      if (mounted) {
+        setState(() {
+          _lista = list;
+          _errorCarga = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _errorCarga = e);
+    }
   }
 
   @override
@@ -42,53 +92,93 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryGold = Color(0xFFD4AF37);
 
+    final body = Stack(
+      children: [
+        AnimatedBackground(
+          child: SafeArea(
+            child: Builder(
+              builder: (context) {
+                if (_cargandoInicial && _lista.isEmpty) {
+                  return const Center(child: CircularProgressIndicator(color: primaryGold));
+                }
+                if (_errorCarga != null && _lista.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Error: $_errorCarga', textAlign: TextAlign.center),
+                          const SizedBox(height: 16),
+                          TextButton(
+                            onPressed: _cargarInicial,
+                            child: const Text('REINTENTAR'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                final todas = _lista;
+                var presupuestos = todas.where((p) {
+                  final st = p.estaVencido ? EstadoPresupuesto.vencido : p.estado;
+                  if (_filtrosEstado.isNotEmpty && !_filtrosEstado.contains(st)) return false;
+
+                  if (_filtroFecha != 'Todos') {
+                    final now = DateTime.now();
+                    final date = p.fechaEvento ?? p.fechaVencimiento;
+                    if (_filtroFecha == 'Últimos 30 días' && date.isBefore(now.subtract(const Duration(days: 30)))) return false;
+                    if (_filtroFecha == 'Este mes' && (date.month != now.month || date.year != now.year)) return false;
+                    if (_filtroFecha == 'Mes pasado' && (date.month != now.subtract(const Duration(days: 30)).month)) return false;
+                    if (_filtroFecha == 'Próximos 90 días' && date.isAfter(now.add(const Duration(days: 90)))) return false;
+                  }
+                  return true;
+                }).toList();
+
+                return Column(
+                  children: [
+                    _buildFiltros(isDark, primaryGold),
+                    if (presupuestos.isEmpty)
+                      Expanded(child: _buildEmptyState(isDark))
+                    else
+                      Expanded(
+                        child: RefreshIndicator(
+                          color: primaryGold,
+                          onRefresh: () => _refrescarLista(pullRemote: true),
+                          child: ListView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.fromLTRB(24, widget.embedded ? 8 : 24, 24, 24),
+                            itemCount: presupuestos.length,
+                            itemBuilder: (context, index) {
+                              final p = presupuestos[index];
+                              return _buildPresupuestoCard(p, isDark, primaryGold);
+                            },
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+        if (_showSuccessAnimation) _buildSuccessOverlay(primaryGold),
+      ],
+    );
+
+    if (widget.embedded) {
+      return body;
+    }
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('CENTRO DE PRESUPUESTOS', 
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 2)
-        ),
+        title: const Text('CENTRO DE PRESUPUESTOS',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 2)),
         backgroundColor: Colors.transparent,
       ),
-      body: Stack(
-        children: [
-          AnimatedBackground(
-            child: SafeArea(
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final repo = ref.watch(presupuestosRepositoryProvider);
-                  return FutureBuilder<List<Presupuesto>>(
-                    future: repo.getAll(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator(color: primaryGold));
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Error: ${snapshot.error}'));
-                      }
-                      final presupuestos = snapshot.data ?? [];
-
-                      if (presupuestos.isEmpty) {
-                        return _buildEmptyState(isDark);
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(24),
-                        itemCount: presupuestos.length,
-                        itemBuilder: (context, index) {
-                          final p = presupuestos[index];
-                          return _buildPresupuestoCard(p, isDark, primaryGold);
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ),
-          if (_showSuccessAnimation) _buildSuccessOverlay(primaryGold),
-        ],
-      ),
+      body: body,
     );
   }
 
@@ -154,12 +244,114 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
     );
   }
 
+  Widget _buildFiltros(bool isDark, Color gold) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.02) : Colors.black.withValues(alpha: 0.02),
+        border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: EstadoPresupuesto.values.map((est) {
+                final isSelected = _filtrosEstado.contains(est);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    label: Text(est.name.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    selected: isSelected,
+                    onSelected: (val) {
+                      setState(() {
+                        if (val) {
+                          _filtrosEstado.add(est);
+                        } else {
+                          _filtrosEstado.remove(est);
+                        }
+                      });
+                    },
+                    selectedColor: gold.withValues(alpha: 0.2),
+                    checkmarkColor: gold,
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.date_range, size: 14, color: Colors.grey),
+              const SizedBox(width: 8),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _filtroFecha,
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                  isDense: true,
+                  items: ['Todos', 'Últimos 30 días', 'Este mes', 'Mes pasado', 'Próximos 90 días']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _filtroFecha = v);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getIconForCategory(String? category) {
+    if (category == null) return Icons.category_rounded;
+    final cat = category.toLowerCase();
+    if (cat.contains('sonido')) return Icons.speaker_rounded;
+    if (cat.contains('iluminación') || cat.contains('iluminacion')) return Icons.lightbulb_outline;
+    if (cat.contains('dj') || cat.contains('animación') || cat.contains('animacion')) return Icons.music_note_rounded;
+    return Icons.category_rounded;
+  }
+
   Widget _buildPresupuestoCard(Presupuesto p, bool isDark, Color gold) {
     final now = DateTime.now();
     final remaining = p.fechaVencimiento.difference(now);
-    final bool isExpired = remaining.isNegative && p.estado == EstadoPresupuesto.activo;
-    final bool isConfirmed = p.estado == EstadoPresupuesto.confirmado;
+    final realState = p.estaVencido ? EstadoPresupuesto.vencido : p.estado;
     final bool isCorrupt = p.cliente?.nombreCompleto == 'CLIENTE DESCONOCIDO';
+    
+    Color customColor;
+    String statusText;
+    IconData statusIcon;
+
+    switch (realState) {
+      case EstadoPresupuesto.borrador:
+        customColor = Colors.grey;
+        statusText = 'BORRADOR';
+        statusIcon = Icons.edit_document;
+        break;
+      case EstadoPresupuesto.enviado:
+        customColor = gold;
+        statusText = 'ENVIADO';
+        statusIcon = Icons.send_rounded;
+        break;
+      case EstadoPresupuesto.aprobado:
+        customColor = Colors.greenAccent;
+        statusText = 'APROBADO';
+        statusIcon = Icons.check_circle_outline;
+        break;
+      case EstadoPresupuesto.rechazado:
+        customColor = Colors.redAccent;
+        statusText = 'RECHAZADO';
+        statusIcon = Icons.cancel_outlined;
+        break;
+      case EstadoPresupuesto.vencido:
+        customColor = Colors.orangeAccent;
+        statusText = 'VENCIDO';
+        statusIcon = Icons.timer_off_outlined;
+        break;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -167,11 +359,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
         color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: isCorrupt 
-              ? Colors.red.withValues(alpha: 0.8) 
-              : (isConfirmed 
-                  ? Colors.greenAccent.withValues(alpha: 0.3) 
-                  : (isExpired ? Colors.redAccent.withValues(alpha: 0.3) : gold.withValues(alpha: 0.2))),
+          color: isCorrupt ? Colors.red.withValues(alpha: 0.8) : customColor.withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: [
@@ -185,33 +373,21 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
             // Header: Cronómetro / Estado
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              color: isConfirmed 
-                  ? Colors.greenAccent.withValues(alpha: 0.1) 
-                  : (isExpired ? Colors.redAccent.withValues(alpha: 0.1) : gold.withValues(alpha: 0.1)),
+              color: customColor.withValues(alpha: 0.1),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        isConfirmed 
-                            ? Icons.verified_user_rounded 
-                            : (isExpired ? Icons.timer_off_outlined : Icons.timer_outlined),
-                        size: 16,
-                        color: isConfirmed ? Colors.greenAccent : (isExpired ? Colors.redAccent : gold),
-                      ),
+                      Icon(statusIcon, size: 16, color: customColor),
                       const SizedBox(width: 8),
                       Text(
-                        isCorrupt 
-                            ? 'REGISTRO CORRUPTO / HUÉRFANO' 
-                            : (isConfirmed 
-                                ? 'CONTRATO FIRMADO' 
-                                : (isExpired ? 'PLAZO VENCIDO' : _formatRemaining(remaining))),
+                        isCorrupt ? 'REGISTRO CORRUPTO / HUÉRFANO' : '$statusText • ${realState == EstadoPresupuesto.enviado || realState == EstadoPresupuesto.borrador ? _formatRemaining(remaining) : ""}',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1,
-                          color: isCorrupt ? Colors.red : (isConfirmed ? Colors.greenAccent : (isExpired ? Colors.redAccent : gold)),
+                          color: isCorrupt ? Colors.red : customColor,
                         ),
                       ),
                     ],
@@ -219,7 +395,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                   Row(
                     children: [
                       Text(
-                        '#' + p.id.substring(0, 5).toUpperCase(),
+                        '#${p.id.substring(0, 5).toUpperCase()}',
                         style: TextStyle(fontSize: 10, color: isDark ? Colors.white24 : Colors.black26),
                       ),
                       const SizedBox(width: 8),
@@ -252,9 +428,16 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                               p.cliente?.nombreCompleto ?? 'CLIENTE SIN NOMBRE',
                               style: GoogleFonts.oswald(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
-                            Text(
-                              Evento.formatearTipo(p.tipoEvento).toUpperCase(),
-                              style: TextStyle(fontSize: 10, color: gold, fontWeight: FontWeight.w900, letterSpacing: 2),
+                            Row(
+                              children: [
+                                Icon(Icons.location_on, size: 10, color: gold),
+                                const SizedBox(width: 4),
+                                Text(p.lugar ?? 'Sin lugar', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                const SizedBox(width: 8),
+                                Icon(Icons.calendar_month, size: 10, color: gold),
+                                const SizedBox(width: 4),
+                                Text(p.fechaEvento != null ? '${p.fechaEvento!.day}/${p.fechaEvento!.month}/${p.fechaEvento!.year}' : 'Válido hasta ${_formatDate(p.fechaVencimiento)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              ],
                             ),
                           ],
                         ),
@@ -273,42 +456,64 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Detalle de servicios (resumen)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: p.servicios.take(3).map((s) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        s.nombre?.toUpperCase() ?? 'SERVICIO',
-                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+                  // Detalle de servicios
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: p.servicios.map((s) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Icon(_getIconForCategory(s.categoria), size: 14, color: isDark ? Colors.white54 : Colors.black54),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              s.nombre ?? 'SERVICIO',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            (s.precioFinal * s.cantidad).toCurrency(),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     )).toList(),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  const Divider(height: 1, color: Colors.grey),
+                  const SizedBox(height: 16),
                   
                   // Acciones
                   Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => PdfService.generarPresupuestoElite(p),
-                          icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                          label: const Text('PDF ÉLITE', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      if (realState == EstadoPresupuesto.borrador) ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              await ref.read(presupuestosRepositoryProvider).cambiarEstado(p.id, EstadoPresupuesto.enviado);
+                              if (!context.mounted) return;
+                              await PdfService.generarPresupuestoElite(p);
+                              if (!context.mounted) return;
+                              await _refrescarLista(pullRemote: false);
+                            },
+                            icon: const Icon(Icons.send, size: 16),
+                            label: const Text('ENVIAR / PDF', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10)),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // BOTÓN EDITAR (A pedido del Señor)
-                      if (!isConfirmed)
+                        const SizedBox(width: 8),
+                      ] else ...[
+                        OutlinedButton(
+                          onPressed: () => PdfService.generarPresupuestoElite(p),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                          child: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+
+                      if (realState != EstadoPresupuesto.aprobado && realState != EstadoPresupuesto.rechazado)
                         IconButton(
                           onPressed: () => _mostrarOpcionesEdicion(p),
                           icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFFD4AF37)),
@@ -318,36 +523,38 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                           ),
                         ),
                       const SizedBox(width: 8),
-                      if (!isConfirmed && !isExpired)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _confirmarPresupuesto(p),
-                            icon: const Icon(Icons.check_rounded, size: 18),
-                            label: const Text('CONFIRMAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: gold,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      if (isConfirmed)
-                         const Expanded(
-                          child: Center(
-                            child: Text('CONVERTIDO A EVENTO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
-                          ),
-                        ),
-                        if (isExpired)
+
+                      if (realState == EstadoPresupuesto.enviado || realState == EstadoPresupuesto.vencido) ...[
+                        Expanded(child: ElevatedButton(
+                          onPressed: () async {
+                              await ref.read(presupuestosRepositoryProvider).cambiarEstado(p.id, EstadoPresupuesto.rechazado);
+                              if (!context.mounted) return;
+                              await _refrescarLista(pullRemote: false);
+                          },
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withValues(alpha: 0.1), foregroundColor: Colors.redAccent, elevation: 0),
+                          child: const Text('RECHAZAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10)),
+                        )),
+                        const SizedBox(width: 8),
+                        Expanded(child: ElevatedButton(
+                          onPressed: () async {
+                              await ref.read(presupuestosRepositoryProvider).cambiarEstado(p.id, EstadoPresupuesto.aprobado);
+                              if (!context.mounted) return;
+                              await _refrescarLista(pullRemote: false);
+                          },
+                          style: ElevatedButton.styleFrom(backgroundColor: gold, foregroundColor: Colors.black),
+                          child: const Text('APROBAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10)),
+                        )),
+                      ],
+
+                      if (realState == EstadoPresupuesto.aprobado)
                          Expanded(
-                          child: TextButton.icon(
-                            onPressed: () {
-                              // TODO: Reactivar (opcional)
-                            },
-                            icon: const Icon(Icons.refresh, size: 18, color: Colors.orangeAccent),
-                            label: const Text('RE-NEGOCIAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: Colors.orangeAccent)),
-                          ),
-                        ),
+                           child: ElevatedButton.icon(
+                             onPressed: () => _confirmarPresupuesto(p),
+                             icon: const Icon(Icons.celebration),
+                             label: const Text('CREAR EVENTO', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                             style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black),
+                           ),
+                         ),
                     ],
                   ),
                 ],
@@ -365,6 +572,10 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
     return 'VENCE EN ${d.inMinutes} MINUTOS';
   }
 
+  String _formatDate(DateTime d) {
+     return '${d.day}/${d.month}/${d.year}';
+  }
+
   Future<void> _editarPresupuesto(Presupuesto p) async {
     Navigator.push(
       context,
@@ -375,16 +586,18 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
           nombreCliente: p.cliente?.nombreCompleto,
           tipoEvento: p.tipoEvento,
           isPresupuesto: true,
-          serviciosIniciales: { for (var s in p.servicios) s.servicioId : s.precioFinal },
-          cantidadesIniciales: { for (var s in p.servicios) s.servicioId : s.cantidad },
-          gruposIniciales: { for (var s in p.servicios) s.servicioId : s.grupo ?? '' },
-          descripcionesIniciales: { for (var s in p.servicios) s.servicioId : s.detalleServicio ?? '' },
+          servicioIdPorLineaInicial: { for (var s in p.servicios) s.id: s.servicioId },
+          serviciosIniciales: { for (var s in p.servicios) s.id: s.precioFinal },
+          cantidadesIniciales: { for (var s in p.servicios) s.id: s.cantidad },
+          gruposIniciales: { for (var s in p.servicios) s.id: s.grupo },
+          comboOrdenIniciales: { for (var s in p.servicios) s.id: s.comboOrden },
+          descripcionesIniciales: { for (var s in p.servicios) s.id: s.detalleServicio },
           detalleAnclajeIA: p.detalleAnclaje,
           lugar: p.lugar,
         ),
       ),
     ).then((_) {
-      if (mounted) setState(() {});
+      if (mounted) unawaited(_refrescarLista(pullRemote: false));
     });
   }
 
@@ -410,7 +623,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
         await ref.read(presupuestosRepositoryProvider).eliminar(p.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🗑️ Presupuesto eliminado.'), backgroundColor: Colors.orange));
-          setState(() {});
+          await _refrescarLista(pullRemote: false);
         }
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
@@ -443,6 +656,18 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
               },
             ),
             const Divider(color: Colors.white12),
+            if (widget.embedded) ...[
+              ListTile(
+                leading: const Icon(Icons.analytics_outlined, color: Colors.greenAccent),
+                title: const Text('Analizar Rentabilidad', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Solo en MI EMPRESA: simulador con este presupuesto.', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => CalculadorRentabilidadScreen(presupuestoPreCargado: p)));
+                },
+              ),
+              const Divider(color: Colors.white12),
+            ],
             ListTile(
               leading: const Icon(Icons.settings_suggest_rounded, color: Color(0xFFD4AF37)),
               title: const Text('Configuración Maestro (Pro)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -467,7 +692,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
       builder: (ctx) => _PanelMaestroContenido(
         presupuesto: p,
         onSave: () {
-          if (mounted) setState(() {});
+          if (mounted) unawaited(_refrescarLista(pullRemote: false));
         },
       ),
     );
@@ -494,6 +719,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
       try {
         await ref.read(presupuestosRepositoryProvider).confirmarPresupuesto(p.id);
         if (mounted) {
+          await _refrescarLista(pullRemote: false);
           setState(() {
             _showSuccessAnimation = true;
           });

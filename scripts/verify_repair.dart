@@ -1,5 +1,4 @@
 
-import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 // Eliminado mockito por no estar en pubspec

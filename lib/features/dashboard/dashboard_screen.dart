@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../main.dart';
 import '../../models/evento.dart';
@@ -11,14 +12,17 @@ import '../cotizacion/solicitudes_cotizacion_screen.dart';
 import '../cotizacion/widgets/generar_qr_dialog.dart';
 import '../eventos/presupuestos_screen.dart';
 import '../mi_empresa/finanzas_view.dart';
+import '../alquiler/prestamos_alquiler_list_screen.dart';
+import '../cierre_caja/cierre_caja_screen.dart';
+import '../common/providers/user_role_provider.dart';
 import '../recepcion/recepcion_unified_screen.dart';
 import '../common/widgets/animated_background.dart';
 import 'providers/dashboard_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import '../totem/totem_launcher_screen.dart';
 
 import '../../core/services/kiosk_launcher.dart';
+import '../../core/services/user_role_cache.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/sync_engine.dart';
@@ -36,6 +40,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late String _greeting;
+  String _appVersionLabel = '2.2.0';
+  String _appBuildNumber = '';
   late SupabaseClient _supabase;
   RealtimeChannel? _solicitudesChannel;
   RealtimeChannel? _finanzasChannel;
@@ -66,6 +72,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _setupSolicitudesRealtime();
     _setupFinanzasRealtime();
     _fetchPendingRequestsCount();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersionLabel = info.version;
+          _appBuildNumber = info.buildNumber;
+        });
+      }
+    } catch (_) {
+      /* mantiene fallback */
+    }
+  }
+
+  /// Muestra p. ej. 4.5.0 →4.5; 4.5.1 → 4.5.1 (marketing en pie del dashboard).
+  static String _versionMarketingLabel(String raw) {
+    final v = raw.split('+').first.trim();
+    final parts = v.split('.');
+    if (parts.length == 3 && parts[2] == '0') {
+      return '${parts[0]}.${parts[1]}';
+    }
+    return v;
   }
 
   @override
@@ -132,7 +163,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ).subscribe();
   }
 
-  Future<void> _signOut() async => _supabase.auth.signOut();
+  Future<void> _signOut() async => UserRoleCache.signOut(_supabase);
 
   String get _fechaHoy {
     final now = DateTime.now();
@@ -936,7 +967,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         color = Colors.orangeAccent;
         tooltip = 'Nube no disponible';
       case AppConnectivity.offline:
-      default:
         icon = Icons.wifi_off_rounded;
         color = Colors.redAccent;
         tooltip = 'Sin conexión — Modo offline';
@@ -1043,7 +1073,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'JUNIOR EVENTOS  ·  SISTEMA OPERATIVO PREMIUM  ·  v1.0',
+              'JUNIOR EVENTOS  ·  SISTEMA OPERATIVO PREMIUM  ·  v${_versionMarketingLabel(_appVersionLabel)}',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
@@ -1106,15 +1136,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogoServiciosScreen()));
         }
         if (idx == 5) {
-          // Próximamente: Alquiler Inmobiliario
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Módulo de Alquiler Inmobiliario en desarrollo...')),
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PrestamosAlquilerListScreen()),
           );
         }
         if (idx == 6) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanzasView()));
+          // El acceso a Cierre de caja se regula por permisos.puedeCierreCaja
+          // (no por AdminGate): los Admin lo tienen siempre por UserPermissions.admin().
+          final roleAsync = ref.read(userRoleProvider);
+          final role = roleAsync.asData?.value;
+          final puede = role?.isAdmin == true || role?.permisos.puedeCierreCaja == true;
+          if (!puede) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No tenés permiso para Cierre de Caja.')),
+            );
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CierreCajaScreen()),
+          );
         }
         if (idx == 7) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanzasView()));
+        }
+        if (idx == 8) {
           _showConfiguracionDialog(context);
         }
       },
@@ -1160,38 +1207,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           selectedIcon: Icon(Icons.settings_suggest, color: Color(0xFFD4AF37)),
           label: Text('CATÁLOGO'),
         ),
-        NavigationDrawerDestination(
-          icon: const Icon(Icons.real_estate_agent_outlined),
-          selectedIcon: const Icon(Icons.real_estate_agent, color: Color(0xFFD4AF37)),
-          label: SizedBox(
-            width: 170, // Forzar ancho para evitar el overflow en el Drawer
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'ALQUILER INM.',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'PROGRESO',
-                    style: TextStyle(
-                      fontSize: 7,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
-                      color: Colors.blueAccent,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.inventory_2_outlined),
+          selectedIcon: Icon(Icons.inventory_2_rounded, color: Color(0xFFD4AF37)),
+          label: Text('ALQUILER DE ÍTEMS'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.point_of_sale_outlined),
+          selectedIcon: Icon(Icons.point_of_sale_rounded, color: Color(0xFFD4AF37)),
+          label: Text('CIERRE DE CAJA'),
         ),
         const Padding(
           padding: EdgeInsets.fromLTRB(28, 16, 28, 8),
@@ -1247,7 +1271,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _ConfiguracionSheet(supabase: _supabase),
+      builder: (ctx) => _ConfiguracionSheet(
+            supabase: _supabase,
+            appVersionDisplay:
+                '${_versionMarketingLabel(_appVersionLabel)}${_appBuildNumber.isNotEmpty ? ' · compilación $_appBuildNumber' : ''}',
+          ),
     );
   }
 }
@@ -1257,7 +1285,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 class _ConfiguracionSheet extends ConsumerStatefulWidget {
   final SupabaseClient supabase;
-  const _ConfiguracionSheet({required this.supabase});
+  /// Texto listo para mostrar (ej. "0.1 · compilación 1")
+  final String appVersionDisplay;
+
+  const _ConfiguracionSheet({
+    required this.supabase,
+    required this.appVersionDisplay,
+  });
 
   @override
   ConsumerState<_ConfiguracionSheet> createState() => _ConfiguracionSheetState();
@@ -1396,6 +1430,47 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
                   backgroundColor: gold, foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+              ),
+            ),
+
+            const SizedBox(height: 32),
+            _sectionHeader('ℹ️  ACERCA DE', isDark),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: gold.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Junior Eventos',
+                    style: GoogleFonts.oswald(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                      color: gold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sistema de gestión operativa para eventos.',
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Versión ${widget.appVersionDisplay}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                    ),
+                  ),
+                ],
               ),
             ),
 

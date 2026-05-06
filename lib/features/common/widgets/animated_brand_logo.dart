@@ -69,12 +69,12 @@ class _AnimatedBrandLogoState extends State<AnimatedBrandLogo> with SingleTicker
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0xFFD4AF37).withOpacity(0.5),
+                          color: const Color(0xFFD4AF37).withValues(alpha: 0.5),
                           width: 2.0,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFD4AF37).withOpacity(0.3),
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.3),
                             blurRadius: 10 * _animation.value,
                             spreadRadius: 5 * _animation.value,
                           ),

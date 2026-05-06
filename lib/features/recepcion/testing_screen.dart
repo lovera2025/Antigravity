@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../main.dart';
 import '../../models/invitado.dart';
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';

@@ -33,6 +33,13 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Instalador Windows (Inno Setup) — no versionar binarios comprimidos
+installer/dist/*
+!installer/dist/.gitkeep
+
+# Dump local del repo (opcional)
+repomix-output.xml
+
 # Symbolication related
 app.*.symbols
 

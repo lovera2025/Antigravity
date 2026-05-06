@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/evento.dart';
 import '../../../models/transaccion.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../repositories/eventos_repository.dart';
 import '../repositories/transacciones_repository.dart';
 
 class RegistrarPagoDialog extends ConsumerStatefulWidget {
@@ -29,11 +30,13 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
   final _formKey = GlobalKey<FormState>();
   final _conceptoController = TextEditingController();
   final _montoController = TextEditingController();
-  final _porcentajeController = TextEditingController(); 
-  
+  final _pctBonifController = TextEditingController();
+
   bool _isSubmitting = false;
   bool _contextoExpandido = false;
-  bool _esDescuento = false; 
+  /// Si ya hay % guardado en el evento, el campo queda bloqueado hasta "Cambiar acuerdo".
+  bool _pctFieldEditable = true;
+  String _medioPago = 'Efectivo';
 
   bool get _esRecepcion =>
       widget.evento.tipo.toLowerCase().contains('recepci');
@@ -43,33 +46,65 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
   double get _sena30 => widget.presupuestoTotal * 0.30;
 
   double get _totalPagado =>
-      widget.transaccionesExistentes.fold(0, (s, t) => s + t.monto);
-      
+      widget.transaccionesExistentes.fold(0.0, (s, t) => s + t.monto);
+
   double get _saldoRestante => widget.presupuestoTotal - _totalPagado;
 
   bool get _senaYaAbonada => _totalPagado >= _sena30 - 0.01;
 
-  bool get _montoLocked => false; 
+  bool get _montoLocked => false;
 
-  double get _descuentoCalculado {
-    final cleanText = _porcentajeController.text.replaceAll(',', '.');
-    final porcentaje = double.tryParse(cleanText) ?? 0.0;
-    return widget.presupuestoTotal * (porcentaje / 100);
+  double get _montoEfectivoIngresado {
+    final cleanText = _montoController.text.replaceAll('.', '').replaceAll(',', '.');
+    return double.tryParse(cleanText) ?? 0.0;
+  }
+
+  double get _pctDraft {
+    final cleanText = _pctBonifController.text.replaceAll(',', '.').trim();
+    if (cleanText.isEmpty) return 0.0;
+    return double.tryParse(cleanText) ?? 0.0;
+  }
+
+  double get _montoBonifPreview =>
+      widget.presupuestoTotal * (_pctDraft / 100.0);
+
+  double get _creditoSinBonifGlobal => widget.transaccionesExistentes
+      .where((t) => !t.esBonificacionGlobal)
+      .fold(0.0, (s, t) => s + t.monto);
+
+  /// Saldo proyectado luego de aplicar el % mostrado (reemplaza la bonif. global en libro).
+  double get _saldoTrasBonifPreview =>
+      widget.presupuestoTotal - _creditoSinBonifGlobal - _montoBonifPreview;
+
+  bool _hayCambioBonificacion(double pct) {
+    final saved = widget.evento.bonificacionGlobalPct;
+    if (saved == null) return pct > 0.001;
+    if (pct <= 0.001) return true;
+    return (saved - pct).abs() > 0.001;
   }
 
   @override
   void initState() {
     super.initState();
+    final saved = widget.evento.bonificacionGlobalPct;
+    if (saved != null && saved > 0.001) {
+      _pctBonifController.text = saved == saved.roundToDouble()
+          ? saved.toInt().toString()
+          : saved.toStringAsFixed(2);
+      _pctFieldEditable = false;
+    } else {
+      _pctFieldEditable = true;
+    }
+
     if (_montoLocked) {
       _conceptoController.text = 'Seña Inicial (30%)';
       _montoController.text = (_sena30).toFormattedNumber();
     } else {
       _cargarUltimoMonto();
     }
-    
-    _porcentajeController.addListener(() {
-      if (_esDescuento) setState(() {});
-    });
+
+    _montoController.addListener(() => setState(() {}));
+    _pctBonifController.addListener(() => setState(() {}));
   }
 
   Future<void> _cargarUltimoMonto() async {
@@ -86,64 +121,83 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
   void dispose() {
     _conceptoController.dispose();
     _montoController.dispose();
-    _porcentajeController.dispose();
+    _pctBonifController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final pct = _pctDraft;
+    final bonifCambio = _hayCambioBonificacion(pct);
+    final montoBase = _montoEfectivoIngresado;
+
+    if (!bonifCambio && montoBase <= 0.001) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Indicá un porcentaje de bonificación a aplicar o un monto a saldar.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final nuevoBonifMonto = pct > 0.001 ? widget.presupuestoTotal * (pct / 100.0) : 0.0;
+    final saldoTrasBonif = widget.presupuestoTotal - _creditoSinBonifGlobal - nuevoBonifMonto;
+
+    if (montoBase > saldoTrasBonif + 0.01) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'El valor a saldar (${montoBase.toCurrency()}) supera el saldo disponible tras la bonificación (${saldoTrasBonif.toCurrency()}).',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
-      final repo = ref.read(transaccionesRepositoryProvider);
-      
-      double montoFinal = 0.0;
-      String conceptoFinal = '';
+      final transRepo = ref.read(transaccionesRepositoryProvider);
+      final eventosRepo = ref.read(eventosRepositoryProvider);
 
-      if (_esDescuento) {
-        final cleanText = _porcentajeController.text.replaceAll(',', '.');
-        final porcentaje = double.tryParse(cleanText) ?? 0.0;
-        montoFinal = _descuentoCalculado;
-        conceptoFinal = 'Descuento Aplicado (${porcentaje.toStringAsFixed(porcentaje == porcentaje.truncateToDouble() ? 0 : 1)}%)';
-      } else {
-        final cleanText = _montoController.text.replaceAll('.', '').replaceAll(',', '.');
-        montoFinal = double.parse(cleanText);
-        conceptoFinal = _conceptoController.text.trim();
-      }
-
-      // --- ESCUDO DE TRANSACCIÓN ---
-      if (montoFinal > _saldoRestante + 0.01) {
-        setState(() => _isSubmitting = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error: El monto (${montoFinal.toCurrency()}) excede el saldo a liquidar (${_saldoRestante.toCurrency()})'),
-              backgroundColor: Colors.redAccent,
-            ),
+      if (bonifCambio) {
+        if (pct <= 0.001) {
+          await transRepo.eliminarBonificacionesGlobales(widget.evento.id);
+          await eventosRepo.actualizarBonificacionGlobalPct(widget.evento.id, null);
+        } else {
+          await transRepo.aplicarBonificacionGlobal(
+            eventoId: widget.evento.id,
+            presupuestoTotal: widget.presupuestoTotal,
+            porcentaje: pct,
           );
+          await eventosRepo.actualizarBonificacionGlobalPct(widget.evento.id, pct);
         }
-        return;
       }
-      // ---------------------------------
 
-      await repo.registrarPago(
-        eventoId: widget.evento.id,
-        monto: montoFinal,
-        concepto: conceptoFinal,
-      );
-
-      if (!_esDescuento) {
+      if (montoBase > 0.001) {
+        await transRepo.registrarPago(
+          eventoId: widget.evento.id,
+          monto: montoBase,
+          concepto: _conceptoController.text.trim(),
+          medioPago: _medioPago,
+        );
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble('ultimo_monto_pago_${widget.evento.id}', montoFinal);
+        await prefs.setDouble('ultimo_monto_pago_${widget.evento.id}', montoBase);
       }
 
       if (mounted) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_esDescuento ? 'Descuento aplicado con éxito' : 'Pago registrado exitosamente'),
-            backgroundColor: _esDescuento ? const Color(0xFFD4AF37) : Colors.green,
-            action: _esDescuento ? SnackBarAction(label: 'OK', textColor: Colors.black, onPressed: (){}) : null,
+            content: const Text('Operación registrada exitosamente'),
+            backgroundColor: bonifCambio ? const Color(0xFFD4AF37) : Colors.green,
           ),
         );
       }
@@ -266,99 +320,98 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
             ),
           ),
           const SizedBox(height: 8),
-          if (_contextoExpandido) ...
-            [
-              const Divider(height: 1, indent: 14, endIndent: 14),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (cliente?.telefono != null)
-                      _buildContextoFila(
-                        icon: Icons.phone_rounded,
-                        label: 'Teléfono',
-                        valor: cliente!.telefono!,
-                        isDark: isDark,
-                        gold: gold,
-                      ),
-                    if (cliente?.email != null)
-                      _buildContextoFila(
-                        icon: Icons.email_outlined,
-                        label: 'Email',
-                        valor: cliente!.email!,
-                        isDark: isDark,
-                        gold: gold,
-                      ),
+          if (_contextoExpandido) ...[
+            const Divider(height: 1, indent: 14, endIndent: 14),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (cliente?.telefono != null)
                     _buildContextoFila(
-                      icon: Icons.account_balance_wallet_outlined,
-                      label: 'Presupuesto total',
-                      valor: widget.presupuestoTotal.toCurrency(),
+                      icon: Icons.phone_rounded,
+                      label: 'Teléfono',
+                      valor: cliente!.telefono!,
                       isDark: isDark,
                       gold: gold,
                     ),
+                  if (cliente?.email != null)
                     _buildContextoFila(
-                      icon: Icons.check_circle_outline_rounded,
-                      label: 'Total pagado / Descontado',
-                      valor: totalPagadoStr,
+                      icon: Icons.email_outlined,
+                      label: 'Email',
+                      valor: cliente!.email!,
                       isDark: isDark,
                       gold: gold,
-                      valorColor: progreso >= 1.0 ? green : null,
                     ),
-                    _buildContextoFila(
-                      icon: Icons.pending_actions_rounded,
-                      label: 'Saldo restante',
-                      valor: _saldoRestante.toCurrency(),
-                      isDark: isDark,
-                      gold: gold,
-                      valorColor: _saldoRestante <= 0.01 ? green : red,
-                    ),
-                    if (widget.servicios.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'SERVICIOS CONTRATADOS',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.2,
-                          color: isDark ? Colors.white38 : Colors.black38,
-                        ),
+                  _buildContextoFila(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: 'Presupuesto total',
+                    valor: widget.presupuestoTotal.toCurrency(),
+                    isDark: isDark,
+                    gold: gold,
+                  ),
+                  _buildContextoFila(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Total pagado / Descontado',
+                    valor: totalPagadoStr,
+                    isDark: isDark,
+                    gold: gold,
+                    valorColor: progreso >= 1.0 ? green : null,
+                  ),
+                  _buildContextoFila(
+                    icon: Icons.pending_actions_rounded,
+                    label: 'Saldo restante',
+                    valor: _saldoRestante.toCurrency(),
+                    isDark: isDark,
+                    gold: gold,
+                    valorColor: _saldoRestante <= 0.01 ? green : red,
+                  ),
+                  if (widget.servicios.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'SERVICIOS CONTRATADOS',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                        color: isDark ? Colors.white38 : Colors.black38,
                       ),
-                      const SizedBox(height: 4),
-                      ...widget.servicios.map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Row(
-                          children: [
-                            Icon(Icons.storefront_outlined, size: 12, color: gold.withValues(alpha: 0.7)),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                s.servicio?.nombre ?? 'Servicio',
+                    ),
+                    const SizedBox(height: 4),
+                    ...widget.servicios.map((s) => Padding(
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: Row(
+                            children: [
+                              Icon(Icons.storefront_outlined, size: 12, color: gold.withValues(alpha: 0.7)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  s.servicio?.nombre ?? 'Servicio',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                s.precioFinalAcordado.toCurrency(),
                                 style: TextStyle(
                                   fontSize: 11,
+                                  fontWeight: FontWeight.bold,
                                   color: isDark ? Colors.white70 : Colors.black87,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                            Text(
-                              s.precioFinalAcordado.toCurrency(),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white70 : Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )),
-                    ],
-                    const SizedBox(height: 6),
+                            ],
+                          ),
+                        )),
                   ],
-                ),
+                  const SizedBox(height: 6),
+                ],
               ),
-            ],
+            ),
+          ],
         ],
       ),
     );
@@ -407,13 +460,17 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
     const gold = Color(0xFFD4AF37);
     const green = Color(0xFF00B894);
     const red = Color(0xFFE74C3C);
-    
-    final nuevoSaldoCalculado = _saldoRestante - _descuentoCalculado;
-    final descuentoExcedido = nuevoSaldoCalculado < 0;
+
+    final montoBase = _montoEfectivoIngresado;
+    final pct = _pctDraft;
+    final montoBonif = _montoBonifPreview;
+    final saldoTrasBonif = _saldoTrasBonifPreview;
+    final saldoFinalProyectado = saldoTrasBonif - montoBase;
+    final excedeSaldo = saldoFinalProyectado < -0.01;
 
     Widget? infoBanner;
 
-    if (!_esRecepcion && _esPrimerPago && !_esDescuento) {
+    if (!_esRecepcion && _esPrimerPago) {
       infoBanner = Container(
         padding: const EdgeInsets.all(14),
         margin: const EdgeInsets.only(bottom: 16),
@@ -453,7 +510,7 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
           ],
         ),
       );
-    } else if (!_esRecepcion && !_esPrimerPago && !_senaYaAbonada && !_esDescuento) {
+    } else if (!_esRecepcion && !_esPrimerPago && !_senaYaAbonada) {
       infoBanner = Container(
         padding: const EdgeInsets.all(14),
         margin: const EdgeInsets.only(bottom: 16),
@@ -476,11 +533,9 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
         ),
       );
     }
-    
+
     return AlertDialog(
-      title: Text(
-        _esDescuento ? 'Aplicar Descuento' : 'Registrar Transacción',
-      ),
+      title: const Text('Registrar Transacción'),
       content: SizedBox(
         width: 400,
         child: Form(
@@ -489,26 +544,145 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildContextoBanner(isDark, gold, green, red),
-                if (infoBanner != null) infoBanner,
-                
-                // ── Campos de Pago Normal ──
+                ?infoBanner,
+
+                Text(
+                  'Bonificación sobre presupuesto total',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'El % se calcula sobre el presupuesto global del evento (${widget.presupuestoTotal.toCurrency()}). Queda guardado para este evento al confirmar; podés cambiarlo después si hace falta (poco habitual).',
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1.35,
+                    color: isDark ? Colors.white54 : Colors.black45,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _pctBonifController,
+                        readOnly: !_pctFieldEditable,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Porcentaje de bonificación (%)',
+                          hintText: 'Ej: 10',
+                          prefixIcon: const Icon(Icons.percent_rounded, color: Color(0xFFD4AF37)),
+                          filled: !_pctFieldEditable,
+                          fillColor: !_pctFieldEditable
+                              ? (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04))
+                              : null,
+                        ),
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) {
+                          if (_pctFieldEditable) FocusScope.of(context).nextFocus();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                if (!_pctFieldEditable && widget.evento.bonificacionGlobalPct != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => setState(() => _pctFieldEditable = true),
+                      child: const Text('Cambiar acuerdo'),
+                    ),
+                  ),
+                if (pct > 0 && montoBonif > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: gold.withValues(alpha: 0.4)),
+                      color: gold.withValues(alpha: 0.06),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Crédito por bonificación (${pct.toString().replaceAll('.', ',')}%)',
+                              style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
+                            ),
+                            Text(
+                              montoBonif.toCurrency(),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFD4AF37),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Saldo proyectado tras bonificación: ${saldoTrasBonif.toCurrency()}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isDark ? Colors.white54 : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 20),
+                Text(
+                  'Pago en esta operación (opcional)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Podés solo fijar la bonificación arriba, o además registrar efectivo / transferencia que se imputa al saldo.',
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1.35,
+                    color: isDark ? Colors.white54 : Colors.black45,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: _conceptoController,
-                  readOnly: _montoLocked || _esDescuento,
-                  enabled: !_esDescuento, // Se atenúa si el descuento está activo
+                  readOnly: _montoLocked,
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) {
+                    if (!_montoLocked) FocusScope.of(context).nextFocus();
+                  },
                   decoration: InputDecoration(
-                    labelText: 'Concepto',
+                    labelText: 'Concepto del pago',
                     hintText: _esRecepcion
                         ? 'Ej: Cuota 1, Cuota 2...'
                         : 'Ej: Seña, Pago parcial...',
                     prefixIcon: const Icon(Icons.description),
                   ),
                   validator: (value) {
-                    if (_esDescuento) return null; // Ignora validación en modo descuento
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Ingrese un concepto válido';
+                    if (montoBase > 0.01 && (value == null || value.trim().isEmpty)) {
+                      return 'Ingrese un concepto si hay monto a cobrar';
                     }
                     return null;
                   },
@@ -516,8 +690,7 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _montoController,
-                  readOnly: _montoLocked || _esDescuento,
-                  enabled: !_esDescuento, // Se atenúa si el descuento está activo
+                  readOnly: _montoLocked,
                   keyboardType: _montoLocked ? TextInputType.none : TextInputType.number,
                   inputFormatters: _montoLocked
                       ? []
@@ -533,145 +706,162 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
                             );
                           }),
                         ],
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) {
+                    if (_isSubmitting) return;
+                    if (excedeSaldo) return;
+                    _submit();
+                  },
                   decoration: const InputDecoration(
-                    labelText: 'Monto a Registrar (\$)',
+                    labelText: 'Valor a saldar (\$)',
                     prefixIcon: Icon(Icons.attach_money),
                     hintText: '0,00',
                   ),
-                  validator: (value) {
-                    if (_esDescuento) return null; // Ignora validación en modo descuento
-                    if (value == null || value.trim().isEmpty || value == '0,00') {
-                      return 'Ingrese un monto';
-                    }
-                    return null;
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _medioPago,
+                  decoration: const InputDecoration(
+                    labelText: 'Medio de Pago',
+                    prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                    DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _medioPago = val);
                   },
                 ),
-                
-                const SizedBox(height: 16),
 
-                // ── Switch de Descuento ──
-                if (!_montoLocked)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _esDescuento ? gold.withValues(alpha: 0.1) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _esDescuento ? gold.withValues(alpha: 0.5) : (isDark ? Colors.white12 : Colors.black12),
-                      ),
-                    ),
-                    child: SwitchListTile(
-                      title: const Text(
-                        'Descuento Especial',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      subtitle: const Text(
-                        'Bonifica una parte de la deuda en lugar del pago',
-                        style: TextStyle(fontSize: 10, color: Colors.grey),
-                      ),
-                      activeColor: gold,
-                      value: _esDescuento,
-                      onChanged: (val) {
-                        setState(() {
-                          _esDescuento = val;
-                          _formKey.currentState?.reset(); 
-                        });
-                      },
+                const SizedBox(height: 20),
+
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.black26 : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: excedeSaldo ? Colors.redAccent : gold.withValues(alpha: 0.5),
                     ),
                   ),
-
-                // ── Ticket Dinámico de Descuento ──
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOutCubic,
-                  child: !_esDescuento
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: Column(
-                            key: const ValueKey('modo_descuento'),
-                            children: [
-                              TextFormField(
-                                controller: _porcentajeController,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                                ],
-                                decoration: InputDecoration(
-                                  labelText: 'Porcentaje de Descuento (%)',
-                                  hintText: 'Ej: 10',
-                                  prefixIcon: const Icon(Icons.percent_rounded, color: Color(0xFFD4AF37)),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 1),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.trim().isEmpty) return 'Ingrese un porcentaje';
-                                  final val = double.tryParse(value.replaceAll(',', '.'));
-                                  if (val == null || val <= 0) return 'Ingrese un valor válido';
-                                  if (val > 100) return 'No puede superar el 100%';
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              // --- TICKET VISUALIZADOR EN TIEMPO REAL ---
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isDark ? Colors.black26 : Colors.grey.shade50,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: descuentoExcedido ? Colors.redAccent : gold.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text('Deuda Actual:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                        Text(_saldoRestante.toCurrency(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('Bonificación (${_porcentajeController.text.isEmpty ? '0' : _porcentajeController.text}%):', style: const TextStyle(color: Colors.green, fontSize: 12)),
-                                        Text('- ${_descuentoCalculado.toCurrency()}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
-                                      ],
-                                    ),
-                                    const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 8.0),
-                                      child: Divider(height: 1),
-                                    ),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('NUEVO SALDO:', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: descuentoExcedido ? Colors.redAccent : null)),
-                                        Text(
-                                          nuevoSaldoCalculado.toCurrency(),
-                                          style: TextStyle(
-                                            color: descuentoExcedido ? Colors.redAccent : gold,
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 18,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    if (descuentoExcedido) ...[
-                                      const SizedBox(height: 8),
-                                      const Text(
-                                        '⚠️ El descuento supera la deuda actual.',
-                                        style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                                      )
-                                    ]
-                                  ],
-                                ),
-                              ),
-                            ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Presupuesto total', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text(
+                            widget.presupuestoTotal.toCurrency(),
+                            style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12),
                           ),
+                        ],
+                      ),
+                      if (pct > 0.001 && montoBonif > 0.01) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Bonificación global (${pct.toString().replaceAll('.', ',')}%)',
+                              style: const TextStyle(color: Color(0xFFD4AF37), fontSize: 12),
+                            ),
+                            Text(
+                              '- ${montoBonif.toCurrency()}',
+                              style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ],
                         ),
+                      ],
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Saldo tras bonificación',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                          Text(
+                            saldoTrasBonif.toCurrency(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: saldoTrasBonif <= 0.01 ? green : (isDark ? Colors.white : Colors.black87),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (montoBase > 0.01) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Valor a saldar (esta operación)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(montoBase.toCurrency(), style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ),
+                      ],
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8.0),
+                        child: Divider(height: 1),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Saldo después de cobrar',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: excedeSaldo ? Colors.redAccent : null,
+                            ),
+                          ),
+                          Text(
+                            saldoFinalProyectado.toCurrency(),
+                            style: TextStyle(
+                              color: excedeSaldo ? Colors.redAccent : (isDark ? Colors.white70 : Colors.black87),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'EFECTIVO A COBRAR',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                              color: excedeSaldo ? Colors.redAccent : green,
+                            ),
+                          ),
+                          Text(
+                            montoBase.toCurrency(),
+                            style: TextStyle(
+                              color: excedeSaldo ? Colors.redAccent : green,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (excedeSaldo) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'El monto a saldar supera el saldo disponible.',
+                          style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -680,12 +870,11 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
       ),
       actions: [
         TextButton(
-          onPressed:
-              _isSubmitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
           child: const Text('Cancelar'),
         ),
         ElevatedButton(
-          onPressed: _isSubmitting ? null : _submit,
+          onPressed: _isSubmitting || excedeSaldo ? null : _submit,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFD4AF37),
             foregroundColor: Colors.white,
@@ -694,12 +883,9 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2),
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                 )
-              : Text(_montoLocked 
-                  ? 'Registrar Seña' 
-                  : (_esDescuento ? 'Aplicar Descuento' : 'Guardar Pago')),
+              : const Text('Confirmar operación'),
         ),
       ],
     );

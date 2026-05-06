@@ -258,6 +258,33 @@ class ClientesRepository {
     }
   }
 
+  /// Garantiza que el cliente exista en Supabase antes de crear FKs (p. ej. préstamos).
+  /// Devuelve false si no hay red, no hay fila local, o falla el upsert.
+  Future<bool> ensureClienteEnNube(String clienteId) async {
+    if (_connectivity.currentStatus != AppConnectivity.online) return false;
+    final db = await LocalDatabase.instance;
+    final rows = await db.query('clientes', where: 'id = ?', whereArgs: [clienteId]);
+    if (rows.isEmpty) return false;
+    final r = rows.first;
+    final payload = <String, dynamic>{
+      'id': r['id'],
+      'nombre_completo': r['nombre_completo'],
+      'telefono': r['telefono'],
+      'email': r['email'],
+      'is_archived': r['is_archived'] ?? 0,
+      'created_at': r['created_at'],
+    };
+    try {
+      await _supabase.from('clientes').upsert(payload);
+      await _removeFromQueue(clienteId);
+      debugPrint('☁️ Cliente asegurado en nube (FK): $clienteId');
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ ensureClienteEnNube falló: $e');
+      return false;
+    }
+  }
+
   /// Intenta sincronizar una operación inmediatamente (fire & forget).
   void _syncImmediately(Map<String, dynamic> data, SyncOperation op, String id) {
     Future.microtask(() async {

@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,8 +11,11 @@ import '../../../models/contrato_alumno.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/utils/ar_time.dart';
+import '../../../core/utils/pago_interes_mora.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../services/calculadora_financiera.dart';
+import '../services/mora_cuota_calculator.dart';
 
 /// Repositorio de Contratos de Alumnos (Eventos Masivos) — Offline-First.
 class ContratosRepository {
@@ -18,6 +23,30 @@ class ContratosRepository {
   final ConnectivityService _connectivity;
 
   ContratosRepository(this._supabase, this._connectivity);
+
+  /// Suma mora cobrada (no anulada) dentro de una transacción, **antes** de insertar un nuevo pago.
+  Future<double> _sumMoraCobradaHistorialTxn(
+    dynamic txn,
+    String contratoId,
+  ) async {
+    final rows = await txn.query(
+      'pagos_contrato_alumno',
+      columns: ['monto', 'line_kind', 'concepto', 'anulado'],
+      where: 'contrato_alumno_id = ?',
+      whereArgs: [contratoId],
+    );
+    double s = 0;
+    for (final p in rows) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+      final lk = (p['line_kind'] as String?)?.trim();
+      final concepto = p['concepto'] as String? ?? '';
+      if (lk == kLineKindInteresMora ||
+          esPagoInteresMoraPorConcepto(concepto)) {
+        s += (p['monto'] as num).toDouble();
+      }
+    }
+    return double.parse(s.toStringAsFixed(2));
+  }
 
   // ── LECTURA ────────────────────────────────────────────────────────────────
 
@@ -84,6 +113,13 @@ class ContratosRepository {
       localUpdates['nombres_acompanantes'] = jsonEncode(localUpdates['nombres_acompañantes']);
       localUpdates.remove('nombres_acompañantes');
     }
+    // SQLite FFI no acepta bool en bindings; la columna es INTEGER.
+    if (localUpdates.containsKey('contrato_firmado')) {
+      final v = localUpdates['contrato_firmado'];
+      if (v is bool) {
+        localUpdates['contrato_firmado'] = v ? 1 : 0;
+      }
+    }
 
     await db.update('contratos_alumnos', localUpdates, where: 'id = ?', whereArgs: [id]);
     
@@ -104,12 +140,22 @@ class ContratosRepository {
     double? montoADescontarDeSaldo,
     double descuentoPorcentaje = 0,
     int cuotasLiquidadas = 1,
+    String? medioPago,
+    /// Solo SQLite local; no se envía a Supabase hasta tener columna en nube.
+    String? lineKind,
+    /// Mora pendiente calculada ANTES de que este mismo recibo avance
+    /// cuotas_pagadas. Si se provee, se usa directamente en vez de
+    /// recalcular desde el contrato (que ya fue mutado por la línea base).
+    double? moraPendienteAntesDeLote,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
-    final now = DateTime.now().toUtc().toIso8601String();
+    // Sello temporal ESTRICTO del pago (instante UTC preciso). Se muestra en
+    // huso America/Argentina/Buenos_Aires vía ArTime.
+    final now = ArTime.nowUtcIso();
 
-    final pagoData = {
+    final lk = lineKind?.trim();
+    final pagoData = <String, dynamic>{
       'id': id,
       'contrato_alumno_id': contratoId,
       'monto': monto,
@@ -118,16 +164,93 @@ class ContratosRepository {
       'concepto': concepto,
       'fecha_pago': now,
       'created_at': now,
+      'medio_pago': medioPago,
+      if (lk != null && lk.isNotEmpty) 'line_kind': lk,
     };
 
     await db.transaction((txn) async {
-      // 1. Insertar pago
-      await txn.insert('pagos_contrato_alumno', pagoData);
-      
-      // 2. Actualizar saldo y cuotas en el contrato (Localmente)
       final conceptoLower = concepto.toLowerCase();
-      
-      if (conceptoLower.contains('base')) {
+
+      final bool esInteres =
+          lk == kLineKindInteresMora || esPagoInteresMoraPorConcepto(concepto);
+
+      if (esInteres) {
+        double pendienteAntes;
+        if (moraPendienteAntesDeLote != null) {
+          // Snapshot pre-lote: el caller nos pasó la mora que existía ANTES
+          // de que este mismo recibo avanzara cuotas_pagadas.
+          pendienteAntes = moraPendienteAntesDeLote;
+        } else {
+          // Cálculo legacy (recibos que solo cobran mora sin cuota base).
+          final cRows = await txn.query(
+            'contratos_alumnos',
+            where: 'id = ?',
+            whereArgs: [contratoId],
+            limit: 1,
+          );
+          if (cRows.isNotEmpty) {
+            final ca = ContratoAlumno.fromJson(cRows.first);
+            final cobradoAntes =
+                await _sumMoraCobradaHistorialTxn(txn, contratoId);
+            final mora = MoraCuotaCalculator.calcular(ca);
+            final formula = (mora.interesAcumulado - cobradoAntes).clamp(
+              0.0,
+              double.infinity,
+            );
+            final tracked = double.parse(
+              (cRows.first['mora_pendiente_tracked'] ?? 0.0).toString(),
+            );
+            pendienteAntes = math.max(formula, tracked);
+          } else {
+            pendienteAntes = 0;
+          }
+        }
+        final nuevoTracked =
+            (pendienteAntes - monto).clamp(0.0, double.infinity);
+        await txn.update(
+          'contratos_alumnos',
+          {'mora_pendiente_tracked': nuevoTracked},
+          where: 'id = ?',
+          whereArgs: [contratoId],
+        );
+      }
+
+      await txn.insert('pagos_contrato_alumno', pagoData);
+
+      if (esInteres) {
+        // Ya actualizamos mora_pendiente_tracked; saldo / cuotas no cambian.
+      } else if (conceptoLower.contains('base')) {
+        // ── Snapshot mora ANTES de avanzar cuotas_pagadas ──────────
+        // Al incrementar cuotas_pagadas, MoraCuotaCalculator mirará la
+        // cuota siguiente; si aún no venció, interesAcumulado caerá a 0
+        // y la mora acumulada de la cuota anterior se perdería.
+        // Persistimos el valor actual en mora_pendiente_tracked para que
+        // pendienteDisplay lo conserve.
+        final snapRows = await txn.query(
+          'contratos_alumnos',
+          where: 'id = ?',
+          whereArgs: [contratoId],
+          limit: 1,
+        );
+        if (snapRows.isNotEmpty) {
+          final caSnap = ContratoAlumno.fromJson(snapRows.first);
+          final cobradoSnap =
+              await _sumMoraCobradaHistorialTxn(txn, contratoId);
+          final moraSnap = MoraCuotaCalculator.calcular(caSnap);
+          final formulaSnap = (moraSnap.interesAcumulado - cobradoSnap)
+              .clamp(0.0, double.infinity);
+          final trackedSnap = caSnap.moraPendienteTracked;
+          final pendienteAhora = math.max(formulaSnap, trackedSnap);
+          if (pendienteAhora > trackedSnap + 0.01) {
+            await txn.update(
+              'contratos_alumnos',
+              {'mora_pendiente_tracked': pendienteAhora},
+              where: 'id = ?',
+              whereArgs: [contratoId],
+            );
+          }
+        }
+        // ── Ahora sí, avanzar cuota ───────────────────────────────
         await txn.rawUpdate('''
           UPDATE contratos_alumnos 
           SET saldo_deudor = saldo_deudor - ?, 
@@ -183,12 +306,13 @@ class ContratosRepository {
       );
     }
 
-    // Encolar sync del pago
+    // Encolar sync del pago (sin columnas solo-locales).
+    final syncPayload = Map<String, dynamic>.from(pagoData)..remove('line_kind');
     await SyncQueue.enqueue(
       tabla: 'pagos_contrato_alumno',
       operacion: SyncOperation.insert,
       registroId: id,
-      payload: pagoData,
+      payload: syncPayload,
     );
 
     // Retornar contrato actualizado post-transacción
@@ -229,8 +353,16 @@ class ContratosRepository {
     double totalRecaudadoReal = 0;
 
     for (final p in pagos) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+
       final monto = (p['monto'] as num).toDouble();
-      final concepto = (p['concepto'] as String? ?? '').toLowerCase();
+      final conceptoRaw = p['concepto'] as String? ?? '';
+      final lkRow = (p['line_kind'] as String?)?.trim();
+      if (lkRow == kLineKindInteresMora ||
+          esPagoInteresMoraPorConcepto(conceptoRaw)) {
+        continue;
+      }
+      final concepto = conceptoRaw.toLowerCase();
       
       final bool esEntregaParcial = concepto.contains('entrega') || 
                                      concepto.contains('adelanto') || 
@@ -322,10 +454,13 @@ class ContratosRepository {
       }
     }
 
-    if (!hasChanges) return;
+    if (hasChanges) {
+      await db.update('contratos_alumnos', finalUpdates, where: 'id = ?', whereArgs: [contratoId]);
+    }
 
-    await db.update('contratos_alumnos', finalUpdates, where: 'id = ?', whereArgs: [contratoId]);
-
+    // El enqueue se ejecuta SIEMPRE: tras una anulación los contadores locales pueden quedar
+    // ya consistentes (hasChanges=false) pero la nube necesita el update igual para que
+    // dashboards/cobros suscritos al realtime de contratos_alumnos vean el contador correcto.
     await SyncQueue.enqueue(
       tabla: 'contratos_alumnos',
       operacion: SyncOperation.update,
@@ -337,22 +472,26 @@ class ContratosRepository {
   /// Obtiene el último pago de un contrato.
   Future<Map<String, dynamic>?> getUltimoPago(String contratoId) async {
     final db = await LocalDatabase.instance;
-    final rows = await db.query('pagos_contrato_alumno',
-        where: 'contrato_alumno_id = ?',
-        whereArgs: [contratoId],
-        orderBy: 'fecha_pago DESC',
-        limit: 1);
+    final rows = await db.query(
+      'pagos_contrato_alumno',
+      where: 'contrato_alumno_id = ? AND (anulado IS NULL OR anulado = 0)',
+      whereArgs: [contratoId],
+      orderBy: 'fecha_pago DESC',
+      limit: 1,
+    );
     return rows.isEmpty ? null : rows.first;
   }
 
   /// Obtiene todos los pagos del último lote.
   Future<List<Map<String, dynamic>>> getUltimosPagosLote(String contratoId) async {
     final db = await LocalDatabase.instance;
-    final ultimo = await db.query('pagos_contrato_alumno',
-        where: 'contrato_alumno_id = ?',
-        whereArgs: [contratoId],
-        orderBy: 'fecha_pago DESC',
-        limit: 1);
+    final ultimo = await db.query(
+      'pagos_contrato_alumno',
+      where: 'contrato_alumno_id = ? AND (anulado IS NULL OR anulado = 0)',
+      whereArgs: [contratoId],
+      orderBy: 'fecha_pago DESC',
+      limit: 1,
+    );
     if (ultimo.isEmpty) return [];
 
     final ultimaFechaStr = ultimo.first['fecha_pago'] as String?;
@@ -375,6 +514,63 @@ class ContratosRepository {
         where: 'contrato_alumno_id = ?',
         whereArgs: [contratoId],
         orderBy: 'fecha_pago DESC');
+  }
+
+  /// Suma de ingresos registrados como interés por mora (no afectan saldo del plan).
+  Future<double> sumMoraCobradaHistorial(String contratoId) async {
+    final m = await sumMoraCobradaHistorialPorContratos([contratoId]);
+    return m[contratoId] ?? 0.0;
+  }
+
+  /// Misma regla que [esPagoInteresMoraPorConcepto] + [kLineKindInteresMora] en SQLite.
+  Future<Map<String, double>> sumMoraCobradaHistorialPorContratos(
+      List<String> contratoIds) async {
+    final out = <String, double>{for (final id in contratoIds) id: 0.0};
+    if (contratoIds.isEmpty) return out;
+    final db = await LocalDatabase.instance;
+    const chunk = 120;
+    for (var i = 0; i < contratoIds.length; i += chunk) {
+      final end =
+          (i + chunk < contratoIds.length) ? i + chunk : contratoIds.length;
+      final part = contratoIds.sublist(i, end);
+      final ph = part.map((_) => '?').join(',');
+      final rows = await db.rawQuery(
+        'SELECT * FROM pagos_contrato_alumno WHERE contrato_alumno_id IN ($ph)',
+        part,
+      );
+      for (final p in rows) {
+        if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+        final cid = p['contrato_alumno_id'] as String?;
+        if (cid == null) continue;
+        final lk = (p['line_kind'] as String?)?.trim();
+        final concepto = p['concepto'] as String? ?? '';
+        if (lk == kLineKindInteresMora ||
+            esPagoInteresMoraPorConcepto(concepto)) {
+          out[cid] = (out[cid] ?? 0) + (p['monto'] as num).toDouble();
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Todos los pagos locales para un conjunto de contratos (p. ej. tab Cobro en Mi Empresa).
+  /// Orden: [fecha_pago] ascendente. Trocea la consulta para respetar límites de variables SQLite.
+  Future<List<Map<String, dynamic>>> getPagosForContratoIds(List<String> contratoIds) async {
+    if (contratoIds.isEmpty) return [];
+    final db = await LocalDatabase.instance;
+    const chunk = 200;
+    final out = <Map<String, dynamic>>[];
+    for (var i = 0; i < contratoIds.length; i += chunk) {
+      final end = (i + chunk < contratoIds.length) ? i + chunk : contratoIds.length;
+      final part = contratoIds.sublist(i, end);
+      final ph = part.map((_) => '?').join(',');
+      final rows = await db.rawQuery(
+        'SELECT * FROM pagos_contrato_alumno WHERE contrato_alumno_id IN ($ph) ORDER BY fecha_pago ASC',
+        part,
+      );
+      out.addAll(rows);
+    }
+    return out;
   }
 
   /// Repara contratos huérfanos.
@@ -535,6 +731,10 @@ class ContratosRepository {
           'concepto': row['concepto'],
           'fecha_pago': row['fecha_pago'],
           'created_at': row['created_at'],
+          'medio_pago': row['medio_pago'],
+          'anulado': row['anulado'] ?? 0,
+          'motivo_anulacion': row['motivo_anulacion'],
+          'fecha_anulacion': row['fecha_anulacion'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);
@@ -553,6 +753,9 @@ class ContratosRepository {
     final data = contrato.toJson();
     if (data.containsKey('nombres_acompanantes')) {
       data['nombres_acompanantes'] = jsonEncode(data['nombres_acompanantes']);
+    }
+    if (data.containsKey('contrato_firmado')) {
+      data['contrato_firmado'] = (data['contrato_firmado'] == true) ? 1 : 0;
     }
     return data;
   }

@@ -14,6 +14,13 @@ class AdminAuthNotifier extends Notifier<AdminAuthState> {
   static const String _prefKey = 'admin_session_expiry';
   static const String _pinKey = 'admin_pin';
   static const String _defaultPin = '2026';
+  static const String _miEmpresaExitKey = 'mi_empresa_last_exit';
+
+  /// Tras validar PIN MAESTRO, cuánto dura el flag `isAdmin` persistido (alineado con sesión privilegiada).
+  static const Duration sessionTtl = Duration(minutes: 3);
+
+  /// Si salís de Mi Empresa y volvés pasado este tiempo, se pide PIN de nuevo (grace para reentradas rápidas).
+  static const Duration miEmpresaReauthGrace = Duration(minutes: 3);
 
   @override
   AdminAuthState build() {
@@ -43,13 +50,30 @@ class AdminAuthNotifier extends Notifier<AdminAuthState> {
   Future<bool> verifyAndLogin(String pin) async {
     final storedPin = await _getPin();
     if (pin == storedPin) {
-      final expiry = DateTime.now().add(const Duration(hours: 24));
+      final expiry = DateTime.now().add(sessionTtl);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefKey, expiry.toIso8601String());
+      await prefs.remove(_miEmpresaExitKey);
       state = AdminAuthState(isAdmin: true, expiresAt: expiry);
       return true;
     }
     return false;
+  }
+
+  /// Llamar al salir de [FinanzasView] (Mi Empresa) para marcar que hubo una salida.
+  Future<void> recordMiEmpresaExit() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_miEmpresaExitKey, DateTime.now().toIso8601String());
+  }
+
+  /// Sesión admin activa pero hace falta volver a verificar identidad para Mi Empresa (salida > grace).
+  Future<bool> mustReauthMiEmpresa() async {
+    if (!state.isAdmin) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final s = prefs.getString(_miEmpresaExitKey);
+    if (s == null) return false;
+    final exit = DateTime.parse(s);
+    return DateTime.now().difference(exit) > miEmpresaReauthGrace;
   }
 
   /// Verifica el PIN actual y luego cambia al nuevo.
@@ -70,6 +94,7 @@ class AdminAuthNotifier extends Notifier<AdminAuthState> {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefKey);
+    await prefs.remove(_miEmpresaExitKey);
     state = AdminAuthState.loggedOut();
   }
 }

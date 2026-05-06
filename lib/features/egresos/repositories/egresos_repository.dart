@@ -5,6 +5,7 @@ import '../../../main.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/uuid_utils.dart';
 
 class EgresosRepository {
@@ -52,11 +53,13 @@ class EgresosRepository {
     required String proveedor,
     required String categoria,
     DateTime? fecha,
+    String? medioPago,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
-    final now = (fecha ?? DateTime.now()).toIso8601String();
-    
+    // Instante preciso del egreso en UTC. La UI/PDF lo muestran en huso AR.
+    final now = (fecha?.toUtc() ?? ArTime.nowUtc()).toIso8601String();
+
     final data = {
       'id': id,
       'evento_id': eventoId,
@@ -65,6 +68,7 @@ class EgresosRepository {
       'categoria': categoria,
       'fecha': now,
       'created_by': _supabase.auth.currentUser?.id,
+      'medio_pago': medioPago,
     };
 
     // 1. Guardar localmente
@@ -105,10 +109,12 @@ class EgresosRepository {
     required String proveedor,
     required String categoria,
     DateTime? fecha,
+    String? medioPago,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
-    final now = (fecha ?? DateTime.now()).toIso8601String();
+    // Instante preciso del egreso OPEX en UTC.
+    final now = (fecha?.toUtc() ?? ArTime.nowUtc()).toIso8601String();
 
     final data = <String, dynamic>{
       'id': id,
@@ -117,6 +123,7 @@ class EgresosRepository {
       'categoria': categoria,
       'fecha': now,
       'created_by': _supabase.auth.currentUser?.id,
+      'medio_pago': medioPago,
     };
 
     // 1. Guardar localmente (sin evento_id)
@@ -136,6 +143,40 @@ class EgresosRepository {
     }
   }
 
+  /// Elimina un egreso en SQLite y en la nube (offline-first).
+  Future<void> eliminarEgreso(String id) async {
+    if (id.isEmpty || id.length != 36) {
+      debugPrint('🚫 eliminarEgreso: id inválido');
+      return;
+    }
+    final db = await LocalDatabase.instance;
+    await db.delete('egresos', where: 'id = ?', whereArgs: [id]);
+    await SyncQueue.enqueue(
+      tabla: 'egresos',
+      operacion: SyncOperation.delete,
+      registroId: id,
+      payload: {'id': id},
+    );
+    if (_connectivity.currentStatus == AppConnectivity.online) {
+      _syncDeleteImmediately(id);
+    }
+  }
+
+  void _syncDeleteImmediately(String id) {
+    Future.microtask(() async {
+      try {
+        await _supabase.from('egresos').delete().eq('id', id);
+        final db = await LocalDatabase.instance;
+        await db.delete(
+          '_sync_queue',
+          where: 'tabla = ? AND registro_id = ?',
+          whereArgs: ['egresos', id],
+        );
+      } catch (e) {
+        debugPrint('⚠️ Sync delete egreso fallido: $e');
+      }
+    });
+  }
 
   /// Escucha cambios en la tabla de egresos para refrescar UI.
   RealtimeChannel subscribeToChanges(void Function() onUpdate) {

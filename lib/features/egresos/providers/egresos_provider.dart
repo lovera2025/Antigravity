@@ -62,7 +62,7 @@ final egresosStatsProvider = Provider((ref) {
         final monto = double.tryParse(item['monto'].toString()) ?? 0;
         totalGeneral += monto;
         
-        final egresoDate = DateTime.tryParse(item['fecha'] ?? '');
+        final egresoDate = DateTime.tryParse(item['fecha']?.toString() ?? '')?.toLocal();
         if (egresoDate != null && egresoDate.month == now.month && egresoDate.year == now.year) {
           totalMes += monto;
         }

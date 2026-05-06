@@ -27,6 +27,9 @@ class ContratoAlumno {
   final String? telefono;
   final double porcentajeDescuento;
   final DateTime? createdAt;
+  final bool contratoFirmado;
+  /// Remanente de mora acordado en cobros parciales (solo SQLite local).
+  final double moraPendienteTracked;
 
   ContratoAlumno({
     required this.id,
@@ -55,6 +58,8 @@ class ContratoAlumno {
     this.telefono,
     this.porcentajeDescuento = 0.0,
     this.createdAt,
+    this.contratoFirmado = false,
+    this.moraPendienteTracked = 0.0,
   });
 
   factory ContratoAlumno.fromJson(Map<String, dynamic> json) {
@@ -106,6 +111,10 @@ class ContratoAlumno {
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
+      contratoFirmado: (json['contrato_firmado'] == 1 || json['contrato_firmado'] == true),
+      moraPendienteTracked: double.parse(
+        (json['mora_pendiente_tracked'] ?? 0.0).toString(),
+      ),
     );
   }
 
@@ -142,6 +151,8 @@ class ContratoAlumno {
         'telefono': telefono,
       'porcentaje_descuento': porcentajeDescuento,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+      'contrato_firmado': contratoFirmado,
+      'mora_pendiente_tracked': moraPendienteTracked,
     };
   }
 
@@ -172,6 +183,8 @@ class ContratoAlumno {
     String? telefono,
     double? porcentajeDescuento,
     DateTime? createdAt,
+    bool? contratoFirmado,
+    double? moraPendienteTracked,
   }) {
     return ContratoAlumno(
       id: id ?? this.id,
@@ -200,6 +213,8 @@ class ContratoAlumno {
       telefono: telefono ?? this.telefono,
       porcentajeDescuento: porcentajeDescuento ?? this.porcentajeDescuento,
       createdAt: createdAt ?? this.createdAt,
+      contratoFirmado: contratoFirmado ?? this.contratoFirmado,
+      moraPendienteTracked: moraPendienteTracked ?? this.moraPendienteTracked,
     );
   }
 }

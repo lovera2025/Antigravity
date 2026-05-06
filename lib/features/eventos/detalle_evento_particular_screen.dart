@@ -25,14 +25,19 @@ class DetalleEventoParticularScreen extends ConsumerStatefulWidget {
 class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoParticularScreen> {
   bool _isLoading = true;
   late DateTime _fechaEventoActual;
+  late Evento _eventoActual;
   List<EventosServicios> _servicios = [];
   List<Transaccion> _transacciones = [];
   RealtimeChannel? _eventoChannel;
   RealtimeChannel? _transaccionesChannel;
 
+  List<Transaccion> get _transaccionesActivas =>
+      _transacciones.where((t) => !t.esAnulada).toList();
+
   @override
   void initState() {
     super.initState();
+    _eventoActual = widget.evento;
     _fechaEventoActual = widget.evento.fechaEvento;
     _fetchDatos();
     _setupRealtime();
@@ -63,10 +68,14 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       // 2. Fetch Ledger (Transacciones)
       final transData = await transaccionesRepo.getByEvento(widget.evento.id);
 
+      // 3. Evento fresco (bonificación global %, etc.)
+      final evFresh = await eventosRepo.getById(widget.evento.id);
+
       if (mounted) {
         setState(() {
           _servicios = presData;
           _transacciones = transData;
+          if (evFresh != null) _eventoActual = evFresh;
           _isLoading = false;
         });
       }
@@ -95,14 +104,14 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     );
     try {
       final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
-      final totalPagado = _transacciones.fold<double>(0, (sum, item) => sum + item.monto);
+      final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
       final saldoRestante = totalPresupuesto - totalPagado;
 
       await PdfService.generarReciboCompacto(
         evento: widget.evento,
         montoEntregado: totalPagado,
         saldoActual: saldoRestante,
-        transacciones: _transacciones,
+        transacciones: _transaccionesActivas,
         servicios: _servicios,
       );
       messenger.hideCurrentSnackBar();
@@ -131,14 +140,14 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     );
     try {
       final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
-      final totalPagado = _transacciones.fold<double>(0, (sum, item) => sum + item.monto);
+      final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
       final saldoRestante = totalPresupuesto - totalPagado;
 
       await PdfService.compartirRecibo(
         evento: widget.evento,
         montoEntregado: totalPagado,
         saldoActual: saldoRestante,
-        transacciones: _transacciones,
+        transacciones: _transaccionesActivas,
         servicios: _servicios,
       );
       messenger.hideCurrentSnackBar();
@@ -156,7 +165,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
 
     // Calcular saldo al momento de eliminar
     final totalPresupuestoEl = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
-    final totalPagadoEl = _transacciones.fold<double>(0, (sum, item) => sum + item.monto);
+    final totalPagadoEl = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final double saldoAlEliminar = totalPresupuestoEl - totalPagadoEl;
     final bool tieneDeudaAlEliminar = saldoAlEliminar > 0.01;
 
@@ -248,7 +257,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
 
     // Calcular saldo deudor total (Guardia de Deuda) usando los datos cargados en pantalla
     final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
-    final totalPagado = _transacciones.fold<double>(0, (sum, item) => sum + item.monto);
+    final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final double saldoPendiente = totalPresupuesto - totalPagado;
     final bool tieneDeuda = saldoPendiente > 0.01;
 
@@ -332,17 +341,23 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   }
 
   Future<void> _editarServicios() async {
+    final servicioIdPorLinea = {
+      for (var s in _servicios) s.id: s.servicioId,
+    };
     final Map<String, double> serviciosIniciales = {
-      for (var s in _servicios) s.servicioId: s.precioFinalAcordado
+      for (var s in _servicios) s.id: s.precioFinalAcordado
     };
     final Map<String, double> cantidadesIniciales = {
-      for (var s in _servicios) s.servicioId: s.cantidad
+      for (var s in _servicios) s.id: s.cantidad
     };
     final Map<String, String?> gruposIniciales = {
-      for (var s in _servicios) s.servicioId: s.grupo
+      for (var s in _servicios) s.id: s.grupo
+    };
+    final Map<String, int> comboOrdenIniciales = {
+      for (var s in _servicios) s.id: s.comboOrden
     };
     final Map<String, String?> descripcionesIniciales = {
-      for (var s in _servicios) s.servicioId: s.detalleServicio
+      for (var s in _servicios) s.id: s.detalleServicio
     };
 
     final result = await Navigator.push<bool>(
@@ -351,9 +366,11 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
         builder: (_) => SelectorServiciosScreen(
           eventoId: widget.evento.id,
           clienteId: widget.evento.clienteId,
+          servicioIdPorLineaInicial: servicioIdPorLinea,
           serviciosIniciales: serviciosIniciales,
           cantidadesIniciales: cantidadesIniciales,
           gruposIniciales: gruposIniciales,
+          comboOrdenIniciales: comboOrdenIniciales,
           descripcionesIniciales: descripcionesIniciales,
           modalidad: widget.evento.modalidad,
           observaciones: widget.evento.observaciones,
@@ -368,8 +385,8 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   }
 
   Future<void> _editarInformacionEvento() async {
-    final tipoController = TextEditingController(text: widget.evento.tipo);
-    final obsController = TextEditingController(text: widget.evento.observaciones);
+    final tipoController = TextEditingController(text: _eventoActual.tipo);
+    final obsController = TextEditingController(text: _eventoActual.observaciones);
 
     final result = await showDialog<bool>(
       context: context,
@@ -593,7 +610,17 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text((widget.evento.cliente?.nombreCompleto ?? 'DETALLE PARTICULAR').toUpperCase(), style: const TextStyle(fontSize: 14, letterSpacing: 1)),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                (widget.evento.cliente?.nombreCompleto ?? 'DETALLE PARTICULAR').toUpperCase(), 
+                style: const TextStyle(fontSize: 14, letterSpacing: 1),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         backgroundColor: Colors.transparent,
         actions: [
           if (!_isLoading) ...[
@@ -690,8 +717,8 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
             final result = await showDialog<bool>(
               context: context,
               builder: (context) => RegistrarPagoDialog(
-                evento: widget.evento,
-                transaccionesExistentes: _transacciones,
+                evento: _eventoActual,
+                transaccionesExistentes: _transaccionesActivas,
                 presupuestoTotal: presupuesto,
                 servicios: _servicios,
               ),
@@ -708,7 +735,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
 
   Widget _buildEliteStatusBanner(Color green, Color red) {
     final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
-    final totalPagado = _transacciones.fold<double>(0, (sum, item) => sum + item.monto);
+    final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final saldoDeudor = totalPresupuesto - totalPagado;
     final isDesbloqueado = saldoDeudor <= 0;
     final esRecepcion = widget.evento.tipo.toLowerCase().contains('recepci');
@@ -814,7 +841,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
               ],
             ),
           ),
-          if (badgeWidget != null) badgeWidget!,
+          ?badgeWidget,
         ],
       ),
     );
@@ -825,7 +852,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     
     // CORRECCIÓN APLICADA: Ahora multiplica correctamente el precio por la cantidad.
     final presupuestoTotal = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
-    final totalPagado = _transacciones.fold<double>(0, (sum, item) => sum + item.monto);
+    final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final saldo = presupuestoTotal - totalPagado; 
 
     return SingleChildScrollView(
@@ -839,7 +866,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           const SizedBox(height: 24),
           _buildSeccionServicios(),
           const SizedBox(height: 24),
-          _buildSeccionPagos(totalPagado),
+          _buildSeccionPagos(),
         ],
       ),
     );
@@ -1051,7 +1078,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
 
   void _mostrarHistorialPagos() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final double totalPagado = _transacciones.fold(0, (sum, t) => sum + t.monto);
+    final double totalPagado = _transaccionesActivas.fold(0, (sum, t) => sum + t.monto);
     final double totalPresupuesto = _servicios.fold(0, (sum, s) => sum + (s.precioFinalAcordado * s.cantidad));
     final double saldo = totalPresupuesto - totalPagado;
 
@@ -1114,6 +1141,11 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
                       itemBuilder: (context, index) {
                         final tr = _transacciones[index];
                         final fecha = tr.fechaPago ?? DateTime.now();
+                        final bonif = tr.esBonificacion;
+                        final anul = tr.esAnulada;
+                        final accent = anul
+                            ? Colors.blueGrey
+                            : (bonif ? const Color(0xFFD4AF37) : Colors.green);
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
@@ -1121,17 +1153,29 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
                           decoration: BoxDecoration(
                             color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+                            border: Border.all(
+                              color: anul
+                                  ? Colors.blueGrey.withValues(alpha: 0.45)
+                                  : bonif
+                                      ? accent.withValues(alpha: 0.35)
+                                      : (isDark ? Colors.white10 : Colors.black12),
+                            ),
                           ),
                           child: Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.1),
+                                  color: accent.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.check_rounded, color: Colors.green, size: 16),
+                                child: Icon(
+                                  anul
+                                      ? Icons.block_rounded
+                                      : (bonif ? Icons.card_giftcard_rounded : Icons.check_rounded),
+                                  color: accent,
+                                  size: 16,
+                                ),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
@@ -1140,18 +1184,42 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
                                   children: [
                                     Text(
                                       tr.concepto ?? 'Entrega / Pago',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        decoration: anul ? TextDecoration.lineThrough : null,
+                                        color: anul ? Colors.blueGrey : null,
+                                      ),
                                     ),
+                                    if (anul && tr.motivoAnulacion?.trim().isNotEmpty == true)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          'Motivo: ${tr.motivoAnulacion}',
+                                          style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade400),
+                                        ),
+                                      ),
                                     Text(
                                       '${fecha.day}/${fecha.month}/${fecha.year} - ${fecha.hour}:${fecha.minute.toString().padLeft(2, '0')} hs',
                                       style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                    ),
+                                    Text(
+                                      anul
+                                          ? 'Anulado (no suma en cuenta)'
+                                          : (bonif ? 'Bonificación' : 'Efectivo / transferencia'),
+                                      style: TextStyle(fontSize: 10, color: accent, fontWeight: FontWeight.w700),
                                     ),
                                   ],
                                 ),
                               ),
                               Text(
                                 tr.monto.toCurrency(),
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Colors.green),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 14,
+                                  color: accent,
+                                  decoration: anul ? TextDecoration.lineThrough : null,
+                                ),
                               ),
                             ],
                           ),
@@ -1171,7 +1239,27 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
                   children: [
                     _buildResumenRow('PRESUPUESTO:', totalPresupuesto.toCurrency(), Colors.grey, 12),
                     const SizedBox(height: 4),
-                    _buildResumenRow('TOTAL PAGADO:', totalPagado.toCurrency(), Colors.green, 14),
+                    _buildResumenRow('TOTAL IMPUTADO:', totalPagado.toCurrency(), Colors.green, 14),
+                    const SizedBox(height: 6),
+                    _buildResumenRow(
+                      '  Efectivo recibido',
+                      _transaccionesActivas
+                          .where((t) => !t.esBonificacion)
+                          .fold<double>(0, (s, t) => s + t.monto)
+                          .toCurrency(),
+                      Colors.green.shade700,
+                      11,
+                    ),
+                    const SizedBox(height: 2),
+                    _buildResumenRow(
+                      '  Bonificaciones',
+                      _transaccionesActivas
+                          .where((t) => t.esBonificacion)
+                          .fold<double>(0, (s, t) => s + t.monto)
+                          .toCurrency(),
+                      const Color(0xFFD4AF37),
+                      11,
+                    ),
                     const Divider(height: 16),
                     _buildResumenRow('SALDO PENDIENTE:', saldo.toCurrency(), const Color(0xFFD4AF37), 16),
                   ],
@@ -1200,46 +1288,103 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     );
   }
 
-  Widget _buildSeccionPagos(double totalPagado) {
+  Widget _buildSeccionPagos() {
     if (_transacciones.isEmpty) {
       return const SizedBox.shrink();
     }
+
+    final totalPagado = _transaccionesActivas.fold<double>(0, (s, t) => s + t.monto);
+    final totalEfectivo =
+        _transaccionesActivas.where((t) => !t.esBonificacion).fold<double>(0, (s, t) => s + t.monto);
+    final totalBonif =
+        _transaccionesActivas.where((t) => t.esBonificacion).fold<double>(0, (s, t) => s + t.monto);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+           crossAxisAlignment: CrossAxisAlignment.start,
            children: [
              const Text(
                'HISTORIAL DE PAGOS',
                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.2, color: Colors.grey),
              ),
-             Text(
-                'TOTAL: ${totalPagado.toCurrency()}',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Colors.green),
-             )
+             Column(
+               crossAxisAlignment: CrossAxisAlignment.end,
+               children: [
+                 Text(
+                   'IMPUTADO: ${totalPagado.toCurrency()}',
+                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Colors.green),
+                 ),
+                 if (totalBonif > 0.01)
+                   Text(
+                     'Efectivo ${totalEfectivo.toCurrency()} · Bonif. ${totalBonif.toCurrency()}',
+                     style: TextStyle(fontSize: 9, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                   ),
+               ],
+             ),
            ],
         ),
         const SizedBox(height: 8),
         ..._transacciones.map((tr) {
            final fecha = tr.fechaPago != null ? "${tr.fechaPago!.day}/${tr.fechaPago!.month}/${tr.fechaPago!.year}" : "Sin fecha";
+           final bonif = tr.esBonificacion;
+           final anul = tr.esAnulada;
+           final accent = anul
+               ? Colors.blueGrey
+               : (bonif ? const Color(0xFFD4AF37) : Colors.green);
            return Card(
              margin: const EdgeInsets.only(bottom: 8),
              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
              child: ListTile(
                leading: Container(
                  padding: const EdgeInsets.all(8),
-                 decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), shape: BoxShape.circle),
-                 child: const Icon(Icons.payments_rounded, color: Colors.green, size: 16),
+                 decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+                 child: Icon(
+                   anul
+                       ? Icons.block_rounded
+                       : (bonif ? Icons.card_giftcard_rounded : Icons.payments_rounded),
+                   color: accent,
+                   size: 16,
+                 ),
                ),
-               title: Text(tr.concepto ?? 'Pago', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-               subtitle: Text(fecha, style: const TextStyle(fontSize: 12)),
-               trailing: Text('+${tr.monto.toCurrency()}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 15)),
+               title: Text(
+                 tr.concepto ?? 'Pago',
+                 style: TextStyle(
+                   fontWeight: FontWeight.w600,
+                   fontSize: 14,
+                   decoration: anul ? TextDecoration.lineThrough : null,
+                   color: anul ? Colors.blueGrey : null,
+                 ),
+               ),
+               subtitle: Column(
+                 crossAxisAlignment: CrossAxisAlignment.start,
+                 children: [
+                   Text(fecha, style: const TextStyle(fontSize: 12)),
+                   Text(
+                     anul
+                         ? 'Anulado · ${tr.motivoAnulacion?.trim().isNotEmpty == true ? tr.motivoAnulacion! : "sin detalle"}'
+                         : (bonif ? 'Bonificación (crédito a cuenta)' : 'Pago en efectivo / transferencia'),
+                     style: TextStyle(fontSize: 10, color: accent, fontWeight: FontWeight.w700),
+                   ),
+                 ],
+               ),
+               isThreeLine: true,
+               trailing: Text(
+                 '+${tr.monto.toCurrency()}',
+                 style: TextStyle(
+                   color: accent,
+                   fontWeight: FontWeight.bold,
+                   fontSize: 15,
+                   decoration: anul ? TextDecoration.lineThrough : null,
+                 ),
+               ),
              ),
            );
         }),
       ],
     );
   }
+
 }

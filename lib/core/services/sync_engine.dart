@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../database/local_database.dart';
 import '../database/sync_queue.dart';
+import '../utils/uuid_utils.dart';
 import 'connectivity_service.dart';
+import '../../features/mi_empresa/repositories/finanzas_repository.dart';
 
 /// Estado del motor de sincronización.
 enum SyncStatus {
@@ -122,6 +124,8 @@ class SyncEngine {
       // ── Paso 3: Pull Cloud → Local ─────────────────────────────────────────
       await _pullFromCloud();
 
+      FinanzasRepository.invalidateProyeccionCache();
+
       _lastSyncTime = DateTime.now();
       _updateStatus(SyncStatus.idle);
       debugPrint('✅ Ciclo de sincronización completado');
@@ -151,16 +155,23 @@ class SyncEngine {
       final payload = entry.payload;
       
       if (table == 'clientes') return 0;
-      if (table == 'eventos' || table == 'presupuestos') return 1;
+      if (table == 'eventos' || table == 'presupuestos' || table == 'prestamos_alquiler') return 1;
       
       // Los servicios globales son prioridad 0, los ad-hoc (con evento_id) son prioridad 2
       if (table == 'servicios') {
         return (payload['evento_id'] != null) ? 2 : 0;
       }
       
-      if (table == 'pagos_contrato_alumno') return 4;
-      if (table == 'eventos_servicios' || table == 'presupuesto_servicios') return 3; // Depende de padre y servicio
-      
+      if (table == 'pagos_contrato_alumno' || table == 'pagos_prestamo_alquiler') return 4;
+      if (table == 'eventos_servicios' || table == 'presupuesto_servicios' || table == 'prestamo_alquiler_lineas') {
+        return 3;
+      } // Depende de padre y servicio / préstamo
+
+      // Análisis de rentabilidad: opcionalmente referencia evento/presupuesto; va al final
+      if (table == 'calculos_rentabilidad') return 5;
+      // Caja fuerte (Mi empresa PERSONAL): sin FK a eventos; cola estable
+      if (table == 'caja_fuerte_movimientos') return 5;
+
       // Resto de tablas (transacciones, egresos, invitados, etc) dependen de evento
       return 2;
     }
@@ -198,6 +209,10 @@ class SyncEngine {
         final isPresupuesto = sortedPending.any((e) => e.tabla == 'presupuestos' && e.registroId == payload['evento_id']);
         parentTable = isPresupuesto ? 'presupuestos' : 'eventos';
         parentId = payload['evento_id'];
+      } else if (payload['presupuesto_id'] != null && pendingIdsInQueue.contains(payload['presupuesto_id'])) {
+        hasPendingParent = true;
+        parentTable = 'presupuestos';
+        parentId = payload['presupuesto_id'];
       } else if (payload['cliente_id'] != null && pendingIdsInQueue.contains(payload['cliente_id'])) {
         hasPendingParent = true;
         parentTable = 'clientes';
@@ -206,35 +221,17 @@ class SyncEngine {
         hasPendingParent = true;
         parentTable = 'contratos_alumnos';
         parentId = payload['contrato_alumno_id'];
-      } else {
-        final table = entry.tabla;
-        final payload = entry.payload;
-
-        // 1. Verificar integridad del Evento Padre
-        if (table == 'servicios' && payload['evento_id'] != null) {
-          if (pendingIdsInQueue.contains(payload['evento_id'])) {
-             debugPrint('  ⏳ Posponiendo Servicio (${entry.registroId}): Evento Padre ${payload['evento_id']} en cola.');
-             continue;
-          }
-        }
-
-        // 2. Verificar integridad del Presupuesto Padre
-        if (table == 'presupuesto_servicios' && payload['presupuesto_id'] != null) {
-          if (pendingIdsInQueue.contains(payload['presupuesto_id'])) {
-             debugPrint('  ⏳ Posponiendo Detalle Presupuesto: Presupuesto Padre ${payload['presupuesto_id']} en cola.');
-             continue;
-          }
-        }
-        
-        // 3. Verificar integridad de Evento-Servicio
-        if (table == 'eventos_servicios') {
-          final eid = payload['evento_id'];
-          final sid = payload['servicio_id'];
-          if (pendingIdsInQueue.contains(eid) || pendingIdsInQueue.contains(sid)) {
-             debugPrint('  ⏳ Posponiendo Presupuesto Item: Padre(s) en cola.');
-             continue;
-          }
-        }
+      } else if (payload['prestamo_id'] != null && pendingIdsInQueue.contains(payload['prestamo_id'])) {
+        hasPendingParent = true;
+        parentTable = 'prestamos_alquiler';
+        parentId = payload['prestamo_id'];
+      } else if (entry.tabla == 'eventos_servicios' &&
+                 payload['servicio_id'] != null &&
+                 pendingIdsInQueue.contains(payload['servicio_id'])) {
+        // Caso especial: línea de servicio cuyo servicio (catálogo o ad-hoc) aún no subió.
+        hasPendingParent = true;
+        parentTable = 'servicios';
+        parentId = payload['servicio_id'];
       }
 
       if (hasPendingParent) {
@@ -288,6 +285,7 @@ class SyncEngine {
       'cliente_id': 'clientes',
       'contrato_alumno_id': 'contratos_alumnos',
       'servicio_id': 'servicios',
+      'prestamo_id': 'prestamos_alquiler',
     };
 
     final db = await LocalDatabase.instance;
@@ -326,12 +324,18 @@ class SyncEngine {
     }
   }
 
-  // Tablas que usan clave primaria compuesta (sin columna 'id' propia).
-  static const _compositePrimaryKeyTables = {'eventos_servicios', 'presupuesto_servicios'};
-
   /// Valida que todos los campos UUID en el payload tengan formato correcto (36 chars).
   String? _validateUuidFields(Map<String, dynamic> payload) {
-    const uuidFields = ['id', 'evento_id', 'cliente_id', 'servicio_id', 'contrato_alumno_id', 'invitado_id'];
+    const uuidFields = [
+      'id',
+      'evento_id',
+      'presupuesto_id',
+      'cliente_id',
+      'servicio_id',
+      'contrato_alumno_id',
+      'invitado_id',
+      'prestamo_id',
+    ];
     for (final field in uuidFields) {
       if (payload.containsKey(field)) {
         final val = payload[field];
@@ -353,23 +357,22 @@ class SyncEngine {
       throw Exception('UUID_INVALIDO: El campo "$badField" contiene un valor no-UUID en ${entry.tabla}');
     }
 
-    final isComposite = _compositePrimaryKeyTables.contains(entry.tabla);
-
     switch (entry.operacion) {
       case SyncOperation.insert:
         await _supabase.from(entry.tabla).upsert(payload);
         break;
       case SyncOperation.update:
-        if (isComposite) {
-          await _supabase.from(entry.tabla).upsert(payload);
-        } else {
-          await _supabase.from(entry.tabla)
-              .update(payload)
-              .eq('id', entry.registroId);
-        }
+        await _supabase.from(entry.tabla)
+            .update(payload)
+            .eq('id', entry.registroId);
         break;
       case SyncOperation.delete:
-        if (entry.tabla == 'eventos_servicios' || entry.tabla == 'presupuesto_servicios') {
+        if (entry.registroId.length == 36) {
+          await _supabase.from(entry.tabla)
+              .delete()
+              .eq('id', entry.registroId);
+        } else if (entry.tabla == 'eventos_servicios' || entry.tabla == 'presupuesto_servicios') {
+          // Legado: eventoId_servicioId
           final parts = entry.registroId.split('_');
           if (parts.length == 2) {
             final parentField = entry.tabla == 'eventos_servicios' ? 'evento_id' : 'presupuesto_id';
@@ -396,13 +399,22 @@ class SyncEngine {
     await _pullTable(db, 'clientes', 'created_at');
     await _pullTable(db, 'servicios', null);
     await _pullTable(db, 'eventos', 'created_at');
-    await _pullTable(db, 'eventos_servicios', null, primaryKey: 'evento_id');
+    await _pullTable(db, 'eventos_servicios', null, primaryKey: 'id');
+    await _pullTable(db, 'presupuestos', 'created_at');
+    await _pullTable(db, 'presupuesto_servicios', null, primaryKey: 'id');
     await _pullTable(db, 'transacciones', 'fecha_pago');
     await _pullTable(db, 'egresos', 'fecha');
     await _pullTable(db, 'contratos_alumnos', 'created_at');
     await _pullTable(db, 'pagos_contrato_alumno', 'created_at');
     await _pullTable(db, 'invitados', 'updated_at');
     await _pullTable(db, 'solicitudes_cotizacion', null);
+    await _pullTable(db, 'prestamos_alquiler', 'created_at');
+    await _pullTable(db, 'prestamo_alquiler_lineas', null);
+    await _pullTable(db, 'pagos_prestamo_alquiler', 'created_at');
+    await _pullTable(db, 'calculos_rentabilidad', 'created_at');
+    await _pullTable(db, 'obligaciones_pago', 'fecha_vencimiento');
+    await _pullTable(db, 'caja_fuerte_movimientos', 'created_at');
+    await _pullTable(db, 'rentabilidad_config', null);
 
     debugPrint('📥 Pull completado');
   }
@@ -420,15 +432,29 @@ class SyncEngine {
 
       if (rows.isEmpty) return;
 
-      const fkFields = ['evento_id', 'cliente_id', 'contrato_alumno_id', 'servicio_id', 'invitado_id'];
+      const fkFields = ['evento_id', 'cliente_id', 'contrato_alumno_id', 'servicio_id', 'invitado_id', 'prestamo_id'];
+
+      Map<String, double?>? preservedBonifPctByEventoId;
+      if (table == 'eventos') {
+        final localPctRows = await db.query('eventos', columns: ['id', 'bonificacion_global_pct']);
+        preservedBonifPctByEventoId = {
+          for (final r in localPctRows)
+            r['id'] as String: r['bonificacion_global_pct'] != null
+                ? (r['bonificacion_global_pct'] as num).toDouble()
+                : null,
+        };
+      }
 
       final batch = db.batch();
       int skipped = 0;
-      for (final row in rows) {
+      for (var index = 0; index < rows.length; index++) {
+        final row = rows[index];
         final id = row['id'] as String?;
         if (id != null && id.length != 36) {
-          skipped++;
-          continue;
+          if (table != 'eventos_servicios' && table != 'presupuesto_servicios') {
+            skipped++;
+            continue;
+          }
         }
 
         bool hasBadFk = false;
@@ -442,10 +468,82 @@ class SyncEngine {
         }
         if (hasBadFk) continue;
 
-        final cleanRow = _cleanForSqlite(table, row);
-        batch.insert(table, cleanRow, conflictAlgorithm: ConflictAlgorithm.replace);
+        var cleanRow = _cleanForSqlite(table, row);
+        if (table == 'eventos_servicios' || table == 'presupuesto_servicios') {
+          final insertMap = Map<String, dynamic>.from(cleanRow);
+          final rawId = (insertMap['id'] as String?)?.trim() ?? '';
+          if (rawId.length != 36) {
+            final parentKey = table == 'eventos_servicios' ? 'evento_id' : 'presupuesto_id';
+            final pid = (insertMap[parentKey] as String?)?.trim() ?? '';
+            final sid = (insertMap['servicio_id'] as String?)?.trim() ?? '';
+            if (pid.isEmpty || sid.isEmpty) {
+              skipped++;
+              continue;
+            }
+            final ctx = table == 'eventos_servicios' ? 'es' : 'ps';
+            insertMap['id'] = UuidUtils.lineaIdDeterministic(ctx, pid, sid, index);
+          }
+          cleanRow = insertMap;
+        }
+        if (table == 'eventos' && preservedBonifPctByEventoId != null) {
+          final eid = cleanRow['id'] as String;
+          final cloudPctRaw = row['bonificacion_global_pct'];
+          final insertRow = Map<String, dynamic>.from(cleanRow);
+          if (cloudPctRaw != null) {
+            insertRow['bonificacion_global_pct'] = double.tryParse(cloudPctRaw.toString());
+          } else {
+            final preserved = preservedBonifPctByEventoId[eid];
+            if (preserved != null) {
+              insertRow['bonificacion_global_pct'] = preserved;
+            }
+          }
+          batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else {
+          batch.insert(table, cleanRow, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
       }
       await batch.commit(noResult: true);
+
+      // Prune orphan rows for line-item tables (eventos_servicios / presupuesto_servicios).
+      // Migration v35 reassigned local UUIDs, so cloud rows arrive with their original UUIDs
+      // and coexist with the locally-generated ones → duplicates.  Prune removes any local
+      // row whose id is NOT in the cloud set and NOT pending in the sync queue.
+      if (table == 'eventos_servicios' || table == 'presupuesto_servicios') {
+        final cloudIds = <String>{};
+        for (var i = 0; i < rows.length; i++) {
+          final rawId = (rows[i]['id'] as String?)?.trim() ?? '';
+          if (rawId.length == 36) {
+            cloudIds.add(rawId);
+          } else {
+            final parentKey = table == 'eventos_servicios' ? 'evento_id' : 'presupuesto_id';
+            final pid = (rows[i][parentKey] as String?)?.trim() ?? '';
+            final sid = (rows[i]['servicio_id'] as String?)?.trim() ?? '';
+            if (pid.isNotEmpty && sid.isNotEmpty) {
+              final ctx = table == 'eventos_servicios' ? 'es' : 'ps';
+              cloudIds.add(UuidUtils.lineaIdDeterministic(ctx, pid, sid, i));
+            }
+          }
+        }
+
+        final pendingRows = await db.query('_sync_queue',
+            columns: ['registro_id'],
+            where: "tabla = ?",
+            whereArgs: [table]);
+        final pendingIds = pendingRows.map((r) => r['registro_id'] as String).toSet();
+
+        final localRows = await db.query(table, columns: ['id']);
+        int pruned = 0;
+        for (final r in localRows) {
+          final localId = (r['id'] as String?) ?? '';
+          if (localId.isNotEmpty && !cloudIds.contains(localId) && !pendingIds.contains(localId)) {
+            await db.delete(table, where: 'id = ?', whereArgs: [localId]);
+            pruned++;
+          }
+        }
+        if (pruned > 0) {
+          debugPrint('  🧹 $table: $pruned filas huérfanas eliminadas (dedup post-migración)');
+        }
+      }
 
       final stored = rows.length - skipped;
       debugPrint('  📥 $table: $stored registros${skipped > 0 ? " ($skipped corruptos omitidos)" : ""}');
@@ -458,16 +556,147 @@ class SyncEngine {
   Map<String, dynamic> _cleanForSqlite(String table, Map<String, dynamic> row) {
     const tableColumns = {
       'clientes': ['id', 'nombre_completo', 'telefono', 'email', 'is_archived', 'created_at'],
-      'eventos': ['id', 'cliente_id', 'tipo', 'fecha_evento', 'cantidad_cuotas', 'modalidad', 'estado', 'pin_operador', 'observaciones', 'created_at'],
-      'servicios': ['id', 'nombre', 'categoria', 'costo_base', 'margen_ganancia', 'costo_interno', 'evento_id'],
-      'eventos_servicios': ['evento_id', 'servicio_id', 'precio_final_acordado', 'cantidad'],
-      'transacciones': ['id', 'evento_id', 'monto', 'concepto', 'fecha_pago', 'created_by'],
-      'egresos': ['id', 'evento_id', 'monto', 'proveedor', 'categoria', 'fecha', 'created_by'],
-      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at'],
-      'pagos_contrato_alumno': ['id', 'contrato_alumno_id', 'monto', 'concepto', 'fecha_pago', 'created_at'],
+      'eventos': ['id', 'cliente_id', 'tipo', 'fecha_evento', 'cantidad_cuotas', 'modalidad', 'estado', 'pin_operador', 'observaciones', 'bonificacion_global_pct', 'created_at'],
+      'servicios': ['id', 'nombre', 'categoria', 'costo_base', 'margen_ganancia', 'costo_interno', 'evento_id', 'is_archived'],
+      'eventos_servicios': ['id', 'evento_id', 'servicio_id', 'precio_final_acordado', 'cantidad', 'grupo', 'detalle_servicio', 'combo_orden'],
+      'presupuestos': [
+        'id',
+        'cliente_id',
+        'tipo_evento',
+        'lugar',
+        'detalle_anclaje',
+        'fecha_vencimiento',
+        'fecha_evento',
+        'estado',
+        'instagram',
+        'telefono',
+        'vendedor_nombre',
+        'titulo_festejado',
+        'notificado_vencimiento',
+        'created_at',
+      ],
+      'presupuesto_servicios': [
+        'id',
+        'presupuesto_id',
+        'servicio_id',
+        'precio_final',
+        'cantidad',
+        'detalle_servicio',
+        'grupo',
+        'combo_orden',
+      ],
+      'transacciones': [
+        'id',
+        'evento_id',
+        'monto',
+        'concepto',
+        'fecha_pago',
+        'created_by',
+        'medio_pago',
+        'anulado',
+        'motivo_anulacion',
+        'fecha_anulacion',
+      ],
+      'egresos': ['id', 'evento_id', 'monto', 'proveedor', 'categoria', 'fecha', 'created_by', 'medio_pago'],
+      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked'],
+      'pagos_contrato_alumno': [
+        'id',
+        'contrato_alumno_id',
+        'monto',
+        'monto_gross',
+        'descuento_porcentaje',
+        'concepto',
+        'fecha_pago',
+        'created_at',
+        'medio_pago',
+        'anulado',
+        'motivo_anulacion',
+        'fecha_anulacion',
+      ],
       'invitados': ['id', 'evento_id', 'nombre_completo', 'dni', 'numero_mesa', 'estado_ingreso', 'intentos_fallidos', 'updated_at', 'created_at'],
       'solicitudes_cotizacion': ['id', 'cliente_nombre', 'cliente_celular', 'servicios_seleccionados', 'estado'],
-      'presupuesto_servicios': ['presupuesto_id', 'servicio_id', 'precio_final', 'cantidad', 'detalle_servicio'],
+      'prestamos_alquiler': [
+        'id',
+        'cliente_id',
+        'fecha_inicio',
+        'fecha_fin',
+        'aplica_iva',
+        'alicuota_iva',
+        'subtotal_neto',
+        'monto_iva',
+        'total',
+        'texto_redaccion',
+        'texto_disclaimer',
+        'visible_listado',
+        'created_at',
+        'updated_at',
+      ],
+      'prestamo_alquiler_lineas': [
+        'id',
+        'prestamo_id',
+        'descripcion',
+        'cantidad',
+        'precio_unitario',
+        'linea_total',
+        'orden',
+      ],
+      'pagos_prestamo_alquiler': [
+        'id',
+        'prestamo_id',
+        'monto',
+        'concepto',
+        'fecha_pago',
+        'created_at',
+        'medio_pago',
+        'anulado',
+        'motivo_anulacion',
+        'fecha_anulacion',
+      ],
+      'calculos_rentabilidad': [
+        'id',
+        'evento_id',
+        'presupuesto_id',
+        'precio_venta',
+        'honorario_adrian_monto',
+        'honorario_adrian_pct',
+        'honorario_modo',
+        'costos_variables_json',
+        'costos_fijos_json',
+        'resultado',
+        'notas',
+        'created_at',
+        'created_by',
+      ],
+      'obligaciones_pago': [
+        'id',
+        'titulo',
+        'tipo_obligacion',
+        'fecha_vencimiento',
+        'monto_estimado',
+        'estado',
+        'fecha_pago',
+        'created_at',
+      ],
+      'caja_fuerte_movimientos': [
+        'id',
+        'tipo',
+        'monto',
+        'nota',
+        'created_at',
+      ],
+      'rentabilidad_config': [
+        'id',
+        'alquiler_local',
+        'sueldos_admin',
+        'servicios_oficina',
+        'impuestos_fijos',
+        'honorario_adrian_default_monto',
+        'honorario_adrian_default_pct',
+        'honorario_modo_default',
+        'eventos_estimados_mes',
+        'updated_at',
+        'updated_by',
+      ],
     };
 
     final validCols = tableColumns[table];
@@ -496,40 +725,6 @@ class SyncEngine {
     }
 
     return clean;
-  }
-
-  /// Purga de IDs corruptos directamente en Supabase.
-  Future<void> _purgeCloudCorruptData() async {
-    const tablesWithId = [
-      'contratos_alumnos', 'pagos_contrato_alumno', 'transacciones', 'egresos',
-      'invitados', 'clientes', 'eventos', 'servicios',
-    ];
-
-    int totalEliminados = 0;
-
-    for (final table in tablesWithId) {
-      try {
-        final rows = await _supabase.from(table).select('id');
-        final badIds = (rows as List)
-            .map((r) => r['id'] as String?)
-            .where((id) => id != null && id.length != 36)
-            .cast<String>()
-            .toList();
-
-        if (badIds.isEmpty) continue;
-
-        for (final badId in badIds) {
-          await _supabase.from(table).delete().eq('id', badId);
-          totalEliminados++;
-        }
-      } catch (e) {
-        debugPrint('  ⚠️ Error purga cloud en $table: $e');
-      }
-    }
-
-    if (totalEliminados > 0) {
-      debugPrint('🗑️ Purga cloud: $totalEliminados registros corruptos eliminados');
-    }
   }
 
   bool _isNonRetryableError(dynamic e) {

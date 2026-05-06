@@ -7,15 +7,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border;
-import 'package:path_provider/path_provider.dart';
 import '../../core/services/sync_engine.dart';
 import '../../models/invitado.dart';
 import '../totem/totem_panel.dart';
-import '../totem/totem_launcher_screen.dart';
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
-import '../../../main.dart' show kWebBaseUrl;
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/kiosk_launcher.dart';
 
 class RecepcionUnifiedScreen extends ConsumerStatefulWidget {
@@ -372,8 +368,6 @@ class _TabButton extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  static const _perla = Color(0xFFE2E2E2);
-
   const _TabButton({
     required this.label,
     required this.icon,
@@ -446,7 +440,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const gold = Color(0xFFD4AF37);
     const perla = Color(0xFFE2E2E2);
     final selectedEventId = ref.watch(selectedEventProvider);
 
@@ -525,7 +518,8 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
           }
 
           return DropdownButtonFormField<String>(
-            value: selectedEventId,
+            key: ValueKey(selectedEventId),
+            initialValue: selectedEventId,
             hint: Text(
               'Seleccionar evento activo...',
               style: GoogleFonts.outfit(fontSize: 14, color: isDark ? Colors.white38 : Colors.black38),
@@ -1030,7 +1024,7 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
       ),
     );
 
-    if (confirmar == true && mounted) {
+    if (confirmar == true) {
       try {
         final repo = ref.read(invitadosRepositoryProvider);
         await repo.deshacerIngreso(invitado.id);
@@ -1038,13 +1032,13 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
         // Refrescar UI Stats
         ref.invalidate(statsEventoProvider(invitado.eventoId));
         
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Se deshizo el ingreso correctamente'), backgroundColor: Colors.orangeAccent),
           );
         }
       } catch (e) {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
           );
@@ -1070,7 +1064,7 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
       ),
     );
 
-    if (confirmar == true && mounted) {
+    if (confirmar == true) {
       try {
         final repo = ref.read(invitadosRepositoryProvider);
         await repo.eliminar(invitado.id);
@@ -1079,13 +1073,13 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
         ref.read(syncEngineProvider).syncNow();
         ref.invalidate(statsEventoProvider(invitado.eventoId));
         
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Participante eliminado correctamente'), backgroundColor: Colors.redAccent),
           );
         }
       } catch (e) {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
           );
@@ -1111,7 +1105,7 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
       ),
     );
 
-    if (confirmar == true && mounted) {
+    if (confirmar == true) {
       try {
         final repo = ref.read(invitadosRepositoryProvider);
         await repo.vaciarEvento(eventoId);
@@ -1128,13 +1122,13 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
         ref.invalidate(invitadosStreamProvider(eventoId));
         ref.invalidate(statsEventoProvider(eventoId));
         
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Se eliminaron todos los invitados. Lista vacía.'), backgroundColor: Colors.redAccent),
           );
         }
       } catch (e) {
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
           );

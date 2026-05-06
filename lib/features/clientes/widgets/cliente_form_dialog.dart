@@ -90,6 +90,8 @@ class _ClienteFormDialogState extends ConsumerState<ClienteFormDialog> {
             children: [
               TextFormField(
                 controller: _nombreController,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                 decoration: const InputDecoration(
                   labelText: 'Nombre Completo',
                   prefixIcon: Icon(Icons.person),
@@ -100,6 +102,8 @@ class _ClienteFormDialogState extends ConsumerState<ClienteFormDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _telefonoController,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                 decoration: const InputDecoration(
                   labelText: 'Teléfono / Celular',
                   prefixIcon: Icon(Icons.phone),
@@ -112,6 +116,10 @@ class _ClienteFormDialogState extends ConsumerState<ClienteFormDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) {
+                  if (!_isLoading) _submit();
+                },
                 decoration: const InputDecoration(
                   labelText: 'Email (Opcional)',
                   prefixIcon: Icon(Icons.email),

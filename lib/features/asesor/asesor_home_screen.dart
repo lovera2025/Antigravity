@@ -11,7 +11,10 @@ import '../catalogo/catalogo_screen.dart';
 import '../cotizacion/widgets/generar_qr_dialog.dart';
 import '../totem/totem_launcher_screen.dart';
 import '../mi_empresa/finanzas_view.dart';
+import '../cierre_caja/cierre_caja_screen.dart';
+import '../rentabilidad/calculador_rentabilidad_screen.dart';
 import '../../core/services/sync_engine.dart';
+import '../../core/services/user_role_cache.dart';
 
 class AsesorHomeScreen extends ConsumerStatefulWidget {
   const AsesorHomeScreen({super.key});
@@ -192,6 +195,19 @@ class _AsesorHomeScreenState extends ConsumerState<AsesorHomeScreen> {
       ));
     }
 
+    if (permisos.puedeCierreCaja) {
+      modules.add(_ModuleItem(
+        label: 'CIERRE DE CAJA',
+        subtitle: 'Turnos, retiros y exportar',
+        icon: Icons.point_of_sale_outlined,
+        color: gold,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CierreCajaScreen()),
+        ),
+      ));
+    }
+
     if (permisos.puedeFinanzas) {
       modules.add(_ModuleItem(
         label: 'MI EMPRESA',
@@ -201,6 +217,17 @@ class _AsesorHomeScreenState extends ConsumerState<AsesorHomeScreen> {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const FinanzasView()),
+        ),
+      ));
+
+      modules.add(_ModuleItem(
+        label: 'RENTABILIDAD',
+        subtitle: 'Cálculo y simulador',
+        icon: Icons.analytics_outlined,
+        color: Colors.greenAccent,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CalculadorRentabilidadScreen()),
         ),
       ));
     }
@@ -326,9 +353,9 @@ class _AsesorHomeScreenState extends ConsumerState<AsesorHomeScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     _removePresence();
-                    Supabase.instance.client.auth.signOut();
+                    await UserRoleCache.signOut(Supabase.instance.client);
                   },
                   icon: const Icon(Icons.logout_rounded, size: 18),
                   label: Text(

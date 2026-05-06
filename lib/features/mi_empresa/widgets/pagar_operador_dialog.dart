@@ -42,6 +42,8 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
   List<MapEntry<String, double>> _operadoresParaEsteTipo = [];
   bool _cargandoOperadoresTipo = false;
 
+  String _medioPagoSeleccionado = 'Efectivo';
+
   static const _gold = Color(0xFFD4AF37);
   static const _blue = Colors.blueAccent;
 
@@ -270,6 +272,7 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
           proveedor: _operadorController.text.trim(),
           categoria: 'Personal',
           fecha: DateTime.now(),
+          medioPago: _medioPagoSeleccionado,
         );
       } else {
         // ── OPEX: sin evento, uso del repo directo para SQLite + sync ──
@@ -278,6 +281,7 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
           proveedor: _operadorController.text.trim(),
           categoria: 'Personal',
           fecha: DateTime.now(),
+          medioPago: _medioPagoSeleccionado,
         );
       }
 
@@ -528,6 +532,7 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
                     controller: ctrl,
                     focusNode: focusNode,
                     textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       hintText: 'Nombre del operador...',
                       prefixIcon: const Icon(Icons.person_outline, size: 18),
@@ -538,8 +543,10 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
                       _operadorController.text = val;
                       // Buscar sugerencia con debounce implícito al perder foco
                     },
-                    onEditingComplete: () {
+                    onFieldSubmitted: (_) {
+                      _operadorController.text = ctrl.text;
                       _buscarTarifaSugerida();
+                      onSubmitted();
                       FocusScope.of(context).nextFocus();
                     },
                     validator: (v) {
@@ -658,9 +665,32 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 ),
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) {
+                  if (!_isSubmitting) _submit();
+                },
                 validator: (v) {
                   if (v == null || v.trim().isEmpty || v == '0,00') return 'Ingresá el monto';
                   return null;
+                },
+              ),
+
+              const SizedBox(height: 14),
+              _buildLabel('MEDIO DE PAGO', Icons.account_balance_wallet_rounded),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                initialValue: _medioPagoSeleccionado,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.account_balance_wallet_rounded, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                  DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _medioPagoSeleccionado = val);
                 },
               ),
 

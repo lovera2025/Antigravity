@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,8 +7,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../main.dart';
 import '../../../models/presupuesto.dart';
-import '../../../models/cliente.dart';
-import '../../../models/servicio.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
@@ -22,9 +22,15 @@ class PresupuestosRepository {
 
   PresupuestosRepository(this._supabase, this._connectivity, this._ref, this._syncEngine);
 
+  void _scheduleSync() {
+    if (_connectivity.currentStatus != AppConnectivity.online) return;
+    unawaited(_syncEngine.syncNow());
+  }
+
   // ── LECTURA ────────────────────────────────────────────────────────────────
 
-  Future<List<Presupuesto>> getAll() async {
+  /// [pullRemoteWhenOnline]: en false solo lee SQLite (rápido tras editar en local).
+  Future<List<Presupuesto>> getAll({bool pullRemoteWhenOnline = true}) async {
     final db = await LocalDatabase.instance;
 
     const query = '''
@@ -36,7 +42,7 @@ class PresupuestosRepository {
 
     final rows = await db.rawQuery(query);
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
+    if (_connectivity.currentStatus == AppConnectivity.online && pullRemoteWhenOnline) {
       await _pullPresupuestosFromCloud(db);
       final freshRows = await db.rawQuery(query);
       return _mapRowsToPresupuestos(db, freshRows);
@@ -113,31 +119,32 @@ class PresupuestosRepository {
       'notificado_vencimiento': 0,
       'created_at': nowIso,
     };
-    await db.insert('presupuestos', presupuestoData);
+    await db.insert('presupuestos', presupuestoData, conflictAlgorithm: ConflictAlgorithm.replace);
     await SyncQueue.enqueue(tabla: 'presupuestos', operacion: SyncOperation.insert, registroId: presupuestoId, payload: presupuestoData);
 
     // 3. Servicios
     for (final s in servicios) {
+      final lineaId = (s['id'] is String && (s['id'] as String).length == 36) ? s['id'] as String : UuidUtils.generate();
       final psData = {
+        'id': lineaId,
         'presupuesto_id': presupuestoId,
         'servicio_id': s['servicio_id'],
         'precio_final': s['precio_final'],
         'cantidad': s['cantidad'] ?? 1.0,
         'detalle_servicio': s['detalle_servicio'],
         'grupo': s['grupo'],
+        'combo_orden': s['combo_orden'] ?? 0,
       };
-      await db.insert('presupuesto_servicios', psData);
+      await db.insert('presupuesto_servicios', psData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
         tabla: 'presupuesto_servicios', 
         operacion: SyncOperation.insert, 
-        registroId: '${presupuestoId}_${s['servicio_id']}', 
+        registroId: lineaId, 
         payload: psData
       );
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
+    _scheduleSync();
 
     return presupuestoId;
   }
@@ -151,17 +158,23 @@ class PresupuestosRepository {
     // 1. Crear Evento Real
     final repoEventos = _ref.read(eventosRepositoryProvider);
     // Convertir servicios de presupuesto a formato compatible con el nuevo selector {'precio': x, 'cantidad': y}
-    final Map<String, Map<String, dynamic>> serviciosMap = { 
-      for (var s in p.servicios) s.servicioId : {
+    final Map<String, Map<String, dynamic>> serviciosMap = {
+      for (var s in p.servicios) s.id: {
+        'servicio_id': s.servicioId,
         'precio': s.precioFinal,
         'cantidad': s.cantidad,
+        'grupo': s.grupo,
+        'combo_orden': s.comboOrden,
+        'detalle_servicio': s.detalleServicio,
       }
     };
     
     await repoEventos.crearEventoCompleto(
       clienteId: p.clienteId,
       tipoEvento: p.tipoEvento,
-      fechaEvento: DateTime.now().add(const Duration(days: 30)), 
+      // Si el presupuesto trae fecha_evento se usa esa; caso contrario,
+      // se mantiene el placeholder histórico (+30 días) para no bloquear el alta.
+      fechaEvento: p.fechaEvento ?? DateTime.now().add(const Duration(days: 30)),
       modalidad: 'particular',
       observaciones: p.detalleAnclaje,
       serviciosSeleccionados: serviciosMap,
@@ -176,9 +189,20 @@ class PresupuestosRepository {
       payload: {'id': id, 'estado': 'confirmado'}
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
+    _scheduleSync();
+  }
+
+  Future<void> cambiarEstado(String id, EstadoPresupuesto nuevoEstado) async {
+    final db = await LocalDatabase.instance;
+    await db.update('presupuestos', {'estado': nuevoEstado.name}, where: 'id = ?', whereArgs: [id]);
+    await SyncQueue.enqueue(
+      tabla: 'presupuestos', 
+      operacion: SyncOperation.update, 
+      registroId: id, 
+      payload: {'id': id, 'estado': nuevoEstado.name}
+    );
+
+    _scheduleSync();
   }
 
   Future<void> eliminar(String id) async {
@@ -187,9 +211,7 @@ class PresupuestosRepository {
     await db.delete('presupuestos', where: 'id = ?', whereArgs: [id]);
     await SyncQueue.enqueue(tabla: 'presupuestos', operacion: SyncOperation.delete, registroId: id, payload: {});
     
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
+    _scheduleSync();
   }
 
   Future<void> actualizar({
@@ -202,8 +224,7 @@ class PresupuestosRepository {
   }) async {
     final db = await LocalDatabase.instance;
     final now = DateTime.now();
-    final nowIso = now.toUtc().toIso8601String();
-    
+
     // 1. Actualizar presupuesto base
     final presupuestoData = {
       'tipo_evento': tipoEvento,
@@ -215,24 +236,56 @@ class PresupuestosRepository {
     await db.update('presupuestos', presupuestoData, where: 'id = ?', whereArgs: [id]);
     await SyncQueue.enqueue(tabla: 'presupuestos', operacion: SyncOperation.update, registroId: id, payload: presupuestoData);
 
-    // 2. Reemplazar servicios (borrar y reinsertar)
+    // 2. Reemplazar servicios (local + cola de sync: borrados en nube + upserts)
+    final oldRows = await db.query(
+      'presupuesto_servicios',
+      columns: ['id'],
+      where: 'presupuesto_id = ?',
+      whereArgs: [id],
+    );
+    final newIds = servicios
+        .map((s) {
+          final raw = s['id'];
+          return raw is String && raw.length == 36 ? raw : null;
+        })
+        .whereType<String>()
+        .toSet();
+    for (final row in oldRows) {
+      final linea = row['id'] as String;
+      if (!newIds.contains(linea)) {
+        await SyncQueue.enqueue(
+          tabla: 'presupuesto_servicios',
+          operacion: SyncOperation.delete,
+          registroId: linea,
+          payload: {'id': linea, 'presupuesto_id': id},
+        );
+      }
+    }
+
     await db.delete('presupuesto_servicios', where: 'presupuesto_id = ?', whereArgs: [id]);
-    
+
     for (final s in servicios) {
+      final lineaId = (s['id'] is String && (s['id'] as String).length == 36) ? s['id'] as String : UuidUtils.generate();
       final psData = {
+        'id': lineaId,
         'presupuesto_id': id,
         'servicio_id': s['servicio_id'],
         'precio_final': s['precio_final'],
         'cantidad': s['cantidad'] ?? 1.0,
         'detalle_servicio': s['detalle_servicio'],
         'grupo': s['grupo'],
+        'combo_orden': s['combo_orden'] ?? 0,
       };
-      await db.insert('presupuesto_servicios', psData);
+      await db.insert('presupuesto_servicios', psData, conflictAlgorithm: ConflictAlgorithm.replace);
+      await SyncQueue.enqueue(
+        tabla: 'presupuesto_servicios',
+        operacion: SyncOperation.insert,
+        registroId: lineaId,
+        payload: psData,
+      );
     }
-    
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
+
+    _scheduleSync();
   }
 
   Future<void> actualizarConfiguracionIntegral({
@@ -276,9 +329,7 @@ class PresupuestosRepository {
       await SyncQueue.enqueue(tabla: 'clientes', operacion: SyncOperation.update, registroId: clienteId, payload: clientData);
     }
     
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
+    _scheduleSync();
   }
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
@@ -297,12 +348,14 @@ class PresupuestosRepository {
       ''', [pid]);
 
       final List<Map<String, dynamic>> serviciosJson = sRows.map((sr) => {
+        'id': sr['id'],
         'presupuesto_id': sr['presupuesto_id'],
         'servicio_id': sr['servicio_id'],
         'precio_final': sr['precio_final'],
         'cantidad': sr['cantidad'],
         'detalle_servicio': sr['detalle_servicio'],
         'grupo': sr['grupo'],
+        'combo_orden': sr['combo_orden'] ?? 0,
         'servicios': {
           'id': sr['servicio_id'],
           'nombre': sr['nombre'] ?? sr['detalle_servicio'] ?? 'Servicio Ad-hoc',
@@ -333,6 +386,9 @@ class PresupuestosRepository {
       
       final batch = db.batch();
       for (final row in list) {
+        final presupuestoId = row['id'] as String? ?? '';
+        if (presupuestoId.isEmpty) continue;
+
         batch.insert('presupuestos', {
           'id': row['id'],
           'cliente_id': row['cliente_id'],
@@ -340,6 +396,7 @@ class PresupuestosRepository {
           'lugar': row['lugar'],
           'detalle_anclaje': row['detalle_anclaje'],
           'fecha_vencimiento': row['fecha_vencimiento'],
+          'fecha_evento': row['fecha_evento'],
           'estado': row['estado'],
           'instagram': row['instagram'],
           'telefono': row['telefono'],
@@ -349,15 +406,33 @@ class PresupuestosRepository {
           'created_at': row['created_at'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-        final servicios = row['presupuesto_servicios'] as List;
-        for (final s in servicios) {
+        // Reemplazar líneas solo para este presupuesto: evita mezclar borrados locales
+        // con filas viejas que el pull volvería a insertar (mismos ids que en la nube).
+        batch.delete('presupuesto_servicios', where: 'presupuesto_id = ?', whereArgs: [presupuestoId]);
+
+        final servicios = row['presupuesto_servicios'] as List? ?? [];
+        for (var i = 0; i < servicios.length; i++) {
+          final s = servicios[i] as Map;
+          final sMap = Map<String, dynamic>.from(s);
+          final pid = (sMap['presupuesto_id'] as String?)?.trim() ?? presupuestoId;
+          final sid = (sMap['servicio_id'] as String?)?.trim() ?? '';
+          if (pid.isEmpty || sid.isEmpty) continue;
+
+          final rawId = sMap['id'] ?? sMap['Id'];
+          final idStr = (rawId is String) ? rawId.trim() : '';
+          final lineaId = (idStr.length == 36)
+              ? idStr
+              : UuidUtils.lineaIdDeterministic('ps', pid, sid, i);
+
           batch.insert('presupuesto_servicios', {
-            'presupuesto_id': s['presupuesto_id'],
-            'servicio_id': s['servicio_id'],
-            'precio_final': s['precio_final'],
-            'cantidad': s['cantidad'] ?? 1.0,
-            'detalle_servicio': s['detalle_servicio'],
-            'grupo': s['grupo'],
+            'id': lineaId,
+            'presupuesto_id': pid,
+            'servicio_id': sid,
+            'precio_final': sMap['precio_final'],
+            'cantidad': sMap['cantidad'] ?? 1.0,
+            'detalle_servicio': sMap['detalle_servicio'],
+            'grupo': sMap['grupo'],
+            'combo_orden': sMap['combo_orden'] ?? 0,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       }
@@ -368,16 +443,6 @@ class PresupuestosRepository {
   }
 
   // _syncInmediato deprecado a favor de SyncEngine
-
-  Future<void> _removeFromQueue(String tabla, String registroId) async {
-    final db = await LocalDatabase.instance;
-    await db.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: [tabla, registroId]);
-  }
-
-  Future<void> _removeQueueByPrefix(String tabla, String prefix) async {
-    final db = await LocalDatabase.instance;
-    await db.delete('_sync_queue', where: 'tabla = ? AND registro_id LIKE ?', whereArgs: [tabla, '$prefix%']);
-  }
 }
 
 final presupuestosRepositoryProvider = Provider<PresupuestosRepository>((ref) {

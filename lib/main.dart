@@ -99,7 +99,7 @@ void main(List<String> args) async {
       backgroundColor: Colors.transparent,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
-      title: 'Junior Eventos Admin',
+      title: 'Junior Eventos',
     );
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.show();
@@ -526,23 +526,62 @@ class JuniorEventsApp extends ConsumerWidget {
   }
 }
 
-class AuthWrapper extends ConsumerWidget {
+class AuthWrapper extends ConsumerStatefulWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends ConsumerState<AuthWrapper> {
+  /// Un solo [Future.delayed] para el failsafe: si se recrea en cada build, el timer nunca termina.
+  late final Future<void> _authSplashTimeout =
+      Future.delayed(const Duration(seconds: 6));
+
+  /// Evita invalidar el rol en cada rebuild del [StreamBuilder] (podía provocar ciclos de actualización).
+  String? _invalidatedRoleForUserId;
+
+  /// Rehidrata sesión desde disco si el stream de auth tarda o falla (p. ej. sin internet).
+  Session? _effectiveSession(AsyncSnapshot<AuthState> snapshot, SupabaseClient supabase) {
+    if (snapshot.data?.session != null) {
+      return snapshot.data!.session;
+    }
+    if (snapshot.hasError) {
+      return supabase.auth.currentSession;
+    }
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return supabase.auth.currentSession;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final supabase = ref.watch(supabaseProvider);
 
     return StreamBuilder<AuthState>(
       stream: supabase.auth.onAuthStateChange,
       builder: (context, snapshot) {
+        final session = _effectiveSession(snapshot, supabase);
+
+        if (session != null) {
+          final uid = session.user.id;
+          if (_invalidatedRoleForUserId != uid) {
+            _invalidatedRoleForUserId = uid;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              ref.invalidate(userRoleProvider);
+            });
+          }
+          return const _RoleRouter();
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
-          // Timeout de seguridad en UI: Si en 6 segundos no hay estado, mostramos login
-          return FutureBuilder(
-            future: Future.delayed(const Duration(seconds: 6)),
+          return FutureBuilder<void>(
+            future: _authSplashTimeout,
             builder: (context, timerSnapshot) {
               if (timerSnapshot.connectionState == ConnectionState.done) {
-                return const LoginScreen(); // Failsafe: Mandamos a login si el stream cuelga
+                return const LoginScreen();
               }
               return const Scaffold(
                 backgroundColor: Color(0xFF0A0A0A),
@@ -606,14 +645,7 @@ class AuthWrapper extends ConsumerWidget {
           );
         }
 
-        final session = snapshot.data?.session;
-        if (session != null) {
-          // Limpiar cache de rol para que cada login consulte datos frescos
-          ref.invalidate(userRoleProvider);
-          // Sesión activa → revisar rol y redirigir
-          return const _RoleRouter();
-        }
-
+        _invalidatedRoleForUserId = null;
         return const LoginScreen();
       },
     );

@@ -1,6 +1,7 @@
 class IngresoDetallado {
   final String id;
-  final String fuente; // 'Masivo' o 'Particular'
+  final String fuente; // 'Masivo', 'Particular', 'Alquiler'
+  /// Instante UTC canónico (ISO desde DB). La vista convierte a hora Argentina al mostrar.
   final DateTime fecha;
   final double monto;
   final String concepto;
@@ -8,6 +9,9 @@ class IngresoDetallado {
   final String nombreEvento;
   final String? eventoId;
   final String? clienteId;
+  /// Cuando [fuente] es Alquiler, enlace al préstamo (pantalla detalle).
+  final String? prestamoId;
+  final String? medioPago;
 
   IngresoDetallado({
     required this.id,
@@ -19,6 +23,8 @@ class IngresoDetallado {
     required this.nombreEvento,
     this.eventoId,
     this.clienteId,
+    this.prestamoId,
+    this.medioPago,
   });
 
   // Utilidad para ordenar

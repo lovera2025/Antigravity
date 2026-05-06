@@ -3,14 +3,7 @@ import 'package:intl/intl.dart';
 extension CurrencyFormatting on num {
   /// Formatea un número como moneda argentina (ARS).
   /// Ejemplo: 1234.56 -> $ 1.234,56
-  String toCurrency() {
-    final formatter = NumberFormat.currency(
-      locale: 'es_AR',
-      symbol: '\$ ',
-      decimalDigits: 2,
-    );
-    return formatter.format(this);
-  }
+  String toCurrency() => '\$ ${toFormattedNumber()}';
 
   /// Formatea un número como moneda sin el símbolo.
   /// Ejemplo: 1234.56 -> 1.234,56

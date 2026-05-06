@@ -475,6 +475,7 @@ class _CrearEventoScreenState extends ConsumerState<CrearEventoScreen> {
                     const SizedBox(height: 56),
                     
                     // Botón de Acción Élite
+                    const SizedBox(height: 24),
                     _buildFerrariAction(
                       label: 'DEFINIR SERVICIOS',
                       icon: Icons.auto_awesome,

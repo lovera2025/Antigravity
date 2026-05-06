@@ -1,0 +1,86 @@
+import '../../../core/utils/ar_time.dart';
+
+/// Categoría usada en la tabla `egresos` para etiquetar retiros de caja.
+/// Se centraliza acá para que `cierre_caja_provider` y `finanzas_provider`
+/// compartan la constante sin acoplarse entre sí.
+const String kCategoriaRetiroCaja = 'Retiro de caja';
+
+/// Turnos de cierre de caja. El corte mañana/tarde se decide por hora AR
+/// (default 14:00) y `dia` engloba ambos (00:00 a 23:59 AR).
+enum TurnoCaja {
+  manana,
+  tarde,
+  dia,
+}
+
+extension TurnoCajaX on TurnoCaja {
+  String get label {
+    switch (this) {
+      case TurnoCaja.manana:
+        return 'MAÑANA';
+      case TurnoCaja.tarde:
+        return 'TARDE';
+      case TurnoCaja.dia:
+        return 'DÍA';
+    }
+  }
+
+  String get labelCorto {
+    switch (this) {
+      case TurnoCaja.manana:
+        return 'Mañana';
+      case TurnoCaja.tarde:
+        return 'Tarde';
+      case TurnoCaja.dia:
+        return 'Día';
+    }
+  }
+
+  /// Identificador estable para nombres de archivo / logs.
+  String get slug {
+    switch (this) {
+      case TurnoCaja.manana:
+        return 'manana';
+      case TurnoCaja.tarde:
+        return 'tarde';
+      case TurnoCaja.dia:
+        return 'dia';
+    }
+  }
+}
+
+/// Rango horario [inicio, fin) en reloj AR para un día calendario AR dado.
+class RangoHorarioAr {
+  final DateTime inicioAr;
+  final DateTime finAr;
+
+  const RangoHorarioAr({required this.inicioAr, required this.finAr});
+
+  /// `dt` (UTC o AR) cae dentro del rango (comparado en huso AR).
+  bool contiene(DateTime dt) {
+    final ar = ArTime.toAr(dt);
+    return !ar.isBefore(inicioAr) && ar.isBefore(finAr);
+  }
+}
+
+/// Calcula el rango horario AR de un turno para un día calendario AR puntual.
+///
+/// `corteHora` (default 14): hora AR a partir de la cual termina mañana y arranca tarde.
+RangoHorarioAr rangoHorarioAr(
+  DateTime diaCalendarioAr,
+  TurnoCaja turno, {
+  int corteHora = 14,
+}) {
+  final base = DateTime(diaCalendarioAr.year, diaCalendarioAr.month, diaCalendarioAr.day);
+  final inicio0 = base;
+  final corte = base.add(Duration(hours: corteHora));
+  final fin = base.add(const Duration(days: 1));
+  switch (turno) {
+    case TurnoCaja.manana:
+      return RangoHorarioAr(inicioAr: inicio0, finAr: corte);
+    case TurnoCaja.tarde:
+      return RangoHorarioAr(inicioAr: corte, finAr: fin);
+    case TurnoCaja.dia:
+      return RangoHorarioAr(inicioAr: inicio0, finAr: fin);
+  }
+}

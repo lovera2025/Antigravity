@@ -24,12 +24,17 @@ CREATE TABLE IF NOT EXISTS public.presupuestos (
 );
 
 -- 3. CREACIÓN DE LA TABLA DE SERVICIOS VINCULADOS AL PRESUPUESTO
+-- PK id por línea (sync / app); permite varias líneas con el mismo servicio_id (combos, etc.).
+-- Si ya tenés la tabla vieja con PK compuesta, aplicá supabase/migrations/20260422120000_presupuesto_servicios_line_id.sql
 CREATE TABLE IF NOT EXISTS public.presupuesto_servicios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     presupuesto_id UUID NOT NULL REFERENCES public.presupuestos(id) ON DELETE CASCADE,
     servicio_id UUID NOT NULL REFERENCES public.servicios(id),
     precio_final NUMERIC NOT NULL,
-    detalle_servicio TEXT,
-    PRIMARY KEY (presupuesto_id, servicio_id)
+    cantidad NUMERIC DEFAULT 1.0,
+    grupo TEXT,
+    combo_orden INTEGER DEFAULT 0,
+    detalle_servicio TEXT
 );
 
 -- 4. CONFIGURACIÓN DE SEGURIDAD (RLS)
@@ -54,3 +59,4 @@ END $$;
 -- 5. ÍNDICES PARA OPTIMIZACIÓN
 CREATE INDEX IF NOT EXISTS idx_presupuestos_cliente ON public.presupuestos(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_presupuestos_estado ON public.presupuestos(estado);
+CREATE INDEX IF NOT EXISTS idx_presupuesto_servicios_presupuesto ON public.presupuesto_servicios (presupuesto_id);

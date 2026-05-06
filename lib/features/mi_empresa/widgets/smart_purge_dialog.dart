@@ -28,6 +28,8 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
     'accesos': {},
     'presupuestos': {},
     'solicitudes': {},
+    'prestamos_alquiler': {},
+    'pagos_alquiler': {},
   };
 
   final ScrollController _scrollController = ScrollController();
@@ -63,7 +65,7 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
           _selectedIds[entry.key] = entry.value.map((e) => e['id'].toString()).toSet();
           
           // Calcular impacto financiero (Solo de items seleccionados, inicialmente todos)
-          if (entry.key == 'transacciones' || entry.key == 'pagos') {
+          if (entry.key == 'transacciones' || entry.key == 'pagos' || entry.key == 'pagos_alquiler') {
             for (var item in entry.value) {
               _montoTotalImpacto += double.tryParse(item['monto'].toString()) ?? 0;
             }
@@ -89,7 +91,7 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
       final items = _resultados[key] ?? [];
       final selected = _selectedIds[key] ?? {};
       
-      if (key == 'transacciones' || key == 'pagos') {
+      if (key == 'transacciones' || key == 'pagos' || key == 'pagos_alquiler') {
         for (var item in items) {
           if (selected.contains(item['id'].toString())) {
             total += double.tryParse(item['monto'].toString()) ?? 0;
@@ -332,6 +334,8 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
                               _buildSection('INVITADOS', 'invitados', Icons.people_outline_rounded),
                               _buildSection('REGISTROS DE ACCESO', 'accesos', Icons.fact_check_outlined),
                               _buildSection('PRESUPUESTOS', 'presupuestos', Icons.description_outlined),
+                              _buildSection('PRÉSTAMOS ALQUILER ÍTEMS', 'prestamos_alquiler', Icons.inventory_2_outlined),
+                              _buildSection('PAGOS ALQUILER ÍTEMS', 'pagos_alquiler', Icons.paid_outlined),
                               _buildSection('SOLICITUDES DE COTIZACIÓN', 'solicitudes', Icons.send_and_archive_outlined),
                             ],
                           ),
@@ -429,7 +433,7 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
             ],
           ),
         ),
-        if (key == 'transacciones' || key == 'pagos' || key == 'egresos')
+        if (key == 'transacciones' || key == 'pagos' || key == 'pagos_alquiler' || key == 'egresos')
           Padding(
             padding: const EdgeInsets.only(bottom: 8, left: 4),
             child: Text(
@@ -465,6 +469,15 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
                 case 'pagos':
                   label = '${item['concepto'] ?? 'Pago'} - \$${item['monto']}';
                   subLabel = 'RELACIONADO CON EL EVENTO/CONTRATO SELECCIONADO';
+                  break;
+                case 'pagos_alquiler':
+                  label = '${item['concepto'] ?? 'Pago alquiler'} - \$${item['monto']}';
+                  subLabel = 'PAGO VINCULADO A PRÉSTAMO DE ÍTEMS';
+                  break;
+                case 'prestamos_alquiler':
+                  label = 'PRÉSTAMO ${item['id'].toString().substring(0, 8)}...';
+                  subLabel =
+                      'DEL ${item['fecha_inicio'] ?? ''} AL ${item['fecha_fin'] ?? ''} — TOTAL \$${item['total'] ?? 0}';
                   break;
                 case 'egresos':
                   label = '${item['concepto'] ?? 'Egreso'} - \$${item['monto']}';

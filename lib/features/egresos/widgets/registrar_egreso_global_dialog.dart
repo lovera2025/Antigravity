@@ -25,15 +25,17 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
   Evento? _eventoSeleccionado;
 
   final List<String> _categorias = [
-    'Proveedor',
-    'Personal',
-    'Alquiler',
-    'Catering',
-    'Bebida',
+    'Sueldos',
+    'Operadores',
+    'Alquiler local',
+    'Proveedores',
+    'Logística',
+    'Marketing',
     'Impuestos',
-    'Otro'
+    'Otro',
   ];
-  String _categoriaSeleccionada = 'Proveedor';
+  String _categoriaSeleccionada = 'Proveedores';
+  String _medioPagoSeleccionado = 'Efectivo';
 
   @override
   void initState() {
@@ -95,6 +97,7 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
         monto: monto,
         proveedor: _proveedorController.text.trim(),
         categoria: _categoriaSeleccionada,
+        medioPago: _medioPagoSeleccionado,
       );
 
       // Notificamos al provider de egresos para que se refresque (aunque el stream lo haría)
@@ -153,6 +156,8 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
               const SizedBox(height: 16),
               TextFormField(
                 controller: _proveedorController,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                 decoration: const InputDecoration(
                   labelText: 'Proveedor / Concepto',
                   prefixIcon: Icon(Icons.business_center),
@@ -190,7 +195,26 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
                   prefixIcon: Icon(Icons.attach_money),
                   hintText: '0,00',
                 ),
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) {
+                  if (!_isSubmitting && !_isLoadingEventos) _submit();
+                },
                 validator: (value) => (value == null || value == '0,00') ? 'Requerido' : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _medioPagoSeleccionado,
+                decoration: const InputDecoration(
+                  labelText: 'Medio de Pago',
+                  prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                  DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _medioPagoSeleccionado = val);
+                },
               ),
             ],
           ),

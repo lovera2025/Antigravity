@@ -8,6 +8,7 @@ import '../../../models/transaccion.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/uuid_utils.dart';
 
 /// Repositorio de Transacciones (Ingresos) — Offline-First.
@@ -53,10 +54,13 @@ class TransaccionesRepository {
     required double monto,
     String? concepto,
     String? createdBy,
+    String? medioPago,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
-    final now = DateTime.now().toUtc().toIso8601String();
+    // Sello temporal ESTRICTO: instante UTC preciso. La presentación al
+    // usuario se realiza vía ArTime en huso America/Argentina/Buenos_Aires.
+    final now = ArTime.nowUtcIso();
 
     final data = {
       'id': id,
@@ -65,6 +69,7 @@ class TransaccionesRepository {
       'concepto': concepto,
       'fecha_pago': now,
       'created_by': createdBy,
+      'medio_pago': medioPago,
     };
 
     await db.insert('transacciones', data, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -83,6 +88,47 @@ class TransaccionesRepository {
 
     debugPrint('✅ Transacción registrada localmente: $id');
     return id;
+  }
+
+  /// Quita la(s) transacción(es) de bonificación global (reemplazo al cambiar el %).
+  Future<void> eliminarBonificacionesGlobales(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'transacciones',
+      columns: ['id'],
+      where: 'evento_id = ? AND concepto IS NOT NULL AND instr(concepto, ?) = 1',
+      whereArgs: [eventoId, kConceptoBonificacionGlobalPrefix],
+    );
+    for (final r in rows) {
+      final id = r['id'] as String;
+      await db.delete('transacciones', where: 'id = ?', whereArgs: [id]);
+      await SyncQueue.enqueue(
+        tabla: 'transacciones',
+        operacion: SyncOperation.delete,
+        registroId: id,
+        payload: {'id': id},
+      );
+    }
+  }
+
+  /// Una sola bonificación global: [presupuestoTotal] × [porcentaje]/100. Si [porcentaje] ≤ 0, solo elimina la anterior.
+  Future<void> aplicarBonificacionGlobal({
+    required String eventoId,
+    required double presupuestoTotal,
+    required double porcentaje,
+  }) async {
+    await eliminarBonificacionesGlobales(eventoId);
+    if (porcentaje <= 0.001 || presupuestoTotal <= 0) return;
+    final monto = presupuestoTotal * (porcentaje / 100.0);
+    if (monto <= 0.01) return;
+    final pctStr = porcentaje == porcentaje.roundToDouble()
+        ? porcentaje.toInt().toString()
+        : porcentaje.toStringAsFixed(2);
+    await registrarPago(
+      eventoId: eventoId,
+      monto: monto,
+      concepto: '$kConceptoBonificacionGlobalPrefix$pctStr% sobre presupuesto total)',
+    );
   }
 
   // ── SYNC & REALTIME ────────────────────────────────────────────────────────
@@ -175,6 +221,10 @@ class TransaccionesRepository {
           'concepto': row['concepto'],
           'fecha_pago': row['fecha_pago'],
           'created_by': row['created_by'],
+          'medio_pago': row['medio_pago'],
+          'anulado': row['anulado'] ?? 0,
+          'motivo_anulacion': row['motivo_anulacion'],
+          'fecha_anulacion': row['fecha_anulacion'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);

@@ -21,16 +21,19 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
   final _montoController = TextEditingController();
   bool _isSubmitting = false;
 
+  /// Misma taxonomía que egreso global (Finanzas / desglose por categoría).
   final List<String> _categorias = [
-    'Proveedor',
-    'Personal',
-    'Alquiler',
-    'Catering',
-    'Bebida',
+    'Sueldos',
+    'Operadores',
+    'Alquiler local',
+    'Proveedores',
+    'Logística',
+    'Marketing',
     'Impuestos',
-    'Otro'
+    'Otro',
   ];
-  String _categoriaSeleccionada = 'Proveedor';
+  String _categoriaSeleccionada = 'Proveedores';
+  String _medioPagoSeleccionado = 'Efectivo';
 
   @override
   void dispose() {
@@ -57,6 +60,7 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
         monto: monto,
         proveedor: _proveedorController.text.trim(),
         categoria: _categoriaSeleccionada,
+        medioPago: _medioPagoSeleccionado,
       );
 
       // Notificamos al provider de egresos masivo para que se refresque
@@ -91,6 +95,8 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
             children: [
               TextFormField(
                 controller: _proveedorController,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
                 decoration: const InputDecoration(
                   labelText: 'Proveedor / Concepto',
                   hintText: 'Ej: DJ Junior, Catering X...',
@@ -145,11 +151,30 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
                   prefixIcon: Icon(Icons.attach_money),
                   hintText: '0,00',
                 ),
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) {
+                  if (!_isSubmitting) _submit();
+                },
                 validator: (value) {
                   if (value == null || value.trim().isEmpty || value == '0,00') {
                     return 'Ingrese un monto';
                   }
                   return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _medioPagoSeleccionado,
+                decoration: const InputDecoration(
+                  labelText: 'Medio de Pago',
+                  prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
+                  DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _medioPagoSeleccionado = val);
                 },
               ),
             ],

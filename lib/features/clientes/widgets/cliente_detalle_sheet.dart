@@ -6,7 +6,6 @@ import '../repositories/clientes_repository.dart';
 import '../../eventos/detalle_evento_masivo_screen.dart';
 import '../../eventos/detalle_evento_particular_screen.dart';
 import '../../../core/database/local_database.dart';
-import 'dart:ui';
 
 class ClienteDetalleSheet extends ConsumerStatefulWidget {
   final Cliente cliente;

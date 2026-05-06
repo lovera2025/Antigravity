@@ -6,6 +6,7 @@ class Egreso {
   final String? categoria;
   final DateTime? fecha;
   final String? createdBy;
+  final String? medioPago;
 
   Egreso({
     required this.id,
@@ -15,7 +16,17 @@ class Egreso {
     this.categoria,
     this.fecha,
     this.createdBy,
+    this.medioPago,
   });
+
+  /// ISO desde SQLite/Supabase → instante UTC canónico (misma política que ingresos).
+  /// La presentación en AR usa [ArTime.toAr] en UI/PDF.
+  static DateTime? _parseFechaUtc(dynamic raw) {
+    if (raw == null) return null;
+    final p = DateTime.tryParse(raw.toString());
+    if (p == null) return null;
+    return p.isUtc ? p : p.toUtc();
+  }
 
   factory Egreso.fromJson(Map<String, dynamic> json) {
     return Egreso(
@@ -24,10 +35,9 @@ class Egreso {
       monto: double.tryParse(json['monto']?.toString() ?? '0') ?? 0.0,
       proveedor: json['proveedor'] ?? json['concepto'] ?? 'Gasto sin nombre',
       categoria: json['categoria'] ?? 'Otro',
-      fecha: json['fecha'] != null 
-          ? DateTime.tryParse(json['fecha']) 
-          : (json['fecha_pago'] != null ? DateTime.tryParse(json['fecha_pago']) : DateTime.now()),
+      fecha: _parseFechaUtc(json['fecha']) ?? _parseFechaUtc(json['fecha_pago']),
       createdBy: json['created_by'],
+      medioPago: json['medio_pago'],
     );
   }
 
@@ -39,6 +49,7 @@ class Egreso {
       'proveedor': proveedor,
       'categoria': categoria,
       'fecha': fecha?.toIso8601String(),
+      'medio_pago': medioPago,
     };
   }
 }

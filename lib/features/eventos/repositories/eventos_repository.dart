@@ -114,11 +114,13 @@ class EventosRepository {
 
     return rows.map((r) {
       return EventosServicios(
+        id: r['id'] as String,
         eventoId: r['evento_id'] as String,
         servicioId: r['servicio_id'] as String,
         precioFinalAcordado: (r['precio_final_acordado'] as num).toDouble(),
         cantidad: (r['cantidad'] as num?)?.toDouble() ?? 1.0,
         grupo: r['grupo'] as String?,
+        comboOrden: (r['combo_orden'] as num?)?.toInt() ?? 0,
         detalleServicio: r['detalle_servicio'] as String?,
         servicio: r['servicio_nombre'] != null ? Servicio(
           id: r['servicio_id'] as String,
@@ -148,7 +150,8 @@ class EventosRepository {
     int cantidadCuotas = 1,
     String modalidad = 'particular',
     String? observaciones,
-    required Map<String, Map<String, dynamic>> serviciosSeleccionados, // servicioId -> {'precio': x, 'cantidad': y}
+    /// [lineaId] -> { 'servicio_id', 'precio', 'cantidad', 'grupo', 'combo_orden', 'detalle_servicio' } (mismo servicio varias filas)
+    required Map<String, Map<String, dynamic>> serviciosSeleccionados,
   }) async {
     final db = await LocalDatabase.instance;
     final now = DateTime.now().toUtc().toIso8601String();
@@ -189,19 +192,24 @@ class EventosRepository {
 
     // 3. Crear presupuesto (servicios)
     for (final entry in serviciosSeleccionados.entries) {
+      final lineaId = entry.key;
+      final v = entry.value;
+      final servicioId = (v['servicio_id'] as String?)?.trim() ?? lineaId;
       final esData = {
+        'id': lineaId,
         'evento_id': eventoId,
-        'servicio_id': entry.key,
-        'precio_final_acordado': entry.value['precio'] ?? 0.0,
-        'cantidad': entry.value['cantidad'] ?? 1.0,
-        'grupo': entry.value['grupo'],
-        'detalle_servicio': entry.value['detalle_servicio'],
+        'servicio_id': servicioId,
+        'precio_final_acordado': v['precio'] ?? 0.0,
+        'cantidad': v['cantidad'] ?? 1.0,
+        'grupo': v['grupo'],
+        'combo_orden': v['combo_orden'] ?? 0,
+        'detalle_servicio': v['detalle_servicio'],
       };
       await db.insert('eventos_servicios', esData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
         tabla: 'eventos_servicios',
         operacion: SyncOperation.insert,
-        registroId: '${eventoId}_${entry.key}',
+        registroId: lineaId,
         payload: esData,
       );
     }
@@ -219,24 +227,46 @@ class EventosRepository {
   Future<void> actualizarPresupuesto(String eventoId, Map<String, Map<String, dynamic>> servicios) async {
     final db = await LocalDatabase.instance;
 
-    // Borrar presupuesto viejo
+    final oldRows = await db.query(
+      'eventos_servicios',
+      columns: ['id'],
+      where: 'evento_id = ?',
+      whereArgs: [eventoId],
+    );
+    final newLineaIds = servicios.keys.toSet();
+    for (final row in oldRows) {
+      final id = row['id'] as String;
+      if (!newLineaIds.contains(id)) {
+        await SyncQueue.enqueue(
+          tabla: 'eventos_servicios',
+          operacion: SyncOperation.delete,
+          registroId: id,
+          payload: {'id': id, 'evento_id': eventoId},
+        );
+      }
+    }
+
     await db.delete('eventos_servicios', where: 'evento_id = ?', whereArgs: [eventoId]);
 
-    // Insertar nuevo
     for (final entry in servicios.entries) {
+      final lineaId = entry.key;
+      final v = entry.value;
+      final servicioId = (v['servicio_id'] as String?)?.trim() ?? lineaId;
       final esData = {
+        'id': lineaId,
         'evento_id': eventoId,
-        'servicio_id': entry.key,
-        'precio_final_acordado': entry.value['precio'] ?? 0.0,
-        'cantidad': entry.value['cantidad'] ?? 1.0,
-        'grupo': entry.value['grupo'],
-        'detalle_servicio': entry.value['detalle_servicio'],
+        'servicio_id': servicioId,
+        'precio_final_acordado': v['precio'] ?? 0.0,
+        'cantidad': v['cantidad'] ?? 1.0,
+        'grupo': v['grupo'],
+        'combo_orden': v['combo_orden'] ?? 0,
+        'detalle_servicio': v['detalle_servicio'],
       };
       await db.insert('eventos_servicios', esData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
         tabla: 'eventos_servicios',
         operacion: SyncOperation.insert,
-        registroId: '${eventoId}_${entry.key}',
+        registroId: lineaId,
         payload: esData,
       );
     }
@@ -426,6 +456,25 @@ class EventosRepository {
     }
   }
 
+  /// Persiste el % de bonificación global acordado (sobre presupuesto total del evento).
+  Future<void> actualizarBonificacionGlobalPct(String eventoId, double? porcentaje) async {
+    final db = await LocalDatabase.instance;
+    final data = <String, dynamic>{
+      'bonificacion_global_pct': porcentaje,
+    };
+    await db.update('eventos', data, where: 'id = ?', whereArgs: [eventoId]);
+    await SyncQueue.enqueue(
+      tabla: 'eventos',
+      operacion: SyncOperation.update,
+      registroId: eventoId,
+      payload: {'id': eventoId, ...data},
+    );
+
+    if (_connectivity.currentStatus == AppConnectivity.online) {
+      _syncEngine.syncNow();
+    }
+  }
+
   /// Actualiza el estado de un evento.
   Future<void> actualizarEstado(String eventoId, EstadoEvento nuevoEstado) async {
     final estadoStr = _estadoToString(nuevoEstado);
@@ -562,6 +611,14 @@ class EventosRepository {
         }
       }
 
+      final localPctRows = await db.query('eventos', columns: ['id', 'bonificacion_global_pct']);
+      final preservedPctById = <String, double?>{
+        for (final r in localPctRows)
+          r['id'] as String: r['bonificacion_global_pct'] != null
+              ? (r['bonificacion_global_pct'] as num).toDouble()
+              : null,
+      };
+
       final batch = db.batch();
       
       // Aseguramos de descargar también a los clientes (previniendo nombres nulos)
@@ -590,6 +647,11 @@ class EventosRepository {
         final id = row['id'] as String;
         if (pendingIds.contains(id)) continue;
 
+        final preservedPct = preservedPctById[id];
+        final cloudPct = row['bonificacion_global_pct'] != null
+            ? double.tryParse(row['bonificacion_global_pct'].toString())
+            : null;
+
         batch.insert('eventos', {
           'id': row['id'],
           'cliente_id': row['cliente_id'],
@@ -600,6 +662,7 @@ class EventosRepository {
           'estado': row['estado'] ?? 'Planificacion',
           'pin_operador': row['pin_operador'],
           'observaciones': row['observaciones'],
+          'bonificacion_global_pct': cloudPct ?? preservedPct,
           'created_at': row['created_at'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
@@ -610,13 +673,26 @@ class EventosRepository {
     }
   }
 
+  String _lineaIdEventoServicioCloud(Map<String, dynamic> r, String eventoIdFallback, int indexInList) {
+    var k = (r['id'] as String?)?.trim() ?? '';
+    if (k.length == 36) return k;
+    final eid = (r['evento_id'] as String?)?.trim() ?? eventoIdFallback;
+    final sid = (r['servicio_id'] as String?)?.trim() ?? '';
+    if (eid.isEmpty || sid.isEmpty) return '';
+    return UuidUtils.lineaIdDeterministic('es', eid, sid, indexInList);
+  }
+
   Future<void> _pullPresupuestoByEvento(Database db, String eventoId, {bool prune = false}) async {
     try {
       final response = await _supabase.from('eventos_servicios').select().eq('evento_id', eventoId);
       final List<dynamic> list = response as List;
       
-      // La clave primaria de eventos_servicios es (evento_id, servicio_id)
-      final cloudKeys = list.map((r) => '${r['evento_id']}_${r['servicio_id']}').toSet();
+      final cloudKeys = <String>{};
+      for (var i = 0; i < list.length; i++) {
+        final r = list[i] as Map<String, dynamic>;
+        final id = _lineaIdEventoServicioCloud(r, eventoId, i);
+        if (id.isNotEmpty) cloudKeys.add(id);
+      }
 
       // Claves con cambios locales pendientes
       final pendingRows = await db.query('_sync_queue', columns: ['registro_id'], where: "tabla = 'eventos_servicios'");
@@ -625,21 +701,21 @@ class EventosRepository {
       if (prune) {
         final localRows = await db.query('eventos_servicios', where: 'evento_id = ?', whereArgs: [eventoId]);
         final orphans = localRows.where((r) {
-          final key = '${r['evento_id']}_${r['servicio_id']}';
-          return !cloudKeys.contains(key);
+          final id = r['id'] as String? ?? '';
+          return id.isNotEmpty && !cloudKeys.contains(id);
         }).toList();
 
         if (orphans.isNotEmpty) {
           for (final r in orphans) {
-            final key = '${r['evento_id']}_${r['servicio_id']}';
+            final key = r['id'] as String? ?? '';
             final inQueue = await db.query('_sync_queue', 
               where: "tabla = 'eventos_servicios' AND registro_id = ?", 
               whereArgs: [key]
             );
             if (inQueue.isEmpty) {
               await db.delete('eventos_servicios', 
-                where: 'evento_id = ? AND servicio_id = ?', 
-                whereArgs: [r['evento_id'], r['servicio_id']]
+                where: 'id = ?', 
+                whereArgs: [key]
               );
             }
           }
@@ -647,16 +723,20 @@ class EventosRepository {
       }
 
       final batch = db.batch();
-      for (final row in list) {
-        final key = '${row['evento_id']}_${row['servicio_id']}';
-        if (pendingKeys.contains(key)) continue;
+      for (var i = 0; i < list.length; i++) {
+        final row = list[i] as Map<String, dynamic>;
+        final rid = _lineaIdEventoServicioCloud(row, eventoId, i);
+        if (rid.isEmpty) continue;
+        if (pendingKeys.contains(rid)) continue;
 
         batch.insert('eventos_servicios', {
-          'evento_id': row['evento_id'],
+          'id': rid,
+          'evento_id': row['evento_id'] ?? eventoId,
           'servicio_id': row['servicio_id'],
           'precio_final_acordado': row['precio_final_acordado'],
           'cantidad': row['cantidad'] ?? 1.0,
           'grupo': row['grupo'],
+          'combo_orden': row['combo_orden'] ?? 0,
           'detalle_servicio': row['detalle_servicio'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
@@ -716,6 +796,9 @@ class EventosRepository {
       modalidad: (row['modalidad'] as String?) ?? 'particular',
       pinOperador: row['pin_operador'] as String?,
       observaciones: row['observaciones'] as String?,
+      bonificacionGlobalPct: row['bonificacion_global_pct'] != null
+          ? (row['bonificacion_global_pct'] as num).toDouble()
+          : null,
       createdAt: row['created_at'] != null ? DateTime.tryParse(row['created_at'] as String) : null,
       cliente: clienteData != null ? Cliente.fromJson(clienteData) : null,
     );
@@ -744,11 +827,6 @@ class EventosRepository {
   Future<void> _removeFromQueue(String tabla, String registroId) async {
     final db = await LocalDatabase.instance;
     await db.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: [tabla, registroId]);
-  }
-
-  Future<void> _removeQueueByPrefix(String tabla, String prefix) async {
-    final db = await LocalDatabase.instance;
-    await db.delete('_sync_queue', where: 'tabla = ? AND registro_id LIKE ?', whereArgs: [tabla, '$prefix%']);
   }
 
 }

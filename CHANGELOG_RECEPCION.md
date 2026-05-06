@@ -4,6 +4,15 @@ Registro completo de cambios y nuevas funcionalidades implementadas.
 
 ---
 
+## [1.0.1] - 2026-04-29
+
+### 🔧 Mantenimiento / versión
+
+- Versión de aplicación unificada en **1.0.1** (`pubspec.yaml`, instalador Windows Inno Setup, metadatos del ejecutable en Windows, etiqueta del dashboard).
+- Build de release Windows regenerado para esta versión.
+
+---
+
 ## [1.0.0] - 2026-03-15
 
 ### 🎉 Lanzamiento Inicial
@@ -368,8 +377,8 @@ Ninguno reportado actualmente. Sistema estable para producción.
 
 **Desarrollado por**: AI Assistant (Claude Sonnet 4.5 - PRO Mode)  
 **Para**: Argüello Events  
-**Fecha**: 15 de Marzo, 2026  
-**Versión**: 1.0.0
+**Fecha**: 29 de Abril, 2026  
+**Versión**: 1.0.1
 
 ---
 

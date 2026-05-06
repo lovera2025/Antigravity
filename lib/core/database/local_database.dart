@@ -4,6 +4,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../utils/pago_interes_mora.dart';
+import '../utils/uuid_utils.dart';
+
 /// Base de datos local SQLite — persistencia offline.
 ///
 /// Almacena en: Mis Documentos/JuniorEventos/data.db
@@ -11,7 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 22;
+  static const int _version = 40;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -81,6 +84,7 @@ class LocalDatabase {
         estado TEXT DEFAULT 'Planificacion',
         pin_operador TEXT,
         observaciones TEXT,
+        bonificacion_global_pct REAL,
         created_at TEXT,
         FOREIGN KEY (cliente_id) REFERENCES clientes(id)
       )
@@ -95,24 +99,28 @@ class LocalDatabase {
         costo_base REAL DEFAULT 0.0,
         margen_ganancia REAL DEFAULT 0.0,
         costo_interno REAL DEFAULT 0.0,
-        evento_id TEXT
+        evento_id TEXT,
+        is_archived INTEGER DEFAULT 0
       )
     ''');
 
     // ── Eventos ↔ Servicios ──────────────────────────────────────────────────
     await db.execute('''
       CREATE TABLE eventos_servicios (
+        id TEXT NOT NULL,
         evento_id TEXT NOT NULL,
         servicio_id TEXT NOT NULL,
         precio_final_acordado REAL NOT NULL,
         cantidad REAL DEFAULT 1.0,
         grupo TEXT,
+        combo_orden INTEGER DEFAULT 0,
         detalle_servicio TEXT,
-        PRIMARY KEY (evento_id, servicio_id),
+        PRIMARY KEY (id),
         FOREIGN KEY (evento_id) REFERENCES eventos(id),
         FOREIGN KEY (servicio_id) REFERENCES servicios(id)
       )
     ''');
+    await db.execute('CREATE INDEX idx_es_evento ON eventos_servicios(evento_id)');
 
     // ── Transacciones (Ingresos) ─────────────────────────────────────────────
     await db.execute('''
@@ -123,6 +131,10 @@ class LocalDatabase {
         concepto TEXT,
         fecha_pago TEXT,
         created_by TEXT,
+        medio_pago TEXT,
+        anulado INTEGER DEFAULT 0,
+        motivo_anulacion TEXT,
+        fecha_anulacion TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -137,6 +149,7 @@ class LocalDatabase {
         categoria TEXT,
         fecha TEXT,
         created_by TEXT,
+        medio_pago TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -170,6 +183,8 @@ class LocalDatabase {
         telefono TEXT,
         porcentaje_descuento REAL DEFAULT 0.0,
         created_at TEXT,
+        contrato_firmado INTEGER DEFAULT 0,
+        mora_pendiente_tracked REAL DEFAULT 0.0,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -180,9 +195,16 @@ class LocalDatabase {
         id TEXT PRIMARY KEY,
         contrato_alumno_id TEXT NOT NULL,
         monto REAL NOT NULL,
+        monto_gross REAL,
+        descuento_porcentaje REAL DEFAULT 0.0,
         concepto TEXT DEFAULT 'Cuota Base',
         fecha_pago TEXT,
         created_at TEXT,
+        medio_pago TEXT,
+        line_kind TEXT,
+        anulado INTEGER DEFAULT 0,
+        motivo_anulacion TEXT,
+        fecha_anulacion TEXT,
         FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
       )
     ''');
@@ -230,6 +252,25 @@ class LocalDatabase {
       )
     ''');
 
+    // ── Rentabilidad ──────────────────────────────────────────────────────────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS calculos_rentabilidad (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT,
+        presupuesto_id TEXT,
+        precio_venta REAL NOT NULL,
+        honorario_adrian_monto REAL DEFAULT 0,
+        honorario_adrian_pct REAL DEFAULT 0,
+        honorario_modo TEXT DEFAULT 'monto',
+        costos_variables_json TEXT,
+        costos_fijos_json TEXT,
+        resultado REAL,
+        notas TEXT,
+        created_at TEXT,
+        created_by TEXT
+      )
+    ''');
+
     // ── Sync Queue (Cola de sincronización) ──────────────────────────────────
     await db.execute('''
       CREATE TABLE _sync_queue (
@@ -253,6 +294,7 @@ class LocalDatabase {
         lugar TEXT,
         detalle_anclaje TEXT,
         fecha_vencimiento TEXT NOT NULL,
+        fecha_evento TEXT,
         estado TEXT DEFAULT 'activo',
         instagram TEXT,
         telefono TEXT,
@@ -266,14 +308,68 @@ class LocalDatabase {
 
     await db.execute('''
       CREATE TABLE presupuesto_servicios (
+        id TEXT NOT NULL,
         presupuesto_id TEXT NOT NULL,
         servicio_id TEXT NOT NULL,
         precio_final REAL NOT NULL,
         cantidad REAL DEFAULT 1.0,
+        grupo TEXT,
+        combo_orden INTEGER DEFAULT 0,
         detalle_servicio TEXT,
-        PRIMARY KEY (presupuesto_id, servicio_id),
+        PRIMARY KEY (id),
         FOREIGN KEY (presupuesto_id) REFERENCES presupuestos(id) ON DELETE CASCADE,
         FOREIGN KEY (servicio_id) REFERENCES servicios(id)
+      )
+    ''');
+    await db.execute('CREATE INDEX idx_ps_presupuesto ON presupuesto_servicios(presupuesto_id)');
+
+    // ── Préstamo / alquiler de ítems ─────────────────────────────────────────
+    await db.execute('''
+      CREATE TABLE prestamos_alquiler (
+        id TEXT PRIMARY KEY,
+        cliente_id TEXT NOT NULL,
+        fecha_inicio TEXT NOT NULL,
+        fecha_fin TEXT NOT NULL,
+        aplica_iva INTEGER NOT NULL DEFAULT 0,
+        alicuota_iva REAL NOT NULL DEFAULT 21,
+        subtotal_neto REAL NOT NULL DEFAULT 0,
+        monto_iva REAL NOT NULL DEFAULT 0,
+        total REAL NOT NULL DEFAULT 0,
+        texto_redaccion TEXT,
+        texto_disclaimer TEXT,
+        visible_listado INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE prestamo_alquiler_lineas (
+        id TEXT PRIMARY KEY,
+        prestamo_id TEXT NOT NULL,
+        descripcion TEXT NOT NULL,
+        cantidad REAL NOT NULL,
+        precio_unitario REAL NOT NULL,
+        linea_total REAL NOT NULL,
+        orden INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE pagos_prestamo_alquiler (
+        id TEXT PRIMARY KEY,
+        prestamo_id TEXT NOT NULL,
+        monto REAL NOT NULL,
+        concepto TEXT,
+        fecha_pago TEXT,
+        created_at TEXT,
+        medio_pago TEXT,
+        anulado INTEGER DEFAULT 0,
+        motivo_anulacion TEXT,
+        fecha_anulacion TEXT,
+        FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
       )
     ''');
 
@@ -282,6 +378,48 @@ class LocalDatabase {
       CREATE TABLE _sync_meta (
         clave TEXT PRIMARY KEY,
         valor TEXT NOT NULL
+      )
+    ''');
+
+    // ── Obligaciones de Pago (Avisos) ─────────────────────────────────────────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS obligaciones_pago (
+        id TEXT PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        tipo_obligacion TEXT NOT NULL,
+        fecha_vencimiento TEXT NOT NULL,
+        monto_estimado REAL DEFAULT 0,
+        estado TEXT DEFAULT 'pendiente',
+        fecha_pago TEXT,
+        created_at TEXT
+      )
+    ''');
+
+    // ── Caja fuerte (cupos declarados por el dueño; local-only, sin sync) ────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS caja_fuerte_movimientos (
+        id TEXT PRIMARY KEY,
+        tipo TEXT NOT NULL,
+        monto REAL NOT NULL,
+        nota TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    // ── Configuración de Rentabilidad Fija ───────────────────────────────────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS rentabilidad_config (
+        id TEXT PRIMARY KEY,
+        alquiler_local REAL DEFAULT 0,
+        sueldos_admin REAL DEFAULT 0,
+        servicios_oficina REAL DEFAULT 0,
+        impuestos_fijos REAL DEFAULT 0,
+        honorario_adrian_default_monto REAL DEFAULT 0,
+        honorario_adrian_default_pct REAL DEFAULT 0,
+        honorario_modo_default TEXT DEFAULT 'monto',
+        eventos_estimados_mes INTEGER DEFAULT 1,
+        updated_at TEXT,
+        updated_by TEXT
       )
     ''');
 
@@ -294,6 +432,12 @@ class LocalDatabase {
     await db.execute('CREATE INDEX idx_pagos_contrato ON pagos_contrato_alumno(contrato_alumno_id)');
     await db.execute('CREATE INDEX idx_invitados_evento ON invitados(evento_id)');
     await db.execute('CREATE INDEX idx_sync_queue_tabla ON _sync_queue(tabla)');
+    await db.execute('CREATE INDEX idx_prestamos_cliente ON prestamos_alquiler(cliente_id)');
+    await db.execute('CREATE INDEX idx_prestamos_visible ON prestamos_alquiler(visible_listado)');
+    await db.execute('CREATE INDEX idx_lineas_prestamo ON prestamo_alquiler_lineas(prestamo_id)');
+    await db.execute('CREATE INDEX idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)');
+
+    await db.execute('CREATE INDEX idx_caja_fuerte_created ON caja_fuerte_movimientos(created_at)');
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -569,6 +713,400 @@ class LocalDatabase {
         debugPrint('✅ Migración v22 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v22: $e');
+      }
+    }
+
+    if (oldVersion < 23) {
+      debugPrint('  🔧 Aplicando migración v23 (Archivado de Servicios)');
+      try {
+        await db.execute('ALTER TABLE servicios ADD COLUMN is_archived INTEGER DEFAULT 0');
+        debugPrint('✅ Migración v23 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota: is_archived ya existía o error al añadir: $e');
+      }
+    }
+
+    if (oldVersion < 24) {
+      debugPrint('  🔧 Aplicando migración v24 (grupo en presupuesto_servicios — BDs nuevas sin v20)');
+      try {
+        await db.execute('ALTER TABLE presupuesto_servicios ADD COLUMN grupo TEXT');
+        debugPrint('✅ Migración v24 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota: grupo ya existía o error al añadir: $e');
+      }
+    }
+
+    if (oldVersion < 25) {
+      debugPrint('  🔧 Aplicando migración v25 (Bonificación global % sobre presupuesto del evento)');
+      try {
+        await db.execute('ALTER TABLE eventos ADD COLUMN bonificacion_global_pct REAL');
+        debugPrint('✅ Migración v25 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota: error al añadir bonificacion_global_pct a eventos: $e');
+      }
+    }
+
+    if (oldVersion < 26) {
+      debugPrint('  🔧 Aplicando migración v26 (Orden de combo en presupuesto/evento)');
+      try {
+        await db.execute('ALTER TABLE eventos_servicios ADD COLUMN combo_orden INTEGER DEFAULT 0');
+        await db.execute('ALTER TABLE presupuesto_servicios ADD COLUMN combo_orden INTEGER DEFAULT 0');
+        debugPrint('✅ Migración v26 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota: error al añadir combo_orden: $e');
+      }
+    }
+
+    if (oldVersion < 27) {
+      debugPrint('  🔧 Aplicando migración v27 (Préstamo / alquiler de ítems)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS prestamos_alquiler (
+            id TEXT PRIMARY KEY,
+            cliente_id TEXT NOT NULL,
+            fecha_inicio TEXT NOT NULL,
+            fecha_fin TEXT NOT NULL,
+            aplica_iva INTEGER NOT NULL DEFAULT 0,
+            alicuota_iva REAL NOT NULL DEFAULT 21,
+            subtotal_neto REAL NOT NULL DEFAULT 0,
+            monto_iva REAL NOT NULL DEFAULT 0,
+            total REAL NOT NULL DEFAULT 0,
+            texto_redaccion TEXT,
+            texto_disclaimer TEXT,
+            visible_listado INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT,
+            updated_at TEXT,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS prestamo_alquiler_lineas (
+            id TEXT PRIMARY KEY,
+            prestamo_id TEXT NOT NULL,
+            descripcion TEXT NOT NULL,
+            cantidad REAL NOT NULL,
+            precio_unitario REAL NOT NULL,
+            linea_total REAL NOT NULL,
+            orden INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS pagos_prestamo_alquiler (
+            id TEXT PRIMARY KEY,
+            prestamo_id TEXT NOT NULL,
+            monto REAL NOT NULL,
+            concepto TEXT,
+            fecha_pago TEXT,
+            created_at TEXT,
+            FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_prestamos_cliente ON prestamos_alquiler(cliente_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_prestamos_visible ON prestamos_alquiler(visible_listado)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_lineas_prestamo ON prestamo_alquiler_lineas(prestamo_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)');
+        debugPrint('✅ Migración v27 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v27: $e');
+      }
+    }
+
+    if (oldVersion < 28) {
+      debugPrint('  🔧 Aplicando migración v28 (pagos_contrato_alumno: gross/descuento en BDs nuevas sin v13)');
+      try {
+        try {
+          await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN monto_gross REAL');
+        } catch (e) {
+          debugPrint('  ⚠️ Nota: monto_gross ya existía o error al añadir: $e');
+        }
+        try {
+          await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN descuento_porcentaje REAL DEFAULT 0.0');
+        } catch (e) {
+          debugPrint('  ⚠️ Nota: descuento_porcentaje ya existía o error al añadir: $e');
+        }
+        await db.execute('UPDATE pagos_contrato_alumno SET monto_gross = monto WHERE monto_gross IS NULL');
+        debugPrint('✅ Migración v28 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v28: $e');
+      }
+    }
+
+    if (oldVersion < 29) {
+      debugPrint('  🔧 Aplicando migración v29 (Clasificación de Medios de Pago)');
+      try {
+        try {
+          await db.execute('ALTER TABLE transacciones ADD COLUMN medio_pago TEXT');
+        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a transacciones: $e'); }
+        
+        try {
+          await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN medio_pago TEXT');
+        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a pagos_contrato_alumno: $e'); }
+        
+        try {
+          await db.execute('ALTER TABLE pagos_prestamo_alquiler ADD COLUMN medio_pago TEXT');
+        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a pagos_prestamo_alquiler: $e'); }
+        
+        try {
+          await db.execute('ALTER TABLE egresos ADD COLUMN medio_pago TEXT');
+        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a egresos: $e'); }
+
+        debugPrint('✅ Migración v29 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v29: $e');
+      }
+    }
+
+    if (oldVersion < 31) {
+      debugPrint('  🔧 Aplicando migración v30/v31 (fecha_evento en presupuestos)');
+      try {
+        try {
+          await db.execute('ALTER TABLE presupuestos ADD COLUMN fecha_evento TEXT');
+        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir fecha_evento a presupuestos: $e'); }
+        debugPrint('✅ Migración v31 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v31: $e');
+      }
+    }
+    if (oldVersion < 32) {
+      debugPrint('  🔧 Aplicando migración v32 (calculos_rentabilidad)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS calculos_rentabilidad (
+            id TEXT PRIMARY KEY,
+            evento_id TEXT,
+            presupuesto_id TEXT,
+            precio_venta REAL NOT NULL,
+            honorario_adrian_monto REAL DEFAULT 0,
+            honorario_adrian_pct REAL DEFAULT 0,
+            honorario_modo TEXT DEFAULT 'monto',
+            costos_variables_json TEXT,
+            costos_fijos_json TEXT,
+            resultado REAL,
+            notas TEXT,
+            created_at TEXT,
+            created_by TEXT
+          )
+        ''');
+        debugPrint('✅ Migración v32 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v32: $e');
+      }
+    }
+
+    if (oldVersion < 33) {
+      debugPrint('  🔧 Aplicando migración v33 (rentabilidad_config)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS rentabilidad_config (
+            id TEXT PRIMARY KEY,
+            alquiler_local REAL DEFAULT 0,
+            sueldos_admin REAL DEFAULT 0,
+            servicios_oficina REAL DEFAULT 0,
+            impuestos_fijos REAL DEFAULT 0,
+            honorario_adrian_default_monto REAL DEFAULT 0,
+            honorario_adrian_default_pct REAL DEFAULT 0,
+            honorario_modo_default TEXT DEFAULT 'monto',
+            eventos_estimados_mes INTEGER DEFAULT 1,
+            updated_at TEXT,
+            updated_by TEXT
+          )
+        ''');
+        debugPrint('✅ Migración v33 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v33: $e');
+      }
+    }
+
+    if (oldVersion < 34) {
+      debugPrint('  🔧 Aplicando migración v34 (Sistema de Avisos y Reminders)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS obligaciones_pago (
+            id TEXT PRIMARY KEY,
+            titulo TEXT NOT NULL,
+            tipo_obligacion TEXT NOT NULL,
+            fecha_vencimiento TEXT NOT NULL,
+            monto_estimado REAL DEFAULT 0,
+            estado TEXT DEFAULT 'pendiente',
+            fecha_pago TEXT,
+            created_at TEXT
+          )
+        ''');
+        debugPrint('✅ Migración v34 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v34: $e');
+      }
+    }
+
+    if (oldVersion < 35) {
+      debugPrint('  🔧 Aplicando migración v35 (líneas de presupuesto: id propio, mismo servicio varias veces)...');
+      try {
+        await db.transaction((txn) async {
+          final esRows = await txn.query('eventos_servicios');
+          final psRows = await txn.query('presupuesto_servicios');
+
+          await txn.execute('DROP TABLE IF EXISTS eventos_servicios');
+          await txn.execute('''
+            CREATE TABLE eventos_servicios (
+              id TEXT NOT NULL,
+              evento_id TEXT NOT NULL,
+              servicio_id TEXT NOT NULL,
+              precio_final_acordado REAL NOT NULL,
+              cantidad REAL DEFAULT 1.0,
+              grupo TEXT,
+              combo_orden INTEGER DEFAULT 0,
+              detalle_servicio TEXT,
+              PRIMARY KEY (id),
+              FOREIGN KEY (evento_id) REFERENCES eventos(id),
+              FOREIGN KEY (servicio_id) REFERENCES servicios(id)
+            )
+          ''');
+          for (final r in esRows) {
+            await txn.insert('eventos_servicios', {
+              'id': UuidUtils.generate(),
+              'evento_id': r['evento_id'],
+              'servicio_id': r['servicio_id'],
+              'precio_final_acordado': r['precio_final_acordado'],
+              'cantidad': r['cantidad'] ?? 1.0,
+              'grupo': r['grupo'],
+              'combo_orden': r['combo_orden'] ?? 0,
+              'detalle_servicio': r['detalle_servicio'],
+            });
+          }
+          await txn.execute('CREATE INDEX IF NOT EXISTS idx_es_evento ON eventos_servicios(evento_id)');
+
+          await txn.execute('DROP TABLE IF EXISTS presupuesto_servicios');
+          await txn.execute('''
+            CREATE TABLE presupuesto_servicios (
+              id TEXT NOT NULL,
+              presupuesto_id TEXT NOT NULL,
+              servicio_id TEXT NOT NULL,
+              precio_final REAL NOT NULL,
+              cantidad REAL DEFAULT 1.0,
+              grupo TEXT,
+              combo_orden INTEGER DEFAULT 0,
+              detalle_servicio TEXT,
+              PRIMARY KEY (id),
+              FOREIGN KEY (presupuesto_id) REFERENCES presupuestos(id) ON DELETE CASCADE,
+              FOREIGN KEY (servicio_id) REFERENCES servicios(id)
+            )
+          ''');
+          for (final r in psRows) {
+            await txn.insert('presupuesto_servicios', {
+              'id': UuidUtils.generate(),
+              'presupuesto_id': r['presupuesto_id'],
+              'servicio_id': r['servicio_id'],
+              'precio_final': r['precio_final'],
+              'cantidad': r['cantidad'] ?? 1.0,
+              'grupo': r['grupo'],
+              'combo_orden': r['combo_orden'] ?? 0,
+              'detalle_servicio': r['detalle_servicio'],
+            });
+          }
+          await txn.execute('CREATE INDEX IF NOT EXISTS idx_ps_presupuesto ON presupuesto_servicios(presupuesto_id)');
+        });
+        debugPrint('✅ Migración v35 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v35: $e');
+      }
+    }
+
+    if (oldVersion < 36) {
+      debugPrint('  🔧 Aplicando migración v36 (contrato_firmado en contratos_alumnos)');
+      try {
+        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN contrato_firmado INTEGER DEFAULT 0');
+        debugPrint('✅ Migración v36 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota: error al añadir columna contrato_firmado: $e');
+      }
+    }
+
+    if (oldVersion < 37) {
+      debugPrint('  🔧 Aplicando migración v37 (anulación no destructiva de cobros)');
+      try {
+        for (final t in ['transacciones', 'pagos_contrato_alumno', 'pagos_prestamo_alquiler']) {
+          try {
+            await db.execute('ALTER TABLE $t ADD COLUMN anulado INTEGER DEFAULT 0');
+          } catch (e) {
+            debugPrint('  ⚠️ Nota: anulado en $t: $e');
+          }
+          try {
+            await db.execute('ALTER TABLE $t ADD COLUMN motivo_anulacion TEXT');
+          } catch (e) {
+            debugPrint('  ⚠️ Nota: motivo_anulacion en $t: $e');
+          }
+          try {
+            await db.execute('ALTER TABLE $t ADD COLUMN fecha_anulacion TEXT');
+          } catch (e) {
+            debugPrint('  ⚠️ Nota: fecha_anulacion en $t: $e');
+          }
+        }
+        debugPrint('✅ Migración v37 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v37: $e');
+      }
+    }
+
+    if (oldVersion < 38) {
+      debugPrint('  🔧 Aplicando migración v38 (line_kind en pagos_contrato_alumno)');
+      try {
+        try {
+          await db.execute(
+              'ALTER TABLE pagos_contrato_alumno ADD COLUMN line_kind TEXT');
+        } catch (e) {
+          debugPrint('  ⚠️ Nota: line_kind en pagos_contrato_alumno: $e');
+        }
+        final rows =
+            await db.query('pagos_contrato_alumno', columns: ['id', 'concepto']);
+        for (final r in rows) {
+          final concepto = r['concepto'] as String?;
+          if (!esPagoInteresMoraPorConcepto(concepto)) continue;
+          await db.update(
+            'pagos_contrato_alumno',
+            {'line_kind': kLineKindInteresMora},
+            where: 'id = ?',
+            whereArgs: [r['id']],
+          );
+        }
+        debugPrint('✅ Migración v38 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error en migración v38: $e');
+      }
+    }
+
+    if (oldVersion < 39) {
+      debugPrint(
+        '  🔧 Aplicando migración v39 (mora_pendiente_tracked en contratos_alumnos)',
+      );
+      try {
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mora_pendiente_tracked REAL DEFAULT 0.0',
+        );
+        debugPrint('✅ Migración v39 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota: mora_pendiente_tracked: $e');
+      }
+    }
+
+    if (oldVersion < 40) {
+      debugPrint('  🔧 Aplicando migración v40 (caja_fuerte_movimientos)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS caja_fuerte_movimientos (
+            id TEXT PRIMARY KEY,
+            tipo TEXT NOT NULL,
+            monto REAL NOT NULL,
+            nota TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_caja_fuerte_created ON caja_fuerte_movimientos(created_at)',
+        );
+        debugPrint('✅ Migración v40 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota migración v40 caja_fuerte: $e');
       }
     }
   }

@@ -18,6 +18,8 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
   final int cantidadCuotas;
   final String? eventoId;
   final Map<String, double>? serviciosIniciales;
+  /// Si las claves de [serviciosIniciales] son **id de línea** (36 chars), mapea línea → servicio del catálogo. Si es null, las claves se asumen `servicio_id` (comportamiento previo, una fila por servicio).
+  final Map<String, String>? servicioIdPorLineaInicial;
   final String modalidad;
   final String? observaciones;
   final String? lugar;
@@ -28,6 +30,8 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
   final Map<String, String?>? descripcionesIniciales;
   final String? instagramPublicidad;
   final Map<String, String?>? gruposIniciales;
+  /// Orden dentro del combo por servicio (0 = primero, lleva el precio del bloque).
+  final Map<String, int>? comboOrdenIniciales;
   final Map<String, double>? cantidadesIniciales;
   final String? telefonoPublicidad;
 
@@ -42,6 +46,7 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
     this.cantidadCuotas = 1,
     this.eventoId,
     this.serviciosIniciales,
+    this.servicioIdPorLineaInicial,
     this.modalidad = 'particular',
     this.observaciones,
     this.lugar,
@@ -53,6 +58,7 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
     this.instagramPublicidad,
     this.telefonoPublicidad,
     this.gruposIniciales,
+    this.comboOrdenIniciales,
     this.cantidadesIniciales,
   });
 
@@ -67,15 +73,17 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
   List<Servicio> _catalogoFiltrado = [];
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  final ScrollController _catalogScrollController = ScrollController();
+  final ScrollController _panelScrollController = ScrollController();
 
   
-  // Map recording Selected Service ID -> {precio, cantidad, grupo}
+  // Clave = id de **línea** (UUID); el mismo [servicio_id] del catálogo puede repetirse en varias claves.
   final Map<String, Map<String, dynamic>> _serviciosSeleccionados = {};
   
   // Panel Control
   bool _showPanel = true;
   
-  // Nuevo: Map recording Selected Service ID -> Technical Description
+  // Map: lineaId -> descripción técnica
   final Map<String, String?> _detallesServicios = {};
 
   // Inteligencia de Sesión
@@ -89,22 +97,62 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
   // Sugerencia Inteligente
   Servicio? _suggestedService;
 
-  List<String> get _sugerenciasVinculacion {
-    final grupos = _serviciosSeleccionados.values
-        .map((v) => v['grupo'] as String?)
-        .where((g) => g != null && g.isNotEmpty)
-        .cast<String>()
-        .toSet();
-    
-    final nombresServicios = _serviciosSeleccionados.keys.map((id) {
-      final srv = _catalogo.where((s) => s.id == id).firstOrNull;
-      return srv?.nombre;
-    }).whereType<String>().toSet();
+  static const String _kGrupoDropdownNuevo = '__nuevo__';
 
-    return {...grupos, ...nombresServicios}.toList();
+  List<String> get _gruposComboExistentes {
+    final set = <String>{};
+    for (final v in _serviciosSeleccionados.values) {
+      final g = (v['grupo'] as String?)?.trim();
+      if (g != null && g.isNotEmpty) set.add(g);
+    }
+    final list = set.toList()..sort();
+    return list;
   }
 
+  String? _normGrupo(String? g) {
+    if (g == null) return null;
+    final t = g.trim();
+    return t.isEmpty ? null : t;
+  }
 
+  String _grupoDropdownInicial(String rawText) {
+    final t = rawText.trim();
+    if (t.isEmpty) return '';
+    if (_gruposComboExistentes.contains(t)) return t;
+    return _kGrupoDropdownNuevo;
+  }
+
+  int _computeComboOrdenForSave({
+    String? lineaIdEnEdicion,
+    required String? grupoResuelto,
+    required bool isEditing,
+  }) {
+    final g = _normGrupo(grupoResuelto);
+    if (g == null) return 0;
+
+    if (isEditing && lineaIdEnEdicion != null) {
+      final prevG = _normGrupo(_serviciosSeleccionados[lineaIdEnEdicion]?['grupo'] as String?);
+      if (prevG == g) {
+        return (_serviciosSeleccionados[lineaIdEnEdicion]?['combo_orden'] as num?)?.toInt() ?? 0;
+      }
+    }
+
+    var maxO = -1;
+    for (final e in _serviciosSeleccionados.entries) {
+      if (lineaIdEnEdicion != null && e.key == lineaIdEnEdicion) continue;
+      if (_normGrupo(e.value['grupo'] as String?) != g) continue;
+      final o = (e.value['combo_orden'] as num?)?.toInt() ?? 0;
+      if (o > maxO) maxO = o;
+    }
+    return maxO + 1;
+  }
+
+  bool _algunaLineaConServicio(String servicioId) => _serviciosSeleccionados.values
+      .any((v) => (v['servicio_id'] as String? ?? '') == servicioId);
+
+  int _lineasMismoCatalogo(String servicioId) => _serviciosSeleccionados.values
+      .where((v) => (v['servicio_id'] as String? ?? '') == servicioId)
+      .length;
 
   @override
   void initState() {
@@ -115,22 +163,50 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     // Iniciar el proceso de reconstrucción y limpieza
     if (widget.serviciosIniciales != null) {
       for (var entry in widget.serviciosIniciales!.entries) {
-        _serviciosSeleccionados[entry.key] = {
+        final k = entry.key;
+        final bool clavesSonLineaId = widget.servicioIdPorLineaInicial != null;
+        final String lineaId = clavesSonLineaId ? k : UuidUtils.generate();
+        final String servicioId =
+            clavesSonLineaId ? (widget.servicioIdPorLineaInicial![k] ?? k) : k;
+        final String auxK = clavesSonLineaId ? k : servicioId;
+        _serviciosSeleccionados[lineaId] = {
+          'servicio_id': servicioId,
           'precio': entry.value,
-          'cantidad': widget.cantidadesIniciales?[entry.key] ?? 1.0,
-          'grupo': widget.gruposIniciales?[entry.key],
+          'cantidad': widget.cantidadesIniciales?[auxK] ?? 1.0,
+          'grupo': widget.gruposIniciales?[auxK],
+          'combo_orden': widget.comboOrdenIniciales?[auxK] ?? 0,
         };
       }
     }
 
     if (widget.descripcionesIniciales != null) {
-      _detallesServicios.addAll(widget.descripcionesIniciales!);
+      for (final e in widget.descripcionesIniciales!.entries) {
+        if (widget.servicioIdPorLineaInicial != null) {
+          if (widget.servicioIdPorLineaInicial!.containsKey(e.key) ||
+              _serviciosSeleccionados.containsKey(e.key)) {
+            _detallesServicios[e.key] = e.value;
+          }
+        } else {
+          for (final linea in _serviciosSeleccionados.entries) {
+            if ((linea.value['servicio_id'] as String? ?? linea.key) == e.key) {
+              _detallesServicios[linea.key] = e.value;
+            }
+          }
+        }
+      }
     }
 
     // Ejecutar limpieza de servicios huérfanos al entrar si estamos en un evento existente
     if (widget.eventoId != null) {
       final repo = ref.read(eventosRepositoryProvider);
-      final idsEnPresupuesto = widget.serviciosIniciales?.keys.toList() ?? [];
+      final List<String> idsEnPresupuesto;
+      if (widget.serviciosIniciales == null || widget.serviciosIniciales!.isEmpty) {
+        idsEnPresupuesto = [];
+      } else if (widget.servicioIdPorLineaInicial != null) {
+        idsEnPresupuesto = widget.servicioIdPorLineaInicial!.values.toSet().toList();
+      } else {
+        idsEnPresupuesto = widget.serviciosIniciales!.keys.toList();
+      }
       repo.purgarServiciosHuerfanos(widget.eventoId!, idsEnPresupuesto).then((_) {
         if (mounted) _fetchCatalogo();
       });
@@ -175,7 +251,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
 
 
   void _onSearchSubmitted(String val) {
-    if (_suggestedService != null && !_serviciosSeleccionados.containsKey(_suggestedService!.id)) {
+    if (_suggestedService != null) {
       _solicitarPrecio(_suggestedService!);
     }
   }
@@ -185,7 +261,12 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     final idsEnGrupo = _serviciosSeleccionados.entries
         .where((e) => e.value['grupo'] == nombreGrupo)
         .map((e) => e.key)
-        .toList();
+        .toList()
+      ..sort((a, b) {
+        final oa = (_serviciosSeleccionados[a]?['combo_orden'] as num?)?.toInt() ?? 0;
+        final ob = (_serviciosSeleccionados[b]?['combo_orden'] as num?)?.toInt() ?? 0;
+        return oa.compareTo(ob);
+      });
     
     final primaryGold = const Color(0xFFD4AF37);
 
@@ -221,14 +302,16 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                     itemCount: idsEnGrupo.length,
                     itemBuilder: (context, index) {
                       final id = idsEnGrupo[index];
+                      final data = _serviciosSeleccionados[id]!;
+                      final sid = (data['servicio_id'] as String?) ?? id;
                       final srv = _catalogo.firstWhere(
-                        (s) => s.id == id, 
+                        (s) => s.id == sid, 
                         orElse: () {
-                          final nombreRespaldo = _detallesServicios[id] ?? 'Servicio Ad-hoc';
-                          return Servicio(id: id, nombre: nombreRespaldo, categoria: 'Personalizado');
+                          final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[id] ?? 'Servicio Ad-hoc';
+                          return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
                         }
                       );
-                      final data = _serviciosSeleccionados[id]!;
+                      final ord = (data['combo_orden'] as num?)?.toInt() ?? 0;
                       
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -236,7 +319,12 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                         child: ListTile(
                           dense: true,
                           title: Text(srv.nombre.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                          subtitle: Text(((data['precio'] as num) * (data['cantidad'] as num)).toCurrency(), style: TextStyle(color: primaryGold, fontSize: 10)),
+                          subtitle: Text(
+                            ord == 0
+                                ? '1º del combo • ${((data['precio'] as num) * (data['cantidad'] as num)).toCurrency()} (lleva el total)'
+                                : '${ord + 1}º • ${((data['precio'] as num) * (data['cantidad'] as num)).toCurrency()}',
+                            style: TextStyle(color: primaryGold, fontSize: 10),
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -244,7 +332,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                                 icon: const Icon(Icons.settings, size: 18, color: Colors.blueAccent),
                                 onPressed: () {
                                   Navigator.pop(ctx);
-                                  _solicitarPrecio(srv, isEditing: true);
+                                  _solicitarPrecio(srv, isEditing: true, lineaId: id);
                                 },
                                 tooltip: 'Editar inversión/descripción',
                               ),
@@ -253,6 +341,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                                 onPressed: () {
                                   setState(() {
                                     _serviciosSeleccionados[id]?['grupo'] = null;
+                                    _serviciosSeleccionados[id]?['combo_orden'] = 0;
                                   });
                                   setModalState(() {
                                     idsEnGrupo.remove(id);
@@ -324,6 +413,8 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
   void dispose() {
     _searchController.dispose();
     _searchFocus.dispose();
+    _catalogScrollController.dispose();
+    _panelScrollController.dispose();
     _ejecutarLimpiezaSiCorresponde();
     super.dispose();
   }
@@ -363,12 +454,15 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
         final List<Map<String, dynamic>> serviciosFinales = [];
         for (final entry in _serviciosSeleccionados.entries) {
           final data = entry.value;
+          final sid = data['servicio_id'] as String? ?? entry.key;
           serviciosFinales.add({
-            'servicio_id': entry.key,
+            'id': entry.key,
+            'servicio_id': sid,
             'precio_final': data['precio'] ?? 0.0,
             'cantidad': data['cantidad'] ?? 1.0,
             'detalle_servicio': _detallesServicios[entry.key],
             'grupo': data['grupo'],
+            'combo_orden': data['combo_orden'] ?? 0,
           });
         }
 
@@ -427,7 +521,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
             await repo.actualizarEventoInfo(
               widget.eventoId!, 
               tipo: widget.tipoEvento, 
-              observaciones: widget.observaciones
+              observaciones: widget.observaciones,
             );
           }
         } else {
@@ -472,222 +566,432 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     }
   }
 
-  void _solicitarPrecio(Servicio servicio, {bool isEditing = false}) {
-    // Si ya está seleccionado y NO forzamos la edición, lo deseleccionamos.
-    if (!isEditing && _serviciosSeleccionados.containsKey(servicio.id)) {
-      setState(() {
-        _serviciosSeleccionados.remove(servicio.id);
-        _detallesServicios.remove(servicio.id);
-      });
-      return;
-    }
-
-    // Siempre mostrar modal de precio/cantidad en modo Elite (salvo presupuestos que tiene su modal propio)
+  void _solicitarPrecio(Servicio servicio, {bool isEditing = false, String? lineaId}) {
     if (widget.isPresupuesto) {
-       _mostrarModalPrecioCompleto(servicio);
+      _mostrarModalPrecioCompleto(servicio, lineaId: lineaId, isEditingLine: isEditing);
     } else {
-       _mostrarModalPrecioCantidad(servicio);
+      _mostrarModalPrecioCantidad(servicio, lineaId: lineaId, isEditingLine: isEditing);
     }
   }
 
-  void _mostrarModalPrecioCantidad(Servicio servicio) {
-    final bool existe = _serviciosSeleccionados.containsKey(servicio.id);
-    final double precioActual = existe 
-        ? (_serviciosSeleccionados[servicio.id]?['precio'] as num).toDouble()
+  void _mostrarModalPrecioCantidad(Servicio servicio, {String? lineaId, bool isEditingLine = false}) {
+    final bool existe = lineaId != null && isEditingLine && _serviciosSeleccionados.containsKey(lineaId);
+    final String? lid = lineaId;
+    final double precioActual = (existe && lid != null)
+        ? (_serviciosSeleccionados[lid]!['precio'] as num).toDouble()
         : (servicio.costoBase ?? 0.0);
-    final double cantidadActual = existe 
-        ? (_serviciosSeleccionados[servicio.id]?['cantidad'] as num).toDouble()
+    final double cantidadActual = (existe && lid != null)
+        ? (_serviciosSeleccionados[lid]!['cantidad'] as num).toDouble()
         : 1.0;
 
     final priceController = TextEditingController(text: precioActual.toFormattedNumber());
     final quantityController = TextEditingController(text: cantidadActual.toStringAsFixed(cantidadActual == cantidadActual.toInt() ? 0 : 2));
-    final descController = TextEditingController(text: _detallesServicios[servicio.id] ?? '');
-    final groupController = TextEditingController(text: _serviciosSeleccionados[servicio.id]?['grupo']?.toString() ?? '');
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+    final descController = TextEditingController(text: (existe && lid != null) ? (_detallesServicios[lid] ?? '') : '');
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFD4AF37), width: 1)),
-        title: Text(servicio.nombre.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: priceController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                TextInputFormatter.withFunction((oldValue, newValue) {
-                  if (newValue.text.isEmpty) return newValue;
-                  final double value = double.parse(newValue.text) / 100;
-                  final String newText = value.toFormattedNumber();
-                  return newValue.copyWith(
-                    text: newText,
-                    selection: TextSelection.collapsed(offset: newText.length),
-                  );
-                }),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'Precio Unitario (\$)',
-                labelStyle: TextStyle(color: Colors.grey),
-                prefixIcon: Icon(Icons.attach_money, color: Color(0xFFD4AF37)),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: quantityController,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Cantidad / Personas',
-                      labelStyle: TextStyle(color: Colors.grey),
-                      prefixIcon: Icon(Icons.people_outline, color: Color(0xFFD4AF37)),
-                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    // Acción rápida para "Por Persona" - contexto Adri
-                    setState(() {
-                      _showPanel = true;
-                    });
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), minimumSize: const Size(40, 40)),
-                  child: const Icon(Icons.calculate, color: Colors.black, size: 18),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descController,
-              maxLines: 2,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: const InputDecoration(
-                labelText: 'Detalles Técnicos / Nota PDF',
-                labelStyle: TextStyle(color: Colors.grey),
-                prefixIcon: Icon(Icons.description_outlined, color: Color(0xFFD4AF37)),
-                hintText: 'Ej: Incluye 2 operadores, traslados...',
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Autocomplete<String>(
-              initialValue: TextEditingValue(text: groupController.text),
-              optionsBuilder: (TextEditingValue textEditingValue) {
-                final suggestions = _sugerenciasVinculacion;
-                if (textEditingValue.text.isEmpty) {
-                  return suggestions;
-                }
-                return suggestions.where((String option) {
-                  return _normalize(option).contains(_normalize(textEditingValue.text));
-                });
-              },
+      builder: (ctx) {
+        String grupoDd = _grupoDropdownInicial(
+          (existe && lid != null) ? (_serviciosSeleccionados[lid]!['grupo']?.toString() ?? '') : '',
+        );
+        final nuevoNombreCtrl = TextEditingController(
+          text: grupoDd == _kGrupoDropdownNuevo
+              ? (existe && lid != null ? (_serviciosSeleccionados[lid]!['grupo']?.toString() ?? '').trim() : '')
+              : '',
+        );
 
-              onSelected: (String selection) {
-                groupController.text = selection;
-              },
-              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                // Sincronizar con nuestro groupController principal
-                controller.addListener(() {
-                  groupController.text = controller.text;
-                });
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: const InputDecoration(
-                    labelText: 'Agrupar con (Nombre de Grupo opcional)',
-                    labelStyle: TextStyle(color: Colors.grey),
-                    prefixIcon: Icon(Icons.link, color: Color(0xFFD4AF37)),
-                    hintText: 'Ej: Ambientación & Deco',
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                  ),
-                );
-              },
-              optionsViewBuilder: (context, onSelected, options) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4.0,
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 300,
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: options.length,
-                        itemBuilder: (BuildContext context, int index) {
-                          final String option = options.elementAt(index);
-                          return InkWell(
-                            onTap: () => onSelected(option),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              child: Text(option, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                            ),
+        // ─── Estado local extras combo ──────────────────────────────────
+        final Set<String> extrasIds = {};
+        final Map<String, TextEditingController> extrasPrecios = {};
+        // true = incluido en combo (precio 0), false = precio propio
+        final Map<String, bool> extrasIncluidos = {};
+        String extraBusqueda = '';
+        // ────────────────────────────────────────────────────────────────
+
+        String resolvedGrupoNombre() {
+          if (grupoDd.isEmpty) return '';
+          if (grupoDd == _kGrupoDropdownNuevo) return nuevoNombreCtrl.text.trim();
+          return grupoDd;
+        }
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final resolvedPreview = resolvedGrupoNombre();
+            final coPreview = _computeComboOrdenForSave(
+              lineaIdEnEdicion: existe ? lid : null,
+              grupoResuelto: resolvedPreview.isEmpty ? null : resolvedPreview,
+              isEditing: existe,
+            );
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFFD4AF37), width: 1),
+              ),
+              title: Text(
+                servicio.nombre.toUpperCase(),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        TextInputFormatter.withFunction((oldValue, newValue) {
+                          if (newValue.text.isEmpty) return newValue;
+                          final double value = double.parse(newValue.text) / 100;
+                          final String newText = value.toFormattedNumber();
+                          return newValue.copyWith(
+                            text: newText,
+                            selection: TextSelection.collapsed(offset: newText.length),
                           );
-                        },
+                        }),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: 'Precio Unitario (\$)',
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        prefixIcon: const Icon(Icons.attach_money, color: Color(0xFFD4AF37)),
+                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                        helperText: _normGrupo(resolvedPreview) == null
+                            ? null
+                            : (coPreview > 0
+                                ? 'Incluido en el combo: el total del bloque va en el 1.er ítem. Aquí se guarda \$0.'
+                                : '1.er ítem del combo: este importe es el total del bloque en el PDF.'),
+                        helperMaxLines: 3,
+                        helperStyle: TextStyle(
+                          fontSize: 9,
+                          color: coPreview > 0 ? Colors.amber.shade200 : Colors.greenAccent.shade100,
+                        ),
                       ),
                     ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: quantityController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              labelText: 'Cantidad / Personas',
+                              labelStyle: TextStyle(color: Colors.grey),
+                              prefixIcon: Icon(Icons.people_outline, color: Color(0xFFD4AF37)),
+                              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _showPanel = true;
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4AF37),
+                            minimumSize: const Size(40, 40),
+                          ),
+                          child: const Icon(Icons.calculate, color: Colors.black, size: 18),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descController,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: const InputDecoration(
+                        labelText: 'Detalles Técnicos / Nota PDF',
+                        labelStyle: TextStyle(color: Colors.grey),
+                        prefixIcon: Icon(Icons.description_outlined, color: Color(0xFFD4AF37)),
+                        hintText: 'Ej: Incluye 2 operadores, traslados...',
+                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey<String>(grupoDd),
+                      initialValue: () {
+                        const nuevo = _kGrupoDropdownNuevo;
+                        final allowed = ['', ..._gruposComboExistentes, nuevo];
+                        if (allowed.contains(grupoDd)) return grupoDd;
+                        return nuevo;
+                      }(),
+                      decoration: const InputDecoration(
+                        labelText: 'Combo / grupo (PDF unificado)',
+                        labelStyle: TextStyle(color: Colors.grey),
+                        prefixIcon: Icon(Icons.link, color: Color(0xFFD4AF37)),
+                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                      ),
+                      dropdownColor: const Color(0xFF2A2A2A),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      items: [
+                        const DropdownMenuItem(value: '', child: Text('Sin combo')),
+                        ..._gruposComboExistentes.map(
+                          (g) => DropdownMenuItem(value: g, child: Text(g)),
+                        ),
+                        const DropdownMenuItem(
+                          value: _kGrupoDropdownNuevo,
+                          child: Text('+ Nuevo combo (nombre propio)'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setModalState(() {
+                          grupoDd = v;
+                          if (v == _kGrupoDropdownNuevo) {
+                            nuevoNombreCtrl.clear();
+                          }
+                        });
+                      },
+                    ),
+                    if (grupoDd == _kGrupoDropdownNuevo) ...[
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: nuevoNombreCtrl,
+                        onChanged: (_) => setModalState(() {}),
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: const InputDecoration(
+                          labelText: 'Nombre del nuevo combo',
+                          labelStyle: TextStyle(color: Colors.grey),
+                          hintText: 'Ej: Pack Sonido Premium',
+                          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Text(
+                      'Este servicio es el 1.º del combo: definí acá el precio total del paquete.',
+                      style: TextStyle(fontSize: 9, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+                    ),
+                    // ─── Sección: agregar más servicios al mismo combo ──────
+                    if (_normGrupo(resolvedPreview) != null) ...[
+                      const SizedBox(height: 16),
+                      const Divider(color: Colors.white24),
+                      const SizedBox(height: 8),
+                      Row(children: const [
+                        Icon(Icons.playlist_add, color: Color(0xFFD4AF37), size: 16),
+                        SizedBox(width: 6),
+                        Text('INCLUIR EN ESTE COMBO', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.8)),
+                      ]),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tildados = incluidos sin precio extra. Destildalos si querés que sumen su propio importe.',
+                        style: TextStyle(fontSize: 9, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        onChanged: (v) => setModalState(() => extraBusqueda = _normalize(v)),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        decoration: const InputDecoration(
+                          hintText: 'Buscar servicio del catálogo...',
+                          hintStyle: TextStyle(color: Colors.grey, fontSize: 12),
+                          prefixIcon: Icon(Icons.search, color: Colors.grey, size: 18),
+                          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        child: Builder(builder: (_) {
+                          final disponibles = _catalogo.where((s) {
+                            if (s.id == servicio.id) return false;
+                            if (extrasIds.contains(s.id)) return true;
+                            if (extraBusqueda.isEmpty) return true;
+                            return _normalize(s.nombre).contains(extraBusqueda);
+                          }).toList();
+                          if (disponibles.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Sin resultados en el catálogo', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                            );
+                          }
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: disponibles.length,
+                            itemBuilder: (context, i) {
+                              final s = disponibles[i];
+                              final isChecked = extrasIds.contains(s.id);
+                              final isIncluido = extrasIncluidos[s.id] ?? true;
+                              final pCtrl = extrasPrecios[s.id];
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CheckboxListTile(
+                                    dense: true,
+                                    checkColor: Colors.black,
+                                    fillColor: WidgetStateProperty.resolveWith((states) {
+                                      if (states.contains(WidgetState.selected)) {
+                                        return const Color(0xFFD4AF37);
+                                      }
+                                      return null;
+                                    }),
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(s.nombre.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    subtitle: Text(
+                                      s.costoBase != null ? s.costoBase!.toCurrency() : 'Sin tarifa base',
+                                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                                    ),
+                                    value: isChecked,
+                                    onChanged: (v) {
+                                      setModalState(() {
+                                        if (v == true) {
+                                          extrasIds.add(s.id);
+                                          extrasIncluidos[s.id] = true;
+                                          extrasPrecios[s.id] = TextEditingController(
+                                            text: (s.costoBase ?? 0).toFormattedNumber(),
+                                          );
+                                        } else {
+                                          extrasIds.remove(s.id);
+                                          extrasIncluidos.remove(s.id);
+                                          extrasPrecios[s.id]?.dispose();
+                                          extrasPrecios.remove(s.id);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  if (isChecked) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 12, right: 4, bottom: 2),
+                                      child: Row(
+                                        children: [
+                                          Switch(
+                                            value: isIncluido,
+                                            activeThumbColor: const Color(0xFFD4AF37),
+                                            onChanged: (v) => setModalState(() => extrasIncluidos[s.id] = v),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            isIncluido ? 'Incluido en combo' : 'Precio propio',
+                                            style: TextStyle(
+                                              color: isIncluido ? const Color(0xFFD4AF37) : Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!isIncluido && pCtrl != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 40, right: 4, bottom: 8),
+                                        child: TextField(
+                                          controller: pCtrl,
+                                          keyboardType: TextInputType.number,
+                                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.digitsOnly,
+                                            TextInputFormatter.withFunction((oldValue, newValue) {
+                                              if (newValue.text.isEmpty) return newValue;
+                                              final double value = double.parse(newValue.text) / 100;
+                                              final String newText = value.toFormattedNumber();
+                                              return newValue.copyWith(text: newText, selection: TextSelection.collapsed(offset: newText.length));
+                                            }),
+                                          ],
+                                          decoration: const InputDecoration(
+                                            labelText: 'Precio propio (\$)',
+                                            labelStyle: TextStyle(color: Colors.grey, fontSize: 11),
+                                            prefixIcon: Icon(Icons.attach_money, color: Color(0xFFD4AF37), size: 16),
+                                            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                                            isDense: true,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ],
+                              );
+                            },
+                          );
+                        }),
+                      ),
+                    ],
+                    // ────────────────────────────────────────────────────────
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4AF37),
+                    foregroundColor: Colors.black,
                   ),
-                );
-              },
-            ),
+                  onPressed: () {
+                    final cleanPrice = priceController.text.replaceAll('.', '').replaceAll(',', '.');
+                    var price = double.tryParse(cleanPrice) ?? 0;
+                    final quantity = double.tryParse(quantityController.text) ?? 1.0;
 
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCELAR', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37), foregroundColor: Colors.black),
-            onPressed: () {
-              final cleanPrice = priceController.text.replaceAll('.', '').replaceAll(',', '.');
-              final price = double.tryParse(cleanPrice) ?? 0;
-              final quantity = double.tryParse(quantityController.text) ?? 1.0;
-              
-              if (price >= 0) {
-                final groupName = groupController.text.trim();
-                setState(() {
-                  _serviciosSeleccionados[servicio.id] = {
-                    'precio': price,
-                    'cantidad': quantity,
-                    'grupo': groupName.isEmpty ? null : groupName,
-                  };
-                  _detallesServicios[servicio.id] = descController.text.trim().isEmpty ? null : descController.text.trim();
-                  
-                  // MAGIA DE VINCULACIÓN AUTOMÁTICA
-                  if (groupName.isNotEmpty) {
-                    final normalizedGroup = _normalize(groupName);
-                    final matchingUnselected = _catalogo.where((c) =>
-                        _normalize(c.nombre) == normalizedGroup &&
-                        !_serviciosSeleccionados.containsKey(c.id)).firstOrNull;
-                    if (matchingUnselected != null) {
-                      _serviciosSeleccionados[matchingUnselected.id] = {
-                        'precio': 0.0, // <-- LÓGICA VINCULACIÓN: El primer ítem ya cubre el bloque
-                        'cantidad': 1.0,
-                        'grupo': groupName,
-                      };
+                    var resolvedGrupo = resolvedGrupoNombre();
+                    if (grupoDd == _kGrupoDropdownNuevo && resolvedGrupo.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Escribí un nombre para el nuevo combo.')),
+                      );
+                      return;
                     }
-                  }
-                  
-                  _showPanel = true; // Abrir panel al agregar
-                });
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('AÑADIR AL EVENTO', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+
+                    final co = _computeComboOrdenForSave(
+                      lineaIdEnEdicion: existe ? lid : null,
+                      grupoResuelto: resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                      isEditing: existe,
+                    );
+                    if (co > 0) price = 0;
+
+                    if (price >= 0) {
+                      setState(() {
+                        final String lineaPrincipal =
+                            (existe && lid != null) ? lid : UuidUtils.generate();
+                        _serviciosSeleccionados[lineaPrincipal] = {
+                          'servicio_id': servicio.id,
+                          'precio': price,
+                          'cantidad': quantity,
+                          'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                          'combo_orden': co,
+                        };
+                        _detallesServicios[lineaPrincipal] =
+                            descController.text.trim().isEmpty ? null : descController.text.trim();
+
+                        for (final extraId in List<String>.from(extrasIds)) {
+                          final incluido = extrasIncluidos[extraId] ?? true;
+                          final extCtrl = extrasPrecios[extraId];
+                          final rawExtra = extCtrl?.text ?? '0,00';
+                          final cleanExtra = rawExtra.replaceAll('.', '').replaceAll(',', '.');
+                          final extraPrecio = incluido ? 0.0 : (double.tryParse(cleanExtra) ?? 0.0);
+                          final extraCo = _computeComboOrdenForSave(
+                            lineaIdEnEdicion: null,
+                            grupoResuelto: resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                            isEditing: false,
+                          );
+                          _serviciosSeleccionados[UuidUtils.generate()] = {
+                            'servicio_id': extraId,
+                            'precio': extraPrecio,
+                            'cantidad': 1.0,
+                            'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                            'combo_orden': extraCo,
+                          };
+                        }
+
+                        _showPanel = true;
+                      });
+                      Navigator.pop(ctx);
+                    }
+                  },
+                  child: const Text('AÑADIR AL EVENTO', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -740,7 +1044,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
               SwitchListTile(
                 title: const Text('¿Agregar a catálogo permanente?', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 value: isPermanent,
-                activeColor: const Color(0xFFD4AF37),
+                activeThumbColor: const Color(0xFFD4AF37),
                 onChanged: (val) => setModalState(() => isPermanent = val),
               ),
             ],
@@ -779,14 +1083,16 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                 setState(() {
                   _nombresAdHoc[nuevoId] = nameController.text;
                   _catalogo = [..._catalogo, nuevoSrvModel];
-                  _catalogoFiltrado = [..._catalogo, nuevoSrvModel];
+                  _catalogoFiltrado = [..._catalogo];
                 });
                 
                 // Refrescamos en segundo plano por seguridad
                 _fetchCatalogo();
                 
-                if (mounted) {
+                if (ctx.mounted) {
                   Navigator.pop(ctx);
+                }
+                if (mounted) {
                   _solicitarPrecio(nuevoSrvModel);
                 }
               },
@@ -800,195 +1106,418 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
 
 
   /// Modal completo para presupuestos: precio + descripción técnica para PDF.
-  void _mostrarModalPrecioCompleto(Servicio servicio) {
-    final controller = TextEditingController(text: (_serviciosSeleccionados[servicio.id]?['precio'] as num? ?? servicio.costoBase ?? 0).toFormattedNumber());
-    final quantityController = TextEditingController(text: (_serviciosSeleccionados[servicio.id]?['cantidad'] as num? ?? 1).toStringAsFixed(0));
-    final descController = TextEditingController(text: _detallesServicios[servicio.id] ?? '');
-    final groupController = TextEditingController(text: _serviciosSeleccionados[servicio.id]?['grupo']?.toString() ?? '');
+  void _mostrarModalPrecioCompleto(
+    Servicio servicio, {
+    String? lineaId,
+    bool isEditingLine = false,
+  }) {
+    final bool existeP = lineaId != null && isEditingLine && _serviciosSeleccionados.containsKey(lineaId);
+    final String? lidP = lineaId;
+    final controller = TextEditingController(
+      text: (existeP && lidP != null
+              ? (_serviciosSeleccionados[lidP]!['precio'] as num? ?? servicio.costoBase ?? 0)
+              : (servicio.costoBase ?? 0))
+          .toFormattedNumber(),
+    );
+    final quantityController = TextEditingController(
+      text: (existeP && lidP != null
+              ? (_serviciosSeleccionados[lidP]!['cantidad'] as num? ?? 1)
+              : 1)
+          .toStringAsFixed(0),
+    );
+    final descController = TextEditingController(
+      text: (existeP && lidP != null) ? (_detallesServicios[lidP] ?? '') : '',
+    );
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('DEFINIR DETALLES: ${servicio.nombre.toUpperCase()}'),
-        content: SizedBox(
-          width: 450, // Ancho fijo para forzar el wrapping del texto
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  TextInputFormatter.withFunction((oldValue, newValue) {
-                    if (newValue.text.isEmpty) return newValue;
-                    final double value = double.parse(newValue.text) / 100;
-                    final String newText = value.toFormattedNumber();
-                    return newValue.copyWith(
-                      text: newText,
-                      selection: TextSelection.collapsed(offset: newText.length),
-                    );
-                  }),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'Inversión por este servicio (\$)',
-                  prefixIcon: const Icon(Icons.attach_money, color: Color(0xFFD4AF37)),
-                  hintText: '0,00',
-                  helperText: (servicio.costoBase != null) 
-                      ? 'Tarifa sugerida: ${servicio.costoBase!.toCurrency()}'
-                      : null,
-                  helperStyle: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 10),
-                ),
-                autofocus: false,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Cantidad / Personas',
-                  prefixIcon: Icon(Icons.people_outline, color: Color(0xFFD4AF37)),
-                  hintText: '1',
-                ),
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: descController,
-                minLines: 4,
-                maxLines: 8,
-                textAlignVertical: TextAlignVertical.top,
-                style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(
-                  labelText: 'Descripción Técnica Humanizada (Para el PDF)',
-                  alignLabelWithHint: true,
-                  prefixIcon: Padding(
-                    padding: EdgeInsets.only(bottom: 50),
-                    child: Icon(Icons.description_outlined),
-                  ),
-                  hintText: 'Ej: Incluimos sonorización lineal de alta fidelidad con 8 cabezales móviles y efectos atmosféricos profesionales...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(12),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Esta descripción aparecerá debajo del título del servicio en el presupuesto final.',
-                style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic),
-              ),
-              const SizedBox(height: 16),
-              Autocomplete<String>(
-                initialValue: TextEditingValue(text: groupController.text),
-                optionsBuilder: (TextEditingValue textEditingValue) {
-                  final suggestions = _sugerenciasVinculacion;
-                  if (textEditingValue.text.isEmpty) {
-                    return suggestions;
-                  }
-                  return suggestions.where((String option) {
-                    return _normalize(option).contains(_normalize(textEditingValue.text));
-                  });
-                },
+      builder: (ctx) {
+        String grupoDd = _grupoDropdownInicial(
+          (existeP && lidP != null) ? (_serviciosSeleccionados[lidP]!['grupo']?.toString() ?? '') : '',
+        );
+        final nuevoNombreCtrl = TextEditingController(
+          text: grupoDd == _kGrupoDropdownNuevo
+              ? (existeP && lidP != null
+                  ? (_serviciosSeleccionados[lidP]!['grupo']?.toString() ?? '').trim()
+                  : '')
+              : '',
+        );
 
-                onSelected: (String selection) {
-                  groupController.text = selection;
-                },
-                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                  controller.addListener(() {
-                    groupController.text = controller.text;
-                  });
-                  return TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    decoration: const InputDecoration(
-                      labelText: 'Vincular / Nombre de Grupo (Opcional)',
-                      prefixIcon: Icon(Icons.link, color: Color(0xFFD4AF37)),
-                      hintText: 'Ej: DISEÑO DE ESPACIOS',
-                    ),
-                  );
-                },
-                optionsViewBuilder: (context, onSelected, options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4.0,
-                      color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        width: 400,
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          itemBuilder: (BuildContext context, int index) {
-                            final String option = options.elementAt(index);
-                            return InkWell(
-                              onTap: () => onSelected(option),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Text(option, style: const TextStyle(color: Colors.white, fontSize: 12)),
-                              ),
+        // ─── Estado local extras combo ──────────────────────────────────
+        final Set<String> extrasIds = {};
+        final Map<String, TextEditingController> extrasPrecios = {};
+        final Map<String, bool> extrasIncluidos = {};
+        String extraBusqueda = '';
+        // ────────────────────────────────────────────────────────────────
+
+        String resolvedGrupoNombre() {
+          if (grupoDd.isEmpty) return '';
+          if (grupoDd == _kGrupoDropdownNuevo) return nuevoNombreCtrl.text.trim();
+          return grupoDd;
+        }
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final resolvedPreview = resolvedGrupoNombre();
+            final coPreview = _computeComboOrdenForSave(
+              lineaIdEnEdicion: existeP ? lidP : null,
+              grupoResuelto: resolvedPreview.isEmpty ? null : resolvedPreview,
+              isEditing: existeP,
+            );
+
+            String? helperInversion;
+            Color? helperColor;
+            if (_normGrupo(resolvedPreview) != null) {
+              helperInversion = coPreview > 0
+                  ? 'Incluido en el combo: el total del bloque va en el 1.er ítem. Aquí se guarda \$0.'
+                  : '1.er ítem del combo: este importe es el total del bloque en el PDF (títulos unidos con •).';
+              helperColor = coPreview > 0 ? Colors.deepOrange : const Color(0xFFD4AF37);
+            } else if (servicio.costoBase != null) {
+              helperInversion = 'Tarifa sugerida: ${servicio.costoBase!.toCurrency()}';
+              helperColor = const Color(0xFFD4AF37);
+            }
+
+            return AlertDialog(
+              title: Text('DEFINIR DETALLES: ${servicio.nombre.toUpperCase()}'),
+              content: SizedBox(
+                width: 450,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: controller,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setModalState(() {}),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          TextInputFormatter.withFunction((oldValue, newValue) {
+                            if (newValue.text.isEmpty) return newValue;
+                            final double value = double.parse(newValue.text) / 100;
+                            final String newText = value.toFormattedNumber();
+                            return newValue.copyWith(
+                              text: newText,
+                              selection: TextSelection.collapsed(offset: newText.length),
                             );
-                          },
+                          }),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Inversión por este servicio (\$)',
+                          prefixIcon: const Icon(Icons.attach_money, color: Color(0xFFD4AF37)),
+                          hintText: '0,00',
+                          helperText: helperInversion,
+                          helperStyle: TextStyle(
+                            color: helperColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                          helperMaxLines: 3,
+                        ),
+                        autofocus: false,
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: quantityController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Cantidad / Personas',
+                          prefixIcon: Icon(Icons.people_outline, color: Color(0xFFD4AF37)),
+                          hintText: '1',
                         ),
                       ),
-                    ),
-                  );
-                },
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: descController,
+                        minLines: 4,
+                        maxLines: 8,
+                        textAlignVertical: TextAlignVertical.top,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: const InputDecoration(
+                          labelText: 'Descripción Técnica Humanizada (Para el PDF)',
+                          alignLabelWithHint: true,
+                          prefixIcon: Padding(
+                            padding: EdgeInsets.only(bottom: 50),
+                            child: Icon(Icons.description_outlined),
+                          ),
+                          hintText:
+                              'Ej: Incluimos sonorización lineal de alta fidelidad con 8 cabezales móviles y efectos atmosféricos profesionales...',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.all(12),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Esta descripción aparecerá debajo del bloque unificado en el presupuesto final.',
+                        style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey<String>(grupoDd),
+                        initialValue: () {
+                          final allowed = ['', ..._gruposComboExistentes, _kGrupoDropdownNuevo];
+                          if (allowed.contains(grupoDd)) return grupoDd;
+                          return _kGrupoDropdownNuevo;
+                        }(),
+                        decoration: const InputDecoration(
+                          labelText: 'Combo / grupo (lista + nuevo)',
+                          prefixIcon: Icon(Icons.link, color: Color(0xFFD4AF37)),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: '', child: Text('Sin combo')),
+                          ..._gruposComboExistentes.map(
+                            (g) => DropdownMenuItem(value: g, child: Text(g)),
+                          ),
+                          const DropdownMenuItem(
+                            value: _kGrupoDropdownNuevo,
+                            child: Text('+ Nuevo combo (nombre propio)'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setModalState(() {
+                            grupoDd = v;
+                            if (v == _kGrupoDropdownNuevo) {
+                              nuevoNombreCtrl.clear();
+                            }
+                          });
+                        },
+                      ),
+                      if (grupoDd == _kGrupoDropdownNuevo) ...[
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: nuevoNombreCtrl,
+                          onChanged: (_) => setModalState(() {}),
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre del nuevo combo',
+                            hintText: 'Ej: Pack Sonido + Ambientación',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Este servicio es el 1.º del combo: definí acá el precio total del paquete.',
+                        style: TextStyle(fontSize: 9, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                      ),
+                      // ─── Sección: agregar más servicios al mismo combo ───
+                      if (_normGrupo(resolvedPreview) != null) ...[
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Row(children: const [
+                          Icon(Icons.playlist_add, color: Color(0xFFD4AF37), size: 16),
+                          SizedBox(width: 6),
+                          Text('INCLUIR EN ESTE COMBO', style: TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.8)),
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tildados = incluidos sin precio extra. Destildalos si querés que sumen su propio importe.',
+                          style: TextStyle(fontSize: 9, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                        ),
+                        const SizedBox(height: 8),
+                      TextField(
+                        onChanged: (v) => setModalState(() => extraBusqueda = _normalize(v)),
+                        decoration: const InputDecoration(
+                          hintText: 'Buscar servicio del catálogo...',
+                          prefixIcon: Icon(Icons.search, size: 18),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 220),
+                        child: Builder(builder: (_) {
+                          final disponibles = _catalogo.where((s) {
+                            if (s.id == servicio.id) return false;
+                            if (extrasIds.contains(s.id)) return true;
+                            if (extraBusqueda.isEmpty) return true;
+                            return _normalize(s.nombre).contains(extraBusqueda);
+                          }).toList();
+                          if (disponibles.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Sin resultados en el catálogo', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                            );
+                          }
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: disponibles.length,
+                            itemBuilder: (context, i) {
+                              final s = disponibles[i];
+                              final isChecked = extrasIds.contains(s.id);
+                              final isIncluido = extrasIncluidos[s.id] ?? true;
+                              final pCtrl = extrasPrecios[s.id];
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CheckboxListTile(
+                                    dense: true,
+                                    checkColor: Colors.black,
+                                    fillColor: WidgetStateProperty.resolveWith((states) {
+                                      if (states.contains(WidgetState.selected)) {
+                                        return const Color(0xFFD4AF37);
+                                      }
+                                      return null;
+                                    }),
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(s.nombre.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                    subtitle: Text(
+                                      s.costoBase != null ? s.costoBase!.toCurrency() : 'Sin tarifa base',
+                                      style: const TextStyle(fontSize: 10),
+                                    ),
+                                    value: isChecked,
+                                    onChanged: (v) {
+                                      setModalState(() {
+                                        if (v == true) {
+                                          extrasIds.add(s.id);
+                                          extrasIncluidos[s.id] = true;
+                                          extrasPrecios[s.id] = TextEditingController(
+                                            text: (s.costoBase ?? 0).toFormattedNumber(),
+                                          );
+                                        } else {
+                                          extrasIds.remove(s.id);
+                                          extrasIncluidos.remove(s.id);
+                                          extrasPrecios[s.id]?.dispose();
+                                          extrasPrecios.remove(s.id);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  if (isChecked) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 12, right: 4, bottom: 2),
+                                      child: Row(
+                                        children: [
+                                          Switch(
+                                            value: isIncluido,
+                                            activeThumbColor: const Color(0xFFD4AF37),
+                                            onChanged: (v) => setModalState(() => extrasIncluidos[s.id] = v),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            isIncluido ? 'Incluido en combo' : 'Precio propio',
+                                            style: TextStyle(
+                                              color: isIncluido ? const Color(0xFFD4AF37) : Colors.black87,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (!isIncluido && pCtrl != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 40, right: 4, bottom: 8),
+                                        child: TextField(
+                                          controller: pCtrl,
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.digitsOnly,
+                                            TextInputFormatter.withFunction((oldValue, newValue) {
+                                              if (newValue.text.isEmpty) return newValue;
+                                              final double value = double.parse(newValue.text) / 100;
+                                              final String newText = value.toFormattedNumber();
+                                              return newValue.copyWith(text: newText, selection: TextSelection.collapsed(offset: newText.length));
+                                            }),
+                                          ],
+                                          decoration: const InputDecoration(
+                                            labelText: 'Precio propio (\$)',
+                                            prefixIcon: Icon(Icons.attach_money, color: Color(0xFFD4AF37), size: 16),
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ],
+                              );
+                            },
+                          );
+                        }),
+                      ),
+                    ],
+                    // ────────────────────────────────────────────────────────
+                  ],
+                ),
               ),
-
-              const SizedBox(height: 4),
-              const Text(
-                'Los servicios con el mismo grupo saldrán unificados en el PDF y el panel.',
-                style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCELAR', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFD4AF37),
-              foregroundColor: Colors.black,
             ),
-            onPressed: () {
-              final cleanText = controller.text
-                  .replaceAll('.', '')
-                  .replaceAll(',', '.');
-              
-              final precio = double.tryParse(cleanText);
-              if (precio != null && precio >= 0) {
-                final groupName = groupController.text.trim();
-                final quantity = double.tryParse(quantityController.text) ?? 1.0;
-                setState(() {
-                  _serviciosSeleccionados[servicio.id] = {
-                    'precio': precio,
-                    'cantidad': quantity,
-                    'grupo': groupName.isEmpty ? null : groupName,
-                  };
-                  _detallesServicios[servicio.id] = descController.text;
+            actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4AF37),
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    final cleanText = controller.text.replaceAll('.', '').replaceAll(',', '.');
+                    var precio = double.tryParse(cleanText);
+                    if (precio == null || precio < 0) return;
 
-                  // MAGIA DE VINCULACIÓN AUTOMÁTICA
-                  if (groupName.isNotEmpty) {
-                    final normalizedGroup = _normalize(groupName);
-                    final matchingUnselected = _catalogo.where((c) =>
-                        _normalize(c.nombre) == normalizedGroup &&
-                        !_serviciosSeleccionados.containsKey(c.id)).firstOrNull;
-                    if (matchingUnselected != null) {
-                      _serviciosSeleccionados[matchingUnselected.id] = {
-                        'precio': 0.0, // <-- LÓGICA VINCULACIÓN: El primer ítem ya cubre el bloque
-                        'cantidad': 1.0,
-                        'grupo': groupName,
-                      };
+                    var resolvedGrupo = resolvedGrupoNombre();
+                    if (grupoDd == _kGrupoDropdownNuevo && resolvedGrupo.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Escribí un nombre para el nuevo combo.')),
+                      );
+                      return;
                     }
-                  }
-                });
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text('CONFIRMAR DETALLES', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+
+                    final co = _computeComboOrdenForSave(
+                      lineaIdEnEdicion: existeP ? lidP : null,
+                      grupoResuelto: resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                      isEditing: existeP,
+                    );
+                    if (co > 0) precio = 0;
+
+                    final quantity = double.tryParse(quantityController.text) ?? 1.0;
+                    setState(() {
+                      final String lineaPrincipal =
+                          (existeP && lidP != null) ? lidP : UuidUtils.generate();
+                      _serviciosSeleccionados[lineaPrincipal] = {
+                        'servicio_id': servicio.id,
+                        'precio': precio,
+                        'cantidad': quantity,
+                        'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                        'combo_orden': co,
+                      };
+                      _detallesServicios[lineaPrincipal] = descController.text;
+
+                      for (final extraId in List<String>.from(extrasIds)) {
+                        final incluido = extrasIncluidos[extraId] ?? true;
+                        final extCtrl = extrasPrecios[extraId];
+                        final rawExtra = extCtrl?.text ?? '0,00';
+                        final cleanExtra = rawExtra.replaceAll('.', '').replaceAll(',', '.');
+                        final extraPrecio = incluido ? 0.0 : (double.tryParse(cleanExtra) ?? 0.0);
+                        final extraCo = _computeComboOrdenForSave(
+                          lineaIdEnEdicion: null,
+                          grupoResuelto: resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                          isEditing: false,
+                        );
+                        _serviciosSeleccionados[UuidUtils.generate()] = {
+                          'servicio_id': extraId,
+                          'precio': extraPrecio,
+                          'cantidad': 1.0,
+                          'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
+                          'combo_orden': extraCo,
+                        };
+                      }
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('CONFIRMAR DETALLES', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1034,19 +1563,20 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                                     // Ordenar: No seleccionados primero, seleccionados al final
                                     final List<Servicio> sortedList = List.from(_catalogoFiltrado);
                                     sortedList.sort((a, b) {
-                                      final aSelected = _serviciosSeleccionados.containsKey(a.id);
-                                      final bSelected = _serviciosSeleccionados.containsKey(b.id);
+                                      final aSelected = _algunaLineaConServicio(a.id);
+                                      final bSelected = _algunaLineaConServicio(b.id);
                                       if (aSelected && !bSelected) return 1;
                                       if (!aSelected && bSelected) return -1;
                                       return 0;
                                     });
 
                                     return ListView.builder(
+                                      controller: _catalogScrollController,
                                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                                       itemCount: sortedList.length,
                                       itemBuilder: (context, index) {
                                         final servicio = sortedList[index];
-                                        final isSelected = _serviciosSeleccionados.containsKey(servicio.id);
+                                        final isSelected = _algunaLineaConServicio(servicio.id);
                                         return _buildServiceListItem(servicio, isSelected);
                                       },
                                     );
@@ -1107,15 +1637,25 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     final primaryGold = const Color(0xFFD4AF37);
     final esPropio = servicio.eventoId != null;
     
-    // Lógica de vinculación
-    final String? grupoActual = _serviciosSeleccionados[servicio.id]?['grupo'];
+    String? primerGrupoDeServicio() {
+      for (final e in _serviciosSeleccionados.entries) {
+        if ((e.value['servicio_id'] as String? ?? e.key) == servicio.id) {
+          return e.value['grupo'] as String?;
+        }
+      }
+      return null;
+    }
+
+    final String? grupoActual = primerGrupoDeServicio();
     final bool isSuggested = _suggestedService?.id == servicio.id;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       margin: const EdgeInsets.only(bottom: 12),
       curve: Curves.easeOutCubic,
-      transform: isSelected ? (Matrix4.identity()..scale(1.01)) : Matrix4.identity(),
+      transform: isSelected
+          ? Matrix4.diagonal3Values(1.01, 1.01, 1.0)
+          : Matrix4.identity(),
       decoration: BoxDecoration(
         color: isSelected 
             ? primaryGold.withValues(alpha: 0.12) 
@@ -1179,6 +1719,17 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                         color: isSelected ? primaryGold : (isSuggested ? Colors.blueAccent : null),
                       ),
                     ),
+                    if (_lineasMismoCatalogo(servicio.id) > 1) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '×${_lineasMismoCatalogo(servicio.id)}',
+                        style: TextStyle(
+                          fontSize: 8,
+                          color: isSelected ? primaryGold : Colors.white54,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                     if (esPropio) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -1253,35 +1804,52 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
 
                     return ListView(
                       key: const ValueKey('list'),
+                      controller: _panelScrollController,
                       padding: const EdgeInsets.all(16),
                       children: [
                         // Individuales (Primero)
                         ...ungroupedIds.map((id) {
                           final data = _serviciosSeleccionados[id];
                           if (data == null) return const SizedBox.shrink();
-                          
+                          final sid = (data['servicio_id'] as String?) ?? id;
                           final srv = _catalogo.firstWhere(
-                            (s) => s.id == id, 
+                            (s) => s.id == sid, 
                             orElse: () {
-                              // RESPALDO DE SEGURIDAD (ELITE): Si no está en catálogo, buscar en sesión o detalles
-                              final nombreRespaldo = _nombresAdHoc[id] ?? _detallesServicios[id] ?? 'Servicio Ad-hoc';
-                              return Servicio(id: id, nombre: nombreRespaldo, categoria: 'Personalizado');
+                              final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[id] ?? 'Servicio Ad-hoc';
+                              return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
                             }
                           );
-                          return _buildPanelItem(srv, (data['precio'] as num? ?? 0).toDouble(), (data['cantidad'] as num? ?? 1).toDouble());
+                          return _buildPanelItem(
+                            id,
+                            srv,
+                            (data['precio'] as num? ?? 0).toDouble(),
+                            (data['cantidad'] as num? ?? 1).toDouble(),
+                          );
                         }),
                         
                         // Grupos (Al Final)
                         ...groupsMap.entries.map((entry) {
                           final grupoNombre = entry.key;
-                          final ids = entry.value;
-                          final listServicios = ids.map((id) => _catalogo.firstWhere(
-                            (s) => s.id == id, 
-                            orElse: () {
-                              final nombreRespaldo = _nombresAdHoc[id] ?? _detallesServicios[id] ?? 'Servicio Ad-hoc';
-                              return Servicio(id: id, nombre: nombreRespaldo, categoria: 'Personalizado');
-                            }
-                          )).toList();
+                          final ids = List<String>.from(entry.value)
+                            ..sort((a, b) {
+                              final oa = (_serviciosSeleccionados[a]?['combo_orden'] as num?)?.toInt() ?? 0;
+                              final ob = (_serviciosSeleccionados[b]?['combo_orden'] as num?)?.toInt() ?? 0;
+                              return oa.compareTo(ob);
+                            });
+                          final listLineasData = <({String lineaId, Servicio srv})>[];
+                          for (final lineaId in ids) {
+                            final data = _serviciosSeleccionados[lineaId];
+                            if (data == null) continue;
+                            final sid = (data['servicio_id'] as String?) ?? lineaId;
+                            final srv = _catalogo.firstWhere(
+                              (s) => s.id == sid,
+                              orElse: () {
+                                final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[lineaId] ?? 'Servicio Ad-hoc';
+                                return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
+                              },
+                            );
+                            listLineasData.add((lineaId: lineaId, srv: srv));
+                          }
                           
                           final totalGrupo = ids.fold(0.0, (sum, id) {
                             final data = _serviciosSeleccionados[id];
@@ -1289,7 +1857,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                             return sum + ((data['precio'] as num? ?? 0) * (data['cantidad'] as num? ?? 1));
                           });
 
-                          return _buildGroupedPanelItem(grupoNombre, listServicios, totalGrupo);
+                          return _buildGroupedPanelItem(grupoNombre, listLineasData, totalGrupo);
                         }),
                       ],
                     );
@@ -1301,9 +1869,9 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     );
   }
 
-  Widget _buildPanelItem(Servicio srv, double precio, double cantidad) {
+  Widget _buildPanelItem(String lineaId, Servicio srv, double precio, double cantidad) {
     return InkWell(
-      onTap: () => _solicitarPrecio(srv, isEditing: true),
+      onTap: () => _solicitarPrecio(srv, isEditing: true, lineaId: lineaId),
       borderRadius: BorderRadius.circular(12),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -1321,7 +1889,12 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                 Expanded(child: Text(srv.nombre.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))),
                 IconButton(
                   icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 16),
-                  onPressed: () => setState(() => _serviciosSeleccionados.remove(srv.id)),
+                  onPressed: () {
+                    setState(() {
+                      _serviciosSeleccionados.remove(lineaId);
+                      _detallesServicios.remove(lineaId);
+                    });
+                  },
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -1341,7 +1914,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     );
   }
 
-  Widget _buildGroupedPanelItem(String nombre, List<Servicio> servicios, double total) {
+  Widget _buildGroupedPanelItem(String nombre, List<({String lineaId, Servicio srv})> lineas, double total) {
     final primaryGold = const Color(0xFFD4AF37);
     
     return Container(
@@ -1400,14 +1973,14 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
-              children: servicios.map((s) {
-                final data = _serviciosSeleccionados[s.id];
+              children: lineas.map((e) {
+                final data = _serviciosSeleccionados[e.lineaId];
                 if (data == null) return const SizedBox.shrink();
-                
+                final s = e.srv;
                 final itemTotal = (data['precio'] as num? ?? 0) * (data['cantidad'] as num? ?? 1);
                 
                 return InkWell(
-                  onTap: () => _solicitarPrecio(s, isEditing: true),
+                  onTap: () => _solicitarPrecio(s, isEditing: true, lineaId: e.lineaId),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                     child: Row(
@@ -1427,7 +2000,10 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                       const SizedBox(width: 8),
                       IconButton(
                         icon: const Icon(Icons.link_off, color: Colors.grey, size: 14),
-                        onPressed: () => setState(() => _serviciosSeleccionados[s.id]?['grupo'] = null),
+                        onPressed: () => setState(() {
+                          _serviciosSeleccionados[e.lineaId]?['grupo'] = null;
+                          _serviciosSeleccionados[e.lineaId]?['combo_orden'] = 0;
+                        }),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         tooltip: 'Desvincular',
@@ -1494,179 +2070,6 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                   : const Text('CONFIRMAR EVENTO', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildServiceCard(Servicio servicio, bool isSelected, double? agreedPrice) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryGold = const Color(0xFFD4AF37);
-
-    return InkWell(
-      onTap: () => _solicitarPrecio(servicio),
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? primaryGold.withValues(alpha: 0.12)
-              : (isDark ? Colors.white.withValues(alpha: 0.03) : Theme.of(context).cardColor),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected ? primaryGold : (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              _getIconFor(servicio.nombre),
-              size: 20,
-              color: isSelected ? primaryGold : (isDark ? Colors.white38 : Colors.black38),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                servicio.nombre.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                  color: isSelected ? primaryGold : (isDark ? Colors.white70 : Colors.black87),
-                ),
-              ),
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: primaryGold,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  (agreedPrice ?? 0).toCurrency(),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-            ] else
-              Icon(Icons.add_circle_outline, size: 16,
-                  color: isDark ? Colors.white24 : Colors.black26),
-          ],
-        ),
-      ),
-    );
-  }
-
-  double get _baseTotal {
-    double total = 0;
-    for (var id in _serviciosSeleccionados.keys) {
-      final srv = _catalogo.firstWhere((s) => s.id == id, orElse: () => Servicio(id: '', nombre: '', categoria: ''));
-      total += srv.costoBase ?? 0;
-    }
-    return total;
-  }
-
-  Widget _buildFloatingBottomBar() {
-    final primaryGold = const Color(0xFFD4AF37);
-    final baseTotal = _baseTotal;
-    final percentage = baseTotal > 0 ? (_totalPresupuesto / baseTotal) : 1.0;
-    
-    Color healthColor = Colors.greenAccent;
-    String healthLabel = 'RENTABLE';
-
-    if (percentage < 0.8) {
-      healthColor = Colors.redAccent;
-      healthLabel = 'BAJO MARGEN';
-    } else if (percentage < 0.9) {
-      healthColor = Colors.orangeAccent;
-      healthLabel = 'AJUSTADO';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
-          )
-        ],
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_serviciosSeleccionados.isNotEmpty) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: percentage.clamp(0.0, 1.0),
-                      backgroundColor: Colors.white12,
-                      valueColor: AlwaysStoppedAnimation<Color>(healthColor),
-                      minHeight: 4,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  healthLabel,
-                  style: TextStyle(color: healthColor, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-          ],
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('INVERSIÓN TOTAL', style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                  Text(
-                    (_totalPresupuesto).toCurrency(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
-                  ),
-                ],
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryGold,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  elevation: 0,
-                ),
-                onPressed: _isSaving ? null : _guardarPresupuesto,
-                child: _isSaving 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
-                    : const Row(
-                        children: [
-                          Text('CONFIRMAR', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
-                          SizedBox(width: 8),
-                          Icon(Icons.check_circle_outline, size: 18),
-                        ],
-                      ),
-              )
-            ],
           ),
         ],
       ),

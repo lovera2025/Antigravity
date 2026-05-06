@@ -1,7 +1,7 @@
 import 'cliente.dart';
 import 'servicio.dart';
 
-enum EstadoPresupuesto { activo, vencido, confirmado }
+enum EstadoPresupuesto { borrador, enviado, aprobado, rechazado, vencido }
 
 class Presupuesto {
   final String id;
@@ -10,6 +10,7 @@ class Presupuesto {
   final String? lugar;
   final String? detalleAnclaje;
   final DateTime fechaVencimiento;
+  final DateTime? fechaEvento;
   final EstadoPresupuesto estado;
   final String? instagram;
   final String? telefono;
@@ -27,7 +28,8 @@ class Presupuesto {
     this.lugar,
     this.detalleAnclaje,
     required this.fechaVencimiento,
-    this.estado = EstadoPresupuesto.activo,
+    this.fechaEvento,
+    this.estado = EstadoPresupuesto.enviado,
     this.instagram,
     this.telefono,
     this.vendedorNombre,
@@ -38,9 +40,25 @@ class Presupuesto {
     this.servicios = const [],
   });
 
-  bool get estaVencido => DateTime.now().isAfter(fechaVencimiento) && estado == EstadoPresupuesto.activo;
+  bool get estaVencido => DateTime.now().isAfter(fechaVencimiento) && estado == EstadoPresupuesto.enviado;
 
   double get total => servicios.fold(0, (sum, item) => sum + (item.precioFinal * item.cantidad));
+
+  static EstadoPresupuesto _mapEstado(String? estadoRaw) {
+    if (estadoRaw == null) return EstadoPresupuesto.enviado;
+    switch(estadoRaw.toLowerCase()) {
+      case 'activo':
+        return EstadoPresupuesto.enviado;
+      case 'confirmado':
+        return EstadoPresupuesto.aprobado;
+      default:
+        try {
+          return EstadoPresupuesto.values.byName(estadoRaw);
+        } catch(_) {
+          return EstadoPresupuesto.enviado;
+        }
+    }
+  }
 
   factory Presupuesto.fromJson(Map<String, dynamic> json) {
     return Presupuesto(
@@ -52,7 +70,8 @@ class Presupuesto {
       fechaVencimiento: json['fecha_vencimiento'] != null 
           ? (DateTime.tryParse(json['fecha_vencimiento'].toString()) ?? DateTime.now().add(const Duration(days: 7)))
           : DateTime.now().add(const Duration(days: 7)),
-      estado: EstadoPresupuesto.values.byName(json['estado'] ?? 'activo'),
+      fechaEvento: json['fecha_evento'] != null ? DateTime.tryParse(json['fecha_evento'].toString()) : null,
+      estado: _mapEstado(json['estado']),
       instagram: json['instagram'],
       telefono: json['telefono'],
       vendedorNombre: json['vendedor_nombre'],
@@ -78,6 +97,7 @@ class Presupuesto {
       'lugar': lugar,
       'detalle_anclaje': detalleAnclaje,
       'fecha_vencimiento': fechaVencimiento.toIso8601String(),
+      if (fechaEvento != null) 'fecha_evento': fechaEvento!.toIso8601String(),
       'estado': estado.name,
       'instagram': instagram,
       'telefono': telefono,
@@ -90,46 +110,57 @@ class Presupuesto {
 }
 
 class PresupuestoServicio {
+  final String id;
   final String presupuestoId;
   final String servicioId;
   final double precioFinal;
   final double cantidad;
   final String? detalleServicio;
   final String? grupo;
+  final int comboOrden;
+  final String? categoria;
   final Servicio? servicio;
 
   String? get nombre => servicio?.nombre;
 
   PresupuestoServicio({
+    required this.id,
     required this.presupuestoId,
     required this.servicioId,
     required this.precioFinal,
     this.cantidad = 1.0,
     this.detalleServicio,
     this.grupo,
+    this.comboOrden = 0,
+    this.categoria,
     this.servicio,
   });
 
   factory PresupuestoServicio.fromJson(Map<String, dynamic> json) {
     return PresupuestoServicio(
+      id: (json['id'] ?? json['presupuesto_id'] ?? json['servicio_id'] ?? '') as String,
       presupuestoId: (json['presupuesto_id'] ?? '').toString(),
       servicioId: (json['servicio_id'] ?? '').toString(),
       precioFinal: double.tryParse(json['precio_final']?.toString() ?? '0') ?? 0.0,
       cantidad: double.tryParse((json['cantidad'] ?? 1.0).toString()) ?? 1.0,
       detalleServicio: json['detalle_servicio'],
       grupo: json['grupo'],
+      comboOrden: (json['combo_orden'] as num?)?.toInt() ?? 0,
+      categoria: json['servicios'] != null ? json['servicios']['categoria'] : null,
       servicio: json['servicios'] != null ? Servicio.fromJson(Map<String, dynamic>.from(json['servicios'])) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'presupuesto_id': presupuestoId,
       'servicio_id': servicioId,
       'precio_final': precioFinal,
       'cantidad': cantidad,
       'detalle_servicio': detalleServicio,
       'grupo': grupo,
+      'combo_orden': comboOrden,
     };
   }
 }

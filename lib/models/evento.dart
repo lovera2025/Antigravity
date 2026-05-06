@@ -14,6 +14,8 @@ class Evento {
   final String? pinOperador;
   final String modalidad; // 'particular' o 'masivo'
   final String? observaciones;
+  /// Porcentaje de bonificación acordado sobre el presupuesto total (persistido en eventos).
+  final double? bonificacionGlobalPct;
 
   // To hold joined properties when queried
   final Cliente? cliente;
@@ -33,6 +35,7 @@ class Evento {
     this.pinOperador,
     this.modalidad = 'particular',
     this.observaciones,
+    this.bonificacionGlobalPct,
     this.cliente,
     this.presupuesto,
     this.presupuestoTotal,
@@ -63,6 +66,9 @@ class Evento {
       pinOperador: json['pin_operador'] as String?,
       modalidad: (json['modalidad'] ?? 'particular') as String,
       observaciones: json['observaciones'] as String?,
+      bonificacionGlobalPct: json['bonificacion_global_pct'] != null
+          ? double.tryParse(json['bonificacion_global_pct'].toString())
+          : null,
       
       // Attempt to parse joined Vistas/Tables if they exist in the JSON response
       cliente: json['clientes'] != null ? Cliente.fromJson(json['clientes']) : null,
@@ -95,6 +101,7 @@ class Evento {
       'modalidad': modalidad,
       if (pinOperador != null) 'pin_operador': pinOperador,
       if (observaciones != null) 'observaciones': observaciones,
+      if (bonificacionGlobalPct != null) 'bonificacion_global_pct': bonificacionGlobalPct,
     };
   }
 
@@ -132,45 +139,59 @@ class Evento {
 }
 
 class EventosServicios {
+  /// Fila lógica; permite el mismo [servicioId] varias veces en un evento.
+  final String id;
   final String eventoId;
   final String servicioId;
   final double precioFinalAcordado;
   final double cantidad;
   final String? grupo;
+  /// Orden dentro del combo (0 = primero: lleva el precio total del bloque en PDF/panel).
+  final int comboOrden;
   final String? detalleServicio;
 
   
   final Servicio? servicio;
 
   EventosServicios({
+    required this.id,
     required this.eventoId,
     required this.servicioId,
     required this.precioFinalAcordado,
     this.cantidad = 1.0,
     this.grupo,
+    this.comboOrden = 0,
     this.detalleServicio,
     this.servicio,
   });
 
   factory EventosServicios.fromJson(Map<String, dynamic> json) {
+    final idRaw = json['id'];
+    if (idRaw == null || (idRaw is String && idRaw.length != 36)) {
+      throw FormatException('eventos_servicios: falta id (línea) de 36 caracteres');
+    }
     return EventosServicios(
-      eventoId: json['evento_id'],
-      servicioId: json['servicio_id'],
+      id: idRaw as String,
+      eventoId: json['evento_id'] as String,
+      servicioId: json['servicio_id'] as String,
       precioFinalAcordado: double.parse(json['precio_final_acordado'].toString()),
       cantidad: json['cantidad'] != null ? double.parse(json['cantidad'].toString()) : 1.0,
-      grupo: json['grupo'],
-      detalleServicio: json['detalle_servicio'],
-      servicio: json['servicios'] != null ? Servicio.fromJson(json['servicios']) : null,
+      grupo: json['grupo'] as String?,
+      comboOrden: (json['combo_orden'] as num?)?.toInt() ?? 0,
+      detalleServicio: json['detalle_servicio'] as String?,
+      servicio: json['servicios'] != null ? Servicio.fromJson(json['servicios'] as Map<String, dynamic>) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'evento_id': eventoId,
       'servicio_id': servicioId,
       'precio_final_acordado': precioFinalAcordado,
       'cantidad': cantidad,
       'grupo': grupo,
+      'combo_orden': comboOrden,
       'detalle_servicio': detalleServicio,
     };
   }

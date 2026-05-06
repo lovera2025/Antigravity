@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,23 +8,591 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../main.dart';
+import '../../core/utils/ar_time.dart';
 import '../../models/egreso.dart';
 import '../../models/evento.dart';
 import '../common/providers/admin_provider.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/utils/currency_extensions.dart';
+import '../common/services/pdf_service.dart';
 import 'widgets/pagar_operador_dialog.dart';
 import 'widgets/editar_pago_operador_dialog.dart';
 import 'models/ingreso_detallado.dart';
 import 'providers/finanzas_provider.dart';
 import '../dashboard/providers/dashboard_provider.dart';
+import 'widgets/corregir_medio_pago_dialog.dart';
+import 'widgets/anular_cobro_cuota_dialog.dart';
 import 'widgets/smart_purge_dialog.dart';
 import '../eventos/detalle_evento_particular_screen.dart';
 import '../eventos/detalle_evento_masivo_screen.dart';
 import '../eventos/repositories/eventos_repository.dart';
+import '../alquiler/prestamo_alquiler_detalle_screen.dart';
+import '../egresos/repositories/egresos_repository.dart';
+import '../egresos/widgets/registrar_egreso_global_dialog.dart';
+import '../eventos/eventos_screen.dart';
+import '../egresos/providers/egresos_provider.dart';
+import '../eventos/presupuestos_screen.dart';
+import 'repositories/finanzas_repository.dart';
+import '../rentabilidad/repositories/rentabilidad_repository.dart';
+import '../../models/calculo_rentabilidad.dart';
+import '../../models/obligacion_pago.dart';
+import 'providers/obligaciones_provider.dart';
+import 'providers/caja_fuerte_provider.dart';
+import 'widgets/avisos_view.dart';
+import 'widgets/caja_fuerte_dialogs.dart';
+import 'widgets/pagar_aviso_dialog.dart';
+import 'widgets/cobro_masivos_tab.dart';
+import '../cierre_caja/models/turno_caja.dart';
+import '../cierre_caja/providers/cierre_caja_provider.dart';
+import '../cierre_caja/widgets/registrar_retiro_dialog.dart';
 
 
 enum SearchContext { todos, ingresos, egresos }
+enum FinanzasSubView { salud, flujo, categorias, avisos }
+
+/// Mitiga spam del motor Windows (`accessibility_bridge` / AXTree) en [Tooltip] dentro de scroll/listas.
+bool _tooltipExcludeSemanticsWin() => defaultTargetPlatform == TargetPlatform.windows;
+
+/// Destino al tocar cada pilar del score en SALUD (scroll + sección relacionada).
+enum _SaludPillarTap { liquidez, margen, momentum, alertas }
+
+/// Torta del mes (cobros por fuente / pagos por categoría): en SALUD; el toggle vive junto a ese bloque.
+enum _FiltroMesCaja { cobros, pagos }
+
+enum _PulsoRangoVista { mesCalendario, ultimos30 }
+
+/// En el listado por mes, el chip «Efectivo» incluye explícitos + solo **hoy** todo lo que no sea transferencia (p. ej. sin medio).
+bool _ingresoCuentaComoEfectivoEnListado(IngresoDetallado ing, DateTime hoyAr) {
+  final mp = ing.medioPago?.toLowerCase().trim();
+  if (mp == 'transferencia') return false;
+  if (mp == 'efectivo') return true;
+  return ArTime.mismoDia(ing.fecha, hoyAr);
+}
+
+class _DiaPulsoDatum {
+  final DateTime dia;
+  final double ing;
+  final double eg;
+  final int nPagos;
+  final int nEgresos;
+  double get neto => ing - eg;
+  const _DiaPulsoDatum({
+    required this.dia,
+    required this.ing,
+    required this.eg,
+    required this.nPagos,
+    required this.nEgresos,
+  });
+}
+
+/// Totales de ingresos/egresos para un mes calendario (inicio = día 1).
+class _MesData {
+  final DateTime mes;
+  final double ingresos;
+  final double egresos;
+  double get neto => ingresos - egresos;
+  const _MesData({required this.mes, required this.ingresos, required this.egresos});
+}
+
+_MesData _calcularMesData(FinanzasState state, DateTime mesInicio) {
+  final mes = DateTime(mesInicio.year, mesInicio.month, 1);
+  final siguiente = DateTime(mes.year, mes.month + 1, 1);
+  final ing = state.ingresos
+      .where((x) => !x.fecha.isBefore(mes) && x.fecha.isBefore(siguiente))
+      .fold(0.0, (s, e) => s + e.monto);
+  final eg = state.egresos
+      .where((x) => x.fecha != null && !x.fecha!.isBefore(mes) && x.fecha!.isBefore(siguiente))
+      .fold(0.0, (s, e) => s + e.monto);
+  return _MesData(mes: mes, ingresos: ing, egresos: eg);
+}
+
+List<_MesData> _ultimosMesesDatos(FinanzasState state, {int cantidad = 6}) {
+  final now = DateTime.now();
+  final out = <_MesData>[];
+  for (int i = cantidad - 1; i >= 0; i--) {
+    final m = DateTime(now.year, now.month - i, 1);
+    out.add(_calcularMesData(state, m));
+  }
+  return out;
+}
+
+/// Score compuesto 0-100 de salud financiera, descompuesto en 4 pilares
+/// ponderados. Usa solo señales que ya calcula el provider.
+class _HealthScoreData {
+  /// 0-100
+  final double score;
+  /// 0-30 — runway en meses respecto al OPEX
+  final double liquidez;
+  /// 0-30 — margen neto histórico
+  final double margen;
+  /// 0-25 — variación % de ingresos mes vs mes anterior
+  final double momentum;
+  /// 0-15 — penalidad por alertas financieras activas
+  final double alertas;
+  /// Meses de oxígeno (capital neto / opex 30d). Saturado en 999 si no hay egresos.
+  final double runwayMeses;
+  /// % margen histórico (ing - eg) / ing.
+  final double margenPct;
+  /// Δ ingresos mes actual vs mes anterior (p.ej. 0.12 = +12%).
+  final double deltaIngPct;
+  final int alertasCount;
+
+  const _HealthScoreData({
+    required this.score,
+    required this.liquidez,
+    required this.margen,
+    required this.momentum,
+    required this.alertas,
+    required this.runwayMeses,
+    required this.margenPct,
+    required this.deltaIngPct,
+    required this.alertasCount,
+  });
+}
+
+_HealthScoreData _calcularHealthScore(FinanzasState state, int alertasFinancieras) {
+  final capNeto = state.hudTotalIngresosHistoricoGlobal - state.hudTotalEgresosHistoricoGlobal;
+  final opex = state.hudOpex30DiasLocal.abs();
+
+  // 1. Liquidez (runway): 30 pts si ≥ 6 meses de oxígeno.
+  double runwayMeses;
+  if (opex <= 0) {
+    runwayMeses = capNeto > 0 ? 999 : 0;
+  } else {
+    runwayMeses = (capNeto / opex).clamp(0.0, 999.0);
+  }
+  final liquidez = (runwayMeses / 6.0).clamp(0.0, 1.0) * 30.0;
+
+  // 2. Margen histórico: 30 pts si el margen neto ≥ 30%.
+  final ingHist = state.hudTotalIngresosHistoricoGlobal;
+  final margenPct = ingHist > 0 ? (capNeto / ingHist) : 0.0;
+  final margen = (margenPct / 0.30).clamp(0.0, 1.0) * 30.0;
+
+  // 3. Momentum: Δ% ingresos mes actual vs mes anterior.
+  //    -20% → 0 pts, 0% → 12.5 pts, +20% → 25 pts (lineal).
+  final nowAr = ArTime.nowAr();
+  final mesAct = DateTime(nowAr.year, nowAr.month, 1);
+  final mesPrev = DateTime(mesAct.year, mesAct.month - 1, 1);
+  final curr = _calcularMesData(state, mesAct);
+  final prev = _calcularMesData(state, mesPrev);
+  double deltaPct;
+  if (prev.ingresos <= 0) {
+    deltaPct = curr.ingresos > 0 ? 1.0 : 0.0;
+  } else {
+    deltaPct = (curr.ingresos - prev.ingresos) / prev.ingresos;
+  }
+  final momentumNorm = ((deltaPct + 0.20) / 0.40).clamp(0.0, 1.0);
+  final momentum = momentumNorm * 25.0;
+
+  // 4. Alertas: 15 pts base, -3 por cada alerta financiera activa.
+  final alertas = (15.0 - alertasFinancieras * 3.0).clamp(0.0, 15.0);
+
+  final score = (liquidez + margen + momentum + alertas).clamp(0.0, 100.0);
+
+  return _HealthScoreData(
+    score: score,
+    liquidez: liquidez,
+    margen: margen,
+    momentum: momentum,
+    alertas: alertas,
+    runwayMeses: runwayMeses,
+    margenPct: margenPct,
+    deltaIngPct: deltaPct,
+    alertasCount: alertasFinancieras,
+  );
+}
+
+List<IngresoDetallado> _ingresosVista(FinanzasState state) {
+  final f = state.fechaExactaFiltro;
+  if (f == null) return state.ingresos;
+  return state.ingresos.where((i) => ArTime.mismoDia(i.fecha, f)).toList();
+}
+
+List<Egreso> _egresosVista(FinanzasState state) {
+  final f = state.fechaExactaFiltro;
+  if (f == null) return state.egresos;
+  return state.egresos.where((e) => e.fecha != null && ArTime.mismoDia(e.fecha!, f)).toList();
+}
+
+/// Primer instante del lunes AR de la semana que contiene [diaAr].
+DateTime _lunesSemanaArDesde(DateTime diaAr) {
+  final a = ArTime.toAr(diaAr);
+  final d = DateTime(a.year, a.month, a.day);
+  return d.subtract(Duration(days: d.weekday - 1));
+}
+
+/// Línea horizontal punteada (referencia de promedio sobre la barra).
+class _DashedOverlayPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  _DashedOverlayPainter({required this.color, this.strokeWidth = 1});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+    const dash = 3.0;
+    const gap = 3.0;
+    final y = size.height / 2;
+    double x = 0;
+    while (x < size.width) {
+      final x2 = min(x + dash, size.width);
+      canvas.drawLine(Offset(x, y), Offset(x2, y), paint);
+      x += dash + gap;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedOverlayPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
+}
+
+/// Torta simple de egresos por categoría (donut).
+class _EgresosPiePainter extends CustomPainter {
+  final List<double> amounts;
+  final List<Color> colors;
+  final Color holeColor;
+
+  _EgresosPiePainter({
+    required this.amounts,
+    required this.colors,
+    required this.holeColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = amounts.fold(0.0, (a, b) => a + b);
+    if (total <= 0) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = min(size.width, size.height) / 2 * 0.92;
+    const holeFrac = 0.52;
+    var start = -pi / 2;
+    for (var i = 0; i < amounts.length; i++) {
+      final sweep = 2 * pi * (amounts[i] / total);
+      final paint = Paint()
+        ..color = colors[i % colors.length]
+        ..style = PaintingStyle.fill;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        start,
+        sweep,
+        true,
+        paint,
+      );
+      start += sweep;
+    }
+    canvas.drawCircle(
+      center,
+      radius * holeFrac,
+      Paint()
+        ..color = holeColor
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _EgresosPiePainter oldDelegate) =>
+      oldDelegate.amounts != amounts ||
+      oldDelegate.colors != colors ||
+      oldDelegate.holeColor != holeColor;
+}
+
+/// Gauge circular 0-100 con apertura inferior (270° de sweep).
+///
+/// Pinta un track gris y sobre él un arco de color (rojo <40, ámbar 40-70,
+/// verde ≥70) proporcional al valor. Agrega dos ticks sutiles en 40 y 70
+/// como referencia visual de umbrales.
+class _HealthScoreArcPainter extends CustomPainter {
+  /// Valor renderizado (0-100). Puede ser animado desde 0 al valor real.
+  final double score;
+  /// Valor "objetivo" real (0-100) — define el color del arco aunque [score]
+  /// esté a mitad de animación.
+  final double targetScore;
+  final Color trackColor;
+  final Color tickColor;
+
+  _HealthScoreArcPainter({
+    required this.score,
+    required this.targetScore,
+    required this.trackColor,
+    required this.tickColor,
+  });
+
+  Color get _valueColor {
+    if (targetScore < 40) return const Color(0xFFE74C3C);
+    if (targetScore < 70) return const Color(0xFFF39C12);
+    return const Color(0xFF00B894);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = min(size.width, size.height) / 2 * 0.86;
+    final strokeW = radius * 0.16;
+
+    const startAngle = 3 * pi / 4;
+    const totalSweep = 3 * pi / 2;
+
+    final track = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeW
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      totalSweep,
+      false,
+      track,
+    );
+
+    final pct = (score / 100).clamp(0.0, 1.0);
+    final valueSweep = totalSweep * pct;
+    if (valueSweep > 0.001) {
+      final rect = Rect.fromCircle(center: center, radius: radius);
+      final baseColor = _valueColor;
+      final value = Paint()
+        ..shader = SweepGradient(
+          startAngle: startAngle,
+          endAngle: startAngle + totalSweep,
+          colors: [
+            baseColor.withValues(alpha: 0.55),
+            baseColor,
+          ],
+          transform: const GradientRotation(3 * pi / 4),
+        ).createShader(rect)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeW
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(rect, startAngle, valueSweep, false, value);
+    }
+
+    final tick = Paint()
+      ..color = tickColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    for (final t in [40, 70]) {
+      final a = startAngle + totalSweep * (t / 100);
+      final inner = center + Offset(cos(a), sin(a)) * (radius - strokeW * 0.65);
+      final outer = center + Offset(cos(a), sin(a)) * (radius + strokeW * 0.65);
+      canvas.drawLine(inner, outer, tick);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HealthScoreArcPainter old) =>
+      old.score != score ||
+      old.targetScore != targetScore ||
+      old.trackColor != trackColor ||
+      old.tickColor != tickColor;
+}
+
+// ── Timeline del día (HOY) ───────────────────────────────────────────────────
+
+class _TimelineLayDot {
+  final Offset center;
+  final double displayR;
+  final double hitR;
+  final Color color;
+  final String tooltip;
+  final bool esIngreso;
+
+  const _TimelineLayDot({
+    required this.center,
+    required this.displayR,
+    required this.hitR,
+    required this.color,
+    required this.tooltip,
+    required this.esIngreso,
+  });
+}
+
+class _TimelineDiaLayout {
+  final List<_TimelineLayDot> dots;
+  final double padH;
+  final double drawW;
+  final double gridTop;
+  final double gridBottom;
+  final double? nowX;
+  final String nowLabel;
+
+  const _TimelineDiaLayout({
+    required this.dots,
+    required this.padH,
+    required this.drawW,
+    required this.gridTop,
+    required this.gridBottom,
+    required this.nowX,
+    required this.nowLabel,
+  });
+}
+
+_TimelineDiaLayout _layoutTimelineDia(FinanzasState state, Size size) {
+  const green = Color(0xFF00B894);
+  const red = Color(0xFFE74C3C);
+  final w = size.width;
+  const padH = 8.0;
+  final drawW = (w - 2 * padH).clamp(4.0, double.infinity);
+  const gridTop = 14.0;
+  const gridBottom = 54.0;
+  const yIng = 26.0;
+  const yEg = 40.0;
+
+  final hoyRef = ArTime.nowAr();
+  final raw = <({bool ing, DateTime when, double monto, String concept})>[];
+  for (final i in state.ingresos) {
+    if (!ArTime.mismoDia(i.fecha, hoyRef)) continue;
+    final concept = i.concepto.trim().isNotEmpty
+        ? i.concepto
+        : (i.nombreEvento.trim().isNotEmpty ? i.nombreEvento : 'Ingreso');
+    raw.add((ing: true, when: i.fecha, monto: i.monto, concept: concept));
+  }
+  for (final e in state.egresos) {
+    if (e.fecha == null || !ArTime.mismoDia(e.fecha!, hoyRef)) continue;
+    final concept =
+        (e.proveedor?.trim().isNotEmpty == true) ? e.proveedor! : (e.categoria ?? 'Egreso');
+    raw.add((ing: false, when: e.fecha!, monto: e.monto, concept: concept));
+  }
+
+  var maxM = 1.0;
+  for (final r in raw) {
+    if (r.monto > maxM) maxM = r.monto;
+  }
+
+  final dots = <_TimelineLayDot>[];
+  for (final r in raw) {
+    final ar = ArTime.toAr(r.when);
+    final frac = (ar.hour + ar.minute / 60.0 + ar.second / 3600.0) / 24.0;
+    final x = padH + frac.clamp(0.0, 1.0) * drawW;
+    final displayR = 6.0 + (r.monto / maxM) * 2.0;
+    final hitR = max(14.0, displayR + 2.0);
+    final y = r.ing ? yIng : yEg;
+    final tip =
+        '${ArTime.formatHora(r.when)} · ${r.concept} · ${r.monto.toCurrency()}';
+    dots.add(
+      _TimelineLayDot(
+        center: Offset(x, y),
+        displayR: displayR,
+        hitR: hitR,
+        color: r.ing ? green : red,
+        tooltip: tip,
+        esIngreso: r.ing,
+      ),
+    );
+  }
+
+  final nowAr = ArTime.nowAr();
+  final nowFrac = (nowAr.hour + nowAr.minute / 60.0 + nowAr.second / 3600.0) / 24.0;
+  final nx = padH + nowFrac.clamp(0.0, 1.0) * drawW;
+  final nowLabel =
+      '${nowAr.hour.toString().padLeft(2, '0')}:${nowAr.minute.toString().padLeft(2, '0')}';
+
+  return _TimelineDiaLayout(
+    dots: dots,
+    padH: padH,
+    drawW: drawW,
+    gridTop: gridTop,
+    gridBottom: gridBottom,
+    nowX: nx.isFinite ? nx : null,
+    nowLabel: nowLabel,
+  );
+}
+
+class _TimelineDiaPainter extends CustomPainter {
+  final _TimelineDiaLayout layout;
+  final bool isDark;
+  final Color gold;
+
+  _TimelineDiaPainter({
+    required this.layout,
+    required this.isDark,
+    required this.gold,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final gridMinor = isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.07);
+    final labelColor = isDark ? Colors.white38 : Colors.black45;
+
+    for (var k = 0; k <= 8; k++) {
+      final u = k * 3 / 24.0;
+      final x = layout.padH + u * layout.drawW;
+      final p = Paint()
+        ..color = gridMinor
+        ..strokeWidth = 1;
+      canvas.drawLine(Offset(x, layout.gridTop), Offset(x, layout.gridBottom), p);
+    }
+
+    final hourLabels = ['00', '03', '06', '09', '12', '15', '18', '21', '24'];
+    for (var k = 0; k < hourLabels.length; k++) {
+      final u = k * 3 / 24.0;
+      final x = layout.padH + u * layout.drawW;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: hourLabels[k],
+          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: labelColor),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x - tp.width / 2, size.height - tp.height - 4));
+    }
+
+    final nx = layout.nowX;
+    if (nx != null) {
+      final flag = Paint()
+        ..color = gold.withValues(alpha: 0.85)
+        ..strokeWidth = 1.5;
+      canvas.drawLine(Offset(nx, layout.gridTop), Offset(nx, layout.gridBottom), flag);
+
+      final tNow = TextPainter(
+        text: TextSpan(
+          text: layout.nowLabel,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            color: gold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      var lx = nx - tNow.width / 2;
+      lx = lx.clamp(2.0, w - tNow.width - 2);
+      tNow.paint(canvas, Offset(lx, 2));
+    }
+
+    for (final d in layout.dots) {
+      final fill = Paint()..color = d.color;
+      canvas.drawCircle(d.center, d.displayR, fill);
+      final ring = Paint()
+        ..color = (isDark ? Colors.black : Colors.white).withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+      canvas.drawCircle(d.center, d.displayR, ring);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelineDiaPainter oldDelegate) =>
+      oldDelegate.layout.dots.length != layout.dots.length ||
+      oldDelegate.layout.nowX != layout.nowX ||
+      oldDelegate.layout.nowLabel != layout.nowLabel ||
+      oldDelegate.isDark != isDark ||
+      oldDelegate.gold != gold;
+}
+
+/// Tamaño mínimo de área táctil y dibujo de iconos en Finanzas (legible en 19–24" 1080p).
+const double _kFinanzasAppBarIconSize = 22;
+const double _kFinanzasIconButtonMinSide = 46;
+
+ButtonStyle _finanzasIconButtonStyle() => IconButton.styleFrom(
+      minimumSize: const Size(_kFinanzasIconButtonMinSide, _kFinanzasIconButtonMinSide),
+      padding: const EdgeInsets.all(10),
+      tapTargetSize: MaterialTapTargetSize.padded,
+    );
 
 class FinanzasView extends ConsumerStatefulWidget {
   const FinanzasView({super.key});
@@ -35,6 +605,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  /// Capturado en [initState]: en [dispose] no se puede usar [ref] (Riverpod).
+  late final AdminAuthNotifier _adminAuthNotifier;
+
   // Tab OPERADORES: recepción check-in por evento
   List<Map<String, dynamic>> _eventosParaOperadores = [];
   String? _operadoresEventoId;
@@ -46,33 +619,158 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   Set<String> _onlineUserIds = {};
   RealtimeChannel? _presenceChannel;
 
-  // Filtro de búsqueda unificado (Buscador Maestro)
+  // Buscador Maestro
   final _masterSearchCtrl = TextEditingController();
+  // Búsqueda dentro del panel desplegable de ingresos / egresos (refina sin depender solo del scroll)
+  final _ingresosListaSearchCtrl = TextEditingController();
+  final _egresosListaSearchCtrl = TextEditingController();
   SearchContext _searchContext = SearchContext.todos;
+  FinanzasSubView _currentSubView = FinanzasSubView.salud;
+  final _ingresosHScrollCtrl = ScrollController();
+  // null = Todos; valores posibles: 'efectivo' | 'transferencia' (efectivo = explícitos + solo hoy lo no transferencia)
+  String? _medioPagoFiltro;
 
+  /// Tras resolver reingreso a Mi Empresa (PIN si hace falta).
+  bool _miEmpresaGateReady = false;
+  bool _needsMiEmpresaReauth = false;
+
+  _FiltroMesCaja _filtroMesCaja = _FiltroMesCaja.pagos;
+
+  /// Scroll a secciones de la vista SALUD al tocar pilares del hero.
+  final GlobalKey _keySaludRunway = GlobalKey();
+  final GlobalKey _keySaludResumen = GlobalKey();
+  final GlobalKey _keySaludTabla = GlobalKey();
+  final GlobalKey _keySaludAlertas = GlobalKey();
+  final ExpansibleController _alertasGestionExpansionController = ExpansibleController();
+
+  _PulsoRangoVista _pulsoRango = _PulsoRangoVista.mesCalendario;
+  List<IngresoDetallado>? _pulso30Ingresos;
+  List<Egreso>? _pulso30Egresos;
+  bool _pulso30Loading = false;
+
+  /// Pulso diario (vista mes): scroll horizontal hasta acercar el día actual.
+  final ScrollController _pulsoBarrasScrollController = ScrollController();
+  String? _pulsoScrollAppliedStamp;
+
+  Future<void> _cargarDatosPulso30(FinanzasState finState) async {
+    setState(() => _pulso30Loading = true);
+    try {
+      final finRepo = ref.read(finanzasRepositoryProvider);
+      final egrRepo = ref.read(egresosRepositoryProvider);
+      final ing = await finRepo.obtenerIngresosDetallados(mes: null, eventoId: finState.eventoIdFiltro);
+      final egMaps = await egrRepo.getEgresosConEvento();
+      final eg = egMaps.map((e) => Egreso.fromJson(e)).toList();
+      if (!mounted) return;
+      final nowAr = ArTime.nowAr();
+      final fin = DateTime(nowAr.year, nowAr.month, nowAr.day);
+      final ini = fin.subtract(const Duration(days: 29));
+      bool enRango(DateTime? dt) {
+        if (dt == null) return false;
+        final a = ArTime.toAr(dt);
+        final solo = DateTime(a.year, a.month, a.day);
+        return !solo.isBefore(ini) && !solo.isAfter(fin);
+      }
+      setState(() {
+        _pulso30Ingresos = ing.where((i) => enRango(i.fecha)).toList();
+        _pulso30Egresos = eg.where((e) => enRango(e.fecha)).toList();
+        _pulso30Loading = false;
+      });
+    } catch (e) {
+      debugPrint('Pulso 30d: $e');
+      if (mounted) setState(() => _pulso30Loading = false);
+    }
+  }
+
+  void _onTabControllerTick() {
+    setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController.addListener(() => setState(() {}));
+    _adminAuthNotifier = ref.read(adminAuthProvider.notifier);
+    _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(_onTabControllerTick);
     final isAdmin = ref.read(adminAuthProvider).isAdmin;
     if (isAdmin) {
       _fetchOperadores();
       _fetchAsesores();
       _setupPresenceListener();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resolveMiEmpresaAccess());
+  }
+
+  Future<void> _resolveMiEmpresaAccess() async {
+    final reauth = await ref.read(adminAuthProvider.notifier).mustReauthMiEmpresa();
+    if (!mounted) return;
+    setState(() {
+      _needsMiEmpresaReauth = reauth;
+      _miEmpresaGateReady = true;
+    });
   }
 
   @override
   void dispose() {
+    unawaited(_adminAuthNotifier.recordMiEmpresaExit());
+    _tabController.removeListener(_onTabControllerTick);
     _tabController.dispose();
     _operadoresPinCtrl.dispose();
     _masterSearchCtrl.dispose();
+    _ingresosListaSearchCtrl.dispose();
+    _egresosListaSearchCtrl.dispose();
+    _ingresosHScrollCtrl.dispose();
+    _pulsoBarrasScrollController.dispose();
     if (_presenceChannel != null) {
       Supabase.instance.client.removeChannel(_presenceChannel!);
     }
+    _alertasGestionExpansionController.dispose();
     super.dispose();
+  }
+
+  void _onSaludPillarTap(_SaludPillarTap pillar) {
+    void scrollTo(GlobalKey key) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = key.currentContext;
+        if (ctx == null || !mounted) return;
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.15,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    }
+
+    switch (pillar) {
+      case _SaludPillarTap.liquidez:
+        scrollTo(_keySaludRunway);
+        break;
+      case _SaludPillarTap.margen:
+        scrollTo(_keySaludResumen);
+        break;
+      case _SaludPillarTap.momentum:
+        scrollTo(_keySaludTabla);
+        break;
+      case _SaludPillarTap.alertas:
+        scrollTo(_keySaludAlertas);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _alertasGestionExpansionController.expand();
+        });
+        break;
+    }
+  }
+
+  String _tooltipSaludPillar(_SaludPillarTap t) {
+    switch (t) {
+      case _SaludPillarTap.liquidez:
+        return 'Ir al cartel de cuánto te alcanza la plata';
+      case _SaludPillarTap.margen:
+        return 'Ir al resumen del mes (ingresos, egresos y saldo)';
+      case _SaludPillarTap.momentum:
+        return 'Ver la tabla comparativa mes a mes';
+      case _SaludPillarTap.alertas:
+        return 'Abrir alertas de cobros y deudas';
+    }
   }
 
   /// Cargar lista de Asesores desde perfiles + permisos.
@@ -196,97 +894,182 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     }
   }
 
+  Widget _buildFinanzasTabArea(
+    bool isDark,
+    Color gold,
+    AsyncValue<FinanzasState> asyncFinanzas,
+  ) {
+    if (asyncFinanzas.isLoading && !asyncFinanzas.hasValue) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
+    }
+    if (asyncFinanzas.hasError) {
+      return Center(
+        child: Text(
+          'Error: ${asyncFinanzas.error}',
+          style: const TextStyle(color: Colors.red),
+        ),
+      );
+    }
+
+    final state = asyncFinanzas.requireValue;
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildContent(isDark, gold, state),
+        const PresupuestosScreen(embedded: true),
+        CobroMasivosTab(isDark: isDark, gold: gold),
+        _buildPersonalTab(isDark, gold, state),
+        _buildOperadoresTab(isDark, gold),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(adminAuthProvider).isAdmin;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const gold = Color(0xFFD4AF37);
+    final showMiEmpresaContent =
+        _miEmpresaGateReady && isAdmin && !_needsMiEmpresaReauth;
+
+    final asyncFinanzas = ref.watch(finanzasProvider);
+
+    ref.listen<AsyncValue<FinanzasState>>(finanzasProvider, (prev, next) {
+      if (!showMiEmpresaContent) return;
+      if (!next.hasValue) return;
+      final no = next.requireValue;
+      final po = prev != null && prev.hasValue ? prev.requireValue : null;
+      if (po == null ||
+          po.ingresos.length != no.ingresos.length ||
+          po.egresos.length != no.egresos.length ||
+          po.mesFiltro != no.mesFiltro ||
+          po.eventoIdFiltro != no.eventoIdFiltro) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _pulso30Ingresos = null;
+              _pulso30Egresos = null;
+            });
+          }
+        });
+      }
+    });
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'MI EMPRESA',
-          style: GoogleFonts.oswald(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 3,
-          ),
-        ),
-        actions: [
-          if (isAdmin)
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () async {
-                ref.read(finanzasProvider.notifier).recargar();
-                _fetchOperadores();
-              },
-              tooltip: 'Actualizar',
-            ),
-          if (isAdmin)
-            IconButton(
-              icon: Icon(Icons.cleaning_services_rounded, size: 16, color: gold.withValues(alpha: 0.3)),
-              onPressed: () => showDialog(
-                context: context,
-                builder: (context) => const SmartPurgeDialog(),
+          appBar: AppBar(
+            title: Text(
+              'MI EMPRESA',
+              style: GoogleFonts.oswald(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3,
               ),
-              tooltip: 'Saneamiento',
             ),
-          const SizedBox(width: 8),
-        ],
-        bottom: isAdmin
-            ? TabBar(
-                controller: _tabController,
-                labelColor: gold,
-                unselectedLabelColor: Colors.grey,
-                indicatorColor: gold,
-                dividerColor: Colors.transparent,
-                labelStyle: const TextStyle(
-                    fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
-                tabs: const [
-                  Tab(icon: Icon(Icons.bar_chart_rounded, size: 18), text: 'FINANZAS'),
-                  Tab(icon: Icon(Icons.engineering_outlined, size: 18), text: 'PERSONAL'),
-                  Tab(icon: Icon(Icons.login_rounded, size: 18), text: 'OPERADORES'),
-                ],
-              )
-            : null,
-      ),
-      floatingActionButton: isAdmin && _tabController.index == 1
-          ? _buildPersonalFAB(isDark, gold)
-          : null,
-      body: !isAdmin
-          ? _buildLockScreen(gold)
-          : !isAdmin
+            actions: [
+              if (showMiEmpresaContent)
+                IconButton(
+                  style: _finanzasIconButtonStyle(),
+                  icon: Icon(Icons.refresh_rounded, size: _kFinanzasAppBarIconSize, color: gold),
+                  onPressed: () async {
+                    ref.read(finanzasProvider.notifier).recargar();
+                    _fetchOperadores();
+                  },
+                  tooltip: 'Actualizar',
+                ),
+              if (showMiEmpresaContent)
+                PopupMenuButton<String>(
+                  tooltip: 'Correcciones de cobro',
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.edit_outlined, size: _kFinanzasAppBarIconSize, color: gold.withValues(alpha: 0.92)),
+                  onSelected: (value) async {
+                    final ok = await AdminGate.check(context, ref, forceVerification: true);
+                    if (!ok || !context.mounted) return;
+                    if (value == 'medio') {
+                      await showDialog<void>(
+                        context: context,
+                        builder: (_) => const CorregirMedioPagoDialog(),
+                      );
+                    } else if (value == 'anular') {
+                      await showDialog<void>(
+                        context: context,
+                        builder: (_) => const AnularCobroCuotaDialog(),
+                      );
+                    }
+                  },
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem(value: 'medio', child: Text('Corregir medio de pago')),
+                    PopupMenuItem(value: 'anular', child: Text('Anular cobro por error')),
+                  ],
+                ),
+              if (showMiEmpresaContent)
+                IconButton(
+                  style: _finanzasIconButtonStyle(),
+                  icon: Icon(
+                    Icons.south_west_rounded,
+                    size: _kFinanzasAppBarIconSize,
+                    color: const Color(0xFFE74C3C),
+                  ),
+                  tooltip: 'Registrar retiro de caja',
+                  onPressed: () async {
+                    await showDialog<bool>(
+                      context: context,
+                      builder: (_) => const RegistrarRetiroDialog(),
+                    );
+                    if (!context.mounted) return;
+                    ref.read(finanzasProvider.notifier).recargar();
+                  },
+                ),
+              if (showMiEmpresaContent)
+                IconButton(
+                  style: _finanzasIconButtonStyle(),
+                  icon: Icon(Icons.cleaning_services_rounded, size: _kFinanzasAppBarIconSize, color: gold.withValues(alpha: 0.85)),
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (context) => const SmartPurgeDialog(),
+                  ),
+                  tooltip: 'Saneamiento',
+                ),
+              const SizedBox(width: 4),
+            ],
+            bottom: showMiEmpresaContent
+                ? TabBar(
+                    isScrollable: true,
+                    controller: _tabController,
+                    labelColor: gold,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: gold,
+                    dividerColor: Colors.transparent,
+                    labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
+                    tabs: const [
+                      Tab(icon: Icon(Icons.bar_chart_rounded, size: 18), text: 'FINANZAS'),
+                      Tab(icon: Icon(Icons.request_quote_outlined, size: 18), text: 'PRESUPUESTOS'),
+                      Tab(icon: Icon(Icons.payments_outlined, size: 18), text: 'COBRO'),
+                      Tab(icon: Icon(Icons.engineering_outlined, size: 18), text: 'PERSONAL'),
+                      Tab(icon: Icon(Icons.login_rounded, size: 18), text: 'OPERADORES'),
+                    ],
+                  )
+                : null,
+          ),
+          floatingActionButton: showMiEmpresaContent && _tabController.index == 3
+              ? _buildPersonalFAB(isDark, gold)
+              : null,
+          body: !_miEmpresaGateReady
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
                 )
-              : Consumer(
-                  builder: (context, ref, _) {
-                    final asyncFinanzas = ref.watch(finanzasProvider);
-                    
-                    if (asyncFinanzas.isLoading && !asyncFinanzas.hasValue) {
-                      return const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)));
-                    }
-                    if (asyncFinanzas.hasError) {
-                      return Center(child: Text('Error: ${asyncFinanzas.error}', style: const TextStyle(color: Colors.red)));
-                    }
-                    
-                    final state = asyncFinanzas.requireValue;
-
-                    return TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildContent(isDark, gold, state),
-                        _buildPersonalTab(isDark, gold, state),
-                        _buildOperadoresTab(isDark, gold),
-                      ],
-                    );
-                  }
-                ),
+              : (!isAdmin || _needsMiEmpresaReauth)
+                  ? _buildLockScreen(
+                      gold,
+                      needsReauth: _needsMiEmpresaReauth,
+                    )
+                  : _buildFinanzasTabArea(isDark, gold, asyncFinanzas),
     );
   }
 
   // ── Pantalla de bloqueo ────────────────────────────────────────────────────
-  Widget _buildLockScreen(Color gold) {
+  Widget _buildLockScreen(Color gold, {bool needsReauth = false}) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -320,13 +1103,36 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   : Colors.black38,
             ),
           ),
+          if (needsReauth) ...[
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Text(
+                'Volvé a ingresar el PIN: pasaron más de ${AdminAuthNotifier.miEmpresaReauthGrace.inMinutes} min desde la última vez que saliste de Mi Empresa, o revalidá para continuar.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white54
+                      : Colors.black54,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 28),
           ElevatedButton.icon(
             onPressed: () async {
-              final hasAccess = await AdminGate.check(context, ref);
+              final hasAccess = await AdminGate.check(
+                context,
+                ref,
+                forceVerification: needsReauth,
+              );
               if (hasAccess && mounted) {
                 _fetchOperadores();
-                setState(() {});
+                setState(() {
+                  if (needsReauth) _needsMiEmpresaReauth = false;
+                });
               }
             },
             icon: const Icon(Icons.key_rounded),
@@ -344,22 +1150,739 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
-  Widget _buildHUD(bool isDark, Color gold, FinanzasState state, {bool compact = false}) {
-    final proj = state.proyeccionFinanciera;
-    if (proj == null) return const SizedBox.shrink();
+  static String _hudEstadoLiquidezLocal(FinanzasState state) {
+    final cap = state.hudTotalIngresosHistoricoGlobal - state.hudTotalEgresosHistoricoGlobal;
+    final proy = state.hudProyeccion30DiasLocal;
+    if (proy < 0) return 'CRÍTICO: RIESGO DE INSOLVENCIA';
+    if (cap > 0 && proy < cap * 0.2) return 'ADVERTENCIA: LIQUIDEZ BAJA';
+    return 'SALUDABLE: FLUJO DE CAJA POSITIVO';
+  }
 
-    final cap = (proj['capital_liquido'] as num?)?.toDouble() ?? 0.0;
-    final opex = (proj['opex_capex_a_30_dias'] as num?)?.toDouble() ?? 0.0;
-    final proy30 = (proj['proyeccion_caja_30d'] as num?)?.toDouble() ?? 0.0;
-    final status = proj['estado_sistema']?.toString() ?? 'DESCONOCIDO';
-    final isCritical = status.contains('CRÍTICO');
-    final pColor = isCritical ? const Color(0xFFE74C3C) : const Color(0xFF00B894);
+  static Color _hudColorEstadoLiquidez(String status) {
+    if (status.contains('CRÍTICO')) return const Color(0xFFE74C3C);
+    return const Color(0xFF00B894);
+  }
+
+  bool _hudEsDiaCalendarioHoy(FinanzasState state) {
+    if (state.fechaInteligenciaHud == null) return true;
+    return ArTime.mismoDia(state.fechaInteligenciaHud!, ArTime.nowAr());
+  }
+
+  String _suffixDetalleDiaHud(FinanzasState state) {
+    if (state.fechaInteligenciaHud == null || _hudEsDiaCalendarioHoy(state)) return 'hoy';
+    return ArTime.formatFechaCorta(state.fechaInteligenciaHud!);
+  }
+
+  Future<void> _pickFechaInteligenciaHud(BuildContext context, FinanzasState state) async {
+    final maxAr = ArTime.nowAr();
+    final maxDay = DateTime(maxAr.year, maxAr.month, maxAr.day);
+    var initial = state.fechaInteligenciaHud ?? maxDay;
+    if (initial.isAfter(maxDay)) initial = maxDay;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: maxDay,
+      helpText: 'Ver ingresos y egresos de ese día',
+      cancelText: 'Cancelar',
+      confirmText: 'Ver',
+    );
+    if (picked == null || !mounted) return;
+    await ref.read(finanzasProvider.notifier).setFechaInteligenciaHud(picked);
+  }
+
+  Future<void> _exportarCierreCajaPdf(BuildContext context, FinanzasState state) async {
+    if (state.hudModoInteligencia != FinanzasHudModo.hoy) return;
+    final nAr = ArTime.nowAr();
+    final hoyDia = DateTime(nAr.year, nAr.month, nAr.day);
+    final diaNorm = state.fechaInteligenciaHud ?? hoyDia;
+    try {
+      await PdfService.generarCierreCajaPdf(
+        diaCalendarioAr: diaNorm,
+        ingresosDelDia: List<IngresoDetallado>.from(state.ingresosHoyLista),
+        egresosDelDia: List<Egreso>.from(state.egresosHoyLista),
+        totalIngresos: state.hudIngresosHoy,
+        totalEgresos: state.hudEgresosHoy,
+        ingresosEfectivo: state.hudIngresosHoyEfectivo,
+        ingresosTransferencia: state.hudIngresosHoyTransferencia,
+        emitidoPor: Supabase.instance.client.auth.currentUser?.email,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo generar el PDF de cierre: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _eliminarRetiroCajaInteligencia(BuildContext context, Egreso e) async {
+    if (e.id.length != 36) return;
+    if ((e.categoria ?? '').trim() != kCategoriaRetiroCaja) return;
+    final okPin = await AdminGate.check(context, ref);
+    if (!okPin || !context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar este retiro de caja?'),
+        content: Text(
+          'Se borrará "${e.proveedor ?? 'Retiro de caja'}" por ${e.monto.toCurrency()} (local y nube). Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFE74C3C),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      await ref.read(egresosRepositoryProvider).eliminarEgreso(e.id);
+      await ref.read(egresosProvider.notifier).refresh();
+      await ref.read(finanzasProvider.notifier).recargar();
+      await ref.read(cierreCajaProvider.notifier).refrescarManual();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Retiro eliminado'),
+          backgroundColor: Color(0xFF00B894),
+        ),
+      );
+    } catch (err) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo eliminar: $err')),
+      );
+    }
+  }
+
+  Widget _buildInteligenciaBarraDia(BuildContext context, FinanzasState state, bool isDark, Color gold, bool compact) {
+    final fijo = state.fechaInteligenciaHud;
+    final labelAr = fijo != null ? ArTime.formatFechaCorta(fijo) : ArTime.formatFechaCorta(ArTime.nowAr());
+    final subt = fijo == null
+        ? 'Tiempo real: totales del día según hora Argentina · tocá para elegir otro día'
+        : (_hudEsDiaCalendarioHoy(state)
+            ? 'Día fijado igual al calendario de hoy · tocá para cambiar'
+            : 'Totales del día elegido (histórico) · tocá para cambiar');
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: compact ? 8 : 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _pickFechaInteligenciaHud(context, state),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14, vertical: compact ? 8 : 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: gold.withValues(alpha: 0.38)),
+                    color: isDark ? Colors.white.withValues(alpha: 0.04) : gold.withValues(alpha: 0.07),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_month_rounded, size: compact ? 18 : 20, color: gold),
+                      SizedBox(width: compact ? 8 : 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DÍA EN ANÁLISIS · $labelAr',
+                              style: TextStyle(
+                                fontSize: compact ? 9 : 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.85,
+                                color: gold,
+                              ),
+                            ),
+                            SizedBox(height: compact ? 2 : 4),
+                            Text(
+                              subt,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: compact ? 8 : 10,
+                                height: 1.25,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (fijo != null) ...[
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () => ref.read(finanzasProvider.notifier).setFechaInteligenciaHud(null),
+                          child: Text(
+                            'AHORA',
+                            style: TextStyle(
+                              fontSize: compact ? 8 : 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.6,
+                              color: gold,
+                            ),
+                          ),
+                        ),
+                      ],
+                      Icon(Icons.tune_rounded, size: compact ? 16 : 18, color: isDark ? Colors.white38 : Colors.black38),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.only(left: compact ? 2 : 4, top: compact ? 2 : 4),
+              minimumSize: Size(compact ? 40 : 44, compact ? 40 : 44),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            tooltip: 'Exportar cierre de caja (PDF) del día en análisis',
+            onPressed: state.hudModoInteligencia == FinanzasHudModo.hoy ? () => _exportarCierreCajaPdf(context, state) : null,
+            icon: Icon(
+              Icons.picture_as_pdf_rounded,
+              size: compact ? 22 : 24,
+              color: gold.withValues(alpha: state.hudModoInteligencia == FinanzasHudModo.hoy ? 1 : 0.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _schedulePulsoScrollCentrarHoy(FinanzasState state, List<_DiaPulsoDatum> serie) {
+    if (_pulsoRango != _PulsoRangoVista.mesCalendario || serie.isEmpty) return;
+    final refMes = state.mesFiltro ?? ArTime.nowAr();
+    final stamp = '${_pulsoRango.index}_${refMes.year}_${refMes.month}_${serie.length}';
+    if (_pulsoScrollAppliedStamp == stamp) return;
+
+    void attempt([int depth = 0]) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (depth > 28) {
+          _pulsoScrollAppliedStamp = stamp;
+          return;
+        }
+        if (!_pulsoBarrasScrollController.hasClients) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => attempt(depth + 1));
+          return;
+        }
+        final now = ArTime.nowAr();
+        final idx = serie.indexWhere((d) => ArTime.mismoDia(d.dia, now));
+        if (idx < 0) {
+          _pulsoScrollAppliedStamp = stamp;
+          return;
+        }
+        const colW = 26.0;
+        const gap = 5.0;
+        const step = colW + gap;
+        final vp = _pulsoBarrasScrollController.position.viewportDimension;
+        final max = _pulsoBarrasScrollController.position.maxScrollExtent;
+        final ideal = idx * step - vp / 2 + step / 2;
+        final offset = ideal.clamp(0.0, max);
+        _pulsoBarrasScrollController.jumpTo(offset);
+        _pulsoScrollAppliedStamp = stamp;
+      });
+    }
+
+    attempt();
+  }
+
+  Widget _buildHudModoSelector(FinanzasState state, bool isDark, Color gold, {required bool compact}) {
+    final fs = compact ? 9.0 : 11.0;
+    return SegmentedButton<FinanzasHudModo>(
+      showSelectedIcon: false,
+      segments: [
+        ButtonSegment<FinanzasHudModo>(
+          value: FinanzasHudModo.hoy,
+          label: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text('HOY', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+          ),
+        ),
+        ButtonSegment<FinanzasHudModo>(
+          value: FinanzasHudModo.acumuladoIngresos,
+          label: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(compact ? 'Σ ING.' : 'INGRESOS ACUM.', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+          ),
+        ),
+        ButtonSegment<FinanzasHudModo>(
+          value: FinanzasHudModo.acumuladoNeto,
+          label: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(compact ? 'NETO' : 'CAPITAL NETO', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+          ),
+        ),
+      ],
+      selected: {state.hudModoInteligencia},
+      onSelectionChanged: (s) {
+        ref.read(finanzasProvider.notifier).setHudModoInteligencia(s.first);
+      },
+      style: ButtonStyle(
+        visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return gold.withValues(alpha: 0.22);
+          return Colors.transparent;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return gold;
+          return isDark ? Colors.white54 : Colors.black54;
+        }),
+        side: WidgetStateProperty.all(BorderSide(color: gold.withValues(alpha: 0.35))),
+      ),
+    );
+  }
+
+  List<IngresoDetallado> _ingresosHoyPorMedioBucket(FinanzasState state, String bucket) {
+    final items = state.ingresosHoyLista;
+    switch (bucket) {
+      case 'efectivo':
+        return items.where((i) => i.medioPago?.toLowerCase().trim() != 'transferencia').toList();
+      case 'transferencia':
+        return items.where((i) => i.medioPago?.toLowerCase().trim() == 'transferencia').toList();
+      default:
+        return const [];
+    }
+  }
+
+  void _abrirDetalleIngresosHoyPorMedio(BuildContext context, bool isDark, FinanzasState state, String bucket) {
+    final list = _ingresosHoyPorMedioBucket(state, bucket);
+    final total = list.fold<double>(0, (s, i) => s + i.monto);
+    late final String titulo;
+    late final String subtitulo;
+    switch (bucket) {
+      case 'efectivo':
+        titulo = 'Ingresos en efectivo (${_suffixDetalleDiaHud(state)})';
+        subtitulo =
+            'Incluye efectivo explícito y lo demás que no sea transferencia (p. ej. sin medio en DB), movimientos del día seleccionado en Inteligencia financiera.';
+        break;
+      case 'transferencia':
+        titulo = 'Ingresos por transferencia (${_suffixDetalleDiaHud(state)})';
+        subtitulo = 'Cada ítem fue registrado con medio de pago transferencia.';
+        break;
+      default:
+        titulo = '—';
+        subtitulo = '';
+    }
+    const gold = Color(0xFFD4AF37);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.52,
+          maxChildSize: 0.92,
+          minChildSize: 0.32,
+          builder: (_, scrollCtrl) {
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF121218) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border.all(color: gold.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black26,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(titulo, style: GoogleFonts.oswald(fontSize: 20, fontWeight: FontWeight.w800, color: isDark ? Colors.white : Colors.black87)),
+                        const SizedBox(height: 6),
+                        Text(subtitulo, style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white54 : Colors.black54)),
+                        const SizedBox(height: 12),
+                        Text(total.toCurrency(), style: GoogleFonts.oswald(fontSize: 28, fontWeight: FontWeight.w900, color: gold, letterSpacing: -0.5)),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: list.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                'No hay movimientos en esta categoría para el día del análisis.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollCtrl,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                            itemCount: list.length,
+                            itemBuilder: (context, index) {
+                              final ing = list[index];
+                              final quien = ing.alumnoOCliente.trim().isNotEmpty ? ing.alumnoOCliente : ing.nombreEvento;
+                              final evLine = ing.nombreEvento.trim().isNotEmpty ? ' · ${ing.nombreEvento}' : '';
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                                ),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                  title: Text(ing.concepto, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                  subtitle: Text(
+                                    '${ArTime.formatHora(ing.fecha)} · ${ing.fuente}$evLine\n$quien',
+                                    style: TextStyle(fontSize: 12, height: 1.3, color: isDark ? Colors.white60 : Colors.black54),
+                                  ),
+                                  isThreeLine: true,
+                                  trailing: Text(
+                                    ing.monto.toCurrency(),
+                                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _hudTileIngresoHoyMedio({
+    required BuildContext context,
+    required bool isDark,
+    required Color gold,
+    required FinanzasState state,
+    required bool compact,
+    required String label,
+    required double monto,
+    required Color accent,
+    required IconData icon,
+    required String bucket,
+    double? retirosTurno,
+  }) {
+    final retiros = retirosTurno ?? 0.0;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _abrirDetalleIngresosHoyPorMedio(context, isDark, state, bucket),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: compact ? 8 : 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accent.withValues(alpha: 0.4)),
+            color: accent.withValues(alpha: 0.07),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: compact ? 14 : 18, color: accent),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: compact ? 9 : 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.7,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.playlist_add_check_rounded, size: compact ? 14 : 16, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.22)),
+                ],
+              ),
+              SizedBox(height: compact ? 4 : 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  monto.toCurrency(),
+                  style: GoogleFonts.oswald(
+                    fontSize: compact ? 15 : 34,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : Colors.black,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+              ),
+              if (retiros > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Retiros: −${retiros.toCurrency()}',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFE74C3C),
+                    ),
+                  ),
+                ),
+              if (!compact)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Tocá para ver cada movimiento',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.38)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Selector de turno (mañana/tarde/día) para los buckets netos del HUD.
+  Widget _hudTurnoSelector(FinanzasState state, bool isDark, Color gold, {bool compact = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Theme(
+          data: Theme.of(context).copyWith(
+            textTheme: Theme.of(context).textTheme.copyWith(
+                  labelLarge: TextStyle(fontSize: compact ? 10 : 11, fontWeight: FontWeight.w900),
+                ),
+          ),
+          child: SegmentedButton<TurnoCaja>(
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity(
+                horizontal: compact ? -3 : -2,
+                vertical: compact ? -3 : -2,
+              ),
+              padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: compact ? 6 : 10, vertical: compact ? 4 : 6),
+              ),
+            ),
+            segments: const [
+              ButtonSegment(
+                value: TurnoCaja.manana,
+                label: Text('MAÑ.', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+              ),
+              ButtonSegment(
+                value: TurnoCaja.tarde,
+                label: Text('TARDE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+              ),
+              ButtonSegment(
+                value: TurnoCaja.dia,
+                label: Text('DÍA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+              ),
+            ],
+            selected: <TurnoCaja>{state.hudTurno},
+            onSelectionChanged: (s) {
+              if (s.isEmpty) return;
+              ref.read(finanzasProvider.notifier).setHudTurno(s.first);
+            },
+          ),
+        ),
+        Tooltip(
+          message: 'Tocá para leer una guía breve',
+          child: TextButton.icon(
+            onPressed: () => _showAyudaTurnoInteligencia(context, gold),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 2, vertical: compact ? 2 : 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: gold.withValues(alpha: 0.92),
+            ),
+            icon: Icon(Icons.info_outline_rounded, size: compact ? 15 : 16),
+            label: Text(
+              '¿Qué es el turno aquí?',
+              style: GoogleFonts.outfit(
+                fontSize: compact ? 10 : 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showAyudaTurnoInteligencia(BuildContext context, Color gold) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final muted = Theme.of(ctx).brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.75)
+            : Colors.black87;
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.schedule_rounded, color: gold, size: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '¿Qué es el turno aquí?',
+                  style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Text(
+              'En Inteligencia financiera, MAÑANA, TARDE y DÍA no filtran todo el panel por franja: solo indican en qué tramo horario se consideran los retiros de caja al calcular los netos de efectivo y transferencia (los bloques verde y violeta de abajo).\n\n'
+              'Los totales del día (ingresos, egresos y neto que ves arriba) son siempre del día calendario completo.\n\n'
+              'Si necesitás un cierre operativo de “solo mañana” o “solo tarde” con ingresos y movimientos de ese rango, usá la pantalla Cierre de caja: ahí el turno sí acota todo lo que ves.',
+              style: TextStyle(height: 1.45, color: muted, fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Entendido',
+                style: TextStyle(fontWeight: FontWeight.w800, color: gold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHUD(BuildContext context, bool isDark, Color gold, FinanzasState state, {bool compact = false}) {
+    final modo = state.hudModoInteligencia;
+    final capNetoGlobal = state.hudTotalIngresosHistoricoGlobal - state.hudTotalEgresosHistoricoGlobal;
+    final netoHoy = state.hudIngresosHoy - state.hudEgresosHoy;
+
+    late final double mainVal;
+    late final String mainLabel;
+    late final String leftLbl;
+    late final String rightLbl;
+    late final double leftAmt;
+    late final double rightAmt;
+    late final bool leftAsExpenseLine;
+
+    switch (modo) {
+      case FinanzasHudModo.hoy:
+        mainVal = state.hudIngresosHoy;
+        mainLabel = 'INGRESOS DEL DÍA';
+        leftLbl = 'EGRESOS DEL DÍA';
+        rightLbl = 'NETO DEL DÍA';
+        leftAmt = state.hudEgresosHoy;
+        rightAmt = netoHoy;
+        leftAsExpenseLine = true;
+        break;
+      case FinanzasHudModo.acumuladoIngresos:
+        mainVal = state.hudTotalIngresosHistoricoGlobal;
+        mainLabel = 'INGRESOS ACUMULADOS (TOTAL)';
+        leftLbl = 'EGRESOS ACUMULADOS';
+        rightLbl = 'CAPITAL NETO (ING − EGR)';
+        leftAmt = state.hudTotalEgresosHistoricoGlobal;
+        rightAmt = capNetoGlobal;
+        leftAsExpenseLine = true;
+        break;
+      case FinanzasHudModo.acumuladoNeto:
+        mainVal = capNetoGlobal;
+        mainLabel = 'CAPITAL LÍQUIDO (INGRESOS − EGRESOS)';
+        leftLbl = 'OPEX/CAPEX (30 DÍAS)';
+        rightLbl = 'PROYECCIÓN (30 DÍAS)';
+        leftAmt = state.hudOpex30DiasLocal;
+        rightAmt = state.hudProyeccion30DiasLocal;
+        leftAsExpenseLine = true;
+        break;
+    }
+
+    late final String status;
+    late final Color pColor;
+    switch (modo) {
+      case FinanzasHudModo.hoy:
+        final mirandoHistorico =
+            state.fechaInteligenciaHud != null && !_hudEsDiaCalendarioHoy(state);
+        if (state.hudIngresosHoy <= 0 && state.hudEgresosHoy <= 0) {
+          status = mirandoHistorico ? 'SIN MOVIMIENTOS (ESE DÍA)' : 'SIN MOVIMIENTOS HOY';
+          pColor = isDark ? Colors.white38 : Colors.black45;
+        } else if (state.hudIngresosHoy <= 0 && state.hudEgresosHoy > 0) {
+          status = mirandoHistorico ? 'SOLO EGRESOS (ESE DÍA)' : 'SOLO EGRESOS HOY';
+          pColor = const Color(0xFFE74C3C);
+        } else {
+          status = mirandoHistorico ? 'INGRESOS DEL DÍA (SELECCIONADO)' : 'INGRESOS HOY';
+          pColor = const Color(0xFF00B894);
+        }
+        break;
+      case FinanzasHudModo.acumuladoIngresos:
+        status = 'VISTA: SOLO INGRESOS';
+        pColor = gold;
+        break;
+      case FinanzasHudModo.acumuladoNeto:
+        status = _hudEstadoLiquidezLocal(state);
+        pColor = _hudColorEstadoLiquidez(status);
+        break;
+    }
+
+    Color rightValueColor() {
+      if (modo == FinanzasHudModo.hoy) {
+        return netoHoy < 0 ? const Color(0xFFE74C3C) : const Color(0xFF00B894);
+      }
+      if (modo == FinanzasHudModo.acumuladoIngresos) {
+        return capNetoGlobal < 0 ? const Color(0xFFE74C3C) : const Color(0xFF00B894);
+      }
+      return rightAmt < 0 ? const Color(0xFFE74C3C) : pColor;
+    }
+
+    Widget secondaryLine(String lbl, double amt, {required bool asExpense}) {
+      final subStyle = TextStyle(fontSize: compact ? 8.0 : 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1);
+      final valStyle = TextStyle(
+        fontSize: compact ? 14 : 20,
+        fontWeight: FontWeight.w900,
+        color: asExpense ? const Color(0xFFE74C3C) : rightValueColor(),
+        letterSpacing: -0.3,
+      );
+      final prefix = asExpense && amt >= 0 ? '-' : '';
+      final shown = asExpense ? amt.abs() : amt;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(lbl, style: subStyle),
+          SizedBox(height: compact ? 2 : 4),
+          Text('$prefix${shown.toCurrency()}', style: valStyle),
+        ],
+      );
+    }
 
     if (compact) {
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -372,44 +1895,126 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             ),
           ],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: gold.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.hub_outlined, color: gold, size: 18),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            _buildHudModoSelector(state, isDark, gold, compact: true),
+            const SizedBox(height: 10),
+            if (modo == FinanzasHudModo.hoy) _buildInteligenciaBarraDia(context, state, isDark, gold, true),
+            Row(
               children: [
-                Text('CAPITAL LÍQUIDO ACTUAL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1)),
-                Text(cap.toCurrency(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black, letterSpacing: -0.5)),
-              ],
-            ),
-            const Spacer(),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('ESTADO DEL SISTEMA', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1)),
-                const SizedBox(height: 2),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: pColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: pColor.withValues(alpha: 0.2)),
+                    color: gold.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
-                  child: Text(
-                    status,
-                    style: TextStyle(color: pColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                  child: Icon(Icons.hub_outlined, color: gold, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('INTELIGENCIA FINANCIERA', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: gold, letterSpacing: 1.2)),
+                      if (modo == FinanzasHudModo.hoy) ...[
+                        Text(mainLabel, style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.8)),
+                        Text(
+                          'Tocá efectivo o transferencia para el detalle',
+                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.w700, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.35)),
+                        ),
+                      ] else ...[
+                        Text(mainLabel, style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.8)),
+                        Text(mainVal.toCurrency(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black, letterSpacing: -0.5)),
+                      ],
+                    ],
                   ),
                 ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('ESTADO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1)),
+                    const SizedBox(height: 2),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 160),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: pColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: pColor.withValues(alpha: 0.2)),
+                      ),
+                      child: Text(
+                        status,
+                        textAlign: TextAlign.end,
+                        style: TextStyle(color: pColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (modo == FinanzasHudModo.hoy) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _hudTurnoSelector(state, isDark, gold, compact: true),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _hudTileIngresoHoyMedio(
+                      context: context,
+                      isDark: isDark,
+                      gold: gold,
+                      state: state,
+                      compact: true,
+                      label: 'EFECTIVO',
+                      monto: state.hudEfectivoNetoHoy,
+                      accent: const Color(0xFF00B894),
+                      icon: Icons.payments_outlined,
+                      bucket: 'efectivo',
+                      retirosTurno: state.hudRetirosEfectivoHoy,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _hudTileIngresoHoyMedio(
+                      context: context,
+                      isDark: isDark,
+                      gold: gold,
+                      state: state,
+                      compact: true,
+                      label: 'TRANSF.',
+                      monto: state.hudTransferenciaNetaHoy,
+                      accent: const Color(0xFF6C63FF),
+                      icon: Icons.swap_horiz_rounded,
+                      bucket: 'transferencia',
+                      retirosTurno: state.hudRetirosTransferenciaHoy,
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  () {
+                    final suf = _suffixDetalleDiaHud(state);
+                    if (suf == 'hoy') return 'Total ingresos del día: ${state.hudIngresosHoy.toCurrency()}';
+                    return 'Total ingresos ($suf): ${state.hudIngresosHoy.toCurrency()}';
+                  }(),
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: isDark ? Colors.white.withValues(alpha: 0.45) : Colors.black54),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: secondaryLine(leftLbl, leftAmt, asExpense: leftAsExpenseLine)),
+                const SizedBox(width: 12),
+                Expanded(child: secondaryLine(rightLbl, rightAmt, asExpense: false)),
               ],
             ),
           ],
@@ -442,32 +2047,82 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          Text(cap.toCurrency(), style: GoogleFonts.oswald(fontSize: 44, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black, letterSpacing: -1)),
-          Text('CAPITAL LÍQUIDO ACTUAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1.5)),
-          const SizedBox(height: 32),
+          const SizedBox(height: 12),
+          _buildHudModoSelector(state, isDark, gold, compact: false),
+          const SizedBox(height: 12),
+          if (modo == FinanzasHudModo.hoy) _buildInteligenciaBarraDia(context, state, isDark, gold, false),
+          const SizedBox(height: 20),
+          if (modo == FinanzasHudModo.hoy) ...[
+            Text(
+              mainLabel,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1.5),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Tocá cada bloque para ver concepto, monto, cliente y hora.',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, height: 1.3, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.45)),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _hudTurnoSelector(state, isDark, gold),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _hudTileIngresoHoyMedio(
+                    context: context,
+                    isDark: isDark,
+                    gold: gold,
+                    state: state,
+                    compact: false,
+                    label: 'EFECTIVO',
+                    monto: state.hudEfectivoNetoHoy,
+                    accent: const Color(0xFF00B894),
+                    icon: Icons.payments_outlined,
+                    bucket: 'efectivo',
+                    retirosTurno: state.hudRetirosEfectivoHoy,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _hudTileIngresoHoyMedio(
+                    context: context,
+                    isDark: isDark,
+                    gold: gold,
+                    state: state,
+                    compact: false,
+                    label: 'TRANSFERENCIA',
+                    monto: state.hudTransferenciaNetaHoy,
+                    accent: const Color(0xFF6C63FF),
+                    icon: Icons.swap_horiz_rounded,
+                    bucket: 'transferencia',
+                    retirosTurno: state.hudRetirosTransferenciaHoy,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              () {
+                final suf = _suffixDetalleDiaHud(state);
+                if (suf == 'hoy') return 'Total ingresos del día: ${state.hudIngresosHoy.toCurrency()}';
+                return 'Total ingresos ($suf): ${state.hudIngresosHoy.toCurrency()}';
+              }(),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: isDark ? Colors.white54 : Colors.black54),
+            ),
+            const SizedBox(height: 28),
+          ] else ...[
+            Text(mainVal.toCurrency(), style: GoogleFonts.oswald(fontSize: 44, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black, letterSpacing: -1)),
+            Text(mainLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1.5)),
+            const SizedBox(height: 32),
+          ],
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('OPEX/CAPEX (30 DÍAS)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1)),
-                    const SizedBox(height: 4),
-                    Text('-${opex.toCurrency()}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFE74C3C))),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('PROYECCIÓN (30 DÍAS)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1)),
-                    const SizedBox(height: 4),
-                    Text(proy30.toCurrency(), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: pColor)),
-                  ],
-                ),
-              ),
+              Expanded(child: secondaryLine(leftLbl, leftAmt, asExpense: leftAsExpenseLine)),
+              Expanded(child: secondaryLine(rightLbl, rightAmt, asExpense: false)),
             ],
           ),
         ],
@@ -476,8 +2131,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 
   Widget _buildFiltroMeses(bool isDark, Color gold, FinanzasState state) {
-    final now = DateTime.now();
-    final meses = List.generate(6, (i) => DateTime(now.year, now.month - i, 1));
+    final ahoraAr = ArTime.nowAr();
+    final meses = List.generate(6, (i) => DateTime(ahoraAr.year, ahoraAr.month - i, 1));
     const mesesNombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
     return SingleChildScrollView(
@@ -502,9 +2157,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? gold.withValues(alpha: 0.5) : Colors.transparent)),
                 onSelected: (val) {
                   if (val) {
-                    ref.read(finanzasProvider.notifier).aplicarFiltro(mes: m);
+                    ref.read(finanzasProvider.notifier).aplicarFiltro(mes: m, clearFechaExacta: true);
                   } else {
-                    ref.read(finanzasProvider.notifier).aplicarFiltro(clearMes: true);
+                    ref.read(finanzasProvider.notifier).aplicarFiltro(clearMes: true, clearFechaExacta: true);
                   }
                 },
               ),
@@ -514,16 +2169,175 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             Padding(
               padding: const EdgeInsets.only(left: 4),
               child: IconButton(
-                icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+                style: _finanzasIconButtonStyle(),
+                icon: Icon(Icons.filter_alt_off_rounded, size: 20, color: isDark ? Colors.white54 : Colors.black54),
                 tooltip: 'Limpiar Filtros',
-                color: isDark ? Colors.white54 : Colors.black54,
                 onPressed: () {
-                  ref.read(finanzasProvider.notifier).aplicarFiltro(clearMes: true, clearEvento: true);
+                  ref.read(finanzasProvider.notifier).aplicarFiltro(
+                        clearMes: true,
+                        clearEvento: true,
+                        clearFechaExacta: true,
+                      );
                 },
               ),
             ),
         ],
       ),
+    );
+  }
+
+  // ── VISTA RENTABILIDAD BASE ────────────────────────────────────────────────
+  Widget _buildVistaAvisos(bool isDark, Color gold) {
+    return AvisosView(isDark: isDark, gold: gold);
+  }
+
+  static const List<String> _diaCortoEs = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
+
+  /// Próximos avisos pendientes: horizontal; tap → [PagarAvisoDialog] (registrar pago).
+  Widget _buildProximosAvisosCarrusel(BuildContext context, bool isDark, Color gold) {
+    final asyncObl = ref.watch(obligacionesProvider);
+
+    return asyncObl.when(
+      loading: () => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: const LinearProgressIndicator(minHeight: 3),
+        ),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (List<ObligacionPago> list) {
+        final pendientes = list.where((o) => o.estado == 'pendiente').toList()
+          ..sort((a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento));
+        if (pendientes.isEmpty) return const SizedBox.shrink();
+
+        final now = DateTime.now();
+        final hoy = DateTime(now.year, now.month, now.day);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.notifications_active_outlined, size: 18, color: gold.withValues(alpha: 0.9)),
+                const SizedBox(width: 8),
+                Text(
+                  'PRÓXIMOS AVISOS · Toca para registrar pago',
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.05,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 108,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                itemCount: pendientes.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
+                itemBuilder: (ctx, i) {
+                  final ObligacionPago o = pendientes[i];
+                  final fv = DateTime(o.fechaVencimiento.year, o.fechaVencimiento.month, o.fechaVencimiento.day);
+                  final dias = fv.difference(hoy).inDays;
+                  final Color accent;
+                  final String urgencia;
+                  if (dias < 0) {
+                    accent = Colors.redAccent;
+                    urgencia = 'Vencido · hace ${dias.abs()} día(s)';
+                  } else if (dias == 0) {
+                    accent = Colors.deepOrangeAccent;
+                    urgencia = 'Vence hoy';
+                  } else if (dias <= 3) {
+                    accent = Colors.orangeAccent;
+                    urgencia = 'En $dias día(s)';
+                  } else {
+                    accent = gold;
+                    urgencia = 'En $dias día(s)';
+                  }
+                  final isEmpresa = o.tipoObligacion == 'empresa';
+                  final diasSem = _diaCortoEs[fv.weekday - 1];
+                  final fechaTxt =
+                      '${fv.day.toString().padLeft(2, '0')}/${fv.month.toString().padLeft(2, '0')}/${fv.year}';
+                  final montoLbl = o.montoEstimado > 0.01 ? o.montoEstimado.toCurrency() : 'Monto libre';
+
+                  return SizedBox(
+                    width: min(274.0, MediaQuery.sizeOf(context).width * 0.82),
+                    child: Material(
+                      color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () async {
+                          await showDialog<void>(
+                            context: context,
+                            builder: (_) => PagarAvisoDialog(obligacion: o),
+                          );
+                          if (!context.mounted) return;
+                          await ref.read(finanzasProvider.notifier).recargar();
+                          await ref.read(obligacionesProvider.notifier).refresh();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    isEmpresa ? Icons.domain_rounded : Icons.home_outlined,
+                                    size: 16,
+                                    color: isEmpresa ? Colors.blueAccent : Colors.purpleAccent,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      o.titulo.toUpperCase(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.oswald(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12.5,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$urgencia · $diasSem $fechaTxt',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: accent,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                isEmpresa ? 'Empresa · $montoLbl' : 'Adrián (Casa) · $montoLbl',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark ? Colors.white54 : Colors.black54,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -533,85 +2347,134 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     final isSearching = query.isNotEmpty;
 
     return RefreshIndicator(
-      onRefresh: () async { 
-        await ref.read(finanzasProvider.notifier).recargar(); 
+      onRefresh: () async {
+        await ref.read(finanzasProvider.notifier).recargar();
+        await ref.read(obligacionesProvider.notifier).refresh();
+        await ref.read(cajaFuerteProvider.notifier).refresh();
       },
       color: gold,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 900;
+          final w = constraints.maxWidth;
+          // Dos columnas solo con ventana cómoda; en 1080p apilado si está muy angosto.
+          final isWide = w >= 1000;
+          // Tablas apretadas solo cuando hay split ingresos|egresos y el ancho total es limitado.
+          final compactSplitTables = _searchContext == SearchContext.todos && w < 1320;
+          // Sin tope artificial 880: usa casi todo el ancho útil para no dejar “media pantalla vacía”.
+          const horizontalInset = 40.0;
+          final usableW = (w - horizontalInset).clamp(320.0, double.infinity);
+          final contentMaxW = isWide ? min(1480.0, usableW) : usableW;
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
             child: Center(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: isWide ? 1400 : 800),
+                constraints: BoxConstraints(maxWidth: contentMaxW),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // ── CABECERA PERMANENTE (Filtros + Buscador) ──
                     _buildFiltroMeses(isDark, gold, state),
+                    if (state.fechaExactaFiltro != null) ...[
+                      const SizedBox(height: 12),
+                      _buildChipViendoDia(isDark, gold, state),
+                    ],
                     const SizedBox(height: 16),
                     _buildBuscadorMaestro(isDark, gold),
                     const SizedBox(height: 20),
                     
-                    // ── HUD Adaptativo ──
-                    _buildHUD(isDark, gold, state, compact: isSearching),
+                    // ── CONTROLES DE VISTA INTERNA ──
                     if (!isSearching) ...[
-                      const SizedBox(height: 16),
-                      _buildPorCobrarHUD(isDark, gold),
-                      _buildAlertasGestion(isDark, gold),
-                      const SizedBox(height: 24),
-                      _sectionLabel('Rendimiento Mensual', Icons.bar_chart_rounded),
-                      _buildTablaAnualDinamica(isDark, gold, const Color(0xFF00B894), const Color(0xFFE74C3C), state),
-                      const SizedBox(height: 32),
+                      Center(
+                        child: SegmentedButton<FinanzasSubView>(
+                          segments: const [
+                            ButtonSegment(value: FinanzasSubView.salud, label: Text('SALUD', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1))),
+                            ButtonSegment(value: FinanzasSubView.flujo, label: Text('FLUJO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1))),
+                            ButtonSegment(value: FinanzasSubView.categorias, label: Text('HOY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1))),
+                            ButtonSegment(value: FinanzasSubView.avisos, label: Text('AVISOS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1))),
+                          ],
+                          selected: {_currentSubView},
+                          onSelectionChanged: (Set<FinanzasSubView> newSelection) {
+                            setState(() {
+                              _currentSubView = newSelection.first;
+                            });
+                          },
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                              if (states.contains(WidgetState.selected)) return gold.withValues(alpha: 0.2);
+                              return Colors.transparent;
+                            }),
+                            foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                              if (states.contains(WidgetState.selected)) return gold;
+                              return isDark ? Colors.white54 : Colors.black54;
+                            }),
+                            side: WidgetStateProperty.all(BorderSide(color: gold.withValues(alpha: 0.3))),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildProximosAvisosCarrusel(context, isDark, gold),
+                      const SizedBox(height: 12),
                     ],
 
-                    // ── ZONA DE OPERACIONES (Doble Columna si es ancho) ──
-                    if (isWide)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (_searchContext != SearchContext.egresos)
-                            Expanded(
-                              flex: _searchContext == SearchContext.ingresos ? 2 : 1,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _sectionLabel('INGRESOS', Icons.add_card_rounded),
-                                  const SizedBox(height: 12),
-                                  _buildIngresosLista(isDark, gold, const Color(0xFF00B894), state.ingresos, isHalf: _searchContext == SearchContext.todos),
-                                ],
+                    // ── HUD Adaptativo (Siempre visible si hay búsqueda, o arriba de todo) ──
+                    _buildHUD(context, isDark, gold, state, compact: isSearching),
+                    const SizedBox(height: 16),
+
+                    if (isSearching || _currentSubView == FinanzasSubView.flujo) ...[
+                      // ── ZONA DE OPERACIONES (Doble Columna si es ancho) ──
+                      if (isWide)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_searchContext != SearchContext.egresos)
+                              Expanded(
+                                flex: _searchContext == SearchContext.ingresos ? 2 : 1,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _sectionLabel('INGRESOS', Icons.add_card_rounded),
+                                    const SizedBox(height: 12),
+                                    _buildIngresosLista(isDark, gold, const Color(0xFF00B894), _ingresosVista(state), isHalf: compactSplitTables),
+                                  ],
+                                ),
                               ),
-                            ),
-                          if (_searchContext == SearchContext.todos) const SizedBox(width: 24),
-                          if (_searchContext != SearchContext.ingresos)
-                            Expanded(
-                              flex: _searchContext == SearchContext.egresos ? 2 : 1,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _sectionLabel('EGRESOS', Icons.receipt_long_outlined),
-                                  const SizedBox(height: 12),
-                                  _buildEgresosLista(isDark, gold, const Color(0xFFE74C3C), state.egresos, isHalf: _searchContext == SearchContext.todos),
-                                ],
+                            if (_searchContext == SearchContext.todos) const SizedBox(width: 24),
+                            if (_searchContext != SearchContext.ingresos)
+                              Expanded(
+                                flex: _searchContext == SearchContext.egresos ? 2 : 1,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _sectionLabel('EGRESOS', Icons.receipt_long_outlined),
+                                    const SizedBox(height: 12),
+                                    _buildEgresosLista(isDark, gold, const Color(0xFFE74C3C), _egresosVista(state), isHalf: compactSplitTables),
+                                  ],
+                                ),
                               ),
-                            ),
+                          ],
+                        )
+                      else ...[
+                        if (_searchContext != SearchContext.egresos) ...[
+                          _sectionLabel('INGRESOS RECIENTES', Icons.add_card_rounded),
+                          const SizedBox(height: 12),
+                          _buildIngresosLista(isDark, gold, const Color(0xFF00B894), _ingresosVista(state), isHalf: false),
+                          const SizedBox(height: 28),
                         ],
-                      )
-                    else ...[
-                      if (_searchContext != SearchContext.egresos) ...[
-                        _sectionLabel('INGRESOS RECIENTES', Icons.add_card_rounded),
-                        const SizedBox(height: 12),
-                        _buildIngresosLista(isDark, gold, const Color(0xFF00B894), state.ingresos, isHalf: false),
-                        const SizedBox(height: 28),
+                        if (_searchContext != SearchContext.ingresos) ...[
+                          _sectionLabel('EGRESOS REGISTRADOS', Icons.receipt_long_outlined),
+                          const SizedBox(height: 12),
+                          _buildEgresosLista(isDark, gold, const Color(0xFFE74C3C), _egresosVista(state), isHalf: false),
+                        ],
                       ],
-                      if (_searchContext != SearchContext.ingresos) ...[
-                        _sectionLabel('EGRESOS REGISTRADOS', Icons.receipt_long_outlined),
-                        const SizedBox(height: 12),
-                        _buildEgresosLista(isDark, gold, const Color(0xFFE74C3C), state.egresos, isHalf: false),
-                      ],
+                    ] else if (_currentSubView == FinanzasSubView.salud) ...[
+                      // ── VISTA SALUD ──
+                      _buildVistaSalud(isDark, gold, state),
+                    ] else if (_currentSubView == FinanzasSubView.categorias) ...[
+                      _buildVistaCategorias(isDark, gold, state),
+                    ] else if (_currentSubView == FinanzasSubView.avisos) ...[
+                      _buildVistaAvisos(isDark, gold),
                     ],
                   ],
                 ),
@@ -714,6 +2577,2102 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
+  Widget _buildChipViendoDia(bool isDark, Color gold, FinanzasState state) {
+    final d = state.fechaExactaFiltro!;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => ref.read(finanzasProvider.notifier).aplicarFiltro(
+              mes: state.mesFiltro,
+              clearFechaExacta: true,
+            ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: gold.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: gold.withValues(alpha: 0.45)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_today_rounded, size: 16, color: gold),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Viendo: ${ArTime.formatDiaMes(d)} · Tocá para volver al mes completo',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+              ),
+              Icon(Icons.close_rounded, size: 18, color: gold),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── HERO: Score de Salud Financiera 0-100 ─────────────────────────────────
+  /// Tarjeta principal de la vista SALUD: gauge circular con score compuesto
+  /// (liquidez + margen + momentum + alertas), 4 pilares desglosados y un
+  /// bloque con runway en meses.
+  Widget _buildHealthScoreHero(
+    bool isDark,
+    Color gold,
+    FinanzasState state, {
+    Key? runwayKey,
+    void Function(_SaludPillarTap)? onPillarTap,
+  }) {
+    final statsAsync = ref.watch(dashboardStatsProvider);
+    final alertasCount = statsAsync.maybeWhen(
+      data: (s) => s.alertas.where((a) => a.isFinanciera).length,
+      orElse: () => 0,
+    );
+    final hs = _calcularHealthScore(state, alertasCount);
+
+    final Color scoreColor;
+    final String scoreLabel;
+    final IconData scoreIcon;
+    if (hs.score < 40) {
+      scoreColor = const Color(0xFFE74C3C);
+      scoreLabel = 'HAY QUE VERLA';
+      scoreIcon = Icons.warning_amber_rounded;
+    } else if (hs.score < 70) {
+      scoreColor = const Color(0xFFF39C12);
+      scoreLabel = 'OJO, AJUSTADO';
+      scoreIcon = Icons.visibility_outlined;
+    } else {
+      scoreColor = const Color(0xFF00B894);
+      scoreLabel = 'TODO EN ORDEN';
+      scoreIcon = Icons.favorite_rounded;
+    }
+
+    final cardBg = isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white;
+    final trackColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
+    final tickColor = isDark
+        ? Colors.white.withValues(alpha: 0.35)
+        : Colors.black.withValues(alpha: 0.3);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: scoreColor.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: scoreColor.withValues(alpha: 0.12),
+            blurRadius: 32,
+            spreadRadius: -6,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (ctx, cons) {
+          // Tres columnas (gauge | pilares | runway) solo si entra cómodo; si no, apilado.
+          final isWide = cons.maxWidth >= 920;
+
+          final gaugeBlock = _buildHealthGauge(
+            hs: hs,
+            scoreColor: scoreColor,
+            scoreLabel: scoreLabel,
+            scoreIcon: scoreIcon,
+            trackColor: trackColor,
+            tickColor: tickColor,
+            isDark: isDark,
+            gold: gold,
+          );
+
+          final pillarsBlock = _buildHealthPillars(
+            hs: hs,
+            isDark: isDark,
+            gold: gold,
+            onPillarTap: onPillarTap,
+          );
+
+          final runwayBlock = _buildRunwayBlock(
+            key: runwayKey,
+            hs: hs,
+            scoreColor: scoreColor,
+            isDark: isDark,
+            gold: gold,
+          );
+
+          Widget header = Row(
+            children: [
+              Icon(Icons.monitor_heart_outlined, color: gold, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'SALUD FINANCIERA',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.oswald(
+                    fontSize: 14,
+                    letterSpacing: 2.2,
+                    color: gold,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: scoreColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: scoreColor.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(scoreIcon, size: 12, color: scoreColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      scoreLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                        color: scoreColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+
+          if (isWide) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                const SizedBox(height: 20),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 220, height: 220, child: gaugeBlock),
+                    const SizedBox(width: 20),
+                    Expanded(child: pillarsBlock),
+                    const SizedBox(width: 16),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 152, maxWidth: 200),
+                      child: runwayBlock,
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              header,
+              const SizedBox(height: 20),
+              Center(child: SizedBox(width: 220, height: 220, child: gaugeBlock)),
+              const SizedBox(height: 24),
+              pillarsBlock,
+              const SizedBox(height: 20),
+              runwayBlock,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHealthGauge({
+    required _HealthScoreData hs,
+    required Color scoreColor,
+    required String scoreLabel,
+    required IconData scoreIcon,
+    required Color trackColor,
+    required Color tickColor,
+    required bool isDark,
+    required Color gold,
+  }) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: hs.score),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOutCubic,
+      builder: (ctx, animated, _) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _HealthScoreArcPainter(
+                  score: animated,
+                  targetScore: hs.score,
+                  trackColor: trackColor,
+                  tickColor: tickColor,
+                ),
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'SCORE',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  animated.toStringAsFixed(0),
+                  style: GoogleFonts.oswald(
+                    fontSize: 64,
+                    fontWeight: FontWeight.w900,
+                    color: scoreColor,
+                    letterSpacing: -2,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '/ 100',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildHealthPillars({
+    required _HealthScoreData hs,
+    required bool isDark,
+    required Color gold,
+    void Function(_SaludPillarTap)? onPillarTap,
+  }) {
+    final green = const Color(0xFF00B894);
+    final red = const Color(0xFFE74C3C);
+    final amber = const Color(0xFFF39C12);
+
+    Color pillarColor(double value, double max) {
+      final pct = max > 0 ? value / max : 0.0;
+      if (pct < 0.4) return red;
+      if (pct < 0.7) return amber;
+      return green;
+    }
+
+    Widget pillar({
+      required IconData icon,
+      required String label,
+      required String detail,
+      required double value,
+      required double max,
+      required _SaludPillarTap tap,
+    }) {
+      final color = pillarColor(value, max);
+      final pct = max > 0 ? (value / max).clamp(0.0, 1.0) : 0.0;
+      final body = Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 12, color: color),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        detail,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${value.toStringAsFixed(0)}/${max.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 7,
+                backgroundColor: color.withValues(alpha: isDark ? 0.12 : 0.08),
+                valueColor: AlwaysStoppedAnimation<Color>(color.withValues(alpha: 0.82)),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (onPillarTap == null) return body;
+      return Tooltip(
+        excludeFromSemantics: _tooltipExcludeSemanticsWin(),
+        message: _tooltipSaludPillar(tap),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => onPillarTap(tap),
+            borderRadius: BorderRadius.circular(10),
+            hoverColor: gold.withValues(alpha: 0.06),
+            splashColor: gold.withValues(alpha: 0.1),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: body,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    String runwayDetail() {
+      if (hs.runwayMeses >= 999) return 'sin techo';
+      if (hs.runwayMeses >= 99) return '99+ meses';
+      return '${hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',')} meses de aire';
+    }
+
+    String momentumDetail() {
+      final pct = hs.deltaIngPct * 100;
+      final sign = pct >= 0 ? '+' : '';
+      return 'vs mes pasado $sign${pct.toStringAsFixed(1).replaceAll('.', ',')}%';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'DE QUÉ DEPENDE EL PUNTAJE',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+            color: isDark ? Colors.white38 : Colors.black38,
+          ),
+        ),
+        const SizedBox(height: 12),
+        pillar(
+          icon: Icons.water_drop_outlined,
+          label: 'Colchón en caja',
+          detail: runwayDetail(),
+          value: hs.liquidez,
+          max: 30,
+          tap: _SaludPillarTap.liquidez,
+        ),
+        pillar(
+          icon: Icons.percent_rounded,
+          label: 'Cuánto te queda después de gastar',
+          detail: '${(hs.margenPct * 100).toStringAsFixed(1).replaceAll('.', ',')}% del ingreso',
+          value: hs.margen,
+          max: 30,
+          tap: _SaludPillarTap.margen,
+        ),
+        pillar(
+          icon: Icons.trending_up_rounded,
+          label: 'Si cobrás más o menos que el mes pasado',
+          detail: momentumDetail(),
+          value: hs.momentum,
+          max: 25,
+          tap: _SaludPillarTap.momentum,
+        ),
+        pillar(
+          icon: Icons.notifications_active_outlined,
+          label: 'Avisos que no dejás pasar',
+          detail: hs.alertasCount == 0 ? 'ninguno' : '${hs.alertasCount} para ver',
+          value: hs.alertas,
+          max: 15,
+          tap: _SaludPillarTap.alertas,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRunwayBlock({
+    Key? key,
+    required _HealthScoreData hs,
+    required Color scoreColor,
+    required bool isDark,
+    required Color gold,
+  }) {
+    final String bigValue;
+    final String unit;
+    final String caption;
+
+    if (hs.runwayMeses >= 999) {
+      bigValue = '∞';
+      unit = '';
+      caption = 'No registrás gastos recientes; el número no aplica igual que siempre.';
+    } else if (hs.runwayMeses >= 99) {
+      bigValue = '99+';
+      unit = 'meses';
+      caption = 'Tenés banda de margen al ritmo de gasto de hoy.';
+    } else {
+      bigValue = hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',');
+      unit = 'meses';
+      if (hs.runwayMeses < 2) {
+        caption = 'Muy justo: conviene meter cobros o bajar gasto fijo.';
+      } else if (hs.runwayMeses < 4) {
+        caption = 'Corto pero manejable; si podés, empujá ventas.';
+      } else if (hs.runwayMeses < 8) {
+        caption = 'Razonable: no estás al límite todos los meses.';
+      } else {
+        caption = 'Cómodo: podés pensar en invertir sin sudar.';
+      }
+    }
+
+    return Container(
+      key: key,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scoreColor.withValues(alpha: isDark ? 0.08 : 0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scoreColor.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.air_rounded, size: 14, color: scoreColor),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '¿CUÁNTO TE DURA LA PLATA?',
+                  maxLines: 3,
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                    color: scoreColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                bigValue,
+                style: GoogleFonts.oswald(
+                  fontSize: 38,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : Colors.black87,
+                  letterSpacing: -1.5,
+                  height: 1,
+                ),
+              ),
+              if (unit.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    unit,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'de “aire” si el gasto sigue parecido al de ahora',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white38 : Colors.black45,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            caption,
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.35,
+              fontStyle: FontStyle.italic,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── VISTA SALUD ──
+  Widget _buildVistaSalud(bool isDark, Color gold, FinanzasState state) {
+    const gridGap = 22.0;
+
+    final pulsoDiarioBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Pulso diario de caja', Icons.show_chart_rounded),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: _buildPulsoDiarioCaja(isDark, gold, state),
+        ),
+      ],
+    );
+
+    final mSalud = state.mesFiltro ?? DateTime.now();
+    final labelMesSalud = '${mSalud.month.toString().padLeft(2, '0')}/${mSalud.year}';
+    final esCobrosSalud = _filtroMesCaja == _FiltroMesCaja.cobros;
+
+    final tortaMesBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.pie_chart_outline_rounded, color: gold, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                esCobrosSalud ? 'COBROS DEL MES' : 'PAGOS DEL MES',
+                style: GoogleFonts.oswald(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                  color: gold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Mes: $labelMesSalud · Ajustá el mes con el filtro superior.',
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? Colors.white38 : Colors.black45,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Center(
+          child: SegmentedButton<_FiltroMesCaja>(
+            segments: const [
+              ButtonSegment<_FiltroMesCaja>(
+                value: _FiltroMesCaja.cobros,
+                label: Text('ME PAGARON', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+                icon: Icon(Icons.arrow_downward_rounded, size: 16),
+              ),
+              ButtonSegment<_FiltroMesCaja>(
+                value: _FiltroMesCaja.pagos,
+                label: Text('YO PAGUÉ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+                icon: Icon(Icons.arrow_upward_rounded, size: 16),
+              ),
+            ],
+            selected: {_filtroMesCaja},
+            onSelectionChanged: (s) => setState(() => _filtroMesCaja = s.first),
+            style: ButtonStyle(
+              backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                if (states.contains(WidgetState.selected)) return gold.withValues(alpha: 0.22);
+                return Colors.transparent;
+              }),
+              foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
+                if (states.contains(WidgetState.selected)) return gold;
+                return isDark ? Colors.white54 : Colors.black54;
+              }),
+              side: WidgetStateProperty.all(BorderSide(color: gold.withValues(alpha: 0.35))),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _buildDesgloseCategorias(
+          isDark,
+          gold,
+          state,
+          limitTop: 0,
+          showPieChart: true,
+          cobrosPorFuente: esCobrosSalud,
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useGrid = constraints.maxWidth >= 1100;
+
+        final cuatroBloquesSalud = useGrid
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        pulsoDiarioBlock,
+                        SizedBox(height: gridGap),
+                        _buildRentabilidadPromedioHUD(isDark),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: gridGap),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        tortaMesBlock,
+                        SizedBox(height: gridGap),
+                        _buildPorCobrarHUD(isDark, gold),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  pulsoDiarioBlock,
+                  const SizedBox(height: 24),
+                  tortaMesBlock,
+                  const SizedBox(height: 24),
+                  _buildRentabilidadPromedioHUD(isDark),
+                  const SizedBox(height: 24),
+                  _buildPorCobrarHUD(isDark, gold),
+                ],
+              );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 0 · HERO: Health Score 0-100 (gauge + pilares + runway)
+            _buildHealthScoreHero(
+              isDark,
+              gold,
+              state,
+              runwayKey: _keySaludRunway,
+              onPillarTap: _onSaludPillarTap,
+            ),
+            const SizedBox(height: 24),
+            // A · Resumen del mes
+            KeyedSubtree(
+              key: _keySaludResumen,
+              child: _buildResumenMes(isDark, gold, state),
+            ),
+            const SizedBox(height: 24),
+            // B–F · Pulso, categorías, rentabilidad, por cobrar (grid 2×2 si ancho ≥ 1100)
+            cuatroBloquesSalud,
+            const SizedBox(height: 24),
+            // C · Comparativa mensual
+            KeyedSubtree(
+              key: _keySaludTabla,
+              child: _buildTablaAnualDinamica(isDark, gold, const Color(0xFF00B894), const Color(0xFFE74C3C), state),
+            ),
+            const SizedBox(height: 24),
+            // G · Alertas
+            KeyedSubtree(
+              key: _keySaludAlertas,
+              child: _buildAlertasGestion(isDark, gold),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  (double, double) _sumarIngEgRango(
+    List<IngresoDetallado> ingSrc,
+    List<Egreso> egSrc,
+    DateTime desdeDia,
+    DateTime hastaDiaInclusive,
+  ) {
+    bool enRango(DateTime? dt) {
+      if (dt == null) return false;
+      final a = ArTime.toAr(dt);
+      final solo = DateTime(a.year, a.month, a.day);
+      return !solo.isBefore(desdeDia) && !solo.isAfter(hastaDiaInclusive);
+    }
+    final ing = ingSrc.where((i) => enRango(i.fecha)).fold(0.0, (s, i) => s + i.monto);
+    final eg = egSrc.where((e) => enRango(e.fecha)).fold(0.0, (s, e) => s + e.monto);
+    return (ing, eg);
+  }
+
+  List<_DiaPulsoDatum> _serieDiasPulso(FinanzasState state) {
+    if (_pulsoRango == _PulsoRangoVista.mesCalendario) {
+      final refMes = state.mesFiltro ?? ArTime.nowAr();
+      final y = refMes.year;
+      final m = refMes.month;
+      final last = DateTime(y, m + 1, 0).day;
+      final out = <_DiaPulsoDatum>[];
+      for (var d = 1; d <= last; d++) {
+        final dia = DateTime(y, m, d);
+        var ing = 0.0;
+        var eg = 0.0;
+        var ni = 0;
+        var ne = 0;
+        for (final i in state.ingresos) {
+          if (ArTime.mismoDia(i.fecha, dia)) {
+            ing += i.monto;
+            ni++;
+          }
+        }
+        for (final e in state.egresos) {
+          if (e.fecha != null && ArTime.mismoDia(e.fecha!, dia)) {
+            eg += e.monto;
+            ne++;
+          }
+        }
+        out.add(_DiaPulsoDatum(dia: dia, ing: ing, eg: eg, nPagos: ni, nEgresos: ne));
+      }
+      return out;
+    }
+    final ingL = _pulso30Ingresos ?? [];
+    final egL = _pulso30Egresos ?? [];
+    final nowAr = ArTime.nowAr();
+    final fin = DateTime(nowAr.year, nowAr.month, nowAr.day);
+    final ini = fin.subtract(const Duration(days: 29));
+    final out = <_DiaPulsoDatum>[];
+    for (var i = 0; i < 30; i++) {
+      final dia = ini.add(Duration(days: i));
+      var ing = 0.0;
+      var eg = 0.0;
+      var ni = 0;
+      var ne = 0;
+      for (final x in ingL) {
+        if (ArTime.mismoDia(x.fecha, dia)) {
+          ing += x.monto;
+          ni++;
+        }
+      }
+      for (final x in egL) {
+        if (x.fecha != null && ArTime.mismoDia(x.fecha!, dia)) {
+          eg += x.monto;
+          ne++;
+        }
+      }
+      out.add(_DiaPulsoDatum(dia: dia, ing: ing, eg: eg, nPagos: ni, nEgresos: ne));
+    }
+    return out;
+  }
+
+  Widget _buildPulsoChipsRapidos(bool isDark, Color gold, FinanzasState state, Color green, Color red) {
+    final nowAr = ArTime.nowAr();
+    final hoy = DateTime(nowAr.year, nowAr.month, nowAr.day);
+    final ayer = hoy.subtract(const Duration(days: 1));
+    final lun = _lunesSemanaArDesde(nowAr);
+    final dom = lun.add(const Duration(days: 6));
+
+    List<IngresoDetallado> ingPulse;
+    List<Egreso> egPulse;
+    if (_pulsoRango == _PulsoRangoVista.mesCalendario) {
+      ingPulse = state.ingresos;
+      egPulse = state.egresos;
+    } else {
+      ingPulse = _pulso30Ingresos ?? [];
+      egPulse = _pulso30Egresos ?? [];
+    }
+
+    final h = _sumarIngEgRango(ingPulse, egPulse, hoy, hoy);
+    final a = _sumarIngEgRango(ingPulse, egPulse, ayer, ayer);
+    final sem = _sumarIngEgRango(ingPulse, egPulse, lun, dom);
+    final mesIng = state.ingresos.fold(0.0, (s, i) => s + i.monto);
+    final mesEg = state.egresos.fold(0.0, (s, e) => s + e.monto);
+
+    Widget chip(String label, double ing, double eg) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: gold.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+                color: isDark ? Colors.white38 : Colors.black45,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '+${ing.toCurrency()}',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: green),
+            ),
+            Text(
+              '-${eg.toCurrency()}',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: red),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        chip('HOY', h.$1, h.$2),
+        chip('AYER', a.$1, a.$2),
+        chip('ESTA SEMANA (lun–dom)', sem.$1, sem.$2),
+        chip('ESTE MES (filtro)', mesIng, mesEg),
+      ],
+    );
+  }
+
+  Widget _buildPulsoFooter(bool isDark, Color gold, FinanzasState state, Color green, Color red, List<_DiaPulsoDatum> serie) {
+    if (serie.isEmpty) return const SizedBox.shrink();
+    _DiaPulsoDatum best = serie.first;
+    _DiaPulsoDatum worst = serie.first;
+    for (final d in serie) {
+      if (d.neto > best.neto) best = d;
+      if (d.neto < worst.neto) worst = d;
+    }
+    var sinMov = 0;
+    var sumI = 0.0;
+    var sumE = 0.0;
+    for (final d in serie) {
+      sumI += d.ing;
+      sumE += d.eg;
+      if (d.ing == 0 && d.eg == 0) sinMov++;
+    }
+    final n = serie.length;
+    final promI = n > 0 ? sumI / n : 0.0;
+    final promE = n > 0 ? sumE / n : 0.0;
+    const mesesN = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+    String labelDia(DateTime d) {
+      final ar = ArTime.toAr(d);
+      return '${mesesN[ar.month - 1]} ${ar.day}';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Mejor día (neto): ${labelDia(best.dia)} · ${best.neto.toCurrency()}',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: green.withValues(alpha: 0.9)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Peor día (neto): ${labelDia(worst.dia)} · ${worst.neto.toCurrency()}',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: red.withValues(alpha: 0.9)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Días sin movimiento: $sinMov · Promedio diario: +${promI.toCurrency()} ing. · -${promE.toCurrency()} egr.',
+          style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPulsoBarrasDias(bool isDark, Color gold, FinanzasState state, Color green, Color red) {
+    final serie = _serieDiasPulso(state);
+    if (serie.isEmpty) return const SizedBox.shrink();
+    _schedulePulsoScrollCentrarHoy(state, serie);
+
+    var scaleMax = 1.0;
+    for (final d in serie) {
+      scaleMax = max(scaleMax, max(d.ing, d.eg));
+    }
+
+    const maxH = 112.0;
+    const colW = 26.0;
+    const gap = 5.0;
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        return Scrollbar(
+          controller: _pulsoBarrasScrollController,
+          thumbVisibility: true,
+          trackVisibility: true,
+          thickness: 7,
+          radius: const Radius.circular(6),
+          child: SingleChildScrollView(
+            controller: _pulsoBarrasScrollController,
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: serie.map((d) {
+              final hIn = scaleMax > 0 ? (d.ing / scaleMax) * maxH : 0.0;
+              final hEg = scaleMax > 0 ? (d.eg / scaleMax) * maxH : 0.0;
+              final ar = ArTime.toAr(d.dia);
+              final sel = state.fechaExactaFiltro != null && ArTime.mismoDia(d.dia, state.fechaExactaFiltro!);
+              final tip =
+                  '${ArTime.formatDiaMes(d.dia)}: ingresó ${d.ing.toCurrency()} en ${d.nPagos} pagos · gastó ${d.eg.toCurrency()} en ${d.nEgresos} egresos. Tocá para filtrar el día.';
+
+              return Padding(
+                padding: const EdgeInsets.only(right: gap),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Tooltip(
+                      excludeFromSemantics: _tooltipExcludeSemanticsWin(),
+                      message: tip,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () async {
+                            await ref.read(finanzasProvider.notifier).aplicarFiltro(
+                                  mes: DateTime(ar.year, ar.month, 1),
+                                  fechaExactaFiltro: DateTime(ar.year, ar.month, ar.day),
+                                );
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: colW,
+                            padding: const EdgeInsets.only(top: 4),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: sel ? gold : Colors.transparent,
+                                width: sel ? 2 : 0,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: max(2.0, hIn),
+                                  decoration: BoxDecoration(
+                                    color: green.withValues(alpha: 0.85),
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Container(
+                                  width: 10,
+                                  height: max(2.0, hEg),
+                                  decoration: BoxDecoration(
+                                    color: red.withValues(alpha: 0.85),
+                                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(3)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${ar.day}',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPulsoDiarioCaja(bool isDark, Color gold, FinanzasState state) {
+    final green = const Color(0xFF00B894);
+    final red = const Color(0xFFE74C3C);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                _pulsoRango == _PulsoRangoVista.mesCalendario
+                    ? 'Cada barra: verde = ingresos, rojo = egresos (escala compartida).'
+                    : 'Últimos 30 días corridos (hora Argentina).',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.white38 : Colors.black45,
+                ),
+              ),
+            ),
+            SegmentedButton<_PulsoRangoVista>(
+              segments: const [
+                ButtonSegment(
+                  value: _PulsoRangoVista.mesCalendario,
+                  label: Text('Mes', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                ),
+                ButtonSegment(
+                  value: _PulsoRangoVista.ultimos30,
+                  label: Text('30 días', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                ),
+              ],
+              selected: {_pulsoRango},
+              onSelectionChanged: (s) {
+                final v = s.first;
+                setState(() {
+                  _pulsoRango = v;
+                  if (v == _PulsoRangoVista.mesCalendario) {
+                    _pulsoScrollAppliedStamp = null;
+                  }
+                });
+                if (v == _PulsoRangoVista.ultimos30 && _pulso30Ingresos == null) {
+                  _cargarDatosPulso30(state);
+                }
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                side: WidgetStateProperty.all(BorderSide(color: gold.withValues(alpha: 0.35))),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildPulsoChipsRapidos(isDark, gold, state, green, red),
+        const SizedBox(height: 16),
+        if (_pulsoRango == _PulsoRangoVista.ultimos30 && _pulso30Loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 28),
+            child: Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
+          )
+        else ...[
+          _buildPulsoBarrasDias(isDark, gold, state, green, red),
+          const SizedBox(height: 14),
+          _buildPulsoFooter(isDark, gold, state, green, red, _serieDiasPulso(state)),
+        ],
+      ],
+    );
+  }
+
+  /// Detalle de egresos del día (totales del día van en el HUD «Inteligencia financiera», modo HOY).
+  Widget _buildPanelOperativoDia(BuildContext context, bool isDark, Color gold, FinanzasState state) {
+    final nAr = ArTime.nowAr();
+    final hoyNorm = DateTime(nAr.year, nAr.month, nAr.day);
+    final diaAnalisis = state.fechaInteligenciaHud ?? hoyNorm;
+    final esCalendarioActual = ArTime.mismoDia(diaAnalisis, nAr);
+    final red = const Color(0xFFE74C3C);
+
+    final egresosHoy = <Egreso>[];
+    for (final e in state.egresos) {
+      if (e.fecha != null && ArTime.mismoDia(e.fecha!, diaAnalisis)) egresosHoy.add(e);
+    }
+    egresosHoy.sort((a, b) => b.monto.compareTo(a.monto));
+
+    final labelRef = DateTime.utc(diaAnalisis.year, diaAnalisis.month, diaAnalisis.day, 12);
+    final labelDia = ArTime.formatFechaLarga(labelRef);
+    final topRows = egresosHoy.take(8).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.today_rounded, color: gold, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'OPERACIÓN DEL DÍA',
+                style: GoogleFonts.oswald(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                  color: gold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          labelDia[0].toUpperCase() + labelDia.substring(1),
+          style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Ingresos, egresos y neto del día están en «Inteligencia financiera» arriba (HOY).',
+          style: TextStyle(
+            fontSize: 10,
+            height: 1.35,
+            fontStyle: FontStyle.italic,
+            color: isDark ? Colors.white38 : Colors.black45,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Icon(Icons.receipt_long_outlined, color: gold.withValues(alpha: 0.85), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              esCalendarioActual ? 'EGRESOS DE HOY (${egresosHoy.length})' : 'EGRESOS DEL DÍA (${egresosHoy.length})',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (topRows.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+              ),
+            ),
+            child: Text(
+              esCalendarioActual ? 'Sin egresos registrados hoy.' : 'Sin egresos en este día.',
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: isDark ? Colors.white38 : Colors.black45,
+              ),
+            ),
+          )
+        else
+          ...topRows.map((e) {
+          final cat = (e.categoria?.trim().isNotEmpty == true) ? e.categoria! : 'Sin categoría';
+          final titulo = (e.proveedor?.trim().isNotEmpty == true) ? e.proveedor! : cat;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.trending_down_rounded, size: 18, color: red.withValues(alpha: 0.85)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          titulo,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        if (titulo != cat)
+                          Text(
+                            cat,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white38 : Colors.black45,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if ((e.categoria ?? '').trim() == kCategoriaRetiroCaja && e.id.length == 36)
+                    IconButton(
+                      tooltip: 'Eliminar retiro de caja',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 18,
+                        color: red.withValues(alpha: 0.75),
+                      ),
+                      onPressed: () => _eliminarRetiroCajaInteligencia(context, e),
+                    ),
+                  Text(
+                    e.monto.toCurrency(),
+                    style: GoogleFonts.oswald(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: red,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  /// Barra 00:00–24:00 con puntos por movimiento del día (CustomPaint).
+  Widget _buildTimelineDia(bool isDark, Color gold, FinanzasState state) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionLabel('Movimientos del día', Icons.schedule_rounded),
+          const SizedBox(height: 12),
+          _TimelineDiaStrip(
+            isDark: isDark,
+            gold: gold,
+            state: state,
+            onIngresoDotTap: () async {
+              final ok = await AdminGate.check(context, ref);
+              if (!ok || !mounted) return;
+              setState(() {
+                _currentSubView = FinanzasSubView.flujo;
+                _searchContext = SearchContext.ingresos;
+              });
+            },
+            onEgresoDotTap: () async {
+              final ok = await AdminGate.check(context, ref);
+              if (!ok || !mounted) return;
+              if (!context.mounted) return;
+              await showDialog<bool>(
+                context: context,
+                builder: (_) => const RegistrarEgresoGlobalDialog(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Pestaña HOY: operación del día + timeline + accesos rápidos.
+  Widget _buildVistaCategorias(bool isDark, Color gold, FinanzasState state) {
+    final ctaStyle = ElevatedButton.styleFrom(
+      backgroundColor: gold,
+      foregroundColor: Colors.black87,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.6),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPanelOperativoDia(context, isDark, gold, state),
+        const SizedBox(height: 24),
+        _buildTimelineDia(isDark, gold, state),
+        const SizedBox(height: 28),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            ElevatedButton(
+              onPressed: () async {
+                final ok = await AdminGate.check(context, ref);
+                if (!ok || !mounted) return;
+                setState(() {
+                  _currentSubView = FinanzasSubView.flujo;
+                  _searchContext = SearchContext.ingresos;
+                });
+              },
+              style: ctaStyle,
+              child: const Text('+ INGRESO'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final ok = await AdminGate.check(context, ref);
+                if (!ok || !mounted) return;
+                if (!context.mounted) return;
+                await showDialog<bool>(
+                  context: context,
+                  builder: (_) => const RegistrarEgresoGlobalDialog(),
+                );
+              },
+              style: ctaStyle,
+              child: const Text('+ EGRESO'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _currentSubView = FinanzasSubView.avisos);
+              },
+              style: ctaStyle,
+              child: const Text('PAGAR AVISO'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final ok = await AdminGate.check(context, ref);
+                if (!ok || !mounted) return;
+                if (!context.mounted) return;
+                await Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(builder: (_) => const EventosScreen()),
+                );
+              },
+              style: ctaStyle,
+              child: const Text('VER AGENDA'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Bloque D: Desglose de Gastos por Categoría ───────────────────────────
+  /// [limitTop]: cantidad máxima de filas en barras; `0` = todas las categorías.
+  /// [showPieChart]: torta (máx. 6 segmentos; el resto se agrupa en "Otros").
+  /// [cobrosPorFuente]: si es true, agrupa ingresos del mes por fuente (Particular / Masivo / Alquiler).
+  Widget _buildDesgloseCategorias(
+    bool isDark,
+    Color gold,
+    FinanzasState state, {
+    int limitTop = 5,
+    bool showPieChart = false,
+    bool cobrosPorFuente = false,
+  }) {
+    final ingresosMes = _ingresosVista(state);
+    final egresosMes = _egresosVista(state);
+
+    if (cobrosPorFuente) {
+      if (ingresosMes.isEmpty) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.payments_outlined, size: 20, color: isDark ? Colors.white24 : Colors.black26),
+              const SizedBox(width: 10),
+              Text(
+                'Sin cobros registrados para este período',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } else if (egresosMes.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.receipt_long_outlined, size: 20, color: isDark ? Colors.white24 : Colors.black26),
+            const SizedBox(width: 10),
+            Text(
+              'Sin egresos registrados para este período',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white38 : Colors.black38,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    String etiquetaFuenteCobro(String fuente) {
+      switch (fuente.trim()) {
+        case 'Masivo':
+          return 'Eventos masivos';
+        case 'Particular':
+          return 'Eventos particulares';
+        case 'Alquiler':
+          return 'Alquiler / ítems';
+        default:
+          return fuente.trim().isEmpty ? 'Otro' : fuente.trim();
+      }
+    }
+
+    // Agrupar
+    final Map<String, double> porCategoria = {};
+    if (cobrosPorFuente) {
+      for (final i in ingresosMes) {
+        final k = etiquetaFuenteCobro(i.fuente);
+        porCategoria[k] = (porCategoria[k] ?? 0) + i.monto;
+      }
+    } else {
+      for (final e in egresosMes) {
+        final cat = (e.categoria?.trim().isNotEmpty == true) ? e.categoria! : 'Otro';
+        porCategoria[cat] = (porCategoria[cat] ?? 0) + e.monto;
+      }
+    }
+
+    final sorted = porCategoria.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final totalEg = cobrosPorFuente
+        ? ingresosMes.fold(0.0, (s, i) => s + i.monto)
+        : egresosMes.fold(0.0, (s, e) => s + e.monto);
+
+    final barRows = limitTop <= 0 ? sorted : sorted.take(limitTop).toList();
+    final accentTotal = cobrosPorFuente ? const Color(0xFF00B894) : const Color(0xFFE74C3C);
+
+    // Paleta de colores para las barras / torta
+    const barColors = [
+      Color(0xFFE74C3C),
+      Color(0xFFE67E22),
+      Color(0xFF9B59B6),
+      Color(0xFF3498DB),
+      Color(0xFF1ABC9C),
+      Color(0xFF00B894),
+      Color(0xFF6C63FF),
+      Color(0xFFE91E63),
+    ];
+
+    IconData iconForClave(String clave) {
+      if (cobrosPorFuente) {
+        final l = clave.toLowerCase();
+        if (l.contains('masivo')) return Icons.groups_2_rounded;
+        if (l.contains('particular')) return Icons.person_rounded;
+        if (l.contains('alquiler')) return Icons.inventory_2_rounded;
+        return Icons.payments_rounded;
+      }
+      switch (clave.toLowerCase()) {
+        case 'sueldos':      return Icons.people_alt_rounded;
+        case 'operadores':   return Icons.engineering_rounded;
+        case 'personal':     return Icons.engineering_rounded;
+        case 'alquiler local': return Icons.store_rounded;
+        case 'alquiler':     return Icons.store_rounded;
+        case 'proveedores':  return Icons.inventory_2_rounded;
+        case 'proveedor':    return Icons.inventory_2_rounded;
+        case 'logística':    return Icons.local_shipping_rounded;
+        case 'logistica':    return Icons.local_shipping_rounded;
+        case 'marketing':    return Icons.campaign_rounded;
+        case 'impuestos':    return Icons.account_balance_rounded;
+        case 'catering':     return Icons.restaurant_rounded;
+        case 'bebida':       return Icons.local_bar_rounded;
+        default:             return Icons.label_outline_rounded;
+      }
+    }
+
+    // Datos para torta: hasta 5 categorías + "Otros"
+    final List<MapEntry<String, double>> pieSlices = [];
+    if (showPieChart && sorted.isNotEmpty) {
+      const maxSlices = 5;
+      if (sorted.length <= maxSlices) {
+        pieSlices.addAll(sorted);
+      } else {
+        pieSlices.addAll(sorted.take(maxSlices));
+        final resto = sorted.skip(maxSlices).fold(0.0, (s, e) => s + e.value);
+        pieSlices.add(MapEntry('Otros', resto));
+      }
+    }
+
+    final holeColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+
+    Widget pieAndLegend() {
+      if (!showPieChart || pieSlices.isEmpty || totalEg <= 0) {
+        return const SizedBox.shrink();
+      }
+      final amounts = pieSlices.map((e) => e.value).toList();
+      final colors = List<Color>.generate(
+        pieSlices.length,
+        (i) => barColors[i % barColors.length],
+      );
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 480;
+          final pieSize = wide ? 168.0 : 140.0;
+          final pie = SizedBox(
+            width: pieSize,
+            height: pieSize,
+            child: CustomPaint(
+              painter: _EgresosPiePainter(
+                amounts: amounts,
+                colors: colors,
+                holeColor: holeColor,
+              ),
+            ),
+          );
+          final legend = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: pieSlices.asMap().entries.map((e) {
+              final i = e.key;
+              final entry = e.value;
+              final pct = totalEg > 0 ? (entry.value / totalEg) * 100 : 0.0;
+              final c = colors[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        entry.key,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${pct.toStringAsFixed(1)}%',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: c),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          );
+          if (!wide) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                pie,
+                const SizedBox(height: 16),
+                legend,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              pie,
+              const SizedBox(width: 20),
+              Expanded(child: legend),
+            ],
+          );
+        },
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  cobrosPorFuente
+                      ? (showPieChart ? 'DESGLOSE POR ORIGEN (ME PAGARON)' : 'TOP ORIGEN DE COBRO')
+                      : (showPieChart ? 'DESGLOSE POR CATEGORÍA' : 'TOP CATEGORÍAS DE GASTO'),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ),
+              Text(
+                'Total: ${totalEg.toCurrency()}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: accentTotal.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+          ),
+          if (showPieChart) ...[
+            const SizedBox(height: 16),
+            pieAndLegend(),
+          ],
+          const SizedBox(height: 16),
+          ...barRows.asMap().entries.map((entry) {
+            final i = entry.key;
+            final cat = entry.value.key;
+            final monto = entry.value.value;
+            final pct = totalEg > 0 ? (monto / totalEg) : 0.0;
+            final color = barColors[i % barColors.length];
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(iconForClave(cat), color: color, size: 12),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          cat,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${(pct * 100).toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        monto.toCurrency(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: pct.clamp(0.0, 1.0),
+                      minHeight: 7,
+                      backgroundColor: color.withValues(alpha: isDark ? 0.1 : 0.07),
+                      valueColor: AlwaysStoppedAnimation<Color>(color.withValues(alpha: 0.75)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (limitTop > 0 && sorted.length > limitTop) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.more_horiz_rounded, size: 14, color: isDark ? Colors.white24 : Colors.black26),
+                const SizedBox(width: 6),
+                Text(
+                  '+ ${sorted.length - limitTop} ítems más (pestaña HOY con filtro ${cobrosPorFuente ? 'cobros' : 'pagos'})',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResumenMes(bool isDark, Color gold, FinanzasState state) {
+    final green = const Color(0xFF00B894);
+    final red = const Color(0xFFE74C3C);
+
+    String deltaLabel(double prevVal, double currVal) {
+      if (prevVal == 0 && currVal == 0) return '0%';
+      if (prevVal == 0) return currVal > 0 ? '+100%' : '0%';
+      final p = ((currVal - prevVal) / prevVal) * 100;
+      return '${p >= 0 ? '+' : ''}${p.toStringAsFixed(1)}%';
+    }
+
+    final fe = state.fechaExactaFiltro;
+    if (fe != null) {
+      final ingList = _ingresosVista(state);
+      final egList = _egresosVista(state);
+      final ing = ingList.fold(0.0, (s, i) => s + i.monto);
+      final eg = egList.fold(0.0, (s, e) => s + e.monto);
+      final neto = ing - eg;
+
+      final fAr = ArTime.toAr(fe);
+      final diaRef = DateTime(fAr.year, fAr.month, fAr.day);
+      final prevDia = diaRef.subtract(const Duration(days: 1));
+      final ingPrev = state.ingresos.where((i) => ArTime.mismoDia(i.fecha, prevDia)).fold(0.0, (s, i) => s + i.monto);
+      final egPrev = state.egresos.where((e) => e.fecha != null && ArTime.mismoDia(e.fecha!, prevDia)).fold(0.0, (s, e) => s + e.monto);
+      final netoPrev = ingPrev - egPrev;
+
+      final dIng = deltaLabel(ingPrev, ing);
+      final dEg = deltaLabel(egPrev, eg);
+      final dNeto = deltaLabel(netoPrev, neto);
+      final ingBarVal = ingPrev > 0 ? (ing / ingPrev).clamp(0.0, 1.0) : (ing > 0 ? 1.0 : 0.0);
+      final superaIng = ingPrev > 0 && ing > ingPrev;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _buildKPICard('INGRESOS', ing, isDark, gold, green)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildKPICard('EGRESOS', eg, isDark, gold, red)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildKPICard('SALDO NETO', neto, isDark, gold, neto >= 0 ? green : red, highlight: true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withValues(alpha: 0.04) : gold.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.08) : gold.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.compare_arrows_rounded, size: 18, color: gold),
+                    const SizedBox(width: 8),
+                    Text(
+                      'VS DÍA ANTERIOR (${ArTime.formatFechaCorta(prevDia)})',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Ingresos respecto al día anterior (mismo mes cargado)',
+                  style: TextStyle(fontSize: 9, color: isDark ? Colors.white38 : Colors.black45),
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: ingBarVal,
+                    minHeight: 8,
+                    backgroundColor: isDark ? Colors.white10 : Colors.black12,
+                    valueColor: AlwaysStoppedAnimation<Color>(superaIng ? green : gold.withValues(alpha: 0.85)),
+                  ),
+                ),
+                if (superaIng)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Superás el día anterior en ingresos',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: green.withValues(alpha: 0.9)),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    _buildDeltaChip('Ing.', dIng, isDark, green),
+                    _buildDeltaChip('Egr.', dEg, isDark, red),
+                    _buildDeltaChip('Neto', dNeto, isDark, neto >= netoPrev ? green : red),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Vista normal (sin drill-down desde el gráfico): mismos totales que el HUD — día en análisis (tiempo real o fecha fija).
+    final arHud =
+        state.fechaInteligenciaHud != null ? ArTime.toAr(state.fechaInteligenciaHud!) : ArTime.nowAr();
+    final diaRef = DateTime(arHud.year, arHud.month, arHud.day);
+
+    final ing = state.hudIngresosHoy;
+    final eg = state.hudEgresosHoy;
+    final neto = ing - eg;
+
+    final prevDia = diaRef.subtract(const Duration(days: 1));
+    final ingPrev =
+        state.ingresos.where((i) => ArTime.mismoDia(i.fecha, prevDia)).fold(0.0, (s, i) => s + i.monto);
+    final egPrev =
+        state.egresos.where((e) => e.fecha != null && ArTime.mismoDia(e.fecha!, prevDia)).fold(0.0, (s, e) => s + e.monto);
+    final netoPrev = ingPrev - egPrev;
+
+    final dIng = deltaLabel(ingPrev, ing);
+    final dEg = deltaLabel(egPrev, eg);
+    final dNeto = deltaLabel(netoPrev, neto);
+    final ingBarVal = ingPrev > 0 ? (ing / ingPrev).clamp(0.0, 1.0) : (ing > 0 ? 1.0 : 0.0);
+    final superaIng = ingPrev > 0 && ing > ingPrev;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildKPICard('INGRESOS', ing, isDark, gold, green)),
+            const SizedBox(width: 16),
+            Expanded(child: _buildKPICard('EGRESOS', eg, isDark, gold, red)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildKPICard('SALDO NETO', neto, isDark, gold, neto >= 0 ? green : red, highlight: true),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : gold.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.08) : gold.withValues(alpha: 0.25),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.compare_arrows_rounded, size: 18, color: gold),
+                  const SizedBox(width: 8),
+                  Text(
+                    'VS DÍA ANTERIOR (${ArTime.formatFechaCorta(prevDia)})',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Ingresos respecto al día anterior',
+                style: TextStyle(fontSize: 9, color: isDark ? Colors.white38 : Colors.black45),
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: ingBarVal,
+                  minHeight: 8,
+                  backgroundColor: isDark ? Colors.white10 : Colors.black12,
+                  valueColor: AlwaysStoppedAnimation<Color>(superaIng ? green : gold.withValues(alpha: 0.85)),
+                ),
+              ),
+              if (superaIng)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Superás el día anterior en ingresos',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: green.withValues(alpha: 0.9)),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  _buildDeltaChip('Ing.', dIng, isDark, green),
+                  _buildDeltaChip('Egr.', dEg, isDark, red),
+                  _buildDeltaChip('Neto', dNeto, isDark, neto >= netoPrev ? green : red),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDeltaChip(String label, String deltaStr, bool isDark, Color accent) {
+    final isNeg = deltaStr.startsWith('-');
+    final isFlat = deltaStr == '0%';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('$label ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black45)),
+        Icon(
+          isFlat ? Icons.horizontal_rule_rounded : (isNeg ? Icons.south_east_rounded : Icons.north_east_rounded),
+          size: 14,
+          color: accent,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          deltaStr,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: accent),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildKPICard(String label, double amount, bool isDark, Color gold, Color accent, {bool highlight = false}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: highlight 
+            ? accent.withValues(alpha: 0.1) 
+            : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: highlight 
+              ? accent.withValues(alpha: 0.3) 
+              : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
+          width: highlight ? 2.0 : 1.0,
+        ),
+        boxShadow: highlight ? [
+          BoxShadow(color: accent.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4)),
+        ] : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label, 
+            style: TextStyle(
+              fontSize: 10, 
+              fontWeight: FontWeight.w900, 
+              letterSpacing: 1.5, 
+              color: highlight ? accent : (isDark ? Colors.white54 : Colors.black54)
+            )
+          ),
+          const SizedBox(height: 8),
+          Text(
+            amount.toCurrency(), 
+            style: GoogleFonts.oswald(
+              fontSize: 22, 
+              fontWeight: FontWeight.w700, 
+              color: highlight ? accent : (isDark ? Colors.white : Colors.black),
+              letterSpacing: -0.5
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Alertas de Gestión (Privadas) ──────────────────────────────────────────
   Widget _buildAlertasGestion(bool isDark, Color gold) {
     return Consumer(
@@ -739,6 +4698,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   child: Theme(
                     data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                     child: ExpansionTile(
+                      controller: _alertasGestionExpansionController,
                       initiallyExpanded: false,
                       tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                       leading: Icon(Icons.admin_panel_settings_outlined, color: gold, size: 20),
@@ -822,27 +4782,32 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
-  // ── Tabla mensual ──────────────────────────────────────────────────────────
+  // ── Tabla mensual (últimos 6 meses + promedio + tooltips) ─────────────────
   Widget _buildTablaAnualDinamica(bool isDark, Color gold, Color green, Color red, FinanzasState state) {
     const mesesNombre = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    
-    final now = DateTime.now();
-    final List<_MesData> mesesCalculados = [];
-    
-    for (int i = 5; i >= 0; i--) {
-      final mes = DateTime(now.year, now.month - i, 1);
-      final siguiente = DateTime(mes.year, mes.month + 1, 1);
-      
-      final ing = state.ingresos.where((x) => !x.fecha.isBefore(mes) && x.fecha.isBefore(siguiente)).fold(0.0, (s, e) => s + e.monto);
-      final eg = state.egresos.where((x) => x.fecha != null && !x.fecha!.isBefore(mes) && x.fecha!.isBefore(siguiente)).fold(0.0, (s, e) => s + e.monto);
-      
-      mesesCalculados.add(_MesData(mes: mes, ingresos: ing, egresos: eg));
-    }
 
+    final mesesCalculados = _ultimosMesesDatos(state, cantidad: 6);
     final maxVal = mesesCalculados.fold<double>(
       0,
       (m, d) => [m, d.ingresos, d.egresos].reduce((a, b) => a > b ? a : b),
     );
+
+    final promIng = mesesCalculados.fold<double>(0, (s, d) => s + d.ingresos) / mesesCalculados.length;
+    final promEg = mesesCalculados.fold<double>(0, (s, d) => s + d.egresos) / mesesCalculados.length;
+
+    _MesData best = mesesCalculados.first;
+    _MesData worst = mesesCalculados.first;
+    for (final d in mesesCalculados) {
+      if (d.neto > best.neto) best = d;
+      if (d.neto < worst.neto) worst = d;
+    }
+    final tipMejorPeor =
+        'Mejor mes (neto): ${mesesNombre[best.mes.month - 1]} ${best.mes.year} (${best.neto.toCurrency()}). '
+        'Peor mes (neto): ${mesesNombre[worst.mes.month - 1]} ${worst.mes.year} (${worst.neto.toCurrency()}). '
+        'Tocá una fila para filtrar Finanzas a ese mes.';
+
+    final promIngRatio = maxVal > 0 ? (promIng / maxVal).clamp(0.0, 1.0) : 0.0;
+    final promEgRatio = maxVal > 0 ? (promEg / maxVal).clamp(0.0, 1.0) : 0.0;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -854,7 +4819,35 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Icon(Icons.bar_chart_rounded, size: 16, color: gold.withValues(alpha: 0.85)),
+              const SizedBox(width: 8),
+              Text(
+                'COMPARATIVA MENSUAL',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  color: isDark ? Colors.white54 : Colors.black54,
+                ),
+              ),
+              const Spacer(),
+              Tooltip(
+                excludeFromSemantics: _tooltipExcludeSemanticsWin(),
+                message: tipMejorPeor,
+                child: Icon(Icons.info_outline_rounded, size: 18, color: gold.withValues(alpha: 0.7)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Línea punteada = promedio de los 6 meses mostrados (ingresos / egresos).',
+            style: TextStyle(fontSize: 9, color: isDark ? Colors.white30 : Colors.black38, fontStyle: FontStyle.italic),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               SizedBox(width: 36, child: Text('MES', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1, color: isDark ? Colors.white38 : Colors.black38))),
@@ -864,31 +4857,166 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             ],
           ),
           const SizedBox(height: 10),
+          // Fila promedio 6 meses (referencia)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    'Ø',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: gold),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Stack(
+                        alignment: Alignment.centerLeft,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: promIngRatio,
+                              minHeight: 6,
+                              backgroundColor: Colors.transparent,
+                              valueColor: AlwaysStoppedAnimation<Color>(green.withValues(alpha: 0.35)),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _DashedOverlayPainter(
+                                color: green.withValues(alpha: 0.95),
+                                strokeWidth: 1.2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Stack(
+                        alignment: Alignment.centerLeft,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: promEgRatio,
+                              minHeight: 6,
+                              backgroundColor: Colors.transparent,
+                              valueColor: AlwaysStoppedAnimation<Color>(red.withValues(alpha: 0.35)),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _DashedOverlayPainter(
+                                color: red.withValues(alpha: 0.95),
+                                strokeWidth: 1.2,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Prom. ${promIng.toCurrency()} / ${promEg.toCurrency()}',
+                        style: TextStyle(fontSize: 8, color: isDark ? Colors.white30 : Colors.black38),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    (promIng - promEg).toCurrency(),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: (promIng - promEg) >= 0 ? green : red),
+                  ),
+                ),
+              ],
+            ),
+          ),
           ...(mesesCalculados.map((m) {
             final nombre = mesesNombre[m.mes.month - 1];
-            final neto = m.ingresos - m.egresos;
+            final neto = m.neto;
             final ingRatio = maxVal > 0 ? (m.ingresos / maxVal).clamp(0.0, 1.0) : 0.0;
             final egRatio = maxVal > 0 ? (m.egresos / maxVal).clamp(0.0, 1.0) : 0.0;
             final isCurrent = m.mes.month == DateTime.now().month && m.mes.year == DateTime.now().year;
+            final isSelected =
+                state.mesFiltro?.year == m.mes.year && state.mesFiltro?.month == m.mes.month;
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  SizedBox(width: 36, child: Text(nombre, style: TextStyle(fontSize: 10, fontWeight: isCurrent ? FontWeight.w900 : FontWeight.w600, color: isCurrent ? gold : (isDark ? Colors.white54 : Colors.black54)))),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => ref.read(finanzasProvider.notifier).aplicarFiltro(mes: m.mes, clearFechaExacta: true),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Row(
                       children: [
-                        ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: ingRatio, minHeight: 6, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation<Color>(green.withValues(alpha: 0.7)))),
-                        const SizedBox(height: 3),
-                        ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: egRatio, minHeight: 6, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation<Color>(red.withValues(alpha: 0.7)))),
+                        SizedBox(
+                          width: 36,
+                          child: Text(
+                            nombre,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isCurrent ? FontWeight.w900 : FontWeight.w600,
+                              color: isSelected
+                                  ? gold
+                                  : (isCurrent ? gold : (isDark ? Colors.white54 : Colors.black54)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Tooltip(
+                            excludeFromSemantics: _tooltipExcludeSemanticsWin(),
+                            message:
+                                '${mesesNombre[m.mes.month - 1]} ${m.mes.year}: neto ${neto.toCurrency()}. Tocá para filtrar.',
+                            child: Column(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: ingRatio,
+                                    minHeight: 6,
+                                    backgroundColor: Colors.transparent,
+                                    valueColor: AlwaysStoppedAnimation<Color>(green.withValues(alpha: 0.7)),
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: egRatio,
+                                    minHeight: 6,
+                                    backgroundColor: Colors.transparent,
+                                    valueColor: AlwaysStoppedAnimation<Color>(red.withValues(alpha: 0.7)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 80,
+                          child: Text(
+                            neto.toCurrency(),
+                            textAlign: TextAlign.right,
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: neto >= 0 ? green : red),
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  SizedBox(width: 80, child: Text(neto.toCurrency(), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: neto >= 0 ? green : red))),
-                ],
+                ),
               ),
             );
           })),
@@ -921,7 +5049,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.account_balance_wallet_outlined, color: gold, size: 16),
+                      Icon(Icons.account_balance_wallet_outlined, color: gold, size: 18),
                       const SizedBox(width: 8),
                       Text('POR COBRAR', style: GoogleFonts.oswald(fontSize: 12, letterSpacing: 2, color: gold)),
                     ],
@@ -972,17 +5100,51 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
+  bool _ingresoCoincideTexto(IngresoDetallado ing, String q) {
+    if (q.isEmpty) return true;
+    final ql = q.toLowerCase();
+    return ing.alumnoOCliente.toLowerCase().contains(ql) ||
+        ing.concepto.toLowerCase().contains(ql) ||
+        ing.nombreEvento.toLowerCase().contains(ql) ||
+        ing.fuente.toLowerCase().contains(ql);
+  }
+
+  bool _egresoCoincideTexto(Egreso eg, String q) {
+    if (q.isEmpty) return true;
+    final ql = q.toLowerCase();
+    final prov = (eg.proveedor ?? '').toLowerCase();
+    final cat = (eg.categoria ?? '').toLowerCase();
+    final mp = (eg.medioPago ?? '').toLowerCase();
+    return prov.contains(ql) || cat.contains(ql) || mp.contains(ql);
+  }
+
   // ── Lista de Ingresos (ÉLITE DataTables) ───────────────────────────────────
   Widget _buildIngresosLista(bool isDark, Color gold, Color green, List<IngresoDetallado> ingresos, {required bool isHalf}) {
     // Filtrado dinámico unificado
     if (_searchContext == SearchContext.egresos) return const SizedBox.shrink();
 
     final query = _masterSearchCtrl.text.toLowerCase().trim();
+    final localQ = _ingresosListaSearchCtrl.text.toLowerCase().trim();
+    final hoyAr = ArTime.nowAr();
     final filteredIngresos = ingresos.where((ing) {
-      if (query.isEmpty) return true;
-      return ing.alumnoOCliente.toLowerCase().contains(query) ||
-             ing.concepto.toLowerCase().contains(query);
+      if (_medioPagoFiltro != null) {
+        if (_medioPagoFiltro == 'transferencia') {
+          if (ing.medioPago?.toLowerCase().trim() != 'transferencia') return false;
+        } else if (_medioPagoFiltro == 'efectivo') {
+          if (!_ingresoCuentaComoEfectivoEnListado(ing, hoyAr)) return false;
+        }
+      }
+      if (!_ingresoCoincideTexto(ing, query)) return false;
+      if (!_ingresoCoincideTexto(ing, localQ)) return false;
+      return true;
     }).toList();
+
+    // Conteos para los chips (sin considerar _medioPagoFiltro; sí buscadores maestro + lista)
+    final ingresosFiltradosPorQuery = ingresos.where((ing) {
+      return _ingresoCoincideTexto(ing, query) && _ingresoCoincideTexto(ing, localQ);
+    }).toList();
+    final cntEfectivo = ingresosFiltradosPorQuery.where((i) => _ingresoCuentaComoEfectivoEnListado(i, hoyAr)).length;
+    final cntTransferencia = ingresosFiltradosPorQuery.where((i) => i.medioPago?.toLowerCase().trim() == 'transferencia').length;
 
     return Column(
       children: [
@@ -1004,14 +5166,92 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           child: Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
-              initiallyExpanded: query.isNotEmpty, // Se expande automáticamente al buscar
+              initiallyExpanded: false,
               tilePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               title: Text(
-                'MOSTRAR REGISTROS DE INGRESOS (${filteredIngresos.length})',
+                'REGISTROS DE INGRESOS (${filteredIngresos.length})',
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isDark ? Colors.white60 : Colors.black54, letterSpacing: 1.5),
               ),
               children: [
-                if (filteredIngresos.isEmpty && query.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: TextField(
+                    controller: _ingresosListaSearchCtrl,
+                    onChanged: (_) => setState(() {}),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar en esta lista: cliente, concepto, evento, fuente…',
+                      hintStyle: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white24 : Colors.black38,
+                      ),
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search_rounded, size: 22, color: gold.withValues(alpha: 0.75)),
+                      suffixIcon: _ingresosListaSearchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _ingresosListaSearchCtrl.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: gold.withValues(alpha: 0.25)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: gold.withValues(alpha: 0.2)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: gold.withValues(alpha: 0.55)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ),
+                // ── Filtro por medio de pago ─────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text('Todos (${ingresosFiltradosPorQuery.length})', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                        selected: _medioPagoFiltro == null,
+                        onSelected: (_) => setState(() => _medioPagoFiltro = null),
+                        selectedColor: gold.withValues(alpha: 0.2),
+                        side: BorderSide(color: _medioPagoFiltro == null ? gold : Colors.grey.shade300, width: 1.2),
+                      ),
+                      ChoiceChip(
+                        avatar: Icon(Icons.payments_outlined, size: 14, color: _medioPagoFiltro == 'efectivo' ? const Color(0xFF00B894) : Colors.grey),
+                        label: Text('Efectivo ($cntEfectivo)', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                        selected: _medioPagoFiltro == 'efectivo',
+                        onSelected: (_) => setState(() => _medioPagoFiltro = _medioPagoFiltro == 'efectivo' ? null : 'efectivo'),
+                        selectedColor: const Color(0xFF00B894).withValues(alpha: 0.15),
+                        side: BorderSide(color: _medioPagoFiltro == 'efectivo' ? const Color(0xFF00B894) : Colors.grey.shade300, width: 1.2),
+                      ),
+                      ChoiceChip(
+                        avatar: Icon(Icons.swap_horiz_rounded, size: 14, color: _medioPagoFiltro == 'transferencia' ? const Color(0xFF6C63FF) : Colors.grey),
+                        label: Text('Transferencia ($cntTransferencia)', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                        selected: _medioPagoFiltro == 'transferencia',
+                        onSelected: (_) => setState(() => _medioPagoFiltro = _medioPagoFiltro == 'transferencia' ? null : 'transferencia'),
+                        selectedColor: const Color(0xFF6C63FF).withValues(alpha: 0.15),
+                        side: BorderSide(color: _medioPagoFiltro == 'transferencia' ? const Color(0xFF6C63FF) : Colors.grey.shade300, width: 1.2),
+                      ),
+                    ],
+                  ),
+                ),
+                if (filteredIngresos.isEmpty && (_medioPagoFiltro != null || query.isNotEmpty || localQ.isNotEmpty))
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(
@@ -1024,73 +5264,157 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 else if (filteredIngresos.isNotEmpty)
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        headingRowHeight: 45,
-                        dataRowMinHeight: 48,
-                        dataRowMaxHeight: 60,
-                        headingRowColor: WidgetStateProperty.all(isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.015)),
-                        headingTextStyle: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: gold.withValues(alpha: 0.7), letterSpacing: 1),
-                        dataTextStyle: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87),
-                        dividerThickness: 0.5,
-                        horizontalMargin: isHalf ? 8 : 20,
-                        columnSpacing: isHalf ? 10 : 25,
-                        columns: const [
-                          DataColumn(label: Text('CLIENTE')),
-                          DataColumn(label: Text('CONCEPTO')),
-                          DataColumn(label: Text('EVENTO')),
-                          DataColumn(label: Text('FECHA')),
-                          DataColumn(label: Text('MONTO')),
-                          DataColumn(label: Text('ACCION')),
-                        ],
-                        rows: filteredIngresos.take(50).map((ing) {
-                          final fechaStr = '${ing.fecha.day.toString().padLeft(2, '0')}/${ing.fecha.month.toString().padLeft(2, '0')}';
-                          return DataRow(
-                            cells: [
-                                DataCell(
-                                  SizedBox(
-                                    width: isHalf ? 120 : 180,
-                                    child: Text(
-                                      ing.alumnoOCliente,
-                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              DataCell(Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(color: gold.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-                                child: Text(ing.concepto.toUpperCase(), style: TextStyle(color: gold, fontSize: 8, fontWeight: FontWeight.w900)),
-                              )),
-                              DataCell(Text(Evento.formatearTipo(ing.nombreEvento), style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 10))),
-                              DataCell(Text(fechaStr, style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
-                              DataCell(Text('+${ing.monto.toCurrency()}', style: TextStyle(color: green, fontWeight: FontWeight.w900, fontFamily: 'monospace', fontSize: 13))),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (ing.eventoId != null)
-                                        IconButton(
-                                          icon: const Icon(Icons.celebration_rounded, size: 16),
-                                          color: gold,
-                                          tooltip: 'Ir al Evento',
-                                          onPressed: () => _navegarAEvento(ing),
+                    child: Scrollbar(
+                          controller: _ingresosHScrollCtrl,
+                          thumbVisibility: true,
+                          trackVisibility: false,
+                          thickness: 4,
+                          radius: const Radius.circular(10),
+                          child: SingleChildScrollView(
+                            controller: _ingresosHScrollCtrl,
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: DataTable(
+                              headingRowHeight: 38,
+                              dataRowMinHeight: 40,
+                              dataRowMaxHeight: 52,
+                              headingRowColor: WidgetStateProperty.all(isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.015)),
+                              headingTextStyle: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: gold.withValues(alpha: 0.7), letterSpacing: 0.8),
+                              dataTextStyle: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87),
+                              dividerThickness: 0.5,
+                              horizontalMargin: 12,
+                              columnSpacing: 10,
+                              columns: const [
+                                DataColumn(label: Text('CLIENTE')),
+                                DataColumn(label: Text('CONCEPTO')),
+                                DataColumn(label: Text('EVENTO')),
+                                DataColumn(label: Text('FECHA')),
+                                DataColumn(label: Text('MONTO')),
+                                DataColumn(label: Text('MEDIO')),
+                                DataColumn(label: Text('ACCIÓN')),
+                              ],
+                              rows: filteredIngresos.map((ing) {
+                                // Una sola conversión UTC → reloj AR (el repo ya no aplica toAr).
+                                final fechaAr = ArTime.toAr(ing.fecha);
+                                final fechaStr =
+                                    '${fechaAr.day.toString().padLeft(2, '0')}/${fechaAr.month.toString().padLeft(2, '0')} '
+                                    '${fechaAr.hour.toString().padLeft(2, '0')}:${fechaAr.minute.toString().padLeft(2, '0')}';
+                                const double actionIconSize = 18.0;
+                                final actionButtonStyle = IconButton.styleFrom(
+                                  minimumSize: const Size(30, 30),
+                                  padding: EdgeInsets.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                );
+    
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      SizedBox(
+                                        width: isHalf ? 90 : 130,
+                                        child: Text(
+                                          ing.alumnoOCliente,
+                                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 10),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      IconButton(
-                                        icon: const Icon(Icons.print_rounded, size: 16),
-                                        color: gold.withValues(alpha: 0.6),
-                                        tooltip: 'Imprimir Recibo',
-                                        onPressed: () {
-                                          ref.read(finanzasProvider.notifier).imprimirRecibo(context, ing);
-                                        },
                                       ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          );
-                        }).toList(),
+                                    ),
+                                    DataCell(
+                                      ConstrainedBox(
+                                        constraints: BoxConstraints(maxWidth: isHalf ? 70 : 90),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                          decoration: BoxDecoration(color: gold.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
+                                          child: Text(ing.concepto.toUpperCase(), style: TextStyle(color: gold, fontSize: 7, fontWeight: FontWeight.w900), overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      SizedBox(
+                                        width: isHalf ? 60 : 75,
+                                        child: Text(
+                                          Evento.formatearTipo(ing.nombreEvento), 
+                                          style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 9),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      )
+                                    ),
+                                    DataCell(Text(fechaStr, style: const TextStyle(fontFamily: 'monospace', fontSize: 9))),
+                                    DataCell(Text('+${ing.monto.toCurrency()}', style: TextStyle(color: green, fontWeight: FontWeight.w900, fontFamily: 'monospace', fontSize: 11))),
+                                    DataCell(
+                                      Builder(builder: (_) {
+                                        final mp = ing.medioPago;
+                                        final mpLower = mp?.toLowerCase().trim();
+                                        if (mpLower == 'transferencia') {
+                                          return Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.swap_horiz_rounded, size: 11, color: const Color(0xFF6C63FF)),
+                                              const SizedBox(width: 3),
+                                              Text('Transferencia', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: const Color(0xFF6C63FF))),
+                                            ],
+                                          );
+                                        }
+                                        if (_ingresoCuentaComoEfectivoEnListado(ing, hoyAr)) {
+                                          final label = (mp == null || mp.isEmpty || mpLower == 'efectivo') ? 'Efectivo' : mp;
+                                          return Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.payments_outlined, size: 11, color: const Color(0xFF00B894)),
+                                              const SizedBox(width: 3),
+                                              Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF00B894))),
+                                            ],
+                                          );
+                                        }
+                                        if (mp == null || mp.isEmpty) {
+                                          return Text('—', style: TextStyle(color: isDark ? Colors.white24 : Colors.black26, fontSize: 10));
+                                        }
+                                        return Text(mp, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: isDark ? Colors.white60 : Colors.black54));
+                                      }),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (ing.eventoId != null)
+                                            IconButton(
+                                              style: actionButtonStyle,
+                                              icon: Icon(Icons.celebration_rounded, size: actionIconSize, color: gold),
+                                              tooltip: 'Ir al Evento',
+                                              onPressed: () => _navegarAEvento(ing),
+                                            ),
+                                          if (ing.prestamoId != null)
+                                            IconButton(
+                                              style: actionButtonStyle,
+                                              icon: Icon(Icons.inventory_2_outlined, size: actionIconSize, color: gold),
+                                              tooltip: 'Ver préstamo / PDF acta',
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => PrestamoAlquilerDetalleScreen(prestamoId: ing.prestamoId!),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          IconButton(
+                                            style: actionButtonStyle,
+                                            icon: Icon(
+                                              Icons.print_rounded,
+                                              size: actionIconSize,
+                                              color: ing.fuente == 'Alquiler' ? gold.withValues(alpha: 0.45) : gold,
+                                            ),
+                                            tooltip: ing.fuente == 'Alquiler' ? 'Recibo evento no aplica — usá PDF en préstamo' : 'Imprimir Recibo',
+                                            onPressed: () {
+                                              ref.read(finanzasProvider.notifier).imprimirRecibo(context, ing);
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                        ),
                       ),
                     ),
                   ),
@@ -1108,11 +5432,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     if (_searchContext == SearchContext.ingresos) return const SizedBox.shrink();
 
     final query = _masterSearchCtrl.text.toLowerCase().trim();
+    final localEg = _egresosListaSearchCtrl.text.toLowerCase().trim();
     final filteredEgresos = egresos.where((eg) {
-      if (query.isEmpty) return true;
-      final prov = (eg.proveedor ?? '').toLowerCase();
-      final cat = (eg.categoria ?? '').toLowerCase();
-      return prov.contains(query) || cat.contains(query);
+      return _egresoCoincideTexto(eg, query) && _egresoCoincideTexto(eg, localEg);
     }).toList();
 
     return Column(
@@ -1134,14 +5456,60 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           child: Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
-              initiallyExpanded: query.isNotEmpty, // Auto-expansión al buscar
+              initiallyExpanded: false,
               tilePadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               title: Text(
-                'MOSTRAR REGISTROS DE EGRESOS (${filteredEgresos.length})',
+                'REGISTROS DE EGRESOS (${filteredEgresos.length})',
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isDark ? Colors.white60 : Colors.black54, letterSpacing: 1.5),
               ),
               children: [
-                if (filteredEgresos.isEmpty && query.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: TextField(
+                    controller: _egresosListaSearchCtrl,
+                    onChanged: (_) => setState(() {}),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar en esta lista: proveedor, categoría, medio de pago…',
+                      hintStyle: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white24 : Colors.black38,
+                      ),
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search_rounded, size: 22, color: gold.withValues(alpha: 0.75)),
+                      suffixIcon: _egresosListaSearchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _egresosListaSearchCtrl.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: gold.withValues(alpha: 0.25)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: gold.withValues(alpha: 0.2)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: gold.withValues(alpha: 0.55)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                ),
+                if (filteredEgresos.isEmpty && (query.isNotEmpty || localEg.isNotEmpty))
                   Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(
@@ -1157,9 +5525,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
-                        headingRowHeight: 45,
-                        dataRowMinHeight: 48,
-                        dataRowMaxHeight: 60,
+                        headingRowHeight: 46,
+                        dataRowMinHeight: 52,
+                        dataRowMaxHeight: 68,
                         headingRowColor: WidgetStateProperty.all(isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.015)),
                         headingTextStyle: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: gold.withValues(alpha: 0.7), letterSpacing: 1),
                         dataTextStyle: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87),
@@ -1172,7 +5540,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                           DataColumn(label: Text('FECHA')),
                           DataColumn(label: Text('MONTO')),
                         ],
-                        rows: filteredEgresos.take(50).map((eg) {
+                        rows: filteredEgresos.map((eg) {
                           final fechaStr = eg.fecha != null ? '${eg.fecha!.day.toString().padLeft(2, '0')}/${eg.fecha!.month.toString().padLeft(2, '0')}' : '--';
                           final cat = (eg.categoria ?? 'Otro').toUpperCase();
                           return DataRow(
@@ -1837,7 +6205,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                                   await SharePlus.instance.share(
                                     ShareParams(
                                       text: 'Acceso recepción (check-in):\n$opUrl\nPIN: ${_operadoresPinCtrl.text.trim()}\n\nAbrí el link, ingresá el PIN y marcá ingresos.',
-                                      subject: 'Acceso Recepción - Arguello Events',
+                                      subject: 'Acceso Recepción - Junior Eventos',
                                     ),
                                   );
                                 },
@@ -1857,40 +6225,278 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
+  /// Referencia semanal cobrada vs cupo «caja fuerte» solo uso declarativo dueño (SQLite local).
+  Widget _buildCajaFuertePersonalSection(bool isDark, Color gold) {
+    const cof = Color(0xFF5D4037);
+    const amberAccent = Color(0xFFFFB74D);
+    final async = ref.watch(cajaFuerteProvider);
+
+    return async.when(
+      loading: () => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: const LinearProgressIndicator(minHeight: 4),
+        ),
+      ),
+      error: (e, _) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text('No se pudo cargar Caja fuerte: $e', style: const TextStyle(fontSize: 12)),
+      ),
+      data: (res) {
+        final saldo = res.saldo;
+        final sinSaldo = saldo <= 1e-6;
+        final umbralBajo = !sinSaldo &&
+            res.ultimaAsignacionMonto > 100 &&
+            saldo <= res.ultimaAsignacionMonto * 0.15;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: amberAccent.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.savings_outlined, color: amberAccent, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CAJA FUERTE',
+                        style: GoogleFonts.oswald(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                          color: isDark ? Colors.white : cof,
+                        ),
+                      ),
+                      Text(
+                        'Cupo personal del dueño (no descontamos caja empresa automáticamente)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.25,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (sinSaldo)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+                ),
+                child: const Text(
+                  'Sin saldo en Caja fuerte. Asigná un monto para poder registrar retiros.',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.redAccent),
+                ),
+              )
+            else if (umbralBajo)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                ),
+                child: const Text(
+                  'Saldo bajo: te queda poco respecto de tu última asignación.',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.deepOrange),
+                ),
+              ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    cof.withValues(alpha: isDark ? 0.95 : 1),
+                    cof.withValues(alpha: 0.75),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: gold.withValues(alpha: 0.35)),
+                boxShadow: [
+                  BoxShadow(
+                    color: cof.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Saldo disponible',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    saldo.toCurrency(),
+                    style: TextStyle(color: sinSaldo ? Colors.white54 : Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Cobros registrados esta semana (lun–dom)',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 10, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    res.ingresosRegistradosSemana.toCurrency(),
+                    style: const TextStyle(color: amberAccent, fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Retiros Caja fuerte esta semana: ${res.retirosSemana.toCurrency()}',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => const CajaFuerteAsignarDialog(),
+                          );
+                          if (mounted && ok == true) {
+                            await ref.read(cajaFuerteProvider.notifier).refresh();
+                          }
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: gold,
+                          foregroundColor: Colors.black,
+                        ),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Asignar', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: sinSaldo
+                            ? null
+                            : () async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => CajaFuerteRetiroDialog(saldoActual: saldo),
+                                );
+                                if (mounted && ok == true) {
+                                  await ref.read(cajaFuerteProvider.notifier).refresh();
+                                }
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
+                        ),
+                        icon: const Icon(Icons.remove_rounded, size: 18),
+                        label: const Text('Retiro', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (res.movimientos.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Últimos movimientos',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: isDark ? Colors.white38 : Colors.black45),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
+                ),
+                child: Column(
+                  children: res.movimientos.take(5).map((m) {
+                    final d = m.createdAt.toLocal();
+                    final fechaTxt = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+                    final sign = m.esAsignacion ? '+' : '−';
+                    final col = m.esAsignacion ? const Color(0xFF00B894) : Colors.redAccent;
+                    return ListTile(
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: Icon(
+                        m.esAsignacion ? Icons.arrow_circle_down_rounded : Icons.arrow_circle_up_rounded,
+                        color: col,
+                        size: 20,
+                      ),
+                      title: Text(
+                        '${m.esAsignacion ? 'Asignación' : 'Retiro'} $sign${m.monto.toCurrency()}',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                      ),
+                      subtitle: Text(
+                        fechaTxt + (m.nota != null && m.nota!.isNotEmpty ? ' · ${m.nota}' : ''),
+                        style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _placeholderSinPagosPersonal(Color blue) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: blue.withValues(alpha: 0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.engineering_outlined, color: blue, size: 40),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'SIN PAGOS A PERSONAL REGISTRADOS',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1, color: Colors.grey),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Podés cargar pagos a operadores con «Pagar operador» cuando corresponda.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: Colors.grey),
+        ),
+      ],
+    );
+  }
+
   // ── Tab PERSONAL ───────────────────────────────────────────────────────────
   Widget _buildPersonalTab(bool isDark, Color gold, FinanzasState state) {
     const blue = Colors.blueAccent;
     const red = Color(0xFFE74C3C);
 
     final personal = state.egresos.where((e) => e.categoria == 'Personal').toList();
-
-    if (personal.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: blue.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.engineering_outlined, color: blue, size: 40),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'SIN PAGOS A PERSONAL REGISTRADOS',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Usá el botón para registrar el pago a un operador.',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
 
     // Agrupar por proveedor (operador)
     final grouped = <String, List<Egreso>>{};
@@ -1905,7 +6511,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         return totalB.compareTo(totalA);
       });
 
-    final totalPersonal = personal.fold(0.0, (s, e) => s + e.monto);
+    final totalPersonal =
+        personal.isEmpty ? 0.0 : personal.fold(0.0, (s, e) => s + e.monto);
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -1916,6 +6523,11 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildCajaFuertePersonalSection(isDark, gold),
+              const SizedBox(height: 28),
+              if (personal.isEmpty)
+                Center(child: _placeholderSinPagosPersonal(blue))
+              else ...[
               // ── Banner total personal ──────────────────────────────────────
               Container(
                 width: double.infinity,
@@ -2081,15 +6693,72 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                                       DataCell(
                                         Align(
                                           alignment: Alignment.centerRight,
-                                          child: IconButton(
-                                            icon: Icon(Icons.edit_outlined, size: 14, color: isDark ? Colors.white38 : Colors.black38),
-                                            tooltip: 'Editar pago',
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
-                                            onPressed: () async {
-                                              final result = await showDialog<bool>(context: context, builder: (_) => EditarPagoOperadorDialog(egreso: pg));
-                                              if (mounted && result == true) _fetchOperadores();
-                                            },
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: Icon(Icons.edit_outlined, size: 14, color: isDark ? Colors.white38 : Colors.black38),
+                                                tooltip: 'Editar pago',
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                onPressed: () async {
+                                                  final result = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (_) => EditarPagoOperadorDialog(egreso: pg),
+                                                  );
+                                                  if (mounted && result == true) {
+                                                    _fetchOperadores();
+                                                    ref.read(finanzasProvider.notifier).recargar();
+                                                  }
+                                                },
+                                              ),
+                                              IconButton(
+                                                icon: Icon(Icons.delete_outline_rounded, size: 14, color: red.withValues(alpha: 0.85)),
+                                                tooltip: 'Eliminar pago',
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                onPressed: () async {
+                                                  final ok = await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (ctx) => AlertDialog(
+                                                      title: const Text('¿Eliminar este pago?'),
+                                                      content: Text(
+                                                        'Se borrará el pago a ${pg.proveedor ?? '—'} por ${pg.monto.toCurrency()} (local y nube).',
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.pop(ctx, false),
+                                                          child: const Text('Cancelar'),
+                                                        ),
+                                                        FilledButton(
+                                                          style: FilledButton.styleFrom(backgroundColor: red, foregroundColor: Colors.white),
+                                                          onPressed: () => Navigator.pop(ctx, true),
+                                                          child: const Text('Eliminar'),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                  if (ok != true || !mounted) return;
+                                                  try {
+                                                    await ref.read(egresosRepositoryProvider).eliminarEgreso(pg.id);
+                                                    ref.read(egresosProvider.notifier).refresh();
+                                                    ref.read(finanzasProvider.notifier).recargar();
+                                                    _fetchOperadores();
+                                                    if (mounted) {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(content: Text('Pago eliminado'), backgroundColor: Color(0xFF00B894)),
+                                                      );
+                                                    }
+                                                  } catch (e) {
+                                                    if (mounted) {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        SnackBar(content: Text('No se pudo eliminar: $e')),
+                                                      );
+                                                    }
+                                                  }
+                                                },
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
@@ -2106,10 +6775,80 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   ),
                 );
               }),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // ── RENTABILIDAD PROMEDIO HUD ──────────────────────────────────────────────
+  Widget _buildRentabilidadPromedioHUD(bool isDark) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final repo = ref.watch(rentabilidadRepositoryProvider);
+        return FutureBuilder<List<CalculoRentabilidad>>(
+          future: repo.getHistorial(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+
+            final ahora = DateTime.now();
+            final limite = ahora.subtract(const Duration(days: 30));
+            final recientes = snapshot.data!.where((c) => c.createdAt.isAfter(limite)).toList();
+            
+            if (recientes.isEmpty) return const SizedBox.shrink();
+            
+            double sumRentabilidad = 0;
+            int countValid = 0;
+            for(final c in recientes) {
+               if (c.resultado != null) {
+                  sumRentabilidad += c.resultado!;
+                  countValid++;
+               }
+            }
+            if (countValid == 0) return const SizedBox.shrink();
+            
+            final prom = sumRentabilidad / countValid;
+            
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.03) : Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF00B894).withValues(alpha: 0.3), width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Row(
+                    children: [
+                      const Icon(Icons.insights_rounded, color: Color(0xFF00B894), size: 18),
+                      const SizedBox(width: 8),
+                      Text('RENTABILIDAD PROMEDIO (30 DÍAS)', style: GoogleFonts.oswald(fontSize: 12, letterSpacing: 2, color: const Color(0xFF00B894))),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    prom.toCurrency(),
+                    style: GoogleFonts.oswald(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: prom >= 0 ? const Color(0xFF00B894) : const Color(0xFFE74C3C),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Promedio de ganancia neta empresa en $countValid simulaciones guardadas.',
+                    style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -2133,9 +6872,113 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 }
 
-class _MesData {
-  final DateTime mes;
-  final double ingresos;
-  final double egresos;
-  const _MesData({required this.mes, required this.ingresos, required this.egresos});
+class _TimelineDiaStrip extends StatefulWidget {
+  const _TimelineDiaStrip({
+    required this.isDark,
+    required this.gold,
+    required this.state,
+    this.onIngresoDotTap,
+    this.onEgresoDotTap,
+  });
+
+  final bool isDark;
+  final Color gold;
+  final FinanzasState state;
+  final VoidCallback? onIngresoDotTap;
+  final VoidCallback? onEgresoDotTap;
+
+  @override
+  State<_TimelineDiaStrip> createState() => _TimelineDiaStripState();
+}
+
+class _TimelineDiaStripState extends State<_TimelineDiaStrip> {
+  String? _activeTip;
+
+  void _pickTip(Offset local, _TimelineDiaLayout layout) {
+    // Solo se evalúa la franja del gráfico (80px); así el cursor puede bajar al texto sin perder el tip.
+    if (local.dy < 0 || local.dy > 80) return;
+    for (final d in layout.dots) {
+      if ((local - d.center).distance <= d.hitR) {
+        if (_activeTip != d.tooltip) {
+          setState(() => _activeTip = d.tooltip);
+        }
+        return;
+      }
+    }
+    if (_activeTip != null) {
+      setState(() => _activeTip = null);
+    }
+  }
+
+  void _onTapDownChart(TapDownDetails details, _TimelineDiaLayout layout) {
+    final p = details.localPosition;
+    if (p.dy >= 0 && p.dy <= 80) {
+      for (final d in layout.dots) {
+        if ((p - d.center).distance <= d.hitR) {
+          if (d.esIngreso) {
+            widget.onIngresoDotTap?.call();
+          } else {
+            widget.onEgresoDotTap?.call();
+          }
+          return;
+        }
+      }
+    }
+    _pickTip(p, layout);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = _layoutTimelineDia(widget.state, Size(constraints.maxWidth, 80));
+        return MouseRegion(
+          onExit: (_) {
+            if (_activeTip != null) setState(() => _activeTip = null);
+          },
+          onHover: (event) => _pickTip(event.localPosition, layout),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Tooltip(
+                excludeFromSemantics: _tooltipExcludeSemanticsWin(),
+                message: 'Tocá un punto: verde = cobros, rojo = gastos',
+                child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapDown: (d) => _onTapDownChart(d, layout),
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerHover: (e) => _pickTip(e.localPosition, layout),
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    height: 80,
+                    child: CustomPaint(
+                      painter: _TimelineDiaPainter(
+                        layout: layout,
+                        isDark: widget.isDark,
+                        gold: widget.gold,
+                      ),
+                    ),
+                  ),
+                ),
+                ),
+              ),
+              if (_activeTip != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _activeTip!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
