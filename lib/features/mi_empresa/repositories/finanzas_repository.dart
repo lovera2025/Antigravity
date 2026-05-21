@@ -503,6 +503,35 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     );
   }
 
+  /// Actualiza solo [fecha_pago] en SQLite y encola sync.
+  Future<void> actualizarFechaPagoRegistro({
+    required String tabla,
+    required String id,
+    required DateTime nuevaFecha,
+  }) async {
+    if (!_tablasMedioPagoCorregible.contains(tabla)) {
+      throw ArgumentError('Tabla no permitida: $tabla');
+    }
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(tabla, where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) {
+      throw StateError('No existe el registro en la base local');
+    }
+    if (((rows.first['anulado'] as num?)?.toInt() ?? 0) != 0) {
+      throw StateError('El cobro está anulado; no se puede cambiar la fecha.');
+    }
+    
+    final isoDate = nuevaFecha.toUtc().toIso8601String();
+    
+    await db.update(tabla, {'fecha_pago': isoDate}, where: 'id = ?', whereArgs: [id]);
+    await SyncQueue.enqueue(
+      tabla: tabla,
+      operacion: SyncOperation.update,
+      registroId: id,
+      payload: {'id': id, 'fecha_pago': isoDate},
+    );
+  }
+
   /// Marca el cobro como anulado (no borra la fila). Excluye el monto de saldos y reportes.
   /// Devuelve el `contrato_alumno_id` si [tabla] es masivos, para llamar a [ContratosRepository.recalcularProgresoContrato].
   Future<String?> anularPagoConMotivo({

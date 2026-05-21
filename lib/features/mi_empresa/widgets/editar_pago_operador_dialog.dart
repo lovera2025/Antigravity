@@ -128,7 +128,7 @@ class _EditarPagoOperadorDialogState
     if (!_formKey.currentState!.validate()) return;
     if (_eventoIdSeleccionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccioná evento u OPEX')),
+        const SnackBar(content: Text('Seleccioná evento o Gasto empresa')),
       );
       return;
     }
@@ -270,7 +270,7 @@ class _EditarPagoOperadorDialogState
                   const DropdownMenuItem<String>(
                     value: 'OPEX',
                     child: Text(
-                      '🏢 Gasto operativo / OPEX (sin evento)',
+                      '🏢 Gasto empresa (sin evento puntual)',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _gold),
                     ),
                   ),
@@ -286,7 +286,7 @@ class _EditarPagoOperadorDialogState
                   }),
                 ],
                 onChanged: (val) => setState(() => _eventoIdSeleccionado = val),
-                validator: (v) => v == null ? 'Seleccioná evento u OPEX' : null,
+                validator: (v) => v == null ? 'Seleccioná evento o Gasto empresa' : null,
               ),
               const SizedBox(height: 16),
               _buildLabel('OPERADOR / PERSONAL', Icons.badge_outlined),

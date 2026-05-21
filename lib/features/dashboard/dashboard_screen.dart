@@ -40,7 +40,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late String _greeting;
-  String _appVersionLabel = '2.2.0';
+  String _appVersionLabel = '2.5.5';
   String _appBuildNumber = '';
   late SupabaseClient _supabase;
   RealtimeChannel? _solicitudesChannel;
@@ -244,6 +244,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Consumer(builder: (context, ref, _) {
                             final statsAsync = ref.watch(dashboardStatsProvider);
                             return statsAsync.when(
+                              skipLoadingOnReload: true,
                               data: (stats) => _buildKpiRow(stats, isDark, primaryGold),
                               loading: () => const SizedBox(
                                 height: 90,
@@ -258,6 +259,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Consumer(builder: (context, ref, _) {
                             final statsAsync = ref.watch(dashboardStatsProvider);
                             return statsAsync.when(
+                              skipLoadingOnReload: true,
                               data: (stats) => _buildProximosEventos(stats, isDark, primaryGold),
                               loading: () => const SizedBox.shrink(),
                               error: (e, _) => const SizedBox.shrink(),
@@ -268,6 +270,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           Consumer(builder: (context, ref, _) {
                             final statsAsync = ref.watch(dashboardStatsProvider);
                             return statsAsync.when(
+                              skipLoadingOnReload: true,
                               data: (stats) {
                                 final operationalAlerts = stats.alertas.where((a) => !a.isFinanciera).toList();
                                 return operationalAlerts.isNotEmpty
@@ -947,11 +950,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget _buildSyncIndicator(Color gold) {
     final connectivity = ref.watch(connectivityStatusProvider);
     final syncAsync = ref.watch(syncPendingCountProvider);
+    final statusAsync = ref.watch(syncStatusProvider);
+    
     final pendingCount = syncAsync.when(
       data: (count) => count,
       loading: () => 0,
       error: (_, _) => 0,
     );
+    
+    final syncStatus = statusAsync.when(
+      data: (s) => s,
+      loading: () => SyncStatus.idle,
+      error: (_, _) => SyncStatus.idle,
+    );
+    
+    final isSyncing = syncStatus == SyncStatus.syncing || syncStatus == SyncStatus.wakingUp;
 
     IconData icon;
     Color color;
@@ -962,17 +975,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         icon = Icons.cloud_done_outlined;
         color = Colors.greenAccent;
         tooltip = 'Conectado a la nube';
+        break;
       case AppConnectivity.cloudUnavailable:
         icon = Icons.cloud_off_outlined;
         color = Colors.orangeAccent;
         tooltip = 'Nube no disponible';
+        break;
       case AppConnectivity.offline:
         icon = Icons.wifi_off_rounded;
         color = Colors.redAccent;
         tooltip = 'Sin conexión — Modo offline';
+        break;
     }
 
-    if (pendingCount > 0) {
+    if (isSyncing) {
+      tooltip = 'Sincronizando con la nube...';
+      color = Colors.blueAccent;
+    } else if (pendingCount > 0) {
       tooltip += ' ($pendingCount cambios pendientes)';
     }
 
@@ -980,6 +999,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       padding: const EdgeInsets.only(right: 4),
       child: GestureDetector(
         onTap: () async {
+          if (isSyncing) return; // Evitar multiples clicks
           final engine = ref.read(syncEngineProvider);
           await engine.syncNow();
           
@@ -1011,8 +1031,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(icon, color: color, size: 20),
-              if (pendingCount > 0)
+              _AnimatedSyncCloud(icon: icon, color: color, isSyncing: isSyncing),
+              if (pendingCount > 0 && !isSyncing)
                 Positioned(
                   top: -4,
                   right: -6,
@@ -1039,6 +1059,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
     );
   }
+
 
   // ── Shared helpers ─────────────────────────────────────────────────────────
   Widget _buildSectionLabel(String label, IconData icon) {
@@ -1276,6 +1297,63 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             appVersionDisplay:
                 '${_versionMarketingLabel(_appVersionLabel)}${_appBuildNumber.isNotEmpty ? ' · compilación $_appBuildNumber' : ''}',
           ),
+    );
+  }
+}
+
+class _AnimatedSyncCloud extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final bool isSyncing;
+
+  const _AnimatedSyncCloud({required this.icon, required this.color, required this.isSyncing});
+
+  @override
+  State<_AnimatedSyncCloud> createState() => _AnimatedSyncCloudState();
+}
+
+class _AnimatedSyncCloudState extends State<_AnimatedSyncCloud> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    if (widget.isSyncing) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedSyncCloud oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isSyncing && !oldWidget.isSyncing) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.isSyncing && oldWidget.isSyncing) {
+      _controller.stop();
+      _controller.value = 0.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: widget.isSyncing ? 1.0 + (_controller.value * 0.15) : 1.0,
+          child: Opacity(
+            opacity: widget.isSyncing ? 0.6 + (_controller.value * 0.4) : 1.0,
+            child: Icon(widget.isSyncing ? Icons.cloud_sync_rounded : widget.icon, color: widget.color, size: 20),
+          ),
+        );
+      },
     );
   }
 }

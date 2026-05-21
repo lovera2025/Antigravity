@@ -5,6 +5,12 @@ import '../../../core/utils/ar_time.dart';
 /// compartan la constante sin acoplarse entre sí.
 const String kCategoriaRetiroCaja = 'Retiro de caja';
 
+/// Egreso sin evento: plata del negocio que el dueño retira a su bolsillo personal (Resumen de caja).
+const String kCategoriaRetiroDueno = 'Retiro dueño';
+
+/// Egreso sin evento: gasto pagado desde el bolsillo personal (no resta otra vez del saldo empresa).
+const String kCategoriaGastoPersonal = 'Gasto personal';
+
 /// Turnos de cierre de caja. El corte mañana/tarde se decide por hora AR
 /// (default 14:00) y `dia` engloba ambos (00:00 a 23:59 AR).
 enum TurnoCaja {
@@ -50,18 +56,25 @@ extension TurnoCajaX on TurnoCaja {
 }
 
 /// Rango horario [inicio, fin) en reloj AR para un día calendario AR dado.
+///
+/// [inicioAr] y [finAr] usan la misma convención que [ArTime.toAr]: componentes
+/// de reloj de pared AR en un [DateTime] marcado UTC (no instante real).
 class RangoHorarioAr {
   final DateTime inicioAr;
   final DateTime finAr;
 
   const RangoHorarioAr({required this.inicioAr, required this.finAr});
 
-  /// `dt` (UTC o AR) cae dentro del rango (comparado en huso AR).
+  /// `dt` (UTC o local) cae dentro del rango (comparado en huso AR).
   bool contiene(DateTime dt) {
     final ar = ArTime.toAr(dt);
     return !ar.isBefore(inicioAr) && ar.isBefore(finAr);
   }
 }
+
+/// Instante “pared AR” para comparar con [ArTime.toAr] sin mezclar TZ del SO.
+DateTime _arWall(int year, int month, int day, [int hour = 0, int minute = 0]) =>
+    DateTime.utc(year, month, day, hour, minute);
 
 /// Calcula el rango horario AR de un turno para un día calendario AR puntual.
 ///
@@ -71,10 +84,12 @@ RangoHorarioAr rangoHorarioAr(
   TurnoCaja turno, {
   int corteHora = 14,
 }) {
-  final base = DateTime(diaCalendarioAr.year, diaCalendarioAr.month, diaCalendarioAr.day);
-  final inicio0 = base;
-  final corte = base.add(Duration(hours: corteHora));
-  final fin = base.add(const Duration(days: 1));
+  final y = diaCalendarioAr.year;
+  final m = diaCalendarioAr.month;
+  final d = diaCalendarioAr.day;
+  final inicio0 = _arWall(y, m, d);
+  final corte = _arWall(y, m, d, corteHora);
+  final fin = inicio0.add(const Duration(days: 1));
   switch (turno) {
     case TurnoCaja.manana:
       return RangoHorarioAr(inicioAr: inicio0, finAr: corte);

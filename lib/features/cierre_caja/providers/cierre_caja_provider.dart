@@ -24,16 +24,27 @@ class CierreCajaState {
   final List<Egreso> retirosTurno;
 
   /// Egresos del mismo turno que **no** son retiros de caja (p. ej. Personal, Proveedores).
-  /// Mismas filas que en Finanzas; solo se listan acá para historial del turno sin duplicar montos.
   final List<Egreso> otrosEgresosTurno;
 
   final double efectivoBruto;
   final double transferenciaBruta;
+
+  /// Suma de TODOS los egresos del turno en efectivo (retiros + otros).
+  final double egresosEfectivo;
+  /// Suma de TODOS los egresos del turno en transferencia (retiros + otros).
+  final double egresosTransferencia;
+
+  /// Solo egresos categoría [kCategoriaRetiroCaja] por medio (para PDF/detalle).
   final double retirosEfectivo;
   final double retirosTransferencia;
+
+  /// Neto real = ingresos − TODOS los egresos del turno por medio.
   final double efectivoNeto;
   final double transferenciaNeta;
   final double totalNeto;
+
+  /// Fondo de cambio **solo guía** (SharedPreferences por día). No participa en ingresos/egresos.
+  final double fondoCambioGuia;
 
   final bool cargando;
   final Object? error;
@@ -48,11 +59,14 @@ class CierreCajaState {
     this.otrosEgresosTurno = const [],
     this.efectivoBruto = 0,
     this.transferenciaBruta = 0,
+    this.egresosEfectivo = 0,
+    this.egresosTransferencia = 0,
     this.retirosEfectivo = 0,
     this.retirosTransferencia = 0,
     this.efectivoNeto = 0,
     this.transferenciaNeta = 0,
     this.totalNeto = 0,
+    this.fondoCambioGuia = 0,
     this.cargando = false,
     this.error,
   });
@@ -67,11 +81,14 @@ class CierreCajaState {
     List<Egreso>? otrosEgresosTurno,
     double? efectivoBruto,
     double? transferenciaBruta,
+    double? egresosEfectivo,
+    double? egresosTransferencia,
     double? retirosEfectivo,
     double? retirosTransferencia,
     double? efectivoNeto,
     double? transferenciaNeta,
     double? totalNeto,
+    double? fondoCambioGuia,
     bool? cargando,
     Object? error,
     bool clearError = false,
@@ -86,11 +103,14 @@ class CierreCajaState {
       otrosEgresosTurno: otrosEgresosTurno ?? this.otrosEgresosTurno,
       efectivoBruto: efectivoBruto ?? this.efectivoBruto,
       transferenciaBruta: transferenciaBruta ?? this.transferenciaBruta,
+      egresosEfectivo: egresosEfectivo ?? this.egresosEfectivo,
+      egresosTransferencia: egresosTransferencia ?? this.egresosTransferencia,
       retirosEfectivo: retirosEfectivo ?? this.retirosEfectivo,
       retirosTransferencia: retirosTransferencia ?? this.retirosTransferencia,
       efectivoNeto: efectivoNeto ?? this.efectivoNeto,
       transferenciaNeta: transferenciaNeta ?? this.transferenciaNeta,
       totalNeto: totalNeto ?? this.totalNeto,
+      fondoCambioGuia: fondoCambioGuia ?? this.fondoCambioGuia,
       cargando: cargando ?? this.cargando,
       error: clearError ? null : (error ?? this.error),
     );
@@ -103,6 +123,49 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
   static const _kPrefsDiaKey = 'cierre_caja_vista_dia_ar';
   static const _kPrefsTurnoKey = 'cierre_caja_vista_turno_slug';
+
+  /// Guía de cambio persistida **solo por día calendario** (al pasar de jornada = día nuevo → empieza en 0).
+  static String _prefsKeyGuiaCambio(DateTime dia) {
+    final n = DateTime(dia.year, dia.month, dia.day);
+    return 'cierre_caja_guia_cambio_v1_${n.year.toString().padLeft(4, '0')}-'
+        '${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<double> _loadGuiaCambioSaldo(DateTime dia) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      return p.getDouble(_prefsKeyGuiaCambio(dia)) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _persistGuiaCambio(DateTime dia, double valor) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final v = valor < 0 ? 0.0 : valor;
+      await p.setDouble(_prefsKeyGuiaCambio(dia), v);
+    } catch (_) {}
+  }
+
+  /// Saldo absoluto del fondo de cambio (guía). No toca movimientos contables.
+  Future<void> setFondoCambioGuia(double valor) async {
+    final v = valor < 0 ? 0.0 : valor;
+    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
+    await _persistGuiaCambio(dia, v);
+    state = state.copyWith(fondoCambioGuia: v);
+  }
+
+  /// Resta del fondo de cambio (guía). El saldo no baja de cero.
+  Future<void> registrarUsoCambioGuia(double monto) async {
+    if (monto <= 0) {
+      throw ArgumentError('El monto debe ser mayor a cero.');
+    }
+    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
+    final nuevo = (state.fondoCambioGuia - monto).clamp(0.0, double.infinity);
+    await _persistGuiaCambio(dia, nuevo);
+    state = state.copyWith(fondoCambioGuia: nuevo);
+  }
 
   static DateTime _diaArHoy() {
     final ar = ArTime.nowAr();
@@ -325,6 +388,8 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
       final egresosTurno = <Egreso>[];
       final retirosTurno = <Egreso>[];
+      double egresosEfectivo = 0;
+      double egresosTransferencia = 0;
       double retirosEfectivo = 0;
       double retirosTransferencia = 0;
       for (final e in egresosFull) {
@@ -332,9 +397,16 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         if (!ArTime.mismoDia(e.fecha!, state.dia)) continue;
         if (!rango.contiene(e.fecha!)) continue;
         egresosTurno.add(e);
+        final mp = (e.medioPago ?? '').toLowerCase().trim();
+        // Todos los egresos del turno restan del bucket por medio de pago.
+        if (mp == 'transferencia') {
+          egresosTransferencia += e.monto;
+        } else {
+          egresosEfectivo += e.monto;
+        }
+        // Retiros formales (para PDF y detalle).
         if ((e.categoria ?? '').trim() == kCategoriaRetiroCaja) {
           retirosTurno.add(e);
-          final mp = (e.medioPago ?? '').toLowerCase().trim();
           if (mp == 'transferencia') {
             retirosTransferencia += e.monto;
           } else {
@@ -363,9 +435,13 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
           .where((e) => (e.categoria ?? '').trim() != kCategoriaRetiroCaja)
           .toList();
 
-      final efectivoNeto = efectivoBruto - retirosEfectivo;
-      final transferenciaNeta = transferenciaBruta - retirosTransferencia;
+      // Neto real: ingresos − TODOS los egresos del turno por medio.
+      final efectivoNeto = efectivoBruto - egresosEfectivo;
+      final transferenciaNeta = transferenciaBruta - egresosTransferencia;
       final totalNeto = efectivoNeto + transferenciaNeta;
+
+      final diaNorm = DateTime(state.dia.year, state.dia.month, state.dia.day);
+      final fondoGuia = await _loadGuiaCambioSaldo(diaNorm);
 
       state = state.copyWith(
         ingresosTurno: ingresosTurno,
@@ -374,11 +450,14 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         otrosEgresosTurno: otrosEgresosTurno,
         efectivoBruto: efectivoBruto,
         transferenciaBruta: transferenciaBruta,
+        egresosEfectivo: egresosEfectivo,
+        egresosTransferencia: egresosTransferencia,
         retirosEfectivo: retirosEfectivo,
         retirosTransferencia: retirosTransferencia,
         efectivoNeto: efectivoNeto,
         transferenciaNeta: transferenciaNeta,
         totalNeto: totalNeto,
+        fondoCambioGuia: fondoGuia,
         cargando: false,
         clearError: true,
       );

@@ -15,6 +15,7 @@ import '../mi_empresa/models/ingreso_detallado.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
+import 'widgets/guia_cambio_section.dart';
 import 'widgets/registrar_retiro_dialog.dart';
 
 class CierreCajaScreen extends ConsumerStatefulWidget {
@@ -108,8 +109,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         otrosEgresosTurno: state.otrosEgresosTurno,
         efectivoBruto: state.efectivoBruto,
         transferenciaBruta: state.transferenciaBruta,
-        retirosEfectivo: state.retirosEfectivo,
-        retirosTransferencia: state.retirosTransferencia,
+        // Pasar egresos totales para que el neto del PDF coincida con la pantalla.
+        retirosEfectivo: state.egresosEfectivo,
+        retirosTransferencia: state.egresosTransferencia,
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -140,8 +142,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       if (isEfectivo) return mp != 'transferencia';
       return mp == 'transferencia';
     }).toList();
-    final retiros = state.retirosTurno.where((r) {
-      final mp = (r.medioPago ?? '').toLowerCase().trim();
+    // Todos los egresos del turno para ese medio (retiros + otros).
+    final egresos = state.egresosTurno.where((e) {
+      final mp = (e.medioPago ?? '').toLowerCase().trim();
       if (isEfectivo) return mp != 'transferencia';
       return mp == 'transferencia';
     }).toList();
@@ -163,7 +166,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
           icon: icon,
           titulo: titulo,
           ingresos: ingresos,
-          retiros: retiros,
+          egresos: egresos,
           scrollController: controller,
           onEliminarRetiro: (r) async {
             Navigator.of(context).pop();
@@ -238,6 +241,8 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       _selectorDia(context, state, isDark, muted),
                       const SizedBox(height: 14),
                       _accionesCierre(state, isDark),
+                      const SizedBox(height: 14),
+                      const GuiaCambioSection(),
                       if (state.error != null) ...[
                         const SizedBox(height: 8),
                         Text(
@@ -411,6 +416,12 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   }
 
   Widget _bucketsRow(BuildContext context, CierreCajaState state, bool isDark) {
+    final cantEgEfectivo = state.egresosTurno
+        .where((e) => (e.medioPago ?? '').toLowerCase().trim() != 'transferencia')
+        .length;
+    final cantEgTransf = state.egresosTurno
+        .where((e) => (e.medioPago ?? '').toLowerCase().trim() == 'transferencia')
+        .length;
     return IntrinsicHeight(
       child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -423,11 +434,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             accent: _efectivoColor,
             icon: Icons.payments_outlined,
             ingresoBruto: state.efectivoBruto,
-            retiroBruto: state.retirosEfectivo,
+            egresosBruto: state.egresosEfectivo,
             neto: state.efectivoNeto,
-            cantRetiros: state.retirosTurno
-                .where((r) => (r.medioPago ?? '').toLowerCase().trim() != 'transferencia')
-                .length,
+            cantEgresos: cantEgEfectivo,
             onTap: () => _abrirDetalleBucket(context, state, 'efectivo'),
           ),
         ),
@@ -440,11 +449,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             accent: _transferColor,
             icon: Icons.swap_horiz_rounded,
             ingresoBruto: state.transferenciaBruta,
-            retiroBruto: state.retirosTransferencia,
+            egresosBruto: state.egresosTransferencia,
             neto: state.transferenciaNeta,
-            cantRetiros: state.retirosTurno
-                .where((r) => (r.medioPago ?? '').toLowerCase().trim() == 'transferencia')
-                .length,
+            cantEgresos: cantEgTransf,
             onTap: () => _abrirDetalleBucket(context, state, 'transferencia'),
           ),
         ),
@@ -460,9 +467,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     required Color accent,
     required IconData icon,
     required double ingresoBruto,
-    required double retiroBruto,
+    required double egresosBruto,
     required double neto,
-    required int cantRetiros,
+    required int cantEgresos,
     required VoidCallback onTap,
   }) {
     return Material(
@@ -536,10 +543,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.55),
                     ),
                   ),
-                  if (retiroBruto > 0)
+                  if (egresosBruto > 0)
                     Text(
-                      'Retiros: −${retiroBruto.toCurrency()}'
-                          '${cantRetiros > 1 ? '  ($cantRetiros retiros)' : ''}',
+                      'Egresos: −${egresosBruto.toCurrency()}'
+                          '${cantEgresos > 1 ? '  ($cantEgresos egresos)' : ''}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -548,7 +555,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                     )
                   else
                     Text(
-                      'Sin retiros',
+                      'Sin egresos',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -920,7 +927,9 @@ class _DetalleBucketSheet extends StatelessWidget {
   final IconData icon;
   final String titulo;
   final List<IngresoDetallado> ingresos;
-  final List<Egreso> retiros;
+  /// Todos los egresos del bucket (retiros formales + otros). Solo los de
+  /// categoría [kCategoriaRetiroCaja] muestran el botón de eliminar.
+  final List<Egreso> egresos;
   final ScrollController scrollController;
   final Future<void> Function(Egreso r)? onEliminarRetiro;
 
@@ -929,7 +938,7 @@ class _DetalleBucketSheet extends StatelessWidget {
     required this.icon,
     required this.titulo,
     required this.ingresos,
-    required this.retiros,
+    required this.egresos,
     required this.scrollController,
     this.onEliminarRetiro,
   });
@@ -939,8 +948,8 @@ class _DetalleBucketSheet extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = isDark ? Colors.white60 : Colors.black54;
     final totalIng = ingresos.fold<double>(0, (s, i) => s + i.monto);
-    final totalRet = retiros.fold<double>(0, (s, r) => s + r.monto);
-    final neto = totalIng - totalRet;
+    final totalEg = egresos.fold<double>(0, (s, e) => s + e.monto);
+    final neto = totalIng - totalEg;
 
     return Container(
       decoration: BoxDecoration(
@@ -1010,18 +1019,18 @@ class _DetalleBucketSheet extends StatelessWidget {
             ...ingresos.map((i) => _filaIngreso(i, muted, isDark)),
           ],
           const SizedBox(height: 14),
-          if (retiros.isEmpty)
+          if (egresos.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Text(
-                'Sin retiros en este bucket.',
+                'Sin egresos en este bucket.',
                 style: TextStyle(color: muted, fontSize: 12),
               ),
             )
           else ...[
-            Text('RETIROS', style: _headerStyle(const Color(0xFFE74C3C))),
+            Text('EGRESOS', style: _headerStyle(const Color(0xFFE74C3C))),
             const SizedBox(height: 6),
-            ...retiros.map((r) => _filaRetiro(r, muted, isDark, onEliminarRetiro)),
+            ...egresos.map((e) => _filaEgreso(e, muted, isDark, onEliminarRetiro)),
           ],
         ],
       ),
@@ -1073,9 +1082,11 @@ class _DetalleBucketSheet extends StatelessWidget {
     );
   }
 
-  Widget _filaRetiro(Egreso e, Color muted, bool isDark,
-      Future<void> Function(Egreso)? onEliminar,) {
+  Widget _filaEgreso(Egreso e, Color muted, bool isDark,
+      Future<void> Function(Egreso)? onEliminarRetiro,) {
     final hora = e.fecha != null ? ArTime.formatHora(e.fecha!) : '—';
+    final esRetiroFormal = (e.categoria ?? '').trim() == kCategoriaRetiroCaja;
+    final cat = (e.categoria ?? '').trim();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -1085,25 +1096,27 @@ class _DetalleBucketSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  e.proveedor ?? 'Retiro de caja',
+                  e.proveedor ?? (esRetiroFormal ? 'Retiro de caja' : 'Egreso'),
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '$hora · ${e.medioPago ?? '—'}',
+                  '$hora · ${e.medioPago ?? '—'}${cat.isNotEmpty ? ' · $cat' : ''}',
                   style: TextStyle(fontSize: 11, color: muted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          if (onEliminar != null && e.id.length == 36)
+          if (esRetiroFormal && onEliminarRetiro != null && e.id.length == 36)
             IconButton(
               tooltip: 'Eliminar retiro',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFE74C3C)),
-              onPressed: () => onEliminar(e),
+              onPressed: () => onEliminarRetiro(e),
             ),
           Text(
             '−${e.monto.toCurrency()}',

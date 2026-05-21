@@ -103,7 +103,7 @@ class EgresosRepository {
     });
   }
 
-  /// Registra un gasto operativo (OPEX) sin evento asociado.
+  /// Registra un egreso sin `evento_id` (SQLite + sync), p. ej. gasto empresa, retiro dueño o gasto personal desde bolsillo.
   Future<void> registrarEgresoSinEvento({
     required double monto,
     required String proveedor,
@@ -113,7 +113,7 @@ class EgresosRepository {
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
-    // Instante preciso del egreso OPEX en UTC.
+    // Instante preciso del egreso sin evento (UTC).
     final now = (fecha?.toUtc() ?? ArTime.nowUtc()).toIso8601String();
 
     final data = <String, dynamic>{

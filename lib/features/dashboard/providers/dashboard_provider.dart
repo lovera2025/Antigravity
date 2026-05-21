@@ -24,6 +24,24 @@ class Alerta {
   });
 }
 
+class InstitucionDeuda {
+  final String id;
+  final String nombre;
+  final double aVencer;
+  final double vencido;
+  final double saldoGlobal;
+
+  double get total => aVencer + vencido;
+
+  InstitucionDeuda({
+    required this.id,
+    required this.nombre,
+    required this.aVencer,
+    required this.vencido,
+    this.saldoGlobal = 0,
+  });
+}
+
 class DashboardStats {
   final int eventosActivos;
   final int eventosMasivosActivos;
@@ -31,7 +49,9 @@ class DashboardStats {
   final double ingresosMes;
   final double egresosMes;
   final double saldoPorCobrar;
+  final double saldoGlobalTotal;
   final double morosidadReal;
+  final List<InstitucionDeuda> deudasPorInstitucion;
   final List<Alerta> alertas;
   final List<Map<String, dynamic>> proximosEventos;
 
@@ -42,7 +62,9 @@ class DashboardStats {
     required this.ingresosMes,
     required this.egresosMes,
     required this.saldoPorCobrar,
+    required this.saldoGlobalTotal,
     required this.morosidadReal,
+    this.deudasPorInstitucion = const [],
     this.alertas = const [],
     this.proximosEventos = const [],
   });
@@ -54,7 +76,9 @@ class DashboardStats {
         ingresosMes: 0,
         egresosMes: 0,
         saldoPorCobrar: 0,
+        saldoGlobalTotal: 0,
         morosidadReal: 0,
+        deudasPorInstitucion: [],
         alertas: [],
         proximosEventos: [],
       );
@@ -106,11 +130,13 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     // 4 & 5. Saldo por Cobrar y Morosidad
     double totalSaldo = 0.0;
     double morosidadReal = 0.0;
+    double saldoGlobalTotal = 0.0;
     List<Alerta> alertas = [];
+    Map<String, InstitucionDeuda> mapaDeudas = {};
 
     // --- SECCIÓN MASIVOS ---
     final contratosRes = await db.rawQuery('''
-      SELECT ca.*, ev.tipo as evento_tipo, c.nombre_completo as cliente_nombre
+      SELECT ca.*, ev.tipo as evento_tipo, c.id as cliente_id, c.nombre_completo as cliente_nombre
       FROM contratos_alumnos ca
       JOIN eventos ev ON ca.evento_id = ev.id
       JOIN clientes c ON ev.cliente_id = c.id
@@ -127,8 +153,27 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       final double saldoTotal = (row['saldo_deudor'] as num?)?.toDouble() ?? 0;
       if (saldoTotal < 0.01) continue;
 
+      // Acumular saldo global real
+      saldoGlobalTotal += saldoTotal;
+
       final String eventoId = row['evento_id'].toString();
-      nombresEventoMap[eventoId] = row['cliente_nombre']?.toString() ?? 'Institución';
+      final String clienteId = row['cliente_id'].toString();
+      final String clienteNombre = row['cliente_nombre']?.toString() ?? 'Institución';
+
+      if (!mapaDeudas.containsKey(clienteId)) {
+        mapaDeudas[clienteId] = InstitucionDeuda(id: clienteId, nombre: clienteNombre, aVencer: 0, vencido: 0);
+      }
+
+      // Acumular saldo global por institución
+      mapaDeudas[clienteId] = InstitucionDeuda(
+        id: clienteId,
+        nombre: clienteNombre,
+        aVencer: mapaDeudas[clienteId]!.aVencer,
+        vencido: mapaDeudas[clienteId]!.vencido,
+        saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal + saldoTotal,
+      );
+
+      nombresEventoMap[eventoId] = clienteNombre;
 
       final c = ContratoAlumno.fromJson(Map<String, dynamic>.from(row));
       final inscrip = c.createdAt ?? now;
@@ -163,17 +208,31 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
         }
       }
 
+      double moraMonto = 0.0;
+      double aVencerMonto = 0.0;
+
       if (cuotasVencidasCount > 0) {
-        final double montoMora = (cuotasVencidasCount * cuotaBaseR).clamp(0.0, saldoTotal);
-        morosidadReal += montoMora;
-        moraPorEvento[eventoId] = (moraPorEvento[eventoId] ?? 0) + montoMora;
+        moraMonto = (cuotasVencidasCount * cuotaBaseR).clamp(0.0, saldoTotal);
+        morosidadReal += moraMonto;
+        moraPorEvento[eventoId] = (moraPorEvento[eventoId] ?? 0) + moraMonto;
         alumnosConMoraPorEvento[eventoId] = (alumnosConMoraPorEvento[eventoId] ?? 0) + 1;
       }
 
       if (proximaAVencer) {
         // Sumamos la cuota que está por vencer en el horizonte de 30 días
         final double restanteTrasMora = (saldoTotal - (cuotasVencidasCount * cuotaBaseR)).clamp(0.0, saldoTotal);
-        saldoAVencerProximamente += cuotaBaseR.clamp(0.0, restanteTrasMora);
+        aVencerMonto = cuotaBaseR.clamp(0.0, restanteTrasMora);
+        saldoAVencerProximamente += aVencerMonto;
+      }
+
+      if (moraMonto > 0 || aVencerMonto > 0) {
+        mapaDeudas[clienteId] = InstitucionDeuda(
+          id: clienteId,
+          nombre: clienteNombre,
+          aVencer: mapaDeudas[clienteId]!.aVencer + aVencerMonto,
+          vencido: mapaDeudas[clienteId]!.vencido + moraMonto,
+          saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal,
+        );
       }
     }
 
@@ -207,7 +266,7 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
            FROM eventos_servicios WHERE evento_id = e.id
         )) as presupuesto_base,
         (SELECT SUM(monto) FROM transacciones WHERE evento_id = e.id AND COALESCE(anulado, 0) = 0) as recaudado,
-        c.nombre_completo as cliente_nombre
+        c.id as cliente_id, c.nombre_completo as cliente_nombre
       FROM eventos e
       JOIN clientes c ON e.cliente_id = c.id
       WHERE e.modalidad = 'particular' AND e.estado IN ('Confirmado', 'Planificacion')
@@ -222,14 +281,38 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       final double saldoReal = (presupuestoFinal - recaudado).clamp(0.0, double.infinity);
       
       if (saldoReal > 0.01) {
+        // Acumular saldo global real (particulares)
+        saldoGlobalTotal += saldoReal;
+
         final String? fechaStr = ev['fecha_evento']?.toString();
         DateTime? fechaEvento = fechaStr != null ? DateTime.tryParse(fechaStr) : null;
+        final String clienteId = ev['cliente_id'].toString();
         final String nombreCli = ev['cliente_nombre']?.toString() ?? 'Cliente';
+
+        if (!mapaDeudas.containsKey(clienteId)) {
+          mapaDeudas[clienteId] = InstitucionDeuda(id: clienteId, nombre: nombreCli, aVencer: 0, vencido: 0);
+        }
+
+        // Acumular saldo global por institución (particulares)
+        mapaDeudas[clienteId] = InstitucionDeuda(
+          id: clienteId,
+          nombre: nombreCli,
+          aVencer: mapaDeudas[clienteId]!.aVencer,
+          vencido: mapaDeudas[clienteId]!.vencido,
+          saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal + saldoReal,
+        );
 
         if (fechaEvento != null && fechaEvento.isBefore(now)) {
           // Evento pasado con saldo = Mora Crítica
           morosidadReal += saldoReal;
           totalSaldo += saldoReal;
+          mapaDeudas[clienteId] = InstitucionDeuda(
+            id: clienteId,
+            nombre: nombreCli,
+            aVencer: mapaDeudas[clienteId]!.aVencer,
+            vencido: mapaDeudas[clienteId]!.vencido + saldoReal,
+            saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal,
+          );
           alertas.add(Alerta(
             titulo: 'MORA EN EVENTO PARTICULAR',
             mensaje: '⚠️ $nombreCli: Mora crítica de ${saldoReal.toCurrency()}.',
@@ -240,6 +323,13 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
         } else if (fechaEvento != null && fechaEvento.difference(now).inDays <= 30) {
           // Evento próximo (30 días) = Saldo a vencer
           totalSaldo += saldoReal;
+          mapaDeudas[clienteId] = InstitucionDeuda(
+            id: clienteId,
+            nombre: nombreCli,
+            aVencer: mapaDeudas[clienteId]!.aVencer + saldoReal,
+            vencido: mapaDeudas[clienteId]!.vencido,
+            saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal,
+          );
         } else if (recaudado < (presupuestoFinal * 0.30) - 0.01) {
           // Seña pendiente (aunque el evento esté lejos)
           final double faltante = (presupuestoFinal * 0.30) - recaudado;
@@ -373,6 +463,9 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
         .toList()
       ..sort((a, b) => a['fecha_evento'].compareTo(b['fecha_evento']));
 
+    final deudasLista = mapaDeudas.values.where((d) => d.total > 0).toList()
+      ..sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+
     return DashboardStats(
       eventosActivos: totalEventos,
       eventosMasivosActivos: masivos,
@@ -380,7 +473,9 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       ingresosMes: totalIngresos,
       egresosMes: totalEgresos,
       saldoPorCobrar: totalSaldo,
+      saldoGlobalTotal: saldoGlobalTotal,
       morosidadReal: morosidadReal,
+      deudasPorInstitucion: deudasLista,
       alertas: alertas,
       proximosEventos: proximosEventos.take(5).toList(),
     );

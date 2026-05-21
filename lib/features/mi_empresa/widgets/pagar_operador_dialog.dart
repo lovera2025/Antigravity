@@ -251,7 +251,7 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
     if (!_formKey.currentState!.validate()) return;
     if (_eventoIdSeleccionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccioná un evento o Gasto Operativo')),
+        const SnackBar(content: Text('Seleccioná un evento o Gasto empresa')),
       );
       return;
     }
@@ -365,7 +365,7 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
                 initialValue: _eventoIdSeleccionado,
                 isExpanded: true,
                 decoration: InputDecoration(
-                  hintText: 'Seleccioná el evento...',
+                  hintText: 'Evento o gasto empresa…',
                   prefixIcon: const Icon(Icons.celebration_outlined, size: 18),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -374,7 +374,7 @@ class _PagarOperadorDialogState extends ConsumerState<PagarOperadorDialog> {
                   const DropdownMenuItem<String>(
                     value: 'OPEX',
                     child: Text(
-                      '🏢 Gasto Operativo / OPEX (Administrativo)',
+                      '🏢 Gasto empresa (sin evento puntual)',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _gold),
                     ),
                   ),

@@ -131,6 +131,30 @@ class ContratosRepository {
     );
   }
 
+  /// Actualiza solo `contrato_firmado` para muchos contratos en una transacción local
+  /// y encola sync por registro (misma semántica que [actualizarContrato]).
+  Future<void> actualizarContratoFirmadoBulk(Map<String, bool> cambiosPorId) async {
+    if (cambiosPorId.isEmpty) return;
+    final db = await LocalDatabase.instance;
+    await db.transaction((txn) async {
+      for (final e in cambiosPorId.entries) {
+        await txn.update(
+          'contratos_alumnos',
+          {'contrato_firmado': e.value ? 1 : 0},
+          where: 'id = ?',
+          whereArgs: [e.key],
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'contratos_alumnos',
+          operacion: SyncOperation.update,
+          registroId: e.key,
+          payload: {'id': e.key, 'contrato_firmado': e.value},
+        );
+      }
+    });
+  }
+
   /// Registra un pago de contrato de alumno.
   /// Retorna el [ContratoAlumno] con saldo actualizado post-transacción.
   Future<ContratoAlumno> registrarPago({
@@ -217,7 +241,13 @@ class ContratosRepository {
 
       await txn.insert('pagos_contrato_alumno', pagoData);
 
-      if (esInteres) {
+      // Cargo canal (operador transferencia): solo ingreso contable,
+      // no afecta saldo ni cuotas del alumno.
+      final bool esCargoCanal = lk == kLineKindCargoCanal;
+
+      if (esCargoCanal) {
+        // Nada que actualizar en el contrato; solo se registra el pago.
+      } else if (esInteres) {
         // Ya actualizamos mora_pendiente_tracked; saldo / cuotas no cambian.
       } else if (conceptoLower.contains('base')) {
         // ── Snapshot mora ANTES de avanzar cuotas_pagadas ──────────
@@ -295,6 +325,7 @@ class ContratosRepository {
         'sillas_extra_cuotas_pagadas': contratoActualizado['sillas_extra_cuotas_pagadas'],
         'mesa_extra_pagado': contratoActualizado['mesa_extra_pagado'],
         'sillas_extra_pagado': contratoActualizado['sillas_extra_pagado'],
+        'mora_pendiente_tracked': contratoActualizado['mora_pendiente_tracked'] ?? 0.0,
       };
 
       // Encolar sync del contrato actualizado
@@ -359,6 +390,7 @@ class ContratosRepository {
       final conceptoRaw = p['concepto'] as String? ?? '';
       final lkRow = (p['line_kind'] as String?)?.trim();
       if (lkRow == kLineKindInteresMora ||
+          lkRow == kLineKindCargoCanal ||
           esPagoInteresMoraPorConcepto(conceptoRaw)) {
         continue;
       }
@@ -768,6 +800,107 @@ class ContratosRepository {
       final id = aRow['id'] as String;
       await recalcularProgresoContrato(id);
     }
+  }
+
+  /// Busca contratos por nombre de alumno o institución (colegio) para restaurar mora.
+  Future<List<ContratoAlumno>> buscarContratosParaMora(String consulta) async {
+    final q = consulta.trim();
+    if (q.length < 2) return [];
+    final like = '%$q%';
+    final db = await LocalDatabase.instance;
+    final rows = await db.rawQuery('''
+      SELECT * FROM contratos_alumnos
+      WHERE nombre_alumno LIKE ? OR IFNULL(institucion, '') LIKE ?
+      ORDER BY nombre_alumno COLLATE NOCASE ASC LIMIT 50
+    ''', [like, like]);
+    return rows.map(_fromLocalRow).toList();
+  }
+
+  /// Alumnos masivos con cuota vencida y mora neta a restaurar (1% cuota × días atraso).
+  Future<List<MoraRestauracionCandidato>> listarCandidatosRestauracionMora({
+    bool excluirBuenaVista = true,
+  }) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.rawQuery('''
+      SELECT ca.* FROM contratos_alumnos ca
+      INNER JOIN eventos ev ON ca.evento_id = ev.id
+      WHERE ev.modalidad = 'masivo'
+        AND ev.estado IN ('Confirmado', 'Planificacion')
+        AND ca.nombre_alumno NOT LIKE '[BAJA]%'
+        AND ca.saldo_deudor > 0.01
+        AND ca.created_at IS NOT NULL
+        AND TRIM(ca.created_at) != ''
+      ORDER BY IFNULL(ca.institucion, '') COLLATE NOCASE ASC,
+               ca.nombre_alumno COLLATE NOCASE ASC
+    ''');
+
+    final contratos = rows.map(_fromLocalRow).toList();
+    if (contratos.isEmpty) return [];
+
+    final moraMap = await sumMoraCobradaHistorialPorContratos(
+      contratos.map((c) => c.id).toList(),
+    );
+    final hoy = ArTime.nowAr();
+    final out = <MoraRestauracionCandidato>[];
+
+    for (final c in contratos) {
+      if (excluirBuenaVista) {
+        final inst = (c.institucion ?? '').trim().toUpperCase();
+        if (inst == 'COLEGIO BUENA VISTA') continue;
+      }
+
+      final moraYaCobrada = moraMap[c.id] ?? 0.0;
+      final calc = MoraCuotaCalculator.calcularRestauracionDesdeReg(
+        c,
+        ahoraAr: hoy,
+        moraYaCobrada: moraYaCobrada,
+      );
+      if (calc == null) continue;
+
+      out.add(MoraRestauracionCandidato(
+        contrato: c,
+        diasMora: calc.diasMora,
+        cuotaBase: calc.cuotaBase,
+        moraBruta: calc.moraBruta,
+        moraYaCobrada: moraYaCobrada,
+        moraActual: c.moraPendienteTracked,
+        moraAplicar: calc.moraAplicar,
+      ));
+    }
+    return out;
+  }
+
+  /// Persiste [mora_pendiente_tracked] en lote y encola sync por contrato.
+  Future<int> restaurarMoraBulk(Map<String, double> moraPorContratoId) async {
+    if (moraPorContratoId.isEmpty) return 0;
+
+    final db = await LocalDatabase.instance;
+    var count = 0;
+
+    await db.transaction((txn) async {
+      for (final e in moraPorContratoId.entries) {
+        if (e.value <= 0.01) continue;
+        await txn.update(
+          'contratos_alumnos',
+          {'mora_pendiente_tracked': e.value},
+          where: 'id = ?',
+          whereArgs: [e.key],
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'contratos_alumnos',
+          operacion: SyncOperation.update,
+          registroId: e.key,
+          payload: {
+            'id': e.key,
+            'mora_pendiente_tracked': e.value,
+          },
+        );
+        count++;
+      }
+    });
+
+    return count;
   }
 }
 

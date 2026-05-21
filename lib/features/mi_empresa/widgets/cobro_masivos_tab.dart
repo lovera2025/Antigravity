@@ -22,6 +22,8 @@ class _CobroFila {
   final DateTime? ultimoPago;
   final MoraCuotaResumen mora;
   final double moraPendiente;
+  final int cuotasVencidasCount;
+  final double cuotasVencidasMonto;
 
   const _CobroFila({
     required this.contrato,
@@ -29,6 +31,8 @@ class _CobroFila {
     this.ultimoPago,
     required this.mora,
     this.moraPendiente = 0,
+    this.cuotasVencidasCount = 0,
+    this.cuotasVencidasMonto = 0,
   });
 }
 
@@ -119,16 +123,206 @@ enum _CobroFiltroCuota { todos, conAlMenosUna, ninguna }
 
 bool _contratoEsBaja(ContratoAlumno a) => a.nombreAlumno.trim().startsWith('[BAJA]');
 
-String? _whatsAppUri(String? telefono) {
-  if (telefono == null) return null;
-  final raw = telefono.replaceAll(RegExp(r'\D'), '');
-  if (raw.isEmpty) return null;
-  var n = raw;
-  if (n.length >= 8 && n.length <= 10 && !n.startsWith('54')) {
-    n = '54$n';
-  } else if (n.startsWith('0')) {
-    n = '54${n.replaceFirst(RegExp(r'^0+'), '')}';
+const Map<String, String> _localidadesCaracteristicas = {
+  'san gregorio': '3382',
+  'diego de alvear': '3382',
+  'rufino': '3382',
+  'maria teresa': '3382',
+  'christophersen': '3382',
+  'aarón castellanos': '3382',
+  'venado tuerto': '3462',
+  'villa cañás': '3462',
+  'goya': '3777',
+  'córdoba': '351',
+  'rosario': '341',
+  'buenos aires': '11',
+};
+
+String? _extraerCaracteristica(String n10) {
+  if (n10.length != 10) return null;
+  if (n10.startsWith('11')) return '11';
+  final tresDigitosPrefixes = {
+    '220', '221', '223', '230', '249', '260', '261', '263', '264', '280', '291', '294', '297', '298', '299',
+    '341', '342', '343', '348', '351', '353', '358', '370', '376', '379', '380', '381', '383', '385', '387', '388'
+  };
+  final prefix3 = n10.substring(0, 3);
+  if (tresDigitosPrefixes.contains(prefix3)) {
+    return prefix3;
   }
+  return n10.substring(0, 4);
+}
+
+String _inferirCaracteristica(ContratoAlumno? contrato, List<ContratoAlumno>? todosContratos) {
+  if (contrato != null) {
+    final curso = contrato.cursoDivision?.toLowerCase() ?? '';
+    final inst = contrato.institucion?.toLowerCase() ?? '';
+    for (final entry in _localidadesCaracteristicas.entries) {
+      if (curso.contains(entry.key) || inst.contains(entry.key)) {
+        return entry.value;
+      }
+    }
+  }
+
+  if (todosContratos != null && todosContratos.isNotEmpty) {
+    final frecuencias = <String, int>{};
+    for (final c in todosContratos) {
+      final tel = c.telefono;
+      if (tel == null) continue;
+      
+      var n = tel.replaceAll(RegExp(r'\D'), '');
+      if (n.isEmpty) continue;
+
+      if (n.startsWith('0')) {
+        n = n.replaceFirst(RegExp(r'^0+'), '');
+      }
+      if (n.startsWith('54') && n.length > 10) {
+        n = n.substring(2);
+      }
+      if (n.startsWith('9') && n.length == 11) {
+        n = n.substring(1);
+      }
+
+      if (n.length == 12) {
+        if (n.substring(2, 4) == '15') {
+          n = n.substring(0, 2) + n.substring(4);
+        } else if (n.substring(3, 5) == '15') {
+          n = n.substring(0, 3) + n.substring(5);
+        } else if (n.substring(4, 6) == '15') {
+          n = n.substring(0, 4) + n.substring(6);
+        }
+      }
+
+      if (n.length == 10) {
+        final caract = _extraerCaracteristica(n);
+        if (caract != null) {
+          frecuencias[caract] = (frecuencias[caract] ?? 0) + 1;
+        }
+      }
+    }
+
+    if (frecuencias.isNotEmpty) {
+      var maxFrec = 0;
+      String? mejorCaract;
+      frecuencias.forEach((caract, frec) {
+        if (frec > maxFrec) {
+          maxFrec = frec;
+          mejorCaract = caract;
+        }
+      });
+      if (mejorCaract != null) {
+        return mejorCaract!;
+      }
+    }
+  }
+
+  return '3382';
+}
+
+String? _whatsAppUri(
+  String? telefono, {
+  ContratoAlumno? contrato,
+  List<ContratoAlumno>? todosContratos,
+}) {
+  if (telefono == null) return null;
+  
+  final trimOriginal = telefono.trim();
+  final esInternacionalExplicito = trimOriginal.startsWith('+') || trimOriginal.startsWith('00');
+  
+  var n = trimOriginal.replaceAll(RegExp(r'\D'), '');
+  if (n.isEmpty) return null;
+
+  // Pre-proceso: Limpiar "54" o "549" mal colocados después de una característica conocida
+  final knownAreaCodes = {
+    '3382', '3462', '3777', '3772', '351', '341', '11', '3482', '3468', '3388', '261', '291', '342', '379', '381'
+  };
+  for (final areaCode in knownAreaCodes) {
+    if (n.startsWith(areaCode)) {
+      final rest = n.substring(areaCode.length);
+      if (rest.startsWith('549') && rest.length > 3) {
+        n = areaCode + rest.substring(3);
+        break;
+      } else if (rest.startsWith('54') && rest.length > 2) {
+        n = areaCode + rest.substring(2);
+        break;
+      }
+    }
+  }
+
+  if (esInternacionalExplicito) {
+    if (trimOriginal.startsWith('00')) {
+      n = n.replaceFirst(RegExp(r'^00+'), '');
+    }
+    return 'https://wa.me/$n';
+  }
+
+  if (n.startsWith('549') && n.length == 13) {
+    return 'https://wa.me/$n';
+  }
+
+  if (n.startsWith('0')) {
+    n = n.replaceFirst(RegExp(r'^0+'), '');
+  }
+
+  bool tenia54 = false;
+  if (n.startsWith('54') && n.length > 10) {
+    tenia54 = true;
+    n = n.substring(2);
+  }
+
+  bool tenia9 = false;
+  if (n.startsWith('9') && n.length == 11) {
+    tenia9 = true;
+    n = n.substring(1);
+  }
+
+  bool esLocalIncompleto = false;
+  String subscriber = n;
+
+  if (n.startsWith('15')) {
+    final sin15 = n.substring(2);
+    if (sin15.length >= 6 && sin15.length <= 8) {
+      esLocalIncompleto = true;
+      subscriber = sin15;
+    }
+  } else if (n.length >= 6 && n.length <= 8) {
+    esLocalIncompleto = true;
+    subscriber = n;
+  }
+
+  if (esLocalIncompleto) {
+    final caract = _inferirCaracteristica(contrato, todosContratos);
+    n = '$caract$subscriber';
+  }
+
+  final iniciaConCaracteristicaValida = n.startsWith('1') || n.startsWith('2') || n.startsWith('3');
+
+  if (iniciaConCaracteristicaValida) {
+    if (n.length == 12) {
+      if (n.substring(2, 4) == '15') {
+        n = n.substring(0, 2) + n.substring(4);
+      } else if (n.substring(3, 5) == '15') {
+        n = n.substring(0, 3) + n.substring(5);
+      } else if (n.substring(4, 6) == '15') {
+        n = n.substring(0, 4) + n.substring(6);
+      }
+    }
+
+    if (n.length == 10) {
+      return 'https://wa.me/549$n';
+    }
+  }
+
+  if (tenia54) {
+    if (tenia9 || n.length == 10) {
+      return 'https://wa.me/549$n';
+    }
+    return 'https://wa.me/54$n';
+  }
+
+  if (iniciaConCaracteristicaValida && n.length >= 8 && n.length <= 11) {
+    return 'https://wa.me/549$n';
+  }
+
   return 'https://wa.me/$n';
 }
 
@@ -169,6 +363,8 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
   List<_CobroFila> _filas = [];
   final _busquedaCtrl = TextEditingController();
   _CobroFiltroCuota _filtroCuota = _CobroFiltroCuota.todos;
+  final Set<String> _seleccionados = {};
+  bool _verSoloCuotasVencidas = true;
 
   @override
   void dispose() {
@@ -205,6 +401,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
           _instituciones = [];
           _institucion = null;
           _filas = [];
+          _seleccionados.clear();
         }
       });
     } catch (e) {
@@ -234,6 +431,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
       _error = null;
       _institucion = null;
       _filas = [];
+      _seleccionados.clear();
       _resetFiltrosVista();
     });
     try {
@@ -276,6 +474,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
       if (mounted) {
         setState(() {
           _filas = [];
+          _seleccionados.clear();
           _loadingDetalle = false;
         });
       }
@@ -313,12 +512,43 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
           moraCobradaHistorial: moraPagada,
           moraPendienteTracked: a.moraPendienteTracked,
         );
+
+        // Cálculo de cuotas vencidas
+        final c = a;
+        final now = ArTime.nowAr();
+        final inscrip = c.createdAt ?? now;
+        final inscAr = ArTime.toAr(inscrip);
+        final tCuotas = c.totalCuotas > 0 ? c.totalCuotas : 1;
+        
+        final totalBase = (c.montoTotalPactado - c.mesaExtraPrecio - c.sillasExtraPrecioTotal).clamp(0.0, double.infinity);
+        final cuotaBase = tCuotas > 0 ? totalBase / tCuotas : 0.0;
+        final cuotaBaseR = double.parse(cuotaBase.toStringAsFixed(2));
+
+        int cuotasVencidasCount = 0;
+        for (int k = c.cuotasPagadas + 1; k <= tCuotas; k++) {
+          var m = inscAr.month + k;
+          var y = inscAr.year;
+          while (m > 12) { m -= 12; y++; }
+          final vK = DateTime(y, m, DateTime(y, m + 1, 0).day);
+          final vKSolo = DateTime(vK.year, vK.month, vK.day);
+          final hoySolo = DateTime(now.year, now.month, now.day);
+
+          if (hoySolo.isAfter(vKSolo)) {
+            cuotasVencidasCount++;
+          } else {
+            break; 
+          }
+        }
+        final cuotasVencidasMonto = (cuotasVencidasCount * cuotaBaseR).clamp(0.0, c.saldoDeudor);
+
         filas.add(_CobroFila(
           contrato: a,
           primeraCuotaBase: primera,
           ultimoPago: ultimo,
           mora: mora,
           moraPendiente: moraPend,
+          cuotasVencidasCount: cuotasVencidasCount,
+          cuotasVencidasMonto: cuotasVencidasMonto,
         ));
       }
       filas.sort((x, y) {
@@ -377,6 +607,144 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
       return _institucion!;
     }
     return _kCobroTodosInstitucion;
+  }
+
+  void _toggleSeleccionTodos(List<_CobroFila> filasVista) {
+    final todosSeleccionados = filasVista.every((f) => _seleccionados.contains(f.contrato.id));
+    setState(() {
+      if (todosSeleccionados) {
+        for (final f in filasVista) {
+          _seleccionados.remove(f.contrato.id);
+        }
+      } else {
+        for (final f in filasVista) {
+          _seleccionados.add(f.contrato.id);
+        }
+      }
+    });
+  }
+
+  Widget _buildResumenSeleccion(List<_CobroFila> filasVista) {
+    if (filasVista.isEmpty) return const SizedBox.shrink();
+    
+    final seleccionadasActual = filasVista.where((f) => _seleccionados.contains(f.contrato.id)).toList();
+    final todosSeleccionados = seleccionadasActual.length == filasVista.length && filasVista.isNotEmpty;
+    
+    double totalMontoDeuda = 0;
+    double totalMoraPendiente = 0;
+    
+    for (final f in seleccionadasActual) {
+      if (_verSoloCuotasVencidas) {
+        totalMontoDeuda += f.cuotasVencidasMonto;
+      } else {
+        totalMontoDeuda += f.contrato.saldoDeudor;
+      }
+      totalMoraPendiente += f.moraPendiente;
+    }
+    
+    final totalCobrar = totalMontoDeuda + totalMoraPendiente;
+    final muted = widget.isDark ? Colors.white54 : Colors.black54;
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      color: widget.gold.withValues(alpha: 0.1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: widget.gold.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Checkbox(
+                  value: todosSeleccionados,
+                  activeColor: widget.gold,
+                  onChanged: (v) => _toggleSeleccionTodos(filasVista),
+                ),
+                Expanded(
+                  child: Text(
+                    'Seleccionar filtrados (${seleccionadasActual.length}/${filasVista.length})',
+                    style: TextStyle(fontWeight: FontWeight.w800, color: widget.gold),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Modo de visualización:',
+                  style: TextStyle(fontSize: 12, color: muted, fontWeight: FontWeight.bold),
+                ),
+                SegmentedButton<bool>(
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity(horizontal: -3, vertical: -3),
+                  ),
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment<bool>(
+                      value: true,
+                      label: Text('Solo Cuotas Vencidas', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                    ),
+                    ButtonSegment<bool>(
+                      value: false,
+                      label: Text('Total Global', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                  selected: {_verSoloCuotasVencidas},
+                  onSelectionChanged: (Set<bool> val) {
+                    setState(() {
+                      _verSoloCuotasVencidas = val.first;
+                    });
+                  },
+                ),
+              ],
+            ),
+            if (seleccionadasActual.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _verSoloCuotasVencidas ? 'Cuotas Vencidas:' : 'Saldo Deudor:',
+                    style: TextStyle(color: muted, fontSize: 13),
+                  ),
+                  Text(totalMontoDeuda.toCurrency(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              if (totalMoraPendiente > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Mora Pendiente:', style: TextStyle(color: muted, fontSize: 13)),
+                      Text(totalMoraPendiente.toCurrency(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _verSoloCuotasVencidas ? 'TOTAL VENCIDO:' : 'TOTAL GLOBAL:',
+                    style: TextStyle(color: widget.gold, fontWeight: FontWeight.w900, fontSize: 14),
+                  ),
+                  Text(
+                    totalCobrar.toCurrency(),
+                    style: TextStyle(color: widget.gold, fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                ],
+              ),
+            ]
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -577,6 +945,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
             style: TextStyle(color: widget.gold, fontWeight: FontWeight.w800, fontSize: 12),
           ),
           const SizedBox(height: 12),
+          _buildResumenSeleccion(filasVista),
           if (filasVista.isEmpty)
             Text(
               'Ningún alumno coincide con la búsqueda o con el filtro de cuota.',
@@ -615,7 +984,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
       chipColor = Colors.blueGrey.shade600;
     }
 
-    final wUri = _whatsAppUri(a.telefono);
+    final wUri = _whatsAppUri(a.telefono, contrato: a, todosContratos: _contratos);
     final curso = a.cursoDivision?.trim();
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -627,6 +996,19 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Checkbox(
+                  value: _seleccionados.contains(a.id),
+                  activeColor: widget.gold,
+                  onChanged: (v) {
+                    setState(() {
+                      if (v == true) {
+                        _seleccionados.add(a.id);
+                      } else {
+                        _seleccionados.remove(a.id);
+                      }
+                    });
+                  },
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -706,6 +1088,20 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                   style: TextStyle(fontSize: 10, color: muted.withValues(alpha: 0.9)),
                 ),
               ),
+            if (f.cuotasVencidasCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 13, color: Colors.redAccent),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Cuotas vencidas: ${f.cuotasVencidasCount} (${f.cuotasVencidasMonto.toCurrency()})',
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                    ),
+                  ],
+                ),
+              ),
             if (mora.enMora && f.moraPendiente > 0.01)
               Text(
                 'Mora pendiente: ${f.moraPendiente.toCurrency()}',
@@ -719,14 +1115,21 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
 
   Future<void> _abrirWhatsappOClipboard(String wUri, ContratoAlumno a) async {
     final nombreCorto = _primeraPalabraNombreAlumno(a.nombreAlumno);
-    final saludo = nombreCorto.isNotEmpty ? 'Hola $nombreCorto' : 'Hola';
+    final saludo = nombreCorto.isNotEmpty ? 'Hola $nombreCorto, t' : 'T';
     final msg =
-        '$saludo, te contactamos desde $_kCobroMarcaMensaje. Te recordamos abonar la cuota a tiempo y así evitás intereses. Si ya abonaste, desestimá el mensaje. Cualquier duda, a disposición.';
+        '$saludo''e contactamos desde Junior Eventos para recordarte que la cuota de la recepción se encuentra vencida.\n\nMantener los pagos al día nos permite seguir organizando cada detalle del evento tal como fue planificado, garantizando la calidad y todo lo que los chicos esperan para esa noche tan especial ✨\n\nAdemás, abonando en fecha evitás intereses por mora y mantenés el valor acordado de la cuota.\n\nTe invitamos a acercarte a regularizar el pago por nuestra oficina Brasil 1346\n\nAnte cualquier consulta, estamos a disposición.';
 
-    final base = wUri.split('?').first;
-    final uri = Uri.parse('$base?text=${Uri.encodeComponent(msg)}');
+    final n = wUri.replaceAll('https://wa.me/', '').split('?').first;
+    
+    final desktopUri = Uri.parse('whatsapp://send?phone=$n&text=${Uri.encodeComponent(msg)}');
+    final webUri = Uri.parse('https://wa.me/$n?text=${Uri.encodeComponent(msg)}');
+
     try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      bool ok = await launchUrl(desktopUri);
+      if (!ok) {
+        ok = await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+      
       if (!mounted) return;
       if (!ok) {
         await Clipboard.setData(ClipboardData(text: msg));

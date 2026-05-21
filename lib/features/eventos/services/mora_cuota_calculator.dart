@@ -23,7 +23,7 @@ class MoraCuotaResumen {
   /// Marca (primer registro / alta) usada para armar vencimientos; solo informativo.
   final DateTime? fechaInscripcionUsada;
 
-  /// Interés acumulado: montoCuotaBaseAprox * 1% * diasMora. Listo para cobro real.
+  /// Interés acumulado: 1% de la cuota base × [diasMora] (crece por día de atraso).
   final double interesAcumulado;
 
   const MoraCuotaResumen({
@@ -55,6 +55,49 @@ DateTime _ultimoDiaMesK(DateTime inscripcion, int k) {
 /// El campo [diaVenc] se conserva por compatibilidad pero ya no se usa.
 DateTime vencimientoPrimeraCuotaBase(DateTime inscripcionAr, int diaVenc) {
   return _ultimoDiaMesK(inscripcionAr, 1);
+}
+
+/// Resultado del cálculo de mora a restaurar (1% cuota × días atraso; [calcular]).
+class MoraRestauracionCalculo {
+  final int diasMora;
+  final double cuotaBase;
+  final double moraBruta;
+  final double moraAplicar;
+
+  const MoraRestauracionCalculo({
+    required this.diasMora,
+    required this.cuotaBase,
+    required this.moraBruta,
+    required this.moraAplicar,
+  });
+}
+
+/// Candidato listo para restauración masiva de mora persistida.
+class MoraRestauracionCandidato {
+  final ContratoAlumno contrato;
+  final int diasMora;
+  final double cuotaBase;
+  final double moraBruta;
+  final double moraYaCobrada;
+  final double moraActual;
+  final double moraAplicar;
+
+  const MoraRestauracionCandidato({
+    required this.contrato,
+    required this.diasMora,
+    required this.cuotaBase,
+    required this.moraBruta,
+    required this.moraYaCobrada,
+    required this.moraActual,
+    required this.moraAplicar,
+  });
+
+  String get institucionLabel =>
+      (contrato.institucion ?? 'Sin colegio').trim();
+
+  /// 1% de la cuota base (mora por día de atraso).
+  double get tasaDiariaMora =>
+      double.parse((cuotaBase * 0.01).toStringAsFixed(2));
 }
 
 /// [porcentajeDiario] 1.0 = 1% / día. Interés lineal simple (solo proyección; no contable).
@@ -130,7 +173,13 @@ class MoraCuotaCalculator {
     }
 
     final bool mora = a.saldoDeudor > 0.01 && dias > 0;
-    final double interes = mora ? cuotaPuraR * 0.01 * dias : 0.0;
+    final double interes = mora
+        ? interesSugeridoSimpleSobreMonto(
+            cuotaPuraR,
+            porcentajeDiario: 1.0,
+            diasMora: dias,
+          )
+        : 0.0;
 
     return MoraCuotaResumen(
       diasMora: dias,
@@ -140,6 +189,30 @@ class MoraCuotaCalculator {
       enMora: mora,
       fechaInscripcionUsada: inscAr,
       interesAcumulado: double.parse(interes.toStringAsFixed(2)),
+    );
+  }
+
+  /// Mora a restaurar en bulk: misma regla que [calcular] (1% cuota × días atraso),
+  /// menos [moraYaCobrada].
+  static MoraRestauracionCalculo? calcularRestauracionDesdeReg(
+    ContratoAlumno a, {
+    DateTime? ahoraAr,
+    double moraYaCobrada = 0,
+  }) {
+    final resumen = calcular(a, ahoraAr);
+    if (!resumen.enMora || resumen.interesAcumulado <= 0.01) return null;
+
+    final moraBruta = resumen.interesAcumulado;
+    final moraAplicar = double.parse(
+      (moraBruta - moraYaCobrada).clamp(0.0, double.infinity).toStringAsFixed(2),
+    );
+    if (moraAplicar <= 0.01) return null;
+
+    return MoraRestauracionCalculo(
+      diasMora: resumen.diasMora,
+      cuotaBase: resumen.montoCuotaBaseAprox,
+      moraBruta: moraBruta,
+      moraAplicar: moraAplicar,
     );
   }
 }

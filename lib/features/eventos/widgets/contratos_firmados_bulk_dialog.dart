@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../common/services/pdf_service.dart';
+import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../repositories/contratos_repository.dart';
 
@@ -7,11 +9,13 @@ import '../repositories/contratos_repository.dart';
 class ContratosFirmadosBulkDialog extends StatefulWidget {
   final List<ContratoAlumno> alumnos;
   final ContratosRepository repository;
+  final String eventoTitulo;
 
   const ContratosFirmadosBulkDialog({
     super.key,
     required this.alumnos,
     required this.repository,
+    required this.eventoTitulo,
   });
 
   @override
@@ -22,7 +26,9 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
   late Map<String, bool> _firmadoPorId;
   late Map<String, bool> _originalPorId;
   bool _guardando = false;
+  bool _exportandoPdf = false;
   late ScrollController _scrollController;
+  late TextEditingController _busquedaCtrl;
 
   @override
   void initState() {
@@ -30,11 +36,13 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
     _firmadoPorId = {for (final a in widget.alumnos) a.id: a.contratoFirmado};
     _originalPorId = Map<String, bool>.from(_firmadoPorId);
     _scrollController = ScrollController();
+    _busquedaCtrl = TextEditingController();
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _busquedaCtrl.dispose();
     super.dispose();
   }
 
@@ -42,6 +50,19 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
     final list = List<ContratoAlumno>.from(widget.alumnos);
     list.sort((a, b) => a.nombreAlumno.toLowerCase().compareTo(b.nombreAlumno.toLowerCase()));
     return list;
+  }
+
+  String get _q => _busquedaCtrl.text.trim().toLowerCase();
+
+  /// Filtra por nombre o curso (misma idea que la tabla principal).
+  List<ContratoAlumno> _filtrar(List<ContratoAlumno> lista) {
+    final q = _q;
+    if (q.isEmpty) return lista;
+    return lista.where((a) {
+      final nombre = a.nombreAlumno.toLowerCase();
+      final curso = (a.cursoDivision ?? '').toLowerCase();
+      return nombre.contains(q) || curso.contains(q);
+    }).toList();
   }
 
   int get _totalEnLista => widget.alumnos.length;
@@ -56,7 +77,7 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
   List<ContratoAlumno> get _firmados =>
       _ordenados.where((a) => _firmadoPorId[a.id] ?? false).toList();
 
-  void _marcarTodos(bool valor) {
+  void _marcarTodosEnPantalla(bool valor) {
     setState(() {
       for (final id in _firmadoPorId.keys) {
         _firmadoPorId[id] = valor;
@@ -64,18 +85,66 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
     });
   }
 
+  Future<void> _confirmarMarcarTodos(bool marcarComoFirmado) async {
+    final n = _totalEnLista;
+    if (n == 0 || _guardando) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          marcarComoFirmado ? 'Marcar todos como firmados' : 'Quitar firma a todos',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          marcarComoFirmado
+              ? 'Se marcarán los $n alumnos de esta lista como «contrato firmado» '
+                    'solo en esta pantalla. Recordá pulsar Guardar para que quede registrado.'
+              : 'Se quitará la marca de contrato firmado a los $n alumnos de esta lista '
+                    'solo en esta pantalla. Recordá pulsar Guardar para que quede registrado.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: marcarComoFirmado
+                ? null
+                : FilledButton.styleFrom(
+                    backgroundColor: Colors.deepOrange.shade800,
+                    foregroundColor: Colors.white,
+                  ),
+            child: Text(marcarComoFirmado ? 'Marcar todos' : 'Quitar marca a todos'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      _marcarTodosEnPantalla(marcarComoFirmado);
+    }
+  }
+
   void _setFirmado(String id, bool valor) {
     setState(() => _firmadoPorId[id] = valor);
   }
 
   Future<void> _guardar() async {
+    final cambios = <String, bool>{};
+    for (final e in _firmadoPorId.entries) {
+      if (_originalPorId[e.key] != e.value) {
+        cambios[e.key] = e.value;
+      }
+    }
+
+    if (cambios.isEmpty) {
+      if (mounted) Navigator.of(context).pop(false);
+      return;
+    }
+
     setState(() => _guardando = true);
     try {
-      for (final e in _firmadoPorId.entries) {
-        final original = _originalPorId[e.key];
-        if (original == e.value) continue;
-        await widget.repository.actualizarContrato(e.key, {'contrato_firmado': e.value});
-      }
+      await widget.repository.actualizarContratoFirmadoBulk(cambios);
       if (mounted) Navigator.of(context).pop(true);
     } catch (err) {
       if (mounted) {
@@ -88,6 +157,33 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
       }
     } finally {
       if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  Future<void> _exportarPdf() async {
+    if (_exportandoPdf) return;
+    setState(() => _exportandoPdf = true);
+    try {
+      final ordenados = _ordenados;
+      final pendientes = ordenados.where((a) => !(_firmadoPorId[a.id] ?? false)).toList();
+      final firmados = ordenados.where((a) => _firmadoPorId[a.id] ?? false).toList();
+      await PdfService.generarListadoContratosFirmadosPdf(
+        eventoTitulo: widget.eventoTitulo,
+        generadoEn: ArTime.nowUtc(),
+        pendientes: pendientes,
+        firmados: firmados,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo generar el PDF: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportandoPdf = false);
     }
   }
 
@@ -287,13 +383,44 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
   }
 
   List<Widget> _construirSlivers(Color teal) {
-    final pendientes = _pendientes;
-    final firmados = _firmados;
+    final pendBase = _pendientes;
+    final firmBase = _firmados;
+    final pendientes = _filtrar(pendBase);
+    final firmados = _filtrar(firmBase);
     final slivers = <Widget>[];
+    final q = _q;
+
+    if (q.isNotEmpty && pendientes.isEmpty && firmados.isEmpty) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                'Ningún alumno coincide con la búsqueda.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return slivers;
+    }
 
     if (pendientes.isNotEmpty) {
       slivers.add(
-        SliverToBoxAdapter(child: _encabezadoSeccion('Pendientes de firmar', pendientes.length, Colors.deepOrange.shade800)),
+        SliverToBoxAdapter(
+          child: _encabezadoSeccion(
+            'Pendientes de firmar',
+            pendientes.length,
+            Colors.deepOrange.shade800,
+          ),
+        ),
       );
       slivers.add(
         SliverList(
@@ -341,6 +468,11 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
   @override
   Widget build(BuildContext context) {
     final teal = Colors.teal.shade700;
+    final pendVis = _filtrar(_pendientes);
+    final firmVis = _filtrar(_firmados);
+    final visCount = pendVis.length + firmVis.length;
+    final hayBusqueda = _q.isNotEmpty;
+
     return AlertDialog(
       title: Row(
         children: [
@@ -361,23 +493,65 @@ class _ContratosFirmadosBulkDialogState extends State<ContratosFirmadosBulkDialo
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _resumenContadores(teal),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _busquedaCtrl,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Buscar por nombre o curso…',
+                prefixIcon: const Icon(Icons.search, size: 22),
+                suffixIcon: _busquedaCtrl.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Limpiar',
+                        icon: const Icon(Icons.clear),
+                        onPressed: _guardando
+                            ? null
+                            : () {
+                                _busquedaCtrl.clear();
+                                setState(() {});
+                              },
+                      ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            if (hayBusqueda) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Mostrando $visCount coincidencia(s) en esta vista ($_totalEnLista en la lista total).',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+              ),
+            ],
+            const SizedBox(height: 10),
             Text(
-              'Tocá la fila o el interruptor. Guardá solo cuando termines.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              '«Marcar / desmarcar todos» afecta a la lista completa ($_totalEnLista). Tocá Guardar para persistir.',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton(
-                  onPressed: _guardando ? null : () => _marcarTodos(true),
+                  onPressed: _guardando ? null : () => _confirmarMarcarTodos(true),
                   child: const Text('Marcar todos'),
                 ),
                 TextButton(
-                  onPressed: _guardando ? null : () => _marcarTodos(false),
+                  onPressed: _guardando ? null : () => _confirmarMarcarTodos(false),
                   child: const Text('Desmarcar todos'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (_guardando || _exportandoPdf) ? null : _exportarPdf,
+                  icon: _exportandoPdf
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: Text(_exportandoPdf ? 'Generando PDF…' : 'Exportar PDF'),
                 ),
               ],
             ),

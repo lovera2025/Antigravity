@@ -2244,6 +2244,229 @@ class PdfService {
     }
   }
 
+  /// Listado de alumnos con estado de contrato firmado (export desde eventos masivos).
+  /// [pendientes] y [firmados] deben estar mutuamente excluyentes y cubrir la lista deseada.
+  static Future<void> generarListadoContratosFirmadosPdf({
+    required String eventoTitulo,
+    required DateTime generadoEn,
+    required List<ContratoAlumno> pendientes,
+    required List<ContratoAlumno> firmados,
+  }) async {
+    final fontRegular = await PdfGoogleFonts.outfitRegular();
+    final fontBold = await PdfGoogleFonts.outfitBold();
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
+    );
+
+    /// Solo campos con valor cargado (sin institución).
+    String datosCargadosResumen(ContratoAlumno a) {
+      final parts = <String>[];
+      final curso = a.cursoDivision?.trim();
+      if (curso != null && curso.isNotEmpty) {
+        parts.add('Curso/div.: $curso');
+      }
+      final tel = a.telefono?.trim();
+      if (tel != null && tel.isNotEmpty) {
+        parts.add('Tel.: $tel');
+      }
+      final mesa = a.numeroMesa?.trim();
+      if (mesa != null && mesa.isNotEmpty) {
+        parts.add('Mesa: $mesa');
+      }
+      if (parts.isEmpty) {
+        return 'Sin otros datos cargados';
+      }
+      return parts.join(' · ');
+    }
+
+    List<List<String>> filasAlumnos(List<ContratoAlumno> lista) {
+      return lista.map((a) {
+        return [a.nombreAlumno, datosCargadosResumen(a)];
+      }).toList();
+    }
+
+    final fechaTxt = ArTime.formatFechaHora(generadoEn);
+    final tituloSafe = eventoTitulo.trim().isEmpty ? 'Evento' : eventoTitulo.trim();
+    final nPend = pendientes.length;
+    final nFirm = firmados.length;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'ESTADO DE CONTRATOS — $tituloSafe',
+              style: pw.TextStyle(
+                fontSize: 16,
+                fontWeight: pw.FontWeight.bold,
+                color: _gold,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Emitido: $fechaTxt',
+              style: pw.TextStyle(fontSize: 9, color: _greyText),
+            ),
+            pw.Text(
+              'Incluye el estado visualizado en pantalla (cambios aún no guardados con «Guardar»).',
+              style: pw.TextStyle(fontSize: 8.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              'Listado en dos bloques: primero quienes no firmaron, después quienes sí firmaron el contrato.',
+              style: pw.TextStyle(fontSize: 9, color: _darkText, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Divider(color: _gold),
+            pw.SizedBox(height: 6),
+          ],
+        ),
+        build: (context) {
+          const headers = <String>[
+            'ALUMNO',
+            'DATOS CARGADOS (curso, tel., mesa)',
+          ];
+
+          pw.Widget bloqueTitulo(String texto, PdfColor color) {
+            return pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 12, bottom: 8),
+              child: pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: pw.BoxDecoration(
+                  color: color == _redAccent
+                      ? PdfColor.fromInt(0xFFFFF0F0)
+                      : color == _greenAccent
+                          ? PdfColor.fromInt(0xFFF0FFF5)
+                          : PdfColor.fromInt(0xFFF5F5F5),
+                  border: pw.Border(
+                    left: pw.BorderSide(color: color, width: 4),
+                  ),
+                ),
+                child: pw.Text(
+                  texto,
+                  style: pw.TextStyle(
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final children = <pw.Widget>[];
+
+          if (pendientes.isNotEmpty) {
+            children.add(
+              bloqueTitulo(
+                'ESTOS NO FIRMARON EL CONTRATO — $nPend persona(s)',
+                _redAccent,
+              ),
+            );
+            children.add(
+              pw.TableHelper.fromTextArray(
+                border: pw.TableBorder.all(color: _greyLight),
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkText,
+                  fontSize: 9,
+                ),
+                headerDecoration: const pw.BoxDecoration(color: _headerBg),
+                cellStyle: pw.TextStyle(fontSize: 8.5),
+                cellPadding: const pw.EdgeInsets.all(5),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(1.4),
+                  1: const pw.FlexColumnWidth(2.2),
+                },
+                data: <List<String>>[
+                  headers,
+                  ...filasAlumnos(pendientes),
+                ],
+              ),
+            );
+          } else {
+            children.add(
+              bloqueTitulo('ESTOS NO FIRMARON EL CONTRATO — 0 persona(s)', _greyText),
+            );
+            children.add(
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 6),
+                child: pw.Text(
+                  '(Nadie pendiente de firma en este listado.)',
+                  style: pw.TextStyle(fontSize: 9.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+                ),
+              ),
+            );
+          }
+
+          if (firmados.isNotEmpty) {
+            children.add(
+              bloqueTitulo(
+                'ESTOS SÍ FIRMARON EL CONTRATO — $nFirm persona(s)',
+                _greenAccent,
+              ),
+            );
+            children.add(
+              pw.TableHelper.fromTextArray(
+                border: pw.TableBorder.all(color: _greyLight),
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkText,
+                  fontSize: 9,
+                ),
+                headerDecoration: const pw.BoxDecoration(color: _headerBg),
+                cellStyle: pw.TextStyle(fontSize: 8.5),
+                cellPadding: const pw.EdgeInsets.all(5),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(1.4),
+                  1: const pw.FlexColumnWidth(2.2),
+                },
+                data: <List<String>>[
+                  headers,
+                  ...filasAlumnos(firmados),
+                ],
+              ),
+            );
+          } else {
+            children.add(
+              bloqueTitulo('ESTOS SÍ FIRMARON EL CONTRATO — 0 persona(s)', _greyText),
+            );
+            children.add(
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 6),
+                child: pw.Text(
+                  '(Nadie figura con contrato firmado en este listado.)',
+                  style: pw.TextStyle(fontSize: 9.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+                ),
+              ),
+            );
+          }
+
+          return children;
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final safeName = tituloSafe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
+    final fname = 'Contratos_${safeName}_$fechaTxt.pdf'
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\\.]'), '_')
+        .replaceAll('__', '_');
+
+    if (!kIsWeb && Platform.isWindows) {
+      await _abrirEnWindows(bytes, fname);
+    } else {
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: fname,
+      );
+    }
+  }
+
   /// PDF de análisis de rentabilidad (uso interno / gestión).
   static Future<void> generarRentabilidadPdf({
     required ResultadoRentabilidad resultado,

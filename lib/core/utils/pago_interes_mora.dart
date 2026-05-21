@@ -1,6 +1,8 @@
-/// Valor persistido en [pagos_contrato_alumno.line_kind] para cobros de mora
-/// (solo ingreso; no liquidan capital del plan).
 const String kLineKindInteresMora = 'interes_mora';
+
+/// Valor persistido en [pagos_contrato_alumno.line_kind] para cargos de
+/// operador/canal (transferencia MP u otro). Solo ingreso; no liquidan capital.
+const String kLineKindCargoCanal = 'cargo_canal_ref';
 
 /// Heurística estable para reconocer líneas de **interés por mora** en
 /// [pagos_contrato_alumno]. No liquidan capital del plan (solo ingreso accesorio).

@@ -163,6 +163,7 @@ class SyncEngine {
       }
       
       if (table == 'pagos_contrato_alumno' || table == 'pagos_prestamo_alquiler') return 4;
+      if (table == 'notas_operativas_contrato') return 4;
       if (table == 'eventos_servicios' || table == 'presupuesto_servicios' || table == 'prestamo_alquiler_lineas') {
         return 3;
       } // Depende de padre y servicio / préstamo
@@ -390,31 +391,33 @@ class SyncEngine {
     }
   }
 
-  /// Descarga datos frescos de Supabase → SQLite.
   Future<void> _pullFromCloud() async {
     final db = await LocalDatabase.instance;
 
-    debugPrint('📥 Pull Cloud → Local...');
+    debugPrint('📥 Pull Cloud → Local (En Paralelo)...');
 
-    await _pullTable(db, 'clientes', 'created_at');
-    await _pullTable(db, 'servicios', null);
-    await _pullTable(db, 'eventos', 'created_at');
-    await _pullTable(db, 'eventos_servicios', null, primaryKey: 'id');
-    await _pullTable(db, 'presupuestos', 'created_at');
-    await _pullTable(db, 'presupuesto_servicios', null, primaryKey: 'id');
-    await _pullTable(db, 'transacciones', 'fecha_pago');
-    await _pullTable(db, 'egresos', 'fecha');
-    await _pullTable(db, 'contratos_alumnos', 'created_at');
-    await _pullTable(db, 'pagos_contrato_alumno', 'created_at');
-    await _pullTable(db, 'invitados', 'updated_at');
-    await _pullTable(db, 'solicitudes_cotizacion', null);
-    await _pullTable(db, 'prestamos_alquiler', 'created_at');
-    await _pullTable(db, 'prestamo_alquiler_lineas', null);
-    await _pullTable(db, 'pagos_prestamo_alquiler', 'created_at');
-    await _pullTable(db, 'calculos_rentabilidad', 'created_at');
-    await _pullTable(db, 'obligaciones_pago', 'fecha_vencimiento');
-    await _pullTable(db, 'caja_fuerte_movimientos', 'created_at');
-    await _pullTable(db, 'rentabilidad_config', null);
+    await Future.wait([
+      _pullTable(db, 'clientes', 'created_at'),
+      _pullTable(db, 'servicios', null),
+      _pullTable(db, 'eventos', 'created_at'),
+      _pullTable(db, 'eventos_servicios', null, primaryKey: 'id'),
+      _pullTable(db, 'presupuestos', 'created_at'),
+      _pullTable(db, 'presupuesto_servicios', null, primaryKey: 'id'),
+      _pullTable(db, 'transacciones', 'fecha_pago'),
+      _pullTable(db, 'egresos', 'fecha'),
+      _pullTable(db, 'contratos_alumnos', 'created_at'),
+      _pullTable(db, 'notas_operativas_contrato', 'updated_at'),
+      _pullTable(db, 'pagos_contrato_alumno', 'created_at'),
+      _pullTable(db, 'invitados', 'updated_at'),
+      _pullTable(db, 'solicitudes_cotizacion', null),
+      _pullTable(db, 'prestamos_alquiler', 'created_at'),
+      _pullTable(db, 'prestamo_alquiler_lineas', null),
+      _pullTable(db, 'pagos_prestamo_alquiler', 'created_at'),
+      _pullTable(db, 'calculos_rentabilidad', 'created_at'),
+      _pullTable(db, 'obligaciones_pago', 'fecha_vencimiento'),
+      _pullTable(db, 'caja_fuerte_movimientos', 'created_at'),
+      _pullTable(db, 'rentabilidad_config', null),
+    ]);
 
     debugPrint('📥 Pull completado');
   }
@@ -599,6 +602,14 @@ class SyncEngine {
       ],
       'egresos': ['id', 'evento_id', 'monto', 'proveedor', 'categoria', 'fecha', 'created_by', 'medio_pago'],
       'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked'],
+      'notas_operativas_contrato': [
+        'id',
+        'contrato_alumno_id',
+        'texto',
+        'resuelto',
+        'created_at',
+        'updated_at',
+      ],
       'pagos_contrato_alumno': [
         'id',
         'contrato_alumno_id',

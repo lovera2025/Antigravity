@@ -55,12 +55,13 @@ class TransaccionesRepository {
     String? concepto,
     String? createdBy,
     String? medioPago,
+    DateTime? fechaPago,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
     // Sello temporal ESTRICTO: instante UTC preciso. La presentación al
     // usuario se realiza vía ArTime en huso America/Argentina/Buenos_Aires.
-    final now = ArTime.nowUtcIso();
+    final now = fechaPago?.toUtc().toIso8601String() ?? ArTime.nowUtcIso();
 
     final data = {
       'id': id,

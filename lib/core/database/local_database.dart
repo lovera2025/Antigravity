@@ -17,7 +17,7 @@ import '../utils/uuid_utils.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 40;
+  static const int _version = 42;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -413,6 +413,19 @@ class LocalDatabase {
       )
     ''');
 
+    // ── Notas operativas por contrato (sync Supabase; no contable) ───────────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS notas_operativas_contrato (
+        id TEXT PRIMARY KEY,
+        contrato_alumno_id TEXT NOT NULL UNIQUE,
+        texto TEXT NOT NULL DEFAULT '',
+        resuelto INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
+      )
+    ''');
+
     // ── Configuración de Rentabilidad Fija ───────────────────────────────────
     await db.execute('''
       CREATE TABLE IF NOT EXISTS rentabilidad_config (
@@ -445,6 +458,9 @@ class LocalDatabase {
     await db.execute('CREATE INDEX idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)');
 
     await db.execute('CREATE INDEX idx_caja_fuerte_created ON caja_fuerte_movimientos(created_at)');
+    await db.execute(
+      'CREATE INDEX idx_notas_operativas_contrato ON notas_operativas_contrato(contrato_alumno_id)',
+    );
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1116,8 +1132,95 @@ class LocalDatabase {
         debugPrint('  ⚠️ Nota migración v40 caja_fuerte: $e');
       }
     }
-  }
 
+    if (oldVersion < 41) {
+      debugPrint('  🔧 Aplicando migración v41 (notas_operativas_contrato)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS notas_operativas_contrato (
+            contrato_alumno_id TEXT PRIMARY KEY,
+            texto TEXT NOT NULL DEFAULT '',
+            resuelto INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_notas_operativas_contrato ON notas_operativas_contrato(contrato_alumno_id)',
+        );
+        debugPrint('✅ Migración v41 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ Nota migración v41 notas_operativas: $e');
+      }
+    }
+
+    if (oldVersion < 42) {
+      debugPrint(
+        '  🔧 Aplicando migración v42 (notas_operativas_contrato: id PK + sync)',
+      );
+      try {
+        final info =
+            await db.rawQuery('PRAGMA table_info(notas_operativas_contrato)');
+        if (info.isEmpty) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS notas_operativas_contrato (
+              id TEXT PRIMARY KEY,
+              contrato_alumno_id TEXT NOT NULL UNIQUE,
+              texto TEXT NOT NULL DEFAULT '',
+              resuelto INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
+            )
+          ''');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_notas_operativas_contrato ON notas_operativas_contrato(contrato_alumno_id)',
+          );
+        } else {
+          final hasIdCol = info.any((c) => c['name'] == 'id');
+          if (!hasIdCol) {
+            final oldRows = await db.query('notas_operativas_contrato');
+            await db.execute('DROP TABLE notas_operativas_contrato');
+            await db.execute('''
+              CREATE TABLE notas_operativas_contrato (
+                id TEXT PRIMARY KEY,
+                contrato_alumno_id TEXT NOT NULL UNIQUE,
+                texto TEXT NOT NULL DEFAULT '',
+                resuelto INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
+              )
+            ''');
+            await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_notas_operativas_contrato ON notas_operativas_contrato(contrato_alumno_id)',
+            );
+            final nowIso = DateTime.now().toUtc().toIso8601String();
+            for (final r in oldRows) {
+              await db.insert('notas_operativas_contrato', {
+                'id': UuidUtils.notaOperativaContratoId(r['contrato_alumno_id'] as String),
+                'contrato_alumno_id': r['contrato_alumno_id'],
+                'texto': r['texto'] ?? '',
+                'resuelto': r['resuelto'] ?? 0,
+                'created_at': (r['created_at'] as String?)?.isNotEmpty == true
+                    ? r['created_at']
+                    : nowIso,
+                'updated_at': (r['updated_at'] as String?)?.isNotEmpty == true
+                    ? r['updated_at']
+                    : nowIso,
+              });
+            }
+            debugPrint(
+              '  ✅ Notas operativas: migradas ${oldRows.length} fila(s) a esquema con id',
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('  ⚠️ Nota migración v42 notas_operativas: $e');
+      }
+    }
+  }
 
   /// Cierra la conexión a la base de datos.
   static Future<void> close() async {
@@ -1134,7 +1237,7 @@ class LocalDatabase {
 
     final db = await instance;
     final tables = [
-      'pagos_contrato_alumno', 'contratos_alumnos', 'transacciones',
+      'pagos_contrato_alumno', 'notas_operativas_contrato', 'contratos_alumnos', 'transacciones',
       'egresos', 'eventos_servicios', 'solicitudes_cotizacion',
       'accesos', 'invitados', 'eventos', 'clientes',
       '_sync_queue', '_sync_meta',
@@ -1151,8 +1254,8 @@ class LocalDatabase {
     final db = await instance;
     final tables = [
       'clientes', 'eventos', 'servicios', 'eventos_servicios', 
-      'transacciones', 'egresos', 'contratos_alumnos', 
-      'pagos_contrato_alumno', 'invitados', 'accesos', 'solicitudes_cotizacion'
+      'transacciones', 'egresos', 'contratos_alumnos',
+      'pagos_contrato_alumno', 'notas_operativas_contrato', 'invitados', 'accesos', 'solicitudes_cotizacion'
     ];
 
     int totalBorrados = 0;
@@ -1216,6 +1319,14 @@ class LocalDatabase {
         debugPrint('  ☢️ Purga Nuclear: Eliminados $pBorrados pagos sin contrato');
       }
 
+      final nBorrados = await txn.rawDelete(
+        "DELETE FROM notas_operativas_contrato WHERE contrato_alumno_id NOT IN (SELECT id FROM contratos_alumnos)"
+      );
+      if (nBorrados > 0) {
+        orfanosBorrados += nBorrados.toInt();
+        debugPrint('  ☢️ Purga Nuclear: Eliminadas $nBorrados notas operativas sin contrato');
+      }
+
       // 5. Limpiar la cola de sincronización (_sync_queue) de operaciones huérfanas
       final qBorrados = await txn.rawDelete(
         "DELETE FROM _sync_queue WHERE tabla = 'contratos_alumnos' AND registro_id NOT IN (SELECT id FROM contratos_alumnos)"
@@ -1223,6 +1334,14 @@ class LocalDatabase {
       if (qBorrados > 0) {
          orfanosBorrados += qBorrados.toInt();
          debugPrint('  ☢️ Purga Nuclear: Eliminadas $qBorrados operaciones de sync huérfanas');
+      }
+
+      final qNotas = await txn.rawDelete(
+        "DELETE FROM _sync_queue WHERE tabla = 'notas_operativas_contrato' AND registro_id NOT IN (SELECT id FROM notas_operativas_contrato)"
+      );
+      if (qNotas > 0) {
+        orfanosBorrados += qNotas.toInt();
+        debugPrint('  ☢️ Purga Nuclear: Eliminadas $qNotas ops sync notas operativas huérfanas');
       }
 
       // Permitir IDs de 36 chars (UUID) o 73 chars (clave compuesta uuid_uuid)

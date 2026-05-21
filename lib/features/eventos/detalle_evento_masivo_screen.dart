@@ -7,8 +7,9 @@ import '../../core/config/app_config.dart';
 
 import '../../models/evento.dart';
 import '../../models/contrato_alumno.dart';
-
+import '../../models/nota_operativa_contrato.dart';
 import '../common/services/pdf_service.dart';
+import 'repositories/notas_operativas_contrato_repository.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/currency_input_formatter.dart';
 import 'repositories/eventos_repository.dart';
@@ -19,6 +20,7 @@ import 'services/calculadora_financiera.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
+import 'widgets/nota_operativa_bottom_sheet.dart';
 
 class DetalleEventoMasivoScreen extends ConsumerStatefulWidget {
   final Evento evento;
@@ -39,9 +41,13 @@ class _DetalleEventoMasivoScreenState
 
   /// Suma de pagos `interes_mora` por contrato (local) para mostrar mora pendiente.
   Map<String, double> _moraCobradaPorContrato = {};
+  /// Notas operativas locales por contrato (no sincronizan; no contables).
+  Map<String, NotaOperativaContrato> _notasOperativasPorContrato = {};
   String _busquedaAlumno = '';
   String? _cursoDivisionFiltro;
   bool _ordenAlfabetico = true;
+  bool _modoSeleccionContratos = false;
+  final Set<String> _idsSeleccionContratos = {};
   RealtimeChannel? _realtimeChannel;
 
   @override
@@ -261,6 +267,7 @@ class _DetalleEventoMasivoScreenState
           _isLoading = false;
         });
       }
+      await _cargarNotasOperativas();
 
       Future.microtask(() async {
         final reparados = await repo.repararContratosHuerfanos(
@@ -286,6 +293,7 @@ class _DetalleEventoMasivoScreenState
             _moraCobradaPorContrato = moraMap2;
           });
         }
+        await _cargarNotasOperativas();
       });
     } catch (e) {
       if (mounted) {
@@ -312,7 +320,19 @@ class _DetalleEventoMasivoScreenState
           _moraCobradaPorContrato = moraMap;
         });
       }
+      await _cargarNotasOperativas();
     } catch (_) {}
+  }
+
+  Future<void> _cargarNotasOperativas() async {
+    if (!mounted) return;
+    final ids = _alumnos.map((e) => e.id).toList();
+    final repo = ref.read(notasOperativasContratoRepositoryProvider);
+    final map = ids.isEmpty
+        ? <String, NotaOperativaContrato>{}
+        : await repo.obtenerPorContratoIds(ids);
+    if (!mounted) return;
+    setState(() => _notasOperativasPorContrato = map);
   }
 
   void _mostrarNotificacionDeuda(ContratoAlumno alumno) {
@@ -648,14 +668,20 @@ class _DetalleEventoMasivoScreenState
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryGold = const Color(0xFFD4AF37);
+    final screenW = MediaQuery.sizeOf(context).width;
+    final layoutCompactScreen = screenW < 1520;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
+        toolbarHeight: layoutCompactScreen ? 48 : kToolbarHeight,
         title: Text(
           (widget.evento.cliente?.nombreCompleto ?? 'DETALLE MASIVO')
               .toUpperCase(),
-          style: const TextStyle(fontSize: 14, letterSpacing: 1),
+          style: TextStyle(
+            fontSize: layoutCompactScreen ? 12 : 14,
+            letterSpacing: 1,
+          ),
         ),
         backgroundColor: Colors.transparent,
         actions: [
@@ -746,15 +772,35 @@ class _DetalleEventoMasivoScreenState
     final recaudado = totalPactado - saldoPendiente;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final screenW = MediaQuery.sizeOf(context).width;
+    // Misma línea que el tab alumnos: laptops 1366×768 y similares.
+    final layoutCompact = screenW < 1520;
+
+    final labelStyle = TextStyle(
+      fontSize: layoutCompact ? 8.5 : 10,
+      fontWeight: FontWeight.bold,
+      color: Colors.grey,
+    );
+    final totalPactadoStyle = TextStyle(
+      fontWeight: FontWeight.w900,
+      fontSize: layoutCompact ? 13 : 16,
+    );
+    final montoGrandeStyle = TextStyle(
+      fontWeight: FontWeight.w900,
+      fontSize: layoutCompact ? 15 : 20,
+    );
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      padding: const EdgeInsets.all(20),
+      margin: EdgeInsets.symmetric(
+        horizontal: layoutCompact ? 8 : 24,
+        vertical: layoutCompact ? 2 : 8,
+      ),
+      padding: EdgeInsets.all(layoutCompact ? 8 : 20),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.blue.withValues(alpha: 0.1)
             : Colors.blue.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(layoutCompact ? 14 : 24),
         border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
       ),
       child: Column(
@@ -762,29 +808,25 @@ class _DetalleEventoMasivoScreenState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'TOTAL PACTADO',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                ),
-              ),
+              Text('TOTAL PACTADO', style: labelStyle),
               Row(
                 children: [
                   Text(
                     _ocultarMontos ? '***' : totalPactado.toCurrency(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
+                    style: totalPactadoStyle,
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: layoutCompact ? 4 : 12),
                   IconButton(
+                    visualDensity:
+                        layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                    padding: layoutCompact ? EdgeInsets.zero : null,
+                    constraints: layoutCompact
+                        ? const BoxConstraints(minWidth: 36, minHeight: 36)
+                        : null,
                     icon: Icon(
                       _ocultarMontos ? Icons.visibility_off : Icons.visibility,
                       color: Colors.grey,
-                      size: 20,
+                      size: layoutCompact ? 18 : 20,
                     ),
                     onPressed: () {
                       setState(() {
@@ -797,29 +839,18 @@ class _DetalleEventoMasivoScreenState
               ),
             ],
           ),
-          const Divider(height: 24),
+          Divider(height: layoutCompact ? 8 : 24),
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'RECAUDADO',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
+                    Text('RECAUDADO', style: labelStyle),
+                    SizedBox(height: layoutCompact ? 2 : 4),
                     Text(
                       _ocultarMontos ? '***' : recaudado.toCurrency(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 20,
-                        color: Colors.green,
-                      ),
+                      style: montoGrandeStyle.copyWith(color: Colors.green),
                     ),
                   ],
                 ),
@@ -828,22 +859,11 @@ class _DetalleEventoMasivoScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text(
-                      'SALDO PENDIENTE',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
+                    Text('SALDO PENDIENTE', style: labelStyle),
+                    SizedBox(height: layoutCompact ? 2 : 4),
                     Text(
                       _ocultarMontos ? '***' : saldoPendiente.toCurrency(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 20,
-                        color: Colors.amber,
-                      ),
+                      style: montoGrandeStyle.copyWith(color: Colors.amber),
                     ),
                   ],
                 ),
@@ -919,275 +939,357 @@ class _DetalleEventoMasivoScreenState
     return LayoutBuilder(
       builder: (context, constraints) {
         final double availableWidth = constraints.maxWidth;
-        final double horizontalPad = availableWidth > 800 ? 32 : 16;
+        // Laptops típicas 1366×768 y similares: más aire útil para tabla y toolbar.
+        final bool layoutCompact = availableWidth < 1520;
+        final double horizontalPad = layoutCompact
+            ? 12
+            : (availableWidth > 800 ? 32 : 16);
         final double tableWidth = availableWidth - (horizontalPad * 2);
 
-        final double colAlumno = tableWidth * 0.20;
-        final double colTelefono = tableWidth * 0.11;
-        final double colAcomp = tableWidth * 0.14;
-        final double colContrato = tableWidth * 0.08;
-        final double colEstado = tableWidth * 0.25;
-        final double colAcciones = tableWidth * 0.22;
+        final double innerTable = tableWidth - (_modoSeleccionContratos ? 52 : 0);
+        final double colAlumno = innerTable * 0.20;
+        final double colTelefono = innerTable * 0.11;
+        final double colAcomp = innerTable * 0.14;
+        final double colContrato = innerTable * 0.08;
+        final double colEstado = innerTable * 0.25;
+                        final double colAcciones = innerTable * 0.26;
 
         final int contratosFirmados = alumnosFiltrados
             .where((a) => a.contratoFirmado)
             .length;
 
+        final double tbIcon = layoutCompact ? 15.0 : 18.0;
+        final double tbIconSm = layoutCompact ? 14.0 : 16.0;
+        final EdgeInsets tbPadLg = EdgeInsets.symmetric(
+          horizontal: layoutCompact ? 10 : 20,
+          vertical: layoutCompact ? 6 : 12,
+        );
+        final EdgeInsets tbPadMd = EdgeInsets.symmetric(
+          horizontal: layoutCompact ? 8 : 16,
+          vertical: layoutCompact ? 6 : 12,
+        );
+        final EdgeInsets tbPadSm = EdgeInsets.symmetric(
+          horizontal: layoutCompact ? 7 : 12,
+          vertical: layoutCompact ? 5 : 8,
+        );
+        final double tbFs = layoutCompact ? 11.0 : 12.0;
+        final double tbFsSm = layoutCompact ? 10.0 : 11.0;
+        final double tbRadius = layoutCompact ? 12.0 : 16.0;
+
+        final tableHeaderStyle = TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: layoutCompact ? 10 : 11,
+          letterSpacing: 1,
+        );
+
+        final Widget secondaryAlumnosToolbarButtons = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _ordenAlfabetico = !_ordenAlfabetico;
+                });
+              },
+              icon: Icon(
+                _ordenAlfabetico ? Icons.sort_by_alpha : Icons.schedule,
+                size: tbIconSm,
+              ),
+              label: Text(
+                _ordenAlfabetico ? 'ORDEN A-Z' : 'FECHA',
+                style: TextStyle(fontSize: tbFsSm),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? Colors.white12 : Colors.black12,
+                foregroundColor: isDark ? Colors.white : Colors.black,
+                padding: tbPadSm,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(tbRadius),
+                ),
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 5 : 8),
+            Tooltip(
+              message: 'Planilla de cursos (PDF)',
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  if (_alumnos.isNotEmpty) {
+                    PdfService.generarPlanillaCursos(widget.evento, _alumnos);
+                  }
+                },
+                icon: Icon(Icons.print_rounded, size: tbIcon),
+                label: Text(
+                  layoutCompact ? 'PLANILLA' : 'PLANILLA CURSOS',
+                  style: TextStyle(fontSize: tbFs),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white12,
+                  foregroundColor: Colors.white,
+                  padding: tbPadSm,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tbRadius),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 5 : 8),
+            Tooltip(
+              message: 'Sortear mesas',
+              child: ElevatedButton.icon(
+                onPressed: _sortearMesas,
+                icon: Icon(Icons.casino, size: tbIcon),
+                label: Text(
+                  layoutCompact ? 'SORTEAR' : 'SORTEAR MESAS',
+                  style: TextStyle(fontSize: tbFs),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                  padding: tbPadSm,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tbRadius),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 5 : 8),
+            Tooltip(
+              message: 'Deshacer sorteo de mesas',
+              child: ElevatedButton.icon(
+                onPressed: _deshacerSorteoMesas,
+                icon: Icon(Icons.undo, size: tbIcon),
+                label: Text(
+                  layoutCompact ? 'DESHACER' : 'DESHACER MESAS',
+                  style: TextStyle(fontSize: tbFs),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepOrange,
+                  foregroundColor: Colors.white,
+                  padding: tbPadSm,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tbRadius),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+        final Widget primaryAlumnosToolbarButtons = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'ALUMNOS INSCRIPTOS',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: layoutCompact ? 10 : 12,
+                letterSpacing: layoutCompact ? 0.7 : 1.2,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 8 : 12),
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: layoutCompact ? 6 : 10,
+                vertical: layoutCompact ? 2 : 4,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+                border: Border.all(
+                  color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.people_alt_rounded,
+                    size: layoutCompact ? 13 : 14,
+                    color: const Color(0xFFD4AF37),
+                  ),
+                  SizedBox(width: layoutCompact ? 4 : 6),
+                  Text(
+                    '${alumnosFiltrados.length}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: layoutCompact ? 12 : 13,
+                      color: const Color(0xFFD4AF37),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 6 : 10),
+            Tooltip(
+              message: 'Contratos firmados / alumnos listados',
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: layoutCompact ? 6 : 10,
+                  vertical: layoutCompact ? 2 : 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+                  border: Border.all(color: Colors.teal.withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.assignment_turned_in_outlined,
+                      size: layoutCompact ? 13 : 14,
+                      color: Colors.teal.shade700,
+                    ),
+                    SizedBox(width: layoutCompact ? 4 : 6),
+                    Text(
+                      '$contratosFirmados/${alumnosFiltrados.length}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: layoutCompact ? 12 : 13,
+                        color: Colors.teal.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 8 : 16),
+            Tooltip(
+              message: 'Registrar nuevo alumno',
+              child: ElevatedButton.icon(
+                onPressed: _mostrarModalRegistrarAlumno,
+                icon: Icon(Icons.person_add_alt_1, size: tbIcon),
+                label: Text(
+                  layoutCompact ? 'REGISTRAR' : 'REGISTRAR ALUMNO',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: tbFs,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD4AF37),
+                  foregroundColor: Colors.black,
+                  padding: tbPadLg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tbRadius),
+                  ),
+                  elevation: layoutCompact ? 2 : 4,
+                ),
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 6 : 10),
+            Tooltip(
+              message: 'Marcar contratos firmados por alumno',
+              child: ElevatedButton.icon(
+                onPressed: _mostrarDialogContratosFirmados,
+                icon: Icon(Icons.assignment_turned_in_outlined, size: tbIcon),
+                label: Text(
+                  'CONTRATOS',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: tbFs,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade700,
+                  foregroundColor: Colors.white,
+                  padding: tbPadMd,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tbRadius),
+                  ),
+                  elevation: layoutCompact ? 2 : 3,
+                ),
+              ),
+            ),
+            SizedBox(width: layoutCompact ? 6 : 8),
+            Tooltip(
+              message:
+                  'Seleccionar varios alumnos en la tabla (usa la búsqueda de arriba) y marcar o quitar firma de contrato de una vez.',
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _modoSeleccionContratos = !_modoSeleccionContratos;
+                    if (!_modoSeleccionContratos) {
+                      _idsSeleccionContratos.clear();
+                    }
+                  });
+                },
+                icon: Icon(
+                  _modoSeleccionContratos ? Icons.close : Icons.checklist_rounded,
+                  size: tbIcon,
+                ),
+                label: Text(
+                  _modoSeleccionContratos ? 'CANCELAR' : 'SELECCIÓN',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: tbFs,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.teal.shade800,
+                  side: BorderSide(color: Colors.teal.shade700, width: layoutCompact ? 1.2 : 1.5),
+                  padding: tbPadMd,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tbRadius),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+
         return Column(
           children: [
             Padding(
-              padding: EdgeInsets.fromLTRB(horizontalPad, 24, horizontalPad, 8),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPad,
+                layoutCompact ? 6 : 24,
+                horizontalPad,
+                layoutCompact ? 4 : 8,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            'ALUMNOS INSCRIPTOS',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 1.2,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFFD4AF37,
-                              ).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFFD4AF37,
-                                ).withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.people_alt_rounded,
-                                  size: 14,
-                                  color: Color(0xFFD4AF37),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '${alumnosFiltrados.length}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 13,
-                                    color: Color(0xFFD4AF37),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Tooltip(
-                            message: 'Contratos firmados / alumnos listados',
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.teal.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.teal.withValues(alpha: 0.45),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.assignment_turned_in_outlined,
-                                    size: 14,
-                                    color: Colors.teal.shade700,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '$contratosFirmados/${alumnosFiltrados.length}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 13,
-                                      color: Colors.teal.shade800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            onPressed: _mostrarModalRegistrarAlumno,
-                            icon: const Icon(Icons.person_add_alt_1, size: 18),
-                            label: const Text(
-                              'REGISTRAR ALUMNO',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFD4AF37),
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 4,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Tooltip(
-                            message: 'Marcar contratos firmados por alumno',
-                            child: ElevatedButton.icon(
-                              onPressed: _mostrarDialogContratosFirmados,
-                              icon: const Icon(
-                                Icons.assignment_turned_in_outlined,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'CONTRATOS',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  setState(() {
-                                    _ordenAlfabetico = !_ordenAlfabetico;
-                                  });
-                                },
-                                icon: Icon(
-                                  _ordenAlfabetico
-                                      ? Icons.sort_by_alpha
-                                      : Icons.schedule,
-                                  size: 16,
-                                ),
-                                label: Text(
-                                  _ordenAlfabetico ? 'ORDEN A-Z' : 'FECHA',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isDark
-                                      ? Colors.white12
-                                      : Colors.black12,
-                                  foregroundColor: isDark
-                                      ? Colors.white
-                                      : Colors.black,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  if (_alumnos.isNotEmpty) {
-                                    PdfService.generarPlanillaCursos(
-                                      widget.evento,
-                                      _alumnos,
-                                    );
-                                  }
-                                },
-                                icon: const Icon(Icons.print_rounded, size: 18),
-                                label: const Text(
-                                  'PLANILLA CURSOS',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white12,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: _sortearMesas,
-                                icon: const Icon(Icons.casino, size: 18),
-                                label: const Text(
-                                  'SORTEAR MESAS',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.indigo,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: _deshacerSorteoMesas,
-                                icon: const Icon(Icons.undo, size: 18),
-                                label: const Text(
-                                  'DESHACER MESAS',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepOrange,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
+                  // Izquierda: contadores + acciones principales; derecha: orden/planilla/sortear/deshacer
+                  // alineados al borde final (ancho del buscador / contenido).
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      visualDensity:
+                          layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: primaryAlumnosToolbarButtons,
                           ),
                         ),
-                      ),
-                    ],
+                        SizedBox(width: layoutCompact ? 8 : 12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const ClampingScrollPhysics(),
+                          child: secondaryAlumnosToolbarButtons,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: layoutCompact ? 8 : 12),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Buscar por alumno o curso',
-                            prefixIcon: Icon(Icons.search),
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            isDense: layoutCompact,
+                            contentPadding: layoutCompact
+                                ? const EdgeInsets.symmetric(horizontal: 10, vertical: 10)
+                                : null,
                           ),
                           onChanged: (value) {
                             setState(() {
@@ -1220,6 +1322,56 @@ class _DetalleEventoMasivoScreenState
                       ),
                     ],
                   ),
+                  if (_modoSeleccionContratos) ...[
+                    const SizedBox(height: 10),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.teal.shade50,
+                        border: Border.all(color: Colors.teal.shade200),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Wrap(
+                          spacing: 12,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Icon(Icons.touch_app, size: 20, color: Colors.teal.shade800),
+                            Text(
+                              '${_idsSeleccionContratos.length} seleccionado(s)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                color: Colors.teal.shade900,
+                              ),
+                            ),
+                            Text(
+                              '· Usá los checkboxes o tocá filas. El encabezado marca todos los visibles.',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: _idsSeleccionContratos.isEmpty
+                                  ? null
+                                  : () => _aplicarContratoFirmadoSeleccionTabla(true),
+                              icon: const Icon(Icons.assignment_turned_in_outlined, size: 18),
+                              label: const Text('Marcar firmado'),
+                            ),
+                            FilledButton.tonalIcon(
+                              onPressed: _idsSeleccionContratos.isEmpty
+                                  ? null
+                                  : () => _aplicarContratoFirmadoSeleccionTabla(false),
+                              style: FilledButton.styleFrom(
+                                foregroundColor: Colors.deepOrange.shade900,
+                              ),
+                              icon: const Icon(Icons.remove_done_rounded, size: 18),
+                              label: const Text('Quitar firma'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1231,88 +1383,64 @@ class _DetalleEventoMasivoScreenState
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minWidth: availableWidth),
                     child: DataTable(
-                      columnSpacing: availableWidth > 1000 ? 24 : 16,
+                      columnSpacing: layoutCompact
+                          ? 10
+                          : (availableWidth > 1000 ? 24 : 16),
                       horizontalMargin: horizontalPad,
-                      headingRowHeight: 48,
-                      dataRowMinHeight: 56,
-                      dataRowMaxHeight: 102,
+                      headingRowHeight: layoutCompact ? 36 : 48,
+                      dataRowMinHeight: layoutCompact ? 44 : 56,
+                      dataRowMaxHeight: layoutCompact ? 72 : 102,
+                      showCheckboxColumn: _modoSeleccionContratos,
+                      onSelectAll: _modoSeleccionContratos
+                          ? (selected) {
+                              setState(() {
+                                if (selected == true) {
+                                  for (final a in alumnosFiltrados) {
+                                    _idsSeleccionContratos.add(a.id);
+                                  }
+                                } else {
+                                  for (final a in alumnosFiltrados) {
+                                    _idsSeleccionContratos.remove(a.id);
+                                  }
+                                }
+                              });
+                            }
+                          : null,
                       columns: [
                         DataColumn(
                           label: SizedBox(
                             width: colAlumno,
-                            child: const Text(
-                              'ALUMNO',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                            child: Text('ALUMNO', style: tableHeaderStyle),
                           ),
                         ),
                         DataColumn(
                           label: SizedBox(
                             width: colTelefono,
-                            child: const Text(
-                              'TELÉFONO',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                            child: Text('TELÉFONO', style: tableHeaderStyle),
                           ),
                         ),
                         DataColumn(
                           label: SizedBox(
                             width: colAcomp,
-                            child: const Text(
-                              'ACOMP.',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                            child: Text('ACOMP.', style: tableHeaderStyle),
                           ),
                         ),
                         DataColumn(
                           label: SizedBox(
                             width: colContrato,
-                            child: const Text(
-                              'CONT.',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                            child: Text('CONT.', style: tableHeaderStyle),
                           ),
                         ),
                         DataColumn(
                           label: SizedBox(
                             width: colEstado,
-                            child: const Text(
-                              'ESTADO DE DEUDA',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                            child: Text('ESTADO DE DEUDA', style: tableHeaderStyle),
                           ),
                         ),
                         DataColumn(
                           label: SizedBox(
                             width: colAcciones,
-                            child: const Text(
-                              'ACCIONES',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                                letterSpacing: 1,
-                              ),
-                            ),
+                            child: Text('ACCIONES', style: tableHeaderStyle),
                           ),
                         ),
                       ],
@@ -1374,7 +1502,22 @@ class _DetalleEventoMasivoScreenState
                         final cuotaInfo =
                             '($cuotasMostrar/$totalCuotas cuotas)';
 
+                        final notaOp = _notasOperativasPorContrato[a.id];
+
                         return DataRow(
+                          selected:
+                              _modoSeleccionContratos && _idsSeleccionContratos.contains(a.id),
+                          onSelectChanged: _modoSeleccionContratos
+                              ? (selected) {
+                                  setState(() {
+                                    if (selected == true) {
+                                      _idsSeleccionContratos.add(a.id);
+                                    } else {
+                                      _idsSeleccionContratos.remove(a.id);
+                                    }
+                                  });
+                                }
+                              : null,
                           cells: [
                             DataCell(
                               SizedBox(
@@ -1387,18 +1530,18 @@ class _DetalleEventoMasivoScreenState
                                       a.nombreAlumno,
                                       overflow: TextOverflow.ellipsis,
                                       maxLines: 1,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w700,
-                                        fontSize: 13,
+                                        fontSize: layoutCompact ? 12 : 13,
                                       ),
                                     ),
                                     if (a.cursoDivision != null &&
                                         a.cursoDivision!.isNotEmpty)
                                       Container(
-                                        margin: const EdgeInsets.only(top: 3),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
+                                        margin: EdgeInsets.only(top: layoutCompact ? 2 : 3),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: layoutCompact ? 6 : 8,
+                                          vertical: layoutCompact ? 1 : 2,
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.blue.withValues(
@@ -1415,8 +1558,8 @@ class _DetalleEventoMasivoScreenState
                                         ),
                                         child: Text(
                                           a.cursoDivision!,
-                                          style: const TextStyle(
-                                            fontSize: 11,
+                                          style: TextStyle(
+                                            fontSize: layoutCompact ? 10 : 11,
                                             fontWeight: FontWeight.w600,
                                             color: Colors.blue,
                                           ),
@@ -1424,14 +1567,14 @@ class _DetalleEventoMasivoScreenState
                                       ),
                                     if (a.createdAt != null)
                                       Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 4,
+                                        padding: EdgeInsets.only(
+                                          top: layoutCompact ? 2 : 4,
                                           left: 2,
                                         ),
                                         child: Text(
                                           'Reg: ${a.createdAt!.day}/${a.createdAt!.month}/${a.createdAt!.year % 100}',
                                           style: TextStyle(
-                                            fontSize: 10,
+                                            fontSize: layoutCompact ? 9 : 10,
                                             color: Colors.grey.withValues(
                                               alpha: 0.6,
                                             ),
@@ -1452,7 +1595,7 @@ class _DetalleEventoMasivoScreenState
                                       ? a.telefono!
                                       : '-',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: layoutCompact ? 11 : 12,
                                     fontWeight: FontWeight.w500,
                                     color: a.telefono?.isNotEmpty == true
                                         ? null
@@ -1526,10 +1669,12 @@ class _DetalleEventoMasivoScreenState
                                 width: colContrato,
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 36,
-                                    minHeight: 36,
+                                  constraints: BoxConstraints(
+                                    minWidth: layoutCompact ? 32 : 36,
+                                    minHeight: layoutCompact ? 32 : 36,
                                   ),
+                                  visualDensity:
+                                      layoutCompact ? VisualDensity.compact : VisualDensity.standard,
                                   tooltip: a.contratoFirmado
                                       ? 'Contrato firmado (tocar para desmarcar)'
                                       : 'Marcar contrato firmado',
@@ -1537,7 +1682,7 @@ class _DetalleEventoMasivoScreenState
                                     a.contratoFirmado
                                         ? Icons.assignment_turned_in
                                         : Icons.pending_actions_outlined,
-                                    size: 22,
+                                    size: layoutCompact ? 20 : 22,
                                     color: a.contratoFirmado
                                         ? Colors.teal.shade700
                                         : Colors.grey.shade500,
@@ -1559,16 +1704,16 @@ class _DetalleEventoMasivoScreenState
                                         Icon(
                                           estadoIcono,
                                           color: estadoColor,
-                                          size: 16,
+                                          size: layoutCompact ? 14 : 16,
                                         ),
-                                        const SizedBox(width: 6),
+                                        SizedBox(width: layoutCompact ? 4 : 6),
                                         Flexible(
                                           child: Text(
                                             estadoTexto,
                                             style: TextStyle(
                                               color: estadoColor,
                                               fontWeight: FontWeight.w700,
-                                              fontSize: 12,
+                                              fontSize: layoutCompact ? 11 : 12,
                                             ),
                                           ),
                                         ),
@@ -1581,14 +1726,14 @@ class _DetalleEventoMasivoScreenState
                                           color: estadoColor.withValues(
                                             alpha: 0.8,
                                           ),
-                                          fontSize: 11,
+                                          fontSize: layoutCompact ? 10 : 11,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     Text(
                                       cuotaInfo,
-                                      style: const TextStyle(
-                                        fontSize: 10,
+                                      style: TextStyle(
+                                        fontSize: layoutCompact ? 9 : 10,
                                         color: Colors.grey,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -1598,11 +1743,11 @@ class _DetalleEventoMasivoScreenState
                                             null &&
                                         mora.proximaCuotaNumero != null)
                                       Padding(
-                                        padding: const EdgeInsets.only(top: 2),
+                                        padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
                                         child: Text(
                                           'Vto. cuota ${mora.proximaCuotaNumero}: ${ArTime.formatFechaCorta(mora.fechaVencimientoProximaCuota!)}',
                                           style: TextStyle(
-                                            fontSize: 9,
+                                            fontSize: layoutCompact ? 8 : 9,
                                             color: Colors.grey.shade600,
                                             fontWeight: FontWeight.w500,
                                           ),
@@ -1610,13 +1755,13 @@ class _DetalleEventoMasivoScreenState
                                       ),
                                     if (moraPendienteFila > 0.01)
                                       Padding(
-                                        padding: const EdgeInsets.only(top: 2),
+                                        padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
                                         child: Text(
                                           mora.enMora && mora.diasMora > 0
                                               ? 'Mora pendiente: ${moraPendienteFila.toCurrency()} · ${mora.diasMora} d'
                                               : 'Mora pendiente: ${moraPendienteFila.toCurrency()}',
                                           style: TextStyle(
-                                            fontSize: 9,
+                                            fontSize: layoutCompact ? 8 : 9,
                                             fontWeight: FontWeight.w700,
                                             color: Colors.orange.shade800,
                                           ),
@@ -1631,45 +1776,146 @@ class _DetalleEventoMasivoScreenState
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(
+                                    visualDensity: layoutCompact
+                                        ? VisualDensity.compact
+                                        : VisualDensity.standard,
+                                    constraints: BoxConstraints(
+                                      minWidth: layoutCompact ? 34 : 40,
+                                      minHeight: layoutCompact ? 34 : 40,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
                                       Icons.edit_outlined,
-                                      size: 20,
+                                      size: layoutCompact ? 18 : 20,
                                     ),
                                     tooltip: 'Editar alumno/cuotas',
                                     onPressed: () =>
                                         _mostrarModalEditarAlumno(a),
                                   ),
                                   IconButton(
-                                    icon: const Icon(
+                                    visualDensity: layoutCompact
+                                        ? VisualDensity.compact
+                                        : VisualDensity.standard,
+                                    constraints: BoxConstraints(
+                                      minWidth: layoutCompact ? 34 : 40,
+                                      minHeight: layoutCompact ? 34 : 40,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
                                       Icons.payments_outlined,
-                                      size: 20,
+                                      size: layoutCompact ? 18 : 20,
                                     ),
                                     tooltip: 'Registrar pago',
                                     onPressed: () => _mostrarModalPagoAlumno(a),
                                   ),
                                   IconButton(
-                                    icon: const Icon(
+                                    visualDensity: layoutCompact
+                                        ? VisualDensity.compact
+                                        : VisualDensity.standard,
+                                    constraints: BoxConstraints(
+                                      minWidth: layoutCompact ? 34 : 40,
+                                      minHeight: layoutCompact ? 34 : 40,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
                                       Icons.account_balance_wallet_outlined,
-                                      size: 20,
-                                      color: Color(0xFFD4AF37),
+                                      size: layoutCompact ? 18 : 20,
+                                      color: const Color(0xFFD4AF37),
                                     ),
                                     tooltip: 'Ver Estado de Cuenta',
                                     onPressed: () =>
                                         _mostrarHistorialPagosAlumno(a),
                                   ),
                                   IconButton(
-                                    icon: const Icon(
+                                    visualDensity: layoutCompact
+                                        ? VisualDensity.compact
+                                        : VisualDensity.standard,
+                                    constraints: BoxConstraints(
+                                      minWidth: layoutCompact ? 34 : 40,
+                                      minHeight: layoutCompact ? 34 : 40,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
                                       Icons.picture_as_pdf_outlined,
-                                      size: 20,
+                                      size: layoutCompact ? 18 : 20,
                                     ),
                                     tooltip: 'Generar Recibo',
                                     onPressed: () => _imprimirReciboAlumno(a),
                                   ),
                                   IconButton(
-                                    icon: const Icon(
+                                    visualDensity: layoutCompact
+                                        ? VisualDensity.compact
+                                        : VisualDensity.standard,
+                                    constraints: BoxConstraints(
+                                      minWidth: layoutCompact ? 34 : 40,
+                                      minHeight: layoutCompact ? 34 : 40,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    tooltip:
+                                        'Nota operativa — no cambia montos ni cuotas',
+                                    onPressed: () async {
+                                      await showNotaOperativaSheet(
+                                        context: context,
+                                        ref: ref,
+                                        alumno: a,
+                                        existente: notaOp,
+                                        onChanged: () {
+                                          _cargarNotasOperativas();
+                                        },
+                                      );
+                                    },
+                                    icon: Stack(
+                                      clipBehavior: Clip.none,
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Icon(
+                                          notaOp != null && notaOp.tieneTexto
+                                              ? (notaOp.resuelto
+                                                  ? Icons.task_alt_rounded
+                                                  : Icons.sticky_note_2_outlined)
+                                              : Icons.note_add_outlined,
+                                          size: layoutCompact ? 18 : 20,
+                                          color: notaOp != null && notaOp.tieneTexto
+                                              ? (notaOp.resuelto
+                                                  ? Colors.teal.shade600
+                                                  : const Color(0xFFD4AF37))
+                                              : Colors.blueGrey.withValues(alpha: 0.45),
+                                        ),
+                                        if (notaOp != null &&
+                                            notaOp.tieneTexto &&
+                                            !notaOp.resuelto)
+                                          Positioned(
+                                            right: layoutCompact ? -4 : -5,
+                                            top: layoutCompact ? -3 : -4,
+                                            child: Container(
+                                              width: layoutCompact ? 7 : 8,
+                                              height: layoutCompact ? 7 : 8,
+                                              decoration: BoxDecoration(
+                                                color: Colors.deepOrangeAccent,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: Colors.white,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    visualDensity: layoutCompact
+                                        ? VisualDensity.compact
+                                        : VisualDensity.standard,
+                                    constraints: BoxConstraints(
+                                      minWidth: layoutCompact ? 34 : 40,
+                                      minHeight: layoutCompact ? 34 : 40,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
                                       Icons.delete_outline,
                                       color: Colors.redAccent,
-                                      size: 20,
+                                      size: layoutCompact ? 18 : 20,
                                     ),
                                     tooltip: 'Eliminar alumno',
                                     onPressed: () => _eliminarAlumno(a),
@@ -2053,10 +2299,17 @@ class _DetalleEventoMasivoScreenState
       return;
     }
     final repo = ref.read(contratosRepositoryProvider);
+    final tituloEvento =
+        widget.evento.cliente?.nombreCompleto.trim().isNotEmpty == true
+            ? widget.evento.cliente!.nombreCompleto.trim()
+            : 'Evento masivo';
     final guardado = await showDialog<bool>(
       context: context,
-      builder: (ctx) =>
-          ContratosFirmadosBulkDialog(alumnos: activos, repository: repo),
+      builder: (ctx) => ContratosFirmadosBulkDialog(
+        alumnos: activos,
+        repository: repo,
+        eventoTitulo: tituloEvento,
+      ),
     );
     if (mounted && guardado == true) {
       await _fetchDatos(cargaSilenciosa: true);
@@ -2068,10 +2321,117 @@ class _DetalleEventoMasivoScreenState
     }
   }
 
+  Future<void> _aplicarContratoFirmadoSeleccionTabla(bool firmado) async {
+    if (_idsSeleccionContratos.isEmpty) return;
+    final ids = List<String>.from(_idsSeleccionContratos);
+    final n = ids.length;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          firmado ? 'Marcar contrato firmado' : 'Quitar firma del contrato',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          firmado
+              ? '¿Confirmás marcar como firmado el contrato de $n alumno(s) seleccionado(s)? '
+                    'Se guardará de inmediato.'
+              : '¿Querés quitar la marca de contrato firmado en $n alumno(s) seleccionado(s)? '
+                    'Se guardará de inmediato.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: firmado
+                ? null
+                : FilledButton.styleFrom(
+                    backgroundColor: Colors.deepOrange.shade800,
+                    foregroundColor: Colors.white,
+                  ),
+            child: Text(firmado ? 'Confirmar firma' : 'Quitar marca'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true || !mounted) return;
+
+    final map = {for (final id in ids) id: firmado};
+    try {
+      await ref.read(contratosRepositoryProvider).actualizarContratoFirmadoBulk(map);
+      if (!mounted) return;
+      setState(() {
+        for (final id in ids) {
+          final idx = _alumnos.indexWhere((x) => x.id == id);
+          if (idx != -1) {
+            _alumnos[idx] = _alumnos[idx].copyWith(contratoFirmado: firmado);
+          }
+        }
+        _idsSeleccionContratos.clear();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              firmado ? 'Contratos marcados como firmados.' : 'Se quitó la marca de contrato firmado.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo actualizar: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _toggleContratoFirmado(ContratoAlumno alumno) async {
     if (alumno.nombreAlumno.startsWith('[BAJA]')) return;
-    final repo = ref.read(contratosRepositoryProvider);
     final nuevo = !alumno.contratoFirmado;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          nuevo ? 'Confirmar contrato firmado' : 'Quitar firma del contrato',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          nuevo
+              ? '¿Confirmás que ${alumno.nombreAlumno} firmó el contrato? '
+                    'Esta acción se guarda de inmediato en el sistema.'
+              : '¿Querés quitar la marca de contrato firmado para ${alumno.nombreAlumno}? '
+                    'Esta acción se guarda de inmediato.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: nuevo
+                ? null
+                : FilledButton.styleFrom(
+                    backgroundColor: Colors.deepOrange.shade800,
+                    foregroundColor: Colors.white,
+                  ),
+            child: Text(nuevo ? 'Confirmar firma' : 'Quitar marca'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    final repo = ref.read(contratosRepositoryProvider);
     try {
       await repo.actualizarContrato(alumno.id, {'contrato_firmado': nuevo});
       if (!mounted) return;
@@ -2164,7 +2524,9 @@ class _DetalleEventoMasivoScreenState
         (alumno.montoTotalPactado -
         alumno.mesaExtraPrecio -
         alumno.sillasExtraPrecioTotal);
-    final double cuotaPura = tCuotas > 0 ? (totalBase / tCuotas) : totalBase;
+    final double cuotaPura = tCuotas > 0
+        ? double.parse((totalBase / tCuotas).toStringAsFixed(2))
+        : totalBase;
 
     final double deudaBaseTotal =
         (alumno.saldoDeudor - deudaMesaTotal - deudaSillasTotal).clamp(
@@ -3011,7 +3373,7 @@ class _DetalleEventoMasivoScreenState
                               if (choice == 'TOTAL') {
                                 setModalState(() {
                                   pagarMesa = true;
-                                  montosManuales.remove('Mesa');
+                                  montosManuales['Mesa'] = deudaMesaTotal;
                                 });
                               } else if (choice == 'UNICA') {
                                 setModalState(() {
@@ -3076,7 +3438,7 @@ class _DetalleEventoMasivoScreenState
                               if (choice == 'TOTAL') {
                                 setModalState(() {
                                   pagarSillas = true;
-                                  montosManuales.remove('Sillas');
+                                  montosManuales['Sillas'] = deudaSillasTotal;
                                 });
                               } else if (choice == 'UNICA') {
                                 setModalState(() {
@@ -4051,7 +4413,21 @@ class _DetalleEventoMasivoScreenState
                     int contadorMesaFinal = 0;
                     int contadorSillasFinal = 0;
                     for (var conc in previewConceptos) {
-                      if (esLineaCargoCanal(conc)) continue;
+                      // Cargo canal: incluirlo como concepto visible en el PDF
+                      if (esLineaCargoCanal(conc)) {
+                        final double cargoMonto = double.parse(
+                          ((conc['monto'] as num).toDouble())
+                              .toStringAsFixed(2),
+                        );
+                        if (cargoMonto > 0.01) {
+                          conceptosFinales.add({
+                            'concepto':
+                                'Cargo oper. transferencia (MP u otro)',
+                            'monto': cargoMonto,
+                          });
+                        }
+                        continue;
+                      }
                       final String cTexto = conc['concepto'] as String;
                       final double cMontoRaw = (conc['monto'] as num)
                           .toDouble();
@@ -4248,7 +4624,24 @@ class _DetalleEventoMasivoScreenState
                               );
                           final lineKind = conc['lineKind'] as String?;
 
-                          if (lineKind == 'cargo_canal_ref') return;
+                          // Cargo canal: se registra como ingreso real
+                          // (Transferencia) para que figure en cierre de caja,
+                          // pero con gross=0 para no afectar saldo del alumno.
+                          if (lineKind == 'cargo_canal_ref') {
+                            if (monto > 0.004) {
+                              await repo.registrarPago(
+                                contratoId: alumno.id,
+                                monto: monto,
+                                concepto: cTexto,
+                                montoADescontarDeSaldo: 0,
+                                descuentoPorcentaje: 0,
+                                cuotasLiquidadas: 0,
+                                medioPago: 'Transferencia',
+                                lineKind: lineKind,
+                              );
+                            }
+                            return;
+                          }
 
                           if (tIng < 0.01 || sumNetas < 0.01) return;
 
@@ -4339,6 +4732,20 @@ class _DetalleEventoMasivoScreenState
                             directUpdates['sillas_extra_cuotas_pagadas'] =
                                 currentSillasPagadas;
                         }
+
+                        // Persistir montos pagados de extras para mantener sync exacto
+                        if (grossMesaPagado > 0.01) {
+                          directUpdates['mesa_extra_pagado'] =
+                              double.parse(((alumno.mesaExtraPagado ?? 0) + grossMesaPagado).toStringAsFixed(2));
+                        }
+                        if (grossSillasPagado > 0.01) {
+                          directUpdates['sillas_extra_pagado'] =
+                              double.parse(((alumno.sillasExtraPagado ?? 0) + grossSillasPagado).toStringAsFixed(2));
+                        }
+
+                        // Persistir mora snapshot para que no se pierda al sincronizar
+                        directUpdates['mora_pendiente_tracked'] =
+                            double.parse(moraPendienteUi.toStringAsFixed(2));
 
                         await repo.actualizarContrato(alumno.id, directUpdates);
 
@@ -4814,22 +5221,60 @@ class _DetalleEventoMasivoScreenState
         final lote = await repo.getUltimosPagosLote(alumno.id);
 
         if (lote.isNotEmpty) {
-          conceptosPagados = lote.map<Map<String, dynamic>>((p) {
-            String raw = (p['concepto'] as String?) ?? 'Pago';
-            if (raw.toUpperCase().contains('MESA')) {
-              raw = mCuotas <= 1
+          // Detect if there are both Efectivo and Transferencia payments in the batch (Mixto)
+          double totalEfectivo = 0.0;
+          double totalTransferencia = 0.0;
+          for (final p in lote) {
+            final double m = (p['monto'] as num?)?.toDouble() ?? 0.0;
+            final String mp = (p['medio_pago'] as String?)?.trim() ?? '';
+            if (mp.toLowerCase() == 'efectivo') {
+              totalEfectivo += m;
+            } else if (mp.toLowerCase().contains('transfer') || mp.toLowerCase() == 'transferencia') {
+              totalTransferencia += m;
+            }
+          }
+
+          if (totalEfectivo > 0.01 && totalTransferencia > 0.01) {
+            medioPago = 'Mixto';
+            montoEfectivoDetalle = totalEfectivo;
+            montoTransferenciaDetalle = totalTransferencia;
+          } else if (totalEfectivo > 0.01) {
+            medioPago = 'Efectivo';
+          } else if (totalTransferencia > 0.01) {
+            medioPago = 'Transferencia';
+          }
+
+          // Group by normalized concept and sum amounts to merge split payments
+          final Map<String, double> agrupados = {};
+          for (final p in lote) {
+            final String raw = (p['concepto'] as String?) ?? 'Pago';
+            final String upper = raw.toUpperCase().trim();
+            String mapped = raw;
+            
+            // Prioritize mapping for interest/mora so it doesn't match legacy 'BASE' rules
+            if (upper.contains('MORA') || upper.contains('INTERE')) {
+              mapped = 'Interés mora (cuota base — este cobro)';
+            } else if (upper.contains('(') && upper.contains(')')) {
+              // Keep detailed rich concept names as-is
+              mapped = raw;
+            } else if (upper == 'BASE' || upper == 'CUOTA BASE') {
+              mapped = 'Cuota Base';
+            } else if (upper == 'MESA' || upper == 'MESA EXTRA') {
+              mapped = mCuotas <= 1
                   ? 'Mesa Extra - Entrega'
                   : 'Mesa Extra (Abono)';
-            } else if (raw.toUpperCase().contains('SILLA')) {
-              raw = 'Sillas Extras - Entrega';
-            } else if (raw.toUpperCase().contains('BASE')) {
-              raw = 'Cuota Base';
+            } else if (upper == 'SILLA' || upper == 'SILLAS EXTRAS') {
+              mapped = 'Sillas Extras - Entrega';
             }
+            
+            agrupados[mapped] = (agrupados[mapped] ?? 0.0) +
+                ((p['monto'] as num?)?.toDouble() ?? 0.0);
+          }
+
+          conceptosPagados = agrupados.entries.map<Map<String, dynamic>>((e) {
             return <String, dynamic>{
-              'concepto': raw,
-              'monto': double.parse(
-                (p['monto'] as num).toDouble().toStringAsFixed(2),
-              ),
+              'concepto': e.key,
+              'monto': double.parse(e.value.toStringAsFixed(2)),
             };
           }).toList();
 

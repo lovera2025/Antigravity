@@ -11,7 +11,7 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $pubspecPath = Join-Path $root "pubspec.yaml"
-$semver = "2.2.0"
+$semver = "2.3.0"
 if (Test-Path $pubspecPath) {
     $verLine = Get-Content $pubspecPath -Encoding UTF8 | Where-Object { $_ -match '^\s*version:\s*(.+)\s*$' } | Select-Object -First 1
     if ($verLine -match 'version:\s*(.+)') {

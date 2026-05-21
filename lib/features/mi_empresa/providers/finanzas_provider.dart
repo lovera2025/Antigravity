@@ -12,8 +12,14 @@ import '../../../models/contrato_alumno.dart';
 import '../../common/services/pdf_service.dart';
 import 'package:flutter/material.dart';
 import '../../../main.dart';
+import '../../../core/database/local_database.dart';
+import '../../../core/utils/pago_interes_mora.dart';
 
-/// Modo del panel “Inteligencia financiera” (HUD): día, solo ingresos históricos o capital neto local.
+/// Clasificación única de medio de pago para buckets EFECTIVO / TRANSFERENCIA del HUD.
+bool finanzasEsMedioTransferencia(String? medioPago) =>
+    medioPago?.toLowerCase().trim() == 'transferencia';
+
+/// Modo del panel «Resumen de caja» (HUD): día, solo cobros históricos o saldo empresa con proyección local.
 enum FinanzasHudModo {
   /// Ingresos cobrados hoy (calendario AR); métricas secundarias del mismo día.
   hoy,
@@ -21,7 +27,7 @@ enum FinanzasHudModo {
   /// Suma histórica de todos los ingresos locales (sin restar egresos).
   acumuladoIngresos,
 
-  /// Ingresos históricos − egresos históricos (misma base SQLite que el listado), con OPEX/proyección 30 días locales.
+  /// Ingresos históricos − egresos históricos (misma base SQLite que el listado), gastos últimos 30 días locales y retiros de bolsillo aparte en UI.
   acumuladoNeto,
 }
 
@@ -35,7 +41,7 @@ class FinanzasState {
   final String? eventoIdFiltro;
   /// Día puntual (calendario AR) para drill-down en Salud / Flujo / categorías.
   final DateTime? fechaExactaFiltro;
-  /// Día elegido para el HUD «Inteligencia financiera» en modo [FinanzasHudModo.hoy] (`null` = siempre el día actual según [ArTime.nowAr]).
+  /// Día elegido para el modo «HOY» del Resumen de caja (`null` = siempre el día actual según [ArTime.nowAr]).
   final DateTime? fechaInteligenciaHud;
   final Map<String, dynamic>? proyeccionFinanciera;
 
@@ -51,7 +57,19 @@ class FinanzasState {
   final List<Egreso> egresosHoyLista;
   final double hudEgresosHoy;
   final double hudTotalIngresosHistoricoGlobal;
+  /// Cobros históricos por medio (misma regla que [hudIngresosHoyEfectivo] / [hudIngresosHoyTransferencia]).
+  final double hudTotalIngresosHistoricoEfectivo;
+  final double hudTotalIngresosHistoricoTransferencia;
+  /// Todos los ingresos locales sin filtro mes/evento; drill-down histórico del HUD.
+  final List<IngresoDetallado> ingresosHistoricosLista;
+  /// Suma egresos que afectan saldo empresa (excluye [kCategoriaGastoPersonal]).
   final double hudTotalEgresosHistoricoGlobal;
+  /// Gastos de empresa históricos por medio (excluye [kCategoriaGastoPersonal]).
+  final double hudTotalEgresosHistoricoEfectivo;
+  final double hudTotalEgresosHistoricoTransferencia;
+  /// Cobros históricos − gastos empresa históricos, por medio.
+  final double hudEfectivoNetoHistorico;
+  final double hudTransferenciaNetaHistorica;
   final double hudOpex30DiasLocal;
   final double hudProyeccion30DiasLocal;
   final FinanzasHudModo hudModoInteligencia;
@@ -67,6 +85,24 @@ class FinanzasState {
   /// Ingresos del turno menos retiros del turno (mismos criterios de filtrado).
   final double hudEfectivoNetoHoy;
   final double hudTransferenciaNetaHoy;
+
+  /// Sumas históricas de egresos categoría [kCategoriaRetiroDueno] (retiros al bolsillo personal).
+  final double hudRetirosBolsaPersonalTotal;
+  final double hudRetirosBolsaPersonalEfectivo;
+  final double hudRetirosBolsaPersonalTransferencia;
+  /// Retiros al bolsillo en el día del HUD (seleccionado o hoy AR).
+  final double hudRetirosBolsaPersonalHoy;
+
+  /// Gastos registrados desde el bolsillo ([kCategoriaGastoPersonal]) por medio.
+  final double hudGastosBolsaPersonalTotal;
+  final double hudGastosBolsaPersonalEfectivo;
+  final double hudGastosBolsaPersonalTransferencia;
+  final double hudGastosBolsaPersonalHoy;
+
+  /// `max(0, retiros − gastos)` por medio y total (histórico global).
+  final double hudSaldoBolsaPersonalTotal;
+  final double hudSaldoBolsaPersonalEfectivo;
+  final double hudSaldoBolsaPersonalTransferencia;
 
   FinanzasState({
     required this.ingresos,
@@ -87,7 +123,14 @@ class FinanzasState {
     this.egresosHoyLista = const [],
     this.hudEgresosHoy = 0,
     this.hudTotalIngresosHistoricoGlobal = 0,
+    this.hudTotalIngresosHistoricoEfectivo = 0,
+    this.hudTotalIngresosHistoricoTransferencia = 0,
+    this.ingresosHistoricosLista = const [],
     this.hudTotalEgresosHistoricoGlobal = 0,
+    this.hudTotalEgresosHistoricoEfectivo = 0,
+    this.hudTotalEgresosHistoricoTransferencia = 0,
+    this.hudEfectivoNetoHistorico = 0,
+    this.hudTransferenciaNetaHistorica = 0,
     this.hudOpex30DiasLocal = 0,
     this.hudProyeccion30DiasLocal = 0,
     this.hudModoInteligencia = FinanzasHudModo.hoy,
@@ -96,6 +139,17 @@ class FinanzasState {
     this.hudRetirosTransferenciaHoy = 0,
     this.hudEfectivoNetoHoy = 0,
     this.hudTransferenciaNetaHoy = 0,
+    this.hudRetirosBolsaPersonalTotal = 0,
+    this.hudRetirosBolsaPersonalEfectivo = 0,
+    this.hudRetirosBolsaPersonalTransferencia = 0,
+    this.hudRetirosBolsaPersonalHoy = 0,
+    this.hudGastosBolsaPersonalTotal = 0,
+    this.hudGastosBolsaPersonalEfectivo = 0,
+    this.hudGastosBolsaPersonalTransferencia = 0,
+    this.hudGastosBolsaPersonalHoy = 0,
+    this.hudSaldoBolsaPersonalTotal = 0,
+    this.hudSaldoBolsaPersonalEfectivo = 0,
+    this.hudSaldoBolsaPersonalTransferencia = 0,
   });
 
   FinanzasState copyWith({
@@ -117,7 +171,14 @@ class FinanzasState {
     List<Egreso>? egresosHoyLista,
     double? hudEgresosHoy,
     double? hudTotalIngresosHistoricoGlobal,
+    double? hudTotalIngresosHistoricoEfectivo,
+    double? hudTotalIngresosHistoricoTransferencia,
+    List<IngresoDetallado>? ingresosHistoricosLista,
     double? hudTotalEgresosHistoricoGlobal,
+    double? hudTotalEgresosHistoricoEfectivo,
+    double? hudTotalEgresosHistoricoTransferencia,
+    double? hudEfectivoNetoHistorico,
+    double? hudTransferenciaNetaHistorica,
     double? hudOpex30DiasLocal,
     double? hudProyeccion30DiasLocal,
     FinanzasHudModo? hudModoInteligencia,
@@ -126,6 +187,17 @@ class FinanzasState {
     double? hudRetirosTransferenciaHoy,
     double? hudEfectivoNetoHoy,
     double? hudTransferenciaNetaHoy,
+    double? hudRetirosBolsaPersonalTotal,
+    double? hudRetirosBolsaPersonalEfectivo,
+    double? hudRetirosBolsaPersonalTransferencia,
+    double? hudRetirosBolsaPersonalHoy,
+    double? hudGastosBolsaPersonalTotal,
+    double? hudGastosBolsaPersonalEfectivo,
+    double? hudGastosBolsaPersonalTransferencia,
+    double? hudGastosBolsaPersonalHoy,
+    double? hudSaldoBolsaPersonalTotal,
+    double? hudSaldoBolsaPersonalEfectivo,
+    double? hudSaldoBolsaPersonalTransferencia,
     bool clearMesFiltro = false,
     bool clearEventoIdFiltro = false,
     bool clearFechaExacta = false,
@@ -150,7 +222,16 @@ class FinanzasState {
       egresosHoyLista: egresosHoyLista ?? this.egresosHoyLista,
       hudEgresosHoy: hudEgresosHoy ?? this.hudEgresosHoy,
       hudTotalIngresosHistoricoGlobal: hudTotalIngresosHistoricoGlobal ?? this.hudTotalIngresosHistoricoGlobal,
+      hudTotalIngresosHistoricoEfectivo: hudTotalIngresosHistoricoEfectivo ?? this.hudTotalIngresosHistoricoEfectivo,
+      hudTotalIngresosHistoricoTransferencia:
+          hudTotalIngresosHistoricoTransferencia ?? this.hudTotalIngresosHistoricoTransferencia,
+      ingresosHistoricosLista: ingresosHistoricosLista ?? this.ingresosHistoricosLista,
       hudTotalEgresosHistoricoGlobal: hudTotalEgresosHistoricoGlobal ?? this.hudTotalEgresosHistoricoGlobal,
+      hudTotalEgresosHistoricoEfectivo: hudTotalEgresosHistoricoEfectivo ?? this.hudTotalEgresosHistoricoEfectivo,
+      hudTotalEgresosHistoricoTransferencia:
+          hudTotalEgresosHistoricoTransferencia ?? this.hudTotalEgresosHistoricoTransferencia,
+      hudEfectivoNetoHistorico: hudEfectivoNetoHistorico ?? this.hudEfectivoNetoHistorico,
+      hudTransferenciaNetaHistorica: hudTransferenciaNetaHistorica ?? this.hudTransferenciaNetaHistorica,
       hudOpex30DiasLocal: hudOpex30DiasLocal ?? this.hudOpex30DiasLocal,
       hudProyeccion30DiasLocal: hudProyeccion30DiasLocal ?? this.hudProyeccion30DiasLocal,
       hudModoInteligencia: hudModoInteligencia ?? this.hudModoInteligencia,
@@ -159,6 +240,17 @@ class FinanzasState {
       hudRetirosTransferenciaHoy: hudRetirosTransferenciaHoy ?? this.hudRetirosTransferenciaHoy,
       hudEfectivoNetoHoy: hudEfectivoNetoHoy ?? this.hudEfectivoNetoHoy,
       hudTransferenciaNetaHoy: hudTransferenciaNetaHoy ?? this.hudTransferenciaNetaHoy,
+      hudRetirosBolsaPersonalTotal: hudRetirosBolsaPersonalTotal ?? this.hudRetirosBolsaPersonalTotal,
+      hudRetirosBolsaPersonalEfectivo: hudRetirosBolsaPersonalEfectivo ?? this.hudRetirosBolsaPersonalEfectivo,
+      hudRetirosBolsaPersonalTransferencia: hudRetirosBolsaPersonalTransferencia ?? this.hudRetirosBolsaPersonalTransferencia,
+      hudRetirosBolsaPersonalHoy: hudRetirosBolsaPersonalHoy ?? this.hudRetirosBolsaPersonalHoy,
+      hudGastosBolsaPersonalTotal: hudGastosBolsaPersonalTotal ?? this.hudGastosBolsaPersonalTotal,
+      hudGastosBolsaPersonalEfectivo: hudGastosBolsaPersonalEfectivo ?? this.hudGastosBolsaPersonalEfectivo,
+      hudGastosBolsaPersonalTransferencia: hudGastosBolsaPersonalTransferencia ?? this.hudGastosBolsaPersonalTransferencia,
+      hudGastosBolsaPersonalHoy: hudGastosBolsaPersonalHoy ?? this.hudGastosBolsaPersonalHoy,
+      hudSaldoBolsaPersonalTotal: hudSaldoBolsaPersonalTotal ?? this.hudSaldoBolsaPersonalTotal,
+      hudSaldoBolsaPersonalEfectivo: hudSaldoBolsaPersonalEfectivo ?? this.hudSaldoBolsaPersonalEfectivo,
+      hudSaldoBolsaPersonalTransferencia: hudSaldoBolsaPersonalTransferencia ?? this.hudSaldoBolsaPersonalTransferencia,
     );
   }
 }
@@ -263,7 +355,10 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
 
     final totalIngresos = ingresosList.fold<double>(0, (sum, i) => sum + i.monto);
     final totalEgresos = egresosList.fold<double>(0, (sum, e) => sum + e.monto);
-    final balanceGlobal = totalIngresos - totalEgresos;
+    final totalEgresosSaldoEmpresa = egresosList
+        .where((e) => (e.categoria ?? '').trim() != kCategoriaGastoPersonal)
+        .fold<double>(0, (sum, e) => sum + e.monto);
+    final balanceGlobal = totalIngresos - totalEgresosSaldoEmpresa;
 
     final nAr = ArTime.nowAr();
     final hoyDia = DateTime(nAr.year, nAr.month, nAr.day);
@@ -279,9 +374,8 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       if (!ArTime.mismoDia(i.fecha, diaHudRef)) continue;
       ingresosHoyLista.add(i);
       hudIngresosHoy += i.monto;
-      final mp = i.medioPago?.toLowerCase().trim();
       // Solo ingresos del día: transferencia aparte; el resto (incl. sin medio) suma a efectivo en el HUD.
-      if (mp == 'transferencia') {
+      if (finanzasEsMedioTransferencia(i.medioPago)) {
         hudIngresosHoyTransferencia += i.monto;
       } else {
         hudIngresosHoyEfectivo += i.monto;
@@ -304,11 +398,10 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
         hudEgresosHoy += e.monto;
       }
       if (e.fecha == null) continue;
-      if ((e.categoria ?? '').trim() != kCategoriaRetiroCaja) continue;
       if (!ArTime.mismoDia(e.fecha!, diaHudRef)) continue;
       if (!rangoHud.contiene(e.fecha!)) continue;
-      final mp = (e.medioPago ?? '').toLowerCase().trim();
-      if (mp == 'transferencia') {
+      // Todos los egresos del turno (no solo retiros de caja) restan del bucket.
+      if (finanzasEsMedioTransferencia(e.medioPago)) {
         hudRetirosTransferenciaHoy += e.monto;
       } else {
         hudRetirosEfectivoHoy += e.monto;
@@ -325,11 +418,83 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       return fb.compareTo(fa);
     });
 
-    final hudTotalIngresosHistoricoGlobal = ingresosFull.fold<double>(0, (s, i) => s + i.monto);
-    final hudTotalEgresosHistoricoGlobal = egresosFull.fold<double>(0, (s, e) => s + e.monto);
+    var hudTotalIngresosHistoricoEfectivo = 0.0;
+    var hudTotalIngresosHistoricoTransferencia = 0.0;
+    for (final i in ingresosFull) {
+      if (finanzasEsMedioTransferencia(i.medioPago)) {
+        hudTotalIngresosHistoricoTransferencia += i.monto;
+      } else {
+        hudTotalIngresosHistoricoEfectivo += i.monto;
+      }
+    }
+    final hudTotalIngresosHistoricoGlobal =
+        hudTotalIngresosHistoricoEfectivo + hudTotalIngresosHistoricoTransferencia;
+    final ingresosHistoricosLista = List<IngresoDetallado>.from(ingresosFull)
+      ..sort((a, b) => b.fecha.compareTo(a.fecha));
+
+    var hudTotalEgresosHistoricoEfectivo = 0.0;
+    var hudTotalEgresosHistoricoTransferencia = 0.0;
+    for (final e in egresosFull) {
+      if ((e.categoria ?? '').trim() == kCategoriaGastoPersonal) continue;
+      if (finanzasEsMedioTransferencia(e.medioPago)) {
+        hudTotalEgresosHistoricoTransferencia += e.monto;
+      } else {
+        hudTotalEgresosHistoricoEfectivo += e.monto;
+      }
+    }
+    final hudTotalEgresosHistoricoGlobal =
+        hudTotalEgresosHistoricoEfectivo + hudTotalEgresosHistoricoTransferencia;
+    final hudEfectivoNetoHistorico = hudTotalIngresosHistoricoEfectivo - hudTotalEgresosHistoricoEfectivo;
+    final hudTransferenciaNetaHistorica =
+        hudTotalIngresosHistoricoTransferencia - hudTotalEgresosHistoricoTransferencia;
+
+    var hudRetirosBolsaPersonalEfectivo = 0.0;
+    var hudRetirosBolsaPersonalTransferencia = 0.0;
+    var hudRetirosBolsaPersonalHoy = 0.0;
+    for (final e in egresosFull) {
+      if ((e.categoria ?? '').trim() != kCategoriaRetiroDueno) continue;
+      if (finanzasEsMedioTransferencia(e.medioPago)) {
+        hudRetirosBolsaPersonalTransferencia += e.monto;
+      } else {
+        hudRetirosBolsaPersonalEfectivo += e.monto;
+      }
+      if (e.fecha != null && ArTime.mismoDia(e.fecha!, diaHudRef)) {
+        hudRetirosBolsaPersonalHoy += e.monto;
+      }
+    }
+    final hudRetirosBolsaPersonalTotal =
+        hudRetirosBolsaPersonalEfectivo + hudRetirosBolsaPersonalTransferencia;
+
+    var hudGastosBolsaPersonalEfectivo = 0.0;
+    var hudGastosBolsaPersonalTransferencia = 0.0;
+    var hudGastosBolsaPersonalHoy = 0.0;
+    for (final e in egresosFull) {
+      if ((e.categoria ?? '').trim() != kCategoriaGastoPersonal) continue;
+      if (finanzasEsMedioTransferencia(e.medioPago)) {
+        hudGastosBolsaPersonalTransferencia += e.monto;
+      } else {
+        hudGastosBolsaPersonalEfectivo += e.monto;
+      }
+      if (e.fecha != null && ArTime.mismoDia(e.fecha!, diaHudRef)) {
+        hudGastosBolsaPersonalHoy += e.monto;
+      }
+    }
+    final hudGastosBolsaPersonalTotal =
+        hudGastosBolsaPersonalEfectivo + hudGastosBolsaPersonalTransferencia;
+
+    final hudSaldoBolsaPersonalEfectivo =
+        (hudRetirosBolsaPersonalEfectivo - hudGastosBolsaPersonalEfectivo).clamp(0.0, double.infinity);
+    final hudSaldoBolsaPersonalTransferencia =
+        (hudRetirosBolsaPersonalTransferencia - hudGastosBolsaPersonalTransferencia)
+            .clamp(0.0, double.infinity);
+    final hudSaldoBolsaPersonalTotal =
+        hudSaldoBolsaPersonalEfectivo + hudSaldoBolsaPersonalTransferencia;
 
     final limite30 = hoyDia.subtract(const Duration(days: 30));
-    final hudOpex30DiasLocal = _sumEgresosEnRangoCalendarioAr(egresosFull, limite30, hoyDia);
+    final egresosParaOpexEmpresa = egresosFull
+        .where((e) => (e.categoria ?? '').trim() != kCategoriaGastoPersonal)
+        .toList();
+    final hudOpex30DiasLocal = _sumEgresosEnRangoCalendarioAr(egresosParaOpexEmpresa, limite30, hoyDia);
     final capNeto = hudTotalIngresosHistoricoGlobal - hudTotalEgresosHistoricoGlobal;
     final hudProyeccion30DiasLocal = capNeto - hudOpex30DiasLocal;
 
@@ -362,7 +527,14 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       egresosHoyLista: egresosHoyLista,
       hudEgresosHoy: hudEgresosHoy,
       hudTotalIngresosHistoricoGlobal: hudTotalIngresosHistoricoGlobal,
+      hudTotalIngresosHistoricoEfectivo: hudTotalIngresosHistoricoEfectivo,
+      hudTotalIngresosHistoricoTransferencia: hudTotalIngresosHistoricoTransferencia,
+      ingresosHistoricosLista: ingresosHistoricosLista,
       hudTotalEgresosHistoricoGlobal: hudTotalEgresosHistoricoGlobal,
+      hudTotalEgresosHistoricoEfectivo: hudTotalEgresosHistoricoEfectivo,
+      hudTotalEgresosHistoricoTransferencia: hudTotalEgresosHistoricoTransferencia,
+      hudEfectivoNetoHistorico: hudEfectivoNetoHistorico,
+      hudTransferenciaNetaHistorica: hudTransferenciaNetaHistorica,
       hudOpex30DiasLocal: hudOpex30DiasLocal,
       hudProyeccion30DiasLocal: hudProyeccion30DiasLocal,
       hudModoInteligencia: preserveHudModo ?? FinanzasHudModo.hoy,
@@ -371,6 +543,17 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       hudRetirosTransferenciaHoy: hudRetirosTransferenciaHoy,
       hudEfectivoNetoHoy: hudEfectivoNetoHoy,
       hudTransferenciaNetaHoy: hudTransferenciaNetaHoy,
+      hudRetirosBolsaPersonalTotal: hudRetirosBolsaPersonalTotal,
+      hudRetirosBolsaPersonalEfectivo: hudRetirosBolsaPersonalEfectivo,
+      hudRetirosBolsaPersonalTransferencia: hudRetirosBolsaPersonalTransferencia,
+      hudRetirosBolsaPersonalHoy: hudRetirosBolsaPersonalHoy,
+      hudGastosBolsaPersonalTotal: hudGastosBolsaPersonalTotal,
+      hudGastosBolsaPersonalEfectivo: hudGastosBolsaPersonalEfectivo,
+      hudGastosBolsaPersonalTransferencia: hudGastosBolsaPersonalTransferencia,
+      hudGastosBolsaPersonalHoy: hudGastosBolsaPersonalHoy,
+      hudSaldoBolsaPersonalTotal: hudSaldoBolsaPersonalTotal,
+      hudSaldoBolsaPersonalEfectivo: hudSaldoBolsaPersonalEfectivo,
+      hudSaldoBolsaPersonalTransferencia: hudSaldoBolsaPersonalTransferencia,
     );
   }
 
@@ -490,44 +673,275 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           transaccionDestacadaId: ingreso.id,
         );
       } else if (ingreso.fuente == 'Masivo') {
-        final resP = await supabase.from('pagos_contrato_alumno').select('*, contratos_alumnos(*, eventos(*, clientes(*)))').eq('id', ingreso.id).single();
-        final contratoJson = resP['contratos_alumnos'];
+        final db = await LocalDatabase.instance;
+        final pagoRows = await db.query(
+          'pagos_contrato_alumno',
+          where: 'id = ?',
+          whereArgs: [ingreso.id],
+          limit: 1,
+        );
+        if (pagoRows.isEmpty) {
+          throw Exception('No se encontró el pago en la base de datos local.');
+        }
+        final resP = Map<String, dynamic>.from(pagoRows.first);
+
+        final String contratoId = resP['contrato_alumno_id'] as String;
+        final contratoRows = await db.query(
+          'contratos_alumnos',
+          where: 'id = ?',
+          whereArgs: [contratoId],
+          limit: 1,
+        );
+        if (contratoRows.isEmpty) {
+          throw Exception('No se encontró el contrato en la base de datos local.');
+        }
+        final contratoJson = Map<String, dynamic>.from(contratoRows.first);
+
+        final String eventoId = contratoJson['evento_id'] as String;
+        final eventoRows = await db.query(
+          'eventos',
+          where: 'id = ?',
+          whereArgs: [eventoId],
+          limit: 1,
+        );
+        if (eventoRows.isEmpty) {
+          throw Exception('No se encontró el evento en la base de datos local.');
+        }
+        final eventoJson = Map<String, dynamic>.from(eventoRows.first);
+
+        final String clienteId = eventoJson['cliente_id'] as String;
+        final clienteRows = await db.query(
+          'clientes',
+          where: 'id = ?',
+          whereArgs: [clienteId],
+          limit: 1,
+        );
+        if (clienteRows.isEmpty) {
+          throw Exception('No se encontró el cliente en la base de datos local.');
+        }
+        final clienteJson = Map<String, dynamic>.from(clienteRows.first);
+
+        eventoJson['clientes'] = clienteJson;
+        contratoJson['eventos'] = eventoJson;
+
         final contrato = ContratoAlumno.fromJson(contratoJson);
-        final evento = Evento.fromJson(contratoJson['eventos']);
+        final evento = Evento.fromJson(eventoJson);
         
-        final String fechaBase = resP['fecha_pago'] ?? resP['created_at'];
+        final String fechaBase = (resP['fecha_pago'] ?? resP['created_at']) as String;
         final DateTime dtBase = DateTime.parse(fechaBase);
 
         // Buscar otros "conceptos" pagados en la misma operación (mismo alumno, misma fecha +- 2 seg)
-        final otrosPagosRes = await supabase
-            .from('pagos_contrato_alumno')
-            .select('concepto, monto')
-            .eq('contrato_alumno_id', contrato.id)
-            .gte('fecha_pago', dtBase.subtract(const Duration(seconds: 2)).toIso8601String())
-            .lte('fecha_pago', dtBase.add(const Duration(seconds: 2)).toIso8601String());
+        final todosPagosRows = await db.query(
+          'pagos_contrato_alumno',
+          where: 'contrato_alumno_id = ?',
+          whereArgs: [contrato.id],
+        );
         
-        final listOtros = (otrosPagosRes as List).map((p) {
-          String raw = p['concepto']?.toString() ?? 'Pago';
-          if (raw.toUpperCase().contains('MESA')) {
-             raw = contrato.mesaExtraCuotas <= 1 ? 'Mesa Extra - Entrega' : 'Mesa Extra (Abono)';
-          } else if (raw.toUpperCase().contains('SILLA')) {
-             raw = 'Sillas Extras - Entrega';
-          } else if (raw.toUpperCase().contains('BASE')) {
-             raw = 'Cuota Base';
+        final listOtrosRaw = <Map<String, dynamic>>[];
+        for (final row in todosPagosRows) {
+          final String? fp = row['fecha_pago'] as String?;
+          final String? ca = row['created_at'] as String?;
+          final String pFechaStr = fp ?? ca ?? '';
+          if (pFechaStr.isEmpty) continue;
+          try {
+            final pDt = DateTime.parse(pFechaStr);
+            final diff = pDt.difference(dtBase).inSeconds.abs();
+            if (diff <= 2) {
+              listOtrosRaw.add(row);
+            }
+          } catch (_) {
+            // Ignorar errores de parseo
           }
-          return {
-            'concepto': raw,
-            'monto': (p['monto'] as num?)?.toDouble() ?? 0.0,
+        }
+
+        // Detect dynamic "Mixto" details
+        String? medioPago;
+        double? montoEfectivoDetalle;
+        double? montoTransferenciaDetalle;
+
+        double totalEfectivo = 0.0;
+        double totalTransferencia = 0.0;
+        for (final p in listOtrosRaw) {
+          final double m = (p['monto'] as num?)?.toDouble() ?? 0.0;
+          final String mp = (p['medio_pago'] as String?)?.trim() ?? '';
+          if (mp.toLowerCase() == 'efectivo') {
+            totalEfectivo += m;
+          } else if (mp.toLowerCase().contains('transfer') || mp.toLowerCase() == 'transferencia') {
+            totalTransferencia += m;
+          }
+        }
+
+        if (totalEfectivo > 0.01 && totalTransferencia > 0.01) {
+          medioPago = 'Mixto';
+          montoEfectivoDetalle = totalEfectivo;
+          montoTransferenciaDetalle = totalTransferencia;
+        } else if (totalEfectivo > 0.01) {
+          medioPago = 'Efectivo';
+        } else if (totalTransferencia > 0.01) {
+          medioPago = 'Transferencia';
+        }
+
+        // Group by normalized concept and sum amounts to merge split payments
+        final Map<String, double> agrupados = {};
+        for (final p in listOtrosRaw) {
+          final String raw = (p['concepto'] as String?) ?? 'Pago';
+          final String upper = raw.toUpperCase().trim();
+          String mapped = raw;
+          
+          // Prioritize mapping for interest/mora so it doesn't match legacy 'BASE' rules
+          if (upper.contains('MORA') || upper.contains('INTERE')) {
+            mapped = 'Interés mora (cuota base — este cobro)';
+          } else if (upper.contains('(') && upper.contains(')')) {
+            // Keep detailed rich concept names as-is
+            mapped = raw;
+          } else if (upper == 'BASE' || upper == 'CUOTA BASE' || upper.contains('CUOTA BASE')) {
+            mapped = 'Cuota Base';
+          } else if (upper == 'MESA' || upper == 'MESA EXTRA' || upper.contains('MESA')) {
+            mapped = contrato.mesaExtraCuotas <= 1
+                ? 'Mesa Extra - Entrega'
+                : 'Mesa Extra (Abono)';
+          } else if (upper == 'SILLA' || upper == 'SILLAS EXTRAS' || upper.contains('SILLA')) {
+            mapped = 'Sillas Extras - Entrega';
+          }
+          
+          agrupados[mapped] = (agrupados[mapped] ?? 0.0) +
+              ((p['monto'] as num?)?.toDouble() ?? 0.0);
+        }
+
+        final listOtros = agrupados.entries.map<Map<String, dynamic>>((e) {
+          return <String, dynamic>{
+            'concepto': e.key,
+            'monto': double.parse(e.value.toStringAsFixed(2)),
           };
         }).toList();
 
+        final double valPago = listOtros.fold<double>(
+          0.0,
+          (sum, c) => sum + ((c['monto'] as num?)?.toDouble() ?? 0.0),
+        );
+
+        // Calcular de forma cronológica el progreso del contrato al momento de esta transacción:
+        // Consideramos pagos no anulados con fecha <= dtBase + 2 segundos
+        int cuotasBaseCronologicas = 0;
+        int cuotasMesaCronologicas = 0;
+        int cuotasSillaCronologicas = 0;
+        double pagadoMesaCronologicas = 0;
+        double pagadoSillaCronologicas = 0;
+        double totalRecaudadoCronologico = 0;
+
+        final double cuotaPuraBase = contrato.totalCuotas > 0
+            ? (contrato.montoTotalPactado - contrato.mesaExtraPrecio - contrato.sillasExtraPrecioTotal) / contrato.totalCuotas
+            : 0.0;
+        final double cuotaPuraMesa = contrato.mesaExtraCuotas > 0
+            ? contrato.mesaExtraPrecio / contrato.mesaExtraCuotas
+            : 0.0;
+        final double cuotaPuraSilla = contrato.sillasExtraCuotas > 0
+            ? contrato.sillasExtraPrecioTotal / contrato.sillasExtraCuotas
+            : 0.0;
+
+        for (final p in todosPagosRows) {
+          if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+
+          final String? fp = p['fecha_pago'] as String?;
+          final String? ca = p['created_at'] as String?;
+          final String pFechaStr = fp ?? ca ?? '';
+          if (pFechaStr.isEmpty) continue;
+
+          try {
+            final pDt = DateTime.parse(pFechaStr);
+            if (pDt.isAfter(dtBase.add(const Duration(seconds: 2)))) {
+              continue;
+            }
+          } catch (_) {
+            continue;
+          }
+
+          final montoVal = (p['monto'] as num).toDouble();
+          final conceptoRaw = p['concepto'] as String? ?? '';
+          final lkRow = (p['line_kind'] as String?)?.trim();
+          if (lkRow == 'Interés mora' ||
+              lkRow == 'cargo_canal' ||
+              esPagoInteresMoraPorConcepto(conceptoRaw)) {
+            continue;
+          }
+          final concepto = conceptoRaw.toLowerCase();
+          final bool esEntregaParcial = concepto.contains('entrega') || 
+                                         concepto.contains('adelanto') || 
+                                         concepto.contains('parcial');
+
+          double mgOriginal = (p['monto_gross'] as num? ?? montoVal).toDouble();
+          double mgSanado = mgOriginal;
+
+          if (concepto.contains('base')) {
+            int cant = 0;
+            if (!esEntregaParcial) {
+              if (concepto.contains('liquidación de')) {
+                final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+                cant = match != null ? int.parse(match.group(1)!) : 1;
+              } else if (concepto.contains('cuota')) {
+                cant = 1;
+              }
+            }
+            if (cant > 0 && mgOriginal == montoVal && montoVal < (cuotaPuraBase * cant - 0.1) && cuotaPuraBase > 0) {
+              mgSanado = cuotaPuraBase * cant;
+            }
+            cuotasBaseCronologicas += cant;
+          } else if (concepto.contains('mesa')) {
+            int cant = 0;
+            if (!esEntregaParcial) {
+              if (concepto.contains('liquidación de')) {
+                final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+                cant = match != null ? int.parse(match.group(1)!) : 1;
+              } else if (concepto.contains('mesa extra')) {
+                cant = 1;
+              }
+            }
+            if (cant > 0 && mgOriginal == montoVal && montoVal < (cuotaPuraMesa * cant - 0.1) && cuotaPuraMesa > 0) {
+              mgSanado = cuotaPuraMesa * cant;
+            }
+            cuotasMesaCronologicas += cant;
+            pagadoMesaCronologicas += mgSanado;
+          } else if (concepto.contains('silla')) {
+            int cant = 0;
+            if (!esEntregaParcial) {
+              if (concepto.contains('liquidación de')) {
+                final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+                cant = match != null ? int.parse(match.group(1)!) : 1;
+              } else if (concepto.contains('sillas extra')) {
+                cant = 1;
+              }
+            }
+            if (cant > 0 && mgOriginal == montoVal && montoVal < (cuotaPuraSilla * cant - 0.1) && cuotaPuraSilla > 0) {
+              mgSanado = cuotaPuraSilla * cant;
+            }
+            cuotasSillaCronologicas += cant;
+            pagadoSillaCronologicas += mgSanado;
+          }
+
+          totalRecaudadoCronologico += mgSanado;
+        }
+
+        final double saldoCronologico = (contrato.montoTotalPactado - totalRecaudadoCronologico).clamp(0, double.infinity);
+
+        final contratoCronologico = contrato.copyWith(
+          cuotasPagadas: cuotasBaseCronologicas.clamp(0, contrato.totalCuotas),
+          mesaExtraCuotasPagadas: cuotasMesaCronologicas.clamp(0, contrato.mesaExtraCuotas),
+          sillasExtraCuotasPagadas: cuotasSillaCronologicas.clamp(0, contrato.sillasExtraCuotas > 0 ? contrato.sillasExtraCuotas : 99),
+          mesaExtraPagado: pagadoMesaCronologicas,
+          sillasExtraPagado: pagadoSillaCronologicas,
+          saldoDeudor: saldoCronologico,
+        );
+
         await PdfService.generarReciboAlumno(
-          alumno: contrato,
+          alumno: contratoCronologico,
           evento: evento,
-          montoPagado: ingreso.monto,
-          saldoPendiente: contrato.saldoDeudor,
+          montoPagado: valPago,
+          saldoPendiente: contratoCronologico.saldoDeudor,
           conceptosPagados: listOtros.isNotEmpty ? listOtros : null,
-          fechaManual: dtBase, // Marcamos como reimpresión con la fecha original
+          fechaManual: dtBase,
+          medioPago: medioPago,
+          montoEfectivoDetalle: montoEfectivoDetalle,
+          montoTransferenciaDetalle: montoTransferenciaDetalle,
         );
       } else if (ingreso.fuente == 'Alquiler') {
         if (context.mounted) {

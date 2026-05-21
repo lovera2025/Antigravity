@@ -20,7 +20,8 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
   bool _submitting = false;
   List<Map<String, dynamic>> _resultados = [];
   Map<String, dynamic>? _seleccion;
-  String _nuevoMedio = 'transferencia';
+  String _nuevoMedio = 'efectivo';
+  DateTime? _nuevaFecha;
 
   static String _etf(String tabla) {
     switch (tabla) {
@@ -83,15 +84,19 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
     final id = sel['id']?.toString();
     if (tabla == null || id == null || id.isEmpty) return;
 
-    final nuevo = _nuevoMedio.toLowerCase().trim();
+    final nuevoMedio = _nuevoMedio.toLowerCase().trim();
     final raw = sel['medio_pago'];
     final actNorm = raw == null || raw.toString().trim().isEmpty
         ? ''
         : raw.toString().toLowerCase().trim();
-    if (actNorm == nuevo) {
+    
+    final bool medioCambio = actNorm != nuevoMedio;
+    final bool fechaCambio = _nuevaFecha != null;
+
+    if (!medioCambio && !fechaCambio) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Elegí un medio distinto al actual.')),
+          const SnackBar(content: Text('Elegí un medio o fecha distinto al actual.')),
         );
       }
       return;
@@ -101,17 +106,29 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
 
     try {
       final repo = ref.read(finanzasRepositoryProvider);
-      await repo.actualizarMedioPagoRegistro(
-        tabla: tabla,
-        id: id,
-        medioPago: nuevo,
-      );
+      
+      if (medioCambio) {
+        await repo.actualizarMedioPagoRegistro(
+          tabla: tabla,
+          id: id,
+          medioPago: nuevoMedio,
+        );
+      }
+      
+      if (fechaCambio) {
+        await repo.actualizarFechaPagoRegistro(
+          tabla: tabla,
+          id: id,
+          nuevaFecha: _nuevaFecha!,
+        );
+      }
+      
       await ref.read(finanzasProvider.notifier).recargar();
 
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Medio de pago actualizado.')),
+        const SnackBar(content: Text('Registro actualizado correctamente.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -133,12 +150,15 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
   bool _puedeAplicar() {
     final sel = _seleccion;
     if (sel == null || _searching || _submitting) return false;
-    final nuevo = _nuevoMedio.toLowerCase().trim();
+    final nuevoMedio = _nuevoMedio.toLowerCase().trim();
     final raw = sel['medio_pago'];
     final actNorm = raw == null || raw.toString().trim().isEmpty
         ? ''
         : raw.toString().toLowerCase().trim();
-    return actNorm != nuevo;
+    
+    final bool medioCambio = actNorm != nuevoMedio;
+    final bool fechaCambio = _nuevaFecha != null;
+    return medioCambio || fechaCambio;
   }
 
   @override
@@ -167,7 +187,7 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
             children: [
               Text(
                 'Buscá por nombre de cliente/alumno o por texto del concepto. '
-                'Solo cambia efectivo ↔ transferencia; no borra registros.',
+                'Podrás cambiar la fecha o el medio de pago; no borra registros.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.35),
               ),
               const SizedBox(height: 14),
@@ -220,14 +240,24 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
                         borderRadius: BorderRadius.circular(10),
                         onTap: () {
                           final mpLow = r['medio_pago']?.toString().toLowerCase().trim();
-                          final def = mpLow == 'transferencia' ? 'efectivo' : 'transferencia';
+                          final String def = (mpLow == 'transferencia' || mpLow == 'efectivo') ? mpLow! : 'efectivo';
                           setState(() {
                             _seleccion = Map<String, dynamic>.from(r);
                             _nuevoMedio = def;
+                            _nuevaFecha = null;
                           });
                         },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            color: selected ? const Color(0xFFD4AF37).withValues(alpha: 0.08) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selected ? const Color(0xFFD4AF37).withValues(alpha: 0.3) : Colors.transparent,
+                              width: 1,
+                            ),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -274,6 +304,7 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
+                  key: ValueKey('medio_pago_${_seleccion?['tabla']}_${_seleccion?['id']}'),
                   initialValue: _nuevoMedio,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -289,6 +320,64 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
                       : (v) {
                           if (v != null) setState(() => _nuevoMedio = v);
                         },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Nueva fecha de pago (opcional):',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: (_submitting) ? null : () async {
+                          final DateTime baseDate = DateTime.tryParse(_seleccion?['fecha_pago']?.toString() ?? '') ?? DateTime.now();
+                          final DateTime? picked = await showDatePicker(
+                            context: context,
+                            initialDate: _nuevaFecha ?? baseDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                               _nuevaFecha = DateTime(
+                                 picked.year,
+                                 picked.month,
+                                 picked.day,
+                                 baseDate.hour,
+                                 baseDate.minute,
+                                 baseDate.second,
+                               );
+                            });
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          ),
+                          child: Text(
+                            _nuevaFecha != null ? ArTime.formatFechaCorta(_nuevaFecha!) : 'Mantener fecha original',
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_nuevaFecha != null && !_submitting) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.undo, color: Colors.redAccent),
+                        tooltip: 'Restablecer fecha original',
+                        onPressed: () {
+                          setState(() {
+                            _nuevaFecha = null;
+                          });
+                        },
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ],

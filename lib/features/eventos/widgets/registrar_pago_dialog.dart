@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/evento.dart';
 import '../../../models/transaccion.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../../../core/utils/ar_time.dart';
 import '../repositories/eventos_repository.dart';
 import '../repositories/transacciones_repository.dart';
 
@@ -37,6 +38,7 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
   /// Si ya hay % guardado en el evento, el campo queda bloqueado hasta "Cambiar acuerdo".
   bool _pctFieldEditable = true;
   String _medioPago = 'Efectivo';
+  DateTime _fechaPago = DateTime.now();
 
   bool get _esRecepcion =>
       widget.evento.tipo.toLowerCase().contains('recepci');
@@ -125,6 +127,41 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
     super.dispose();
   }
 
+  Future<void> _seleccionarFecha() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _fechaPago,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFD4AF37),
+              onPrimary: Colors.black,
+              surface: Color(0xFF1E1E1E),
+              onSurface: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _fechaPago) {
+      setState(() {
+        final now = DateTime.now();
+        _fechaPago = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          now.hour,
+          now.minute,
+          now.second,
+        );
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -187,6 +224,7 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
           monto: montoBase,
           concepto: _conceptoController.text.trim(),
           medioPago: _medioPago,
+          fechaPago: _fechaPago,
         );
         final prefs = await SharedPreferences.getInstance();
         await prefs.setDouble('ultimo_monto_pago_${widget.evento.id}', montoBase);
@@ -732,6 +770,25 @@ class _RegistrarPagoDialogState extends ConsumerState<RegistrarPagoDialog> {
                   onChanged: (val) {
                     if (val != null) setState(() => _medioPago = val);
                   },
+                ),
+
+                const SizedBox(height: 16),
+                
+                InkWell(
+                  onTap: _seleccionarFecha,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Fecha del Pago',
+                      prefixIcon: const Icon(Icons.calendar_today_rounded),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    child: Text(
+                      ArTime.formatFechaHora(_fechaPago),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
                 ),
 
                 const SizedBox(height: 20),

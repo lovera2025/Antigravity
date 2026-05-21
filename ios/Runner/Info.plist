@@ -72,5 +72,10 @@
 	<string>Junior Eventos puede usar la cámara si elegís escanear o capturar una imagen desde la app.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Junior Eventos puede usar el micrófono solo si una función explícita lo requiere.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>https</string>
+	</array>
 </dict>
 </plist>
