@@ -1,0 +1,145 @@
+﻿Widget _buildTuBolsilloMiniCard(BuildContext context, bool isDark, Color gold, FinanzasState state) {
+    const amber = Color(0xFFFFB74D);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _abrirHistorialBolsillo(context, state, isDark, gold),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [amber.withValues(alpha: 0.85), amber],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(color: amber.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.savings_outlined, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MI BOLSILLO',
+                      style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+                    ),
+                    Text(
+                      state.hudRetiroPendienteTotal.toCurrency(),
+                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      'Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()} · Gasté ${state.hudGastadoPersonalTotal.toCurrency()}',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Caja fuerte: efectivo del negocio guardado en el cofre físico (depósitos − retiros).
+  Widget _buildCajaFuertePersonalSection(bool isDark, Color gold) {
+    const cof = Color(0xFF5D4037);
+    const amberAccent = Color(0xFFFFB74D);
+    const green = Color(0xFF00B894);
+    final async = ref.watch(cajaFuerteProvider);
+    final efectivoNegocio = ref.watch(finanzasProvider).value?.hudEfectivoNetoHistorico;
+
+    Widget lineaFormula(String lbl, double monto, {bool negativo = false, bool bold = false}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                lbl,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+                  color: Colors.white.withValues(alpha: bold ? 0.95 : 0.72),
+                ),
+              ),
+            ),
+            Text(
+              '${negativo ? '−' : ''}${monto.toCurrency()}',
+              style: TextStyle(
+                fontSize: bold ? 13 : 12,
+                fontWeight: FontWeight.w900,
+                color: negativo ? Colors.redAccent.shade100 : (bold ? Colors.white : Colors.white.withValues(alpha: 0.9)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return async.when(
+      loading: () => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: const LinearProgressIndicator(minHeight: 4),
+        ),
+      ),
+      error: (e, _) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text('No se pudo cargar Caja fuerte: $e', style: const TextStyle(fontSize: 12)),
+      ),
+      data: (res) {
+        final saldo = res.saldo;
+        final sinSaldo = saldo <= 1e-6;
+        final sinMovimientos = res.movimientos.isEmpty;
+        final fueraCofre = efectivoNegocio != null ? (efectivoNegocio - saldo).clamp(0.0, double.infinity) : null;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: amberAccent.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.savings_outlined, color: amberAccent, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CAJA FUERTE',
+                        style: GoogleFonts.oswald(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                          color: isDark ? Colors.white : cof,
+                        ),
+                      ),
+                      Text(
+                        'Plata del negocio en el cofre · registrá depósitos y retiros para saber cuánto hay hoy',
+                        style: TextStyle(
+   

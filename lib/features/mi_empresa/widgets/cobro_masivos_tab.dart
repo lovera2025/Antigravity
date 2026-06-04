@@ -507,10 +507,16 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
         final ultimo = _ultimoPagoAlPlan(list);
         final mora = MoraCuotaCalculator.calcular(a);
         final moraPagada = _sumMoraCobradaDesdePagos(list);
+        final moraPeriodo = moraCobradaDelPeriodoVigente(
+          list,
+          inicioMoraPeriodoVigente(mora.fechaVencimientoProximaCuota),
+        );
         final moraPend = MoraCuotaCalculator.pendienteDisplay(
           interesAcumulado: mora.interesAcumulado,
           moraCobradaHistorial: moraPagada,
           moraPendienteTracked: a.moraPendienteTracked,
+          moraCobradaOffset: a.moraCobradaOffset,
+          moraCobradaPeriodo: moraPeriodo,
         );
 
         // Cálculo de cuotas vencidas
@@ -758,6 +764,11 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
         setState(() => _contratos = c);
         await _armarFilas(_institucion);
       }
+    });
+
+    ref.listen<int>(contratosMutationTickProvider, (prev, next) async {
+      if (prev == next || _eventoId == null) return;
+      await _cargarContratosYarmar(_eventoId);
     });
 
     final filasVista = _filasFiltradasVista();

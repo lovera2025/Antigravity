@@ -5,11 +5,14 @@ import '../../../core/utils/ar_time.dart';
 /// compartan la constante sin acoplarse entre sí.
 const String kCategoriaRetiroCaja = 'Retiro de caja';
 
-/// Egreso sin evento: plata del negocio que el dueño retira a su bolsillo personal (Resumen de caja).
+/// Egreso sin evento: plata retirada del negocio pero aún no gastada (retiro pendiente).
 const String kCategoriaRetiroDueno = 'Retiro dueño';
 
-/// Egreso sin evento: gasto pagado desde el bolsillo personal (no resta otra vez del saldo empresa).
+/// Egreso sin evento: gasto personal ([empresa] sale del negocio; [pendiente] consume retiro previo).
 const String kCategoriaGastoPersonal = 'Gasto personal';
+
+/// Egreso sin evento: gasto directo del negocio registrado desde el panel del dueño.
+const String kCategoriaGastoEmpresa = 'Gasto empresa';
 
 /// Turnos de cierre de caja. El corte mañana/tarde se decide por hora AR
 /// (default 14:00) y `dia` engloba ambos (00:00 a 23:59 AR).

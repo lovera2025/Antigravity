@@ -31,6 +31,10 @@ class ContratoAlumno {
   /// Remanente de mora acordado en cobros parciales (solo SQLite local).
   final double moraPendienteTracked;
 
+  /// Offset del historial de mora cobrada al momento del último avance de cuota.
+  /// Permite aislar la mora de la cuota actual de la mora acumulada de cuotas anteriores.
+  final double moraCobradaOffset;
+
   ContratoAlumno({
     required this.id,
     required this.eventoId,
@@ -60,6 +64,7 @@ class ContratoAlumno {
     this.createdAt,
     this.contratoFirmado = false,
     this.moraPendienteTracked = 0.0,
+    this.moraCobradaOffset = 0.0,
   });
 
   factory ContratoAlumno.fromJson(Map<String, dynamic> json) {
@@ -115,6 +120,9 @@ class ContratoAlumno {
       moraPendienteTracked: double.parse(
         (json['mora_pendiente_tracked'] ?? 0.0).toString(),
       ),
+      moraCobradaOffset: double.parse(
+        (json['mora_cobrada_offset'] ?? 0.0).toString(),
+      ),
     );
   }
 
@@ -153,6 +161,7 @@ class ContratoAlumno {
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       'contrato_firmado': contratoFirmado,
       'mora_pendiente_tracked': moraPendienteTracked,
+      'mora_cobrada_offset': moraCobradaOffset,
     };
   }
 
@@ -185,6 +194,7 @@ class ContratoAlumno {
     DateTime? createdAt,
     bool? contratoFirmado,
     double? moraPendienteTracked,
+    double? moraCobradaOffset,
   }) {
     return ContratoAlumno(
       id: id ?? this.id,
@@ -215,6 +225,7 @@ class ContratoAlumno {
       createdAt: createdAt ?? this.createdAt,
       contratoFirmado: contratoFirmado ?? this.contratoFirmado,
       moraPendienteTracked: moraPendienteTracked ?? this.moraPendienteTracked,
+      moraCobradaOffset: moraCobradaOffset ?? this.moraCobradaOffset,
     );
   }
 }

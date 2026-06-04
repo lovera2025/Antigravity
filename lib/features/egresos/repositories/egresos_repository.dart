@@ -143,6 +143,43 @@ class EgresosRepository {
     }
   }
 
+  /// Actualiza campos de un egreso existente (offline-first).
+  Future<void> actualizarEgreso({
+    required String id,
+    String? categoria,
+    String? proveedor,
+    String? medioPago,
+    double? monto,
+  }) async {
+    if (id.isEmpty || id.length != 36) {
+      debugPrint('🚫 actualizarEgreso: id inválido');
+      return;
+    }
+    final db = await LocalDatabase.instance;
+    final updates = <String, dynamic>{};
+    if (categoria != null) updates['categoria'] = categoria;
+    if (proveedor != null) updates['proveedor'] = proveedor.trim();
+    if (medioPago != null) updates['medio_pago'] = medioPago;
+    if (monto != null) updates['monto'] = monto;
+    if (updates.isEmpty) return;
+
+    await db.update('egresos', updates, where: 'id = ?', whereArgs: [id]);
+
+    final fullRow = await db.query('egresos', where: 'id = ?', whereArgs: [id]);
+    final payload = fullRow.isNotEmpty ? Map<String, dynamic>.from(fullRow.first) : {'id': id, ...updates};
+
+    await SyncQueue.enqueue(
+      tabla: 'egresos',
+      operacion: SyncOperation.update,
+      registroId: id,
+      payload: payload,
+    );
+
+    if (_connectivity.currentStatus == AppConnectivity.online) {
+      _syncImmediately(payload);
+    }
+  }
+
   /// Elimina un egreso en SQLite y en la nube (offline-first).
   Future<void> eliminarEgreso(String id) async {
     if (id.isEmpty || id.length != 36) {

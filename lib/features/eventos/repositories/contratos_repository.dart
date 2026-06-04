@@ -17,14 +17,14 @@ import '../../../core/utils/uuid_utils.dart';
 import '../services/calculadora_financiera.dart';
 import '../services/mora_cuota_calculator.dart';
 
-/// Repositorio de Contratos de Alumnos (Eventos Masivos) — Offline-First.
+/// Repositorio de Contratos de Alumnos (Eventos Masivos) ÔÇö Offline-First.
 class ContratosRepository {
   final SupabaseClient _supabase;
   final ConnectivityService _connectivity;
 
   ContratosRepository(this._supabase, this._connectivity);
 
-  /// Suma mora cobrada (no anulada) dentro de una transacción, **antes** de insertar un nuevo pago.
+  /// Suma mora cobrada (no anulada) dentro de una transacci├│n, **antes** de insertar un nuevo pago.
   Future<double> _sumMoraCobradaHistorialTxn(
     dynamic txn,
     String contratoId,
@@ -48,7 +48,7 @@ class ContratosRepository {
     return double.parse(s.toStringAsFixed(2));
   }
 
-  // ── LECTURA ────────────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ LECTURA ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
   /// Obtiene todos los contratos de un evento.
   Future<List<ContratoAlumno>> getByEvento(String eventoId) async {
@@ -77,16 +77,16 @@ class ContratosRepository {
     return rows.map(_fromLocalRow).toList();
   }
 
-  // ── ESCRITURA ─────────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ ESCRITURA ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
   /// Registra un nuevo contrato de alumno.
   Future<String> registrarContrato(ContratoAlumno contrato) async {
     final db = await LocalDatabase.instance;
     final data = _toLocalRow(contrato);
     
-    // Validación de seguridad (NotNull en Supabase)
+    // Validaci├│n de seguridad (NotNull en Supabase)
     if (contrato.eventoId.isEmpty || contrato.eventoId == 'null') {
-      throw Exception('INTENTO_REGISTRO_CORRUPTO: El evento_id está vacío o es inválido.');
+      throw Exception('INTENTO_REGISTRO_CORRUPTO: El evento_id est├í vac├¡o o es inv├ílido.');
     }
 
     await db.insert('contratos_alumnos', data, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -104,14 +104,14 @@ class ContratosRepository {
   Future<void> actualizarContrato(String id, Map<String, dynamic> updates) async {
     final db = await LocalDatabase.instance;
     
-    // Serializar arréglos para DB Local
+    // Serializar arr├®glos para DB Local
     final localUpdates = Map<String, dynamic>.from(updates);
     if (localUpdates.containsKey('nombres_acompanantes') && localUpdates['nombres_acompanantes'] is List) {
       localUpdates['nombres_acompanantes'] = jsonEncode(localUpdates['nombres_acompanantes']);
     }
-    if (localUpdates.containsKey('nombres_acompañantes') && localUpdates['nombres_acompañantes'] is List) {
-      localUpdates['nombres_acompanantes'] = jsonEncode(localUpdates['nombres_acompañantes']);
-      localUpdates.remove('nombres_acompañantes');
+    if (localUpdates.containsKey('nombres_acompa├▒antes') && localUpdates['nombres_acompa├▒antes'] is List) {
+      localUpdates['nombres_acompanantes'] = jsonEncode(localUpdates['nombres_acompa├▒antes']);
+      localUpdates.remove('nombres_acompa├▒antes');
     }
     // SQLite FFI no acepta bool en bindings; la columna es INTEGER.
     if (localUpdates.containsKey('contrato_firmado')) {
@@ -131,8 +131,8 @@ class ContratosRepository {
     );
   }
 
-  /// Actualiza solo `contrato_firmado` para muchos contratos en una transacción local
-  /// y encola sync por registro (misma semántica que [actualizarContrato]).
+  /// Actualiza solo `contrato_firmado` para muchos contratos en una transacci├│n local
+  /// y encola sync por registro (misma sem├íntica que [actualizarContrato]).
   Future<void> actualizarContratoFirmadoBulk(Map<String, bool> cambiosPorId) async {
     if (cambiosPorId.isEmpty) return;
     final db = await LocalDatabase.instance;
@@ -156,7 +156,7 @@ class ContratosRepository {
   }
 
   /// Registra un pago de contrato de alumno.
-  /// Retorna el [ContratoAlumno] con saldo actualizado post-transacción.
+  /// Retorna el [ContratoAlumno] con saldo actualizado post-transacci├│n.
   Future<ContratoAlumno> registrarPago({
     required String contratoId,
     required double monto,
@@ -165,17 +165,17 @@ class ContratosRepository {
     double descuentoPorcentaje = 0,
     int cuotasLiquidadas = 1,
     String? medioPago,
-    /// Solo SQLite local; no se envía a Supabase hasta tener columna en nube.
+    /// Solo SQLite local; no se env├¡a a Supabase hasta tener columna en nube.
     String? lineKind,
     /// Mora pendiente calculada ANTES de que este mismo recibo avance
     /// cuotas_pagadas. Si se provee, se usa directamente en vez de
-    /// recalcular desde el contrato (que ya fue mutado por la línea base).
+    /// recalcular desde el contrato (que ya fue mutado por la l├¡nea base).
     double? moraPendienteAntesDeLote,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
     // Sello temporal ESTRICTO del pago (instante UTC preciso). Se muestra en
-    // huso America/Argentina/Buenos_Aires vía ArTime.
+    // huso America/Argentina/Buenos_Aires v├¡a ArTime.
     final now = ArTime.nowUtcIso();
 
     final lk = lineKind?.trim();
@@ -201,11 +201,11 @@ class ContratosRepository {
       if (esInteres) {
         double pendienteAntes;
         if (moraPendienteAntesDeLote != null) {
-          // Snapshot pre-lote: el caller nos pasó la mora que existía ANTES
+          // Snapshot pre-lote: el caller nos pas├│ la mora que exist├¡a ANTES
           // de que este mismo recibo avanzara cuotas_pagadas.
           pendienteAntes = moraPendienteAntesDeLote;
         } else {
-          // Cálculo legacy (recibos que solo cobran mora sin cuota base).
+          // C├ílculo legacy (recibos que solo cobran mora sin cuota base).
           final cRows = await txn.query(
             'contratos_alumnos',
             where: 'id = ?',
@@ -250,10 +250,10 @@ class ContratosRepository {
       } else if (esInteres) {
         // Ya actualizamos mora_pendiente_tracked; saldo / cuotas no cambian.
       } else if (conceptoLower.contains('base')) {
-        // ── Snapshot mora ANTES de avanzar cuotas_pagadas ──────────
-        // Al incrementar cuotas_pagadas, MoraCuotaCalculator mirará la
-        // cuota siguiente; si aún no venció, interesAcumulado caerá a 0
-        // y la mora acumulada de la cuota anterior se perdería.
+        // ÔöÇÔöÇ Snapshot mora ANTES de avanzar cuotas_pagadas ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        // Al incrementar cuotas_pagadas, MoraCuotaCalculator mirar├í la
+        // cuota siguiente; si a├║n no venci├│, interesAcumulado caer├í a 0
+        // y la mora acumulada de la cuota anterior se perder├¡a.
         // Persistimos el valor actual en mora_pendiente_tracked para que
         // pendienteDisplay lo conserve.
         final snapRows = await txn.query(
@@ -280,7 +280,7 @@ class ContratosRepository {
             );
           }
         }
-        // ── Ahora sí, avanzar cuota ───────────────────────────────
+        // ÔöÇÔöÇ Ahora s├¡, avanzar cuota ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
         await txn.rawUpdate('''
           UPDATE contratos_alumnos 
           SET saldo_deudor = saldo_deudor - ?, 
@@ -346,7 +346,7 @@ class ContratosRepository {
       payload: syncPayload,
     );
 
-    // Retornar contrato actualizado post-transacción
+    // Retornar contrato actualizado post-transacci├│n
     await recalcularProgresoContrato(contratoId);
     
     final finalRows = await db.query('contratos_alumnos',
@@ -354,7 +354,7 @@ class ContratosRepository {
     return _fromLocalRow(finalRows.first);
   }
 
-  /// Recalcula los contadores de cuotas de un contrato basándose en el historial de pagos.
+  /// Recalcula los contadores de cuotas de un contrato bas├índose en el historial de pagos.
   Future<void> recalcularProgresoContrato(String contratoId) async {
     final db = await LocalDatabase.instance;
     
@@ -406,8 +406,8 @@ class ContratosRepository {
       if (concepto.contains('base')) {
         int cant = 0;
         if (!esEntregaParcial) {
-          if (concepto.contains('liquidación de')) {
-            final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+          if (concepto.contains('liquidaci├│n de')) {
+            final match = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto);
             cant = match != null ? int.parse(match.group(1)!) : 1;
           } else if (concepto.contains('cuota')) {
             cant = 1;
@@ -421,8 +421,8 @@ class ContratosRepository {
       } else if (concepto.contains('mesa')) {
         int cant = 0;
         if (!esEntregaParcial) {
-          if (concepto.contains('liquidación de')) {
-            final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+          if (concepto.contains('liquidaci├│n de')) {
+            final match = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto);
             cant = match != null ? int.parse(match.group(1)!) : 1;
           } else if (concepto.contains('mesa extra')) {
             cant = 1;
@@ -436,8 +436,8 @@ class ContratosRepository {
       } else if (concepto.contains('silla')) {
         int cant = 0;
         if (!esEntregaParcial) {
-          if (concepto.contains('liquidación de')) {
-            final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+          if (concepto.contains('liquidaci├│n de')) {
+            final match = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto);
             cant = match != null ? int.parse(match.group(1)!) : 1;
           } else if (concepto.contains('sillas extra')) {
             cant = 1;
@@ -490,7 +490,7 @@ class ContratosRepository {
       await db.update('contratos_alumnos', finalUpdates, where: 'id = ?', whereArgs: [contratoId]);
     }
 
-    // El enqueue se ejecuta SIEMPRE: tras una anulación los contadores locales pueden quedar
+    // El enqueue se ejecuta SIEMPRE: tras una anulaci├│n los contadores locales pueden quedar
     // ya consistentes (hasChanges=false) pero la nube necesita el update igual para que
     // dashboards/cobros suscritos al realtime de contratos_alumnos vean el contador correcto.
     await SyncQueue.enqueue(
@@ -501,7 +501,7 @@ class ContratosRepository {
     );
   }
 
-  /// Obtiene el último pago de un contrato.
+  /// Obtiene el ├║ltimo pago de un contrato.
   Future<Map<String, dynamic>?> getUltimoPago(String contratoId) async {
     final db = await LocalDatabase.instance;
     final rows = await db.query(
@@ -514,7 +514,7 @@ class ContratosRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
-  /// Obtiene todos los pagos del último lote.
+  /// Obtiene todos los pagos del ├║ltimo lote.
   Future<List<Map<String, dynamic>>> getUltimosPagosLote(String contratoId) async {
     final db = await LocalDatabase.instance;
     final ultimo = await db.query(
@@ -548,7 +548,7 @@ class ContratosRepository {
         orderBy: 'fecha_pago DESC');
   }
 
-  /// Suma de ingresos registrados como interés por mora (no afectan saldo del plan).
+  /// Suma de ingresos registrados como inter├®s por mora (no afectan saldo del plan).
   Future<double> sumMoraCobradaHistorial(String contratoId) async {
     final m = await sumMoraCobradaHistorialPorContratos([contratoId]);
     return m[contratoId] ?? 0.0;
@@ -586,7 +586,7 @@ class ContratosRepository {
   }
 
   /// Todos los pagos locales para un conjunto de contratos (p. ej. tab Cobro en Mi Empresa).
-  /// Orden: [fecha_pago] ascendente. Trocea la consulta para respetar límites de variables SQLite.
+  /// Orden: [fecha_pago] ascendente. Trocea la consulta para respetar l├¡mites de variables SQLite.
   Future<List<Map<String, dynamic>>> getPagosForContratoIds(List<String> contratoIds) async {
     if (contratoIds.isEmpty) return [];
     final db = await LocalDatabase.instance;
@@ -605,7 +605,7 @@ class ContratosRepository {
     return out;
   }
 
-  /// Repara contratos huérfanos.
+  /// Repara contratos hu├®rfanos.
   Future<int> repararContratosHuerfanos(String eventoId) async {
     final db = await LocalDatabase.instance;
     final huerfanos = await db.query('contratos_alumnos', 
@@ -628,11 +628,11 @@ class ContratosRepository {
     return corregidos;
   }
 
-  // ── SYNC & REALTIME ────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ SYNC & REALTIME ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   
   /// Escucha cambios en tiempo real para alumnos y pagos de un evento.
   RealtimeChannel subscribeToChanges(String eventoId, void Function() onUpdate) {
-    debugPrint('🔔 Suscribiendo a cambios en tiempo real para evento: $eventoId');
+    debugPrint('­ƒöö Suscribiendo a cambios en tiempo real para evento: $eventoId');
     final channel = _supabase.channel('public:contratos_repo_$eventoId');
     
     channel.onPostgresChanges(
@@ -645,7 +645,7 @@ class ContratosRepository {
         value: eventoId,
       ),
       callback: (payload) {
-        debugPrint('🔔 Realtime: Cambio detectado en contrato_alumno');
+        debugPrint('­ƒöö Realtime: Cambio detectado en contrato_alumno');
         onUpdate();
       },
     );
@@ -655,7 +655,7 @@ class ContratosRepository {
       schema: 'public',
       table: 'pagos_contrato_alumno',
       callback: (payload) {
-        debugPrint('🔔 Realtime: Cambio detectado en pagos');
+        debugPrint('­ƒöö Realtime: Cambio detectado en pagos');
         onUpdate();
       },
     );
@@ -705,7 +705,7 @@ class ContratosRepository {
       }
       await batch.commit(noResult: true);
     } catch (e) {
-      debugPrint('⚠️ Error pull contratos: $e');
+      debugPrint('ÔÜá´©Å Error pull contratos: $e');
     }
   }
 
@@ -771,11 +771,11 @@ class ContratosRepository {
       }
       await batch.commit(noResult: true);
     } catch (e) {
-      debugPrint('⚠️ Error pull pagos: $e');
+      debugPrint('ÔÜá´©Å Error pull pagos: $e');
     }
   }
 
-  // ── HELPERS ───────────────────────────────────────────────────────────────
+  // ÔöÇÔöÇ HELPERS ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
   ContratoAlumno _fromLocalRow(Map<String, dynamic> row) {
     return ContratoAlumno.fromJson(row);
@@ -802,7 +802,7 @@ class ContratosRepository {
     }
   }
 
-  /// Busca contratos por nombre de alumno o institución (colegio) para restaurar mora.
+  /// Busca contratos por nombre de alumno o instituci├│n (colegio) para restaurar mora.
   Future<List<ContratoAlumno>> buscarContratosParaMora(String consulta) async {
     final q = consulta.trim();
     if (q.length < 2) return [];
@@ -816,7 +816,7 @@ class ContratosRepository {
     return rows.map(_fromLocalRow).toList();
   }
 
-  /// Alumnos masivos con cuota vencida y mora neta a restaurar (1% cuota × días atraso).
+  /// Alumnos masivos con cuota vencida y mora neta a restaurar (1% cuota ├ù d├¡as atraso).
   Future<List<MoraRestauracionCandidato>> listarCandidatosRestauracionMora({
     bool excluirBuenaVista = true,
   }) async {
@@ -902,9 +902,99 @@ class ContratosRepository {
 
     return count;
   }
+
+  Future<void> forceRefresh(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    await _pullByEvento(db, eventoId, prune: true);
+    await _pullPagosByEvento(db, eventoId, prune: true);
+  }
+
+  Future<Map<String, double>> sumMoraCobradaPeriodoPorContratos(
+      List<ContratoAlumno> alumnos) async {
+    final contratoIds = alumnos.map((e) => e.id).toList();
+    final out = <String, double>{for (final id in contratoIds) id: 0.0};
+    if (contratoIds.isEmpty) return out;
+
+    final alumnoMap = {for (final a in alumnos) a.id: a};
+
+    final db = await LocalDatabase.instance;
+    const chunk = 120;
+    for (var i = 0; i < contratoIds.length; i += chunk) {
+      final end =
+          (i + chunk < contratoIds.length) ? i + chunk : contratoIds.length;
+      final part = contratoIds.sublist(i, end);
+      final ph = part.map((_) => '?').join(',');
+      final rows = await db.rawQuery(
+        'SELECT * FROM pagos_contrato_alumno WHERE contrato_alumno_id IN ($ph)',
+        part,
+      );
+      for (final p in rows) {
+        if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+        final cid = p['contrato_alumno_id'] as String?;
+        if (cid == null) continue;
+        final lk = (p['line_kind'] as String?)?.trim();
+        final concepto = p['concepto'] as String? ?? '';
+
+        if (lk == kLineKindInteresMora || esPagoInteresMoraPorConcepto(concepto)) {
+          final alumno = alumnoMap[cid];
+          if (alumno == null) continue;
+
+          final fp = p['fecha_pago']?.toString();
+          if (fp == null) continue;
+          final d = DateTime.tryParse(fp);
+          if (d == null) continue;
+
+          final res = MoraCuotaCalculator.calcular(alumno);
+          final inicioMora = inicioMoraPeriodoVigente(res.fechaVencimientoProximaCuota);
+
+          if (d.isAfter(inicioMora) || d.isAtSameMomentAs(inicioMora)) {
+            out[cid] = (out[cid] ?? 0.0) + (p['monto'] as num).toDouble();
+          }
+        }
+      }
+    }
+
+    out.forEach((key, val) {
+      out[key] = double.parse(val.toStringAsFixed(2));
+    });
+    return out;
+  }
+
+  Future<bool> ejecutarAuditoriaInteligente(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final alumnos = await db.query('contratos_alumnos', where: 'evento_id = ?', whereArgs: [eventoId]);
+
+    bool huboCambios = false;
+    for (final aRow in alumnos) {
+      final id = aRow['id'] as String;
+      final saldoAnt = (aRow['saldo_deudor'] as num?)?.toDouble() ?? 0.0;
+      final cuotasAnt = (aRow['cuotas_pagadas'] as num?)?.toInt() ?? 0;
+      final mesaAnt = (aRow['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
+      final sillasAnt = (aRow['sillas_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
+
+      await recalcularProgresoContrato(id);
+
+      final freshRows = await db.query('contratos_alumnos', where: 'id = ?', whereArgs: [id], limit: 1);
+      if (freshRows.isNotEmpty) {
+        final fRow = freshRows.first;
+        final saldoNew = (fRow['saldo_deudor'] as num?)?.toDouble() ?? 0.0;
+        final cuotasNew = (fRow['cuotas_pagadas'] as num?)?.toInt() ?? 0;
+        final mesaNew = (fRow['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
+        final sillasNew = (fRow['sillas_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
+
+        if ((saldoAnt - saldoNew).abs() > 0.01 ||
+            cuotasAnt != cuotasNew ||
+            mesaAnt != mesaNew ||
+            sillasAnt != sillasNew) {
+          huboCambios = true;
+        }
+      }
+    }
+    return huboCambios;
+  }
 }
 
-// ── Provider ────────────────────────────────────────────────────────────────
+// ÔöÇÔöÇ Provider ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 final contratosRepositoryProvider = Provider<ContratosRepository>((ref) {
   final supabase = ref.watch(supabaseProvider);

@@ -1,0 +1,48 @@
+﻿Widget _empresaDetalleLinea(String lbl, double monto, Color color, bool isDark, {bool negativo = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(lbl, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? Colors.white54 : Colors.black54)),
+          Text(
+            '${negativo ? '−' : ''}${monto.toCurrency()}',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _medioChipMini(String label, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: color),
+      ),
+    );
+  }
+
+  Widget _buildFiltroMeses(bool isDark, Color gold, FinanzasState state) {
+    final ahoraAr = ArTime.nowAr();
+    final meses = List.generate(6, (i) => DateTime(ahoraAr.year, ahoraAr.month - i, 1));
+    const mesesNombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          ...meses.map((m) {
+            final isSelected = state.mesFiltro?.year == m.year && state.mesFiltro?.month == m.month;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text('${mesesNombres[m.month - 1]} ${m.year}'),
+                selected: isSelected,
+                selectedColor: gold.withValues(alpha: 0.2),
+                backgroundColor: isDark ? Colors.white.withValues(alph

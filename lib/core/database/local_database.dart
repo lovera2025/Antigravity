@@ -17,7 +17,7 @@ import '../utils/uuid_utils.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 42;
+  static const int _version = 44;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -192,6 +192,7 @@ class LocalDatabase {
         created_at TEXT,
         contrato_firmado INTEGER DEFAULT 0,
         mora_pendiente_tracked REAL DEFAULT 0.0,
+        mora_cobrada_offset REAL DEFAULT 0.0,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -1218,6 +1219,66 @@ class LocalDatabase {
         }
       } catch (e) {
         debugPrint('  ⚠️ Nota migración v42 notas_operativas: $e');
+      }
+    }
+
+    if (oldVersion < 43) {
+      debugPrint(
+        '  🔧 v43: retiros dueño históricos → gasto personal [empresa]',
+      );
+      try {
+        final rows = await db.query(
+          'egresos',
+          where: "trim(categoria) = ?",
+          whereArgs: ['Retiro dueño'],
+        );
+        for (final r in rows) {
+          final id = r['id']?.toString();
+          if (id == null || id.isEmpty) continue;
+          final prov = (r['proveedor'] ?? 'Retiro bolsillo personal').toString().trim();
+          final newProv = prov.startsWith('[empresa]') ? prov : '[empresa] $prov';
+          await db.update(
+            'egresos',
+            {'categoria': 'Gasto personal', 'proveedor': newProv},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+        debugPrint('✅ Migración v43: ${rows.length} retiro(s) reclasificados');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v43: $e');
+      }
+    }
+
+    if (oldVersion < 44) {
+      debugPrint(
+        '  🔧 v44: mora_cobrada_offset (aislamiento de mora por período de cuota)',
+      );
+      try {
+        try {
+          await db.execute(
+            'ALTER TABLE contratos_alumnos ADD COLUMN mora_cobrada_offset REAL DEFAULT 0.0',
+          );
+        } catch (e) {
+          debugPrint('  ⚠️ mora_cobrada_offset ya existe: $e');
+        }
+        await db.rawUpdate('''
+          UPDATE contratos_alumnos
+          SET mora_cobrada_offset = (
+            SELECT COALESCE(SUM(p.monto), 0.0)
+            FROM pagos_contrato_alumno p
+            WHERE p.contrato_alumno_id = contratos_alumnos.id
+              AND (p.line_kind = 'interes_mora'
+                   OR LOWER(IFNULL(p.concepto,'')) LIKE '%mora%'
+                   OR LOWER(IFNULL(p.concepto,'')) LIKE '%inter%')
+              AND (p.anulado IS NULL OR p.anulado = 0)
+          )
+          WHERE cuotas_pagadas > 0
+            AND saldo_deudor > 0.01
+        ''');
+        debugPrint('✅ Migración v44 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v44: $e');
       }
     }
   }

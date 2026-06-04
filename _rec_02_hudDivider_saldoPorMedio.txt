@@ -1,0 +1,116 @@
+﻿Widget _buildHudSectionDivider(String label, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.black12)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.black12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaldoPorMedioSection(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold, {
+    required bool compact,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Desglose por medio de pago',
+          style: TextStyle(
+            fontSize: compact ? 10 : 11,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white70 : Colors.black54,
+          ),
+        ),
+        SizedBox(height: compact ? 8 : 10),
+        Row(
+          children: [
+            Expanded(
+              child: _hudTileIngresoHoyMedio(
+                context: context,
+                isDark: isDark,
+                gold: gold,
+                state: state,
+                compact: compact,
+                label: 'EFECTIVO',
+                contexto: 'Saldo neto histórico',
+                monto: state.hudEfectivoNetoHistorico,
+                accent: const Color(0xFF00B894),
+                icon: Icons.payments_outlined,
+                bucket: '',
+              ),
+            ),
+            SizedBox(width: compact ? 8 : 12),
+            Expanded(
+              child: _hudTileIngresoHoyMedio(
+                context: context,
+                isDark: isDark,
+                gold: gold,
+                state: state,
+                compact: compact,
+                label: 'TRANSFERENCIA',
+                contexto: 'Saldo neto histórico',
+                monto: state.hudTransferenciaNetaHistorica,
+                accent: const Color(0xFF6C63FF),
+                icon: Icons.swap_horiz_rounded,
+                bucket: '',
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: EdgeInsets.only(top: compact ? 6 : 8),
+          child: Text(
+            'Cobros menos gastos del negocio, separados por cómo se pagó. El total = saldo contable.',
+            style: TextStyle(
+              fontSize: compact ? 9 : 10,
+              fontWeight: FontWeight.w600,
+              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.42),
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _abrirDetalleCobrosHistoricos(context, state, isDark, gold),
+            icon: Icon(Icons.receipt_long_rounded, size: compact ? 16 : 18, color: gold),
+            label: Text(
+              'Total cobrado histórico: ${state.hudTotalIngresosHistoricoGlobal.toCurrency()}',
+              style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: compact ? 10 : 11),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOperacionHoySection(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold, {
+    required bool compact,
+  }) {
+    final fijo = state.fechaInteligenciaHud;
+    final labelDia = fijo != null ? ArTime.formatFechaCorta(fijo) : ArTime.formatFechaCorta(ArTime.nowAr());
+    final esHoy = _hudEsDiaCalendarioHoy(state);
+    final neto = state.hudNetoDelDia;
+    final resumenColapsado = state

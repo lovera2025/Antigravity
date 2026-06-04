@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/utils/ar_time.dart';
+import '../../../models/caja_fuerte_movimiento.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../providers/caja_fuerte_provider.dart';
 
-/// Asignación de cupo en Caja fuerte (suma al saldo).
+/// Depósito de efectivo del negocio en el cofre físico.
 class CajaFuerteAsignarDialog extends ConsumerStatefulWidget {
   const CajaFuerteAsignarDialog({super.key});
 
@@ -62,8 +65,9 @@ class _CajaFuerteAsignarDialogState extends ConsumerState<CajaFuerteAsignarDialo
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    const cof = Color(0xFF5D4037);
     return AlertDialog(
-      title: const Text('Asignar a Caja fuerte'),
+      title: const Text('Depositar en caja fuerte'),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -71,9 +75,9 @@ class _CajaFuerteAsignarDialogState extends ConsumerState<CajaFuerteAsignarDialo
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Sumá cupo para gastos personales del dueño. No descontamos automáticamente de la caja del negocio: es un control interno sobre lo que decidís disponer.',
-                style: TextStyle(fontSize: 12, height: 1.35),
+              Text(
+                'Registrá cuánto efectivo del negocio guardás en el cofre. Suma al saldo físico de caja fuerte.',
+                style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white70 : Colors.black54),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -92,7 +96,7 @@ class _CajaFuerteAsignarDialogState extends ConsumerState<CajaFuerteAsignarDialo
                   }),
                 ],
                 decoration: const InputDecoration(
-                  labelText: 'Monto',
+                  labelText: 'Monto depositado',
                   prefixText: '\$ ',
                 ),
                 validator: (v) {
@@ -107,7 +111,7 @@ class _CajaFuerteAsignarDialogState extends ConsumerState<CajaFuerteAsignarDialo
                 maxLines: 2,
                 decoration: const InputDecoration(
                   labelText: 'Nota (opcional)',
-                  hintText: 'Ej.: parte del finde',
+                  hintText: 'Ej.: cierre del sábado, sobrante del turno…',
                 ),
               ),
             ],
@@ -122,18 +126,18 @@ class _CajaFuerteAsignarDialogState extends ConsumerState<CajaFuerteAsignarDialo
         FilledButton(
           onPressed: _busy ? null : _guardar,
           style: FilledButton.styleFrom(
-            backgroundColor: isDark ? const Color(0xFFD4AF37) : const Color(0xFF795548),
+            backgroundColor: isDark ? const Color(0xFFD4AF37) : cof,
           ),
           child: _busy
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Guardar'),
+              : const Text('Depositar'),
         ),
       ],
     );
   }
 }
 
-/// Retiro desde Caja fuerte (resta del saldo; bloqueado si supera disponible).
+/// Retiro desde caja fuerte (resta del saldo físico; bloqueado si supera disponible).
 class CajaFuerteRetiroDialog extends ConsumerStatefulWidget {
   final double saldoActual;
 
@@ -147,6 +151,7 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
   final _formKey = GlobalKey<FormState>();
   final _montoCtrl = TextEditingController();
   final _notaCtrl = TextEditingController();
+  CajaFuerteMotivoRetiro _motivo = CajaFuerteMotivoRetiro.personal;
   bool _busy = false;
 
   @override
@@ -176,7 +181,7 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Saldo insuficiente (${widget.saldoActual.toCurrency()}). Asigná más en Caja fuerte o bajá el monto.',
+            'Saldo insuficiente en el cofre (${widget.saldoActual.toCurrency()}). Depositá más o bajá el monto.',
           ),
           backgroundColor: Colors.redAccent,
         ),
@@ -187,7 +192,8 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
     try {
       await ref.read(cajaFuerteProvider.notifier).registrarRetiro(
             m,
-            nota: _notaCtrl.text.trim().isEmpty ? null : _notaCtrl.text.trim(),
+            motivo: _motivo,
+            nota: _notaCtrl.text.trim(),
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -204,8 +210,9 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    const cof = Color(0xFF5D4037);
     return AlertDialog(
-      title: const Text('Retiro desde Caja fuerte'),
+      title: const Text('Retirar del cofre'),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -214,16 +221,35 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Disponible: ${widget.saldoActual.toCurrency()}',
+                'En cofre ahora: ${widget.saldoActual.toCurrency()}',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Registra un gasto personal que rebaja solo el cupo de Caja fuerte (no crea egreso operador).',
-                style: TextStyle(fontSize: 12, height: 1.35),
+              Text(
+                'Indicá para qué sacás la plata. El saldo físico del cofre baja; el Resumen de caja del negocio no cambia solo por este movimiento.',
+                style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white70 : Colors.black54),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '¿Para qué es?',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: isDark ? Colors.white54 : Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<CajaFuerteMotivoRetiro>(
+                showSelectedIcon: false,
+                segments: CajaFuerteMotivoRetiro.values
+                    .map(
+                      (m) => ButtonSegment(
+                        value: m,
+                        label: Text(m.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                      ),
+                    )
+                    .toList(),
+                selected: {_motivo},
+                onSelectionChanged: (s) => setState(() => _motivo = s.first),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -242,7 +268,7 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
                   }),
                 ],
                 decoration: const InputDecoration(
-                  labelText: 'Monto del retiro',
+                  labelText: 'Monto retirado',
                   prefixText: '\$ ',
                 ),
                 validator: (v) {
@@ -255,9 +281,14 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
               TextFormField(
                 controller: _notaCtrl,
                 maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Concepto / nota (opcional)',
+                decoration: InputDecoration(
+                  labelText: 'Detalle',
+                  hintText: _motivo.hint,
                 ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Contanos en pocas palabras para qué fue';
+                  return null;
+                },
               ),
             ],
           ),
@@ -271,13 +302,199 @@ class _CajaFuerteRetiroDialogState extends ConsumerState<CajaFuerteRetiroDialog>
         FilledButton(
           onPressed: _busy ? null : _guardar,
           style: FilledButton.styleFrom(
-            backgroundColor: isDark ? const Color(0xFFD4AF37) : const Color(0xFF795548),
+            backgroundColor: isDark ? const Color(0xFFD4AF37) : cof,
           ),
           child: _busy
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Registrar'),
+              : const Text('Registrar retiro'),
         ),
       ],
+    );
+  }
+}
+
+enum _FiltroHistorialCajaFuerte { todos, depositos, personal, negocio }
+
+/// Historial completo de movimientos de caja fuerte.
+Future<void> showCajaFuerteHistorialSheet(
+  BuildContext context, {
+  required CajaFuerteResumen resumen,
+  required bool isDark,
+  required Color gold,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      return _CajaFuerteHistorialSheet(
+        resumen: resumen,
+        isDark: isDark,
+        gold: gold,
+      );
+    },
+  );
+}
+
+class _CajaFuerteHistorialSheet extends StatefulWidget {
+  final CajaFuerteResumen resumen;
+  final bool isDark;
+  final Color gold;
+
+  const _CajaFuerteHistorialSheet({
+    required this.resumen,
+    required this.isDark,
+    required this.gold,
+  });
+
+  @override
+  State<_CajaFuerteHistorialSheet> createState() => _CajaFuerteHistorialSheetState();
+}
+
+class _CajaFuerteHistorialSheetState extends State<_CajaFuerteHistorialSheet> {
+  _FiltroHistorialCajaFuerte _filtro = _FiltroHistorialCajaFuerte.todos;
+
+  List<CajaFuerteMovimiento> get _filtrados {
+    final all = widget.resumen.movimientos;
+    switch (_filtro) {
+      case _FiltroHistorialCajaFuerte.todos:
+        return all;
+      case _FiltroHistorialCajaFuerte.depositos:
+        return all.where((m) => m.esAsignacion).toList();
+      case _FiltroHistorialCajaFuerte.personal:
+        return all.where((m) => m.motivoRetiro == CajaFuerteMotivoRetiro.personal).toList();
+      case _FiltroHistorialCajaFuerte.negocio:
+        return all.where((m) => m.motivoRetiro == CajaFuerteMotivoRetiro.negocio).toList();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF00B894);
+    const cof = Color(0xFF5D4037);
+    final items = _filtrados;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.72,
+      maxChildSize: 0.92,
+      minChildSize: 0.45,
+      builder: (_, scrollCtrl) {
+        return Container(
+          decoration: BoxDecoration(
+            color: widget.isDark ? const Color(0xFF121218) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border.all(color: widget.gold.withValues(alpha: 0.25)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: widget.isDark ? Colors.white24 : Colors.black26,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'HISTORIAL CAJA FUERTE',
+                      style: GoogleFonts.oswald(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: cof,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Depositaste ${widget.resumen.totalDepositado.toCurrency()} · Retiraste ${widget.resumen.totalRetirado.toCurrency()} · Queda ${widget.resumen.saldo.toCurrency()}',
+                      style: TextStyle(fontSize: 12, height: 1.35, color: widget.isDark ? Colors.white54 : Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    for (final f in _FiltroHistorialCajaFuerte.values)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(
+                            switch (f) {
+                              _FiltroHistorialCajaFuerte.todos => 'Todos',
+                              _FiltroHistorialCajaFuerte.depositos => 'Depósitos',
+                              _FiltroHistorialCajaFuerte.personal => 'Personal',
+                              _FiltroHistorialCajaFuerte.negocio => 'Negocio',
+                            },
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                          ),
+                          selected: _filtro == f,
+                          onSelected: (_) => setState(() => _filtro = f),
+                          selectedColor: widget.gold.withValues(alpha: 0.22),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: items.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No hay movimientos con este filtro.',
+                          style: TextStyle(color: widget.isDark ? Colors.white38 : Colors.black45, fontWeight: FontWeight.w600),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final m = items[index];
+                          final d = ArTime.toAr(m.createdAt);
+                          final fechaTxt = ArTime.formatFechaCorta(d);
+                          final horaTxt = ArTime.formatHora(m.createdAt);
+                          final col = m.esAsignacion ? green : Colors.redAccent;
+                          final detalle = m.notaDetalle;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: widget.isDark ? Colors.white12 : Colors.black12),
+                            ),
+                            child: ListTile(
+                              leading: Icon(
+                                m.esAsignacion ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                                color: col,
+                              ),
+                              title: Text(
+                                '${m.esAsignacion ? '+' : '−'}${m.monto.toCurrency()} · ${m.etiquetaMovimiento}',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                              ),
+                              subtitle: Text(
+                                '$fechaTxt $horaTxt${detalle != null ? '\n$detalle' : ''}',
+                                style: TextStyle(fontSize: 11, height: 1.3, color: widget.isDark ? Colors.white54 : Colors.black54),
+                              ),
+                              isThreeLine: detalle != null,
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

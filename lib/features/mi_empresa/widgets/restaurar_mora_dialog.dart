@@ -19,6 +19,8 @@ class RestaurarMoraDialog extends ConsumerStatefulWidget {
   ConsumerState<RestaurarMoraDialog> createState() => _RestaurarMoraDialogState();
 }
 
+enum AjusteMoraModo { monto, dias }
+
 class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
@@ -31,6 +33,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
   List<ContratoAlumno> _resultados = [];
   ContratoAlumno? _seleccion;
   DateTime _fechaCalculo = DateTime.now();
+
+  AjusteMoraModo _ajusteModo = AjusteMoraModo.monto;
+  bool _ajustarReg = true;
 
   // ── Masivo ──
   bool _scanning = false;
@@ -108,8 +113,21 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     if (sel == null) return;
     final resumen = MoraCuotaCalculator.calcular(sel, _fechaCalculo);
     setState(() {
+      _ajusteModo = AjusteMoraModo.monto;
       _moraCtrl.text = resumen.interesAcumulado.toStringAsFixed(2);
     });
+  }
+
+  MoraRestauracionSimulacion? get _simulacion {
+    final sel = _seleccion;
+    if (sel == null) return null;
+    if (_ajusteModo == AjusteMoraModo.monto) {
+      final m = double.tryParse(_moraCtrl.text.trim()) ?? 0.0;
+      return MoraCuotaCalculator.simularPorMonto(sel, m, ahoraAr: _fechaCalculo);
+    } else {
+      final d = int.tryParse(_moraCtrl.text.trim()) ?? 0;
+      return MoraCuotaCalculator.simularPorDias(sel, d, ahoraAr: _fechaCalculo);
+    }
   }
 
   Future<void> _cambiarFecha() async {
@@ -141,13 +159,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     final sel = _seleccion;
     if (sel == null) return;
 
-    final double? montoMora = double.tryParse(_moraCtrl.text.trim());
-    if (montoMora == null || montoMora < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, ingrese un monto de mora válido.')),
-      );
-      return;
-    }
+    final sim = _simulacion;
+    if (sim == null) return;
 
     final ok = await AdminGate.check(context, ref, forceVerification: true);
     if (!ok || !mounted) return;
@@ -156,9 +169,15 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
-      await repo.actualizarContrato(sel.id, {
-        'mora_pendiente_tracked': montoMora,
-      });
+      final updates = <String, dynamic>{
+        'mora_pendiente_tracked': sim.montoMora,
+      };
+
+      if (_ajustarReg && sim.puedeAjustarReg) {
+        updates['created_at'] = MoraCuotaCalculator.regArAUtcIso(sim.regSugerido!);
+      }
+
+      await repo.actualizarContrato(sel.id, updates);
       ref.read(finanzasProvider.notifier).recargar();
 
       if (!mounted) return;
@@ -166,7 +185,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Mora para ${sel.nombreAlumno} restaurada a ${montoMora.toCurrency()}.',
+            'Mora para ${sel.nombreAlumno} restaurada a ${sim.montoMora.toCurrency()}.',
           ),
           backgroundColor: const Color(0xFF00B894),
         ),
@@ -176,6 +195,66 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('No se pudo restaurar la mora: $e')),
+      );
+    }
+  }
+
+  Future<void> _quitarMora() async {
+    final sel = _seleccion;
+    if (sel == null) return;
+
+    final sim = MoraCuotaCalculator.simularQuitarMora(sel, ahoraAr: _fechaCalculo);
+    if (sim.regSugerido == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('El alumno ya está al día o no se puede calcular.')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar quitar mora'),
+        content: Text(
+          'Se dejará al alumno sin mora. Esto ajustará su fecha de alta (Reg) '
+          'al ${ArTime.formatFechaCorta(sim.regSugerido!)} para que quede al día.\n\n'
+          '¿Continuar?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quitar mora')),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final ok = await AdminGate.check(context, ref, forceVerification: true);
+    if (!ok || !mounted) return;
+
+    setState(() => _submitting = true);
+
+    try {
+      final repo = ref.read(contratosRepositoryProvider);
+      await repo.actualizarContrato(sel.id, {
+        'mora_pendiente_tracked': 0.0,
+        'created_at': MoraCuotaCalculator.regArAUtcIso(sim.regSugerido!),
+      });
+      ref.read(finanzasProvider.notifier).recargar();
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Mora quitada y Reg ajustado para ${sel.nombreAlumno}.'),
+          backgroundColor: const Color(0xFF00B894),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo quitar la mora: $e')),
       );
     }
   }
@@ -377,7 +456,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                   )
-                : const Text('Restaurar Mora', style: TextStyle(fontWeight: FontWeight.w900)),
+                : const Text('Restaurar Mora + Reg', style: TextStyle(fontWeight: FontWeight.w900)),
           ),
         if (_tabCtrl.index == 1 && _candidatos.isNotEmpty)
           FilledButton(
@@ -499,20 +578,81 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
             const SizedBox(height: 16),
             _buildDetalleContrato(isDark, gold),
             const SizedBox(height: 16),
-            TextField(
-              controller: _moraCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Monto de Mora a Aplicar (\$)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-                prefixIcon: Icon(Icons.monetization_on_rounded, color: gold, size: 20),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.restart_alt_rounded, color: gold),
-                  tooltip: 'Restablecer al sugerido',
-                  onPressed: _recalcularMora,
+            Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<AjusteMoraModo>(
+                    segments: const [
+                      ButtonSegment(value: AjusteMoraModo.monto, label: Text('Por monto')),
+                      ButtonSegment(value: AjusteMoraModo.dias, label: Text('Por días')),
+                    ],
+                    selected: {_ajusteModo},
+                    onSelectionChanged: (set) {
+                      setState(() {
+                        _ajusteModo = set.first;
+                        _moraCtrl.clear();
+                      });
+                    },
+                    style: SegmentedButton.styleFrom(
+                      selectedForegroundColor: Colors.black,
+                      selectedBackgroundColor: gold,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _moraCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: _ajusteModo == AjusteMoraModo.monto ? 'Monto a Aplicar (\$)' : 'Días de atraso',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      isDense: true,
+                      prefixIcon: Icon(_ajusteModo == AjusteMoraModo.monto ? Icons.monetization_on_rounded : Icons.calendar_today_rounded, color: gold, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.restart_alt_rounded, color: gold),
+                        tooltip: 'Restablecer al sugerido',
+                        onPressed: _recalcularMora,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              activeColor: gold,
+              title: const Text('Ajustar Reg (info) al restaurar', style: TextStyle(fontWeight: FontWeight.w600)),
+              value: _ajustarReg,
+              onChanged: (v) => setState(() => _ajustarReg = v ?? true),
+            ),
+            if (_simulacion != null) ...[
+              const SizedBox(height: 8),
+              _buildVistaPrevia(isDark, gold),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FilledButton.icon(
+                  onPressed: busy ? null : _quitarMora,
+                  icon: const Icon(Icons.cleaning_services_rounded, size: 18),
+                  label: const Text('Quitar mora'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.redAccent.withOpacity(0.1),
+                    foregroundColor: Colors.redAccent,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Colors.redAccent),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -523,6 +663,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
   Widget _buildDetalleContrato(bool isDark, Color gold) {
     final sel = _seleccion!;
     final resumen = MoraCuotaCalculator.calcular(sel, _fechaCalculo);
+    final createdAt = sel.createdAt != null ? ArTime.toAr(sel.createdAt!) : null;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -540,22 +682,15 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
             '${sel.totalCuotas} cuotas (${sel.cuotasPagadas} pagadas) · Saldo: ${sel.saldoDeudor.toCurrency()}',
             style: const TextStyle(fontSize: 12),
           ),
-          Text(
-            'Mora persistida actual: ${sel.moraPendienteTracked.toCurrency()}',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: gold),
-          ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                child:           Text(
-            'Sugerido ${ArTime.formatFechaCorta(_fechaCalculo)}: '
-            '${resumen.interesAcumulado.toCurrency()} '
-            '(${resumen.diasMora} d × ${(resumen.montoCuotaBaseAprox * 0.01).toCurrency()}/d)',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: isDark ? Colors.white70 : Colors.grey.shade700,
-                  ),
+                child: Text(
+                  'Reg actual: ${createdAt != null ? ArTime.formatFechaCorta(createdAt) : 'N/A'}\n'
+                  'Vto. próximo: ${resumen.fechaVencimientoProximaCuota != null ? ArTime.formatFechaCorta(resumen.fechaVencimientoProximaCuota!) : 'N/A'}\n'
+                  'Mora actual: ${sel.moraPendienteTracked.toCurrency()}',
+                  style: TextStyle(fontSize: 11.5, color: isDark ? Colors.white70 : Colors.grey.shade700, height: 1.4),
                 ),
               ),
               IconButton(
@@ -565,6 +700,68 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVistaPrevia(bool isDark, Color gold) {
+    final sim = _simulacion!;
+    final okReg = sim.puedeAjustarReg;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.black26 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Vista previa al restaurar mora', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: gold)),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Monto:', style: const TextStyle(fontSize: 12)),
+              Text(sim.montoMora.toCurrency(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Días (mes vencido):', style: const TextStyle(fontSize: 12)),
+              Text('${sim.diasMoraEfectivos}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          if (_ajustarReg) ...[
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Reg sugerido:', style: const TextStyle(fontSize: 12)),
+                Text(
+                  okReg ? ArTime.formatFechaCorta(sim.regSugerido!) : 'No aplica',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: okReg ? (isDark ? Colors.greenAccent : Colors.green) : Colors.red,
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Vto. cuota ${sim.proximaCuotaNumero ?? '?'}:', style: const TextStyle(fontSize: 12)),
+                Text(
+                  okReg ? ArTime.formatFechaCorta(sim.vencimientoCoherente!) : 'N/A',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ]
         ],
       ),
     );

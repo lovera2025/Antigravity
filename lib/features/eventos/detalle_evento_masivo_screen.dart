@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -16,11 +18,14 @@ import 'repositories/eventos_repository.dart';
 import 'repositories/contratos_repository.dart';
 import '../../core/utils/ar_time.dart';
 import '../../core/utils/pago_interes_mora.dart';
+import '../../core/services/connectivity_service.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
+import '../dashboard/providers/dashboard_provider.dart';
+import '../mi_empresa/providers/finanzas_provider.dart';
 
 class DetalleEventoMasivoScreen extends ConsumerStatefulWidget {
   final Evento evento;
@@ -38,9 +43,14 @@ class _DetalleEventoMasivoScreenState
   bool _ocultarMontos = false;
   late DateTime _fechaEventoActual;
   List<ContratoAlumno> _alumnos = [];
+  Map<String, MoraCuotaResumen> _moraCache = {};
+  int _itemsRenderizados = 50;
+  final ScrollController _lazyScrollController = ScrollController();
 
   /// Suma de pagos `interes_mora` por contrato (local) para mostrar mora pendiente.
   Map<String, double> _moraCobradaPorContrato = {};
+  /// Mora cobrada solo en el período vigente (desde el último pago de cuota base).
+  Map<String, double> _moraCobradaPeriodoPorContrato = {};
   /// Notas operativas locales por contrato (no sincronizan; no contables).
   Map<String, NotaOperativaContrato> _notasOperativasPorContrato = {};
   String _busquedaAlumno = '';
@@ -53,6 +63,15 @@ class _DetalleEventoMasivoScreenState
   @override
   void initState() {
     super.initState();
+    _lazyScrollController.addListener(() {
+      if (_lazyScrollController.position.pixels >= _lazyScrollController.position.maxScrollExtent - 200) {
+        if (_itemsRenderizados < _alumnos.length) {
+          setState(() {
+            _itemsRenderizados += 50;
+          });
+        }
+      }
+    });
     _fechaEventoActual = widget.evento.fechaEvento;
     _cargarPreferenciaOcultarMontos();
     _fetchDatos();
@@ -107,132 +126,27 @@ class _DetalleEventoMasivoScreenState
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
-      final alumnosFrescos = await repo.getByEvento(widget.evento.id);
-      bool huboCambios = false;
-
-      for (var a in alumnosFrescos) {
-        if (a.nombreAlumno.startsWith('[BAJA]')) continue;
-
-        final pagos = await repo.getHistorialPagosAlumno(a.id);
-        if (pagos.isEmpty) continue;
-
-        double pagadoBase = 0;
-        double pagadoMesa = 0;
-        double pagadoSillas = 0;
-
-        for (var p in pagos) {
-          if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
-          final rawConcepto = p['concepto'] as String?;
-          final lk = (p['line_kind'] as String?)?.trim();
-          if (lk == kLineKindInteresMora ||
-              esPagoInteresMoraPorConcepto(rawConcepto)) {
-            continue;
-          }
-          final concepto = (rawConcepto ?? '').toUpperCase();
-          double montoNeto = double.parse(
-            (p['monto'] as num).toDouble().toStringAsFixed(2),
-          );
-          double dto = (p['descuento_porcentaje'] as num?)?.toDouble() ?? 0.0;
-
-          double montoBruto = montoNeto;
-          if (dto > 0 && dto < 100) {
-            montoBruto = montoNeto / (1 - (dto / 100));
-          }
-
-          if (concepto.contains('BASE')) {
-            pagadoBase += montoBruto;
-          } else if (concepto.contains('MESA')) {
-            pagadoMesa += montoBruto;
-          } else if (concepto.contains('SILLA')) {
-            pagadoSillas += montoBruto;
-          } else {
-            pagadoBase += montoBruto;
-          }
-        }
-
-        final int tCuotas = a.totalCuotas ?? 9;
-        final int cPagadas = a.cuotasPagadas ?? 0;
-        final int mCuotas = a.mesaExtraCuotas ?? 1;
-        final int mPagadas = a.mesaExtraCuotasPagadas ?? 0;
-        final int sCuotas = a.sillasExtraCuotas ?? 1;
-        final int sPagadas = a.sillasExtraCuotasPagadas ?? 0;
-
-        final double totalBase =
-            (a.montoTotalPactado -
-            a.mesaExtraPrecio -
-            a.sillasExtraPrecioTotal);
-        final double cuotaPura = tCuotas > 0
-            ? (totalBase / tCuotas)
-            : totalBase;
-        int cuotasBasePagadas = cuotaPura > 0
-            ? ((pagadoBase + 0.01) / cuotaPura).floor()
-            : 0;
-
-        final double cuotaMesa =
-            a.mesaExtraPrecio / (mCuotas > 0 ? mCuotas : 1);
-        int cuotasMesaPagadas = cuotaMesa > 0
-            ? ((pagadoMesa + 0.01) / cuotaMesa).floor()
-            : 0;
-
-        final double cuotaSillas =
-            a.sillasExtraPrecioTotal / (sCuotas > 0 ? sCuotas : 1);
-        int cuotasSillasPagadas = cuotaSillas > 0
-            ? ((pagadoSillas + 0.01) / cuotaSillas).floor()
-            : 0;
-
-        final double saldoRealCalculado =
-            a.montoTotalPactado - pagadoBase - pagadoMesa - pagadoSillas;
-        final double saldoReal = double.parse(
-          saldoRealCalculado.toStringAsFixed(2),
-        ).clamp(0.0, double.infinity);
-
-        if (saldoReal <= 0.01) {
-          cuotasBasePagadas = tCuotas;
-          cuotasMesaPagadas = (a.mesaExtraPrecio > 0 && mCuotas > 0)
-              ? mCuotas
-              : 0;
-          cuotasSillasPagadas = (a.sillasExtraPrecioTotal > 0 && sCuotas > 0)
-              ? sCuotas
-              : 0;
-        } else {
-          cuotasBasePagadas = cuotasBasePagadas.clamp(0, tCuotas);
-          cuotasMesaPagadas = a.mesaExtraPrecio > 0
-              ? cuotasMesaPagadas.clamp(0, mCuotas)
-              : 0;
-          cuotasSillasPagadas = a.sillasExtraPrecioTotal > 0
-              ? cuotasSillasPagadas.clamp(0, sCuotas)
-              : 0;
-        }
-
-        if (cPagadas != cuotasBasePagadas ||
-            mPagadas != cuotasMesaPagadas ||
-            sPagadas != cuotasSillasPagadas ||
-            (a.saldoDeudor - saldoReal).abs() > 0.01) {
-          await repo.actualizarContrato(a.id, {
-            'cuotas_pagadas': cuotasBasePagadas,
-            'mesa_extra_cuotas_pagadas': cuotasMesaPagadas,
-            'sillas_extra_cuotas_pagadas': cuotasSillasPagadas,
-            'saldo_deudor': saldoReal,
-          });
-          huboCambios = true;
-        }
-      }
+      
+      // Ejecutar la auditoría en lote súper veloz dentro de una sola transacción
+      final huboCambios = await repo.ejecutarAuditoriaInteligente(widget.evento.id);
 
       final listos = await repo.getByEvento(widget.evento.id);
-      final moraMap = await repo.sumMoraCobradaHistorialPorContratos(
-        listos.map((e) => e.id).toList(),
-      );
+      final moraMap = await _cargarMoraHistorialMap(repo, listos);
+      final moraPeriodoMap = await _cargarMoraPeriodoMap(repo, listos);
       if (mounted) {
-        setState(() {
-          _alumnos = listos;
-          _moraCobradaPorContrato = moraMap;
-          _isLoading = false;
-        });
+        _aplicarSnapshotAlumnos(
+          listos,
+          moraMap,
+          moraCobradaPeriodoPorContrato: moraPeriodoMap,
+          isLoading: false,
+        );
         if (!silencioso) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                '¡Auditoría completada! Saldos y cuotas sincronizados.',
+                huboCambios
+                    ? '¡Auditoría completada! Saldos y cuotas corregidos e integrados.'
+                    : '¡Auditoría completada! Todos los saldos y cuotas están correctos.',
               ),
               backgroundColor: Colors.green,
             ),
@@ -256,20 +170,31 @@ class _DetalleEventoMasivoScreenState
     try {
       final repo = ref.read(contratosRepositoryProvider);
 
+      // Carga inmediata desde base de datos local SQLite (Offline-First)
       final alumnos = await repo.getByEvento(widget.evento.id);
-      final moraMap = await repo.sumMoraCobradaHistorialPorContratos(
-        alumnos.map((e) => e.id).toList(),
-      );
+      final moraMap = await _cargarMoraHistorialMap(repo, alumnos);
+      final moraPeriodoMap = await _cargarMoraPeriodoMap(repo, alumnos);
       if (mounted) {
-        setState(() {
-          _alumnos = alumnos;
-          _moraCobradaPorContrato = moraMap;
-          _isLoading = false;
-        });
+        _aplicarSnapshotAlumnos(
+          alumnos,
+          moraMap,
+          moraCobradaPeriodoPorContrato: moraPeriodoMap,
+          isLoading: false,
+        );
       }
       await _cargarNotasOperativas();
 
+      // Procesos pesados de sincronización, recálculo y auditoría inteligente en segundo plano
       Future.microtask(() async {
+        if (!mounted) return;
+        
+        // 1. Sincronizar cambios de Supabase de fondo de forma silenciosa
+        final connStatus = ref.read(connectivityServiceProvider).currentStatus;
+        if (connStatus == AppConnectivity.online) {
+          await repo.forceRefresh(widget.evento.id);
+        }
+
+        // 2. Reparar huérfanos locales
         final reparados = await repo.repararContratosHuerfanos(
           widget.evento.id,
         );
@@ -279,19 +204,21 @@ class _DetalleEventoMasivoScreenState
           );
         }
 
+        // 3. Recalcular todo el evento y auditorías inteligentes en lote (súper veloz)
         await repo.recalcularTodoElEvento(widget.evento.id);
-
         await _forzarAuditoriaInteligente(silencioso: true);
 
+        // 4. Refrescar silenciosamente la interfaz al finalizar
         final alumnosActualizados = await repo.getByEvento(widget.evento.id);
-        final moraMap2 = await repo.sumMoraCobradaHistorialPorContratos(
-          alumnosActualizados.map((e) => e.id).toList(),
-        );
+        final moraMap2 = await _cargarMoraHistorialMap(repo, alumnosActualizados);
+        final moraPeriodoMap2 =
+            await _cargarMoraPeriodoMap(repo, alumnosActualizados);
         if (mounted) {
-          setState(() {
-            _alumnos = alumnosActualizados;
-            _moraCobradaPorContrato = moraMap2;
-          });
+          _aplicarSnapshotAlumnos(
+            alumnosActualizados,
+            moraMap2,
+            moraCobradaPeriodoPorContrato: moraPeriodoMap2,
+          );
         }
         await _cargarNotasOperativas();
       });
@@ -306,19 +233,74 @@ class _DetalleEventoMasivoScreenState
     }
   }
 
+  Future<Map<String, double>> _cargarMoraHistorialMap(
+    ContratosRepository repo,
+    List<ContratoAlumno> alumnos,
+  ) =>
+      repo.sumMoraCobradaHistorialPorContratos(alumnos.map((e) => e.id).toList());
+
+  Future<Map<String, double>> _cargarMoraPeriodoMap(
+    ContratosRepository repo,
+    List<ContratoAlumno> alumnos,
+  ) =>
+      repo.sumMoraCobradaPeriodoPorContratos(alumnos);
+
+  /// Aplica lista + mora cobrada y reconstruye [_moraCache] en un solo paso.
+  void _aplicarSnapshotAlumnos(
+    List<ContratoAlumno> alumnos,
+    Map<String, double> moraCobradaPorContrato, {
+    Map<String, double>? moraCobradaPeriodoPorContrato,
+    bool? isLoading,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _alumnos = alumnos;
+      _moraCobradaPorContrato = moraCobradaPorContrato;
+      if (moraCobradaPeriodoPorContrato != null) {
+        _moraCobradaPeriodoPorContrato = moraCobradaPeriodoPorContrato;
+      }
+      _moraCache.clear();
+      for (final a in _alumnos) {
+        _moraCache[a.id] = MoraCuotaCalculator.calcular(a);
+      }
+      if (isLoading != null) _isLoading = isLoading;
+    });
+  }
+
+  /// Actualización optimista de un contrato (p. ej. inmediatamente post-cobro).
+  void _patchAlumnoLocal(
+    String contratoId,
+    ContratoAlumno actualizado, {
+    double moraCobradaExtra = 0,
+  }) {
+    final index = _alumnos.indexWhere((a) => a.id == contratoId);
+    if (index == -1 || !mounted) return;
+    setState(() {
+      if (moraCobradaExtra > 0.01) {
+        _moraCobradaPorContrato[contratoId] =
+            (_moraCobradaPorContrato[contratoId] ?? 0.0) + moraCobradaExtra;
+        _moraCobradaPeriodoPorContrato[contratoId] =
+            (_moraCobradaPeriodoPorContrato[contratoId] ?? 0.0) +
+                moraCobradaExtra;
+      }
+      _alumnos[index] = actualizado;
+      _moraCache[contratoId] = MoraCuotaCalculator.calcular(actualizado);
+    });
+  }
+
   /// Refresh ligero: solo recarga la lista desde DB sin auditoría.
   Future<void> _refreshAlumnos() async {
     try {
       final repo = ref.read(contratosRepositoryProvider);
       final alumnos = await repo.getByEvento(widget.evento.id);
-      final moraMap = await repo.sumMoraCobradaHistorialPorContratos(
-        alumnos.map((e) => e.id).toList(),
-      );
+      final moraMap = await _cargarMoraHistorialMap(repo, alumnos);
+      final moraPeriodoMap = await _cargarMoraPeriodoMap(repo, alumnos);
       if (mounted) {
-        setState(() {
-          _alumnos = alumnos;
-          _moraCobradaPorContrato = moraMap;
-        });
+        _aplicarSnapshotAlumnos(
+          alumnos,
+          moraMap,
+          moraCobradaPeriodoPorContrato: moraPeriodoMap,
+        );
       }
       await _cargarNotasOperativas();
     } catch (_) {}
@@ -666,6 +648,12 @@ class _DetalleEventoMasivoScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(contratosMutationTickProvider, (prev, next) {
+      if (prev != null && prev != next) {
+        _refreshAlumnos();
+      }
+    });
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryGold = const Color(0xFFD4AF37);
     final screenW = MediaQuery.sizeOf(context).width;
@@ -1377,6 +1365,7 @@ class _DetalleEventoMasivoScreenState
             ),
             Expanded(
               child: SingleChildScrollView(
+                controller: _lazyScrollController,
                 scrollDirection: Axis.vertical,
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -1444,7 +1433,7 @@ class _DetalleEventoMasivoScreenState
                           ),
                         ),
                       ],
-                      rows: alumnosFiltrados.map((a) {
+                      rows: alumnosFiltrados.take(_itemsRenderizados).map((a) {
                         final int tCuotas = a.totalCuotas ?? 9;
                         final int cPagadas = a.cuotasPagadas ?? 0;
                         final int cantAcomp = a.cantidadAcompanantes ?? 0;
@@ -1452,7 +1441,7 @@ class _DetalleEventoMasivoScreenState
                         final int totalCuotas = tCuotas > 0 ? tCuotas : 9;
 
                         /// Misma regla que el vencimiento mostrado abajo (último día del mes por alta + cuota).
-                        final mora = MoraCuotaCalculator.calcular(a);
+                        final mora = _moraCache[a.id] ?? MoraCuotaCalculator.calcular(a);
                         final cobradoMoraHist =
                             _moraCobradaPorContrato[a.id] ?? 0.0;
                         final moraPendienteFila =
@@ -1460,6 +1449,9 @@ class _DetalleEventoMasivoScreenState
                           interesAcumulado: mora.interesAcumulado,
                           moraCobradaHistorial: cobradoMoraHist,
                           moraPendienteTracked: a.moraPendienteTracked,
+                          moraCobradaOffset: a.moraCobradaOffset,
+                          moraCobradaPeriodo:
+                              _moraCobradaPeriodoPorContrato[a.id],
                         );
 
                         final bool estaLiquidado = a.saldoDeudor <= 0.01;
@@ -1753,13 +1745,11 @@ class _DetalleEventoMasivoScreenState
                                           ),
                                         ),
                                       ),
-                                    if (moraPendienteFila > 0.01)
+                                    if (moraPendienteFila > 0.01) ...[
                                       Padding(
                                         padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
                                         child: Text(
-                                          mora.enMora && mora.diasMora > 0
-                                              ? 'Mora pendiente: ${moraPendienteFila.toCurrency()} · ${mora.diasMora} d'
-                                              : 'Mora pendiente: ${moraPendienteFila.toCurrency()}',
+                                          'Mora pendiente: ${moraPendienteFila.toCurrency()}',
                                           style: TextStyle(
                                             fontSize: layoutCompact ? 8 : 9,
                                             fontWeight: FontWeight.w700,
@@ -1767,6 +1757,25 @@ class _DetalleEventoMasivoScreenState
                                           ),
                                         ),
                                       ),
+                                      Builder(builder: (_) {
+                                        final desglose = MoraCuotaCalculator.calcularDesglose(a);
+                                        if (desglose.isEmpty) return const SizedBox.shrink();
+                                        final resumen = desglose
+                                            .map((d) => 'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) ${d.diasMora}d')
+                                            .join(' · ');
+                                        return Padding(
+                                          padding: EdgeInsets.only(top: layoutCompact ? 0 : 1),
+                                          child: Text(
+                                            resumen,
+                                            style: TextStyle(
+                                              fontSize: layoutCompact ? 7 : 8,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.orange.shade600,
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -2488,11 +2497,18 @@ class _DetalleEventoMasivoScreenState
     final prefsMedio = await SharedPreferences.getInstance();
     final cRepo = ref.read(contratosRepositoryProvider);
     final moraYaCobradaHist = await cRepo.sumMoraCobradaHistorial(alumno.id);
+    final pagosAlumno = await cRepo.getHistorialPagosAlumno(alumno.id);
     final moraResumen = MoraCuotaCalculator.calcular(alumno);
+    final moraPeriodo = moraCobradaDelPeriodoVigente(
+      pagosAlumno,
+      inicioMoraPeriodoVigente(moraResumen.fechaVencimientoProximaCuota),
+    );
     final double moraPendienteUi = MoraCuotaCalculator.pendienteDisplay(
       interesAcumulado: moraResumen.interesAcumulado,
       moraCobradaHistorial: moraYaCobradaHist,
       moraPendienteTracked: alumno.moraPendienteTracked,
+      moraCobradaOffset: alumno.moraCobradaOffset,
+      moraCobradaPeriodo: moraPeriodo,
     );
 
     String modoMedioPago =
@@ -2552,8 +2568,16 @@ class _DetalleEventoMasivoScreenState
     );
     final bool informarPctTransferExternoInit =
         prefsMedio.getBool('cobro_masivo_informar_pct_transfer') ?? false;
-    if (moraPendienteUi > 0.01) {
-      moraMontoCobroCtrl.text = moraPendienteUi.toFormattedNumber();
+
+    final moraDesglose = MoraCuotaCalculator.calcularDesglose(alumno);
+    final moraTotalDesglose = moraDesglose.fold<double>(0, (s, d) => s + d.interesBruto);
+    final double moraPendienteEfectivo = moraDesglose.isNotEmpty
+        ? math.max(moraPendienteUi, moraTotalDesglose)
+        : moraPendienteUi;
+    Set<int> moraCuotasSeleccionadas = {};
+
+    if (moraPendienteEfectivo > 0.01) {
+      moraMontoCobroCtrl.text = moraPendienteEfectivo.toFormattedNumber();
     }
 
     bool pagarBase = false;
@@ -2569,16 +2593,34 @@ class _DetalleEventoMasivoScreenState
     bool esLineaCargoCanal(Map<String, dynamic> c) =>
         c['lineKind'] == 'cargo_canal_ref';
 
-    Map<String, dynamic> lineaPreviewInteresMora(double monto) {
+    Map<String, dynamic> lineaPreviewInteresMora(double monto, [List<MoraCuotaDetalle>? cuotasSel]) {
       final g = double.parse(
         monto.clamp(0.0, double.infinity).toStringAsFixed(2),
       );
+      final detalles = cuotasSel ?? <MoraCuotaDetalle>[];
+      String concepto;
+      if (detalles.length == 1) {
+        final d = detalles.first;
+        concepto = 'Interés mora cuota ${d.numeroCuota} (${d.mesLabel})';
+      } else if (detalles.length > 1) {
+        final nums = detalles.map((d) => d.numeroCuota).join(', ');
+        final meses = detalles.map((d) => d.mesLabel.split(' ').first).join(', ');
+        concepto = 'Interés mora cuotas $nums ($meses)';
+      } else {
+        concepto = 'Interés mora (cuota base — este cobro)';
+      }
       return {
-        'concepto': 'Interés mora (cuota base — este cobro)',
+        'concepto': concepto,
         'monto': g,
         'gross': g,
         'cuotas': 0,
         'lineKind': 'interes_mora',
+        'moraDesglose': detalles.map((d) => <String, dynamic>{
+          'numeroCuota': d.numeroCuota,
+          'mesLabel': d.mesLabel,
+          'monto': d.interesBruto,
+          'diasMora': d.diasMora,
+        }).toList(),
       };
     }
 
@@ -2595,18 +2637,28 @@ class _DetalleEventoMasivoScreenState
       };
     }
 
-    final result = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         bool informarPctTransferExterno = informarPctTransferExternoInit;
         String transferCargoModo = transferCargoModoInit;
         return StatefulBuilder(
           builder: (context, setModalState) {
+            List<MoraCuotaDetalle> moraCuotasSeleccionadasList() {
+              return moraDesglose.where((d) => moraCuotasSeleccionadas.contains(d.numeroCuota)).toList();
+            }
+
+            double moraMontoSeleccionado() {
+              final sel = moraCuotasSeleccionadasList();
+              if (sel.isEmpty) return 0;
+              return sel.fold<double>(0, (s, d) => s + d.interesBruto);
+            }
+
             double montoMoraLineaIngresado() {
               double v = CurrencyInputFormatter.parse(moraMontoCobroCtrl.text);
               if (v < 0) v = 0;
-              if (moraPendienteUi > 0.01 && v > moraPendienteUi + 0.01) {
-                v = moraPendienteUi;
+              if (moraPendienteEfectivo > 0.01 && v > moraPendienteEfectivo + 0.01) {
+                v = moraPendienteEfectivo;
               }
               return double.parse(v.toStringAsFixed(2));
             }
@@ -2962,10 +3014,10 @@ class _DetalleEventoMasivoScreenState
                     ((montosManuales['Base'] ?? 0) > 0.01);
                 if (incluirInteresCuota &&
                     cobrandoBaseManual &&
-                    moraPendienteUi > 0.01) {
+                    moraPendienteEfectivo > 0.01) {
                   final mm = montoMoraLineaIngresado();
                   if (mm > 0.01) {
-                    previewConceptos.add(lineaPreviewInteresMora(mm));
+                    previewConceptos.add(lineaPreviewInteresMora(mm, moraCuotasSeleccionadasList()));
                   }
                 }
               }
@@ -3046,10 +3098,10 @@ class _DetalleEventoMasivoScreenState
                 );
               }
 
-              if (incluirInteresCuota && pagarBase && moraPendienteUi > 0.01) {
+              if (incluirInteresCuota && pagarBase && moraPendienteEfectivo > 0.01) {
                 final mm = montoMoraLineaIngresado();
                 if (mm > 0.01) {
-                  previewConceptos.add(lineaPreviewInteresMora(mm));
+                  previewConceptos.add(lineaPreviewInteresMora(mm, moraCuotasSeleccionadasList()));
                   totalAcumuladoNeto += mm;
                 }
               }
@@ -3125,7 +3177,9 @@ class _DetalleEventoMasivoScreenState
                       ),
                       if (moraResumen.fechaVencimientoProximaCuota != null ||
                           moraResumen.enMora ||
-                          moraResumen.diasMora > 0)
+                          moraResumen.diasMora > 0 ||
+                          moraDesglose.isNotEmpty ||
+                          moraPendienteEfectivo > 0.01)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
                           child: Container(
@@ -3151,36 +3205,43 @@ class _DetalleEventoMasivoScreenState
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                if (moraResumen.fechaVencimientoProximaCuota !=
-                                        null &&
-                                    moraResumen.proximaCuotaNumero != null)
-                                  Text(
-                                    'Próx. venc.: ${ArTime.formatFechaCorta(moraResumen.fechaVencimientoProximaCuota!)} (cuota ${moraResumen.proximaCuotaNumero}/$tCuotas)',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade800,
+                                if (moraDesglose.isNotEmpty) ...[
+                                  ...moraDesglose.map((d) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.event_busy_rounded, size: 14, color: Colors.orange.shade700),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            'Cuota ${d.numeroCuota} (${d.mesLabel}) — vto. ${ArTime.formatFechaCorta(d.vencimiento)} — ${d.diasMora} días',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                                          ),
+                                        ),
+                                        Text(
+                                          d.interesBruto.toCurrency(),
+                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.orange.shade900),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                Text(
-                                  'Días de atraso: ${moraResumen.diasMora}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                                if (moraResumen.interesAcumulado > 0.01)
-                                  Text(
-                                    'Interés teórico acum. (hoy): ${moraResumen.interesAcumulado.toCurrency()} · Mora ya cobrada: ${moraYaCobradaHist.toCurrency()}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade800,
+                                  )),
+                                ] else ...[
+                                  if (moraResumen.fechaVencimientoProximaCuota != null &&
+                                      moraResumen.proximaCuotaNumero != null)
+                                    Text(
+                                      'Próx. venc.: ${ArTime.formatFechaCorta(moraResumen.fechaVencimientoProximaCuota!)} (cuota ${moraResumen.proximaCuotaNumero}/$tCuotas)',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                                     ),
+                                  Text(
+                                    'Días de atraso: ${moraResumen.diasMora}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                                   ),
-                                if (moraPendienteUi > 0.01)
+                                ],
+                                if (moraPendienteEfectivo > 0.01)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
                                     child: Text(
-                                      'Mora pendiente: ${moraPendienteUi.toCurrency()}',
+                                      'Mora pendiente total: ${moraPendienteEfectivo.toCurrency()}${moraYaCobradaHist > 0.01 ? ' · Ya cobrada: ${moraYaCobradaHist.toCurrency()}' : ''}',
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w900,
@@ -3209,79 +3270,136 @@ class _DetalleEventoMasivoScreenState
                                     color: Colors.grey.shade600,
                                   ),
                                 ),
-                                if (moraPendienteUi > 0.01) ...[
+                                if (moraPendienteEfectivo > 0.01) ...[
                                   const SizedBox(height: 8),
-                                  CheckboxListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    controlAffinity:
-                                        ListTileControlAffinity.leading,
-                                    value: incluirInteresCuota,
-                                    onChanged: pagarBase
-                                        ? (v) {
-                                            setModalState(() {
-                                              incluirInteresCuota = v ?? false;
-                                              if (incluirInteresCuota) {
-                                                moraMontoCobroCtrl.text =
-                                                    moraPendienteUi
-                                                        .toFormattedNumber();
-                                              }
-                                              recalcularDesdeChecks();
-                                            });
-                                          }
-                                        : null,
-                                    title: Text(
-                                      'Incluir mora en este cobro (máx. ${moraPendienteUi.toCurrency()})',
+                                  if (!pagarBase)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: Text(
+                                        'Marcá primero CUOTA BASE para aplicar mora a esta liquidación.',
+                                        style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                                      ),
+                                    ),
+                                  if (moraDesglose.isNotEmpty) ...[
+                                    Text(
+                                      'MORA POR CUOTA VENCIDA',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
                                         color: Colors.orange.shade900,
+                                        letterSpacing: 0.6,
                                       ),
                                     ),
-                                    subtitle: pagarBase
-                                        ? null
-                                        : Text(
-                                            'Marcá primero CUOTA BASE para aplicar mora a esta liquidación.',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.grey.shade700,
-                                            ),
+                                    const SizedBox(height: 6),
+                                    ...moraDesglose.map((d) {
+                                      final sel = moraCuotasSeleccionadas.contains(d.numeroCuota);
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 2),
+                                        child: CheckboxListTile(
+                                          dense: true,
+                                          contentPadding: EdgeInsets.zero,
+                                          controlAffinity: ListTileControlAffinity.leading,
+                                          value: sel,
+                                          onChanged: pagarBase
+                                              ? (v) {
+                                                  setModalState(() {
+                                                    if (v == true) {
+                                                      moraCuotasSeleccionadas.add(d.numeroCuota);
+                                                    } else {
+                                                      moraCuotasSeleccionadas.remove(d.numeroCuota);
+                                                    }
+                                                    incluirInteresCuota = moraCuotasSeleccionadas.isNotEmpty;
+                                                    if (incluirInteresCuota) {
+                                                      moraMontoCobroCtrl.text = moraMontoSeleccionado().toFormattedNumber();
+                                                    }
+                                                    recalcularDesdeChecks();
+                                                  });
+                                                }
+                                              : null,
+                                          title: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  'Cuota ${d.numeroCuota} (${d.mesLabel}) — ${d.diasMora} días',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Colors.orange.shade900,
+                                                  ),
+                                                ),
+                                              ),
+                                              Text(
+                                                d.interesBruto.toCurrency(),
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: sel ? Colors.orange.shade900 : Colors.grey,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                  ),
-                                  if (incluirInteresCuota && pagarBase) ...[
-                                    TextField(
-                                      controller: moraMontoCobroCtrl,
-                                      keyboardType:
-                                          const TextInputType.numberWithOptions(
-                                            decimal: true,
+                                        ),
+                                      );
+                                    }),
+                                    if (moraCuotasSeleccionadas.isNotEmpty && pagarBase) ...[
+                                      const SizedBox(height: 4),
+                                      TextField(
+                                        controller: moraMontoCobroCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        inputFormatters: [CurrencyInputFormatter()],
+                                        decoration: InputDecoration(
+                                          labelText: 'Monto mora a cobrar ahora',
+                                          prefixIcon: Icon(Icons.percent_rounded, color: Colors.orange.shade800, size: 20),
+                                          filled: true,
+                                          fillColor: Colors.orange.withValues(alpha: 0.05),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide.none,
                                           ),
-                                      inputFormatters: [
-                                        CurrencyInputFormatter(),
-                                      ],
-                                      decoration: InputDecoration(
-                                        labelText: 'Monto mora a cobrar ahora',
-                                        prefixIcon: Icon(
-                                          Icons.percent_rounded,
-                                          color: Colors.orange.shade800,
-                                          size: 20,
                                         ),
-                                        filled: true,
-                                        fillColor: Colors.orange.withValues(
-                                          alpha: 0.05,
-                                        ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
+                                        onChanged: (_) => setModalState(() => recalcularDesdeChecks()),
                                       ),
-                                      onChanged: (_) {
-                                        setModalState(
-                                          () => recalcularDesdeChecks(),
-                                        );
-                                      },
+                                    ],
+                                  ] else ...[
+                                    CheckboxListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      value: incluirInteresCuota,
+                                      onChanged: pagarBase
+                                          ? (v) {
+                                              setModalState(() {
+                                                incluirInteresCuota = v ?? false;
+                                                if (incluirInteresCuota) {
+                                                  moraMontoCobroCtrl.text = moraPendienteEfectivo.toFormattedNumber();
+                                                }
+                                                recalcularDesdeChecks();
+                                              });
+                                            }
+                                          : null,
+                                      title: Text(
+                                        'Incluir mora en este cobro (${moraPendienteEfectivo.toCurrency()})',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.orange.shade900),
+                                      ),
                                     ),
+                                    if (incluirInteresCuota && pagarBase) ...[
+                                      TextField(
+                                        controller: moraMontoCobroCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        inputFormatters: [CurrencyInputFormatter()],
+                                        decoration: InputDecoration(
+                                          labelText: 'Monto mora a cobrar ahora',
+                                          prefixIcon: Icon(Icons.percent_rounded, color: Colors.orange.shade800, size: 20),
+                                          filled: true,
+                                          fillColor: Colors.orange.withValues(alpha: 0.05),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                        ),
+                                        onChanged: (_) => setModalState(() => recalcularDesdeChecks()),
+                                      ),
+                                    ],
                                   ],
                                 ],
                               ],
@@ -4439,6 +4557,19 @@ class _DetalleEventoMasivoScreenState
 
                       String cRico = cTexto;
                       if (esLineaInteresMora(conc)) {
+                        final desg = conc['moraDesglose'] as List<Map<String, dynamic>>?;
+                        if (desg != null && desg.isNotEmpty) {
+                          final double totalBrutoDesg = desg.fold<double>(0, (s, d) => s + (d['monto'] as num).toDouble());
+                          for (final d in desg) {
+                            final proportion = totalBrutoDesg > 0.01 ? (d['monto'] as num).toDouble() / totalBrutoDesg : 1.0 / desg.length;
+                            final montoLinea = double.parse((cMonto * proportion).toStringAsFixed(2));
+                            conceptosFinales.add({
+                              'concepto': 'Interés mora cuota ${d['numeroCuota']} (${d['mesLabel']})',
+                              'monto': montoLinea,
+                            });
+                          }
+                          continue;
+                        }
                         cRico = 'Interés mora (cuota base — este cobro)';
                       } else if (cTexto.toUpperCase().contains('MESA')) {
                         if (mCuotas <= 1) {
@@ -4509,22 +4640,16 @@ class _DetalleEventoMasivoScreenState
                             0,
                             (s, c) => s + (c['monto'] as num).toDouble(),
                           );
-                      setState(() {
-                        // Snapshot pre-lote: moraPendienteUi ya captura el
-                        // interés acumulado ANTES de avanzar cuotas_pagadas.
-                        // Equivale al snapshot que hace el repo en la rama base.
-                        double trackedNuevo = moraPendienteUi;
-                        if (moraEste > 0.01) {
-                          trackedNuevo = (moraPendienteUi - moraEste)
-                              .clamp(0.0, double.infinity);
-                          _moraCobradaPorContrato[alumno.id] =
-                              (_moraCobradaPorContrato[alumno.id] ?? 0.0) +
-                                  moraEste;
-                        }
-                        _alumnos[index] = alumnoFresco.copyWith(
-                          moraPendienteTracked: trackedNuevo,
-                        );
-                      });
+                      double trackedNuevo = moraPendienteEfectivo;
+                      if (moraEste > 0.01) {
+                        trackedNuevo = (moraPendienteEfectivo - moraEste)
+                            .clamp(0.0, double.infinity);
+                      }
+                      _patchAlumnoLocal(
+                        alumno.id,
+                        alumnoFresco.copyWith(moraPendienteTracked: trackedNuevo),
+                        moraCobradaExtra: moraEste,
+                      );
                     }
 
                     await prefsMedio.setString(
@@ -4689,7 +4814,7 @@ class _DetalleEventoMasivoScreenState
                               // persistida) borre el remanente de mora.
                               moraPendienteAntesDeLote:
                                   lineKind == kLineKindInteresMora
-                                      ? moraPendienteUi
+                                      ? moraPendienteEfectivo
                                       : null,
                             );
                           }
@@ -4722,15 +4847,43 @@ class _DetalleEventoMasivoScreenState
                           directUpdates['sillas_extra_cuotas_pagadas'] =
                               currentSillasPagadas;
                         } else {
-                          if (nuevasBase > 0)
+                          // Reconciliar siempre tras cobro base/mesa/sillas (incl. entrega parcial).
+                          if (nuevasBase > 0 ||
+                              previewConceptos.any(
+                                (c) =>
+                                    !esLineaCargoCanal(c) &&
+                                    !esLineaInteresMora(c) &&
+                                    (c['concepto'] as String)
+                                        .toUpperCase()
+                                        .contains('BASE'),
+                              )) {
                             directUpdates['cuotas_pagadas'] =
                                 currentBasePagadas;
-                          if (nuevasMesa > 0)
+                          }
+                          if (nuevasMesa > 0 ||
+                              previewConceptos.any(
+                                (c) =>
+                                    !esLineaCargoCanal(c) &&
+                                    !esLineaInteresMora(c) &&
+                                    (c['concepto'] as String)
+                                        .toUpperCase()
+                                        .contains('MESA'),
+                              )) {
                             directUpdates['mesa_extra_cuotas_pagadas'] =
                                 currentMesaPagadas;
-                          if (nuevasSillas > 0)
+                          }
+                          if (nuevasSillas > 0 ||
+                              previewConceptos.any(
+                                (c) =>
+                                    !esLineaCargoCanal(c) &&
+                                    !esLineaInteresMora(c) &&
+                                    (c['concepto'] as String)
+                                        .toUpperCase()
+                                        .contains('SILLA'),
+                              )) {
                             directUpdates['sillas_extra_cuotas_pagadas'] =
                                 currentSillasPagadas;
+                          }
                         }
 
                         // Persistir montos pagados de extras para mantener sync exacto
@@ -4743,14 +4896,22 @@ class _DetalleEventoMasivoScreenState
                               double.parse(((alumno.sillasExtraPagado ?? 0) + grossSillasPagado).toStringAsFixed(2));
                         }
 
-                        // Persistir mora snapshot para que no se pierda al sincronizar
+                        final double moraEste = previewConceptos
+                            .where(esLineaInteresMora)
+                            .fold<double>(
+                              0.0,
+                              (s, c) => s + (c['monto'] as num).toDouble(),
+                            );
+                        final double trackedNuevo = (moraPendienteEfectivo - moraEste)
+                            .clamp(0.0, double.infinity);
                         directUpdates['mora_pendiente_tracked'] =
-                            double.parse(moraPendienteUi.toStringAsFixed(2));
+                            double.parse(trackedNuevo.toStringAsFixed(2));
 
                         await repo.actualizarContrato(alumno.id, directUpdates);
 
                         // Escaneo final automático sin interrumpir al usuario
                         await _forzarAuditoriaInteligente(silencioso: true);
+                        ref.invalidate(dashboardStatsProvider);
                       } catch (e) {
                         debugPrint('Registro asíncrono demorado: $e');
                       }
@@ -4773,10 +4934,8 @@ class _DetalleEventoMasivoScreenState
     transferMixCtrl.dispose();
     pctTransferInfoCtrl.dispose();
     transferCargoMontoCtrl.dispose();
-
-    if (mounted && result == true) {
-      _refreshAlumnos();
-    }
+    // No _refreshAlumnos() aquí: compite con la persistencia async y pisaba
+    // el update optimista. La auditoría silenciosa del microtask reconcilia DB.
   }
 
   Future<void> _mostrarHistorialPagosAlumno(ContratoAlumno alumno) async {
@@ -5251,9 +5410,8 @@ class _DetalleEventoMasivoScreenState
             final String upper = raw.toUpperCase().trim();
             String mapped = raw;
             
-            // Prioritize mapping for interest/mora so it doesn't match legacy 'BASE' rules
             if (upper.contains('MORA') || upper.contains('INTERE')) {
-              mapped = 'Interés mora (cuota base — este cobro)';
+              mapped = raw.contains('cuota ') ? raw : 'Interés mora (cuota base — este cobro)';
             } else if (upper.contains('(') && upper.contains(')')) {
               // Keep detailed rich concept names as-is
               mapped = raw;

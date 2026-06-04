@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../cierre_caja/models/turno_caja.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../egresos/repositories/egresos_repository.dart';
+import '../bolsa_personal_helpers.dart';
 import '../providers/finanzas_provider.dart';
 
-/// Gasto pagado con plata que ya está en el bolsillo personal ([kCategoriaGastoPersonal]).
+/// Gasto personal: sale del negocio (o consume retiro pendiente si hay).
 class GastoPersonalDialog extends ConsumerStatefulWidget {
   const GastoPersonalDialog({super.key});
 
@@ -42,12 +43,16 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
     super.dispose();
   }
 
-  double _saldoMedio(FinanzasState s) {
-    final mp = _medioPago.toLowerCase().trim();
-    if (mp == 'transferencia') {
+  double _pendienteMedio(FinanzasState s) {
+    if (_medioPago.toLowerCase().trim() == 'transferencia') {
       return s.hudSaldoBolsaPersonalTransferencia;
     }
     return s.hudSaldoBolsaPersonalEfectivo;
+  }
+
+  double _maxPermitido(FinanzasState s) {
+    final empresa = s.hudPlataDelNegocio > 0 ? s.hudPlataDelNegocio : 0.0;
+    return _pendienteMedio(s) + empresa;
   }
 
   Future<void> _submit() async {
@@ -62,24 +67,45 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
         throw Exception('El monto debe ser mayor a cero');
       }
       final finState = ref.read(finanzasProvider).whenOrNull(data: (s) => s);
-      if (finState != null) {
-        final disp = _saldoMedio(finState);
-        if (monto > disp + _excedeTol) {
+      if (finState == null) throw Exception('Finanzas no disponibles');
+
+      final pendiente = _pendienteMedio(finState);
+      final desdePendiente = monto <= pendiente + _excedeTol ? monto : pendiente;
+      final desdeEmpresa = monto - desdePendiente;
+      if (desdeEmpresa > _excedeTol) {
+        final dispEmp = finState.hudPlataDelNegocio > 0 ? finState.hudPlataDelNegocio : 0.0;
+        if (desdeEmpresa > dispEmp + _excedeTol) {
           throw Exception(
-            'Superás lo disponible en bolsillo (${_medioPago.toLowerCase()}): ${disp.toCurrency()}',
+            'Superás lo disponible en empresa (${dispEmp.toCurrency()}) para este gasto',
           );
         }
       }
 
+      final concepto = _conceptoController.text.trim().isEmpty
+          ? 'Gasto personal'
+          : _conceptoController.text.trim();
       final repo = ref.read(egresosRepositoryProvider);
-      await repo.registrarEgresoSinEvento(
-        monto: monto,
-        proveedor: _conceptoController.text.trim().isEmpty ? 'Gasto personal' : _conceptoController.text.trim(),
-        categoria: kCategoriaGastoPersonal,
-        fecha: DateTime.now(),
-        medioPago: _medioPago,
-      );
 
+      if (desdePendiente > _excedeTol) {
+        await repo.registrarEgresoSinEvento(
+          monto: desdePendiente,
+          proveedor: empaquetarProveedorGastoPendiente(concepto),
+          categoria: kCategoriaGastoPersonal,
+          fecha: DateTime.now(),
+          medioPago: _medioPago,
+        );
+      }
+      if (desdeEmpresa > _excedeTol) {
+        await repo.registrarEgresoSinEvento(
+          monto: desdeEmpresa,
+          proveedor: empaquetarProveedorGastoEmpresa(concepto),
+          categoria: kCategoriaGastoPersonal,
+          fecha: DateTime.now(),
+          medioPago: _medioPago,
+        );
+      }
+
+      await ref.read(finanzasProvider.notifier).recargar();
       if (!mounted) return;
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -113,12 +139,14 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final finanzasAsync = ref.watch(finanzasProvider);
 
-    final double? saldoMedio = finanzasAsync.whenOrNull(data: _saldoMedio);
+    final finState = finanzasAsync.whenOrNull(data: (s) => s);
+    final pendiente = finState != null ? _pendienteMedio(finState) : null;
+    final maxPermitido = finState != null ? _maxPermitido(finState) : null;
+    final gastadoTotal = finState?.hudGastadoPersonalTotal;
 
     final montoIngresado = _parseMontoField();
     final excedeDisponible =
-        saldoMedio != null && montoIngresado != null && montoIngresado > saldoMedio + _excedeTol;
-    final restaria = (saldoMedio != null && montoIngresado != null) ? saldoMedio - montoIngresado : null;
+        maxPermitido != null && montoIngresado != null && montoIngresado > maxPermitido + _excedeTol;
 
     return AlertDialog(
       title: Row(
@@ -155,8 +183,8 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
                     border: Border.all(color: _teal.withValues(alpha: 0.35)),
                   ),
                   child: Text(
-                    'Registrás un gasto pagado con plata que ya retiraste al bolsillo. '
-                    'No baja de nuevo el saldo empresa; solo el disponible del bolsillo (según el medio).',
+                    'Registrá un gasto personal. Se descuenta de tu bolsillo; '
+                    'si no alcanza, el resto sale del saldo de empresa.',
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.35,
@@ -185,53 +213,24 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
                 ),
                 const SizedBox(height: 14),
                 finanzasAsync.when(
-                  data: (_) => _buildSaldoBolsilloPanel(
+                  data: (_) => _buildResumenPanel(
                     context,
                     isDark,
-                    saldoMedio: saldoMedio ?? 0,
-                    restaria: restaria,
+                    gastadoTotal: gastadoTotal ?? 0,
+                    pendiente: pendiente ?? 0,
+                    maxPermitido: maxPermitido ?? 0,
                     excedeDisponible: excedeDisponible,
-                    montoIngresado: montoIngresado,
                   ),
-                  loading: () => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _teal.withValues(alpha: 0.9),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Actualizando saldo bolsillo…',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white54 : Colors.black45,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: LinearProgressIndicator(minHeight: 2),
                   ),
                   error: (e, _) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'No se pudo cargar el saldo: $e.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.error,
-                        height: 1.3,
-                      ),
-                    ),
+                    child: Text('No se pudo cargar: $e', style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12)),
                   ),
                 ),
+                const SizedBox(height: 14),
                 Text('MONTO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: _gold, letterSpacing: 1)),
                 const SizedBox(height: 6),
                 TextFormField(
@@ -258,12 +257,11 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty || v == '0,00') return 'Ingresá el monto';
-                    final disp = saldoMedio;
-                    if (disp != null) {
+                    if (maxPermitido != null) {
                       final cleanText = v.replaceAll('.', '').replaceAll(',', '.');
                       final monto = double.tryParse(cleanText);
-                      if (monto != null && monto > disp + _excedeTol) {
-                        return 'No podés gastar más que lo disponible (${disp.toCurrency()})';
+                      if (monto != null && monto > maxPermitido + _excedeTol) {
+                        return 'Superás lo que podés registrar (${maxPermitido.toCurrency()})';
                       }
                     }
                     return null;
@@ -292,7 +290,7 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
           child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
         ),
         FilledButton.icon(
-          onPressed: (_isSubmitting || saldoMedio == null || excedeDisponible) ? null : _submit,
+          onPressed: (_isSubmitting || maxPermitido == null || excedeDisponible) ? null : _submit,
           style: FilledButton.styleFrom(backgroundColor: _teal, foregroundColor: Colors.white),
           icon: _isSubmitting
               ? const SizedBox(
@@ -307,89 +305,63 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
     );
   }
 
-  Widget _buildSaldoBolsilloPanel(
+  Widget _buildResumenPanel(
     BuildContext context,
     bool isDark, {
-    required double saldoMedio,
-    required double? restaria,
+    required double gastadoTotal,
+    required double pendiente,
+    required double maxPermitido,
     required bool excedeDisponible,
-    required double? montoIngresado,
   }) {
     final baseStyle = TextStyle(
       fontSize: 12,
       height: 1.35,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w600,
       color: isDark ? Colors.white70 : Colors.black87,
     );
-    final valStyle = baseStyle.copyWith(
-      fontWeight: FontWeight.w900,
-      color: excedeDisponible
-          ? Theme.of(context).colorScheme.error
-          : (isDark ? Colors.white : Colors.black87),
-    );
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: excedeDisponible
+            ? Theme.of(context).colorScheme.error.withValues(alpha: isDark ? 0.14 : 0.08)
+            : _teal.withValues(alpha: isDark ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
           color: excedeDisponible
-              ? Theme.of(context).colorScheme.error.withValues(alpha: isDark ? 0.14 : 0.08)
-              : _teal.withValues(alpha: isDark ? 0.12 : 0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: excedeDisponible
-                ? Theme.of(context).colorScheme.error.withValues(alpha: 0.45)
-                : _teal.withValues(alpha: 0.35),
+              ? Theme.of(context).colorScheme.error.withValues(alpha: 0.45)
+              : _teal.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Disponible en tu bolsillo ($_medioPago)', style: baseStyle.copyWith(fontSize: 10, fontWeight: FontWeight.w900)),
+          Text(
+            pendiente.toCurrency(),
+            style: baseStyle.copyWith(fontSize: 16, fontWeight: FontWeight.w900),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  excedeDisponible ? Icons.warning_rounded : Icons.savings_outlined,
-                  size: 18,
-                  color: excedeDisponible ? Theme.of(context).colorScheme.error : _teal,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Disponible en bolsillo ($_medioPago)',
-                    style: baseStyle.copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.4,
-                      color: isDark ? Colors.white54 : Colors.black54,
-                    ),
-                  ),
-                ),
-              ],
+          if (gastadoTotal > 0.01) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Ya gastaste en total: ${gastadoTotal.toCurrency()}',
+              style: baseStyle.copyWith(fontSize: 11, color: isDark ? Colors.white54 : Colors.black54),
             ),
-            const SizedBox(height: 4),
-            Text(saldoMedio.toCurrency(), style: valStyle.copyWith(fontSize: 18)),
-            if (restaria != null && montoIngresado != null && montoIngresado > _excedeTol) ...[
-              const SizedBox(height: 8),
-              Text(
-                excedeDisponible ? 'Este monto supera lo disponible en este medio.' : 'Después del gasto quedaría:',
-                style: baseStyle.copyWith(fontSize: 11, fontWeight: FontWeight.w800),
-              ),
-              if (!excedeDisponible) ...[
-                const SizedBox(height: 2),
-                Text(
-                  restaria.toCurrency(),
-                  style: baseStyle.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: restaria < 0.02 ? (isDark ? Colors.white38 : Colors.black38) : _teal,
-                  ),
-                ),
-              ],
-            ],
           ],
-        ),
+          const SizedBox(height: 8),
+          Text(
+            'Máximo que podés gastar: ${maxPermitido.toCurrency()}',
+            style: baseStyle.copyWith(fontWeight: FontWeight.w800, color: excedeDisponible ? Theme.of(context).colorScheme.error : _teal),
+          ),
+          if (maxPermitido > pendiente + _excedeTol) ...[
+            const SizedBox(height: 2),
+            Text(
+              '(bolsillo ${pendiente.toCurrency()} + empresa ${(maxPermitido - pendiente).toCurrency()})',
+              style: baseStyle.copyWith(fontSize: 9, color: isDark ? Colors.white38 : Colors.black38),
+            ),
+          ],
+        ],
       ),
     );
   }

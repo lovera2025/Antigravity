@@ -1,0 +1,495 @@
+﻿Widget _buildOperacionHoySection(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold, {
+    required bool compact,
+  }) {
+    final fijo = state.fechaInteligenciaHud;
+    final labelDia = fijo != null ? ArTime.formatFechaCorta(fijo) : ArTime.formatFechaCorta(ArTime.nowAr());
+    final esHoy = _hudEsDiaCalendarioHoy(state);
+    final neto = state.hudNetoDelDia;
+    final resumenColapsado = state.hudIngresosHoy <= 0 && state.hudEgresosHoy <= 0
+        ? (esHoy ? 'Sin movimientos hoy' : 'Sin movimientos ese día')
+        : 'Cobré ${state.hudIngresosHoy.toCurrency()} · Salió ${state.hudEgresosHoy.toCurrency()} · Neto ${neto.toCurrency()}';
+
+    Widget chipResumen(String lbl, double val, Color color) {
+      return Expanded(
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: compact ? 8 : 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.1 : 0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.28)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                lbl,
+                style: TextStyle(fontSize: compact ? 8 : 9, fontWeight: FontWeight.w900, letterSpacing: 0.6, color: color),
+              ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  val.toCurrency(),
+                  style: GoogleFonts.oswald(
+                    fontSize: compact ? 14 : 18,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: gold.withValues(alpha: 0.25)),
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : gold.withValues(alpha: 0.04),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => setState(() => _hudHoyExpanded = !_hudHoyExpanded),
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14, vertical: compact ? 10 : 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      _hudHoyExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                      color: gold,
+                      size: compact ? 20 : 22,
+                    ),
+                    SizedBox(width: compact ? 6 : 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            esHoy ? 'OPERACIÓN DE HOY · $labelDia' : 'OPERACIÓN DEL DÍA · $labelDia',
+                            style: TextStyle(
+                              fontSize: compact ? 9 : 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.8,
+                              color: gold,
+                            ),
+                          ),
+                          if (!_hudHoyExpanded) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              resumenColapsado,
+                              style: TextStyle(
+                                fontSize: compact ? 9 : 10,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_hudHoyExpanded) ...[
+            Divider(height: 1, color: gold.withValues(alpha: 0.18)),
+            Padding(
+              padding: EdgeInsets.fromLTRB(compact ? 12 : 14, compact ? 10 : 12, compact ? 12 : 14, compact ? 12 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildInteligenciaBarraDia(context, state, isDark, gold, compact),
+                  SizedBox(height: compact ? 8 : 10),
+                  Row(
+                    children: [
+                      chipResumen('COBRÉ', state.hudIngresosHoy, const Color(0xFF00B894)),
+                      SizedBox(width: compact ? 6 : 8),
+                      chipResumen('SALIÓ', state.hudEgresosHoy, const Color(0xFFE74C3C)),
+                      SizedBox(width: compact ? 6 : 8),
+                      chipResumen('NETO', neto, gold),
+                    ],
+                  ),
+                  SizedBox(height: compact ? 10 : 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _hudTurnoSelector(state, isDark, gold, compact: compact),
+                  ),
+                  SizedBox(height: compact ? 8 : 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _hudTileIngresoHoyMedio(
+                          context: context,
+                          isDark: isDark,
+                          gold: gold,
+                          state: state,
+                          compact: compact,
+                          label: 'EFECTIVO',
+                          contexto: 'Neto del día',
+                          monto: state.hudEfectivoNetoHoy,
+                          accent: const Color(0xFF00B894),
+                          icon: Icons.payments_outlined,
+                          bucket: 'efectivo',
+                          retirosTurno: state.hudRetirosEfectivoHoy,
+                        ),
+                      ),
+                      SizedBox(width: compact ? 8 : 12),
+                      Expanded(
+                        child: _hudTileIngresoHoyMedio(
+                          context: context,
+                          isDark: isDark,
+                          gold: gold,
+                          state: state,
+                          compact: compact,
+                          label: 'TRANSFERENCIA',
+                          contexto: 'Neto del día',
+                          monto: state.hudTransferenciaNetaHoy,
+                          accent: const Color(0xFF6C63FF),
+                          icon: Icons.swap_horiz_rounded,
+                          bucket: 'transferencia',
+                          retirosTurno: state.hudRetirosTransferenciaHoy,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(top: compact ? 6 : 8),
+                    child: Text(
+                      'Los netos por medio restan salidas del turno elegido (mañana / tarde / día).',
+                      style: TextStyle(
+                        fontSize: compact ? 9 : 10,
+                        fontWeight: FontWeight.w600,
+                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.42),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHUD(BuildContext context, bool isDark, Color gold, FinanzasState state, {bool compact = false}) {
+    final cardBg = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white;
+
+    Widget header({required bool small}) {
+      return Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(small ? 8 : 10),
+            decoration: BoxDecoration(
+              color: gold.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.account_balance_wallet_outlined, color: gold, size: small ? 18 : 22),
+          ),
+          SizedBox(width: small ? 10 : 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'RESUMEN DE CAJA',
+                  style: GoogleFonts.oswald(
+                    fontSize: small ? 11 : 14,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w900,
+                    color: gold,
+                  ),
+                ),
+                Text(
+                  small ? 'Negocio y bolsillo personal' : '¿Cuánta plata hay? Separá negocio y lo tuyo.',
+                  style: TextStyle(
+                    fontSize: small ? 9 : 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header(small: compact),
+        SizedBox(height: compact ? 10 : 16),
+        _buildSaldoPrincipalBlock(context, state, isDark, gold, compact: compact),
+        SizedBox(height: compact ? 12 : 16),
+        _buildHudSectionDivider('DETALLE', isDark),
+        SizedBox(height: compact ? 8 : 10),
+        _buildSaldoPorMedioSection(context, state, isDark, gold, compact: compact),
+        SizedBox(height: compact ? 10 : 14),
+        _buildOperacionHoySection(context, state, isDark, gold, compact: compact),
+      ],
+    );
+
+    if (compact) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: gold.withValues(alpha: 0.35), width: 1.5),
+          boxShadow: [
+            BoxShadow(color: gold.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: body,
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: gold.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: gold.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 10)),
+        ],
+      ),
+      child: body,
+    );
+  }
+
+  Future<void> _abrirHistorialBolsillo(BuildContext context, FinanzasState state, bool isDark, Color gold) async {
+    try {
+      final raw = await ref.read(egresosRepositoryProvider).getEgresosConEvento();
+      final egresos = raw.map((e) => Egreso.fromJson(e)).toList();
+      if (!context.mounted) return;
+      await showBolsilloHistorialSheet(
+        context,
+        egresos: egresos,
+        isDark: isDark,
+        gold: gold,
+        gastadoTotal: state.hudGastadoPersonalTotal,
+        retiroPendiente: state.hudRetiroPendienteTotal,
+        retiradoTotal: state.hudRetirosBolsaPersonalTotal,
+        gastadoEfectivo: state.hudGastosBolsaPersonalEfectivo,
+        gastadoTransferencia: state.hudGastosBolsaPersonalTransferencia,
+        onRefresh: () => ref.read(finanzasProvider.notifier).recargar(),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo cargar tu bolsillo: $e')),
+      );
+    }
+  }
+
+  void _abrirDetalleCobrosHistoricos(BuildContext context, FinanzasState state, bool isDark, Color gold) {
+    const green = Color(0xFF00B894);
+    final list = state.ingresosHistoricosLista;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.58,
+          maxChildSize: 0.92,
+          minChildSize: 0.35,
+          builder: (_, scrollCtrl) {
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF121218) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border.all(color: gold.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black26,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'TOTAL COBRADO (HISTÓRICO)',
+                          style: GoogleFonts.oswald(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: gold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Suma de todos los cobros registrados, sin restar gastos ni retiros.',
+                          style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white54 : Colors.black54),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          state.hudTotalIngresosHistoricoGlobal.toCurrency(),
+                          style: GoogleFonts.oswald(fontSize: 28, fontWeight: FontWeight.w900, color: gold),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            _medioChipMini('EF ${state.hudTotalIngresosHistoricoEfectivo.toCurrency()}', green, isDark),
+                            _medioChipMini(
+                              'TR ${state.hudTotalIngresosHistoricoTransferencia.toCurrency()}',
+                              const Color(0xFF6C63FF),
+                              isDark,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: list.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No hay cobros registrados.',
+                              style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontWeight: FontWeight.w600),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollCtrl,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                            itemCount: list.length,
+                            itemBuilder: (context, index) {
+                              final ing = list[index];
+                              final quien = ing.alumnoOCliente.trim().isNotEmpty ? ing.alumnoOCliente : ing.nombreEvento;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                                ),
+                                child: ListTile(
+                                  title: Text(ing.concepto, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                  subtitle: Text(
+                                    '${ArTime.formatFechaCorta(ing.fecha)} · $quien',
+                                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                                  ),
+                                  trailing: Text(
+                                    ing.monto.toCurrency(),
+                                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _abrirDetalleEmpresa(BuildContext context, FinanzasState state, bool isDark, Color gold) {
+    const green = Color(0xFF00B894);
+    const red = Color(0xFFE74C3C);
+    const amber = Color(0xFFFFB74D);
+    final cap = state.hudPlataDelNegocio;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.52,
+          maxChildSize: 0.88,
+          minChildSize: 0.38,
+          builder: (_, __) {
+            return Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF121218) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: green.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SALDO DEL NEGOCIO', style: GoogleFonts.oswald(fontSize: 18, fontWeight: FontWeight.w900, color: green)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Saldo contable: cobros menos todo lo que salió del negocio '
+                    '(operadores, gastos personales tuyos, retiros pendientes). '
+                    'Comparalo con efectivo + banco + cofre; no es un arqueo físico automático.',
+                    style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white54 : Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  _empresaDetalleLinea('Total cobrado', state.hudTotalIngresosHistoricoGlobal, green, isDark),
+                  _empresaDetalleLinea('Gastos operativos', state.hudGastosOperativosHistoricoGlobal, red, isDark, negativo: true),
+                  if (state.hudGastosPersonalEmpresaTotal > 0.01)
+                    _empresaDetalleLinea(
+                      'Gastos personales (tuyos)',
+                      state.hudGastosPersonalEmpresaTotal,
+                      red,
+                      isDark,
+                      negativo: true,
+                    ),
+                  if (state.hudRetirosBolsaPersonalTotal > 0.01)
+                    _empresaDetalleLinea(
+                      'Retiros sin gastar',
+                      state.hudRetirosBolsaPersonalTotal,
+                      amber,
+                      isDark,
+                      negativo: true,
+                    ),
+                  const Divider(height: 24),
+                  Text(
+                    cap.toCurrency(),
+                    style: GoogleFonts.oswald(fontSize: 32, fontWeight: FontWeight.w900, color: cap >= 0 ? green : red),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Saldo contable del negocio (EF ${state.hudEfectivoNetoHistorico.toCurrency()} · TR ${state.hudTransferenciaNetaHistorica.toCurrency()})',
+                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _abrirDetalleCobrosHistoricos(context, state, isDark, gold);
+                    },
+                    icon: Icon(Icons.receipt_long_rounded, size: 18, color: gold),
+                    label: Text(
+                      'Ver total cobrado histórico (${state.hudTotalIngresosHistoricoGlobal.toCurrency()})',
+                      style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: 12),
+                    ),
+                  ),
+ 

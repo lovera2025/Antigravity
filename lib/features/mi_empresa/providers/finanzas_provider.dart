@@ -14,10 +14,19 @@ import 'package:flutter/material.dart';
 import '../../../main.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/utils/pago_interes_mora.dart';
+import '../bolsa_personal_helpers.dart';
+
+export '../bolsa_personal_helpers.dart' show finanzasEgresoAfectaCajaEmpresa;
 
 /// Clasificación única de medio de pago para buckets EFECTIVO / TRANSFERENCIA del HUD.
 bool finanzasEsMedioTransferencia(String? medioPago) =>
     medioPago?.toLowerCase().trim() == 'transferencia';
+
+/// Gastos operativos del negocio (excluye retiros al bolsillo y gastos personales).
+bool finanzasEgresoEsGastoOperativoNegocio(Egreso e) {
+  final cat = (e.categoria ?? '').trim();
+  return cat != kCategoriaGastoPersonal && cat != kCategoriaRetiroDueno;
+}
 
 /// Modo del panel «Resumen de caja» (HUD): día, solo cobros históricos o saldo empresa con proyección local.
 enum FinanzasHudModo {
@@ -62,11 +71,13 @@ class FinanzasState {
   final double hudTotalIngresosHistoricoTransferencia;
   /// Todos los ingresos locales sin filtro mes/evento; drill-down histórico del HUD.
   final List<IngresoDetallado> ingresosHistoricosLista;
-  /// Suma egresos que afectan saldo empresa (excluye [kCategoriaGastoPersonal]).
+  /// Suma egresos que afectan saldo empresa ([finanzasEgresoAfectaCajaEmpresa]).
   final double hudTotalEgresosHistoricoGlobal;
-  /// Gastos de empresa históricos por medio (excluye [kCategoriaGastoPersonal]).
+  /// Egresos empresa históricos por medio (misma regla que el total).
   final double hudTotalEgresosHistoricoEfectivo;
   final double hudTotalEgresosHistoricoTransferencia;
+  /// Gastos personales que restaron directo del negocio ([empresa]).
+  final double hudGastosPersonalEmpresaTotal;
   /// Cobros históricos − gastos empresa históricos, por medio.
   final double hudEfectivoNetoHistorico;
   final double hudTransferenciaNetaHistorica;
@@ -99,7 +110,7 @@ class FinanzasState {
   final double hudGastosBolsaPersonalTransferencia;
   final double hudGastosBolsaPersonalHoy;
 
-  /// `max(0, retiros − gastos)` por medio y total (histórico global).
+  /// Retiro al bolsillo sin gastar aún: `max(0, retiros − gastos desde pendiente)` por medio.
   final double hudSaldoBolsaPersonalTotal;
   final double hudSaldoBolsaPersonalEfectivo;
   final double hudSaldoBolsaPersonalTransferencia;
@@ -129,11 +140,12 @@ class FinanzasState {
     this.hudTotalEgresosHistoricoGlobal = 0,
     this.hudTotalEgresosHistoricoEfectivo = 0,
     this.hudTotalEgresosHistoricoTransferencia = 0,
+    this.hudGastosPersonalEmpresaTotal = 0,
     this.hudEfectivoNetoHistorico = 0,
     this.hudTransferenciaNetaHistorica = 0,
     this.hudOpex30DiasLocal = 0,
     this.hudProyeccion30DiasLocal = 0,
-    this.hudModoInteligencia = FinanzasHudModo.hoy,
+    this.hudModoInteligencia = FinanzasHudModo.acumuladoNeto,
     this.hudTurno = TurnoCaja.dia,
     this.hudRetirosEfectivoHoy = 0,
     this.hudRetirosTransferenciaHoy = 0,
@@ -177,6 +189,7 @@ class FinanzasState {
     double? hudTotalEgresosHistoricoGlobal,
     double? hudTotalEgresosHistoricoEfectivo,
     double? hudTotalEgresosHistoricoTransferencia,
+    double? hudGastosPersonalEmpresaTotal,
     double? hudEfectivoNetoHistorico,
     double? hudTransferenciaNetaHistorica,
     double? hudOpex30DiasLocal,
@@ -230,6 +243,8 @@ class FinanzasState {
       hudTotalEgresosHistoricoEfectivo: hudTotalEgresosHistoricoEfectivo ?? this.hudTotalEgresosHistoricoEfectivo,
       hudTotalEgresosHistoricoTransferencia:
           hudTotalEgresosHistoricoTransferencia ?? this.hudTotalEgresosHistoricoTransferencia,
+      hudGastosPersonalEmpresaTotal:
+          hudGastosPersonalEmpresaTotal ?? this.hudGastosPersonalEmpresaTotal,
       hudEfectivoNetoHistorico: hudEfectivoNetoHistorico ?? this.hudEfectivoNetoHistorico,
       hudTransferenciaNetaHistorica: hudTransferenciaNetaHistorica ?? this.hudTransferenciaNetaHistorica,
       hudOpex30DiasLocal: hudOpex30DiasLocal ?? this.hudOpex30DiasLocal,
@@ -253,6 +268,29 @@ class FinanzasState {
       hudSaldoBolsaPersonalTransferencia: hudSaldoBolsaPersonalTransferencia ?? this.hudSaldoBolsaPersonalTransferencia,
     );
   }
+
+  /// Cobros históricos − egresos que afectan saldo empresa (operativos, retiros pendientes, gastos personales [empresa]).
+  double get hudPlataDelNegocio =>
+      hudTotalIngresosHistoricoGlobal - hudTotalEgresosHistoricoGlobal;
+
+  /// Total histórico gastado a título personal.
+  double get hudGastadoPersonalTotal => hudGastosBolsaPersonalTotal;
+
+  /// Retiro pendiente sin gastar (alias de [hudSaldoBolsaPersonalTotal]).
+  double get hudRetiroPendienteTotal => hudSaldoBolsaPersonalTotal;
+
+  /// Gastos operativos históricos (sin retiros pendientes ni gastos personales [empresa]).
+  double get hudGastosOperativosHistoricoGlobal =>
+      hudTotalEgresosHistoricoGlobal - hudRetirosBolsaPersonalTotal - hudGastosPersonalEmpresaTotal;
+
+  double get hudGastosOperativosHistoricoEfectivo =>
+      hudTotalEgresosHistoricoEfectivo - hudRetirosBolsaPersonalEfectivo;
+
+  double get hudGastosOperativosHistoricoTransferencia =>
+      hudTotalEgresosHistoricoTransferencia - hudRetirosBolsaPersonalTransferencia;
+
+  /// Neto del día (cobros − salidas del negocio).
+  double get hudNetoDelDia => hudIngresosHoy - hudEgresosHoy;
 }
 
 class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
@@ -356,7 +394,7 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
     final totalIngresos = ingresosList.fold<double>(0, (sum, i) => sum + i.monto);
     final totalEgresos = egresosList.fold<double>(0, (sum, e) => sum + e.monto);
     final totalEgresosSaldoEmpresa = egresosList
-        .where((e) => (e.categoria ?? '').trim() != kCategoriaGastoPersonal)
+        .where(finanzasEgresoAfectaCajaEmpresa)
         .fold<double>(0, (sum, e) => sum + e.monto);
     final balanceGlobal = totalIngresos - totalEgresosSaldoEmpresa;
 
@@ -395,12 +433,15 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
     for (final e in egresosFull) {
       if (e.fecha != null && ArTime.mismoDia(e.fecha!, diaHudRef)) {
         egresosHoyLista.add(e);
-        hudEgresosHoy += e.monto;
+        if (finanzasEgresoAfectaCajaEmpresa(e)) {
+          hudEgresosHoy += e.monto;
+        }
       }
       if (e.fecha == null) continue;
       if (!ArTime.mismoDia(e.fecha!, diaHudRef)) continue;
       if (!rangoHud.contiene(e.fecha!)) continue;
-      // Todos los egresos del turno (no solo retiros de caja) restan del bucket.
+      if (!finanzasEgresoAfectaCajaEmpresa(e)) continue;
+      // Egresos de empresa del turno restan del bucket (operadores, retiros, etc.).
       if (finanzasEsMedioTransferencia(e.medioPago)) {
         hudRetirosTransferenciaHoy += e.monto;
       } else {
@@ -435,7 +476,7 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
     var hudTotalEgresosHistoricoEfectivo = 0.0;
     var hudTotalEgresosHistoricoTransferencia = 0.0;
     for (final e in egresosFull) {
-      if ((e.categoria ?? '').trim() == kCategoriaGastoPersonal) continue;
+      if (!finanzasEgresoAfectaCajaEmpresa(e)) continue;
       if (finanzasEsMedioTransferencia(e.medioPago)) {
         hudTotalEgresosHistoricoTransferencia += e.monto;
       } else {
@@ -468,12 +509,24 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
     var hudGastosBolsaPersonalEfectivo = 0.0;
     var hudGastosBolsaPersonalTransferencia = 0.0;
     var hudGastosBolsaPersonalHoy = 0.0;
+    var hudGastosPendienteEfectivo = 0.0;
+    var hudGastosPendienteTransferencia = 0.0;
+    var hudGastosPersonalEmpresaTotal = 0.0;
     for (final e in egresosFull) {
       if ((e.categoria ?? '').trim() != kCategoriaGastoPersonal) continue;
+      if (gastoPersonalEsDesdeEmpresa(e)) {
+        hudGastosPersonalEmpresaTotal += e.monto;
+      }
       if (finanzasEsMedioTransferencia(e.medioPago)) {
         hudGastosBolsaPersonalTransferencia += e.monto;
+        if (finanzasGastoPersonalConsumePendiente(e)) {
+          hudGastosPendienteTransferencia += e.monto;
+        }
       } else {
         hudGastosBolsaPersonalEfectivo += e.monto;
+        if (finanzasGastoPersonalConsumePendiente(e)) {
+          hudGastosPendienteEfectivo += e.monto;
+        }
       }
       if (e.fecha != null && ArTime.mismoDia(e.fecha!, diaHudRef)) {
         hudGastosBolsaPersonalHoy += e.monto;
@@ -483,17 +536,15 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
         hudGastosBolsaPersonalEfectivo + hudGastosBolsaPersonalTransferencia;
 
     final hudSaldoBolsaPersonalEfectivo =
-        (hudRetirosBolsaPersonalEfectivo - hudGastosBolsaPersonalEfectivo).clamp(0.0, double.infinity);
+        (hudRetirosBolsaPersonalEfectivo - hudGastosPendienteEfectivo).clamp(0.0, double.infinity);
     final hudSaldoBolsaPersonalTransferencia =
-        (hudRetirosBolsaPersonalTransferencia - hudGastosBolsaPersonalTransferencia)
+        (hudRetirosBolsaPersonalTransferencia - hudGastosPendienteTransferencia)
             .clamp(0.0, double.infinity);
     final hudSaldoBolsaPersonalTotal =
         hudSaldoBolsaPersonalEfectivo + hudSaldoBolsaPersonalTransferencia;
 
     final limite30 = hoyDia.subtract(const Duration(days: 30));
-    final egresosParaOpexEmpresa = egresosFull
-        .where((e) => (e.categoria ?? '').trim() != kCategoriaGastoPersonal)
-        .toList();
+    final egresosParaOpexEmpresa = egresosFull.where(finanzasEgresoEsGastoOperativoNegocio).toList();
     final hudOpex30DiasLocal = _sumEgresosEnRangoCalendarioAr(egresosParaOpexEmpresa, limite30, hoyDia);
     final capNeto = hudTotalIngresosHistoricoGlobal - hudTotalEgresosHistoricoGlobal;
     final hudProyeccion30DiasLocal = capNeto - hudOpex30DiasLocal;
@@ -533,11 +584,12 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       hudTotalEgresosHistoricoGlobal: hudTotalEgresosHistoricoGlobal,
       hudTotalEgresosHistoricoEfectivo: hudTotalEgresosHistoricoEfectivo,
       hudTotalEgresosHistoricoTransferencia: hudTotalEgresosHistoricoTransferencia,
+      hudGastosPersonalEmpresaTotal: hudGastosPersonalEmpresaTotal,
       hudEfectivoNetoHistorico: hudEfectivoNetoHistorico,
       hudTransferenciaNetaHistorica: hudTransferenciaNetaHistorica,
       hudOpex30DiasLocal: hudOpex30DiasLocal,
       hudProyeccion30DiasLocal: hudProyeccion30DiasLocal,
-      hudModoInteligencia: preserveHudModo ?? FinanzasHudModo.hoy,
+      hudModoInteligencia: preserveHudModo ?? FinanzasHudModo.acumuladoNeto,
       hudTurno: turnoHud,
       hudRetirosEfectivoHoy: hudRetirosEfectivoHoy,
       hudRetirosTransferenciaHoy: hudRetirosTransferenciaHoy,
@@ -965,3 +1017,15 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
 final finanzasProvider = AsyncNotifierProvider<FinanzasNotifier, FinanzasState>(
   () => FinanzasNotifier(),
 );
+
+/// Se incrementa tras mutar contratos (mora, pagos, etc.) para que COBRO y otras
+/// vistas recarguen alumnos sin depender solo del ciclo de [finanzasProvider].
+class ContratosMutationTick extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state++;
+}
+
+final contratosMutationTickProvider =
+    NotifierProvider<ContratosMutationTick, int>(ContratosMutationTick.new);

@@ -23,6 +23,7 @@ import '../dashboard/providers/dashboard_provider.dart';
 import 'widgets/corregir_medio_pago_dialog.dart';
 import 'widgets/anular_cobro_cuota_dialog.dart';
 import 'widgets/smart_purge_dialog.dart';
+import 'widgets/restaurar_mora_dialog.dart';
 import '../eventos/detalle_evento_particular_screen.dart';
 import '../eventos/detalle_evento_masivo_screen.dart';
 import '../eventos/repositories/eventos_repository.dart';
@@ -42,6 +43,7 @@ import 'widgets/avisos_view.dart';
 import 'widgets/caja_fuerte_dialogs.dart';
 import 'widgets/pagar_aviso_dialog.dart';
 import 'widgets/cobro_masivos_tab.dart';
+import 'widgets/bolsillo_timeline.dart';
 import '../cierre_caja/models/turno_caja.dart';
 import '../cierre_caja/providers/cierre_caja_provider.dart';
 import '../cierre_caja/widgets/registrar_retiro_dialog.dart';
@@ -636,6 +638,12 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
 
   _FiltroMesCaja _filtroMesCaja = _FiltroMesCaja.pagos;
 
+  /// Operación del día en Resumen de caja (colapsada por defecto; el saldo principal queda arriba).
+  bool _hudHoyExpanded = false;
+
+  /// Caja fuerte colapsable en tab PERSONAL.
+  bool _cajaFuerteExpanded = true;
+
   /// Scroll a secciones de la vista SALUD al tocar pilares del hero.
   final GlobalKey _keySaludRunway = GlobalKey();
   final GlobalKey _keySaludResumen = GlobalKey();
@@ -1030,6 +1038,16 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   ),
                   tooltip: 'Saneamiento',
                 ),
+              if (showMiEmpresaContent)
+                IconButton(
+                  style: _finanzasIconButtonStyle(),
+                  icon: Icon(Icons.restore_rounded, size: _kFinanzasAppBarIconSize, color: gold),
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (context) => const RestaurarMoraDialog(),
+                  ),
+                  tooltip: 'Restaurar mora persistida',
+                ),
               const SizedBox(width: 4),
             ],
             bottom: showMiEmpresaContent
@@ -1160,7 +1178,15 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
 
   static Color _hudColorEstadoLiquidez(String status) {
     if (status.contains('CRÍTICO')) return const Color(0xFFE74C3C);
+    if (status.contains('ADVERTENCIA')) return const Color(0xFFE67E22);
     return const Color(0xFF00B894);
+  }
+
+  String _hudLiquidezBadgeLabel(FinanzasState state) {
+    final st = _hudEstadoLiquidezLocal(state);
+    if (st.contains('CRÍTICO')) return 'Liquidez crítica · 30 días';
+    if (st.contains('ADVERTENCIA')) return 'Liquidez ajustada · 30 días';
+    return 'Flujo positivo';
   }
 
   bool _hudEsDiaCalendarioHoy(FinanzasState state) {
@@ -1407,48 +1433,459 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     attempt();
   }
 
-  Widget _buildHudModoSelector(FinanzasState state, bool isDark, Color gold, {required bool compact}) {
-    final fs = compact ? 9.0 : 11.0;
-    return SegmentedButton<FinanzasHudModo>(
-      showSelectedIcon: false,
-      segments: [
-        ButtonSegment<FinanzasHudModo>(
-          value: FinanzasHudModo.hoy,
-          label: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text('HOY', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+  Widget _buildSaldoPrincipalBlock(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold, {
+    required bool compact,
+  }) {
+    const green = Color(0xFF00B894);
+    const amber = Color(0xFFFFB74D);
+    const violet = Color(0xFF6C63FF);
+    final cap = state.hudPlataDelNegocio;
+    final liquidezColor = _hudColorEstadoLiquidez(_hudEstadoLiquidezLocal(state));
+    final liquidezLabel = _hudLiquidezBadgeLabel(state);
+
+    Widget tarjetaSaldo({
+      required String titulo,
+      required String subtitulo,
+      required double monto,
+      required Color accent,
+      required VoidCallback onTap,
+      List<Widget>? chips,
+      Widget? trailing,
+    }) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(compact ? 12 : 16),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: isDark ? 0.12 : 0.07),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: accent.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        titulo,
+                        style: TextStyle(
+                          fontSize: compact ? 9 : 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                    if (trailing != null) trailing,
+                  ],
+                ),
+                SizedBox(height: compact ? 4 : 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    monto.toCurrency(),
+                    style: GoogleFonts.oswald(
+                      fontSize: compact ? 22 : 30,
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? Colors.white : Colors.black87,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+                if (chips != null) ...[
+                  SizedBox(height: compact ? 6 : 8),
+                  Wrap(spacing: 6, runSpacing: 4, children: chips),
+                ],
+                SizedBox(height: compact ? 4 : 6),
+                Text(
+                  subtitulo,
+                  style: TextStyle(
+                    fontSize: compact ? 9 : 10,
+                    height: 1.3,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        ButtonSegment<FinanzasHudModo>(
-          value: FinanzasHudModo.acumuladoIngresos,
-          label: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(compact ? 'Σ ING.' : 'INGRESOS ACUM.', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tarjetaSaldo(
+          titulo: 'SALDO DEL NEGOCIO',
+          subtitulo: 'Contable: cobros − gastos operativos − gastos personales − retiros pendientes',
+          monto: cap,
+          accent: green,
+          onTap: () => _abrirDetalleEmpresa(context, state, isDark, gold),
+          chips: [
+            _medioChipMini('EF ${state.hudEfectivoNetoHistorico.toCurrency()}', green, isDark),
+            _medioChipMini('TR ${state.hudTransferenciaNetaHistorica.toCurrency()}', violet, isDark),
+          ],
+          trailing: Container(
+            padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8, vertical: compact ? 3 : 4),
+            decoration: BoxDecoration(
+              color: liquidezColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: liquidezColor.withValues(alpha: 0.35)),
+            ),
+            child: Text(
+              liquidezLabel,
+              style: TextStyle(
+                color: liquidezColor,
+                fontSize: compact ? 8 : 9,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
           ),
         ),
-        ButtonSegment<FinanzasHudModo>(
-          value: FinanzasHudModo.acumuladoNeto,
-          label: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(compact ? 'NETO' : 'CAPITAL NETO', style: TextStyle(fontSize: fs, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+        SizedBox(height: compact ? 8 : 12),
+        tarjetaSaldo(
+          titulo: 'MI BOLSILLO',
+          subtitulo: 'Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()} · Gasté ${state.hudGastadoPersonalTotal.toCurrency()}',
+          monto: state.hudRetiroPendienteTotal,
+          accent: amber,
+          onTap: () => _abrirHistorialBolsillo(context, state, isDark, gold),
+          chips: [
+            _medioChipMini('Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()}', Colors.orange, isDark),
+            _medioChipMini('Gasté ${state.hudGastadoPersonalTotal.toCurrency()}', green, isDark),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHudSectionDivider(String label, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.black12)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.black12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaldoPorMedioSection(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold, {
+    required bool compact,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Desglose por medio de pago',
+          style: TextStyle(
+            fontSize: compact ? 10 : 11,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white70 : Colors.black54,
+          ),
+        ),
+        SizedBox(height: compact ? 8 : 10),
+        Row(
+          children: [
+            Expanded(
+              child: _hudTileIngresoHoyMedio(
+                context: context,
+                isDark: isDark,
+                gold: gold,
+                state: state,
+                compact: compact,
+                label: 'EFECTIVO',
+                contexto: 'Saldo neto histórico',
+                monto: state.hudEfectivoNetoHistorico,
+                accent: const Color(0xFF00B894),
+                icon: Icons.payments_outlined,
+                bucket: '',
+              ),
+            ),
+            SizedBox(width: compact ? 8 : 12),
+            Expanded(
+              child: _hudTileIngresoHoyMedio(
+                context: context,
+                isDark: isDark,
+                gold: gold,
+                state: state,
+                compact: compact,
+                label: 'TRANSFERENCIA',
+                contexto: 'Saldo neto histórico',
+                monto: state.hudTransferenciaNetaHistorica,
+                accent: const Color(0xFF6C63FF),
+                icon: Icons.swap_horiz_rounded,
+                bucket: '',
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: EdgeInsets.only(top: compact ? 6 : 8),
+          child: Text(
+            'Cobros menos gastos del negocio, separados por cómo se pagó. El total = saldo contable.',
+            style: TextStyle(
+              fontSize: compact ? 9 : 10,
+              fontWeight: FontWeight.w600,
+              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.42),
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _abrirDetalleCobrosHistoricos(context, state, isDark, gold),
+            icon: Icon(Icons.receipt_long_rounded, size: compact ? 16 : 18, color: gold),
+            label: Text(
+              'Total cobrado histórico: ${state.hudTotalIngresosHistoricoGlobal.toCurrency()}',
+              style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: compact ? 10 : 11),
+            ),
           ),
         ),
       ],
-      selected: {state.hudModoInteligencia},
-      onSelectionChanged: (s) {
-        ref.read(finanzasProvider.notifier).setHudModoInteligencia(s.first);
-      },
-      style: ButtonStyle(
-        visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return gold.withValues(alpha: 0.22);
-          return Colors.transparent;
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return gold;
-          return isDark ? Colors.white54 : Colors.black54;
-        }),
-        side: WidgetStateProperty.all(BorderSide(color: gold.withValues(alpha: 0.35))),
+    );
+  }
+
+  Widget _buildOperacionHoySection(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold, {
+    required bool compact,
+  }) {
+    final fijo = state.fechaInteligenciaHud;
+    final labelDia = fijo != null ? ArTime.formatFechaCorta(fijo) : ArTime.formatFechaCorta(ArTime.nowAr());
+    final esHoy = _hudEsDiaCalendarioHoy(state);
+    final neto = state.hudNetoDelDia;
+    final resumenColapsado = state.hudIngresosHoy <= 0 && state.hudEgresosHoy <= 0
+        ? (esHoy ? 'Sin movimientos hoy' : 'Sin movimientos ese día')
+        : 'Cobré ${state.hudIngresosHoy.toCurrency()} · Salió ${state.hudEgresosHoy.toCurrency()} · Neto ${neto.toCurrency()}';
+
+    Widget chipResumen(String lbl, double val, Color color) {
+      return Expanded(
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: compact ? 8 : 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: isDark ? 0.1 : 0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.28)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                lbl,
+                style: TextStyle(fontSize: compact ? 8 : 9, fontWeight: FontWeight.w900, letterSpacing: 0.6, color: color),
+              ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  val.toCurrency(),
+                  style: GoogleFonts.oswald(
+                    fontSize: compact ? 14 : 18,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: gold.withValues(alpha: 0.25)),
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : gold.withValues(alpha: 0.04),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => setState(() => _hudHoyExpanded = !_hudHoyExpanded),
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14, vertical: compact ? 10 : 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      _hudHoyExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                      color: gold,
+                      size: compact ? 20 : 22,
+                    ),
+                    SizedBox(width: compact ? 6 : 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            esHoy ? 'OPERACIÓN DE HOY · $labelDia' : 'OPERACIÓN DEL DÍA · $labelDia',
+                            style: TextStyle(
+                              fontSize: compact ? 9 : 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.8,
+                              color: gold,
+                            ),
+                          ),
+                          if (!_hudHoyExpanded) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              resumenColapsado,
+                              style: TextStyle(
+                                fontSize: compact ? 9 : 10,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_hudHoyExpanded) ...[
+            Divider(height: 1, color: gold.withValues(alpha: 0.18)),
+            Padding(
+              padding: EdgeInsets.fromLTRB(compact ? 12 : 14, compact ? 10 : 12, compact ? 12 : 14, compact ? 12 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildInteligenciaBarraDia(context, state, isDark, gold, compact),
+                  SizedBox(height: compact ? 8 : 10),
+                  Row(
+                    children: [
+                      chipResumen('COBRÉ', state.hudIngresosHoy, const Color(0xFF00B894)),
+                      SizedBox(width: compact ? 6 : 8),
+                      chipResumen('SALIÓ', state.hudEgresosHoy, const Color(0xFFE74C3C)),
+                      SizedBox(width: compact ? 6 : 8),
+                      chipResumen('NETO', neto, gold),
+                    ],
+                  ),
+                  SizedBox(height: compact ? 10 : 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _hudTurnoSelector(state, isDark, gold, compact: compact),
+                  ),
+                  SizedBox(height: compact ? 8 : 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _hudTileIngresoHoyMedio(
+                          context: context,
+                          isDark: isDark,
+                          gold: gold,
+                          state: state,
+                          compact: compact,
+                          label: 'EFECTIVO',
+                          contexto: 'Neto del día',
+                          monto: state.hudEfectivoNetoHoy,
+                          accent: const Color(0xFF00B894),
+                          icon: Icons.payments_outlined,
+                          bucket: 'efectivo',
+                          retirosTurno: state.hudRetirosEfectivoHoy,
+                        ),
+                      ),
+                      SizedBox(width: compact ? 8 : 12),
+                      Expanded(
+                        child: _hudTileIngresoHoyMedio(
+                          context: context,
+                          isDark: isDark,
+                          gold: gold,
+                          state: state,
+                          compact: compact,
+                          label: 'TRANSFERENCIA',
+                          contexto: 'Neto del día',
+                          monto: state.hudTransferenciaNetaHoy,
+                          accent: const Color(0xFF6C63FF),
+                          icon: Icons.swap_horiz_rounded,
+                          bucket: 'transferencia',
+                          retirosTurno: state.hudRetirosTransferenciaHoy,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(top: compact ? 6 : 8),
+                    child: Text(
+                      'Los netos por medio restan salidas del turno elegido (mañana / tarde / día).',
+                      style: TextStyle(
+                        fontSize: compact ? 9 : 10,
+                        fontWeight: FontWeight.w600,
+                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.42),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _empresaDetalleLinea(String lbl, double monto, Color color, bool isDark, {bool negativo = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(lbl, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? Colors.white54 : Colors.black54)),
+          Text(
+            '${negativo ? '−' : ''}${monto.toCurrency()}',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _medioChipMini(String label, Color color, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: color),
       ),
     );
   }
@@ -1590,13 +2027,14 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     required Color accent,
     required IconData icon,
     required String bucket,
+    String? contexto,
     double? retirosTurno,
   }) {
     final retiros = retirosTurno ?? 0.0;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _abrirDetalleIngresosHoyPorMedio(context, isDark, state, bucket),
+        onTap: bucket.isEmpty ? null : () => _abrirDetalleIngresosHoyPorMedio(context, isDark, state, bucket),
         borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: compact ? 8 : 14),
@@ -1613,14 +2051,28 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   Icon(icon, size: compact ? 14 : 18, color: accent),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: compact ? 9 : 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.7,
-                        color: accent,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: compact ? 9 : 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.7,
+                            color: accent,
+                          ),
+                        ),
+                        if (contexto != null)
+                          Text(
+                            contexto,
+                            style: TextStyle(
+                              fontSize: compact ? 8 : 9,
+                              fontWeight: FontWeight.w700,
+                              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.45),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   Icon(Icons.playlist_add_check_rounded, size: compact ? 14 : 16, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.22)),
@@ -1779,104 +2231,61 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 
   Widget _buildHUD(BuildContext context, bool isDark, Color gold, FinanzasState state, {bool compact = false}) {
-    final modo = state.hudModoInteligencia;
-    final capNetoGlobal = state.hudTotalIngresosHistoricoGlobal - state.hudTotalEgresosHistoricoGlobal;
-    final netoHoy = state.hudIngresosHoy - state.hudEgresosHoy;
+    final cardBg = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white;
 
-    late final double mainVal;
-    late final String mainLabel;
-    late final String leftLbl;
-    late final String rightLbl;
-    late final double leftAmt;
-    late final double rightAmt;
-    late final bool leftAsExpenseLine;
-
-    switch (modo) {
-      case FinanzasHudModo.hoy:
-        mainVal = state.hudIngresosHoy;
-        mainLabel = 'INGRESOS DEL DÍA';
-        leftLbl = 'EGRESOS DEL DÍA';
-        rightLbl = 'NETO DEL DÍA';
-        leftAmt = state.hudEgresosHoy;
-        rightAmt = netoHoy;
-        leftAsExpenseLine = true;
-        break;
-      case FinanzasHudModo.acumuladoIngresos:
-        mainVal = state.hudTotalIngresosHistoricoGlobal;
-        mainLabel = 'INGRESOS ACUMULADOS (TOTAL)';
-        leftLbl = 'EGRESOS ACUMULADOS';
-        rightLbl = 'CAPITAL NETO (ING − EGR)';
-        leftAmt = state.hudTotalEgresosHistoricoGlobal;
-        rightAmt = capNetoGlobal;
-        leftAsExpenseLine = true;
-        break;
-      case FinanzasHudModo.acumuladoNeto:
-        mainVal = capNetoGlobal;
-        mainLabel = 'CAPITAL LÍQUIDO (INGRESOS − EGRESOS)';
-        leftLbl = 'OPEX/CAPEX (30 DÍAS)';
-        rightLbl = 'PROYECCIÓN (30 DÍAS)';
-        leftAmt = state.hudOpex30DiasLocal;
-        rightAmt = state.hudProyeccion30DiasLocal;
-        leftAsExpenseLine = true;
-        break;
-    }
-
-    late final String status;
-    late final Color pColor;
-    switch (modo) {
-      case FinanzasHudModo.hoy:
-        final mirandoHistorico =
-            state.fechaInteligenciaHud != null && !_hudEsDiaCalendarioHoy(state);
-        if (state.hudIngresosHoy <= 0 && state.hudEgresosHoy <= 0) {
-          status = mirandoHistorico ? 'SIN MOVIMIENTOS (ESE DÍA)' : 'SIN MOVIMIENTOS HOY';
-          pColor = isDark ? Colors.white38 : Colors.black45;
-        } else if (state.hudIngresosHoy <= 0 && state.hudEgresosHoy > 0) {
-          status = mirandoHistorico ? 'SOLO EGRESOS (ESE DÍA)' : 'SOLO EGRESOS HOY';
-          pColor = const Color(0xFFE74C3C);
-        } else {
-          status = mirandoHistorico ? 'INGRESOS DEL DÍA (SELECCIONADO)' : 'INGRESOS HOY';
-          pColor = const Color(0xFF00B894);
-        }
-        break;
-      case FinanzasHudModo.acumuladoIngresos:
-        status = 'VISTA: SOLO INGRESOS';
-        pColor = gold;
-        break;
-      case FinanzasHudModo.acumuladoNeto:
-        status = _hudEstadoLiquidezLocal(state);
-        pColor = _hudColorEstadoLiquidez(status);
-        break;
-    }
-
-    Color rightValueColor() {
-      if (modo == FinanzasHudModo.hoy) {
-        return netoHoy < 0 ? const Color(0xFFE74C3C) : const Color(0xFF00B894);
-      }
-      if (modo == FinanzasHudModo.acumuladoIngresos) {
-        return capNetoGlobal < 0 ? const Color(0xFFE74C3C) : const Color(0xFF00B894);
-      }
-      return rightAmt < 0 ? const Color(0xFFE74C3C) : pColor;
-    }
-
-    Widget secondaryLine(String lbl, double amt, {required bool asExpense}) {
-      final subStyle = TextStyle(fontSize: compact ? 8.0 : 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1);
-      final valStyle = TextStyle(
-        fontSize: compact ? 14 : 20,
-        fontWeight: FontWeight.w900,
-        color: asExpense ? const Color(0xFFE74C3C) : rightValueColor(),
-        letterSpacing: -0.3,
-      );
-      final prefix = asExpense && amt >= 0 ? '-' : '';
-      final shown = asExpense ? amt.abs() : amt;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    Widget header({required bool small}) {
+      return Row(
         children: [
-          Text(lbl, style: subStyle),
-          SizedBox(height: compact ? 2 : 4),
-          Text('$prefix${shown.toCurrency()}', style: valStyle),
+          Container(
+            padding: EdgeInsets.all(small ? 8 : 10),
+            decoration: BoxDecoration(
+              color: gold.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.account_balance_wallet_outlined, color: gold, size: small ? 18 : 22),
+          ),
+          SizedBox(width: small ? 10 : 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'RESUMEN DE CAJA',
+                  style: GoogleFonts.oswald(
+                    fontSize: small ? 11 : 14,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w900,
+                    color: gold,
+                  ),
+                ),
+                Text(
+                  small ? 'Negocio y bolsillo personal' : '¿Cuánta plata hay? Separá negocio y lo tuyo.',
+                  style: TextStyle(
+                    fontSize: small ? 9 : 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       );
     }
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header(small: compact),
+        SizedBox(height: compact ? 10 : 16),
+        _buildSaldoPrincipalBlock(context, state, isDark, gold, compact: compact),
+        SizedBox(height: compact ? 12 : 16),
+        _buildHudSectionDivider('DETALLE', isDark),
+        SizedBox(height: compact ? 8 : 10),
+        _buildSaldoPorMedioSection(context, state, isDark, gold, compact: compact),
+        SizedBox(height: compact ? 10 : 14),
+        _buildOperacionHoySection(context, state, isDark, gold, compact: compact),
+      ],
+    );
 
     if (compact) {
       return Container(
@@ -1884,141 +2293,14 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
+          color: cardBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: pColor.withValues(alpha: 0.4), width: 1.5),
+          border: Border.all(color: gold.withValues(alpha: 0.35), width: 1.5),
           boxShadow: [
-            BoxShadow(
-              color: pColor.withValues(alpha: 0.1),
-              blurRadius: 20,
-              spreadRadius: -5,
-            ),
+            BoxShadow(color: gold.withValues(alpha: 0.08), blurRadius: 16, offset: const Offset(0, 6)),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildHudModoSelector(state, isDark, gold, compact: true),
-            const SizedBox(height: 10),
-            if (modo == FinanzasHudModo.hoy) _buildInteligenciaBarraDia(context, state, isDark, gold, true),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: gold.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.hub_outlined, color: gold, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('INTELIGENCIA FINANCIERA', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: gold, letterSpacing: 1.2)),
-                      if (modo == FinanzasHudModo.hoy) ...[
-                        Text(mainLabel, style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.8)),
-                        Text(
-                          'Tocá efectivo o transferencia para el detalle',
-                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.w700, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.35)),
-                        ),
-                      ] else ...[
-                        Text(mainLabel, style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 0.8)),
-                        Text(mainVal.toCurrency(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black, letterSpacing: -0.5)),
-                      ],
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('ESTADO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1)),
-                    const SizedBox(height: 2),
-                    Container(
-                      constraints: const BoxConstraints(maxWidth: 160),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: pColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: pColor.withValues(alpha: 0.2)),
-                      ),
-                      child: Text(
-                        status,
-                        textAlign: TextAlign.end,
-                        style: TextStyle(color: pColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.3),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            if (modo == FinanzasHudModo.hoy) ...[
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _hudTurnoSelector(state, isDark, gold, compact: true),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _hudTileIngresoHoyMedio(
-                      context: context,
-                      isDark: isDark,
-                      gold: gold,
-                      state: state,
-                      compact: true,
-                      label: 'EFECTIVO',
-                      monto: state.hudEfectivoNetoHoy,
-                      accent: const Color(0xFF00B894),
-                      icon: Icons.payments_outlined,
-                      bucket: 'efectivo',
-                      retirosTurno: state.hudRetirosEfectivoHoy,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _hudTileIngresoHoyMedio(
-                      context: context,
-                      isDark: isDark,
-                      gold: gold,
-                      state: state,
-                      compact: true,
-                      label: 'TRANSF.',
-                      monto: state.hudTransferenciaNetaHoy,
-                      accent: const Color(0xFF6C63FF),
-                      icon: Icons.swap_horiz_rounded,
-                      bucket: 'transferencia',
-                      retirosTurno: state.hudRetirosTransferenciaHoy,
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  () {
-                    final suf = _suffixDetalleDiaHud(state);
-                    if (suf == 'hoy') return 'Total ingresos del día: ${state.hudIngresosHoy.toCurrency()}';
-                    return 'Total ingresos ($suf): ${state.hudIngresosHoy.toCurrency()}';
-                  }(),
-                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: isDark ? Colors.white.withValues(alpha: 0.45) : Colors.black54),
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: secondaryLine(leftLbl, leftAmt, asExpense: leftAsExpenseLine)),
-                const SizedBox(width: 12),
-                Expanded(child: secondaryLine(rightLbl, rightAmt, asExpense: false)),
-              ],
-            ),
-          ],
-        ),
+        child: body,
       );
     }
 
@@ -2026,107 +2308,241 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: isDark ? Colors.black : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: pColor.withValues(alpha: 0.3), width: 1.5),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: gold.withValues(alpha: 0.35), width: 1.5),
         boxShadow: [
-          BoxShadow(color: pColor.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 12)),
+          BoxShadow(color: gold.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 10)),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('INTELIGENCIA FINANCIERA', style: GoogleFonts.oswald(fontSize: 12, letterSpacing: 2, color: gold)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: pColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(status, style: TextStyle(color: pColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+      child: body,
+    );
+  }
+
+  Future<void> _abrirHistorialBolsillo(BuildContext context, FinanzasState state, bool isDark, Color gold) async {
+    try {
+      final raw = await ref.read(egresosRepositoryProvider).getEgresosConEvento();
+      final egresos = raw.map((e) => Egreso.fromJson(e)).toList();
+      if (!context.mounted) return;
+      await showBolsilloHistorialSheet(
+        context,
+        egresos: egresos,
+        isDark: isDark,
+        gold: gold,
+        gastadoTotal: state.hudGastadoPersonalTotal,
+        retiroPendiente: state.hudRetiroPendienteTotal,
+        retiradoTotal: state.hudRetirosBolsaPersonalTotal,
+        gastadoEfectivo: state.hudGastosBolsaPersonalEfectivo,
+        gastadoTransferencia: state.hudGastosBolsaPersonalTransferencia,
+        onRefresh: () => ref.read(finanzasProvider.notifier).recargar(),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo cargar tu bolsillo: $e')),
+      );
+    }
+  }
+
+  void _abrirDetalleCobrosHistoricos(BuildContext context, FinanzasState state, bool isDark, Color gold) {
+    const green = Color(0xFF00B894);
+    final list = state.ingresosHistoricosLista;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.58,
+          maxChildSize: 0.92,
+          minChildSize: 0.35,
+          builder: (_, scrollCtrl) {
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF121218) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border.all(color: gold.withValues(alpha: 0.2)),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildHudModoSelector(state, isDark, gold, compact: false),
-          const SizedBox(height: 12),
-          if (modo == FinanzasHudModo.hoy) _buildInteligenciaBarraDia(context, state, isDark, gold, false),
-          const SizedBox(height: 20),
-          if (modo == FinanzasHudModo.hoy) ...[
-            Text(
-              mainLabel,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1.5),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Tocá cada bloque para ver concepto, monto, cliente y hora.',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, height: 1.3, color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.45)),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _hudTurnoSelector(state, isDark, gold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _hudTileIngresoHoyMedio(
-                    context: context,
-                    isDark: isDark,
-                    gold: gold,
-                    state: state,
-                    compact: false,
-                    label: 'EFECTIVO',
-                    monto: state.hudEfectivoNetoHoy,
-                    accent: const Color(0xFF00B894),
-                    icon: Icons.payments_outlined,
-                    bucket: 'efectivo',
-                    retirosTurno: state.hudRetirosEfectivoHoy,
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black26,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _hudTileIngresoHoyMedio(
-                    context: context,
-                    isDark: isDark,
-                    gold: gold,
-                    state: state,
-                    compact: false,
-                    label: 'TRANSFERENCIA',
-                    monto: state.hudTransferenciaNetaHoy,
-                    accent: const Color(0xFF6C63FF),
-                    icon: Icons.swap_horiz_rounded,
-                    bucket: 'transferencia',
-                    retirosTurno: state.hudRetirosTransferenciaHoy,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'TOTAL COBRADO (HISTÓRICO)',
+                          style: GoogleFonts.oswald(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: gold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Suma de todos los cobros registrados, sin restar gastos ni retiros.',
+                          style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white54 : Colors.black54),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          state.hudTotalIngresosHistoricoGlobal.toCurrency(),
+                          style: GoogleFonts.oswald(fontSize: 28, fontWeight: FontWeight.w900, color: gold),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            _medioChipMini('EF ${state.hudTotalIngresosHistoricoEfectivo.toCurrency()}', green, isDark),
+                            _medioChipMini(
+                              'TR ${state.hudTotalIngresosHistoricoTransferencia.toCurrency()}',
+                              const Color(0xFF6C63FF),
+                              isDark,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              () {
-                final suf = _suffixDetalleDiaHud(state);
-                if (suf == 'hoy') return 'Total ingresos del día: ${state.hudIngresosHoy.toCurrency()}';
-                return 'Total ingresos ($suf): ${state.hudIngresosHoy.toCurrency()}';
-              }(),
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: isDark ? Colors.white54 : Colors.black54),
-            ),
-            const SizedBox(height: 28),
-          ] else ...[
-            Text(mainVal.toCurrency(), style: GoogleFonts.oswald(fontSize: 44, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black, letterSpacing: -1)),
-            Text(mainLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isDark ? Colors.white38 : Colors.black38, letterSpacing: 1.5)),
-            const SizedBox(height: 32),
-          ],
-          Row(
-            children: [
-              Expanded(child: secondaryLine(leftLbl, leftAmt, asExpense: leftAsExpenseLine)),
-              Expanded(child: secondaryLine(rightLbl, rightAmt, asExpense: false)),
-            ],
-          ),
-        ],
-      ),
+                  Expanded(
+                    child: list.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No hay cobros registrados.',
+                              style: TextStyle(color: isDark ? Colors.white38 : Colors.black45, fontWeight: FontWeight.w600),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: scrollCtrl,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+                            itemCount: list.length,
+                            itemBuilder: (context, index) {
+                              final ing = list[index];
+                              final quien = ing.alumnoOCliente.trim().isNotEmpty ? ing.alumnoOCliente : ing.nombreEvento;
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                                ),
+                                child: ListTile(
+                                  title: Text(ing.concepto, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                  subtitle: Text(
+                                    '${ArTime.formatFechaCorta(ing.fecha)} · $quien',
+                                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                                  ),
+                                  trailing: Text(
+                                    ing.monto.toCurrency(),
+                                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _abrirDetalleEmpresa(BuildContext context, FinanzasState state, bool isDark, Color gold) {
+    const green = Color(0xFF00B894);
+    const red = Color(0xFFE74C3C);
+    const amber = Color(0xFFFFB74D);
+    final cap = state.hudPlataDelNegocio;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.52,
+          maxChildSize: 0.88,
+          minChildSize: 0.38,
+          builder: (_, __) {
+            return Container(
+              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF121218) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: green.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SALDO DEL NEGOCIO', style: GoogleFonts.oswald(fontSize: 18, fontWeight: FontWeight.w900, color: green)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Saldo contable: cobros menos todo lo que salió del negocio '
+                    '(operadores, gastos personales tuyos, retiros pendientes). '
+                    'Comparalo con efectivo + banco + cofre; no es un arqueo físico automático.',
+                    style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white54 : Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  _empresaDetalleLinea('Total cobrado', state.hudTotalIngresosHistoricoGlobal, green, isDark),
+                  _empresaDetalleLinea('Gastos operativos', state.hudGastosOperativosHistoricoGlobal, red, isDark, negativo: true),
+                  if (state.hudGastosPersonalEmpresaTotal > 0.01)
+                    _empresaDetalleLinea(
+                      'Gastos personales (tuyos)',
+                      state.hudGastosPersonalEmpresaTotal,
+                      red,
+                      isDark,
+                      negativo: true,
+                    ),
+                  if (state.hudRetirosBolsaPersonalTotal > 0.01)
+                    _empresaDetalleLinea(
+                      'Retiros sin gastar',
+                      state.hudRetirosBolsaPersonalTotal,
+                      amber,
+                      isDark,
+                      negativo: true,
+                    ),
+                  const Divider(height: 24),
+                  Text(
+                    cap.toCurrency(),
+                    style: GoogleFonts.oswald(fontSize: 32, fontWeight: FontWeight.w900, color: cap >= 0 ? green : red),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Saldo contable del negocio (EF ${state.hudEfectivoNetoHistorico.toCurrency()} · TR ${state.hudTransferenciaNetaHistorica.toCurrency()})',
+                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _abrirDetalleCobrosHistoricos(context, state, isDark, gold);
+                    },
+                    icon: Icon(Icons.receipt_long_rounded, size: 18, color: gold),
+                    label: Text(
+                      'Ver total cobrado histórico (${state.hudTotalIngresosHistoricoGlobal.toCurrency()})',
+                      style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -6226,6 +6642,62 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 
   /// Referencia semanal cobrada vs cupo «caja fuerte» solo uso declarativo dueño (SQLite local).
+  Widget _buildTuBolsilloMiniCard(BuildContext context, bool isDark, Color gold, FinanzasState state) {
+    const amber = Color(0xFFFFB74D);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _abrirHistorialBolsillo(context, state, isDark, gold),
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [amber.withValues(alpha: 0.85), amber],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(color: amber.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.savings_outlined, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MI BOLSILLO',
+                      style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+                    ),
+                    Text(
+                      state.hudRetiroPendienteTotal.toCurrency(),
+                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      'Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()} · Gasté ${state.hudGastadoPersonalTotal.toCurrency()}',
+                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCajaFuertePersonalSection(bool isDark, Color gold) {
     const cof = Color(0xFF5D4037);
     const amberAccent = Color(0xFFFFB74D);
@@ -6523,8 +6995,30 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildCajaFuertePersonalSection(isDark, gold),
+              _buildTuBolsilloMiniCard(context, isDark, gold, state),
+              const SizedBox(height: 16),
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  initiallyExpanded: _cajaFuerteExpanded,
+                  onExpansionChanged: (v) => setState(() => _cajaFuerteExpanded = v),
+                  title: Text(
+                    'CAJA FUERTE · cofre físico',
+                    style: GoogleFonts.oswald(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 1),
+                  ),
+                  subtitle: const Text(
+                    'Cuánto hay en el cofre según depósitos y retiros',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  children: [
+                    _buildCajaFuertePersonalSection(isDark, gold),
+                  ],
+                ),
+              ),
               const SizedBox(height: 28),
+              _sectionLabel('PAGOS DEL NEGOCIO A OPERADORES', Icons.engineering_outlined),
+              const SizedBox(height: 12),
               if (personal.isEmpty)
                 Center(child: _placeholderSinPagosPersonal(blue))
               else ...[

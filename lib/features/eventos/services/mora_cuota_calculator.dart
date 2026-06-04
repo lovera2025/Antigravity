@@ -37,6 +37,23 @@ class MoraCuotaResumen {
   });
 }
 
+/// Detalle de mora por cada cuota individualmente vencida.
+class MoraCuotaDetalle {
+  final int numeroCuota;
+  final DateTime vencimiento;
+  final int diasMora;
+  final double interesBruto;
+  final String mesLabel;
+
+  const MoraCuotaDetalle({
+    required this.numeroCuota,
+    required this.vencimiento,
+    required this.diasMora,
+    required this.interesBruto,
+    required this.mesLabel,
+  });
+}
+
 int _diasEnMes(int year, int month) => DateTime(year, month + 1, 0).day;
 
 /// Último día del mes (inscripción.month + k).
@@ -55,6 +72,38 @@ DateTime _ultimoDiaMesK(DateTime inscripcion, int k) {
 /// El campo [diaVenc] se conserva por compatibilidad pero ya no se usa.
 DateTime vencimientoPrimeraCuotaBase(DateTime inscripcionAr, int diaVenc) {
   return _ultimoDiaMesK(inscripcionAr, 1);
+}
+
+/// Vista previa al restaurar mora: monto, días (mes vencido) y Reg sugerido.
+class MoraRestauracionSimulacion {
+  final int diasMoraSolicitados;
+  final int diasMoraEfectivos;
+  final double cuotaBase;
+  final double tasaDiaria;
+  final double montoMora;
+  final int? proximaCuotaNumero;
+  final DateTime? vencimientoActual;
+  final DateTime? vencimientoCoherente;
+  final DateTime? regActual;
+  final DateTime? regSugerido;
+
+  const MoraRestauracionSimulacion({
+    this.diasMoraSolicitados = 0,
+    required this.diasMoraEfectivos,
+    required this.cuotaBase,
+    required this.tasaDiaria,
+    required this.montoMora,
+    this.proximaCuotaNumero,
+    this.vencimientoActual,
+    this.vencimientoCoherente,
+    this.regActual,
+    this.regSugerido,
+  });
+
+  bool get puedeAjustarReg =>
+      diasMoraEfectivos > 0 &&
+      regSugerido != null &&
+      vencimientoCoherente != null;
 }
 
 /// Resultado del cálculo de mora a restaurar (1% cuota × días atraso; [calcular]).
@@ -113,18 +162,32 @@ double interesSugeridoSimpleSobreMonto(
 class MoraCuotaCalculator {
   MoraCuotaCalculator._();
 
-  /// Mora a mostrar / cobrar: max entre el saldo teórico del día
-  /// (`interés acum. − historial de cobros mora`) y el remanente persistido
-  /// en [ContratoAlumno.moraPendienteTracked] (p. ej. pago parcial cuando
-  /// después el calendario pone `interesAcumulado` en 0).
+  /// Mora operativa a mostrar / cobrar para este contrato.
+  ///
+  /// - **Fórmula del día** (`interés acum. − historial cobros mora`): lógica real
+  ///   (1% cuota × días); sigue visible como “sugerido” en UI admin.
+  /// - **`moraPendienteTracked`**: remanente persistido. Si el admin lo fijó
+  ///   **por debajo** de la fórmula (caso particular), ese monto manda.
+  /// - Si tracked ≥ fórmula, se usa el máximo (piso automático tras pagos parciales
+  ///   o snapshot al liquidar cuota sin mora).
   static double pendienteDisplay({
     required double interesAcumulado,
     required double moraCobradaHistorial,
     double moraPendienteTracked = 0,
+    /// Offset persistido al avanzar cuota base (fallback si no hay pagos).
+    double moraCobradaOffset = 0,
+    /// Mora cobrada solo en el período vigente (desde el último pago de cuota base).
+    /// Si se provee, tiene prioridad sobre historial − offset.
+    double? moraCobradaPeriodo,
   }) {
-    final f = (interesAcumulado - moraCobradaHistorial)
+    final cobradaEnPeriodo = moraCobradaPeriodo ??
+        (moraCobradaHistorial - moraCobradaOffset).clamp(0.0, double.infinity);
+    final f = (interesAcumulado - cobradaEnPeriodo)
         .clamp(0.0, double.infinity);
     final t = moraPendienteTracked.clamp(0.0, double.infinity);
+    if (t > 0.01 && t < f - 0.01) {
+      return double.parse(t.toStringAsFixed(2));
+    }
     return double.parse(math.max(f, t).toStringAsFixed(2));
   }
 
@@ -190,6 +253,270 @@ class MoraCuotaCalculator {
       fechaInscripcionUsada: inscAr,
       interesAcumulado: double.parse(interes.toStringAsFixed(2)),
     );
+  }
+
+  /// Etiqueta legible de institución para UI admin.
+  static String institucionDisplay(ContratoAlumno a) {
+    final inst = (a.institucion ?? '').trim();
+    return inst.isNotEmpty ? inst : 'Sin institución';
+  }
+
+  static double cuotaBaseDe(ContratoAlumno a) {
+    final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
+    final totalBase = (a.montoTotalPactado -
+            a.mesaExtraPrecio -
+            a.sillasExtraPrecioTotal)
+        .clamp(0.0, double.infinity);
+    return double.parse(
+      (tCuotas > 0 ? totalBase / tCuotas : 0.0).toStringAsFixed(2),
+    );
+  }
+
+  /// Último día del mes de [aprox] que ya venció respecto a [hoySolo].
+  static DateTime _vencimientoMesVencidoParaDias(
+    DateTime hoySolo,
+    int diasMora,
+  ) {
+    final vApprox = hoySolo.subtract(Duration(days: diasMora));
+    var y = vApprox.year;
+    var m = vApprox.month;
+    var vEnd = DateTime(y, m, _diasEnMes(y, m));
+    if (!vEnd.isBefore(hoySolo)) {
+      m--;
+      if (m <= 0) {
+        m = 12;
+        y--;
+      }
+      vEnd = DateTime(y, m, _diasEnMes(y, m));
+    }
+    return vEnd;
+  }
+
+  /// Reg (día 1 del mes de inscripción AR) para que la cuota [proxN] venza en [venc].
+  static DateTime _inscripcionParaVencimientoCuota(
+    DateTime venc,
+    int proxN,
+  ) {
+    var m = venc.month - proxN;
+    var y = venc.year;
+    while (m <= 0) {
+      m += 12;
+      y--;
+    }
+    return DateTime(y, m, 1);
+  }
+
+  /// Reg sugerido para que la próxima cuota pendiente tenga [diasMora] días de atraso.
+  static DateTime? regSugeridoParaDiasMora(
+    ContratoAlumno a,
+    int diasMora, [
+    DateTime? ahoraAr,
+  ]) {
+    if (diasMora <= 0 || a.saldoDeudor <= 0.01) return null;
+    final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
+    final cPag = a.cuotasPagadas.clamp(0, tCuotas);
+    if (cPag >= tCuotas) return null;
+    final proxN = cPag + 1;
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+    final vCoherente = _vencimientoMesVencidoParaDias(hoySolo, diasMora);
+    return _inscripcionParaVencimientoCuota(vCoherente, proxN);
+  }
+
+  /// Reg sugerido para dejar la próxima cuota **al día** (sin mora calendario).
+  static DateTime? regSugeridoParaAlDia(ContratoAlumno a, [DateTime? ahoraAr]) {
+    if (a.saldoDeudor <= 0.01) {
+      return a.createdAt != null ? ArTime.toAr(a.createdAt!) : null;
+    }
+    final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
+    final cPag = a.cuotasPagadas.clamp(0, tCuotas);
+    if (cPag >= tCuotas) return null;
+
+    final proxN = cPag + 1;
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+
+    var y = hoySolo.year;
+    var m = hoySolo.month;
+    var vEnd = DateTime(y, m, _diasEnMes(y, m));
+    if (hoySolo.isAfter(vEnd)) {
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
+      }
+      vEnd = DateTime(y, m, _diasEnMes(y, m));
+    }
+    return _inscripcionParaVencimientoCuota(vEnd, proxN);
+  }
+
+  /// Vencimiento (mes vencido) de la cuota [numeroCuota] dado un Reg AR.
+  static DateTime vencimientoCuotaDesdeRegAr(
+    DateTime regAr,
+    int numeroCuota,
+  ) =>
+      _ultimoDiaMesK(regAr, numeroCuota);
+
+  /// Simula quitar mora persistida y recolocar Reg al día.
+  static MoraRestauracionSimulacion simularQuitarMora(
+    ContratoAlumno a, {
+    DateTime? ahoraAr,
+  }) {
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    final resumenActual = calcular(a, hoy);
+    final cuota = cuotaBaseDe(a);
+    final tasa = double.parse((cuota * 0.01).toStringAsFixed(2));
+    final regSug = regSugeridoParaAlDia(a, hoy);
+    DateTime? vCoherente;
+    if (regSug != null && resumenActual.proximaCuotaNumero != null) {
+      vCoherente = vencimientoCuotaDesdeRegAr(
+        regSug,
+        resumenActual.proximaCuotaNumero!,
+      );
+    }
+
+    return MoraRestauracionSimulacion(
+      diasMoraEfectivos: 0,
+      cuotaBase: cuota,
+      tasaDiaria: tasa,
+      montoMora: 0,
+      proximaCuotaNumero: resumenActual.proximaCuotaNumero,
+      vencimientoActual: resumenActual.fechaVencimientoProximaCuota,
+      vencimientoCoherente: vCoherente,
+      regActual: a.createdAt != null ? ArTime.toAr(a.createdAt!) : null,
+      regSugerido: regSug,
+    );
+  }
+
+  /// ISO UTC para persistir [regAr] (día de alta en huso AR).
+  static String regArAUtcIso(DateTime regAr) {
+    return DateTime.utc(regAr.year, regAr.month, regAr.day, 3, 0, 0)
+        .toIso8601String();
+  }
+
+  static MoraRestauracionSimulacion simularPorDias(
+    ContratoAlumno a,
+    int diasMora, {
+    DateTime? ahoraAr,
+  }) {
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    final resumenActual = calcular(a, hoy);
+    final cuota = cuotaBaseDe(a);
+    final tasa = double.parse((cuota * 0.01).toStringAsFixed(2));
+    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+
+    if (diasMora <= 0 || cuota <= 0.01) {
+      return MoraRestauracionSimulacion(
+        diasMoraEfectivos: 0,
+        cuotaBase: cuota,
+        tasaDiaria: tasa,
+        montoMora: 0,
+        proximaCuotaNumero: resumenActual.proximaCuotaNumero,
+        vencimientoActual: resumenActual.fechaVencimientoProximaCuota,
+        regActual: a.createdAt != null ? ArTime.toAr(a.createdAt!) : null,
+      );
+    }
+
+    final vCoherente = _vencimientoMesVencidoParaDias(hoySolo, diasMora);
+    final diasEfectivos = hoySolo.difference(vCoherente).inDays;
+    final monto = interesSugeridoSimpleSobreMonto(
+      cuota,
+      porcentajeDiario: 1.0,
+      diasMora: diasEfectivos,
+    );
+    final regSug = regSugeridoParaDiasMora(a, diasMora, hoy);
+
+    return MoraRestauracionSimulacion(
+      diasMoraSolicitados: diasMora,
+      diasMoraEfectivos: diasEfectivos,
+      cuotaBase: cuota,
+      tasaDiaria: tasa,
+      montoMora: double.parse(monto.toStringAsFixed(2)),
+      proximaCuotaNumero: resumenActual.proximaCuotaNumero,
+      vencimientoActual: resumenActual.fechaVencimientoProximaCuota,
+      vencimientoCoherente: vCoherente,
+      regActual: a.createdAt != null ? ArTime.toAr(a.createdAt!) : null,
+      regSugerido: regSug,
+    );
+  }
+
+  static MoraRestauracionSimulacion simularPorMonto(
+    ContratoAlumno a,
+    double montoMora, {
+    DateTime? ahoraAr,
+  }) {
+    final cuota = cuotaBaseDe(a);
+    final tasa = double.parse((cuota * 0.01).toStringAsFixed(2));
+    if (montoMora <= 0.01 || tasa <= 0.01) {
+      return simularPorDias(a, 0, ahoraAr: ahoraAr);
+    }
+    final diasAprox = (montoMora / tasa).round().clamp(1, 9999);
+    final sim = simularPorDias(a, diasAprox, ahoraAr: ahoraAr);
+    return MoraRestauracionSimulacion(
+      diasMoraSolicitados: diasAprox,
+      diasMoraEfectivos: sim.diasMoraEfectivos,
+      cuotaBase: sim.cuotaBase,
+      tasaDiaria: sim.tasaDiaria,
+      montoMora: double.parse(montoMora.toStringAsFixed(2)),
+      proximaCuotaNumero: sim.proximaCuotaNumero,
+      vencimientoActual: sim.vencimientoActual,
+      vencimientoCoherente: sim.vencimientoCoherente,
+      regActual: sim.regActual,
+      regSugerido: sim.regSugerido,
+    );
+  }
+
+  static const _mesesCortos = [
+    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+  ];
+
+  /// Desglose de mora por cada cuota individualmente vencida.
+  /// Retorna una entrada por cuota cuyo vencimiento ya pasó, con su interés bruto.
+  static List<MoraCuotaDetalle> calcularDesglose(ContratoAlumno a, [DateTime? ahoraAr]) {
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+
+    if (a.saldoDeudor <= 0.01) return [];
+
+    final inscAr = a.createdAt != null ? ArTime.toAr(a.createdAt!) : hoy;
+    final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
+    final totalBase = (a.montoTotalPactado - a.mesaExtraPrecio - a.sillasExtraPrecioTotal)
+        .clamp(0.0, double.infinity);
+    final cuotaPura = tCuotas > 0
+        ? double.parse((totalBase / tCuotas).toStringAsFixed(2))
+        : 0.0;
+    final cPag = a.cuotasPagadas.clamp(0, tCuotas);
+
+    if (cPag >= tCuotas || cuotaPura <= 0.01) return [];
+
+    final result = <MoraCuotaDetalle>[];
+
+    for (int n = cPag + 1; n <= tCuotas; n++) {
+      final venc = _ultimoDiaMesK(inscAr, n);
+      final vSolo = DateTime(venc.year, venc.month, venc.day);
+
+      if (!hoySolo.isAfter(vSolo)) break;
+
+      final dias = hoySolo.difference(vSolo).inDays;
+      if (dias <= 0) break;
+
+      final interes = interesSugeridoSimpleSobreMonto(
+        cuotaPura,
+        porcentajeDiario: 1.0,
+        diasMora: dias,
+      );
+
+      result.add(MoraCuotaDetalle(
+        numeroCuota: n,
+        vencimiento: venc,
+        diasMora: dias,
+        interesBruto: double.parse(interes.toStringAsFixed(2)),
+        mesLabel: '${_mesesCortos[venc.month - 1]} ${venc.year}',
+      ));
+    }
+
+    return result;
   }
 
   /// Mora a restaurar en bulk: misma regla que [calcular] (1% cuota × días atraso),

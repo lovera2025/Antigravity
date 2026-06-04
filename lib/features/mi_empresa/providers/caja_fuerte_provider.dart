@@ -19,6 +19,40 @@ class CajaFuerteResumen {
     this.ultimaAsignacionMonto = 0,
   });
 
+  /// Suma histórica de depósitos al cofre.
+  double get totalDepositado {
+    var s = 0.0;
+    for (final m in movimientos) {
+      if (m.esAsignacion) s += m.monto;
+    }
+    return s;
+  }
+
+  /// Suma histórica de retiros del cofre.
+  double get totalRetirado {
+    var s = 0.0;
+    for (final m in movimientos) {
+      if (!m.esAsignacion) s += m.monto;
+    }
+    return s;
+  }
+
+  double get retirosPersonal {
+    var s = 0.0;
+    for (final m in movimientos) {
+      if (m.motivoRetiro == CajaFuerteMotivoRetiro.personal) s += m.monto;
+    }
+    return s;
+  }
+
+  double get retirosNegocio {
+    var s = 0.0;
+    for (final m in movimientos) {
+      if (m.motivoRetiro == CajaFuerteMotivoRetiro.negocio) s += m.monto;
+    }
+    return s;
+  }
+
   /// Retiros sumados en la semana calendario AR actual.
   double get retirosSemana {
     final rango = _rangoSemanaAr();
@@ -101,7 +135,11 @@ class CajaFuerteNotifier extends AsyncNotifier<CajaFuerteResumen> {
     await refresh();
   }
 
-  Future<void> registrarRetiro(double monto, {String? nota}) async {
+  Future<void> registrarRetiro(
+    double monto, {
+    required CajaFuerteMotivoRetiro motivo,
+    String? nota,
+  }) async {
     final saldoPrevio = await ref.read(cajaFuerteRepositoryProvider).saldoActual();
     if (monto > saldoPrevio + 1e-6) {
       throw StateError('Saldo insuficiente en Caja fuerte');
@@ -110,7 +148,7 @@ class CajaFuerteNotifier extends AsyncNotifier<CajaFuerteResumen> {
     await repo.insertar(
       tipo: CajaFuerteMovimiento.tipoRetiro,
       monto: monto,
-      nota: nota,
+      nota: CajaFuerteMovimiento.empaquetarNotaRetiro(motivo, nota),
     );
     await refresh();
   }

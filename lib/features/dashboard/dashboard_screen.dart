@@ -40,7 +40,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late String _greeting;
-  String _appVersionLabel = '2.5.5';
+  String _appVersionLabel = '3.5.1';
   String _appBuildNumber = '';
   late SupabaseClient _supabase;
   RealtimeChannel? _solicitudesChannel;

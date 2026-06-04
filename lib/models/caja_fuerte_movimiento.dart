@@ -1,4 +1,4 @@
-/// Movimiento de «Caja fuerte» (asignaciones y retiros del dueño).
+/// Movimiento de «Caja fuerte»: depósitos y retiros del efectivo guardado en el cofre.
 /// SQLite + sincronización con Supabase (`caja_fuerte_movimientos`).
 class CajaFuerteMovimiento {
   final String id;
@@ -11,6 +11,9 @@ class CajaFuerteMovimiento {
 
   static const tipoAsignacion = 'asignacion';
   static const tipoRetiro = 'retiro';
+
+  static const prefijoNotaPersonal = '[Personal] ';
+  static const prefijoNotaNegocio = '[Negocio] ';
 
   const CajaFuerteMovimiento({
     required this.id,
@@ -42,4 +45,69 @@ class CajaFuerteMovimiento {
   }
 
   bool get esAsignacion => tipo == tipoAsignacion;
+
+  CajaFuerteMotivoRetiro? get motivoRetiro {
+    if (esAsignacion) return null;
+    final n = nota ?? '';
+    if (n.startsWith(prefijoNotaPersonal)) return CajaFuerteMotivoRetiro.personal;
+    if (n.startsWith(prefijoNotaNegocio)) return CajaFuerteMotivoRetiro.negocio;
+    return null;
+  }
+
+  /// Texto visible al usuario (sin prefijo de motivo).
+  String? get notaDetalle {
+    final n = nota?.trim();
+    if (n == null || n.isEmpty) return null;
+    if (n.startsWith(prefijoNotaPersonal)) {
+      final rest = n.substring(prefijoNotaPersonal.length).trim();
+      return rest.isEmpty ? null : rest;
+    }
+    if (n.startsWith(prefijoNotaNegocio)) {
+      final rest = n.substring(prefijoNotaNegocio.length).trim();
+      return rest.isEmpty ? null : rest;
+    }
+    return n;
+  }
+
+  String get etiquetaMovimiento {
+    if (esAsignacion) return 'Depósito en cofre';
+    return switch (motivoRetiro) {
+      CajaFuerteMotivoRetiro.personal => 'Retiro · gasto personal',
+      CajaFuerteMotivoRetiro.negocio => 'Retiro · gasto del negocio',
+      null => 'Retiro del cofre',
+    };
+  }
+
+  static String? empaquetarNotaRetiro(CajaFuerteMotivoRetiro motivo, String? detalle) {
+    final pref = motivo == CajaFuerteMotivoRetiro.personal ? prefijoNotaPersonal : prefijoNotaNegocio;
+    final d = detalle?.trim();
+    if (d == null || d.isEmpty) return pref.trim();
+    return '$pref$d';
+  }
+}
+
+/// Motivo de un retiro desde la caja fuerte física.
+enum CajaFuerteMotivoRetiro {
+  personal,
+  negocio,
+}
+
+extension CajaFuerteMotivoRetiroX on CajaFuerteMotivoRetiro {
+  String get label {
+    switch (this) {
+      case CajaFuerteMotivoRetiro.personal:
+        return 'Gasto personal';
+      case CajaFuerteMotivoRetiro.negocio:
+        return 'Gasto del negocio';
+    }
+  }
+
+  String get hint {
+    switch (this) {
+      case CajaFuerteMotivoRetiro.personal:
+        return 'Ej.: supermercado, nafta propia…';
+      case CajaFuerteMotivoRetiro.negocio:
+        return 'Ej.: operador, insumos, delivery…';
+    }
+  }
 }
