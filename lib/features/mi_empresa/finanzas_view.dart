@@ -1933,12 +1933,20 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         header(small: compact),
         SizedBox(height: compact ? 10 : 16),
         _buildSaldoPrincipalBlock(context, state, isDark, gold, compact: compact),
-        SizedBox(height: compact ? 12 : 16),
-        _buildHudSectionDivider('DETALLE', isDark),
-        SizedBox(height: compact ? 8 : 10),
-        _buildSaldoPorMedioSection(context, state, isDark, gold, compact: compact),
-        SizedBox(height: compact ? 10 : 14),
-        _buildOperacionHoySection(context, state, isDark, gold, compact: compact),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text('VER DESGLOSE Y HOY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: gold, letterSpacing: 1.5)),
+            children: [
+              _buildHudSectionDivider('DETALLE', isDark),
+              SizedBox(height: compact ? 8 : 10),
+              _buildSaldoPorMedioSection(context, state, isDark, gold, compact: compact),
+              SizedBox(height: compact ? 10 : 14),
+              _buildOperacionHoySection(context, state, isDark, gold, compact: compact),
+            ],
+          ),
+        ),
       ],
     );
 
@@ -3390,39 +3398,49 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 ],
               );
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 0 · HERO: Health Score 0-100 (gauge + pilares + runway)
-            _buildHealthScoreHero(
-              isDark,
-              gold,
-              state,
-              runwayKey: _keySaludRunway,
-              onPillarTap: _onSaludPillarTap,
-            ),
-            const SizedBox(height: 24),
-            // A · Resumen del mes
-            KeyedSubtree(
-              key: _keySaludResumen,
-              child: _buildResumenMes(isDark, gold, state),
-            ),
-            const SizedBox(height: 24),
-            // B–F · Pulso, categorías, rentabilidad, por cobrar (grid 2×2 si ancho ≥ 1100)
-            cuatroBloquesSalud,
-            const SizedBox(height: 24),
-            // C · Comparativa mensual
-            KeyedSubtree(
-              key: _keySaludTabla,
-              child: _buildTablaAnualDinamica(isDark, gold, const Color(0xFF00B894), const Color(0xFFE74C3C), state),
-            ),
-            const SizedBox(height: 24),
-            // G · Alertas
-            KeyedSubtree(
-              key: _keySaludAlertas,
-              child: _buildAlertasGestion(isDark, gold),
-            ),
-          ],
+        return Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHealthScoreHero(
+                isDark,
+                gold,
+                state,
+                runwayKey: _keySaludRunway,
+                onPillarTap: _onSaludPillarTap,
+              ),
+              const SizedBox(height: 24),
+              ExpansionTile(
+                title: Text('RESUMEN Y COMPARATIVA DEL MES', style: TextStyle(color: gold, fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 13)),
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                children: [
+                  KeyedSubtree(
+                    key: _keySaludResumen,
+                    child: _buildResumenMes(isDark, gold, state),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ExpansionTile(
+                title: Text('ANÁLISIS PROFUNDO Y RENTABILIDAD', style: TextStyle(color: gold, fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 13)),
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                children: [
+                  cuatroBloquesSalud,
+                  const SizedBox(height: 24),
+                  KeyedSubtree(
+                    key: _keySaludTabla,
+                    child: _buildTablaAnualDinamica(isDark, gold, const Color(0xFF00B894), const Color(0xFFE74C3C), state),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              KeyedSubtree(
+                key: _keySaludAlertas,
+                child: _buildAlertasGestion(isDark, gold),
+              ),
+            ],
+          ),
         );
       },
     );
