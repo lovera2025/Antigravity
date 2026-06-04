@@ -15,6 +15,7 @@ import '../../../main.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../bolsa_personal_helpers.dart';
+import '../../dashboard/providers/dashboard_provider.dart';
 
 export '../bolsa_personal_helpers.dart' show finanzasEgresoAfectaCajaEmpresa;
 
@@ -1029,3 +1030,111 @@ class ContratosMutationTick extends Notifier<int> {
 
 final contratosMutationTickProvider =
     NotifierProvider<ContratosMutationTick, int>(ContratosMutationTick.new);
+
+class MesData {
+  final DateTime mes;
+  final double ingresos;
+  final double egresos;
+  double get neto => ingresos - egresos;
+  const MesData({required this.mes, required this.ingresos, required this.egresos});
+}
+
+MesData calcularMesData(FinanzasState state, DateTime mesInicio) {
+  final mes = DateTime(mesInicio.year, mesInicio.month, 1);
+  final siguiente = DateTime(mes.year, mes.month + 1, 1);
+  final ing = state.ingresos
+      .where((x) => !x.fecha.isBefore(mes) && x.fecha.isBefore(siguiente))
+      .fold(0.0, (s, e) => s + e.monto);
+  final eg = state.egresos
+      .where((x) => x.fecha != null && !x.fecha!.isBefore(mes) && x.fecha!.isBefore(siguiente))
+      .fold(0.0, (s, e) => s + e.monto);
+  return MesData(mes: mes, ingresos: ing, egresos: eg);
+}
+
+class HealthScoreData {
+  final double score;
+  final double liquidez;
+  final double margen;
+  final double momentum;
+  final double alertas;
+  final double runwayMeses;
+  final double margenPct;
+  final double deltaIngPct;
+  final int alertasCount;
+
+  const HealthScoreData({
+    required this.score,
+    required this.liquidez,
+    required this.margen,
+    required this.momentum,
+    required this.alertas,
+    required this.runwayMeses,
+    required this.margenPct,
+    required this.deltaIngPct,
+    required this.alertasCount,
+  });
+}
+
+HealthScoreData calcularHealthScore(FinanzasState state, int alertasFinancieras) {
+  final capNeto = state.hudTotalIngresosHistoricoGlobal - state.hudTotalEgresosHistoricoGlobal;
+  final opex = state.hudOpex30DiasLocal.abs();
+
+  double runwayMeses;
+  if (opex <= 0) {
+    runwayMeses = capNeto > 0 ? 999 : 0;
+  } else {
+    runwayMeses = (capNeto / opex).clamp(0.0, 999.0);
+  }
+  final liquidez = (runwayMeses / 6.0).clamp(0.0, 1.0) * 30.0;
+
+  final ingHist = state.hudTotalIngresosHistoricoGlobal;
+  final margenPct = ingHist > 0 ? (capNeto / ingHist) : 0.0;
+  final margen = (margenPct / 0.30).clamp(0.0, 1.0) * 30.0;
+
+  final nowAr = ArTime.nowAr();
+  final mesAct = DateTime(nowAr.year, nowAr.month, 1);
+  final mesPrev = DateTime(mesAct.year, mesAct.month - 1, 1);
+  final curr = calcularMesData(state, mesAct);
+  final prev = calcularMesData(state, mesPrev);
+  double deltaPct;
+  if (prev.ingresos <= 0) {
+    deltaPct = curr.ingresos > 0 ? 1.0 : 0.0;
+  } else {
+    deltaPct = (curr.ingresos - prev.ingresos) / prev.ingresos;
+  }
+  final momentumNorm = ((deltaPct + 0.20) / 0.40).clamp(0.0, 1.0);
+  final momentum = momentumNorm * 25.0;
+
+  final alertas = (15.0 - alertasFinancieras * 3.0).clamp(0.0, 15.0);
+
+  final score = (liquidez + margen + momentum + alertas).clamp(0.0, 100.0);
+
+  return HealthScoreData(
+    score: score,
+    liquidez: liquidez,
+    margen: margen,
+    momentum: momentum,
+    alertas: alertas,
+    runwayMeses: runwayMeses,
+    margenPct: margenPct,
+    deltaIngPct: deltaPct,
+    alertasCount: alertasFinancieras,
+  );
+}
+
+final healthScoreProvider = Provider<AsyncValue<HealthScoreData>>((ref) {
+  final finanzasState = ref.watch(finanzasProvider);
+  final statsState = ref.watch(dashboardStatsProvider);
+
+  return finanzasState.when(
+    data: (state) {
+      final alertasCount = statsState.maybeWhen(
+        data: (s) => s.alertas.where((a) => a.isFinanciera).length,
+        orElse: () => 0,
+      );
+      return AsyncValue.data(calcularHealthScore(state, alertasCount));
+    },
+    loading: () => const AsyncValue.loading(),
+    error: (err, stack) => AsyncValue.error(err, stack),
+  );
+});

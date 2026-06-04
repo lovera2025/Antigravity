@@ -2,7 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../common/utils/currency_extensions.dart';
-import '../finanzas_view.dart';
+
 import '../providers/finanzas_provider.dart';
  // For state dependencies if any
 

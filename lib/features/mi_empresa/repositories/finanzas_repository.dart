@@ -4,14 +4,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../main.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
+import '../../../core/services/connectivity_service.dart';
+import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../models/ingreso_detallado.dart';
 
 class FinanzasRepository {
   final SupabaseClient _supabase;
+  final ConnectivityService _connectivity;
+  final SyncEngine _syncEngine;
 
-  FinanzasRepository(this._supabase);
+  FinanzasRepository(this._supabase, this._connectivity, this._syncEngine);
 
   /// ISO desde SQLite/Supabase → instante UTC canónico (sin conversión AR aquí:
   /// [ArTime.toAr] se aplica en UI y en [ArTime.mismoMes]/[ArTime.mismoDia]).
@@ -349,41 +353,44 @@ class FinanzasRepository {
       final tabla = mapeoTablas[key]!;
 
       for (var id in ids) {
-        // 1. Borrar remoto (si hay red)
-        try {
-          await _supabase.from(tabla).delete().eq('id', id);
-        } catch (e) {
-          debugPrint('⚠️ Error eliminando remoto ($tabla:$id): $e');
-        }
-
-        // 2. Borrar local
+        // 1. Borrar local
         await db.delete(tabla, where: 'id = ?', whereArgs: [id]);
 
         // Manejo especial para tablas que requieren borrado por FK antes de borrar al padre en la misma purga
         if (key == 'presupuestos') {
           await db.delete('presupuesto_servicios', where: 'presupuesto_id = ?', whereArgs: [id]);
-          try { await _supabase.from('presupuesto_servicios').delete().eq('presupuesto_id', id); } catch (_) {}
         }
         if (key == 'eventos') {
           await db.delete('eventos_servicios', where: 'evento_id = ?', whereArgs: [id]);
-          try { await _supabase.from('eventos_servicios').delete().eq('evento_id', id); } catch (_) {}
         }
         
-        // 3. Limpiar cola de sync
-        await db.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: [tabla, id]);
+        // 2. Encolar eliminación para sincronizar con la nube
+        await SyncQueue.enqueue(
+          tabla: tabla,
+          operacion: SyncOperation.delete,
+          registroId: id,
+          payload: {},
+        );
       }
+    }
+
+    if (_connectivity.currentStatus == AppConnectivity.online) {
+      _syncEngine.syncNow();
     }
   }
 
   Future<void> _eliminarFilaSync(String tabla, String id) async {
     final db = await LocalDatabase.instance;
-    try {
-      await _supabase.from(tabla).delete().eq('id', id);
-    } catch (e) {
-      debugPrint('⚠️ Error eliminando remoto ($tabla:$id): $e');
-    }
     await db.delete(tabla, where: 'id = ?', whereArgs: [id]);
-    await db.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: [tabla, id]);
+    await SyncQueue.enqueue(
+      tabla: tabla,
+      operacion: SyncOperation.delete,
+      registroId: id,
+      payload: {},
+    );
+    if (_connectivity.currentStatus == AppConnectivity.online) {
+      _syncEngine.syncNow();
+    }
   }
 
   /// Borra líneas, pagos y cabecera del préstamo (local, remoto y cola).
@@ -596,5 +603,9 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
 }
 
 final finanzasRepositoryProvider = Provider<FinanzasRepository>((ref) {
-  return FinanzasRepository(ref.watch(supabaseProvider));
+  return FinanzasRepository(
+    ref.watch(supabaseProvider),
+    ref.watch(connectivityServiceProvider),
+    ref.watch(syncEngineProvider),
+  );
 });

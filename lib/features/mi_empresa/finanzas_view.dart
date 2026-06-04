@@ -119,91 +119,7 @@ List<_MesData> _ultimosMesesDatos(FinanzasState state, {int cantidad = 6}) {
   return out;
 }
 
-/// Score compuesto 0-100 de salud financiera, descompuesto en 4 pilares
-/// ponderados. Usa solo señales que ya calcula el provider.
-class _HealthScoreData {
-  /// 0-100
-  final double score;
-  /// 0-30 — runway en meses respecto al OPEX
-  final double liquidez;
-  /// 0-30 — margen neto histórico
-  final double margen;
-  /// 0-25 — variación % de ingresos mes vs mes anterior
-  final double momentum;
-  /// 0-15 — penalidad por alertas financieras activas
-  final double alertas;
-  /// Meses de oxígeno (capital neto / opex 30d). Saturado en 999 si no hay egresos.
-  final double runwayMeses;
-  /// % margen histórico (ing - eg) / ing.
-  final double margenPct;
-  /// Δ ingresos mes actual vs mes anterior (p.ej. 0.12 = +12%).
-  final double deltaIngPct;
-  final int alertasCount;
 
-  const _HealthScoreData({
-    required this.score,
-    required this.liquidez,
-    required this.margen,
-    required this.momentum,
-    required this.alertas,
-    required this.runwayMeses,
-    required this.margenPct,
-    required this.deltaIngPct,
-    required this.alertasCount,
-  });
-}
-
-_HealthScoreData _calcularHealthScore(FinanzasState state, int alertasFinancieras) {
-  final capNeto = state.hudTotalIngresosHistoricoGlobal - state.hudTotalEgresosHistoricoGlobal;
-  final opex = state.hudOpex30DiasLocal.abs();
-
-  // 1. Liquidez (runway): 30 pts si ≥ 6 meses de oxígeno.
-  double runwayMeses;
-  if (opex <= 0) {
-    runwayMeses = capNeto > 0 ? 999 : 0;
-  } else {
-    runwayMeses = (capNeto / opex).clamp(0.0, 999.0);
-  }
-  final liquidez = (runwayMeses / 6.0).clamp(0.0, 1.0) * 30.0;
-
-  // 2. Margen histórico: 30 pts si el margen neto ≥ 30%.
-  final ingHist = state.hudTotalIngresosHistoricoGlobal;
-  final margenPct = ingHist > 0 ? (capNeto / ingHist) : 0.0;
-  final margen = (margenPct / 0.30).clamp(0.0, 1.0) * 30.0;
-
-  // 3. Momentum: Δ% ingresos mes actual vs mes anterior.
-  //    -20% → 0 pts, 0% → 12.5 pts, +20% → 25 pts (lineal).
-  final nowAr = ArTime.nowAr();
-  final mesAct = DateTime(nowAr.year, nowAr.month, 1);
-  final mesPrev = DateTime(mesAct.year, mesAct.month - 1, 1);
-  final curr = _calcularMesData(state, mesAct);
-  final prev = _calcularMesData(state, mesPrev);
-  double deltaPct;
-  if (prev.ingresos <= 0) {
-    deltaPct = curr.ingresos > 0 ? 1.0 : 0.0;
-  } else {
-    deltaPct = (curr.ingresos - prev.ingresos) / prev.ingresos;
-  }
-  final momentumNorm = ((deltaPct + 0.20) / 0.40).clamp(0.0, 1.0);
-  final momentum = momentumNorm * 25.0;
-
-  // 4. Alertas: 15 pts base, -3 por cada alerta financiera activa.
-  final alertas = (15.0 - alertasFinancieras * 3.0).clamp(0.0, 15.0);
-
-  final score = (liquidez + margen + momentum + alertas).clamp(0.0, 100.0);
-
-  return _HealthScoreData(
-    score: score,
-    liquidez: liquidez,
-    margen: margen,
-    momentum: momentum,
-    alertas: alertas,
-    runwayMeses: runwayMeses,
-    margenPct: margenPct,
-    deltaIngPct: deltaPct,
-    alertasCount: alertasFinancieras,
-  );
-}
 
 List<IngresoDetallado> _ingresosVista(FinanzasState state) {
   final f = state.fechaExactaFiltro;
@@ -2706,182 +2622,192 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     Key? runwayKey,
     void Function(_SaludPillarTap)? onPillarTap,
   }) {
-    final statsAsync = ref.watch(dashboardStatsProvider);
-    final alertasCount = statsAsync.maybeWhen(
-      data: (s) => s.alertas.where((a) => a.isFinanciera).length,
-      orElse: () => 0,
-    );
-    final hs = _calcularHealthScore(state, alertasCount);
+    final healthScoreAsync = ref.watch(healthScoreProvider);
 
-    final Color scoreColor;
-    final String scoreLabel;
-    final IconData scoreIcon;
-    if (hs.score < 40) {
-      scoreColor = const Color(0xFFE74C3C);
-      scoreLabel = 'HAY QUE VERLA';
-      scoreIcon = Icons.warning_amber_rounded;
-    } else if (hs.score < 70) {
-      scoreColor = const Color(0xFFF39C12);
-      scoreLabel = 'OJO, AJUSTADO';
-      scoreIcon = Icons.visibility_outlined;
-    } else {
-      scoreColor = const Color(0xFF00B894);
-      scoreLabel = 'TODO EN ORDEN';
-      scoreIcon = Icons.favorite_rounded;
-    }
-
-    final cardBg = isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white;
-    final trackColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
-    final tickColor = isDark
-        ? Colors.white.withValues(alpha: 0.35)
-        : Colors.black.withValues(alpha: 0.3);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.7),
-            isDark ? Colors.white.withValues(alpha: 0.02) : Colors.white.withValues(alpha: 0.3),
-          ],
+    return healthScoreAsync.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
         ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: scoreColor.withValues(alpha: 0.6), 
-          width: 2.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: scoreColor.withValues(alpha: 0.25),
-            blurRadius: 40,
-            spreadRadius: 2,
-            offset: const Offset(0, 12),
-          ),
-        ],
       ),
-      child: LayoutBuilder(
-        builder: (ctx, cons) {
-          // Tres columnas (gauge | pilares | runway) solo si entra cómodo; si no, apilado.
-          final isWide = cons.maxWidth >= 920;
+      error: (err, stack) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Error al calcular salud financiera: $err', style: const TextStyle(color: Colors.red)),
+        ),
+      ),
+      data: (hs) {
+        final Color scoreColor;
+        final String scoreLabel;
+        final IconData scoreIcon;
+        if (hs.score < 40) {
+          scoreColor = const Color(0xFFE74C3C);
+          scoreLabel = 'HAY QUE VERLA';
+          scoreIcon = Icons.warning_amber_rounded;
+        } else if (hs.score < 70) {
+          scoreColor = const Color(0xFFF39C12);
+          scoreLabel = 'OJO, AJUSTADO';
+          scoreIcon = Icons.visibility_outlined;
+        } else {
+          scoreColor = const Color(0xFF00B894);
+          scoreLabel = 'TODO EN ORDEN';
+          scoreIcon = Icons.favorite_rounded;
+        }
 
-          final gaugeBlock = _buildHealthGauge(
-            hs: hs,
-            scoreColor: scoreColor,
-            scoreLabel: scoreLabel,
-            scoreIcon: scoreIcon,
-            trackColor: trackColor,
-            tickColor: tickColor,
-            isDark: isDark,
-            gold: gold,
-          );
+        final trackColor = isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06);
+        final tickColor = isDark
+            ? Colors.white.withValues(alpha: 0.35)
+            : Colors.black.withValues(alpha: 0.3);
 
-          final pillarsBlock = _buildHealthPillars(
-            hs: hs,
-            isDark: isDark,
-            gold: gold,
-            onPillarTap: onPillarTap,
-          );
-
-          final runwayBlock = _buildRunwayBlock(
-            key: runwayKey,
-            hs: hs,
-            scoreColor: scoreColor,
-            isDark: isDark,
-            gold: gold,
-          );
-
-          Widget header = Row(
-            children: [
-              Icon(Icons.monitor_heart_outlined, color: gold, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'SALUD FINANCIERA',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.oswald(
-                    fontSize: 14,
-                    letterSpacing: 2.2,
-                    color: gold,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.7),
+                isDark ? Colors.white.withValues(alpha: 0.02) : Colors.white.withValues(alpha: 0.3),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: scoreColor.withValues(alpha: 0.6), 
+              width: 2.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: scoreColor.withValues(alpha: 0.25),
+                blurRadius: 40,
+                spreadRadius: 2,
+                offset: const Offset(0, 12),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: scoreColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: scoreColor.withValues(alpha: 0.35)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(scoreIcon, size: 12, color: scoreColor),
-                    const SizedBox(width: 6),
-                    Text(
-                      scoreLabel,
-                      style: TextStyle(
-                        fontSize: 10,
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (ctx, cons) {
+              // Tres columnas (gauge | pilares | runway) solo si entra cómodo; si no, apilado.
+              final isWide = cons.maxWidth >= 920;
+
+              final gaugeBlock = _buildHealthGauge(
+                hs: hs,
+                scoreColor: scoreColor,
+                scoreLabel: scoreLabel,
+                scoreIcon: scoreIcon,
+                trackColor: trackColor,
+                tickColor: tickColor,
+                isDark: isDark,
+                gold: gold,
+              );
+
+              final pillarsBlock = _buildHealthPillars(
+                hs: hs,
+                isDark: isDark,
+                gold: gold,
+                onPillarTap: onPillarTap,
+              );
+
+              final runwayBlock = _buildRunwayBlock(
+                key: runwayKey,
+                hs: hs,
+                scoreColor: scoreColor,
+                isDark: isDark,
+                gold: gold,
+              );
+
+              Widget header = Row(
+                children: [
+                  Icon(Icons.monitor_heart_outlined, color: gold, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'SALUD FINANCIERA',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.oswald(
+                        fontSize: 14,
+                        letterSpacing: 2.2,
+                        color: gold,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                        color: scoreColor,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ],
-          );
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: scoreColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: scoreColor.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(scoreIcon, size: 12, color: scoreColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          scoreLabel,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                            color: scoreColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
 
-          if (isWide) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                header,
-                const SizedBox(height: 20),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              if (isWide) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(width: 220, height: 220, child: gaugeBlock),
-                    const SizedBox(width: 20),
-                    Expanded(child: pillarsBlock),
-                    const SizedBox(width: 16),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 152, maxWidth: 200),
-                      child: runwayBlock,
+                    header,
+                    const SizedBox(height: 20),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(width: 220, height: 220, child: gaugeBlock),
+                        const SizedBox(width: 20),
+                        Expanded(child: pillarsBlock),
+                        const SizedBox(width: 16),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 152, maxWidth: 200),
+                          child: runwayBlock,
+                        ),
+                      ],
                     ),
                   ],
-                ),
-              ],
-            );
-          }
+                );
+              }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              header,
-              const SizedBox(height: 20),
-              Center(child: SizedBox(width: 220, height: 220, child: gaugeBlock)),
-              const SizedBox(height: 24),
-              pillarsBlock,
-              const SizedBox(height: 20),
-              runwayBlock,
-            ],
-          );
-        },
-      ),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  header,
+                  const SizedBox(height: 20),
+                  Center(child: SizedBox(width: 220, height: 220, child: gaugeBlock)),
+                  const SizedBox(height: 24),
+                  pillarsBlock,
+                  const SizedBox(height: 20),
+                  runwayBlock,
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
   Widget _buildHealthGauge({
-    required _HealthScoreData hs,
+    required HealthScoreData hs,
     required Color scoreColor,
     required String scoreLabel,
     required IconData scoreIcon,
@@ -2950,7 +2876,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 
   Widget _buildHealthPillars({
-    required _HealthScoreData hs,
+    required HealthScoreData hs,
     required bool isDark,
     required Color gold,
     void Function(_SaludPillarTap)? onPillarTap,
@@ -3133,7 +3059,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
 
   Widget _buildRunwayBlock({
     Key? key,
-    required _HealthScoreData hs,
+    required HealthScoreData hs,
     required Color scoreColor,
     required bool isDark,
     required Color gold,
