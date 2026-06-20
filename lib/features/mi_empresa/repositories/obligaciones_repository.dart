@@ -29,9 +29,6 @@ class ObligacionesRepository {
       payload: data,
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   Future<void> eliminarObligacion(String id) async {
@@ -45,9 +42,6 @@ class ObligacionesRepository {
       payload: {},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Lectura puramente local: el SyncEngine es el responsable de mantener

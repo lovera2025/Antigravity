@@ -68,7 +68,8 @@ DateTime? _ultimoPagoAlPlan(Iterable<Map<String, dynamic>> pagos) {
   DateTime? last;
   for (final p in list) {
     if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
-    if (_esInteresPago(p['concepto']?.toString())) continue;
+    if (_esInteresPago(p['concepto']?.toString()) ||
+        esPagoCargoCanalPorConcepto(p['concepto']?.toString())) continue;
     final fp = p['fecha_pago']?.toString();
     if (fp == null) continue;
     final d = DateTime.tryParse(fp);
@@ -522,8 +523,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
         // Cálculo de cuotas vencidas
         final c = a;
         final now = ArTime.nowAr();
-        final inscrip = c.createdAt ?? now;
-        final inscAr = ArTime.toAr(inscrip);
+        final inscAr = c.createdAt != null ? ArTime.toAr(c.createdAt!) : now;
         final tCuotas = c.totalCuotas > 0 ? c.totalCuotas : 1;
         
         final totalBase = (c.montoTotalPactado - c.mesaExtraPrecio - c.sillasExtraPrecioTotal).clamp(0.0, double.infinity);
@@ -758,16 +758,15 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
     // Cuando el realtime de finanzas refresca (anulación de cobros, etc.), reconsultamos
     // los contratos del evento elegido para que el contador "X / N" no quede desfasado.
     ref.listen<AsyncValue<FinanzasState>>(finanzasProvider, (prev, next) async {
-      if (_eventoId != null) {
-        final c = await ref.read(contratosRepositoryProvider).getByEvento(_eventoId!);
-        if (!mounted) return;
-        setState(() => _contratos = c);
-        await _armarFilas(_institucion);
-      }
+      if (_eventoId == null || !mounted) return;
+      final c = await ref.read(contratosRepositoryProvider).getByEvento(_eventoId!);
+      if (!mounted) return;
+      setState(() => _contratos = c);
+      await _armarFilas(_institucion);
     });
 
     ref.listen<int>(contratosMutationTickProvider, (prev, next) async {
-      if (prev == next || _eventoId == null) return;
+      if (prev == next || _eventoId == null || !mounted) return;
       await _cargarContratosYarmar(_eventoId);
     });
 

@@ -59,9 +59,6 @@ class RentabilidadConfigRepository {
         payload: map,
       );
 
-      if (_connectivity.currentStatus == AppConnectivity.online) {
-        _syncEngine.syncNow();
-      }
     } catch (e) {
       debugPrint('Error guardando config de rentabilidad: $e');
       rethrow;

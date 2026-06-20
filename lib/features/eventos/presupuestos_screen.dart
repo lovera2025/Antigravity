@@ -495,7 +495,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                             onPressed: () async {
                               await ref.read(presupuestosRepositoryProvider).cambiarEstado(p.id, EstadoPresupuesto.enviado);
                               if (!context.mounted) return;
-                              await PdfService.generarPresupuestoElite(p);
+                              await PdfService.generarPresupuestoElite(p, context: context);
                               if (!context.mounted) return;
                               await _refrescarLista(pullRemote: false);
                             },
@@ -506,7 +506,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                         const SizedBox(width: 8),
                       ] else ...[
                         OutlinedButton(
-                          onPressed: () => PdfService.generarPresupuestoElite(p),
+                          onPressed: () => PdfService.generarPresupuestoElite(p, context: context),
                           style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                           child: const Icon(Icons.picture_as_pdf_outlined, size: 18),
                         ),
@@ -591,6 +591,7 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
           cantidadesIniciales: { for (var s in p.servicios) s.id: s.cantidad },
           gruposIniciales: { for (var s in p.servicios) s.id: s.grupo },
           comboOrdenIniciales: { for (var s in p.servicios) s.id: s.comboOrden },
+          extrasIniciales: { for (var s in p.servicios) s.id: s.esExtra },
           descripcionesIniciales: { for (var s in p.servicios) s.id: s.detalleServicio },
           detalleAnclajeIA: p.detalleAnclaje,
           lugar: p.lugar,

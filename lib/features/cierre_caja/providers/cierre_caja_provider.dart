@@ -7,7 +7,9 @@ import '../../../models/egreso.dart';
 import '../../egresos/repositories/egresos_repository.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../mi_empresa/repositories/finanzas_repository.dart';
+import '../models/guia_cambio_movimiento.dart';
 import '../models/turno_caja.dart';
+import '../repositories/cierre_caja_repository.dart';
 
 class CierreCajaState {
   final DateTime dia;
@@ -16,35 +18,31 @@ class CierreCajaState {
   /// Hora AR (0..23) en la que termina la mañana y arranca la tarde.
   final int corteHorarioAr;
 
-  /// Día/turno actuales.
   final List<IngresoDetallado> ingresosTurno;
   final List<Egreso> egresosTurno;
-
-  /// Subset de [egresosTurno] cuya categoría es [kCategoriaRetiroCaja].
   final List<Egreso> retirosTurno;
-
-  /// Egresos del mismo turno que **no** son retiros de caja (p. ej. Personal, Proveedores).
   final List<Egreso> otrosEgresosTurno;
 
   final double efectivoBruto;
   final double transferenciaBruta;
-
-  /// Suma de TODOS los egresos del turno en efectivo (retiros + otros).
   final double egresosEfectivo;
-  /// Suma de TODOS los egresos del turno en transferencia (retiros + otros).
   final double egresosTransferencia;
-
-  /// Solo egresos categoría [kCategoriaRetiroCaja] por medio (para PDF/detalle).
   final double retirosEfectivo;
   final double retirosTransferencia;
-
-  /// Neto real = ingresos − TODOS los egresos del turno por medio.
   final double efectivoNeto;
   final double transferenciaNeta;
   final double totalNeto;
 
-  /// Fondo de cambio **solo guía** (SharedPreferences por día). No participa en ingresos/egresos.
+  /// Guía de cambio del día (no contable). Saldo derivado del historial SQLite.
   final double fondoCambioGuia;
+  final List<GuiaCambioMovimiento> guiaCambioMovimientos;
+  final int guiaCantReposiciones;
+  final int guiaCantUsos;
+  final double guiaTotalReposiciones;
+  final double guiaTotalUsos;
+
+  /// Anotación opcional para PDF del turno activo.
+  final String anotacionTurno;
 
   final bool cargando;
   final Object? error;
@@ -67,6 +65,12 @@ class CierreCajaState {
     this.transferenciaNeta = 0,
     this.totalNeto = 0,
     this.fondoCambioGuia = 0,
+    this.guiaCambioMovimientos = const [],
+    this.guiaCantReposiciones = 0,
+    this.guiaCantUsos = 0,
+    this.guiaTotalReposiciones = 0,
+    this.guiaTotalUsos = 0,
+    this.anotacionTurno = '',
     this.cargando = false,
     this.error,
   });
@@ -89,6 +93,12 @@ class CierreCajaState {
     double? transferenciaNeta,
     double? totalNeto,
     double? fondoCambioGuia,
+    List<GuiaCambioMovimiento>? guiaCambioMovimientos,
+    int? guiaCantReposiciones,
+    int? guiaCantUsos,
+    double? guiaTotalReposiciones,
+    double? guiaTotalUsos,
+    String? anotacionTurno,
     bool? cargando,
     Object? error,
     bool clearError = false,
@@ -111,6 +121,12 @@ class CierreCajaState {
       transferenciaNeta: transferenciaNeta ?? this.transferenciaNeta,
       totalNeto: totalNeto ?? this.totalNeto,
       fondoCambioGuia: fondoCambioGuia ?? this.fondoCambioGuia,
+      guiaCambioMovimientos: guiaCambioMovimientos ?? this.guiaCambioMovimientos,
+      guiaCantReposiciones: guiaCantReposiciones ?? this.guiaCantReposiciones,
+      guiaCantUsos: guiaCantUsos ?? this.guiaCantUsos,
+      guiaTotalReposiciones: guiaTotalReposiciones ?? this.guiaTotalReposiciones,
+      guiaTotalUsos: guiaTotalUsos ?? this.guiaTotalUsos,
+      anotacionTurno: anotacionTurno ?? this.anotacionTurno,
       cargando: cargando ?? this.cargando,
       error: clearError ? null : (error ?? this.error),
     );
@@ -124,55 +140,11 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
   static const _kPrefsDiaKey = 'cierre_caja_vista_dia_ar';
   static const _kPrefsTurnoKey = 'cierre_caja_vista_turno_slug';
 
-  /// Guía de cambio persistida **solo por día calendario** (al pasar de jornada = día nuevo → empieza en 0).
-  static String _prefsKeyGuiaCambio(DateTime dia) {
-    final n = DateTime(dia.year, dia.month, dia.day);
-    return 'cierre_caja_guia_cambio_v1_${n.year.toString().padLeft(4, '0')}-'
-        '${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
-  }
-
-  Future<double> _loadGuiaCambioSaldo(DateTime dia) async {
-    try {
-      final p = await SharedPreferences.getInstance();
-      return p.getDouble(_prefsKeyGuiaCambio(dia)) ?? 0;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  Future<void> _persistGuiaCambio(DateTime dia, double valor) async {
-    try {
-      final p = await SharedPreferences.getInstance();
-      final v = valor < 0 ? 0.0 : valor;
-      await p.setDouble(_prefsKeyGuiaCambio(dia), v);
-    } catch (_) {}
-  }
-
-  /// Saldo absoluto del fondo de cambio (guía). No toca movimientos contables.
-  Future<void> setFondoCambioGuia(double valor) async {
-    final v = valor < 0 ? 0.0 : valor;
-    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    await _persistGuiaCambio(dia, v);
-    state = state.copyWith(fondoCambioGuia: v);
-  }
-
-  /// Resta del fondo de cambio (guía). El saldo no baja de cero.
-  Future<void> registrarUsoCambioGuia(double monto) async {
-    if (monto <= 0) {
-      throw ArgumentError('El monto debe ser mayor a cero.');
-    }
-    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    final nuevo = (state.fondoCambioGuia - monto).clamp(0.0, double.infinity);
-    await _persistGuiaCambio(dia, nuevo);
-    state = state.copyWith(fondoCambioGuia: nuevo);
-  }
-
   static DateTime _diaArHoy() {
     final ar = ArTime.nowAr();
     return DateTime(ar.year, ar.month, ar.day);
   }
 
-  /// `yyyy-mm-dd` en calendario (sin TZ ambiguos).
   static String _fechaAString(DateTime dia) =>
       '${dia.year.toString().padLeft(4, '0')}-'
       '${dia.month.toString().padLeft(2, '0')}-'
@@ -266,8 +238,6 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     await _refrescar();
   }
 
-  /// Avanza la vista al siguiente día calendario AR sin tocar historial.
-  /// Se usa para "nueva jornada" (pantalla limpia visualmente).
   Future<void> avanzarANuevaJornadaVisual() async {
     final siguiente = state.dia.add(const Duration(days: 1));
     final n = DateTime(siguiente.year, siguiente.month, siguiente.day);
@@ -284,7 +254,34 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
   Future<void> refrescarManual() => _refrescar();
 
-  /// `monto` validado contra el bucket; lanza si excede el disponible.
+  Future<void> registrarReposicionGuia(double monto, {String? nota}) async {
+    final repo = ref.read(cierreCajaRepositoryProvider);
+    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
+    await repo.registrarReposicion(dia: dia, monto: monto, nota: nota);
+    await _refrescar();
+  }
+
+  Future<void> registrarUsoCambioGuia(double monto, {String? nota}) async {
+    final repo = ref.read(cierreCajaRepositoryProvider);
+    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
+    await repo.registrarUso(dia: dia, monto: monto, nota: nota);
+    await _refrescar();
+  }
+
+  Future<void> registrarAjusteGuia(double saldoReal, {String? nota}) async {
+    final repo = ref.read(cierreCajaRepositoryProvider);
+    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
+    await repo.registrarAjuste(dia: dia, saldoReal: saldoReal, nota: nota);
+    await _refrescar();
+  }
+
+  Future<void> setAnotacionTurno(String texto) async {
+    final repo = ref.read(cierreCajaRepositoryProvider);
+    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
+    await repo.guardarAnotacion(dia: dia, turno: state.turno, texto: texto);
+    state = state.copyWith(anotacionTurno: texto.trim());
+  }
+
   Future<void> registrarRetiro({
     required double monto,
     required String medioPago,
@@ -354,15 +351,21 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     try {
       final finanzasRepo = ref.read(finanzasRepositoryProvider);
       final egresosRepo = ref.read(egresosRepositoryProvider);
+      final cierreRepo = ref.read(cierreCajaRepositoryProvider);
+      final diaNorm = DateTime(state.dia.year, state.dia.month, state.dia.day);
 
       final results = await Future.wait([
         finanzasRepo.obtenerIngresosDetallados(),
         egresosRepo.getEgresosConEvento(),
+        cierreRepo.obtenerGuiaCambioDia(diaNorm),
+        cierreRepo.obtenerAnotacionTexto(diaNorm, state.turno),
       ]);
 
       final ingresosFull = results[0] as List<IngresoDetallado>;
       final egresosRaw = results[1] as List<dynamic>;
       final egresosFull = egresosRaw.map((e) => Egreso.fromJson(e)).toList();
+      final guia = results[2] as GuiaCambioResumen;
+      final anotacion = results[3] as String?;
 
       final rango = rangoHorarioAr(
         state.dia,
@@ -398,13 +401,11 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         if (!rango.contiene(e.fecha!)) continue;
         egresosTurno.add(e);
         final mp = (e.medioPago ?? '').toLowerCase().trim();
-        // Todos los egresos del turno restan del bucket por medio de pago.
         if (mp == 'transferencia') {
           egresosTransferencia += e.monto;
         } else {
           egresosEfectivo += e.monto;
         }
-        // Retiros formales (para PDF y detalle).
         if ((e.categoria ?? '').trim() == kCategoriaRetiroCaja) {
           retirosTurno.add(e);
           if (mp == 'transferencia') {
@@ -435,13 +436,9 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
           .where((e) => (e.categoria ?? '').trim() != kCategoriaRetiroCaja)
           .toList();
 
-      // Neto real: ingresos − TODOS los egresos del turno por medio.
       final efectivoNeto = efectivoBruto - egresosEfectivo;
       final transferenciaNeta = transferenciaBruta - egresosTransferencia;
       final totalNeto = efectivoNeto + transferenciaNeta;
-
-      final diaNorm = DateTime(state.dia.year, state.dia.month, state.dia.day);
-      final fondoGuia = await _loadGuiaCambioSaldo(diaNorm);
 
       state = state.copyWith(
         ingresosTurno: ingresosTurno,
@@ -457,7 +454,13 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         efectivoNeto: efectivoNeto,
         transferenciaNeta: transferenciaNeta,
         totalNeto: totalNeto,
-        fondoCambioGuia: fondoGuia,
+        fondoCambioGuia: guia.saldoActual,
+        guiaCambioMovimientos: guia.movimientos,
+        guiaCantReposiciones: guia.cantReposiciones,
+        guiaCantUsos: guia.cantUsos,
+        guiaTotalReposiciones: guia.totalReposiciones,
+        guiaTotalUsos: guia.totalUsos,
+        anotacionTurno: anotacion ?? '',
         cargando: false,
         clearError: true,
       );

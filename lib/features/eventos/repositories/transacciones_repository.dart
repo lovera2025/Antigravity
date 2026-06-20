@@ -29,13 +29,6 @@ class TransaccionesRepository {
       orderBy: 'fecha_pago DESC',
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      await _pullByEvento(db, eventoId, prune: true);
-      final freshRows = await db.query('transacciones',
-        where: 'evento_id = ?', whereArgs: [eventoId], orderBy: 'fecha_pago DESC');
-      return freshRows.map((r) => Transaccion.fromJson(r)).toList();
-    }
-
     return rows.map((r) => Transaccion.fromJson(r)).toList();
   }
 

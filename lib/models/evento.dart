@@ -148,6 +148,7 @@ class EventosServicios {
   final String? grupo;
   /// Orden dentro del combo (0 = primero: lleva el precio total del bloque en PDF/panel).
   final int comboOrden;
+  final bool esExtra;
   final String? detalleServicio;
 
   
@@ -161,6 +162,7 @@ class EventosServicios {
     this.cantidad = 1.0,
     this.grupo,
     this.comboOrden = 0,
+    this.esExtra = false,
     this.detalleServicio,
     this.servicio,
   });
@@ -178,6 +180,7 @@ class EventosServicios {
       cantidad: json['cantidad'] != null ? double.parse(json['cantidad'].toString()) : 1.0,
       grupo: json['grupo'] as String?,
       comboOrden: (json['combo_orden'] as num?)?.toInt() ?? 0,
+      esExtra: (json['es_extra'] ?? 0) == 1 || json['es_extra'] == true,
       detalleServicio: json['detalle_servicio'] as String?,
       servicio: json['servicios'] != null ? Servicio.fromJson(json['servicios'] as Map<String, dynamic>) : null,
     );
@@ -192,6 +195,7 @@ class EventosServicios {
       'cantidad': cantidad,
       'grupo': grupo,
       'combo_orden': comboOrden,
+      'es_extra': esExtra ? 1 : 0,
       'detalle_servicio': detalleServicio,
     };
   }

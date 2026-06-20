@@ -225,6 +225,18 @@ class FinanzasRepository {
         table: 'contratos_alumnos',
         callback: (_) => onUpdate(),
       )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'cierre_caja_guia_movimientos',
+        callback: (_) => onUpdate(),
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'cierre_caja_anotaciones',
+        callback: (_) => onUpdate(),
+      )
       .subscribe();
 
     return channel;
@@ -374,9 +386,6 @@ class FinanzasRepository {
       }
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   Future<void> _eliminarFilaSync(String tabla, String id) async {
@@ -388,9 +397,6 @@ class FinanzasRepository {
       registroId: id,
       payload: {},
     );
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Borra líneas, pagos y cabecera del préstamo (local, remoto y cola).

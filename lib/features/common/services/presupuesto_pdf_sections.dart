@@ -42,11 +42,15 @@ class PresupuestoPdfSeccion {
 }
 
 /// Misma clasificación que en [PdfService] (combo vs suelto) y mismo orden dentro de combo (combo orden, nombre).
-List<PresupuestoPdfSeccion> buildPresupuestoPdfSecciones(Presupuesto p) {
+List<PresupuestoPdfSeccion> buildPresupuestoPdfSecciones(
+  Presupuesto p, {
+  bool soloExtras = false,
+}) {
+  final serviciosFiltrados = p.servicios.where((s) => soloExtras ? s.esExtra : !s.esExtra);
   final grouped = <String, List<PresupuestoServicio>>{};
   final singles = <PresupuestoServicio>[];
 
-  for (final s in p.servicios) {
+  for (final s in serviciosFiltrados) {
     if (s.grupo != null && s.grupo!.isNotEmpty) {
       grouped.putIfAbsent(s.grupo!, () => []).add(s);
     } else {

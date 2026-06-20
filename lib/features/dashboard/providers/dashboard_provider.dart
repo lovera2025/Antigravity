@@ -8,6 +8,8 @@ import '../../../models/contrato_alumno.dart';
 
 
 
+import '../../mi_empresa/providers/finanzas_provider.dart';
+
 class Alerta {
   final String titulo;
   final String mensaje;
@@ -86,6 +88,7 @@ class DashboardStats {
 
 final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   try {
+    ref.watch(finanzasProvider);
     final db = await LocalDatabase.instance;
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1).toIso8601String();
@@ -463,7 +466,7 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
         .toList()
       ..sort((a, b) => a['fecha_evento'].compareTo(b['fecha_evento']));
 
-    final deudasLista = mapaDeudas.values.where((d) => d.total > 0).toList()
+    final deudasLista = mapaDeudas.values.where((d) => d.saldoGlobal > 0).toList()
       ..sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
 
     return DashboardStats(

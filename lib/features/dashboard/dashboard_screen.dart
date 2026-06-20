@@ -18,17 +18,18 @@ import '../common/providers/user_role_provider.dart';
 import '../recepcion/recepcion_unified_screen.dart';
 import '../common/widgets/animated_background.dart';
 import 'providers/dashboard_provider.dart';
+import '../mi_empresa/providers/finanzas_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../core/services/kiosk_launcher.dart';
 import '../../core/services/user_role_cache.dart';
 import '../recepcion/providers/recepcion_provider.dart';
-import '../../core/services/connectivity_service.dart';
-import '../../core/services/sync_engine.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
+import 'dart:async';
 import 'dart:ui';
+import '../common/widgets/sync_menu_sheet.dart';
 import '../common/widgets/animated_brand_logo.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -47,6 +48,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   RealtimeChannel? _finanzasChannel;
   int _pendingRequestsCount = 0;
   bool _isLaunchingPortal = false; // Estado para el efecto Portal
+  Timer? _statsRefreshDebounce;
 
   final List<String> _greetingOptions = [
     '¡Bienvenido, Titán!',
@@ -101,6 +103,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
+    _statsRefreshDebounce?.cancel();
     if (_solicitudesChannel != null) {
       _supabase.removeChannel(_solicitudesChannel!);
     }
@@ -108,6 +111,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _supabase.removeChannel(_finanzasChannel!);
     }
     super.dispose();
+  }
+
+  void _scheduleDashboardStatsRefresh() {
+    _statsRefreshDebounce?.cancel();
+    _statsRefreshDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      ref.refresh(dashboardStatsProvider);
+    });
   }
 
   Future<void> _fetchPendingRequestsCount() async {
@@ -138,29 +149,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   void _setupFinanzasRealtime() {
-    _finanzasChannel = _supabase.channel('public:finanzas_changes');
-    
-    // Escuchar cambios en la tabla de eventos (ej: de Activo a Finalizado/Cancelado o cambios en presupuesto/pagos)
-    _finanzasChannel!.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'eventos',
-      callback: (payload) {
-        debugPrint('REALTIME: Cambio en eventos detectado -> Actualizando Dashboard');
-        ref.invalidate(dashboardStatsProvider);
-      },
-    );
-
-    // Escuchar cambios en los contratos de los alumnos (pagos nuevos, cambios de deudas)
-    _finanzasChannel!.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'contratos_alumnos',
-      callback: (payload) {
-        debugPrint('REALTIME: Cambio en contratos_alumnos detectado -> Actualizando Dashboard');
-        ref.invalidate(dashboardStatsProvider);
-      },
-    ).subscribe();
+    // Local-first: no refrescar dashboard desde cambios remotos automáticos.
   }
 
   Future<void> _signOut() async => UserRoleCache.signOut(_supabase);
@@ -174,8 +163,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(contratosMutationTickProvider, (prev, next) {
+      if (prev != null && prev != next && mounted) {
+        _scheduleDashboardStatsRefresh();
+      }
+    });
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryGold = Color(0xFFD4AF37);
+    final statsAsync = ref.watch(dashboardStatsProvider);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -191,7 +187,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         backgroundColor: Colors.transparent,
         actions: [
           // ── Indicador offline/sync ─────────────────────────────
-          if (!kIsWeb) _buildSyncIndicator(primaryGold),
+          if (!kIsWeb) const SyncCloudIndicator(),
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),
             onPressed: () => ref.refresh(dashboardStatsProvider),
@@ -241,46 +237,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ],
 
                           // ── KPI Cards (solo operativos) ────────────────────────
-                          Consumer(builder: (context, ref, _) {
-                            final statsAsync = ref.watch(dashboardStatsProvider);
-                            return statsAsync.when(
-                              skipLoadingOnReload: true,
-                              data: (stats) => _buildKpiRow(stats, isDark, primaryGold),
-                              loading: () => const SizedBox(
-                                height: 90,
-                                child: Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37))),
+                          statsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (stats) =>
+                                _buildKpiRow(stats, isDark, primaryGold),
+                            loading: () => const SizedBox(
+                              height: 90,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFD4AF37),
+                                ),
                               ),
-                              error: (e, _) => const SizedBox.shrink(),
-                            );
-                          }),
+                            ),
+                            error: (e, _) => const SizedBox.shrink(),
+                          ),
                           const SizedBox(height: 20),
 
                           // ── Próximos Eventos ──────────────────────────────────
-                          Consumer(builder: (context, ref, _) {
-                            final statsAsync = ref.watch(dashboardStatsProvider);
-                            return statsAsync.when(
-                              skipLoadingOnReload: true,
-                              data: (stats) => _buildProximosEventos(stats, isDark, primaryGold),
-                              loading: () => const SizedBox.shrink(),
-                              error: (e, _) => const SizedBox.shrink(),
-                            );
-                          }),
+                          statsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (stats) =>
+                                _buildProximosEventos(stats, isDark, primaryGold),
+                            loading: () => const SizedBox.shrink(),
+                            error: (e, _) => const SizedBox.shrink(),
+                          ),
                           const SizedBox(height: 20),
 
-                          Consumer(builder: (context, ref, _) {
-                            final statsAsync = ref.watch(dashboardStatsProvider);
-                            return statsAsync.when(
-                              skipLoadingOnReload: true,
-                              data: (stats) {
-                                final operationalAlerts = stats.alertas.where((a) => !a.isFinanciera).toList();
-                                return operationalAlerts.isNotEmpty
-                                    ? _buildAlertas(operationalAlerts, isDark)
-                                    : _buildTodoOk(isDark, primaryGold);
-                              },
-                              loading: () => const SizedBox.shrink(),
-                              error: (e, _) => const SizedBox.shrink(),
-                            );
-                          }),
+                          statsAsync.when(
+                            skipLoadingOnReload: true,
+                            data: (stats) {
+                              final operationalAlerts = stats.alertas
+                                  .where((a) => !a.isFinanciera)
+                                  .toList();
+                              return operationalAlerts.isNotEmpty
+                                  ? _buildAlertas(operationalAlerts, isDark)
+                                  : _buildTodoOk(isDark, primaryGold);
+                            },
+                            loading: () => const SizedBox.shrink(),
+                            error: (e, _) => const SizedBox.shrink(),
+                          ),
                           const SizedBox(height: 20),
 
                           // ── Centro de Comando ─────────────────────────────────
@@ -946,121 +941,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  // ── Sync Indicator (offline/online) ─────────────────────────────────────────
-  Widget _buildSyncIndicator(Color gold) {
-    final connectivity = ref.watch(connectivityStatusProvider);
-    final syncAsync = ref.watch(syncPendingCountProvider);
-    final statusAsync = ref.watch(syncStatusProvider);
-    
-    final pendingCount = syncAsync.when(
-      data: (count) => count,
-      loading: () => 0,
-      error: (_, _) => 0,
-    );
-    
-    final syncStatus = statusAsync.when(
-      data: (s) => s,
-      loading: () => SyncStatus.idle,
-      error: (_, _) => SyncStatus.idle,
-    );
-    
-    final isSyncing = syncStatus == SyncStatus.syncing || syncStatus == SyncStatus.wakingUp;
-
-    IconData icon;
-    Color color;
-    String tooltip;
-
-    switch (connectivity) {
-      case AppConnectivity.online:
-        icon = Icons.cloud_done_outlined;
-        color = Colors.greenAccent;
-        tooltip = 'Conectado a la nube';
-        break;
-      case AppConnectivity.cloudUnavailable:
-        icon = Icons.cloud_off_outlined;
-        color = Colors.orangeAccent;
-        tooltip = 'Nube no disponible';
-        break;
-      case AppConnectivity.offline:
-        icon = Icons.wifi_off_rounded;
-        color = Colors.redAccent;
-        tooltip = 'Sin conexión — Modo offline';
-        break;
-    }
-
-    if (isSyncing) {
-      tooltip = 'Sincronizando con la nube...';
-      color = Colors.blueAccent;
-    } else if (pendingCount > 0) {
-      tooltip += ' ($pendingCount cambios pendientes)';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: GestureDetector(
-        onTap: () async {
-          if (isSyncing) return; // Evitar multiples clicks
-          final engine = ref.read(syncEngineProvider);
-          await engine.syncNow();
-          
-          if (!mounted) return;
-          
-          // REFRESH DE UI TRAS SYNC
-          ref.invalidate(syncPendingCountProvider);
-          ref.invalidate(dashboardStatsProvider);
-          
-          final msg = engine.lastError != null 
-            ? 'Error en sincronización: ${engine.lastError}'
-            : 'Sincronización completada. ${engine.pendingCount} pendientes.';
-            
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(msg),
-              backgroundColor: engine.lastError != null ? Colors.redAccent : Colors.green.withValues(alpha: 0.8),
-              duration: const Duration(seconds: 4),
-              action: engine.lastError != null ? SnackBarAction(
-                label: 'REINTENTAR',
-                textColor: Colors.white,
-                onPressed: () => engine.syncNow(),
-              ) : null,
-            ),
-          );
-        },
-        child: Tooltip(
-          message: tooltip,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              _AnimatedSyncCloud(icon: icon, color: color, isSyncing: isSyncing),
-              if (pendingCount > 0 && !isSyncing)
-                Positioned(
-                  top: -4,
-                  right: -6,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      color: Colors.orangeAccent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black, width: 1),
-                    ),
-                    child: Text(
-                      pendingCount > 9 ? '9+' : '$pendingCount',
-                      style: const TextStyle(
-                        fontSize: 7,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-
   // ── Shared helpers ─────────────────────────────────────────────────────────
   Widget _buildSectionLabel(String label, IconData icon) {
     return Row(
@@ -1104,7 +984,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
           Text(
-            '${now.year}',
+            'ML · ${now.year}',
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
@@ -1301,63 +1181,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-class _AnimatedSyncCloud extends StatefulWidget {
-  final IconData icon;
-  final Color color;
-  final bool isSyncing;
-
-  const _AnimatedSyncCloud({required this.icon, required this.color, required this.isSyncing});
-
-  @override
-  State<_AnimatedSyncCloud> createState() => _AnimatedSyncCloudState();
-}
-
-class _AnimatedSyncCloudState extends State<_AnimatedSyncCloud> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-    if (widget.isSyncing) {
-      _controller.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(_AnimatedSyncCloud oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isSyncing && !oldWidget.isSyncing) {
-      _controller.repeat(reverse: true);
-    } else if (!widget.isSyncing && oldWidget.isSyncing) {
-      _controller.stop();
-      _controller.value = 0.0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: widget.isSyncing ? 1.0 + (_controller.value * 0.15) : 1.0,
-          child: Opacity(
-            opacity: widget.isSyncing ? 0.6 + (_controller.value * 0.4) : 1.0,
-            child: Icon(widget.isSyncing ? Icons.cloud_sync_rounded : widget.icon, color: widget.color, size: 20),
-          ),
-        );
-      },
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Hoja de Configuración
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1546,6 +1369,16 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: isDark ? Colors.white54 : Colors.black45,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'ML · ${DateTime.now().year}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.5,
+                      color: isDark ? Colors.white38 : Colors.black38,
                     ),
                   ),
                 ],

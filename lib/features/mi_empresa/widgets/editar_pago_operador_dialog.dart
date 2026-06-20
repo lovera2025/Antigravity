@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
-import '../../../core/services/connectivity_service.dart';
-import '../../../core/services/sync_engine.dart';
 import '../../../models/egreso.dart';
 import '../../../models/evento.dart';
 import '../../common/utils/currency_extensions.dart';
@@ -169,11 +167,6 @@ class _EditarPagoOperadorDialogState
         registroId: widget.egreso.id,
         payload: remotePayload,
       );
-
-      final connectivity = ref.read(connectivityServiceProvider);
-      if (connectivity.currentStatus == AppConnectivity.online) {
-        unawaited(ref.read(syncEngineProvider).syncNow());
-      }
 
       if (mounted) {
         Navigator.of(context).pop(true);

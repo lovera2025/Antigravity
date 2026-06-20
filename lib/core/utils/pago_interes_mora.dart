@@ -20,7 +20,17 @@ bool esPagoInteresMoraPorConcepto(String? raw) {
   return folded.contains('interes') && folded.contains('mora');
 }
 
-/// Elimina marcas combinantes Unicode (p. ej. NFD: `e` + Ôùî╠ü) para poder detectar `interes`.
+/// Heurística estable para reconocer líneas de **cargo por canal** (recargo de transferencia)
+/// en [pagos_contrato_alumno]. Solo ingreso; no liquidan capital.
+bool esPagoCargoCanalPorConcepto(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return false;
+  final lowered = raw.toLowerCase();
+  final stripped = _stripCombiningMarks(lowered);
+  final folded = foldDiacriticosLatin(stripped);
+  return folded.contains('cargo canal') || folded.contains('cargo oper') || folded.contains('recargo transfer');
+}
+
+/// Elimina marcas combinantes Unicode (p. ej. NFD: `e` + ◌́) para poder detectar `interes`.
 String _stripCombiningMarks(String s) {
   final out = <int>[];
   for (final r in s.runes) {
@@ -31,35 +41,35 @@ String _stripCombiningMarks(String s) {
   return String.fromCharCodes(out);
 }
 
-/// Normaliza min├║sculas latinas comunes (es-AR) a ASCII para comparar conceptos.
+/// Normaliza minúsculas latinas comunes (es-AR) a ASCII para comparar conceptos.
 String foldDiacriticosLatin(String s) {
   var t = s;
   const pairs = [
-    ['├í', 'a'],
-    ['├á', 'a'],
-    ['├ñ', 'a'],
-    ['├ó', 'a'],
-    ['├ú', 'a'],
-    ['├Ñ', 'a'],
-    ['├®', 'e'],
-    ['├¿', 'e'],
-    ['├½', 'e'],
-    ['├¬', 'e'],
-    ['├¡', 'i'],
-    ['├¼', 'i'],
-    ['├»', 'i'],
-    ['├«', 'i'],
-    ['├│', 'o'],
-    ['├▓', 'o'],
-    ['├Â', 'o'],
-    ['├┤', 'o'],
-    ['├Á', 'o'],
-    ['├║', 'u'],
-    ['├╣', 'u'],
-    ['├╝', 'u'],
-    ['├╗', 'u'],
-    ['├▒', 'n'],
-    ['├º', 'c'],
+    ['á', 'a'],
+    ['à', 'a'],
+    ['ä', 'a'],
+    ['â', 'a'],
+    ['ã', 'a'],
+    ['å', 'a'],
+    ['é', 'e'],
+    ['è', 'e'],
+    ['ë', 'e'],
+    ['ê', 'e'],
+    ['í', 'i'],
+    ['ì', 'i'],
+    ['ï', 'i'],
+    ['î', 'i'],
+    ['ó', 'o'],
+    ['ò', 'o'],
+    ['ö', 'o'],
+    ['ô', 'o'],
+    ['õ', 'o'],
+    ['ú', 'u'],
+    ['ù', 'u'],
+    ['ü', 'u'],
+    ['û', 'u'],
+    ['ñ', 'n'],
+    ['ç', 'c'],
   ];
   for (final e in pairs) {
     t = t.replaceAll(e[0], e[1]);

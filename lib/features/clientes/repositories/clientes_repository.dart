@@ -137,11 +137,6 @@ class ClientesRepository {
       payload: data,
     );
 
-    // Si hay conexión, intentar subir de inmediato
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(data, SyncOperation.insert, id);
-    }
-
     debugPrint('✅ Cliente creado localmente: $id');
     return id;
   }
@@ -172,10 +167,6 @@ class ClientesRepository {
       payload: {...data, 'id': id},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(data, SyncOperation.update, id);
-    }
-
     debugPrint('✅ Cliente actualizado localmente: $id');
   }
 
@@ -195,10 +186,6 @@ class ClientesRepository {
       payload: {...data, 'id': id},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(data, SyncOperation.update, id);
-    }
-
     debugPrint('✅ Cliente ${archived ? "archivado" : "desarchivado"} localmente: $id');
   }
 
@@ -216,10 +203,6 @@ class ClientesRepository {
       registroId: id,
       payload: {'id': id},
     );
-
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately({'id': id}, SyncOperation.delete, id);
-    }
 
     debugPrint('✅ Cliente eliminado definitivamente localmente: $id');
   }
@@ -283,33 +266,6 @@ class ClientesRepository {
       debugPrint('⚠️ ensureClienteEnNube falló: $e');
       return false;
     }
-  }
-
-  /// Intenta sincronizar una operación inmediatamente (fire & forget).
-  void _syncImmediately(Map<String, dynamic> data, SyncOperation op, String id) {
-    Future.microtask(() async {
-      try {
-        switch (op) {
-          case SyncOperation.insert:
-            await _supabase.from('clientes').upsert(data);
-            break;
-          case SyncOperation.update:
-            final updateData = Map<String, dynamic>.from(data);
-            updateData.remove('id');
-            await _supabase.from('clientes').update(updateData).eq('id', id);
-            break;
-          case SyncOperation.delete:
-            await _supabase.from('clientes').delete().eq('id', id);
-            break;
-        }
-        // Éxito: remover de la cola
-        await _removeFromQueue(id);
-        debugPrint('☁️ Cliente sync inmediato OK: $id');
-      } catch (e) {
-        debugPrint('⚠️ Sync inmediato fallido (se reintentará): $e');
-        // Se queda en la cola para el SyncEngine
-      }
-    });
   }
 
   Future<void> _removeFromQueue(String registroId) async {

@@ -36,6 +36,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
 
   AjusteMoraModo _ajusteModo = AjusteMoraModo.monto;
   bool _ajustarReg = true;
+  bool _modificarSoloReg = false;
+  DateTime? _nuevaFechaReg;
 
   // ── Masivo ──
   bool _scanning = false;
@@ -104,6 +106,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     setState(() {
       _seleccion = contrato;
       _fechaCalculo = ArTime.nowAr();
+      _nuevaFechaReg = contrato.createdAt != null
+          ? ArTime.toAr(contrato.createdAt!)
+          : ArTime.nowAr();
     });
     _recalcularMora();
   }
@@ -121,6 +126,39 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
   MoraRestauracionSimulacion? get _simulacion {
     final sel = _seleccion;
     if (sel == null) return null;
+
+    if (_modificarSoloReg) {
+      final regSug = _nuevaFechaReg ??
+          (sel.createdAt != null
+              ? ArTime.toAr(sel.createdAt!)
+              : ArTime.nowAr());
+      final tempContrato = sel.copyWith(
+        createdAt: DateTime.utc(regSug.year, regSug.month, regSug.day, 3, 0, 0),
+      );
+      final resumen =
+          MoraCuotaCalculator.calcular(tempContrato, _fechaCalculo);
+      final cuota = MoraCuotaCalculator.cuotaBaseDe(sel);
+      final tasa = double.parse((cuota * 0.01).toStringAsFixed(2));
+
+      return MoraRestauracionSimulacion(
+        diasMoraSolicitados: resumen.diasMora,
+        diasMoraEfectivos: resumen.diasMora,
+        cuotaBase: cuota,
+        tasaDiaria: tasa,
+        montoMora: resumen.interesAcumulado,
+        proximaCuotaNumero: resumen.proximaCuotaNumero,
+        vencimientoActual: sel.createdAt != null
+            ? MoraCuotaCalculator.vencimientoCuotaDesdeRegAr(
+                ArTime.toAr(sel.createdAt!),
+                resumen.proximaCuotaNumero ?? 1,
+              )
+            : null,
+        vencimientoCoherente: resumen.fechaVencimientoProximaCuota,
+        regActual: sel.createdAt != null ? ArTime.toAr(sel.createdAt!) : null,
+        regSugerido: regSug,
+      );
+    }
+
     if (_ajusteModo == AjusteMoraModo.monto) {
       final m = double.tryParse(_moraCtrl.text.trim()) ?? 0.0;
       return MoraCuotaCalculator.simularPorMonto(sel, m, ahoraAr: _fechaCalculo);
@@ -155,6 +193,32 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     }
   }
 
+  Future<void> _elegirFechaRegManual() async {
+    final sel = _seleccion;
+    if (sel == null) return;
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _nuevaFechaReg ?? ArTime.nowAr(),
+      firstDate: DateTime(2020),
+      lastDate: ArTime.nowAr().add(const Duration(days: 365)),
+      helpText: 'Seleccionar fecha de registro (alta)',
+    );
+
+    if (picked != null) {
+      setState(() {
+        _nuevaFechaReg = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          12,
+          0,
+          0,
+        );
+      });
+    }
+  }
+
   Future<void> _aplicarIndividual() async {
     final sel = _seleccion;
     if (sel == null) return;
@@ -170,10 +234,15 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     try {
       final repo = ref.read(contratosRepositoryProvider);
       final updates = <String, dynamic>{
-        'mora_pendiente_tracked': sim.montoMora,
+        'mora_pendiente_tracked': _modificarSoloReg ? 0.0 : sim.montoMora,
       };
 
-      if (_ajustarReg && sim.puedeAjustarReg) {
+      if (_modificarSoloReg) {
+        if (_nuevaFechaReg == null) {
+          throw Exception('Debe seleccionar una fecha de registro válida.');
+        }
+        updates['created_at'] = MoraCuotaCalculator.regArAUtcIso(_nuevaFechaReg!);
+      } else if (_ajustarReg && sim.puedeAjustarReg) {
         updates['created_at'] = MoraCuotaCalculator.regArAUtcIso(sim.regSugerido!);
       }
 
@@ -185,7 +254,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Mora para ${sel.nombreAlumno} restaurada a ${sim.montoMora.toCurrency()}.',
+            _modificarSoloReg
+                ? 'Fecha de registro modificada y mora del momento aplicada para ${sel.nombreAlumno}.'
+                : 'Mora para ${sel.nombreAlumno} restaurada a ${sim.montoMora.toCurrency()}.',
           ),
           backgroundColor: const Color(0xFF00B894),
         ),
@@ -456,7 +527,10 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                   )
-                : const Text('Restaurar Mora + Reg', style: TextStyle(fontWeight: FontWeight.w900)),
+                : Text(
+                    _modificarSoloReg ? 'Modificar solo Reg' : 'Restaurar Mora + Reg',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
           ),
         if (_tabCtrl.index == 1 && _candidatos.isNotEmpty)
           FilledButton(
@@ -547,13 +621,13 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
             Container(
               constraints: const BoxConstraints(maxHeight: 220),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: _resultados.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (ctx, i) {
                   final a = _resultados[i];
                   return ListTile(
@@ -578,57 +652,134 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
             const SizedBox(height: 16),
             _buildDetalleContrato(isDark, gold),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<AjusteMoraModo>(
-                    segments: const [
-                      ButtonSegment(value: AjusteMoraModo.monto, label: Text('Por monto')),
-                      ButtonSegment(value: AjusteMoraModo.dias, label: Text('Por días')),
-                    ],
-                    selected: {_ajusteModo},
-                    onSelectionChanged: (set) {
-                      setState(() {
-                        _ajusteModo = set.first;
-                        _moraCtrl.clear();
-                      });
-                    },
-                    style: SegmentedButton.styleFrom(
-                      selectedForegroundColor: Colors.black,
-                      selectedBackgroundColor: gold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _moraCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: _ajusteModo == AjusteMoraModo.monto ? 'Monto a Aplicar (\$)' : 'Días de atraso',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      isDense: true,
-                      prefixIcon: Icon(_ajusteModo == AjusteMoraModo.monto ? Icons.monetization_on_rounded : Icons.calendar_today_rounded, color: gold, size: 20),
-                      suffixIcon: IconButton(
-                        icon: Icon(Icons.restart_alt_rounded, color: gold),
-                        tooltip: 'Restablecer al sugerido',
-                        onPressed: _recalcularMora,
+            if (!_modificarSoloReg) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<AjusteMoraModo>(
+                      segments: const [
+                        ButtonSegment(value: AjusteMoraModo.monto, label: Text('Por monto')),
+                        ButtonSegment(value: AjusteMoraModo.dias, label: Text('Por días')),
+                      ],
+                      selected: {_ajusteModo},
+                      onSelectionChanged: (set) {
+                        setState(() {
+                          _ajusteModo = set.first;
+                          _moraCtrl.clear();
+                        });
+                      },
+                      style: SegmentedButton.styleFrom(
+                        selectedForegroundColor: Colors.black,
+                        selectedBackgroundColor: gold,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _moraCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: _ajusteModo == AjusteMoraModo.monto ? 'Monto a Aplicar (\$)' : 'Días de atraso',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        isDense: true,
+                        prefixIcon: Icon(_ajusteModo == AjusteMoraModo.monto ? Icons.monetization_on_rounded : Icons.calendar_today_rounded, color: gold, size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(Icons.restart_alt_rounded, color: gold),
+                          tooltip: 'Restablecer al sugerido',
+                          onPressed: _recalcularMora,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: gold,
+                title: const Text('Ajustar Reg (info) al restaurar', style: TextStyle(fontWeight: FontWeight.w600)),
+                value: _ajustarReg,
+                onChanged: (v) => setState(() => _ajustarReg = v ?? true),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: gold.withValues(alpha: 0.05),
+                  border: Border.all(color: gold.withValues(alpha: 0.25)),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_calendar_rounded, color: gold, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fecha de registro (alta) a aplicar:',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white54 : Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _nuevaFechaReg != null
+                                ? ArTime.formatFechaCorta(_nuevaFechaReg!)
+                                : 'Seleccione una fecha',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _submitting ? null : _elegirFechaRegManual,
+                      icon: const Icon(Icons.calendar_month_rounded, size: 16, color: Colors.black),
+                      label: const Text('Elegir fecha', style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: TextButton.styleFrom(
+                        backgroundColor: gold,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
               controlAffinity: ListTileControlAffinity.leading,
               activeColor: gold,
-              title: const Text('Ajustar Reg (info) al restaurar', style: TextStyle(fontWeight: FontWeight.w600)),
-              value: _ajustarReg,
-              onChanged: (v) => setState(() => _ajustarReg = v ?? true),
+              title: const Text('Modificar solo Reg (alta de inscripción)', style: TextStyle(fontWeight: FontWeight.w600)),
+              value: _modificarSoloReg,
+              onChanged: (v) {
+                setState(() {
+                  _modificarSoloReg = v ?? false;
+                  if (_modificarSoloReg) {
+                    _ajustarReg = true;
+                    final sim = _simulacion;
+                    if (sim != null && sim.regSugerido != null) {
+                      _nuevaFechaReg = sim.regSugerido;
+                    } else if (_seleccion != null && _seleccion!.createdAt != null) {
+                      _nuevaFechaReg = ArTime.toAr(_seleccion!.createdAt!);
+                    } else {
+                      _nuevaFechaReg = ArTime.nowAr();
+                    }
+                  }
+                });
+              },
             ),
             if (_simulacion != null) ...[
               const SizedBox(height: 8),
@@ -643,7 +794,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                   icon: const Icon(Icons.cleaning_services_rounded, size: 18),
                   label: const Text('Quitar mora'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.redAccent.withOpacity(0.1),
+                    backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
                     foregroundColor: Colors.redAccent,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -668,9 +819,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: gold.withOpacity(0.06),
+        color: gold.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: gold.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: gold.withValues(alpha: 0.3), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -714,17 +865,25 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       decoration: BoxDecoration(
         color: isDark ? Colors.black26 : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Vista previa al restaurar mora', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: gold)),
+          Text(
+            _modificarSoloReg
+                ? 'Mora del momento (cálculo dinámico)'
+                : 'Vista previa al restaurar mora',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: gold),
+          ),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Monto:', style: const TextStyle(fontSize: 12)),
+              Text(
+                _modificarSoloReg ? 'Mora resultante:' : 'Monto:',
+                style: const TextStyle(fontSize: 12),
+              ),
               Text(sim.montoMora.toCurrency(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -735,18 +894,25 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
               Text('${sim.diasMoraEfectivos}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
             ],
           ),
-          if (_ajustarReg) ...[
+          if (_ajustarReg || _modificarSoloReg) ...[
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Reg sugerido:', style: const TextStyle(fontSize: 12)),
                 Text(
-                  okReg ? ArTime.formatFechaCorta(sim.regSugerido!) : 'No aplica',
+                  _modificarSoloReg ? 'Fecha Reg a aplicar:' : 'Reg sugerido:',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  _modificarSoloReg
+                      ? (_nuevaFechaReg != null ? ArTime.formatFechaCorta(_nuevaFechaReg!) : 'N/A')
+                      : (okReg ? ArTime.formatFechaCorta(sim.regSugerido!) : 'No aplica'),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: okReg ? (isDark ? Colors.greenAccent : Colors.green) : Colors.red,
+                    color: (_modificarSoloReg || okReg)
+                        ? (isDark ? Colors.greenAccent : Colors.green)
+                        : Colors.red,
                   ),
                 ),
               ],
@@ -756,7 +922,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
               children: [
                 Text('Vto. cuota ${sim.proximaCuotaNumero ?? '?'}:', style: const TextStyle(fontSize: 12)),
                 Text(
-                  okReg ? ArTime.formatFechaCorta(sim.vencimientoCoherente!) : 'N/A',
+                  (_modificarSoloReg || okReg)
+                      ? (sim.vencimientoCoherente != null ? ArTime.formatFechaCorta(sim.vencimientoCoherente!) : 'N/A')
+                      : 'N/A',
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -841,7 +1009,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     onSelected: busy
                         ? null
                         : (_) => setState(() => _institucionFiltro = null),
-                    selectedColor: gold.withOpacity(0.25),
+                    selectedColor: gold.withValues(alpha: 0.25),
                     checkmarkColor: gold,
                   ),
                 ),
@@ -857,7 +1025,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                       onSelected: busy
                           ? null
                           : (_) => setState(() => _institucionFiltro = e.key),
-                      selectedColor: gold.withOpacity(0.25),
+                      selectedColor: gold.withValues(alpha: 0.25),
                       checkmarkColor: gold,
                     ),
                   ),
@@ -911,12 +1079,12 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                 )
               : DecoratedBox(
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: ListView.separated(
                     itemCount: _candidatosVisibles.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (ctx, i) {
                       final c = _candidatosVisibles[i];
                       final id = c.contrato.id;

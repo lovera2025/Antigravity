@@ -23,9 +23,6 @@ class RentabilidadRepository {
       registroId: calculo.id, 
       payload: data
     );
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Lectura puramente local — la tabla `calculos_rentabilidad` se sincroniza vía SyncEngine.

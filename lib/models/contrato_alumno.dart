@@ -165,6 +165,48 @@ class ContratoAlumno {
     };
   }
 
+  /// Payload para Supabase — excluye columnas solo SQLite.
+  Map<String, dynamic> toRemotePayload() =>
+      payloadForRemote(toJson());
+
+  /// Normaliza acompañantes para JSONB en Supabase (List nativo, nunca string "[]").
+  static List<String> acompanantesForRemote(dynamic val) {
+    if (val is List) return val.map((e) => e.toString()).toList();
+    if (val is String) {
+      if (val.isEmpty) return [];
+      try {
+        final decoded = jsonDecode(val);
+        if (decoded is List) return decoded.map((e) => e.toString()).toList();
+      } catch (_) {
+        final clean = val.trim();
+        if (clean.startsWith('[') && clean.endsWith(']')) {
+          final inner = clean.substring(1, clean.length - 1).trim();
+          if (inner.isEmpty) return [];
+          return inner
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      }
+    }
+    return [];
+  }
+
+  /// Filtra campos que no existen en la nube (p. ej. cola de sync legacy).
+  static Map<String, dynamic> payloadForRemote(Map<String, dynamic> data) {
+    final out = Map<String, dynamic>.from(data);
+    out.remove('mora_cobrada_offset');
+    if (out.containsKey('nombres_acompanantes')) {
+      out['nombres_acompanantes'] = acompanantesForRemote(out['nombres_acompanantes']);
+    }
+    if (out.containsKey('contrato_firmado')) {
+      final v = out['contrato_firmado'];
+      if (v is int) out['contrato_firmado'] = v != 0;
+    }
+    return out;
+  }
+
   ContratoAlumno copyWith({
     String? id,
     String? eventoId,

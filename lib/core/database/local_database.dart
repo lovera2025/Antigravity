@@ -17,7 +17,7 @@ import '../utils/uuid_utils.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 44;
+  static const int _version = 47;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -75,7 +75,8 @@ class LocalDatabase {
         telefono TEXT,
         email TEXT,
         is_archived INTEGER DEFAULT 0,
-        created_at TEXT
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -93,6 +94,7 @@ class LocalDatabase {
         observaciones TEXT,
         bonificacion_global_pct REAL,
         created_at TEXT,
+        updated_at TEXT,
         FOREIGN KEY (cliente_id) REFERENCES clientes(id)
       )
     ''');
@@ -107,7 +109,8 @@ class LocalDatabase {
         margen_ganancia REAL DEFAULT 0.0,
         costo_interno REAL DEFAULT 0.0,
         evento_id TEXT,
-        is_archived INTEGER DEFAULT 0
+        is_archived INTEGER DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -122,6 +125,8 @@ class LocalDatabase {
         grupo TEXT,
         combo_orden INTEGER DEFAULT 0,
         detalle_servicio TEXT,
+        es_extra INTEGER DEFAULT 0,
+        updated_at TEXT,
         PRIMARY KEY (id),
         FOREIGN KEY (evento_id) REFERENCES eventos(id),
         FOREIGN KEY (servicio_id) REFERENCES servicios(id)
@@ -142,6 +147,7 @@ class LocalDatabase {
         anulado INTEGER DEFAULT 0,
         motivo_anulacion TEXT,
         fecha_anulacion TEXT,
+        updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -157,6 +163,7 @@ class LocalDatabase {
         fecha TEXT,
         created_by TEXT,
         medio_pago TEXT,
+        updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -193,6 +200,7 @@ class LocalDatabase {
         contrato_firmado INTEGER DEFAULT 0,
         mora_pendiente_tracked REAL DEFAULT 0.0,
         mora_cobrada_offset REAL DEFAULT 0.0,
+        updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
     ''');
@@ -213,6 +221,7 @@ class LocalDatabase {
         anulado INTEGER DEFAULT 0,
         motivo_anulacion TEXT,
         fecha_anulacion TEXT,
+        updated_at TEXT,
         FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
       )
     ''');
@@ -256,7 +265,8 @@ class LocalDatabase {
         cliente_celular TEXT NOT NULL,
         servicios_seleccionados TEXT,
         estado TEXT DEFAULT 'pendiente',
-        created_at TEXT
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -275,7 +285,8 @@ class LocalDatabase {
         resultado REAL,
         notas TEXT,
         created_at TEXT,
-        created_by TEXT
+        created_by TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -310,6 +321,7 @@ class LocalDatabase {
         titulo_festejado TEXT,
         notificado_vencimiento INTEGER DEFAULT 0,
         created_at TEXT,
+        updated_at TEXT,
         FOREIGN KEY (cliente_id) REFERENCES clientes(id)
       )
     ''');
@@ -324,6 +336,8 @@ class LocalDatabase {
         grupo TEXT,
         combo_orden INTEGER DEFAULT 0,
         detalle_servicio TEXT,
+        es_extra INTEGER DEFAULT 0,
+        updated_at TEXT,
         PRIMARY KEY (id),
         FOREIGN KEY (presupuesto_id) REFERENCES presupuestos(id) ON DELETE CASCADE,
         FOREIGN KEY (servicio_id) REFERENCES servicios(id)
@@ -361,6 +375,7 @@ class LocalDatabase {
         precio_unitario REAL NOT NULL,
         linea_total REAL NOT NULL,
         orden INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT,
         FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
       )
     ''');
@@ -377,6 +392,7 @@ class LocalDatabase {
         anulado INTEGER DEFAULT 0,
         motivo_anulacion TEXT,
         fecha_anulacion TEXT,
+        updated_at TEXT,
         FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
       )
     ''');
@@ -399,7 +415,8 @@ class LocalDatabase {
         monto_estimado REAL DEFAULT 0,
         estado TEXT DEFAULT 'pendiente',
         fecha_pago TEXT,
-        created_at TEXT
+        created_at TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -410,7 +427,8 @@ class LocalDatabase {
         tipo TEXT NOT NULL,
         monto REAL NOT NULL,
         nota TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        updated_at TEXT
       )
     ''');
 
@@ -424,6 +442,34 @@ class LocalDatabase {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
+      )
+    ''');
+
+    // ── Cierre de caja operativo (guía cambio + anotaciones PDF; sync manual) ─
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cierre_caja_guia_movimientos (
+        id TEXT PRIMARY KEY,
+        fecha TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        monto REAL NOT NULL,
+        saldo_antes REAL,
+        saldo_despues REAL NOT NULL,
+        nota TEXT,
+        fecha_mov TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cierre_caja_anotaciones (
+        id TEXT PRIMARY KEY,
+        fecha TEXT NOT NULL,
+        turno TEXT NOT NULL,
+        texto TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(fecha, turno)
       )
     ''');
 
@@ -459,6 +505,12 @@ class LocalDatabase {
     await db.execute('CREATE INDEX idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)');
 
     await db.execute('CREATE INDEX idx_caja_fuerte_created ON caja_fuerte_movimientos(created_at)');
+    await db.execute(
+      'CREATE INDEX idx_guia_cambio_fecha ON cierre_caja_guia_movimientos(fecha, fecha_mov)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_cierre_anotacion_fecha ON cierre_caja_anotaciones(fecha, turno)',
+    );
     await db.execute(
       'CREATE INDEX idx_notas_operativas_contrato ON notas_operativas_contrato(contrato_alumno_id)',
     );
@@ -1279,6 +1331,148 @@ class LocalDatabase {
         debugPrint('✅ Migración v44 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v44: $e');
+      }
+    }
+
+    if (oldVersion < 45) {
+      debugPrint('  🔧 v45: updated_at universal + reset sync incremental');
+      try {
+        // Agregar updated_at a todas las tablas que no lo tienen
+        final tablasUpdatedAt = [
+          'clientes', 'eventos', 'servicios', 'eventos_servicios',
+          'presupuestos', 'presupuesto_servicios',
+          'transacciones', 'egresos',
+          'contratos_alumnos', 'pagos_contrato_alumno',
+          'solicitudes_cotizacion',
+          'prestamo_alquiler_lineas', 'pagos_prestamo_alquiler',
+          'calculos_rentabilidad', 'obligaciones_pago',
+          'caja_fuerte_movimientos',
+        ];
+        for (final tabla in tablasUpdatedAt) {
+          try {
+            await db.execute('ALTER TABLE $tabla ADD COLUMN updated_at TEXT');
+          } catch (_) {
+            // Ya existe — OK
+          }
+        }
+
+        // Inicializar updated_at con created_at donde exista
+        final tablasConCreatedAt = [
+          'clientes', 'eventos', 'presupuestos', 'contratos_alumnos',
+          'pagos_contrato_alumno', 'pagos_prestamo_alquiler',
+          'calculos_rentabilidad', 'obligaciones_pago',
+          'caja_fuerte_movimientos', 'solicitudes_cotizacion',
+        ];
+        for (final tabla in tablasConCreatedAt) {
+          try {
+            await db.execute(
+              'UPDATE $tabla SET updated_at = created_at '
+              'WHERE updated_at IS NULL AND created_at IS NOT NULL',
+            );
+          } catch (_) {}
+        }
+
+        // Tablas sin created_at: inicializar con now()
+        final nowIso = DateTime.now().toUtc().toIso8601String();
+        final tablasSinCreatedAt = [
+          'servicios', 'eventos_servicios', 'presupuesto_servicios',
+          'prestamo_alquiler_lineas',
+        ];
+        for (final tabla in tablasSinCreatedAt) {
+          try {
+            await db.execute(
+              "UPDATE $tabla SET updated_at = '$nowIso' WHERE updated_at IS NULL",
+            );
+          } catch (_) {}
+        }
+
+        // Transacciones y egresos: usar columnas de fecha de negocio como fallback
+        try {
+          await db.execute(
+            'UPDATE transacciones SET updated_at = fecha_pago '
+            'WHERE updated_at IS NULL AND fecha_pago IS NOT NULL',
+          );
+          await db.execute(
+            'UPDATE egresos SET updated_at = fecha '
+            'WHERE updated_at IS NULL AND fecha IS NOT NULL',
+          );
+        } catch (_) {}
+
+        // Reset _sync_meta para forzar pull completo la primera vez
+        await db.delete('_sync_meta');
+        debugPrint('  🔄 _sync_meta reseteado: primer sync será pull completo');
+
+        debugPrint('✅ Migración v45 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v45: $e');
+      }
+    }
+
+    if (oldVersion < 46) {
+      debugPrint('  🔧 v46: es_extra en presupuesto_servicios y eventos_servicios');
+      try {
+        await db.execute(
+          'ALTER TABLE presupuesto_servicios ADD COLUMN es_extra INTEGER DEFAULT 0',
+        );
+        await db.execute(
+          'ALTER TABLE eventos_servicios ADD COLUMN es_extra INTEGER DEFAULT 0',
+        );
+        debugPrint('✅ Migración v46 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v46: $e');
+      }
+    }
+
+    if (oldVersion < 47) {
+      debugPrint('  🔧 v47: cierre_caja_guia_movimientos + cierre_caja_anotaciones');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cierre_caja_guia_movimientos (
+            id TEXT PRIMARY KEY,
+            fecha TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            monto REAL NOT NULL,
+            saldo_antes REAL,
+            saldo_despues REAL NOT NULL,
+            nota TEXT,
+            fecha_mov TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cierre_caja_anotaciones (
+            id TEXT PRIMARY KEY,
+            fecha TEXT NOT NULL,
+            turno TEXT NOT NULL,
+            texto TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(fecha, turno)
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_guia_cambio_fecha '
+          'ON cierre_caja_guia_movimientos(fecha, fecha_mov)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_cierre_anotacion_fecha '
+          'ON cierre_caja_anotaciones(fecha, turno)',
+        );
+        final nowIso = DateTime.now().toUtc().toIso8601String();
+        for (final tabla in [
+          'cierre_caja_guia_movimientos',
+          'cierre_caja_anotaciones',
+        ]) {
+          await db.insert(
+            '_sync_meta',
+            {'clave': 'last_pull_$tabla', 'valor': nowIso},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        debugPrint('✅ Migración v47 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v47: $e');
       }
     }
   }

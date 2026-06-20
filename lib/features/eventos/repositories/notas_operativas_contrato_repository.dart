@@ -113,9 +113,6 @@ class NotasOperativasContratoRepository {
       );
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
     debugPrint('📝 Nota operativa encolada sync ($contratoAlumnoId)');
   }
 
@@ -136,9 +133,6 @@ class NotasOperativasContratoRepository {
       payload: {'id': canonicalId},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
     debugPrint('🗑️ Nota operativa borrada local + encolada ($contratoAlumnoId)');
   }
 }

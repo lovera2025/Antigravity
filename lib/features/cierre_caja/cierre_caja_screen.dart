@@ -15,8 +15,10 @@ import '../mi_empresa/models/ingreso_detallado.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
+import 'widgets/anotacion_pdf_section.dart';
 import 'widgets/guia_cambio_section.dart';
 import 'widgets/registrar_retiro_dialog.dart';
+import 'widgets/turno_cierre_selector.dart';
 
 class CierreCajaScreen extends ConsumerStatefulWidget {
   const CierreCajaScreen({super.key});
@@ -109,9 +111,16 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         otrosEgresosTurno: state.otrosEgresosTurno,
         efectivoBruto: state.efectivoBruto,
         transferenciaBruta: state.transferenciaBruta,
-        // Pasar egresos totales para que el neto del PDF coincida con la pantalla.
         retirosEfectivo: state.egresosEfectivo,
         retirosTransferencia: state.egresosTransferencia,
+        anotacionTurno: state.anotacionTurno.trim().isEmpty
+            ? null
+            : state.anotacionTurno.trim(),
+        guiaCambioSaldo: state.fondoCambioGuia,
+        guiaCantReposiciones: state.guiaCantReposiciones,
+        guiaCantUsos: state.guiaCantUsos,
+        guiaTotalReposiciones: state.guiaTotalReposiciones,
+        guiaTotalUsos: state.guiaTotalUsos,
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -240,9 +249,17 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                     children: [
                       _selectorDia(context, state, isDark, muted),
                       const SizedBox(height: 14),
-                      _accionesCierre(state, isDark),
+                      TurnoCierreSelector(
+                        turnoActivo: state.turno,
+                        corteHorarioAr: state.corteHorarioAr,
+                        isDark: isDark,
+                        onTurnoChanged: (t) =>
+                            ref.read(cierreCajaProvider.notifier).setTurno(t),
+                      ),
                       const SizedBox(height: 14),
                       const GuiaCambioSection(),
+                      const SizedBox(height: 10),
+                      const AnotacionPdfSection(),
                       if (state.error != null) ...[
                         const SizedBox(height: 8),
                         Text(
@@ -251,7 +268,13 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         ),
                       ],
                       const SizedBox(height: 18),
-                      _bucketsRow(context, state, isDark),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: KeyedSubtree(
+                          key: ValueKey('${state.turno.slug}_${state.dia.toIso8601String()}'),
+                          child: _bucketsRow(context, state, isDark),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       _resumenLine(state, muted),
                     ],
@@ -343,75 +366,6 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  /// Acciones principales: dos botones grandes "CERRAR DÍA" y "CERRAR TARDE".
-  /// Cada uno selecciona el turno; el resumen + el botón EXPORTAR PDF se
-  /// actualizan en consecuencia. La opción "Mañana" queda disponible como
-  /// pildorita secundaria para casos puntuales sin saturar la UI.
-  Widget _accionesCierre(CierreCajaState state, bool isDark) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _BotonCierre(
-                label: 'CERRAR DÍA',
-                subtitle: 'Todo el día (00:00 → 23:59)',
-                icon: Icons.calendar_today_rounded,
-                seleccionado: state.turno == TurnoCaja.dia,
-                accent: _gold,
-                isDark: isDark,
-                onTap: () => ref.read(cierreCajaProvider.notifier).setTurno(TurnoCaja.dia),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _BotonCierre(
-                label: 'CERRAR TARDE',
-                subtitle: 'Desde las ${state.corteHorarioAr.toString().padLeft(2, '0')}:00',
-                icon: Icons.nights_stay_outlined,
-                seleccionado: state.turno == TurnoCaja.tarde,
-                accent: const Color(0xFF6C63FF),
-                isDark: isDark,
-                onTap: () => ref.read(cierreCajaProvider.notifier).setTurno(TurnoCaja.tarde),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            children: [
-              FilterChip(
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                avatar: const Icon(Icons.wb_sunny_outlined, size: 14),
-                label: const Text(
-                  'SOLO MAÑANA',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.6),
-                ),
-                selected: state.turno == TurnoCaja.manana,
-                onSelected: (_) =>
-                    ref.read(cierreCajaProvider.notifier).setTurno(TurnoCaja.manana),
-              ),
-              Text(
-                'Turno actual: ${state.turno.label}',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                  color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.45),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -578,7 +532,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            'TOTAL NETO DEL TURNO: ${state.totalNeto.toCurrency()}',
+            'TOTAL NETO · ${state.turno.labelCorto.toUpperCase()}: ${state.totalNeto.toCurrency()}',
             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1, color: muted),
           ),
         ),
@@ -762,7 +716,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   : () => _exportarPdf(context, state),
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
               label: Text(
-                'EXPORTAR PDF · ${state.turno.label}',
+                'PDF · ${state.turno.labelPdf}',
                 style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
               ),
               style: OutlinedButton.styleFrom(
@@ -773,98 +727,6 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _BotonCierre extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final IconData icon;
-  final bool seleccionado;
-  final Color accent;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _BotonCierre({
-    required this.label,
-    required this.subtitle,
-    required this.icon,
-    required this.seleccionado,
-    required this.accent,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bgColor = seleccionado
-        ? accent.withValues(alpha: isDark ? 0.18 : 0.14)
-        : (isDark ? Colors.white : Colors.black).withValues(alpha: 0.04);
-    final borderColor = seleccionado ? accent : accent.withValues(alpha: 0.35);
-    final fgColor = seleccionado
-        ? accent
-        : (isDark ? Colors.white70 : Colors.black87);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor, width: seleccionado ? 2 : 1),
-            boxShadow: seleccionado
-                ? [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.18),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, color: fgColor, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: GoogleFonts.oswald(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                        color: fgColor,
-                      ),
-                    ),
-                  ),
-                  if (seleccionado)
-                    Icon(Icons.check_circle_rounded, color: accent, size: 18),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600,
-                  color: fgColor.withValues(alpha: 0.75),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

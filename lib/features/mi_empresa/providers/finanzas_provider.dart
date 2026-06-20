@@ -912,28 +912,33 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           final montoVal = (p['monto'] as num).toDouble();
           final conceptoRaw = p['concepto'] as String? ?? '';
           final lkRow = (p['line_kind'] as String?)?.trim();
-          if (lkRow == 'Interés mora' ||
-              lkRow == 'cargo_canal' ||
-              esPagoInteresMoraPorConcepto(conceptoRaw)) {
+          if (lkRow == kLineKindInteresMora ||
+              lkRow == kLineKindCargoCanal ||
+              esPagoInteresMoraPorConcepto(conceptoRaw) ||
+              esPagoCargoCanalPorConcepto(conceptoRaw)) {
             continue;
           }
           final concepto = conceptoRaw.toLowerCase();
           final bool esEntregaParcial = concepto.contains('entrega') || 
                                          concepto.contains('adelanto') || 
-                                         concepto.contains('parcial');
+                                         concepto.contains('parcial') ||
+                                         concepto.contains('abono');
 
           double mgOriginal = (p['monto_gross'] as num? ?? montoVal).toDouble();
           double mgSanado = mgOriginal;
 
           if (concepto.contains('base')) {
             int cant = 0;
-            if (!esEntregaParcial) {
-              if (concepto.contains('liquidación de')) {
-                final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
-                cant = match != null ? int.parse(match.group(1)!) : 1;
-              } else if (concepto.contains('cuota')) {
-                cant = 1;
-              }
+            final matchLiquidacion = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto) ??
+                                     RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+            final matchCuotas = RegExp(r'(\d+)\s+cuota').firstMatch(concepto);
+
+            if (matchLiquidacion != null) {
+              cant = int.parse(matchLiquidacion.group(1)!);
+            } else if (matchCuotas != null) {
+              cant = int.parse(matchCuotas.group(1)!);
+            } else if (!esEntregaParcial && concepto.contains('cuota')) {
+              cant = 1;
             }
             if (cant > 0 && mgOriginal == montoVal && montoVal < (cuotaPuraBase * cant - 0.1) && cuotaPuraBase > 0) {
               mgSanado = cuotaPuraBase * cant;
@@ -941,13 +946,16 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
             cuotasBaseCronologicas += cant;
           } else if (concepto.contains('mesa')) {
             int cant = 0;
-            if (!esEntregaParcial) {
-              if (concepto.contains('liquidación de')) {
-                final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
-                cant = match != null ? int.parse(match.group(1)!) : 1;
-              } else if (concepto.contains('mesa extra')) {
-                cant = 1;
-              }
+            final matchLiquidacion = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto) ??
+                                     RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+            final matchCuotas = RegExp(r'(\d+)\s+cuota').firstMatch(concepto);
+
+            if (matchLiquidacion != null) {
+              cant = int.parse(matchLiquidacion.group(1)!);
+            } else if (matchCuotas != null) {
+              cant = int.parse(matchCuotas.group(1)!);
+            } else if (!esEntregaParcial && (concepto.contains('mesa extra') || concepto.contains('cuota'))) {
+              cant = 1;
             }
             if (cant > 0 && mgOriginal == montoVal && montoVal < (cuotaPuraMesa * cant - 0.1) && cuotaPuraMesa > 0) {
               mgSanado = cuotaPuraMesa * cant;
@@ -956,13 +964,16 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
             pagadoMesaCronologicas += mgSanado;
           } else if (concepto.contains('silla')) {
             int cant = 0;
-            if (!esEntregaParcial) {
-              if (concepto.contains('liquidación de')) {
-                final match = RegExp(r'liquidación de (\d+)').firstMatch(concepto);
-                cant = match != null ? int.parse(match.group(1)!) : 1;
-              } else if (concepto.contains('sillas extra')) {
-                cant = 1;
-              }
+            final matchLiquidacion = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto) ??
+                                     RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+            final matchCuotas = RegExp(r'(\d+)\s+cuota').firstMatch(concepto);
+
+            if (matchLiquidacion != null) {
+              cant = int.parse(matchLiquidacion.group(1)!);
+            } else if (matchCuotas != null) {
+              cant = int.parse(matchCuotas.group(1)!);
+            } else if (!esEntregaParcial && (concepto.contains('sillas extra') || concepto.contains('cuota'))) {
+              cant = 1;
             }
             if (cant > 0 && mgOriginal == montoVal && montoVal < (cuotaPuraSilla * cant - 0.1) && cuotaPuraSilla > 0) {
               mgSanado = cuotaPuraSilla * cant;

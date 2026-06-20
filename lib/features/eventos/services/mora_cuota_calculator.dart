@@ -185,6 +185,34 @@ class MoraCuotaCalculator {
     final f = (interesAcumulado - cobradaEnPeriodo)
         .clamp(0.0, double.infinity);
     final t = moraPendienteTracked.clamp(0.0, double.infinity);
+
+    // Carry-over: próxima cuota aún no venció (interés calendario = 0).
+    // [moraPendienteTracked] se reduce en cada cobro vía registrarPago; solo
+    // restamos del historial si tracked parece un snapshot legacy no actualizado.
+    // Usamos (historial − offset), no moraCobradaPeriodo: pagos antes del
+    // vencimiento de la próxima cuota quedan fuera del filtro de período.
+    if (t > 0.01 && interesAcumulado <= 0.01) {
+      final cobradaDesdeOffset =
+          (moraCobradaHistorial - moraCobradaOffset).clamp(0.0, double.infinity);
+      if (cobradaDesdeOffset <= 0.01) {
+        return double.parse(t.toStringAsFixed(2));
+      }
+      // Pagó todo pero tracked quedó con el monto original (datos legacy).
+      if ((t - cobradaDesdeOffset).abs() <= 0.01) {
+        return 0.0;
+      }
+      // Tracked no bajó con pagos parciales (legacy).
+      if (t > cobradaDesdeOffset + 0.01) {
+        return double.parse(
+          (t - cobradaDesdeOffset)
+              .clamp(0.0, double.infinity)
+              .toStringAsFixed(2),
+        );
+      }
+      // Tracked ya refleja el remanente real (flujo actual post-cobro).
+      return double.parse(t.toStringAsFixed(2));
+    }
+
     if (t > 0.01 && t < f - 0.01) {
       return double.parse(t.toStringAsFixed(2));
     }
@@ -470,6 +498,59 @@ class MoraCuotaCalculator {
     'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
     'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
   ];
+
+  /// Resta [moraCobradaHistorial] del desglose bruto (FIFO por número de cuota).
+  /// Cuotas totalmente cubiertas se omiten; la última puede quedar parcial.
+  static List<MoraCuotaDetalle> desglosePendiente(
+    List<MoraCuotaDetalle> desgloseBruto,
+    double moraCobradaHistorial,
+  ) {
+    if (desgloseBruto.isEmpty) return const [];
+    if (moraCobradaHistorial <= 0.01) {
+      return List<MoraCuotaDetalle>.from(desgloseBruto);
+    }
+
+    var restante = moraCobradaHistorial;
+    final out = <MoraCuotaDetalle>[];
+
+    for (final d in desgloseBruto) {
+      if (restante >= d.interesBruto - 0.01) {
+        restante = (restante - d.interesBruto).clamp(0.0, double.infinity);
+        continue;
+      }
+      final pendiente = (d.interesBruto - restante).clamp(0.0, double.infinity);
+      restante = 0;
+      if (pendiente <= 0.01) continue;
+      out.add(MoraCuotaDetalle(
+        numeroCuota: d.numeroCuota,
+        vencimiento: d.vencimiento,
+        diasMora: d.diasMora,
+        interesBruto: double.parse(pendiente.toStringAsFixed(2)),
+        mesLabel: d.mesLabel,
+      ));
+    }
+
+    return out;
+  }
+
+  /// Mora operativa del modal: máximo entre [moraPendienteUi] y el desglose neto.
+  static double pendienteEfectivoConDesglose({
+    required double moraPendienteUi,
+    required List<MoraCuotaDetalle> desgloseBruto,
+    required double moraCobradaHistorial,
+  }) {
+    if (desgloseBruto.isEmpty) {
+      return double.parse(
+        moraPendienteUi.clamp(0.0, double.infinity).toStringAsFixed(2),
+      );
+    }
+    final desglosePend = desglosePendiente(desgloseBruto, moraCobradaHistorial);
+    final totalNeta =
+        desglosePend.fold<double>(0, (s, d) => s + d.interesBruto);
+    return double.parse(
+      math.max(moraPendienteUi, totalNeta).toStringAsFixed(2),
+    );
+  }
 
   /// Desglose de mora por cada cuota individualmente vencida.
   /// Retorna una entrada por cuota cuyo vencimiento ya pasó, con su interés bruto.

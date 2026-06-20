@@ -68,10 +68,6 @@ class CajaFuerteRepository {
       payload: data,
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
-
     debugPrint('📥 Caja fuerte: insert $tipoNorm $monto (encolado sync)');
   }
 

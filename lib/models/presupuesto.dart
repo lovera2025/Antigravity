@@ -42,7 +42,9 @@ class Presupuesto {
 
   bool get estaVencido => DateTime.now().isAfter(fechaVencimiento) && estado == EstadoPresupuesto.enviado;
 
-  double get total => servicios.fold(0, (sum, item) => sum + (item.precioFinal * item.cantidad));
+  double get total => servicios
+      .where((item) => !item.esExtra)
+      .fold(0, (sum, item) => sum + (item.precioFinal * item.cantidad));
 
   static EstadoPresupuesto _mapEstado(String? estadoRaw) {
     if (estadoRaw == null) return EstadoPresupuesto.enviado;
@@ -118,6 +120,7 @@ class PresupuestoServicio {
   final String? detalleServicio;
   final String? grupo;
   final int comboOrden;
+  final bool esExtra;
   final String? categoria;
   final Servicio? servicio;
 
@@ -132,6 +135,7 @@ class PresupuestoServicio {
     this.detalleServicio,
     this.grupo,
     this.comboOrden = 0,
+    this.esExtra = false,
     this.categoria,
     this.servicio,
   });
@@ -146,6 +150,7 @@ class PresupuestoServicio {
       detalleServicio: json['detalle_servicio'],
       grupo: json['grupo'],
       comboOrden: (json['combo_orden'] as num?)?.toInt() ?? 0,
+      esExtra: (json['es_extra'] ?? 0) == 1 || json['es_extra'] == true,
       categoria: json['servicios'] != null ? json['servicios']['categoria'] : null,
       servicio: json['servicios'] != null ? Servicio.fromJson(Map<String, dynamic>.from(json['servicios'])) : null,
     );
@@ -161,6 +166,7 @@ class PresupuestoServicio {
       'detalle_servicio': detalleServicio,
       'grupo': grupo,
       'combo_orden': comboOrden,
+      'es_extra': esExtra ? 1 : 0,
     };
   }
 }

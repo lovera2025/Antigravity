@@ -81,26 +81,6 @@ class EgresosRepository {
       registroId: id,
       payload: data,
     );
-
-    // 3. Intento de sincronización inmediata si hay red
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(data);
-    }
-  }
-
-  void _syncImmediately(Map<String, dynamic> data) {
-    Future.microtask(() async {
-      try {
-        await _supabase.from('egresos').upsert(data);
-        final db = await LocalDatabase.instance;
-        await db.delete('_sync_queue', 
-          where: 'tabla = ? AND registro_id = ?', 
-          whereArgs: ['egresos', data['id']]
-        );
-      } catch (e) {
-        debugPrint('⚠️ Sync egreso fallido: $e');
-      }
-    });
   }
 
   /// Registra un egreso sin `evento_id` (SQLite + sync), p. ej. gasto empresa, retiro dueño o gasto personal desde bolsillo.
@@ -137,10 +117,6 @@ class EgresosRepository {
       payload: data,
     );
 
-    // 3. Intento de sincronización inmediata si hay red
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(data);
-    }
   }
 
   /// Actualiza campos de un egreso existente (offline-first).
@@ -174,13 +150,9 @@ class EgresosRepository {
       registroId: id,
       payload: payload,
     );
-
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncImmediately(payload);
-    }
   }
 
-  /// Elimina un egreso en SQLite y en la nube (offline-first).
+  /// Elimina un egreso en SQLite y encola sync.
   Future<void> eliminarEgreso(String id) async {
     if (id.isEmpty || id.length != 36) {
       debugPrint('🚫 eliminarEgreso: id inválido');
@@ -194,25 +166,6 @@ class EgresosRepository {
       registroId: id,
       payload: {'id': id},
     );
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncDeleteImmediately(id);
-    }
-  }
-
-  void _syncDeleteImmediately(String id) {
-    Future.microtask(() async {
-      try {
-        await _supabase.from('egresos').delete().eq('id', id);
-        final db = await LocalDatabase.instance;
-        await db.delete(
-          '_sync_queue',
-          where: 'tabla = ? AND registro_id = ?',
-          whereArgs: ['egresos', id],
-        );
-      } catch (e) {
-        debugPrint('⚠️ Sync delete egreso fallido: $e');
-      }
-    });
   }
 
   /// Escucha cambios en la tabla de egresos para refrescar UI.

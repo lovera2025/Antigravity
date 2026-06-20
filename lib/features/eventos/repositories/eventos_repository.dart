@@ -45,12 +45,6 @@ class EventosRepository {
 
     final rows = await db.rawQuery(query, args);
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      await _pullEventosFromCloud(db, prune: true);
-      final freshRows = await db.rawQuery(query, args);
-      return freshRows.map(_eventoFromLocalRow).where((e) => e.estado != EstadoEvento.cancelado).toList();
-    }
-
     return rows.map(_eventoFromLocalRow).where((e) => e.estado != EstadoEvento.cancelado).toList();
   }
 
@@ -101,10 +95,6 @@ class EventosRepository {
   Future<List<EventosServicios>> getPresupuesto(String eventoId) async {
     final db = await LocalDatabase.instance;
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      await _pullPresupuestoByEvento(db, eventoId, prune: true);
-    }
-
     final rows = await db.rawQuery('''
       SELECT es.*, s.nombre as servicio_nombre, s.costo_base, s.margen_ganancia
       FROM eventos_servicios es
@@ -121,6 +111,7 @@ class EventosRepository {
         cantidad: (r['cantidad'] as num?)?.toDouble() ?? 1.0,
         grupo: r['grupo'] as String?,
         comboOrden: (r['combo_orden'] as num?)?.toInt() ?? 0,
+        esExtra: (r['es_extra'] ?? 0) == 1,
         detalleServicio: r['detalle_servicio'] as String?,
         servicio: r['servicio_nombre'] != null ? Servicio(
           id: r['servicio_id'] as String,
@@ -204,6 +195,7 @@ class EventosRepository {
         'grupo': v['grupo'],
         'combo_orden': v['combo_orden'] ?? 0,
         'detalle_servicio': v['detalle_servicio'],
+        'es_extra': (v['es_extra'] == true || v['es_extra'] == 1) ? 1 : 0,
       };
       await db.insert('eventos_servicios', esData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
@@ -212,11 +204,6 @@ class EventosRepository {
         registroId: lineaId,
         payload: esData,
       );
-    }
-
-    // Sync inmediato si hay conexión - El SyncEngine se encargará del orden correcto
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
     }
 
     debugPrint('✅ Evento creado localmente: $eventoId');
@@ -261,6 +248,7 @@ class EventosRepository {
         'grupo': v['grupo'],
         'combo_orden': v['combo_orden'] ?? 0,
         'detalle_servicio': v['detalle_servicio'],
+        'es_extra': (v['es_extra'] == true || v['es_extra'] == 1) ? 1 : 0,
       };
       await db.insert('eventos_servicios', esData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
@@ -271,9 +259,6 @@ class EventosRepository {
       );
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Crea un nuevo servicio en el catálogo.
@@ -298,10 +283,6 @@ class EventosRepository {
     await db.insert('servicios', data, conflictAlgorithm: ConflictAlgorithm.replace);
     await SyncQueue.enqueue(tabla: 'servicios', operacion: SyncOperation.insert, registroId: id, payload: data);
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
-
     return id;
   }
 
@@ -320,13 +301,6 @@ class EventosRepository {
       );
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      try {
-        await _supabase.from('servicios').update(data).eq('id', id);
-      } catch (e) {
-        debugPrint('⚠️ Error actualización servicio: $e');
-      }
-    }
   }
 
   /// Elimina servicios creados para un evento que no se confirmó.
@@ -344,15 +318,12 @@ class EventosRepository {
     // 3. Limpieza de cola de sincronización
     for (final id in ids) {
       await _removeFromQueue('servicios', id);
-    }
-    
-    // 4. Sync con Supabase
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      try {
-        await _supabase.from('servicios').delete().eq('evento_id', eventoId);
-      } catch (e) {
-        debugPrint('⚠️ Error limpieza temporal: $e');
-      }
+      await SyncQueue.enqueue(
+        tabla: 'servicios',
+        operacion: SyncOperation.delete,
+        registroId: id,
+        payload: {},
+      );
     }
   }
 
@@ -393,14 +364,6 @@ class EventosRepository {
         payload: row.first,
       );
     }
-
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      try {
-        await _supabase.from('servicios').update({'is_archived': true}).eq('id', id);
-      } catch (e) {
-        debugPrint('⚠️ Error archivado servicio: $e');
-      }
-    }
   }
   
   /// Restaura un servicio archivado (vuelve a estar disponible).
@@ -418,9 +381,6 @@ class EventosRepository {
       );
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Elimina definitivamente un servicio (físico).
@@ -429,9 +389,6 @@ class EventosRepository {
     await db.delete('servicios', where: 'id = ?', whereArgs: [id]);
     await SyncQueue.enqueue(tabla: 'servicios', operacion: SyncOperation.delete, registroId: id, payload: {});
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Actualiza información básica del evento.
@@ -451,9 +408,6 @@ class EventosRepository {
       payload: {'id': eventoId, ...data},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Persiste el % de bonificación global acordado (sobre presupuesto total del evento).
@@ -470,9 +424,6 @@ class EventosRepository {
       payload: {'id': eventoId, ...data},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Actualiza el estado de un evento.
@@ -487,9 +438,6 @@ class EventosRepository {
       payload: {'id': eventoId, 'estado': estadoStr},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   /// Actualiza la cantidad de cuotas.
@@ -503,9 +451,6 @@ class EventosRepository {
       payload: {'id': eventoId, 'cantidad_cuotas': nuevasCuotas},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   // ── ACTUALIZAR FECHA ───────────────────────────────────────────────────────
@@ -520,9 +465,6 @@ class EventosRepository {
       payload: {'id': eventoId, 'fecha_evento': fechaStr},
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      _syncEngine.syncNow();
-    }
   }
 
   // ── REALTIME ──────────────────────────────────────────────────────────────

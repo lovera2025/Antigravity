@@ -34,6 +34,10 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   List<Transaccion> get _transaccionesActivas =>
       _transacciones.where((t) => !t.esAnulada).toList();
 
+  double _totalContratado() => _servicios
+      .where((s) => !s.esExtra)
+      .fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+
   @override
   void initState() {
     super.initState();
@@ -103,7 +107,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       ),
     );
     try {
-      final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+      final totalPresupuesto = _totalContratado();
       final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
       final saldoRestante = totalPresupuesto - totalPagado;
 
@@ -139,7 +143,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       ),
     );
     try {
-      final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+      final totalPresupuesto = _totalContratado();
       final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
       final saldoRestante = totalPresupuesto - totalPagado;
 
@@ -164,7 +168,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     if (!hasAccess) return;
 
     // Calcular saldo al momento de eliminar
-    final totalPresupuestoEl = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+    final totalPresupuestoEl = _totalContratado();
     final totalPagadoEl = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final double saldoAlEliminar = totalPresupuestoEl - totalPagadoEl;
     final bool tieneDeudaAlEliminar = saldoAlEliminar > 0.01;
@@ -256,7 +260,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     if (!hasAccess) return;
 
     // Calcular saldo deudor total (Guardia de Deuda) usando los datos cargados en pantalla
-    final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+    final totalPresupuesto = _totalContratado();
     final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final double saldoPendiente = totalPresupuesto - totalPagado;
     final bool tieneDeuda = saldoPendiente > 0.01;
@@ -356,6 +360,9 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     final Map<String, int> comboOrdenIniciales = {
       for (var s in _servicios) s.id: s.comboOrden
     };
+    final Map<String, bool> extrasIniciales = {
+      for (var s in _servicios) s.id: s.esExtra
+    };
     final Map<String, String?> descripcionesIniciales = {
       for (var s in _servicios) s.id: s.detalleServicio
     };
@@ -371,6 +378,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           cantidadesIniciales: cantidadesIniciales,
           gruposIniciales: gruposIniciales,
           comboOrdenIniciales: comboOrdenIniciales,
+          extrasIniciales: extrasIniciales,
           descripcionesIniciales: descripcionesIniciales,
           modalidad: widget.evento.modalidad,
           observaciones: widget.evento.observaciones,
@@ -712,7 +720,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       ),
       child: FloatingActionButton(
         onPressed: () async {
-            final presupuesto = _servicios.fold<double>(0, (s, i) => s + (i.precioFinalAcordado * i.cantidad));
+            final presupuesto = _totalContratado();
             if (!mounted) return;
             final result = await showDialog<bool>(
               context: context,
@@ -734,7 +742,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   }
 
   Widget _buildEliteStatusBanner(Color green, Color red) {
-    final totalPresupuesto = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+    final totalPresupuesto = _totalContratado();
     final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final saldoDeudor = totalPresupuesto - totalPagado;
     final isDesbloqueado = saldoDeudor <= 0;
@@ -851,7 +859,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     
     // CORRECCIÓN APLICADA: Ahora multiplica correctamente el precio por la cantidad.
-    final presupuestoTotal = _servicios.fold<double>(0, (sum, item) => sum + (item.precioFinalAcordado * item.cantidad));
+    final presupuestoTotal = _totalContratado();
     final totalPagado = _transaccionesActivas.fold<double>(0, (sum, item) => sum + item.monto);
     final saldo = presupuestoTotal - totalPagado; 
 
@@ -1079,7 +1087,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   void _mostrarHistorialPagos() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final double totalPagado = _transaccionesActivas.fold(0, (sum, t) => sum + t.monto);
-    final double totalPresupuesto = _servicios.fold(0, (sum, s) => sum + (s.precioFinalAcordado * s.cantidad));
+    final double totalPresupuesto = _totalContratado();
     final double saldo = totalPresupuesto - totalPagado;
 
     showDialog(

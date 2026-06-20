@@ -24,6 +24,25 @@ class CalculadoraFinanciera {
     return montoBruto * factor;
   }
 
+  /// Monto bruto que cuenta para saldo/cuotas en auditoría de pagos.
+  /// Con descuento, [montoNeto] < [montoGrossOriginal]; sin inflar cuotas
+  /// se conserva el gross persistido (no el neto cobrado).
+  static double montoGrossAcumuladoEnAuditoria({
+    required double montoNeto,
+    required double montoGrossOriginal,
+    required bool debeInflar,
+    required double targetGrossTotal,
+    required double totalMontoGrupoNeto,
+    required int lineasEnGrupo,
+  }) {
+    if (debeInflar) {
+      return totalMontoGrupoNeto > 0
+          ? targetGrossTotal * (montoNeto / totalMontoGrupoNeto)
+          : targetGrossTotal / lineasEnGrupo;
+    }
+    return montoGrossOriginal;
+  }
+
   /// Distribuye un pago bruto entre los diferentes conceptos de un contrato.
   /// Prioriza: Cuota Base -> Mesa Extra -> Sillas Extras (o según lógica de negocio).
   static Map<String, double> distribuirPago(

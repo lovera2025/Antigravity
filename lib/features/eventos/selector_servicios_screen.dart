@@ -33,6 +33,7 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
   /// Orden dentro del combo por servicio (0 = primero, lleva el precio del bloque).
   final Map<String, int>? comboOrdenIniciales;
   final Map<String, double>? cantidadesIniciales;
+  final Map<String, bool>? extrasIniciales;
   final String? telefonoPublicidad;
 
   const SelectorServiciosScreen({
@@ -60,6 +61,7 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
     this.gruposIniciales,
     this.comboOrdenIniciales,
     this.cantidadesIniciales,
+    this.extrasIniciales,
   });
 
   @override
@@ -154,6 +156,9 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
       .where((v) => (v['servicio_id'] as String? ?? '') == servicioId)
       .length;
 
+  bool _esExtraData(Map<String, dynamic>? data) =>
+      data != null && (data['es_extra'] == true || data['es_extra'] == 1);
+
   @override
   void initState() {
     super.initState();
@@ -175,6 +180,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
           'cantidad': widget.cantidadesIniciales?[auxK] ?? 1.0,
           'grupo': widget.gruposIniciales?[auxK],
           'combo_orden': widget.comboOrdenIniciales?[auxK] ?? 0,
+          'es_extra': widget.extrasIniciales?[auxK] ?? false,
         };
       }
     }
@@ -432,7 +438,10 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
 
 
   double get _totalPresupuesto {
-    return _serviciosSeleccionados.values.fold(0, (sum, val) => sum + ((val['precio'] as num? ?? 0) * (val['cantidad'] as num? ?? 1)));
+    return _serviciosSeleccionados.values.fold(0, (sum, val) {
+      if (_esExtraData(val)) return sum;
+      return sum + ((val['precio'] as num? ?? 0) * (val['cantidad'] as num? ?? 1));
+    });
   }
 
   Future<void> _guardarPresupuesto() async {
@@ -463,6 +472,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
             'detalle_servicio': _detallesServicios[entry.key],
             'grupo': data['grupo'],
             'combo_orden': data['combo_orden'] ?? 0,
+            'es_extra': _esExtraData(data),
           });
         }
 
@@ -605,6 +615,8 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
         // true = incluido en combo (precio 0), false = precio propio
         final Map<String, bool> extrasIncluidos = {};
         String extraBusqueda = '';
+        bool marcarExtra =
+            existe && lid != null ? _esExtraData(_serviciosSeleccionados[lid]) : false;
         // ────────────────────────────────────────────────────────────────
 
         String resolvedGrupoNombre() {
@@ -712,6 +724,31 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                         prefixIcon: Icon(Icons.description_outlined, color: Color(0xFFD4AF37)),
                         hintText: 'Ej: Incluye 2 operadores, traslados...',
                         enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: marcarExtra,
+                      onChanged: (v) => setModalState(() => marcarExtra = v ?? false),
+                      checkColor: Colors.black,
+                      fillColor: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return const Color(0xFFD4AF37);
+                        }
+                        return null;
+                      }),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'MARCAR COMO EXTRA',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'No suma al total. En el PDF va abajo en la sección EXTRAS con su precio.',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 9),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -956,6 +993,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                           'cantidad': quantity,
                           'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
                           'combo_orden': co,
+                          'es_extra': marcarExtra,
                         };
                         _detallesServicios[lineaPrincipal] =
                             descController.text.trim().isEmpty ? null : descController.text.trim();
@@ -977,6 +1015,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                             'cantidad': 1.0,
                             'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
                             'combo_orden': extraCo,
+                            'es_extra': marcarExtra,
                           };
                         }
 
@@ -1148,6 +1187,8 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
         final Map<String, TextEditingController> extrasPrecios = {};
         final Map<String, bool> extrasIncluidos = {};
         String extraBusqueda = '';
+        bool marcarExtra =
+            existeP && lidP != null ? _esExtraData(_serviciosSeleccionados[lidP]) : false;
         // ────────────────────────────────────────────────────────────────
 
         String resolvedGrupoNombre() {
@@ -1250,6 +1291,20 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                       const Text(
                         'Esta descripción aparecerá debajo del bloque unificado en el presupuesto final.',
                         style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic),
+                      ),
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        value: marcarExtra,
+                        onChanged: (v) => setModalState(() => marcarExtra = v ?? false),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'MARCAR COMO EXTRA',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        subtitle: const Text(
+                          'No suma al total. En el PDF va abajo en EXTRAS con su precio.',
+                          style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic),
+                        ),
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
@@ -1486,6 +1541,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                         'cantidad': quantity,
                         'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
                         'combo_orden': co,
+                        'es_extra': marcarExtra,
                       };
                       _detallesServicios[lineaPrincipal] = descController.text;
 
@@ -1506,6 +1562,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                           'cantidad': 1.0,
                           'grupo': resolvedGrupo.isEmpty ? null : resolvedGrupo,
                           'combo_orden': extraCo,
+                          'es_extra': marcarExtra,
                         };
                       }
                     });
@@ -1790,75 +1847,36 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
                     child: Text('No hay servicios seleccionados', style: TextStyle(color: Colors.grey, fontSize: 11)),
                   )
                 : Builder(builder: (context) {
-                    final Map<String, List<String>> groupsMap = {};
-                    final List<String> ungroupedIds = [];
-
-                    for (final id in _serviciosSeleccionados.keys) {
-                      final grupo = _serviciosSeleccionados[id]?['grupo'] as String?;
-                      if (grupo != null && grupo.isNotEmpty) {
-                        groupsMap.putIfAbsent(grupo, () => []).add(id);
-                      } else {
-                        ungroupedIds.add(id);
-                      }
-                    }
+                    final tieneExtras = _serviciosSeleccionados.values.any(_esExtraData);
 
                     return ListView(
                       key: const ValueKey('list'),
                       controller: _panelScrollController,
                       padding: const EdgeInsets.all(16),
                       children: [
-                        // Individuales (Primero)
-                        ...ungroupedIds.map((id) {
-                          final data = _serviciosSeleccionados[id];
-                          if (data == null) return const SizedBox.shrink();
-                          final sid = (data['servicio_id'] as String?) ?? id;
-                          final srv = _catalogo.firstWhere(
-                            (s) => s.id == sid, 
-                            orElse: () {
-                              final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[id] ?? 'Servicio Ad-hoc';
-                              return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
-                            }
-                          );
-                          return _buildPanelItem(
-                            id,
-                            srv,
-                            (data['precio'] as num? ?? 0).toDouble(),
-                            (data['cantidad'] as num? ?? 1).toDouble(),
-                          );
-                        }),
-                        
-                        // Grupos (Al Final)
-                        ...groupsMap.entries.map((entry) {
-                          final grupoNombre = entry.key;
-                          final ids = List<String>.from(entry.value)
-                            ..sort((a, b) {
-                              final oa = (_serviciosSeleccionados[a]?['combo_orden'] as num?)?.toInt() ?? 0;
-                              final ob = (_serviciosSeleccionados[b]?['combo_orden'] as num?)?.toInt() ?? 0;
-                              return oa.compareTo(ob);
-                            });
-                          final listLineasData = <({String lineaId, Servicio srv})>[];
-                          for (final lineaId in ids) {
-                            final data = _serviciosSeleccionados[lineaId];
-                            if (data == null) continue;
-                            final sid = (data['servicio_id'] as String?) ?? lineaId;
-                            final srv = _catalogo.firstWhere(
-                              (s) => s.id == sid,
-                              orElse: () {
-                                final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[lineaId] ?? 'Servicio Ad-hoc';
-                                return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
-                              },
-                            );
-                            listLineasData.add((lineaId: lineaId, srv: srv));
-                          }
-                          
-                          final totalGrupo = ids.fold(0.0, (sum, id) {
-                            final data = _serviciosSeleccionados[id];
-                            if (data == null) return sum;
-                            return sum + ((data['precio'] as num? ?? 0) * (data['cantidad'] as num? ?? 1));
-                          });
-
-                          return _buildGroupedPanelItem(grupoNombre, listLineasData, totalGrupo);
-                        }),
+                        ..._buildPanelServiciosList(soloExtras: false),
+                        if (tieneExtras) ...[
+                          const SizedBox(height: 8),
+                          const Divider(color: Colors.white24),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(Icons.add_circle_outline, color: Color(0xFFD4AF37).withValues(alpha: 0.8), size: 14),
+                              const SizedBox(width: 8),
+                              Text(
+                                'EXTRAS (no suman)',
+                                style: TextStyle(
+                                  color: Color(0xFFD4AF37).withValues(alpha: 0.9),
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 10,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ..._buildPanelServiciosList(soloExtras: true),
+                        ],
                       ],
                     );
                   }),
@@ -1867,6 +1885,76 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
         _buildPanelFooter(),
       ],
     );
+  }
+
+  List<Widget> _buildPanelServiciosList({required bool soloExtras}) {
+    final Map<String, List<String>> groupsMap = {};
+    final List<String> ungroupedIds = [];
+
+    for (final id in _serviciosSeleccionados.keys) {
+      final data = _serviciosSeleccionados[id];
+      if (data == null) continue;
+      if (soloExtras != _esExtraData(data)) continue;
+
+      final grupo = data['grupo'] as String?;
+      if (grupo != null && grupo.isNotEmpty) {
+        groupsMap.putIfAbsent(grupo, () => []).add(id);
+      } else {
+        ungroupedIds.add(id);
+      }
+    }
+
+    return [
+      ...ungroupedIds.map((id) {
+        final data = _serviciosSeleccionados[id];
+        if (data == null) return const SizedBox.shrink();
+        final sid = (data['servicio_id'] as String?) ?? id;
+        final srv = _catalogo.firstWhere(
+          (s) => s.id == sid,
+          orElse: () {
+            final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[id] ?? 'Servicio Ad-hoc';
+            return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
+          },
+        );
+        return _buildPanelItem(
+          id,
+          srv,
+          (data['precio'] as num? ?? 0).toDouble(),
+          (data['cantidad'] as num? ?? 1).toDouble(),
+        );
+      }),
+      ...groupsMap.entries.map((entry) {
+        final grupoNombre = entry.key;
+        final ids = List<String>.from(entry.value)
+          ..sort((a, b) {
+            final oa = (_serviciosSeleccionados[a]?['combo_orden'] as num?)?.toInt() ?? 0;
+            final ob = (_serviciosSeleccionados[b]?['combo_orden'] as num?)?.toInt() ?? 0;
+            return oa.compareTo(ob);
+          });
+        final listLineasData = <({String lineaId, Servicio srv})>[];
+        for (final lineaId in ids) {
+          final data = _serviciosSeleccionados[lineaId];
+          if (data == null) continue;
+          final sid = (data['servicio_id'] as String?) ?? lineaId;
+          final srv = _catalogo.firstWhere(
+            (s) => s.id == sid,
+            orElse: () {
+              final nombreRespaldo = _nombresAdHoc[sid] ?? _detallesServicios[lineaId] ?? 'Servicio Ad-hoc';
+              return Servicio(id: sid, nombre: nombreRespaldo, categoria: 'Personalizado');
+            },
+          );
+          listLineasData.add((lineaId: lineaId, srv: srv));
+        }
+
+        final totalGrupo = ids.fold(0.0, (sum, id) {
+          final data = _serviciosSeleccionados[id];
+          if (data == null) return sum;
+          return sum + ((data['precio'] as num? ?? 0) * (data['cantidad'] as num? ?? 1));
+        });
+
+        return _buildGroupedPanelItem(grupoNombre, listLineasData, totalGrupo);
+      }),
+    ];
   }
 
   Widget _buildPanelItem(String lineaId, Servicio srv, double precio, double cantidad) {

@@ -54,8 +54,10 @@ class SyncQueueEntry {
 /// Cola de sincronización FIFO con deduplicación.
 ///
 /// Las operaciones offline se encolan aquí y se procesan
-/// cuando se recupera la conectividad.
+/// cuando el usuario elige subir a la nube.
 class SyncQueue {
+  /// Notifica al [SyncEngine] que el contador de pendientes cambió.
+  static void Function()? onChanged;
   /// Verifica si un registroId es válido:
   /// - UUID estándar de 36 caracteres (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
   /// - Clave compuesta de dos UUIDs de 36 chars separados por '_' (para eventos_servicios)
@@ -89,6 +91,11 @@ class SyncQueue {
     // Si se provee un ejecutor (transacción), lo usamos para evitar deadlocks
     final db = executor ?? await LocalDatabase.instance;
 
+    // Si es un borrado de un registro principal, limpiamos de la cola a sus hijos huérfanos
+    if (operacion == SyncOperation.delete) {
+      await _cleanOrphanQueueEntries(db, tabla, registroId);
+    }
+
     // Deduplicación: si ya hay una entrada pendiente para este registro,
     // la actualizamos en vez de crear duplicados.
     final existing = await db.query(
@@ -111,6 +118,7 @@ class SyncQueue {
             whereArgs: [tabla, registroId],
           );
           debugPrint('🔄 Sync: INSERT+DELETE cancelados para $tabla/$registroId');
+          onChanged?.call();
           return;
         }
         finalOp = SyncOperation.delete;
@@ -139,6 +147,7 @@ class SyncQueue {
         where: 'tabla = ? AND registro_id = ?',
         whereArgs: [tabla, registroId],
       );
+      onChanged?.call();
       // Log silenciado por pedido del usuario (evitar ruido en terminal)
       // debugPrint('🔄 Sync: Actualizado $finalOp para $tabla/$registroId');
     } else {
@@ -152,10 +161,12 @@ class SyncQueue {
       // Log silenciado por pedido del usuario (evitar ruido en terminal)
       // debugPrint('📝 Sync: Encolado ${operacion.name} para $tabla/$registroId');
     }
+    onChanged?.call();
   }
 
-  /// Obtiene todas las operaciones pendientes, ordenadas FIFO.
-  static Future<List<SyncQueueEntry>> getPending({int limit = 50}) async {
+  /// Obtiene operaciones pendientes, ordenadas FIFO.
+  /// [limit] null = sin límite (drenado manual completo).
+  static Future<List<SyncQueueEntry>> getPending({int? limit = 50}) async {
     final db = await LocalDatabase.instance;
     final rows = await db.query(
       '_sync_queue',
@@ -183,6 +194,7 @@ class SyncQueue {
   static Future<void> markCompleted(int entryId) async {
     final db = await LocalDatabase.instance;
     await db.delete('_sync_queue', where: 'id = ?', whereArgs: [entryId]);
+    onChanged?.call();
   }
 
   /// Marca un intento fallido con su error.
@@ -233,5 +245,83 @@ class SyncQueue {
       debugPrint('🧹 Sync: Purgados $count registros agotados o corruptos');
     }
     return count;
+  }
+
+  /// Limpia de la cola de sincronización cualquier entrada de tablas secundarias
+  /// que dependan del registro principal (padre) que se está eliminando.
+  static Future<void> _cleanOrphanQueueEntries(
+    DatabaseExecutor db,
+    String padreTabla,
+    String padreId,
+  ) async {
+    // Definimos el mapa de dependencias: TablaPadre -> { TablaHija: CampoFK }
+    final Map<String, Map<String, String>> relaciones = {
+      'clientes': {
+        'eventos': 'cliente_id',
+        'presupuestos': 'cliente_id',
+        'prestamos_alquiler': 'cliente_id',
+      },
+      'eventos': {
+        'transacciones': 'evento_id',
+        'egresos': 'evento_id',
+        'contratos_alumnos': 'evento_id',
+        'invitados': 'evento_id',
+        'eventos_servicios': 'evento_id',
+        'calculos_rentabilidad': 'evento_id',
+      },
+      'presupuestos': {
+        'presupuesto_servicios': 'presupuesto_id',
+        'calculos_rentabilidad': 'presupuesto_id',
+      },
+      'contratos_alumnos': {
+        'pagos_contrato_alumno': 'contrato_alumno_id',
+        'notas_operativas_contrato': 'contrato_alumno_id',
+      },
+      'prestamos_alquiler': {
+        'prestamo_alquiler_lineas': 'prestamo_id',
+        'pagos_prestamo_alquiler': 'prestamo_id',
+      },
+    };
+
+    final hijas = relaciones[padreTabla];
+    if (hijas == null || hijas.isEmpty) return;
+
+    for (final entrada in hijas.entries) {
+      final tablaHija = entrada.key;
+      final campoFk = entrada.value;
+
+      // Obtener todas las entradas de la cola de sync para la tabla hija
+      final rows = await db.query(
+        '_sync_queue',
+        columns: ['id', 'payload'],
+        where: 'tabla = ?',
+        whereArgs: [tablaHija],
+      );
+
+      final toDeleteIds = <int>[];
+
+      for (final r in rows) {
+        final id = r['id'] as int;
+        final payloadString = r['payload'] as String?;
+        if (payloadString == null || payloadString.isEmpty) continue;
+
+        try {
+          final payload = jsonDecode(payloadString) as Map<String, dynamic>;
+          if (payload[campoFk]?.toString() == padreId) {
+            toDeleteIds.add(id);
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error decodificando payload para limpiar huérfanos: $e');
+        }
+      }
+
+      if (toDeleteIds.isNotEmpty) {
+        debugPrint('🧹 Sync: Limpiando ${toDeleteIds.length} registros huérfanos de $tablaHija asociados al $padreTabla/$padreId en la cola');
+        // Eliminar registros huérfanos de la cola
+        for (final id in toDeleteIds) {
+          await db.delete('_sync_queue', where: 'id = ?', whereArgs: [id]);
+        }
+      }
+    }
   }
 }

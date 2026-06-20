@@ -212,6 +212,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   List<Egreso>? _pulso30Egresos;
   bool _pulso30Loading = false;
 
+  // Buscador de deudas por institución
+  final _deudasSearchCtrl = TextEditingController();
+  bool _deudasExpanded = false;
+
   /// Pulso diario (vista mes): scroll horizontal hasta acercar el día actual.
   final ScrollController _pulsoBarrasScrollController = ScrollController();
   String? _pulsoScrollAppliedStamp;
@@ -284,6 +288,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     _egresosListaSearchCtrl.dispose();
     _ingresosHScrollCtrl.dispose();
     _pulsoBarrasScrollController.dispose();
+    _deudasSearchCtrl.dispose();
     if (_presenceChannel != null) {
       Supabase.instance.client.removeChannel(_presenceChannel!);
     }
@@ -321,19 +326,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           if (mounted) _alertasGestionExpansionController.expand();
         });
         break;
-    }
-  }
-
-  String _tooltipSaludPillar(_SaludPillarTap t) {
-    switch (t) {
-      case _SaludPillarTap.liquidez:
-        return 'Ir al cartel de cuánto te alcanza la plata';
-      case _SaludPillarTap.margen:
-        return 'Ir al resumen del mes (ingresos, egresos y saldo)';
-      case _SaludPillarTap.momentum:
-        return 'Ver la tabla comparativa mes a mes';
-      case _SaludPillarTap.alertas:
-        return 'Abrir alertas de cobros y deudas';
     }
   }
 
@@ -1057,7 +1049,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                         ),
                       ),
                     ),
-                    if (trailing != null) trailing,
+                    ?trailing,
                   ],
                 ),
                 SizedBox(height: compact ? 4 : 6),
@@ -2055,7 +2047,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           initialChildSize: 0.52,
           maxChildSize: 0.88,
           minChildSize: 0.38,
-          builder: (_, __) {
+          builder: (_, _) {
             return Container(
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               padding: const EdgeInsets.all(20),
@@ -2623,6 +2615,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     void Function(_SaludPillarTap)? onPillarTap,
   }) {
     final healthScoreAsync = ref.watch(healthScoreProvider);
+    final statsAsync = ref.watch(dashboardStatsProvider);
 
     return healthScoreAsync.when(
       loading: () => const Center(
@@ -2638,96 +2631,71 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         ),
       ),
       data: (hs) {
+        final stats = statsAsync.maybeWhen(
+          data: (s) => s,
+          orElse: () => null,
+        );
+
         final Color scoreColor;
         final String scoreLabel;
+        final String scoreAdvice;
         final IconData scoreIcon;
+
         if (hs.score < 40) {
           scoreColor = const Color(0xFFE74C3C);
-          scoreLabel = 'HAY QUE VERLA';
+          scoreLabel = 'CRÍTICO';
           scoreIcon = Icons.warning_amber_rounded;
+          scoreAdvice = hs.runwayMeses >= 999 
+              ? 'Atención: Nivel de alertas críticas elevado. Conviene revisar pagos pendientes urgente.'
+              : 'Peligro: Tus reservas duran ${hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',')} meses. Conviene acelerar cobros o recortar gastos fijos urgente.';
         } else if (hs.score < 70) {
           scoreColor = const Color(0xFFF39C12);
-          scoreLabel = 'OJO, AJUSTADO';
+          scoreLabel = 'AJUSTADO';
           scoreIcon = Icons.visibility_outlined;
+          scoreAdvice = hs.runwayMeses >= 999
+              ? 'Ajustado: Tenés alertas pendientes o ingresos en descenso. Conviene revisar vencimientos.'
+              : 'Ajustado: Tenés reservas para ${hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',')} meses. Es buen momento para activar cobros pendientes o impulsar ventas.';
         } else {
           scoreColor = const Color(0xFF00B894);
-          scoreLabel = 'TODO EN ORDEN';
+          scoreLabel = 'SALUDABLE';
           scoreIcon = Icons.favorite_rounded;
+          scoreAdvice = hs.runwayMeses >= 999
+              ? 'Excelente: Operaciones al día y sin alertas pendientes.'
+              : 'Excelente: Tenés reservas para ${hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',')} meses. Podés planificar inversiones o crecer con total tranquilidad.';
         }
 
-        final trackColor = isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.black.withValues(alpha: 0.06);
-        final tickColor = isDark
-            ? Colors.white.withValues(alpha: 0.35)
-            : Colors.black.withValues(alpha: 0.3);
+        final cardBg = isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white;
 
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                isDark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.7),
-                isDark ? Colors.white.withValues(alpha: 0.02) : Colors.white.withValues(alpha: 0.3),
-              ],
-            ),
+            color: cardBg,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: scoreColor.withValues(alpha: 0.6), 
-              width: 2.0,
+              color: scoreColor.withValues(alpha: 0.45), 
+              width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: scoreColor.withValues(alpha: 0.25),
-                blurRadius: 40,
-                spreadRadius: 2,
-                offset: const Offset(0, 12),
+                color: scoreColor.withValues(alpha: 0.05),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: LayoutBuilder(
-            builder: (ctx, cons) {
-              // Tres columnas (gauge | pilares | runway) solo si entra cómodo; si no, apilado.
-              final isWide = cons.maxWidth >= 920;
-
-              final gaugeBlock = _buildHealthGauge(
-                hs: hs,
-                scoreColor: scoreColor,
-                scoreLabel: scoreLabel,
-                scoreIcon: scoreIcon,
-                trackColor: trackColor,
-                tickColor: tickColor,
-                isDark: isDark,
-                gold: gold,
-              );
-
-              final pillarsBlock = _buildHealthPillars(
-                hs: hs,
-                isDark: isDark,
-                gold: gold,
-                onPillarTap: onPillarTap,
-              );
-
-              final runwayBlock = _buildRunwayBlock(
-                key: runwayKey,
-                hs: hs,
-                scoreColor: scoreColor,
-                isDark: isDark,
-                gold: gold,
-              );
-
-              Widget header = Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Encabezado
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Icon(Icons.monitor_heart_outlined, color: gold, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'SALUD FINANCIERA',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.oswald(
                         fontSize: 14,
                         letterSpacing: 2.2,
@@ -2736,53 +2704,310 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: scoreColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: scoreColor.withValues(alpha: 0.35)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Estado general conversacional
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: scoreColor.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: scoreColor.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Icon(scoreIcon, size: 12, color: scoreColor),
-                        const SizedBox(width: 6),
-                        Text(
-                          scoreLabel,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.2,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
                             color: scoreColor,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(scoreIcon, size: 14, color: Colors.black),
+                              const SizedBox(width: 6),
+                              Text(
+                                scoreLabel,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.black,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Puntaje General: ${hs.score.toStringAsFixed(0)} / 100',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black87,
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 10),
+                    Text(
+                      scoreAdvice,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                        fontStyle: FontStyle.italic,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Fila de Tarjetas Métricas
+              LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final isWide = constraints.maxWidth >= 720;
+                  final cards = [
+                    _buildMetricCard(
+                      icon: Icons.shield_outlined,
+                      title: 'Fondo de respaldo (Caja)',
+                      value: hs.runwayMeses >= 999 
+                          ? 'Sin límite' 
+                          : hs.runwayMeses >= 99 
+                              ? '99+ meses' 
+                              : '${hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',')} meses',
+                      subtitle: 'de tranquilidad',
+                      description: 'Dinero en caja para cubrir costos fijos si no ingresan nuevos cobros.',
+                      color: hs.liquidez >= 20 ? const Color(0xFF00B894) : (hs.liquidez >= 10 ? const Color(0xFFF39C12) : const Color(0xFFE74C3C)),
+                      isDark: isDark,
+                      onTap: onPillarTap != null ? () => onPillarTap(_SaludPillarTap.liquidez) : null,
+                    ),
+                    _buildMetricCard(
+                      icon: Icons.monetization_on_outlined,
+                      title: 'Dinero libre (Ganancia)',
+                      value: '${(hs.margenPct * 100).toStringAsFixed(1).replaceAll('.', ',')}%',
+                      subtitle: 'de lo cobrado',
+                      description: 'Porcentaje de los cobros totales que te queda libre después de restar gastos.',
+                      color: hs.margen >= 20 ? const Color(0xFF00B894) : (hs.margen >= 10 ? const Color(0xFFF39C12) : const Color(0xFFE74C3C)),
+                      isDark: isDark,
+                      onTap: onPillarTap != null ? () => onPillarTap(_SaludPillarTap.margen) : null,
+                    ),
+                    _buildMetricCard(
+                      icon: Icons.trending_up_rounded,
+                      title: 'Comparativa de ingresos',
+                      value: '${hs.deltaIngPct >= 0 ? '+' : ''}${(hs.deltaIngPct * 100).abs().toStringAsFixed(1).replaceAll('.', ',')}%',
+                      subtitle: hs.deltaIngPct >= 0 ? 'de crecimiento' : 'de descenso',
+                      description: 'Variación de la facturación comparando los cobros de este mes con el anterior.',
+                      color: hs.momentum >= 15 ? const Color(0xFF00B894) : (hs.momentum >= 8 ? const Color(0xFFF39C12) : const Color(0xFFE74C3C)),
+                      isDark: isDark,
+                      onTap: onPillarTap != null ? () => onPillarTap(_SaludPillarTap.momentum) : null,
+                    ),
+                    _buildMetricCard(
+                      icon: Icons.notifications_active_outlined,
+                      title: 'Pendientes y deudas',
+                      value: '${hs.alertasCount}',
+                      subtitle: hs.alertasCount == 1 ? 'tema por revisar' : 'temas por revisar',
+                      description: 'Alertas críticas de deudas vencidas o cobros atrasados que requieren atención.',
+                      color: hs.alertasCount == 0 ? const Color(0xFF00B894) : (hs.alertasCount <= 3 ? const Color(0xFFF39C12) : const Color(0xFFE74C3C)),
+                      isDark: isDark,
+                      onTap: onPillarTap != null ? () => onPillarTap(_SaludPillarTap.alertas) : null,
+                    ),
+                  ];
+
+                  if (isWide) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: cards.map((c) => Expanded(child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: c,
+                      ))).toList(),
+                    );
+                  }
+
+                  return Column(
+                    children: cards.map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: c,
+                    )).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // DETALLE DE ORIGEN (De dónde vienen los números)
+              _buildOriginDetailSection(isDark, gold, state, stats),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String subtitle,
+    required String description,
+    required Color color,
+    required bool isDark,
+    VoidCallback? onTap,
+  }) {
+    final cardBg = isDark ? Colors.white.withValues(alpha: 0.02) : Colors.black.withValues(alpha: 0.015);
+    final borderColor = isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04);
+
+    return MouseRegion(
+      cursor: onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: 14, color: color),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
                   ),
                 ],
-              );
+              ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: GoogleFonts.oswald(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : Colors.black87,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 9.5,
+                  height: 1.3,
+                  fontWeight: FontWeight.w500,
+                  fontStyle: FontStyle.italic,
+                  color: isDark ? Colors.white30 : Colors.black45,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOriginDetailSection(
+    bool isDark,
+    Color gold,
+    FinanzasState state,
+    DashboardStats? stats,
+  ) {
+    // 1. Agrupar cobros del mes por evento
+    final mapIngresos = <String, double>{};
+    for (final ing in state.ingresos) {
+      final name = ing.nombreEvento.trim().isNotEmpty ? ing.nombreEvento : 'Otros / Varios';
+      mapIngresos[name] = (mapIngresos[name] ?? 0.0) + ing.monto;
+    }
+    final sortedIngresos = mapIngresos.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    // 2. Deudas por institución
+    final deudas = stats?.deudasPorInstitucion ?? [];
+
+    final containerBg = isDark ? Colors.white.withValues(alpha: 0.015) : Colors.black.withValues(alpha: 0.01);
+    final dividerColor = isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: containerBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.query_stats_rounded, color: gold, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                'DETALLE DE ORIGEN (De dónde vienen los números)',
+                style: GoogleFonts.oswald(
+                  fontSize: 11,
+                  letterSpacing: 1.5,
+                  fontWeight: FontWeight.w900,
+                  color: gold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final isWide = constraints.maxWidth >= 600;
+
+              final cobrosPanel = _buildOriginCobrosPanel(sortedIngresos, isDark, gold);
+              final deudasPanel = _buildOriginDeudasPanel(deudas, isDark, gold);
 
               if (isWide) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    header,
-                    const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(width: 220, height: 220, child: gaugeBlock),
-                        const SizedBox(width: 20),
-                        Expanded(child: pillarsBlock),
-                        const SizedBox(width: 16),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: 152, maxWidth: 200),
-                          child: runwayBlock,
-                        ),
-                      ],
+                    Expanded(child: cobrosPanel),
+                    Container(
+                      width: 1.5,
+                      height: 240,
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      color: dividerColor,
                     ),
+                    Expanded(child: deudasPanel),
                   ],
                 );
               }
@@ -2790,389 +3015,434 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  header,
-                  const SizedBox(height: 20),
-                  Center(child: SizedBox(width: 220, height: 220, child: gaugeBlock)),
-                  const SizedBox(height: 24),
-                  pillarsBlock,
-                  const SizedBox(height: 20),
-                  runwayBlock,
+                  cobrosPanel,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Divider(color: dividerColor, height: 1),
+                  ),
+                  deudasPanel,
                 ],
               );
             },
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  Widget _buildHealthGauge({
-    required HealthScoreData hs,
-    required Color scoreColor,
-    required String scoreLabel,
-    required IconData scoreIcon,
-    required Color trackColor,
-    required Color tickColor,
-    required bool isDark,
-    required Color gold,
-  }) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: hs.score),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeOutCubic,
-      builder: (ctx, animated, _) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: HealthScoreArcPainter(
-                  score: animated,
-                  targetScore: hs.score,
-                  trackColor: trackColor,
-                  tickColor: tickColor,
-                ),
-              ),
+  Widget _buildOriginCobrosPanel(List<MapEntry<String, double>> ingresos, bool isDark, Color gold) {
+    if (ingresos.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _panelHeader('¿Qué cobramos este mes?', Icons.payments_outlined, gold),
+          const SizedBox(height: 16),
+          Text(
+            'No hay cobros registrados en el mes seleccionado.',
+            style: TextStyle(
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+              color: isDark ? Colors.white30 : Colors.black45,
             ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'SCORE',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  animated.toStringAsFixed(0),
-                  style: GoogleFonts.oswald(
-                    fontSize: 64,
-                    fontWeight: FontWeight.w900,
-                    color: scoreColor,
-                    letterSpacing: -2,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '/ 100',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildHealthPillars({
-    required HealthScoreData hs,
-    required bool isDark,
-    required Color gold,
-    void Function(_SaludPillarTap)? onPillarTap,
-  }) {
-    final green = const Color(0xFF00B894);
-    final red = const Color(0xFFE74C3C);
-    final amber = const Color(0xFFF39C12);
-
-    Color pillarColor(double value, double max) {
-      final pct = max > 0 ? value / max : 0.0;
-      if (pct < 0.4) return red;
-      if (pct < 0.7) return amber;
-      return green;
+          ),
+        ],
+      );
     }
 
-    Widget pillar({
-      required IconData icon,
-      required String label,
-      required String detail,
-      required double value,
-      required double max,
-      required _SaludPillarTap tap,
-    }) {
-      final color = pillarColor(value, max);
-      final pct = max > 0 ? (value / max).clamp(0.0, 1.0) : 0.0;
-      final body = Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _panelHeader('¿Qué cobramos este mes?', Icons.payments_outlined, gold),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: ingresos.length > 5 ? 5 : ingresos.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (ctx, i) {
+            final entry = ingresos[i];
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, size: 12, color: color),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
                     children: [
-                      Text(
-                        label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        detail,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white54 : Colors.black54,
+                      Icon(Icons.arrow_circle_down_rounded, size: 12, color: const Color(0xFF00B894)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          entry.key,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white.withValues(alpha: 0.8) : Colors.black87,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Text(
-                  '${value.toStringAsFixed(0)}/${max.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: color,
+                  entry.value.toCurrency(),
+                  style: GoogleFonts.oswald(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white70 : Colors.black87,
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: pct,
-                minHeight: 7,
-                backgroundColor: color.withValues(alpha: isDark ? 0.12 : 0.08),
-                valueColor: AlwaysStoppedAnimation<Color>(color.withValues(alpha: 0.82)),
-              ),
-            ),
-          ],
+            );
+          },
         ),
-      );
-      if (onPillarTap == null) return body;
-      return Tooltip(
-        excludeFromSemantics: _tooltipExcludeSemanticsWin(),
-        message: _tooltipSaludPillar(tap),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => onPillarTap(tap),
-            borderRadius: BorderRadius.circular(10),
-            hoverColor: gold.withValues(alpha: 0.06),
-            splashColor: gold.withValues(alpha: 0.1),
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: body,
-              ),
+        if (ingresos.length > 5) ...[
+          const SizedBox(height: 8),
+          Text(
+            '+ ${ingresos.length - 5} eventos más en el listado inferior.',
+            style: TextStyle(
+              fontSize: 10,
+              fontStyle: FontStyle.italic,
+              color: isDark ? Colors.white30 : Colors.black45,
             ),
           ),
-        ),
-      );
-    }
-
-    String runwayDetail() {
-      if (hs.runwayMeses >= 999) return 'sin techo';
-      if (hs.runwayMeses >= 99) return '99+ meses';
-      return '${hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',')} meses de aire';
-    }
-
-    String momentumDetail() {
-      final pct = hs.deltaIngPct * 100;
-      final sign = pct >= 0 ? '+' : '';
-      return 'vs mes pasado $sign${pct.toStringAsFixed(1).replaceAll('.', ',')}%';
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'DE QUÉ DEPENDE EL PUNTAJE',
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2,
-            color: isDark ? Colors.white38 : Colors.black38,
-          ),
-        ),
-        const SizedBox(height: 12),
-        pillar(
-          icon: Icons.water_drop_outlined,
-          label: 'Colchón en caja',
-          detail: runwayDetail(),
-          value: hs.liquidez,
-          max: 30,
-          tap: _SaludPillarTap.liquidez,
-        ),
-        pillar(
-          icon: Icons.percent_rounded,
-          label: 'Cuánto te queda después de gastar',
-          detail: '${(hs.margenPct * 100).toStringAsFixed(1).replaceAll('.', ',')}% del ingreso',
-          value: hs.margen,
-          max: 30,
-          tap: _SaludPillarTap.margen,
-        ),
-        pillar(
-          icon: Icons.trending_up_rounded,
-          label: 'Si cobrás más o menos que el mes pasado',
-          detail: momentumDetail(),
-          value: hs.momentum,
-          max: 25,
-          tap: _SaludPillarTap.momentum,
-        ),
-        pillar(
-          icon: Icons.notifications_active_outlined,
-          label: 'Avisos que no dejás pasar',
-          detail: hs.alertasCount == 0 ? 'ninguno' : '${hs.alertasCount} para ver',
-          value: hs.alertas,
-          max: 15,
-          tap: _SaludPillarTap.alertas,
-        ),
+        ],
       ],
     );
   }
 
-  Widget _buildRunwayBlock({
-    Key? key,
-    required HealthScoreData hs,
-    required Color scoreColor,
-    required bool isDark,
-    required Color gold,
-  }) {
-    final String bigValue;
-    final String unit;
-    final String caption;
-
-    if (hs.runwayMeses >= 999) {
-      bigValue = '∞';
-      unit = '';
-      caption = 'No registrás gastos recientes; el número no aplica igual que siempre.';
-    } else if (hs.runwayMeses >= 99) {
-      bigValue = '99+';
-      unit = 'meses';
-      caption = 'Tenés banda de margen al ritmo de gasto de hoy.';
-    } else {
-      bigValue = hs.runwayMeses.toStringAsFixed(1).replaceAll('.', ',');
-      unit = 'meses';
-      if (hs.runwayMeses < 2) {
-        caption = 'Muy justo: conviene meter cobros o bajar gasto fijo.';
-      } else if (hs.runwayMeses < 4) {
-        caption = 'Corto pero manejable; si podés, empujá ventas.';
-      } else if (hs.runwayMeses < 8) {
-        caption = 'Razonable: no estás al límite todos los meses.';
-      } else {
-        caption = 'Cómodo: podés pensar en invertir sin sudar.';
-      }
+  Widget _buildOriginDeudasPanel(List<InstitucionDeuda> deudas, bool isDark, Color gold) {
+    if (deudas.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _panelHeader('¿Quiénes nos deben?', Icons.account_balance_outlined, gold),
+          const SizedBox(height: 16),
+          Text(
+            '¡Excelente! No hay deudas pendientes registradas en la calle hoy.',
+            style: TextStyle(
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+              color: isDark ? const Color(0xFF00B894) : Colors.green.shade700,
+            ),
+          ),
+        ],
+      );
     }
 
+    final double totalEnLaCalle = deudas.fold(0.0, (s, d) => s + d.saldoGlobal);
+    final int conVencido = deudas.where((d) => d.vencido > 0.01).length;
+    final int conPorVencer = deudas.where((d) => d.vencido <= 0.01 && d.aVencer > 0.01).length;
+
+    // Filtrar por búsqueda
+    final query = _deudasSearchCtrl.text.trim().toLowerCase();
+    final List<InstitucionDeuda> filtradas = query.isEmpty
+        ? deudas
+        : deudas.where((d) => d.nombre.toLowerCase().contains(query)).toList();
+
+    // Si no está expandido y no hay búsqueda, solo mostrar las que tienen vencido (urgentes)
+    final bool mostrarLista = _deudasExpanded || query.isNotEmpty;
+    final List<InstitucionDeuda> visibles = mostrarLista ? filtradas : filtradas.where((d) => d.vencido > 0.01 || d.aVencer > 0.01).take(3).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _panelHeader('¿Quiénes nos deben?', Icons.account_balance_outlined, gold),
+        const SizedBox(height: 12),
+
+        // ── Resumen compacto ──
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: gold.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: gold.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'TOTAL EN LA CALLE',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                      color: gold,
+                    ),
+                  ),
+                  Text(
+                    totalEnLaCalle.toCurrency(),
+                    style: GoogleFonts.oswald(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: gold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text(
+                    '${deudas.length} instituciones',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? Colors.white38 : Colors.black45,
+                    ),
+                  ),
+                  if (conVencido > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE74C3C).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$conVencido con vencido',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFE74C3C),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (conPorVencer > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orangeAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$conPorVencer por vencer',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.orangeAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Buscador ──
+        SizedBox(
+          height: 36,
+          child: TextField(
+            controller: _deudasSearchCtrl,
+            onChanged: (_) => setState(() {}),
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Buscar institución...',
+              hintStyle: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white24 : Colors.black26,
+              ),
+              prefixIcon: Icon(Icons.search_rounded, size: 16, color: gold.withValues(alpha: 0.6)),
+              suffixIcon: _deudasSearchCtrl.text.isNotEmpty
+                  ? GestureDetector(
+                      onTap: () => setState(() => _deudasSearchCtrl.clear()),
+                      child: Icon(Icons.close_rounded, size: 14, color: isDark ? Colors.white30 : Colors.black26),
+                    )
+                  : null,
+              filled: true,
+              fillColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: gold.withValues(alpha: 0.5)),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Lista de instituciones ──
+        if (query.isNotEmpty && filtradas.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No se encontró ninguna institución con "$query".',
+              style: TextStyle(
+                fontSize: 10,
+                fontStyle: FontStyle.italic,
+                color: isDark ? Colors.white30 : Colors.black38,
+              ),
+            ),
+          )
+        else if (visibles.isNotEmpty)
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: visibles.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (ctx, i) => _buildDeudaCard(visibles[i], isDark, gold),
+          ),
+
+        // ── Botón expandir/colapsar ──
+        if (query.isEmpty && deudas.length > 3) ...[
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () => setState(() => _deudasExpanded = !_deudasExpanded),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _deudasExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  size: 16,
+                  color: gold.withValues(alpha: 0.6),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _deudasExpanded ? 'Ver menos' : 'Ver las ${deudas.length} instituciones',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: gold.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDeudaCard(InstitucionDeuda esc, bool isDark, Color gold) {
+    final bool tieneVencido = esc.vencido > 0.01;
+    final bool tienePorVencer = esc.aVencer > 0.01;
+    final bool tieneMes = tieneVencido || tienePorVencer;
+
+    final Color indicatorColor = tieneVencido
+        ? const Color(0xFFE74C3C)
+        : tienePorVencer
+            ? Colors.orangeAccent
+            : gold.withValues(alpha: 0.6);
+
+    final cardBg = isDark
+        ? Colors.white.withValues(alpha: 0.025)
+        : Colors.black.withValues(alpha: 0.015);
+    final borderCol = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+
     return Container(
-      key: key,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: scoreColor.withValues(alpha: isDark ? 0.08 : 0.06),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: scoreColor.withValues(alpha: 0.25)),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderCol),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Nombre
           Row(
             children: [
-              Icon(Icons.air_rounded, size: 14, color: scoreColor),
-              const SizedBox(width: 6),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: indicatorColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '¿CUÁNTO TE DURA LA PLATA?',
-                  maxLines: 3,
-                  softWrap: true,
+                  esc.nombre,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                    color: scoreColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white.withValues(alpha: 0.85) : Colors.black87,
                   ),
+                ),
+              ),
+              // Total real a la derecha del nombre
+              Text(
+                esc.saldoGlobal.toCurrency(),
+                style: GoogleFonts.oswald(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: gold,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                bigValue,
-                style: GoogleFonts.oswald(
-                  fontSize: 38,
-                  fontWeight: FontWeight.w900,
-                  color: isDark ? Colors.white : Colors.black87,
-                  letterSpacing: -1.5,
-                  height: 1,
+          // Detalle de mes (solo si hay algo del mes)
+          if (tieneMes) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const SizedBox(width: 16),
+                Text(
+                  'Este mes: ${esc.total.toCurrency()}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: tieneVencido ? const Color(0xFFE74C3C) : Colors.orangeAccent,
+                  ),
                 ),
-              ),
-              if (unit.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    unit,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                      color: isDark ? Colors.white54 : Colors.black54,
+                if (tieneVencido) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '(${esc.vencido.toCurrency()} vencido)',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFE74C3C),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'de “aire” si el gasto sigue parecido al de ahora',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: isDark ? Colors.white38 : Colors.black45,
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            caption,
-            style: TextStyle(
-              fontSize: 10.5,
-              height: 1.35,
-              fontStyle: FontStyle.italic,
-              color: isDark ? Colors.white60 : Colors.black54,
-            ),
-          ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _panelHeader(String title, IconData icon, Color gold) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: gold),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: gold,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
     );
   }
 

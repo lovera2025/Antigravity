@@ -59,14 +59,6 @@ class ContratosRepository {
       orderBy: 'nombre_alumno COLLATE NOCASE ASC',
     );
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      await _pullByEvento(db, eventoId, prune: true);
-      await _pullPagosByEvento(db, eventoId, prune: true);
-      final freshRows = await db.query('contratos_alumnos',
-        where: 'evento_id = ?', whereArgs: [eventoId], orderBy: 'nombre_alumno COLLATE NOCASE ASC');
-      return freshRows.map(_fromLocalRow).toList();
-    }
-
     return rows.map(_fromLocalRow).toList();
   }
 
@@ -94,7 +86,7 @@ class ContratosRepository {
       tabla: 'contratos_alumnos',
       operacion: SyncOperation.insert,
       registroId: contrato.id,
-      payload: contrato.toJson(),
+      payload: contrato.toRemotePayload(),
     );
 
     return contrato.id;
@@ -127,7 +119,7 @@ class ContratosRepository {
       tabla: 'contratos_alumnos',
       operacion: SyncOperation.update,
       registroId: id,
-      payload: {'id': id, ...updates},
+      payload: ContratoAlumno.payloadForRemote({'id': id, ...updates}),
     );
   }
 
@@ -153,6 +145,18 @@ class ContratosRepository {
         );
       }
     });
+  }
+
+  /// Elimina un contrato definitivamente de la DB local y encola su eliminación en la nube.
+  Future<void> eliminarContratoPermanente(String id) async {
+    final db = await LocalDatabase.instance;
+    await db.delete('contratos_alumnos', where: 'id = ?', whereArgs: [id]);
+    await SyncQueue.enqueue(
+      tabla: 'contratos_alumnos',
+      operacion: SyncOperation.delete,
+      registroId: id,
+      payload: {'id': id},
+    );
   }
 
   /// Registra un pago de contrato de alumno.
@@ -256,28 +260,37 @@ class ContratosRepository {
         // y la mora acumulada de la cuota anterior se perder├¡a.
         // Persistimos el valor actual en mora_pendiente_tracked para que
         // pendienteDisplay lo conserve.
-        final snapRows = await txn.query(
-          'contratos_alumnos',
-          where: 'id = ?',
-          whereArgs: [contratoId],
-          limit: 1,
-        );
-        if (snapRows.isNotEmpty) {
-          final caSnap = ContratoAlumno.fromJson(snapRows.first);
-          final cobradoSnap =
-              await _sumMoraCobradaHistorialTxn(txn, contratoId);
-          final moraSnap = MoraCuotaCalculator.calcular(caSnap);
-          final formulaSnap = (moraSnap.interesAcumulado - cobradoSnap)
-              .clamp(0.0, double.infinity);
-          final trackedSnap = caSnap.moraPendienteTracked;
-          final pendienteAhora = math.max(formulaSnap, trackedSnap);
-          if (pendienteAhora > trackedSnap + 0.01) {
-            await txn.update(
-              'contratos_alumnos',
-              {'mora_pendiente_tracked': pendienteAhora},
-              where: 'id = ?',
-              whereArgs: [contratoId],
-            );
+        // El snapshot solo se necesita cuando cuotasLiquidadas > 0: al
+        // avanzar cuotas_pagadas, interesAcumulado se resetea para la
+        // próxima cuota y hay que preservar la mora pendiente en tracked.
+        // Para abonos parciales (cuotasLiquidadas == 0) cuotas_pagadas no
+        // avanza, interesAcumulado no se resetea, y elevar tracked
+        // innecesariamente hace que la mora siga apareciendo como pendiente
+        // aun después de haberla pagado.
+        if (cuotasLiquidadas > 0) {
+          final snapRows = await txn.query(
+            'contratos_alumnos',
+            where: 'id = ?',
+            whereArgs: [contratoId],
+            limit: 1,
+          );
+          if (snapRows.isNotEmpty) {
+            final caSnap = ContratoAlumno.fromJson(snapRows.first);
+            final cobradoSnap =
+                await _sumMoraCobradaHistorialTxn(txn, contratoId);
+            final moraSnap = MoraCuotaCalculator.calcular(caSnap);
+            final formulaSnap = (moraSnap.interesAcumulado - cobradoSnap)
+                .clamp(0.0, double.infinity);
+            final trackedSnap = caSnap.moraPendienteTracked;
+            final pendienteAhora = math.max(formulaSnap, trackedSnap);
+            if (pendienteAhora > trackedSnap + 0.01) {
+              await txn.update(
+                'contratos_alumnos',
+                {'mora_pendiente_tracked': pendienteAhora},
+                where: 'id = ?',
+                whereArgs: [contratoId],
+              );
+            }
           }
         }
         // ÔöÇÔöÇ Ahora s├¡, avanzar cuota ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
@@ -376,96 +389,164 @@ class ContratosRepository {
     final pagos = await db.query('pagos_contrato_alumno', 
         where: 'contrato_alumno_id = ?', whereArgs: [contratoId]);
     
-    int cuotasBaseCount = 0;
-    int cuotasMesaCount = 0;
-    int cuotasSillaCount = 0;
-    double pagadoMesa = 0;
-    double pagadoSilla = 0;
-    double totalRecaudadoReal = 0;
-
-    for (final p in pagos) {
-      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
-
-      final monto = (p['monto'] as num).toDouble();
+    final validPagos = pagos.where((p) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
       final conceptoRaw = p['concepto'] as String? ?? '';
       final lkRow = (p['line_kind'] as String?)?.trim();
       if (lkRow == kLineKindInteresMora ||
           lkRow == kLineKindCargoCanal ||
-          esPagoInteresMoraPorConcepto(conceptoRaw)) {
-        continue;
+          esPagoInteresMoraPorConcepto(conceptoRaw) ||
+          esPagoCargoCanalPorConcepto(conceptoRaw)) {
+        return false;
       }
-      final concepto = conceptoRaw.toLowerCase();
-      
-      final bool esEntregaParcial = concepto.contains('entrega') || 
-                                     concepto.contains('adelanto') || 
-                                     concepto.contains('parcial');
+      return true;
+    }).toList();
 
-      double mgOriginal = (p['monto_gross'] as num? ?? monto).toDouble();
-      double mgSanado = mgOriginal;
+    final baseList = <Map<String, dynamic>>[];
+    final mesaList = <Map<String, dynamic>>[];
+    final sillasList = <Map<String, dynamic>>[];
 
-      if (concepto.contains('base')) {
-        int cant = 0;
-        if (!esEntregaParcial) {
-          if (concepto.contains('liquidaci├│n de')) {
-            final match = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto);
-            cant = match != null ? int.parse(match.group(1)!) : 1;
-          } else if (concepto.contains('cuota')) {
-            cant = 1;
-          }
-        }
-        
-        if (cant > 0 && mgOriginal == monto && monto < (cuotaPuraBase * cant - 0.1) && cuotaPuraBase > 0) {
-          mgSanado = cuotaPuraBase * cant;
-        }
-        cuotasBaseCount += cant;
-      } else if (concepto.contains('mesa')) {
-        int cant = 0;
-        if (!esEntregaParcial) {
-          if (concepto.contains('liquidaci├│n de')) {
-            final match = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto);
-            cant = match != null ? int.parse(match.group(1)!) : 1;
-          } else if (concepto.contains('mesa extra')) {
-            cant = 1;
-          }
-        }
-        if (cant > 0 && mgOriginal == monto && monto < (cuotaPuraMesa * cant - 0.1) && cuotaPuraMesa > 0) {
-          mgSanado = cuotaPuraMesa * cant;
-        }
-        cuotasMesaCount += cant;
-        pagadoMesa += mgSanado;
+    for (final p in validPagos) {
+      final concepto = (p['concepto'] as String? ?? '').toLowerCase();
+      if (concepto.contains('mesa')) {
+        mesaList.add(p);
       } else if (concepto.contains('silla')) {
-        int cant = 0;
-        if (!esEntregaParcial) {
-          if (concepto.contains('liquidaci├│n de')) {
-            final match = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto);
-            cant = match != null ? int.parse(match.group(1)!) : 1;
-          } else if (concepto.contains('sillas extra')) {
-            cant = 1;
-          }
-        }
-        if (cant > 0 && mgOriginal == monto && monto < (cuotaPuraSilla * cant - 0.1) && cuotaPuraSilla > 0) {
-          mgSanado = cuotaPuraSilla * cant;
-        }
-        cuotasSillaCount += cant;
-        pagadoSilla += mgSanado;
-      }
-
-      totalRecaudadoReal += mgSanado;
-      
-      if (mgSanado != mgOriginal) {
-        await db.update('pagos_contrato_alumno', {'monto_gross': mgSanado}, where: 'id = ?', whereArgs: [p['id']]);
+        sillasList.add(p);
+      } else {
+        baseList.add(p);
       }
     }
 
+    Future<double> procesarGrupoYCalcularRecaudado(
+      List<Map<String, dynamic>> pagosDeClase,
+      double cuotaPura,
+      String clase,
+    ) async {
+      if (pagosDeClase.isEmpty) return 0.0;
+
+      // Ordenar por fecha_pago
+      final mutables = List<Map<String, dynamic>>.from(pagosDeClase);
+      mutables.sort((a, b) {
+        final fa = DateTime.tryParse(a['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final fb = DateTime.tryParse(b['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return fa.compareTo(fb);
+      });
+
+      final groups = <List<Map<String, dynamic>>>[];
+      var currentGroup = <Map<String, dynamic>>[];
+
+      for (final p in mutables) {
+        if (currentGroup.isEmpty) {
+          currentGroup.add(p);
+        } else {
+          final fa = DateTime.tryParse(currentGroup.last['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final fb = DateTime.tryParse(p['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final diff = fb.difference(fa).inSeconds.abs();
+          if (diff <= 3600) {
+            currentGroup.add(p);
+          } else {
+            groups.add(currentGroup);
+            currentGroup = [p];
+          }
+        }
+      }
+      if (currentGroup.isNotEmpty) {
+        groups.add(currentGroup);
+      }
+
+      double totalMontoGrossAcumulado = 0.0;
+
+      for (final g in groups) {
+        final cants = <int>[];
+        double totalMontoGrupo = 0.0;
+
+        for (final p in g) {
+          final concepto = (p['concepto'] as String? ?? '').toLowerCase();
+          final bool esEntregaParcial = concepto.contains('entrega') ||
+                                         concepto.contains('adelanto') ||
+                                         concepto.contains('parcial') ||
+                                         concepto.contains('abono');
+          int cant = 0;
+          final matchLiquidacion = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto) ??
+                                   RegExp(r'liquidación de (\d+)').firstMatch(concepto);
+          final matchCuotas = RegExp(r'(\d+)\s+cuota').firstMatch(concepto);
+
+          if (matchLiquidacion != null) {
+            cant = int.parse(matchLiquidacion.group(1)!);
+          } else if (matchCuotas != null) {
+            cant = int.parse(matchCuotas.group(1)!);
+          } else if (!esEntregaParcial && concepto.contains('cuota')) {
+            cant = 1;
+          }
+          cants.add(cant);
+          totalMontoGrupo += (p['monto'] as num).toDouble();
+        }
+
+        int targetCant = 0;
+        if (cants.isNotEmpty) {
+          final setCants = cants.toSet();
+          if (setCants.length == 1) {
+            targetCant = cants.first;
+          } else {
+            targetCant = cants.reduce((a, b) => a > b ? a : b);
+          }
+        }
+
+        final targetGrossTotal = cuotaPura * targetCant;
+        final bool debeInflar = cuotaPura > 0 && targetCant > 0 && totalMontoGrupo < (targetGrossTotal - 0.1);
+
+        for (final p in g) {
+          final double monto = (p['monto'] as num).toDouble();
+          final double mgOriginal = (p['monto_gross'] as num? ?? monto).toDouble();
+          double mgSanado = mgOriginal;
+
+          mgSanado = CalculadoraFinanciera.montoGrossAcumuladoEnAuditoria(
+            montoNeto: monto,
+            montoGrossOriginal: mgOriginal,
+            debeInflar: debeInflar,
+            targetGrossTotal: targetGrossTotal,
+            totalMontoGrupoNeto: totalMontoGrupo,
+            lineasEnGrupo: g.length,
+          );
+
+          mgSanado = double.parse(mgSanado.toStringAsFixed(4));
+
+          if ((mgSanado - mgOriginal).abs() > 0.01) {
+            await db.update('pagos_contrato_alumno', {'monto_gross': mgSanado}, where: 'id = ?', whereArgs: [p['id']]);
+          }
+          totalMontoGrossAcumulado += mgSanado;
+        }
+      }
+
+      return totalMontoGrossAcumulado;
+    }
+
+    final double totalBasePaid = await procesarGrupoYCalcularRecaudado(baseList, cuotaPuraBase, 'base');
+    final double pagadoMesa = await procesarGrupoYCalcularRecaudado(mesaList, cuotaPuraMesa, 'mesa');
+    final double pagadoSilla = await procesarGrupoYCalcularRecaudado(sillasList, cuotaPuraSilla, 'silla');
+    
+    final double totalRecaudadoReal = totalBasePaid + pagadoMesa + pagadoSilla;
     final double saldoReal = (contrato.montoTotalPactado - totalRecaudadoReal).clamp(0, double.infinity);
     
+    final int cuotasBaseCount = cuotaPuraBase > 0 
+        ? ((totalBasePaid + 0.1) / cuotaPuraBase).floor().clamp(0, contrato.totalCuotas)
+        : 0;
+        
+    final int cuotasMesaCount = cuotaPuraMesa > 0 
+        ? ((pagadoMesa + 0.1) / cuotaPuraMesa).floor().clamp(0, contrato.mesaExtraCuotas)
+        : 0;
+        
+    final int cuotasSillaCount = cuotaPuraSilla > 0 
+        ? ((pagadoSilla + 0.1) / cuotaPuraSilla).floor().clamp(0, contrato.sillasExtraCuotas > 0 ? contrato.sillasExtraCuotas : 99)
+        : 0;
+
     bool hasChanges = false;
     final currentData = row;
     
     final finalUpdates = {
-      'cuotas_pagadas': cuotasBaseCount.clamp(0, contrato.totalCuotas),
-      'mesa_extra_cuotas_pagadas': cuotasMesaCount.clamp(0, contrato.mesaExtraCuotas),
-      'sillas_extra_cuotas_pagadas': cuotasSillaCount.clamp(0, contrato.sillasExtraCuotas > 0 ? contrato.sillasExtraCuotas : 99),
+      'cuotas_pagadas': cuotasBaseCount,
+      'mesa_extra_cuotas_pagadas': cuotasMesaCount,
+      'sillas_extra_cuotas_pagadas': cuotasSillaCount,
       'mesa_extra_pagado': pagadoMesa,
       'sillas_extra_pagado': pagadoSilla,
       'saldo_deudor': saldoReal.clamp(0, double.infinity),
@@ -488,17 +569,13 @@ class ContratosRepository {
 
     if (hasChanges) {
       await db.update('contratos_alumnos', finalUpdates, where: 'id = ?', whereArgs: [contratoId]);
+      await SyncQueue.enqueue(
+        tabla: 'contratos_alumnos',
+        operacion: SyncOperation.update,
+        registroId: contratoId,
+        payload: {'id': contratoId, ...finalUpdates},
+      );
     }
-
-    // El enqueue se ejecuta SIEMPRE: tras una anulaci├│n los contadores locales pueden quedar
-    // ya consistentes (hasChanges=false) pero la nube necesita el update igual para que
-    // dashboards/cobros suscritos al realtime de contratos_alumnos vean el contador correcto.
-    await SyncQueue.enqueue(
-      tabla: 'contratos_alumnos',
-      operacion: SyncOperation.update,
-      registroId: contratoId,
-      payload: {'id': contratoId, ...finalUpdates},
-    );
   }
 
   /// Obtiene el ├║ltimo pago de un contrato.

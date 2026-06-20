@@ -41,9 +41,12 @@ extension TurnoCajaX on TurnoCaja {
       case TurnoCaja.tarde:
         return 'Tarde';
       case TurnoCaja.dia:
-        return 'Día';
+        return 'Día completo';
     }
   }
+
+  /// Etiqueta para PDF / exportación.
+  String get labelPdf => labelCorto;
 
   /// Identificador estable para nombres de archivo / logs.
   String get slug {

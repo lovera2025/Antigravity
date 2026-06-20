@@ -23,14 +23,13 @@ class PresupuestosRepository {
   PresupuestosRepository(this._supabase, this._connectivity, this._ref, this._syncEngine);
 
   void _scheduleSync() {
-    if (_connectivity.currentStatus != AppConnectivity.online) return;
-    unawaited(_syncEngine.syncNow());
+    // Local-first: encolar ya ocurrió; subida manual vía nubecita.
   }
 
   // ── LECTURA ────────────────────────────────────────────────────────────────
 
-  /// [pullRemoteWhenOnline]: en false solo lee SQLite (rápido tras editar en local).
-  Future<List<Presupuesto>> getAll({bool pullRemoteWhenOnline = true}) async {
+  /// [pullRemoteWhenOnline]: legacy, ignorado — lectura solo local.
+  Future<List<Presupuesto>> getAll({bool pullRemoteWhenOnline = false}) async {
     final db = await LocalDatabase.instance;
 
     const query = '''
@@ -41,12 +40,6 @@ class PresupuestosRepository {
     ''';
 
     final rows = await db.rawQuery(query);
-
-    if (_connectivity.currentStatus == AppConnectivity.online && pullRemoteWhenOnline) {
-      await _pullPresupuestosFromCloud(db);
-      final freshRows = await db.rawQuery(query);
-      return _mapRowsToPresupuestos(db, freshRows);
-    }
 
     return _mapRowsToPresupuestos(db, rows);
   }
@@ -134,6 +127,7 @@ class PresupuestosRepository {
         'detalle_servicio': s['detalle_servicio'],
         'grupo': s['grupo'],
         'combo_orden': s['combo_orden'] ?? 0,
+        'es_extra': (s['es_extra'] == true || s['es_extra'] == 1) ? 1 : 0,
       };
       await db.insert('presupuesto_servicios', psData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
@@ -166,6 +160,7 @@ class PresupuestosRepository {
         'grupo': s.grupo,
         'combo_orden': s.comboOrden,
         'detalle_servicio': s.detalleServicio,
+        'es_extra': s.esExtra,
       }
     };
     
@@ -275,6 +270,7 @@ class PresupuestosRepository {
         'detalle_servicio': s['detalle_servicio'],
         'grupo': s['grupo'],
         'combo_orden': s['combo_orden'] ?? 0,
+        'es_extra': (s['es_extra'] == true || s['es_extra'] == 1) ? 1 : 0,
       };
       await db.insert('presupuesto_servicios', psData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
@@ -356,6 +352,7 @@ class PresupuestosRepository {
         'detalle_servicio': sr['detalle_servicio'],
         'grupo': sr['grupo'],
         'combo_orden': sr['combo_orden'] ?? 0,
+        'es_extra': sr['es_extra'] ?? 0,
         'servicios': {
           'id': sr['servicio_id'],
           'nombre': sr['nombre'] ?? sr['detalle_servicio'] ?? 'Servicio Ad-hoc',
@@ -433,6 +430,7 @@ class PresupuestosRepository {
             'detalle_servicio': sMap['detalle_servicio'],
             'grupo': sMap['grupo'],
             'combo_orden': sMap['combo_orden'] ?? 0,
+            'es_extra': sMap['es_extra'] ?? 0,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       }

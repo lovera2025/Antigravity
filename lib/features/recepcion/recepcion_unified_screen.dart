@@ -1069,8 +1069,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
         final repo = ref.read(invitadosRepositoryProvider);
         await repo.eliminar(invitado.id);
         
-        // Forzar sync inmediato y refresco de stats para reacción instántanea
-        ref.read(syncEngineProvider).syncNow();
         ref.invalidate(statsEventoProvider(invitado.eventoId));
         
         if (context.mounted) {
@@ -1109,9 +1107,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
       try {
         final repo = ref.read(invitadosRepositoryProvider);
         await repo.vaciarEvento(eventoId);
-        
-        // Forzar sync inmediato para que repercuta en la nube en el momento
-        ref.read(syncEngineProvider).syncNow();
         
         // Notificar al tótem para reflejo inmediato sin esperar sync
         if (KioskLauncher.isTotemActive) {
@@ -1451,9 +1446,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
 
       final repo = ref.read(invitadosRepositoryProvider);
       final count = await repo.agregarBatch(eventoId: eventoId, invitados: invitados);
-
-      // DISPARAR SYNC: Muy importante para que aparezcan en el celu/tótem al instante
-      ref.read(syncEngineProvider).syncNow();
 
       ref.invalidate(invitadosStreamProvider(eventoId));
       ref.invalidate(statsEventoProvider(eventoId));
