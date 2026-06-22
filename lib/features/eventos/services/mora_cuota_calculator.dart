@@ -201,15 +201,18 @@ class MoraCuotaCalculator {
       if ((t - cobradaDesdeOffset).abs() <= 0.01) {
         return 0.0;
       }
-      // Tracked no bajó con pagos parciales (legacy).
+      // Tracked vivo (registrarPago): t ya es el remanente → mostrar t.
+      // Legacy stale: t sigue siendo el snapshot pre-pago (t >> cobrada) → t − cobrada.
       if (t > cobradaDesdeOffset + 0.01) {
-        return double.parse(
-          (t - cobradaDesdeOffset)
-              .clamp(0.0, double.infinity)
-              .toStringAsFixed(2),
-        );
+        final legacyRemainder =
+            (t - cobradaDesdeOffset).clamp(0.0, double.infinity);
+        // Si t ≈ cobrada + remanente con t claramente por encima de cobrada×1.25,
+        // tracked no se redujo (DB antigua). Si no, confiar en t.
+        if (t > cobradaDesdeOffset * 1.25 + 0.01) {
+          return double.parse(legacyRemainder.toStringAsFixed(2));
+        }
+        return double.parse(t.toStringAsFixed(2));
       }
-      // Tracked ya refleja el remanente real (flujo actual post-cobro).
       return double.parse(t.toStringAsFixed(2));
     }
 

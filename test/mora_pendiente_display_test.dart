@@ -62,6 +62,18 @@ void main() {
       expect(r, closeTo(2400, 0.01));
     });
 
+    // --- Regresión: pago parcial con remanente > monto pagado (6600 − 3000 = 3600) ---
+    test('carry-over parcial: tracked vivo con resto mayor al pago no doble-descuenta', () {
+      final r = MoraCuotaCalculator.pendienteDisplay(
+        interesAcumulado: 0,
+        moraCobradaHistorial: 3000,
+        moraPendienteTracked: 3600, // registrarPago ya descontó 3000 de 6600
+        moraCobradaOffset: 0,
+        moraCobradaPeriodo: 0,
+      );
+      expect(r, closeTo(3600, 0.01));
+    });
+
     // --- Carry-over parcial legacy (tracked no se redujo en DB antigua) ---
     test('carry-over parcial legacy: tracked stale deduce del historial', () {
       final r = MoraCuotaCalculator.pendienteDisplay(
