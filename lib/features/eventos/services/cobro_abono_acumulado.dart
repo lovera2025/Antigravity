@@ -1,5 +1,7 @@
 import '../../../core/utils/pago_interes_mora.dart';
 
+import 'mesas_extra_utils.dart';
+
 /// Clase de concepto del plan (alineado a [ContratosRepository.recalcularProgresoContrato]).
 enum CobroConceptoClase { base, mesa, sillas }
 
@@ -126,6 +128,26 @@ Map<String, double> grossHistoricoPorConceptoKey(
     'Mesa': grossHistoricoClaseCobro(pagos, CobroConceptoClase.mesa),
     'Sillas': grossHistoricoClaseCobro(pagos, CobroConceptoClase.sillas),
   };
+}
+
+/// Igual que [grossHistoricoPorConceptoKey] + claves `Mesa:1`, `Mesa:2`, …
+Map<String, double> grossHistoricoPorConceptoKeyExtended(
+  Iterable<Map<String, dynamic>> pagos,
+) {
+  final out = Map<String, double>.from(grossHistoricoPorConceptoKey(pagos));
+  for (final p in pagos) {
+    if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+    final concepto = p['concepto'] as String? ?? '';
+    if (!concepto.toLowerCase().contains('mesa')) continue;
+    final gross =
+        (p['monto_gross'] as num?)?.toDouble() ??
+        (p['monto'] as num?)?.toDouble() ??
+        0.0;
+    final n = MesasExtraUtils.numeroMesaDesdeConcepto(concepto);
+    final key = 'Mesa:$n';
+    out[key] = double.parse(((out[key] ?? 0) + gross).toStringAsFixed(2));
+  }
+  return out;
 }
 
 /// Rotula concepto y cuotas liquidadas cuando el cobro solo alcanza abono

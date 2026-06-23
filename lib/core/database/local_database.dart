@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,7 +18,7 @@ import '../utils/uuid_utils.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 47;
+  static const int _version = 48;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -190,6 +191,8 @@ class LocalDatabase {
         sillas_extra_precio_total REAL DEFAULT 0.0,
         sillas_extra_cuotas_pagadas INTEGER DEFAULT 0,
         mesa_extra_pagado REAL DEFAULT 0.0,
+        mesa_extra_cantidad INTEGER DEFAULT 0,
+        mesas_extra_estado TEXT,
         sillas_extra_pagado REAL DEFAULT 0.0,
         curso_division TEXT,
         musica_elegida TEXT,
@@ -1473,6 +1476,72 @@ class LocalDatabase {
         debugPrint('✅ Migración v47 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v47: $e');
+      }
+    }
+
+    if (oldVersion < 48) {
+      debugPrint('  🔧 v48: mesa_extra_cantidad + mesas_extra_estado');
+      try {
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_cantidad INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        debugPrint('  ⚠️ mesa_extra_cantidad: $e');
+      }
+      try {
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mesas_extra_estado TEXT',
+        );
+      } catch (e) {
+        debugPrint('  ⚠️ mesas_extra_estado: $e');
+      }
+
+      try {
+        final rows = await db.query(
+          'contratos_alumnos',
+          columns: [
+            'id',
+            'mesa_extra_precio',
+            'mesa_extra_pagado',
+            'mesa_extra_cuotas_pagadas',
+            'mesas_extra_estado',
+          ],
+        );
+        for (final row in rows) {
+          final estado = row['mesas_extra_estado'] as String?;
+          if (estado != null && estado.trim().isNotEmpty) continue;
+
+          final precio =
+              (row['mesa_extra_precio'] as num?)?.toDouble() ?? 0.0;
+          if (precio <= 0.01) continue;
+
+          final pagado =
+              (row['mesa_extra_pagado'] as num?)?.toDouble() ?? 0.0;
+          final cuotasPagadas =
+              (row['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
+          final liquidada = pagado >= precio - 0.01;
+          final jsonEstado = jsonEncode([
+            {
+              'n': 1,
+              'precio': precio,
+              'pagado': pagado,
+              'cuotasPagadas': cuotasPagadas,
+              'liquidada': liquidada,
+            },
+          ]);
+          await db.update(
+            'contratos_alumnos',
+            {
+              'mesa_extra_cantidad': 1,
+              'mesas_extra_estado': jsonEstado,
+            },
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+        debugPrint('✅ Migración v48 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v48 backfill: $e');
       }
     }
   }

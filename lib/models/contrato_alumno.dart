@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'mesa_extra_item.dart';
+
 class ContratoAlumno {
   final String id;
   final String eventoId;
@@ -21,6 +23,9 @@ class ContratoAlumno {
   final int sillasExtraCuotasPagadas;
   final double mesaExtraPagado;
   final double sillasExtraPagado;
+  final int mesaExtraCantidad;
+  /// JSON serializado (SQLite TEXT) o List en memoria.
+  final dynamic mesasExtraEstadoRaw;
   final String? cursoDivision;
   final String? musicaElegida;
   final String? numeroMesa;
@@ -56,6 +61,8 @@ class ContratoAlumno {
     this.sillasExtraCuotasPagadas = 0,
     this.mesaExtraPagado = 0.0,
     this.sillasExtraPagado = 0.0,
+    this.mesaExtraCantidad = 0,
+    this.mesasExtraEstadoRaw,
     this.cursoDivision,
     this.musicaElegida,
     this.numeroMesa,
@@ -108,6 +115,13 @@ class ContratoAlumno {
       sillasExtraCuotasPagadas: json['sillas_extra_cuotas_pagadas'] as int? ?? 0,
       mesaExtraPagado: double.parse((json['mesa_extra_pagado'] ?? 0.0).toString()),
       sillasExtraPagado: double.parse((json['sillas_extra_pagado'] ?? 0.0).toString()),
+      mesaExtraCantidad: () {
+        final c = json['mesa_extra_cantidad'] as num?;
+        if (c != null) return c.toInt();
+        final precio = double.parse((json['mesa_extra_precio'] ?? 0.0).toString());
+        return precio > 0.01 ? 1 : 0;
+      }(),
+      mesasExtraEstadoRaw: json['mesas_extra_estado'],
       cursoDivision: json['curso_division'] as String?,
       musicaElegida: json['musica_elegida'] as String?,
       numeroMesa: json['numero_mesa'] as String?,
@@ -147,6 +161,9 @@ class ContratoAlumno {
       'sillas_extra_cuotas_pagadas': sillasExtraCuotasPagadas,
       'mesa_extra_pagado': mesaExtraPagado,
       'sillas_extra_pagado': sillasExtraPagado,
+      'mesa_extra_cantidad': mesaExtraCantidad,
+      if (mesasExtraEstadoRaw != null)
+        'mesas_extra_estado': mesasExtraEstadoParaJson(),
       if (institucion != null && institucion!.trim().isNotEmpty)
         'institucion': institucion,
       if (cursoDivision != null && cursoDivision!.trim().isNotEmpty)
@@ -204,7 +221,32 @@ class ContratoAlumno {
       final v = out['contrato_firmado'];
       if (v is int) out['contrato_firmado'] = v != 0;
     }
+    if (out.containsKey('mesas_extra_estado') && out['mesas_extra_estado'] is String) {
+      try {
+        out['mesas_extra_estado'] = jsonDecode(out['mesas_extra_estado'] as String);
+      } catch (_) {}
+    }
     return out;
+  }
+
+  /// Lista parseada de mesas extra (puede estar vacía si legacy sin JSON).
+  List<MesaExtraItem> get mesasExtraParsed =>
+      MesaExtraItem.listFromJson(mesasExtraEstadoRaw);
+
+  dynamic mesasExtraEstadoParaJson() {
+    if (mesasExtraEstadoRaw == null) return null;
+    if (mesasExtraEstadoRaw is String) return mesasExtraEstadoRaw;
+    if (mesasExtraEstadoRaw is List) {
+      return mesasExtraEstadoRaw
+          .map((e) => e is MesaExtraItem ? e.toJson() : e)
+          .toList();
+    }
+    return mesasExtraEstadoRaw;
+  }
+
+  double get precioUnitarioMesaExtra {
+    if (mesaExtraCantidad <= 0 || mesaExtraPrecio <= 0.01) return mesaExtraPrecio;
+    return double.parse((mesaExtraPrecio / mesaExtraCantidad).toStringAsFixed(2));
   }
 
   ContratoAlumno copyWith({
@@ -228,6 +270,8 @@ class ContratoAlumno {
     int? sillasExtraCuotasPagadas,
     double? mesaExtraPagado,
     double? sillasExtraPagado,
+    int? mesaExtraCantidad,
+    dynamic mesasExtraEstadoRaw,
     String? cursoDivision,
     String? musicaElegida,
     String? numeroMesa,
@@ -259,6 +303,8 @@ class ContratoAlumno {
       sillasExtraCuotasPagadas: sillasExtraCuotasPagadas ?? this.sillasExtraCuotasPagadas,
       mesaExtraPagado: mesaExtraPagado ?? this.mesaExtraPagado,
       sillasExtraPagado: sillasExtraPagado ?? this.sillasExtraPagado,
+      mesaExtraCantidad: mesaExtraCantidad ?? this.mesaExtraCantidad,
+      mesasExtraEstadoRaw: mesasExtraEstadoRaw ?? this.mesasExtraEstadoRaw,
       cursoDivision: cursoDivision ?? this.cursoDivision,
       musicaElegida: musicaElegida ?? this.musicaElegida,
       numeroMesa: numeroMesa ?? this.numeroMesa,

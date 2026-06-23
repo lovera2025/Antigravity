@@ -22,6 +22,8 @@ import 'services/calculadora_financiera.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/cobro_abono_acumulado.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
+import 'services/mesas_extra_utils.dart';
+import '../../models/mesa_extra_item.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
@@ -2898,10 +2900,13 @@ class _DetalleEventoMasivoScreenState
       builder: (context) =>
           ModalAlumnoPremium(evento: widget.evento, alumno: alumno),
     );
-    if (mounted && result == true) _refreshAlumnos();
+    if (mounted && result == true) await _refreshAlumnos();
   }
 
   Future<void> _mostrarModalPagoAlumno(ContratoAlumno alumno) async {
+    final cRepo = ref.read(contratosRepositoryProvider);
+    final alumnoFresco = await cRepo.getContratoById(alumno.id) ?? alumno;
+    alumno = alumnoFresco;
     if (alumno.saldoDeudor <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2915,10 +2920,9 @@ class _DetalleEventoMasivoScreenState
     }
 
     final prefsMedio = await SharedPreferences.getInstance();
-    final cRepo = ref.read(contratosRepositoryProvider);
     final moraYaCobradaHist = await cRepo.sumMoraCobradaHistorial(alumno.id);
     final pagosAlumno = await cRepo.getHistorialPagosAlumno(alumno.id);
-    final historicoGrossPorClave = grossHistoricoPorConceptoKey(pagosAlumno);
+    final historicoGrossPorClave = grossHistoricoPorConceptoKeyExtended(pagosAlumno);
     final moraResumen = MoraCuotaCalculator.calcular(alumno);
     final moraPeriodo = moraCobradaDelPeriodoVigente(
       pagosAlumno,
@@ -2947,11 +2951,18 @@ class _DetalleEventoMasivoScreenState
     final int sCuotas = alumno.sillasExtraCuotas ?? 1;
     final int sPagadas = alumno.sillasExtraCuotasPagadas ?? 0;
 
-    final double deudaMesaTotal =
-        (alumno.mesaExtraPrecio - (alumno.mesaExtraPagado ?? 0)).clamp(
-          0.0,
-          double.infinity,
-        );
+    final List<MesaExtraItem> mesasEstadoList =
+        MesasExtraUtils.estadoDesdeContrato(alumno);
+    final List<MesaExtraItem> mesasActivasCobro =
+        MesasExtraUtils.mesasActivas(mesasEstadoList);
+    String mesaCobroKey(int n) => 'Mesa:$n';
+
+    final double deudaMesaTotal = mesasActivasCobro.isEmpty
+        ? (alumno.mesaExtraPrecio - (alumno.mesaExtraPagado)).clamp(
+            0.0,
+            double.infinity,
+          )
+        : mesasActivasCobro.fold<double>(0, (s, m) => s + m.deuda);
     final double deudaSillasTotal =
         (alumno.sillasExtraPrecioTotal - (alumno.sillasExtraPagado ?? 0)).clamp(
           0.0,
@@ -3288,9 +3299,26 @@ class _DetalleEventoMasivoScreenState
                 return 'Cuota Base ($num/$tCuotas)';
               }
               if (raw == 'Mesa Extra' || raw.contains('MESA EXTRA')) {
-                if (mCuotas <= 1) return 'Mesa Extra - Entrega';
-                final num = mPagadas + cuotaOffset;
-                return 'Mesa Extra ($num/$mCuotas)';
+                final match = RegExp(
+                  r'mesa\s*extra\s*(\d+)',
+                  caseSensitive: false,
+                ).firstMatch(raw);
+                final mesaN = match != null ? int.parse(match.group(1)!) : 1;
+                MesaExtraItem item;
+                try {
+                  item = mesasEstadoList.firstWhere((m) => m.n == mesaN);
+                } catch (_) {
+                  item = mesasEstadoList.isNotEmpty
+                      ? mesasEstadoList.first
+                      : MesaExtraItem(n: 1, precio: alumno.mesaExtraPrecio);
+                }
+                final prefix = mesasActivasCobro.length > 1 ||
+                        alumno.mesaExtraCantidad > 1
+                    ? 'Mesa Extra $mesaN'
+                    : 'Mesa Extra';
+                if (mCuotas <= 1) return '$prefix - Entrega';
+                final num = item.cuotasPagadas + cuotaOffset;
+                return '$prefix ($num/$mCuotas)';
               }
               if (raw == 'Sillas Extras' || raw.contains('SILLAS EXTRAS')) {
                 if (sCuotas <= 1) return 'Sillas Extras - Entrega';
@@ -3334,11 +3362,23 @@ class _DetalleEventoMasivoScreenState
                   conceptoFinal = getConceptoDetallado(label, 1);
                   cant = 1;
                 } else {
-                  final int cuotasPagadasClase = switch (conceptoKey) {
-                    'Mesa' => mPagadas,
-                    'Sillas' => sPagadas,
-                    _ => cPagadas,
-                  };
+                  final int cuotasPagadasClase = () {
+                    if (conceptoKey.startsWith('Mesa:')) {
+                      final n = int.tryParse(conceptoKey.split(':').last) ?? 1;
+                      try {
+                        return mesasEstadoList
+                            .firstWhere((m) => m.n == n)
+                            .cuotasPagadas;
+                      } catch (_) {
+                        return mPagadas;
+                      }
+                    }
+                    return switch (conceptoKey) {
+                      'Mesa' => mPagadas,
+                      'Sillas' => sPagadas,
+                      _ => cPagadas,
+                    };
+                  }();
                   final rotulo = rotularDesgloseConAbonosAcumulados(
                     conceptoKey: conceptoKey,
                     label: label,
@@ -3449,6 +3489,24 @@ class _DetalleEventoMasivoScreenState
                   if (key == 'Base') {
                     qPura = cuotaPura;
                     label = 'Cuota Base';
+                  } else if (key.startsWith('Mesa:')) {
+                    final n = int.tryParse(key.split(':').last) ?? 1;
+                    MesaExtraItem item;
+                    try {
+                      item = mesasActivasCobro.firstWhere((m) => m.n == n);
+                    } catch (_) {
+                      item = mesasEstadoList.firstWhere(
+                        (m) => m.n == n,
+                        orElse: () => MesaExtraItem(
+                          n: n,
+                          precio: alumno.precioUnitarioMesaExtra,
+                        ),
+                      );
+                    }
+                    qPura = item.cuotaPura(mCuotas);
+                    label = mesasActivasCobro.length > 1
+                        ? 'Mesa Extra $n'
+                        : 'Mesa Extra';
                   } else if (key == 'Mesa') {
                     qPura =
                         alumno.mesaExtraPrecio / (mCuotas > 0 ? mCuotas : 1);
@@ -3541,13 +3599,27 @@ class _DetalleEventoMasivoScreenState
                   cuotaPura,
                 );
               }
-              if (pagarMesa && deudaMesaTotal > 0.01) {
+              if (mesasActivasCobro.isEmpty && pagarMesa && deudaMesaTotal > 0.01) {
                 procesarConcepto(
                   'Mesa',
                   'Mesa Extra',
                   deudaMesaTotal,
                   alumno.mesaExtraPrecio / (mCuotas > 0 ? mCuotas : 1),
                 );
+              } else {
+                for (final mesa in mesasActivasCobro) {
+                  final key = mesaCobroKey(mesa.n);
+                  if (!montosManuales.containsKey(key)) continue;
+                  final label = mesasActivasCobro.length > 1
+                      ? 'Mesa Extra ${mesa.n}'
+                      : 'Mesa Extra';
+                  procesarConcepto(
+                    key,
+                    label,
+                    mesa.deuda,
+                    mesa.cuotaPura(mCuotas),
+                  );
+                }
               }
               if (pagarSillas && deudaSillasTotal > 0.01) {
                 procesarConcepto(
@@ -4124,69 +4196,78 @@ class _DetalleEventoMasivoScreenState
                         },
                       ),
                       if (deudaMesaTotal > 0.01)
-                        _buildConceptoTile(
-                          titulo: 'MESA EXTRA',
-                          deuda: deudaMesaTotal,
-                          isDark:
-                              Theme.of(context).brightness == Brightness.dark,
-                          selected: pagarMesa,
-                          montoManual: montosManuales['Mesa'],
-                          onChanged: (v) async {
-                            if (v == true) {
-                              double pureMesa =
-                                  alumno.mesaExtraPrecio /
-                                  (mCuotas > 0 ? mCuotas : 1);
-                              int restMesa = mCuotas - mPagadas;
-                              final choice = await _mostrarOpcionesPago(
-                                context,
-                                'Mesa Extra',
-                                deudaMesaTotal,
-                                cuotaUnica: pureMesa,
-                                cuotasRestantes: restMesa,
-                              );
-                              if (choice == 'TOTAL') {
-                                setModalState(() {
-                                  pagarMesa = true;
-                                  montosManuales['Mesa'] = deudaMesaTotal;
-                                });
-                              } else if (choice == 'UNICA') {
-                                setModalState(() {
-                                  pagarMesa = true;
-                                  montosManuales['Mesa'] = pureMesa;
-                                });
-                              } else if (choice == 'VARIAS') {
-                                final n = await _mostrarDialogoSeleccionCuotas(
-                                  context,
-                                  'Mesa Extra',
-                                  restMesa,
+                        ...(mesasActivasCobro.isEmpty
+                            ? [
+                                _buildConceptoTile(
+                                  titulo: 'MESA EXTRA',
+                                  deuda: deudaMesaTotal,
+                                  isDark: Theme.of(context).brightness ==
+                                      Brightness.dark,
+                                  selected: pagarMesa,
+                                  montoManual: montosManuales['Mesa'],
+                                  onChanged: (v) async {
+                                    await _onMesaExtraCobroChanged(
+                                      context: context,
+                                      v: v,
+                                      mesa: null,
+                                      mesaLabel: 'Mesa Extra',
+                                      mesaKeyStr: 'Mesa',
+                                      deuda: deudaMesaTotal,
+                                      cuotaPura: alumno.mesaExtraPrecio /
+                                          (mCuotas > 0 ? mCuotas : 1),
+                                      cuotasRestantes: mCuotas - mPagadas,
+                                      setModalState: setModalState,
+                                      montosManuales: montosManuales,
+                                      onPagarMesaChanged: (val) =>
+                                          pagarMesa = val,
+                                      recalcular: recalcularDesdeChecks,
+                                      preguntarMontoParcial:
+                                          preguntarMontoParcial,
+                                      mostrarOpcionesPago: _mostrarOpcionesPago,
+                                      mostrarDialogoSeleccionCuotas:
+                                          _mostrarDialogoSeleccionCuotas,
+                                    );
+                                  },
+                                ),
+                              ]
+                            : mesasActivasCobro.map((mesa) {
+                                final key = mesaCobroKey(mesa.n);
+                                final label = mesasActivasCobro.length > 1
+                                    ? 'MESA EXTRA ${mesa.n}'
+                                    : 'MESA EXTRA';
+                                return _buildConceptoTile(
+                                  titulo: label,
+                                  deuda: mesa.deuda,
+                                  isDark: Theme.of(context).brightness ==
+                                      Brightness.dark,
+                                  selected:
+                                      montosManuales.containsKey(key),
+                                  montoManual: montosManuales[key],
+                                  onChanged: (v) async {
+                                    await _onMesaExtraCobroChanged(
+                                      context: context,
+                                      v: v,
+                                      mesa: mesa,
+                                      mesaLabel: 'Mesa Extra ${mesa.n}',
+                                      mesaKeyStr: key,
+                                      deuda: mesa.deuda,
+                                      cuotaPura: mesa.cuotaPura(mCuotas),
+                                      cuotasRestantes:
+                                          mesa.cuotasRestantes(mCuotas),
+                                      setModalState: setModalState,
+                                      montosManuales: montosManuales,
+                                      onPagarMesaChanged: (val) =>
+                                          pagarMesa = val,
+                                      recalcular: recalcularDesdeChecks,
+                                      preguntarMontoParcial:
+                                          preguntarMontoParcial,
+                                      mostrarOpcionesPago: _mostrarOpcionesPago,
+                                      mostrarDialogoSeleccionCuotas:
+                                          _mostrarDialogoSeleccionCuotas,
+                                    );
+                                  },
                                 );
-                                if (n != null) {
-                                  setModalState(() {
-                                    pagarMesa = true;
-                                    montosManuales['Mesa'] = pureMesa * n;
-                                  });
-                                }
-                              } else if (choice == 'PARTE') {
-                                final m = await preguntarMontoParcial(
-                                  'Mesa Extra',
-                                  deudaMesaTotal,
-                                );
-                                if (m != null) {
-                                  setModalState(() {
-                                    pagarMesa = true;
-                                    montosManuales['Mesa'] = m;
-                                  });
-                                }
-                              }
-                            } else {
-                              setModalState(() {
-                                pagarMesa = false;
-                                montosManuales.remove('Mesa');
-                              });
-                            }
-                            recalcularDesdeChecks();
-                          },
-                        ),
+                              })),
                       if (deudaSillasTotal > 0.01)
                         _buildConceptoTile(
                           titulo: 'SILLAS EXTRAS',
@@ -5510,6 +5591,7 @@ class _DetalleEventoMasivoScreenState
                             double.parse(trackedNuevo.toStringAsFixed(2));
 
                         await repo.actualizarContrato(alumno.id, directUpdates);
+                        await repo.reconciliarMesasEstadoContrato(alumno.id);
 
                         // Escaneo final automático sin interrumpir al usuario
                         await _forzarAuditoriaInteligente(silencioso: true);
@@ -5549,6 +5631,8 @@ class _DetalleEventoMasivoScreenState
 
   Future<void> _mostrarHistorialPagosAlumno(ContratoAlumno alumno) async {
     final repo = ref.read(contratosRepositoryProvider);
+    final alumnoUi = await repo.getContratoById(alumno.id) ?? alumno;
+    final mesasResumen = MesasExtraUtils.estadoDesdeContrato(alumnoUi);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showDialog(
@@ -5603,13 +5687,33 @@ class _DetalleEventoMasivoScreenState
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    alumno.nombreAlumno.toUpperCase(),
+                    alumnoUi.nombreAlumno.toUpperCase(),
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white70 : Colors.black54,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (mesasResumen.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    ...mesasResumen.map((m) {
+                      final cuotas = alumnoUi.mesaExtraCuotas;
+                      final linea = m.liquidada
+                          ? 'Mesa ${m.n} · Liquidada · ${m.precio.toCurrency()}'
+                          : 'Mesa ${m.n} · Cuota ${m.cuotasPagadas}/$cuotas · Deuda ${m.deuda.toCurrency()}';
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          linea,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white54 : Colors.black45,
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                 ],
               ),
             ),
@@ -5654,9 +5758,10 @@ class _DetalleEventoMasivoScreenState
                                   final List<Map<String, dynamic>>
                                   pagosConDetalle = [];
 
-                                  final int tCuotas = alumno.totalCuotas ?? 9;
+                                  final int tCuotas = alumnoUi.totalCuotas ?? 9;
                                   final int mCuotas =
-                                      alumno.mesaExtraCuotas ?? 1;
+                                      alumnoUi.mesaExtraCuotas ?? 1;
+                                  final Map<int, int> contadoresMesa = {};
 
                                   for (var p in cronologico) {
                                     final conceptoOriginal =
@@ -5671,17 +5776,25 @@ class _DetalleEventoMasivoScreenState
                                           (contadores['Cuota Base'] ?? 0) + 1;
                                       conceptoMejorado =
                                           'Cuota Base (${contadores['Cuota Base']}/$tCuotas)';
-                                    } else if (conceptoOriginal.startsWith(
-                                      'Mesa Extra',
-                                    )) {
-                                      contadores['Mesa Extra'] =
-                                          (contadores['Mesa Extra'] ?? 0) + 1;
+                                    } else if (conceptoOriginal
+                                        .toLowerCase()
+                                        .contains('mesa')) {
+                                      final mesaN = MesasExtraUtils
+                                          .numeroMesaDesdeConcepto(
+                                        conceptoOriginal,
+                                      );
+                                      contadoresMesa[mesaN] =
+                                          (contadoresMesa[mesaN] ?? 0) + 1;
+                                      final cMesa = contadoresMesa[mesaN]!;
+                                      final prefix = mesasResumen.length > 1
+                                          ? 'Mesa Extra $mesaN'
+                                          : 'Mesa Extra 1';
                                       if (mCuotas <= 1) {
                                         conceptoMejorado =
-                                            'Mesa Extra - Entrega';
+                                            '$prefix - Entrega';
                                       } else {
                                         conceptoMejorado =
-                                            'Mesa Extra (${contadores['Mesa Extra']}/$mCuotas)';
+                                            '$prefix ($cMesa/$mCuotas)';
                                       }
                                     } else if (conceptoOriginal.startsWith(
                                       'Sillas Extras',
@@ -6412,6 +6525,83 @@ class _DetalleEventoMasivoScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _onMesaExtraCobroChanged({
+    required BuildContext context,
+    required bool? v,
+    required MesaExtraItem? mesa,
+    required String mesaLabel,
+    required String mesaKeyStr,
+    required double deuda,
+    required double cuotaPura,
+    required int cuotasRestantes,
+    required StateSetter setModalState,
+    required Map<String, double> montosManuales,
+    required void Function(bool) onPagarMesaChanged,
+    required VoidCallback recalcular,
+    required Future<double?> Function(String titulo, double maximo)
+        preguntarMontoParcial,
+    required Future<String?> Function(
+      BuildContext context,
+      String titulo,
+      double deuda, {
+      double? cuotaUnica,
+      int? cuotasRestantes,
+    }) mostrarOpcionesPago,
+    required Future<int?> Function(BuildContext context, String titulo, int max)
+        mostrarDialogoSeleccionCuotas,
+  }) async {
+    if (v == true) {
+      final choice = await mostrarOpcionesPago(
+        context,
+        mesaLabel,
+        deuda,
+        cuotaUnica: cuotaPura,
+        cuotasRestantes: cuotasRestantes,
+      );
+      if (choice == 'TOTAL') {
+        setModalState(() {
+          onPagarMesaChanged(true);
+          montosManuales[mesaKeyStr] = deuda;
+        });
+      } else if (choice == 'UNICA') {
+        setModalState(() {
+          onPagarMesaChanged(true);
+          montosManuales[mesaKeyStr] = cuotaPura;
+        });
+      } else if (choice == 'VARIAS') {
+        final n = await mostrarDialogoSeleccionCuotas(
+          context,
+          mesaLabel,
+          cuotasRestantes,
+        );
+        if (n != null) {
+          setModalState(() {
+            onPagarMesaChanged(true);
+            montosManuales[mesaKeyStr] = cuotaPura * n;
+          });
+        }
+      } else if (choice == 'PARTE') {
+        final m = await preguntarMontoParcial(mesaLabel, deuda);
+        if (m != null) {
+          setModalState(() {
+            onPagarMesaChanged(true);
+            montosManuales[mesaKeyStr] = m;
+          });
+        }
+      }
+    } else {
+      setModalState(() {
+        montosManuales.remove(mesaKeyStr);
+        onPagarMesaChanged(
+          montosManuales.keys.any(
+            (k) => k == 'Mesa' || k.startsWith('Mesa:'),
+          ),
+        );
+      });
+    }
+    recalcular();
   }
 
   Future<String?> _mostrarOpcionesPago(

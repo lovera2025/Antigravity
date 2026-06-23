@@ -14,8 +14,10 @@ import '../../../core/services/connectivity_service.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../services/mesas_extra_utils.dart';
 import '../services/calculadora_financiera.dart';
 import '../services/mora_cuota_calculator.dart';
+import '../../../models/mesa_extra_item.dart';
 
 /// Repositorio de Contratos de Alumnos (Eventos Masivos) ÔÇö Offline-First.
 class ContratosRepository {
@@ -69,7 +71,20 @@ class ContratosRepository {
     return rows.map(_fromLocalRow).toList();
   }
 
-  // ÔöÇÔöÇ ESCRITURA ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  /// Contrato por id — lectura fresca desde SQLite (local-first).
+  Future<ContratoAlumno?> getContratoById(String id) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'contratos_alumnos',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return _fromLocalRow(rows.first);
+  }
+
+  // ÔöÇÔöÇ ESCRITURA
 
   /// Registra un nuevo contrato de alumno.
   Future<String> registrarContrato(ContratoAlumno contrato) async {
@@ -112,14 +127,27 @@ class ContratosRepository {
         localUpdates['contrato_firmado'] = v ? 1 : 0;
       }
     }
+    if (localUpdates.containsKey('mesas_extra_estado')) {
+      localUpdates['mesas_extra_estado'] =
+          _encodeMesasEstadoLocal(localUpdates['mesas_extra_estado']);
+    }
 
     await db.update('contratos_alumnos', localUpdates, where: 'id = ?', whereArgs: [id]);
     
+    final remotePayload = Map<String, dynamic>.from(updates);
+    if (remotePayload.containsKey('mesas_extra_estado')) {
+      final raw = remotePayload['mesas_extra_estado'];
+      if (raw is String) {
+        try {
+          remotePayload['mesas_extra_estado'] = jsonDecode(raw);
+        } catch (_) {}
+      }
+    }
     await SyncQueue.enqueue(
       tabla: 'contratos_alumnos',
       operacion: SyncOperation.update,
       registroId: id,
-      payload: ContratoAlumno.payloadForRemote({'id': id, ...updates}),
+      payload: ContratoAlumno.payloadForRemote({'id': id, ...remotePayload}),
     );
   }
 
@@ -576,6 +604,99 @@ class ContratosRepository {
         payload: {'id': contratoId, ...finalUpdates},
       );
     }
+
+    await reconciliarMesasEstadoContrato(contratoId);
+  }
+
+  /// Reconstruye JSON de mesas desde pagos + agregados (no modifica pagos).
+  Future<void> reconciliarMesasEstadoContrato(String contratoId) async {
+    final db = await LocalDatabase.instance;
+    final cRows = await db.query(
+      'contratos_alumnos',
+      where: 'id = ?',
+      whereArgs: [contratoId],
+      limit: 1,
+    );
+    if (cRows.isEmpty) return;
+    final row = cRows.first;
+    final contrato = _fromLocalRow(row);
+    if (contrato.mesaExtraPrecio <= 0.01) return;
+
+    final cant = contrato.mesaExtraCantidad > 0 ? contrato.mesaExtraCantidad : 1;
+    final unit = cant > 0
+        ? double.parse((contrato.mesaExtraPrecio / cant).toStringAsFixed(2))
+        : contrato.mesaExtraPrecio;
+
+    final pagos = await db.query(
+      'pagos_contrato_alumno',
+      where: 'contrato_alumno_id = ?',
+      whereArgs: [contratoId],
+    );
+
+    List<MesaExtraItem> mesas;
+    final tienePagosMesaNumerados = pagos.any((p) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
+      final c = p['concepto'] as String? ?? '';
+      return RegExp(r'mesa\s*extra\s*[2-9]', caseSensitive: false).hasMatch(c);
+    });
+
+    if (tienePagosMesaNumerados || contrato.mesasExtraParsed.isNotEmpty) {
+      mesas = MesasExtraUtils.reconciliarDesdePagos(
+        cantidad: cant,
+        precioUnitario: unit,
+        cuotasPlan: contrato.mesaExtraCuotas,
+        pagos: pagos,
+      );
+    } else {
+      mesas = MesasExtraUtils.estadoDesdeContrato(contrato);
+      if (cant > 1) {
+        mesas = MesasExtraUtils.repartirPagadoFifo(
+          cantidad: cant,
+          precioUnitario: unit,
+          cuotasPlan: contrato.mesaExtraCuotas,
+          pagadoTotal: contrato.mesaExtraPagado,
+          cuotasPagadasLegacy: contrato.mesaExtraCuotasPagadas,
+        );
+      }
+    }
+
+    final pagadoTotal = MesasExtraUtils.totalPagado(mesas);
+    final cuotasMax = MesasExtraUtils.maxCuotasPagadas(mesas);
+    final jsonStr = MesaExtraItem.encodeList(mesas);
+
+    final updates = <String, dynamic>{
+      'mesa_extra_cantidad': cant,
+      'mesas_extra_estado': jsonStr,
+      'mesa_extra_pagado': double.parse(pagadoTotal.toStringAsFixed(2)),
+      'mesa_extra_cuotas_pagadas': cuotasMax,
+    };
+
+    final oldJson = row['mesas_extra_estado'] as String? ?? '';
+    final oldPagado = (row['mesa_extra_pagado'] as num?)?.toDouble() ?? 0.0;
+    final oldCuotas = (row['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
+    final oldCant = (row['mesa_extra_cantidad'] as num?)?.toInt() ?? 0;
+
+    if (oldJson != jsonStr ||
+        (oldPagado - pagadoTotal).abs() > 0.01 ||
+        oldCuotas != cuotasMax ||
+        oldCant != cant) {
+      await db.update(
+        'contratos_alumnos',
+        updates,
+        where: 'id = ?',
+        whereArgs: [contratoId],
+      );
+      await SyncQueue.enqueue(
+        tabla: 'contratos_alumnos',
+        operacion: SyncOperation.update,
+        registroId: contratoId,
+        payload: ContratoAlumno.payloadForRemote({
+          'id': contratoId,
+          ...updates,
+          'mesas_extra_estado': mesas.map((e) => e.toJson()).toList(),
+        }),
+      );
+    }
   }
 
   /// Obtiene el ├║ltimo pago de un contrato.
@@ -866,7 +987,24 @@ class ContratosRepository {
     if (data.containsKey('contrato_firmado')) {
       data['contrato_firmado'] = (data['contrato_firmado'] == true) ? 1 : 0;
     }
+    if (data.containsKey('mesas_extra_estado')) {
+      data['mesas_extra_estado'] = _encodeMesasEstadoLocal(data['mesas_extra_estado']);
+    }
     return data;
+  }
+
+  String? _encodeMesasEstadoLocal(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is String) return raw;
+    if (raw is List) {
+      final items = raw.map((e) {
+        if (e is MesaExtraItem) return e.toJson();
+        if (e is Map) return Map<String, dynamic>.from(e);
+        return e;
+      }).toList();
+      return jsonEncode(items);
+    }
+    return jsonEncode(raw);
   }
 
   Future<void> recalcularTodoElEvento(String eventoId) async {

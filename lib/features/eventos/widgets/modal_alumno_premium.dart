@@ -6,7 +6,9 @@ import '../../../models/evento.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../common/utils/currency_input_formatter.dart';
+import '../../../models/mesa_extra_item.dart';
 import '../repositories/contratos_repository.dart';
+import '../services/mesas_extra_utils.dart';
 import '../../../core/utils/uuid_utils.dart';
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
@@ -72,8 +74,13 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       _montoCtrl = TextEditingController(text: montoBaseUI.toFormattedNumber());
       _cuotasCtrl = TextEditingController(text: al.totalCuotas.toString());
       
-      _mesasExtraCant = al.mesaExtraPrecio > 0 ? 1 : 0;
-      _mesaPrecioCtrl = TextEditingController(text: _mesasExtraCant > 0 ? al.mesaExtraPrecio.toFormattedNumber() : '');
+      _mesasExtraCant = al.mesaExtraPrecio > 0
+          ? (al.mesaExtraCantidad > 0 ? al.mesaExtraCantidad : 1)
+          : 0;
+      final unitMesa = _mesasExtraCant > 0 ? al.precioUnitarioMesaExtra : 0.0;
+      _mesaPrecioCtrl = TextEditingController(
+        text: _mesasExtraCant > 0 ? unitMesa.toFormattedNumber() : '',
+      );
       _mesaCuotasCtrl = TextEditingController(text: al.mesaExtraCuotas.toString());
       
       _sillasExtraCant = al.sillasExtraCantidad;
@@ -96,7 +103,28 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
     _montoCtrl.addListener(_updateTotals);
     _mesaPrecioCtrl.addListener(_updateTotals);
+    _mesaCuotasCtrl.addListener(_updateTotals);
     _sillasPrecioUnitCtrl.addListener(_updateTotals);
+  }
+
+  List<MesaExtraItem> get _previewMesas {
+    if (_mesasExtraCant < 1) return [];
+    final unit = CurrencyInputFormatter.parse(_mesaPrecioCtrl.text);
+    if (unit <= 0) return [];
+    final cuotas = int.tryParse(_mesaCuotasCtrl.text) ?? 1;
+    if (isEdit && widget.alumno != null) {
+      final prev = MesasExtraUtils.estadoDesdeContrato(widget.alumno!);
+      return MesasExtraUtils.construirParaGuardar(
+        cantidadNueva: _mesasExtraCant,
+        precioUnitario: unit,
+        cuotasPlan: cuotas,
+        estadoAnterior: prev,
+      );
+    }
+    return List.generate(
+      _mesasExtraCant,
+      (i) => MesaExtraItem(n: i + 1, precio: unit),
+    );
   }
 
   Future<void> _cargarUltimoMontoBase() async {
@@ -180,6 +208,43 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       final sillasExtraCuotas = sillasCuotasParsed < 1 ? 1 : sillasCuotasParsed;
 
       final totalSillasParse = double.parse(_montoSillas.toStringAsFixed(2));
+      final mesaCuotasSafe = mesaCuotas < 1 ? 1 : mesaCuotas;
+      final precioUnitMesa = CurrencyInputFormatter.parse(_mesaPrecioCtrl.text);
+      final cantMesas = _mesasExtraCant;
+
+      if (isEdit && cantMesas > 0) {
+        final prev = MesasExtraUtils.estadoDesdeContrato(widget.alumno!);
+        if (!MesasExtraUtils.puedeReducirCantidad(prev, cantMesas)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No podés quitar mesas que ya tienen pagos registrados.',
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          setState(() => _isSubmitting = false);
+          return;
+        }
+      }
+
+      List<MesaExtraItem> mesasEstado = [];
+      if (cantMesas > 0 && precioUnitMesa > 0) {
+        if (isEdit) {
+          mesasEstado = MesasExtraUtils.construirParaGuardar(
+            cantidadNueva: cantMesas,
+            precioUnitario: precioUnitMesa,
+            cuotasPlan: mesaCuotasSafe,
+            estadoAnterior: MesasExtraUtils.estadoDesdeContrato(widget.alumno!),
+            pagadoTotalFallback: widget.alumno!.mesaExtraPagado,
+          );
+        } else {
+          mesasEstado = List.generate(
+            cantMesas,
+            (i) => MesaExtraItem(n: i + 1, precio: precioUnitMesa),
+          );
+        }
+      }
 
       if (isEdit) {
         // Modo Edición
@@ -211,13 +276,17 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           saldoDeudor: nuevoSaldoDeudor,
           totalCuotas: planCuotas,
           mesaExtraPrecio: _montoMesa,
-          mesaExtraCuotas: mesaCuotas,
+          mesaExtraCuotas: mesaCuotasSafe,
+          mesaExtraCantidad: cantMesas,
+          mesasExtraEstadoRaw: mesasEstado.map((e) => e.toJson()).toList(),
           sillasExtraCantidad: _sillasExtraCant,
           sillasExtraPrecioTotal: totalSillasParse,
           sillasExtraCuotas: sillasExtraCuotas,
         );
 
         await repo.actualizarContrato(al.id, alumnoEditado.toJson());
+        await repo.recalcularProgresoContrato(al.id);
+        await repo.reconciliarMesasEstadoContrato(al.id);
       } else {
         // Modo Creación
         final nuevoContrato = ContratoAlumno(
@@ -231,7 +300,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           porcentajeDescuento: 0.0,
           totalCuotas: planCuotas,
           mesaExtraPrecio: _montoMesa,
-          mesaExtraCuotas: mesaCuotas,
+          mesaExtraCuotas: mesaCuotasSafe,
+          mesaExtraCantidad: cantMesas,
+          mesasExtraEstadoRaw: mesasEstado.map((e) => e.toJson()).toList(),
           sillasExtraCantidad: _sillasExtraCant,
           sillasExtraCuotas: sillasExtraCuotas,
           sillasExtraPrecioTotal: totalSillasParse,
@@ -483,10 +554,26 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 _mesasExtraCant, 
                                 () {
                                   setState(() {
+                                    final prev = isEdit && widget.alumno != null
+                                        ? MesasExtraUtils.estadoDesdeContrato(widget.alumno!)
+                                        : <MesaExtraItem>[];
+                                    final next = _mesasExtraCant - 1;
+                                    if (next >= 0 &&
+                                        !MesasExtraUtils.puedeReducirCantidad(prev, next)) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Esa mesa ya tiene pagos — no se puede quitar.',
+                                          ),
+                                          backgroundColor: Colors.orangeAccent,
+                                        ),
+                                      );
+                                      return;
+                                    }
                                     _mesasExtraCant--;
                                     if (_mesasExtraCant == 0) _mesaPrecioCtrl.clear();
                                   });
-                                }, 
+                                },
                                 () => setState(() => _mesasExtraCant++)
                               ),
                               const SizedBox(width: 24),
@@ -531,6 +618,42 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 ],
                               ),
                             ),
+                            if (_mesasExtraCant > 1) ...[
+                              const SizedBox(height: 12),
+                              ..._previewMesas.map((m) {
+                                final cuotasPlan =
+                                    int.tryParse(_mesaCuotasCtrl.text) ?? 1;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        'Mesa ${m.n}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black87,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          m.liquidada
+                                              ? 'Liquidada · ${m.precio.toCurrency()}'
+                                              : 'Deuda ${m.deuda.toCurrency()} · Cuota ${m.cuotasPagadas}/$cuotasPlan',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
                           ],
                         ],
                       ),
