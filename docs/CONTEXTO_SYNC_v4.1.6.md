@@ -1,20 +1,24 @@
 # Contexto — Fix sync, mesas y carpeta (v4.1.6)
 
-**Fecha:** Junio 2026  
+> **Referencia para Cursor / equipo:** `incidente sync 24-jun-2026` · `CONTEXTO_SYNC_v4.1.6`  
+> Si en un chat futuro decís *“leé el contexto del 24 de junio”* o *“el incidente sync v4.1.6”*, apuntá a este archivo.
+
+**Fecha del incidente y fix:** **Miércoles 24 de junio de 2026**  
 **Versión:** 4.1.6+9  
 **Instalador:** `installer/dist/Setup Junior Eventos v4.1.6.exe`  
-**Commit:** `fix(sync): pagos, mesas y carpeta unica — v4.1.6`  
-**Rama:** `feature/optimizacion-finanzas`
+**Commits:** `4966057` (fix código) · `e3c8b0f` (este doc)  
+**Rama:** `feature/optimizacion-finanzas`  
+**Archivo:** `docs/CONTEXTO_SYNC_v4.1.6.md`
 
-Este documento queda en el repositorio (Git) para que cualquier persona del equipo sepa qué pasó, qué se corrigió y cómo operar la app con dos PCs.
+Este documento queda en el repositorio (Git) para que cualquier persona del equipo — o el asistente en Cursor — sepa qué pasó ese día, qué se corrigió y cómo operar la app con dos PCs.
 
 ---
 
-## Resumen
+## Resumen (24-jun-2026)
 
 La app **Junior Eventos** es offline-first: guarda todo en SQLite local (`Mis Documentos/Junior Eventos/data.db`) y sincroniza manualmente con Supabase. Se usa en **dos o más PCs** a la vez (oficina + notebook en escuelas).
 
-En junio 2026 aparecieron problemas graves de sync y de cálculo de mesas extra. Se corrigieron en código, se recuperaron datos desde un backup local viejo, y se publicó el instalador **4.1.6**.
+**Ese día (24/06/2026)** aparecieron y se resolvieron problemas graves de sync y de cálculo de mesas extra. Se corrigieron en código, se recuperaron datos desde un backup local viejo (`data.db`), se subió a Supabase y se publicó el instalador **4.1.6**.
 
 ---
 
@@ -143,3 +147,15 @@ Cada pago tiene un **`id` UUID único**. Al bajar se hace `REPLACE`, no se dupli
 ## Contacto / mantenimiento
 
 Si aparece un caso nuevo: anotar PC, versión del exe, si hubo Subir/Bajar, y comparar un alumno concreto en Supabase (`contratos_alumnos` + `pagos_contrato_alumno`) vs historial en la app.
+
+---
+
+## Cómo referenciar este incidente en un chat (Cursor)
+
+Decile al asistente cualquiera de estas frases:
+
+- *“Leé `docs/CONTEXTO_SYNC_v4.1.6.md`”*
+- *“Es el incidente sync del **24 de junio de 2026**”*
+- *“CONTEXTO_SYNC_v4.1.6 / incidente sync 24-jun-2026”*
+
+Asunto cubierto por este doc: pagos que no sync entre PCs, límite 1000 pagos, mesas extra liquidadas juntas, carpetas `JuniorEventos` duplicadas, recuperación con `data.db` viejo + Subir + Pull completo forzado, release **4.1.6**.
