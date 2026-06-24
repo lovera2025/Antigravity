@@ -211,7 +211,7 @@ class SyncCloudIndicator extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Operás con lo que está en este dispositivo (Mis Documentos/JuniorEventos). '
+                    'Operás con lo que está en este dispositivo (Mis Documentos/Junior Eventos). '
                     'La nube es respaldo e intercambio entre equipos.',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.7),
@@ -291,6 +291,14 @@ class SyncCloudIndicator extends ConsumerWidget {
                       subtitle: 'Sube pendientes y luego baja cambios remotos',
                       enabled: uploadCount > 0 || probe.remoteChangeCount > 0,
                       onTap: () => _run(ctx, ref, () => engine.syncBidirectional()),
+                    ),
+                    _actionTile(
+                      ctx,
+                      icon: Icons.restore_rounded,
+                      label: 'Pull completo forzado',
+                      subtitle: 'Resetea timestamps y baja TODOS los datos desde cero',
+                      enabled: true,
+                      onTap: () => _run(ctx, ref, () => engine.forceFullPull()),
                     ),
                   ],
                 ],

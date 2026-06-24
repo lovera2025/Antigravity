@@ -3,7 +3,7 @@
 
 #define MyAppName "Junior Eventos"
 #define MyShortcutName "Junior Eventos"
-#define MyAppVersion "4.1.5"
+#define MyAppVersion "4.1.6"
 #define MyAppPublisher "ML"
 #define MyAppExeName "arguello_events.exe"
 #define SourceIcon "windows\\runner\\resources\\app_icon.ico"

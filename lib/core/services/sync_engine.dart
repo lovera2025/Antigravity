@@ -303,6 +303,21 @@ class SyncEngine {
   /// Alias de compatibilidad → bidireccional manual.
   Future<void> syncNow() => syncBidirectional();
 
+  /// Borra todos los timestamps de último pull para forzar pull completo
+  /// en la próxima sincronización. Útil para recuperar datos faltantes
+  /// cuando se cambió de PC o se detectaron registros perdidos.
+  Future<void> resetPullTimestamps() async {
+    final db = await LocalDatabase.instance;
+    await db.delete('_sync_meta');
+    debugPrint('🔄 Timestamps de pull reseteados — el próximo pull será completo');
+  }
+
+  /// Resetea timestamps y hace pull completo de inmediato.
+  Future<void> forceFullPull() async {
+    await resetPullTimestamps();
+    await pullRemote();
+  }
+
   Future<int> _probeTable(Database db, String table) async {
     final dateColumn = _incrementalColumns[table];
     if (dateColumn == null) return 0;
@@ -678,8 +693,19 @@ class SyncEngine {
         query = query.order(orderBy, ascending: false);
       }
 
-      final List<dynamic> data = await query;
-      final rows = data.cast<Map<String, dynamic>>();
+      // Paginación: Supabase devuelve máx. 1000 filas por request.
+      // Iteramos en páginas hasta agotar los registros disponibles.
+      const int kPageSize = 1000;
+      final allData = <Map<String, dynamic>>[];
+      int fromIdx = 0;
+      while (true) {
+        final List<dynamic> page = await query.range(fromIdx, fromIdx + kPageSize - 1);
+        final pageRows = page.cast<Map<String, dynamic>>();
+        allData.addAll(pageRows);
+        if (pageRows.length < kPageSize) break;
+        fromIdx += kPageSize;
+      }
+      final rows = allData;
 
       if (rows.isEmpty) {
         // Aunque no haya nuevos registros, actualizamos el timestamp del último pull

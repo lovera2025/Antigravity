@@ -13,7 +13,7 @@ import '../utils/uuid_utils.dart';
 
 /// Base de datos local SQLite — persistencia offline.
 ///
-/// Almacena en: Mis Documentos/JuniorEventos/data.db
+/// Almacena en: Mis Documentos/Junior Eventos/data.db
 /// Esquema espejo de Supabase para sincronización bidireccional.
 class LocalDatabase {
   static Database? _db;
@@ -28,9 +28,20 @@ class LocalDatabase {
   }
 
   static Future<String> get dbPath async {
-    // Almacenar en Mis Documentos/JuniorEventos/
+    // Almacenar en Mis Documentos/Junior Eventos/
     final docsDir = await getApplicationDocumentsDirectory();
-    final appDir = Directory('${docsDir.path}${Platform.pathSeparator}JuniorEventos');
+    final oldDir = Directory('${docsDir.path}${Platform.pathSeparator}JuniorEventos');
+    final appDir = Directory('${docsDir.path}${Platform.pathSeparator}Junior Eventos');
+
+    // Migración automática: mover data.db de la carpeta vieja a la nueva si existe.
+    final oldDb = File('${oldDir.path}${Platform.pathSeparator}$_dbName');
+    final newDb = File('${appDir.path}${Platform.pathSeparator}$_dbName');
+    if (await oldDb.exists() && !await newDb.exists()) {
+      if (!await appDir.exists()) await appDir.create(recursive: true);
+      await oldDb.rename(newDb.path);
+      debugPrint('📦 DB migrada: JuniorEventos → Junior Eventos');
+    }
+
     if (!await appDir.exists()) {
       await appDir.create(recursive: true);
     }

@@ -220,6 +220,7 @@ class ContratosRepository {
       'concepto': concepto,
       'fecha_pago': now,
       'created_at': now,
+      'updated_at': now,
       'medio_pago': medioPago,
       if (lk != null && lk.isNotEmpty) 'line_kind': lk,
     };
@@ -410,7 +411,7 @@ class ContratosRepository {
       contrato.montoTotalPactado - contrato.mesaExtraPrecio - contrato.sillasExtraPrecioTotal, 
       contrato.totalCuotas
     );
-    final cuotaPuraMesa = contrato.mesaExtraCuotas > 0 ? contrato.mesaExtraPrecio / contrato.mesaExtraCuotas : 0.0;
+    final cuotaPuraMesa = contrato.mesaExtraCuotas > 0 ? contrato.precioUnitarioMesaExtra / contrato.mesaExtraCuotas : 0.0;
     final cuotaPuraSilla = contrato.sillasExtraCuotas > 0 ? contrato.sillasExtraPrecioTotal / contrato.sillasExtraCuotas : 0.0;
 
     // 2. Obtener todos los pagos
@@ -561,7 +562,7 @@ class ContratosRepository {
         : 0;
         
     final int cuotasMesaCount = cuotaPuraMesa > 0 
-        ? ((pagadoMesa + 0.1) / cuotaPuraMesa).floor().clamp(0, contrato.mesaExtraCuotas)
+        ? ((pagadoMesa + 0.1) / cuotaPuraMesa).floor().clamp(0, contrato.mesaExtraCuotas * (contrato.mesaExtraCantidad > 0 ? contrato.mesaExtraCantidad : 1))
         : 0;
         
     final int cuotasSillaCount = cuotaPuraSilla > 0 
@@ -960,6 +961,7 @@ class ContratosRepository {
           conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);
+      await reconciliarMesasLegacyPendientesEvento(eventoId);
     } catch (e) {
       debugPrint('ÔÜá´©Å Error pull contratos: $e');
     }
@@ -1019,6 +1021,7 @@ class ContratosRepository {
           'concepto': row['concepto'],
           'fecha_pago': row['fecha_pago'],
           'created_at': row['created_at'],
+          'updated_at': row['updated_at'],
           'medio_pago': row['medio_pago'],
           'anulado': row['anulado'] ?? 0,
           'motivo_anulacion': row['motivo_anulacion'],
