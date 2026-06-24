@@ -22,6 +22,7 @@ import '../../core/utils/pago_interes_mora.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/cobro_abono_acumulado.dart';
+import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
 import '../../models/mesa_extra_item.dart';
@@ -5514,6 +5515,9 @@ class _DetalleEventoMasivoScreenState
                               (s, c) =>
                                   s + (c['monto'] as num).toDouble(),
                             );
+                        final loteHistAcum = Map<String, double>.from(
+                          historicoGrossPorClave,
+                        );
 
                         Future<void> registrarLineaUna(
                           Map<String, dynamic> conc,
@@ -5576,27 +5580,66 @@ class _DetalleEventoMasivoScreenState
                             double m,
                             double mg,
                             String med,
-                            int cq,
-                          ) async {
+                            int cq, {
+                            String? conceptoRegistro,
+                          }) async {
                             if (m <= 0.004) return;
                             await repo.registrarPago(
                               contratoId: alumno.id,
                               monto: m,
-                              concepto: cTexto,
+                              concepto: conceptoRegistro ?? cTexto,
                               montoADescontarDeSaldo: mg,
                               descuentoPorcentaje:
                                   double.tryParse(descStr) ?? 0,
                               cuotasLiquidadas: cq,
                               medioPago: med,
                               lineKind: lineKind,
-                              // Snapshot pre-lote: evita que el avance de
-                              // cuotas_pagadas (por la línea base ya
-                              // persistida) borre el remanente de mora.
                               moraPendienteAntesDeLote:
                                   lineKind == kLineKindInteresMora
                                       ? moraPendienteEfectivo
                                       : null,
                             );
+                          }
+
+                          final esPlanLinea = lineKind != kLineKindCargoCanal &&
+                              lineKind != kLineKindInteresMora &&
+                              !esLineaCargoCanal(conc) &&
+                              !esLineaInteresMora(conc);
+
+                          if (modoMedioPago == 'Mixto' &&
+                              mE > 0.004 &&
+                              mT > 0.004 &&
+                              esPlanLinea) {
+                            final histClase =
+                                ConceptoPagoDisplay.grossHistoricoClasePreview(
+                              loteHistAcum,
+                              conc,
+                            );
+                            final partes =
+                                ConceptoPagoDisplay.rotularPartesMixtoPlan(
+                              contrato: alumno,
+                              previewLinea: conc,
+                              grossHistoricoClase: histClase,
+                              grossLinea: gross,
+                              netLinea: monto,
+                              parteEfectivo: parteEfectivo,
+                              totalIngresado: tIng,
+                            );
+                            for (final part in partes) {
+                              await uno(
+                                part.net,
+                                part.gross,
+                                part.medio,
+                                part.rotulo.cuotasLiquidadas,
+                                conceptoRegistro: part.rotulo.concepto,
+                              );
+                            }
+                            ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
+                              loteHistAcum,
+                              conc,
+                              gross,
+                            );
+                            return;
                           }
 
                           if (mE <= 0.004 && mT > 0.004) {
@@ -5609,6 +5652,14 @@ class _DetalleEventoMasivoScreenState
                           } else {
                             await uno(mT, gT, 'Transferencia', cCuotas);
                             await uno(mE, gE, 'Efectivo', 0);
+                          }
+
+                          if (esPlanLinea) {
+                            ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
+                              loteHistAcum,
+                              conc,
+                              gross,
+                            );
                           }
                         }
 
@@ -5850,138 +5901,11 @@ class _DetalleEventoMasivoScreenState
                                   ),
                                 )
                               : (() {
-                                  final cronologico = pagos.reversed.toList();
-                                  final Map<String, int> contadores = {};
-                                  final List<Map<String, dynamic>>
-                                  pagosConDetalle = [];
-
-                                  final int tCuotas = alumnoUi.totalCuotas ?? 9;
-                                  final int mCuotas =
-                                      alumnoUi.mesaExtraCuotas ?? 1;
-                                  final Map<int, int> contadoresMesa = {};
-
-                                  // Estado FIFO para pagos legacy sin número de mesa.
-                                  // cronologico itera del más viejo al más reciente.
-                                  final int cantMesasHist = mesasResumen.length;
-                                  final double precioUnitMesaHist =
-                                      cantMesasHist > 1
-                                      ? (mesasResumen.first.precio > 0.01
-                                          ? mesasResumen.first.precio
-                                          : alumnoUi.mesaExtraPrecio /
-                                                cantMesasHist)
-                                      : alumnoUi.mesaExtraPrecio;
-                                  double acumuladoFifoMesa = 0.0;
-                                  int mesaFifoActual = 1;
-
-                                  for (var p in cronologico) {
-                                    final conceptoOriginal =
-                                        p['concepto'] as String? ??
-                                        'Cuota Base';
-                                    String conceptoMejorado = conceptoOriginal;
-
-                                    if (conceptoOriginal.startsWith(
-                                      'Cuota Base',
-                                    )) {
-                                      contadores['Cuota Base'] =
-                                          (contadores['Cuota Base'] ?? 0) + 1;
-                                      conceptoMejorado =
-                                          'Cuota Base (${contadores['Cuota Base']}/$tCuotas)';
-                                    } else if (conceptoOriginal
-                                        .toLowerCase()
-                                        .contains('mesa')) {
-                                      final mesaExplicita = MesasExtraUtils
-                                          .numeroMesaDesdeConcepto(
-                                        conceptoOriginal,
-                                      );
-                                      int mesaN;
-                                      if (mesaExplicita > 1 ||
-                                          cantMesasHist <= 1) {
-                                        // Concepto ya tiene número ≥2, o sola mesa: confiar en él.
-                                        mesaN = mesaExplicita;
-                                      } else {
-                                        // Legacy sin número: asignar FIFO (más viejo → mesa 1).
-                                        final esAnulado =
-                                            ((p['anulado'] as num?)?.toInt() ??
-                                                    0) !=
-                                                0;
-                                        if (!esAnulado) {
-                                          final gross =
-                                              (p['monto_gross'] as num?)
-                                                  ?.toDouble() ??
-                                              (p['monto'] as num?)
-                                                  ?.toDouble() ??
-                                              0.0;
-                                          if (mesaFifoActual < cantMesasHist &&
-                                              acumuladoFifoMesa + gross >
-                                                  precioUnitMesaHist + 0.01) {
-                                            mesaFifoActual++;
-                                            acumuladoFifoMesa = gross;
-                                          } else {
-                                            acumuladoFifoMesa += gross;
-                                          }
-                                        }
-                                        mesaN = mesaFifoActual;
-                                      }
-                                      contadoresMesa[mesaN] =
-                                          (contadoresMesa[mesaN] ?? 0) + 1;
-                                      final cMesa = contadoresMesa[mesaN]!;
-                                      final pagoGrossMesa =
-                                          (p['monto_gross'] as num?)
-                                              ?.toDouble() ??
-                                          (p['monto'] as num?)?.toDouble() ??
-                                          0.0;
-                                      final esLiquidacionMesa =
-                                          precioUnitMesaHist > 0.01 &&
-                                          pagoGrossMesa >=
-                                              precioUnitMesaHist - 0.01;
-                                      final cMesaDisplay =
-                                          esLiquidacionMesa ? mCuotas : cMesa;
-                                      final prefix = MesasExtraUtils.labelCobro(
-                                        mesaN,
-                                        cantMesasHist,
-                                      );
-                                      if (mCuotas <= 1) {
-                                        conceptoMejorado =
-                                            '$prefix - Entrega';
-                                      } else {
-                                        conceptoMejorado =
-                                            '$prefix ($cMesaDisplay/$mCuotas)';
-                                      }
-                                    } else if (conceptoOriginal.startsWith(
-                                      'Sillas Extras',
-                                    )) {
-                                      conceptoMejorado =
-                                          'Sillas Extras - Entrega';
-                                    }
-
-                                    final pCpy = Map<String, dynamic>.from(p);
-                                    pCpy['concepto_detallado'] =
-                                        conceptoMejorado;
-                                    // Badge liquidada: aplica a pagos de mesa que cubren el precio completo.
-                                    if (conceptoOriginal
-                                            .toLowerCase()
-                                            .contains('mesa') &&
-                                        precioUnitMesaHist > 0.01) {
-                                      final gm =
-                                          (p['monto_gross'] as num?)
-                                              ?.toDouble() ??
-                                          (p['monto'] as num?)?.toDouble() ??
-                                          0.0;
-                                      if (gm >= precioUnitMesaHist - 0.01) {
-                                        pCpy['es_liquidacion_mesa'] = true;
-                                      }
-                                    }
-                                    if ((p['descuento_porcentaje'] as num? ??
-                                            0) >
-                                        0.01) {
-                                      pCpy['label_descuento'] =
-                                          '${(p['descuento_porcentaje'] as num).toStringAsFixed(0)}% OFF';
-                                    }
-                                    pagosConDetalle.add(pCpy);
-                                  }
-
-                                  final listaFinal = pagosConDetalle.reversed
-                                      .toList();
+                                  final listaFinal =
+                                      ConceptoPagoDisplay.enriquecerPagosHistorial(
+                                    alumnoUi,
+                                    pagos,
+                                  );
 
                                   return ListView.builder(
                                     padding: const EdgeInsets.symmetric(
@@ -6133,6 +6057,22 @@ class _DetalleEventoMasivoScreenState
                                                       color: Colors.grey,
                                                     ),
                                                   ),
+                                                  if (p['subtitulo_medio'] !=
+                                                          null &&
+                                                      (p['subtitulo_medio']
+                                                              as String)
+                                                          .isNotEmpty)
+                                                    Text(
+                                                      p['subtitulo_medio']
+                                                          as String,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors
+                                                            .grey.shade600,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                    ),
                                                 ],
                                               ),
                                             ),
@@ -6306,8 +6246,6 @@ class _DetalleEventoMasivoScreenState
     ContratoAlumno alumnoParaPdf = alumno;
     double pctDescuentoPdf = porcentajeDescuentoLiquidacion;
 
-    final int mCuotas = alumno.mesaExtraCuotas ?? 1;
-
     try {
       final repo = ref.read(contratosRepositoryProvider);
 
@@ -6340,72 +6278,8 @@ class _DetalleEventoMasivoScreenState
             medioPago = 'Transferencia';
           }
 
-          final Map<String, Map<String, dynamic>> agrupados = {};
-          for (final p in lote) {
-            final String raw = (p['concepto'] as String?) ?? 'Pago';
-            final String upper = raw.toUpperCase().trim();
-            final lk = (p['line_kind'] as String?)?.trim();
-            final bool esMora = lk == kLineKindInteresMora ||
-                esPagoInteresMoraPorConcepto(raw);
-            final bool esCargo = lk == kLineKindCargoCanal ||
-                esPagoCargoCanalPorConcepto(raw);
-            final bool esPlan = !esMora && !esCargo;
-
-            String mapped = raw;
-
-            if (upper.contains('MORA') || upper.contains('INTERE')) {
-              mapped = raw.contains('cuota ') ? raw : 'Interés mora (cuota base — este cobro)';
-            } else if (upper.contains('(') && upper.contains(')')) {
-              mapped = raw;
-            } else if (upper == 'BASE' || upper == 'CUOTA BASE') {
-              mapped = 'Cuota Base';
-            } else if (upper == 'MESA' || upper == 'MESA EXTRA') {
-              mapped = mCuotas <= 1
-                  ? 'Mesa Extra - Entrega'
-                  : 'Mesa Extra (Abono)';
-            } else if (upper == 'SILLA' || upper == 'SILLAS EXTRAS') {
-              mapped = 'Sillas Extras - Entrega';
-            }
-
-            final net = (p['monto'] as num?)?.toDouble() ?? 0.0;
-            final gross =
-                (p['monto_gross'] as num?)?.toDouble() ?? net;
-
-            final prev = agrupados[mapped];
-            if (prev == null) {
-              agrupados[mapped] = {
-                'net': net,
-                'gross': gross,
-                'esPlan': esPlan,
-                'esMora': esMora,
-                'esCargo': esCargo,
-              };
-            } else {
-              prev['net'] = (prev['net'] as double) + net;
-              prev['gross'] = (prev['gross'] as double) + gross;
-            }
-          }
-
-          conceptosPagados = agrupados.entries.map<Map<String, dynamic>>((e) {
-            final net = double.parse(
-              (e.value['net'] as double).toStringAsFixed(2),
-            );
-            final out = <String, dynamic>{
-              'concepto': e.key,
-              'monto': net,
-            };
-            if (e.value['esMora'] == true) {
-              out['esMora'] = true;
-            } else if (e.value['esCargo'] == true) {
-              out['esCargoCanal'] = true;
-            } else if (e.value['esPlan'] == true) {
-              out['gross'] = double.parse(
-                (e.value['gross'] as double).toStringAsFixed(2),
-              );
-              out['esPlanLiquidacion'] = true;
-            }
-            return out;
-          }).toList();
+          conceptosPagados =
+              ConceptoPagoDisplay.conceptosPdfDesdePagosLote(alumno, lote);
 
           valPago = conceptosPagados.fold<double>(
             0,
