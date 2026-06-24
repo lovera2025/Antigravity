@@ -608,6 +608,62 @@ class ContratosRepository {
     await reconciliarMesasEstadoContrato(contratoId);
   }
 
+  /// Normaliza metadata legacy (cantidad 0 o JSON vacío) sin tocar pagos.
+  /// Devuelve cuántos contratos se actualizaron.
+  Future<int> reconciliarMesasLegacyPendientesEvento(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'contratos_alumnos',
+      columns: [
+        'id',
+        'mesa_extra_precio',
+        'mesa_extra_cantidad',
+        'mesas_extra_estado',
+      ],
+      where: 'evento_id = ? AND mesa_extra_precio > 0.01',
+      whereArgs: [eventoId],
+    );
+    var actualizados = 0;
+    for (final row in rows) {
+      final cant = (row['mesa_extra_cantidad'] as num?)?.toInt() ?? 0;
+      final estado = row['mesas_extra_estado'] as String?;
+      final pendiente =
+          cant <= 0 || estado == null || estado.trim().isEmpty;
+      if (!pendiente) continue;
+
+      final id = row['id'] as String;
+      final antes = await db.query(
+        'contratos_alumnos',
+        columns: ['mesas_extra_estado', 'mesa_extra_cantidad'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      await reconciliarMesasEstadoContrato(id);
+      if (antes.isEmpty) {
+        actualizados++;
+        continue;
+      }
+      final despues = await db.query(
+        'contratos_alumnos',
+        columns: ['mesas_extra_estado', 'mesa_extra_cantidad'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (despues.isEmpty) continue;
+      final jsonAntes = antes.first['mesas_extra_estado'] as String? ?? '';
+      final jsonDespues = despues.first['mesas_extra_estado'] as String? ?? '';
+      final cantAntes = (antes.first['mesa_extra_cantidad'] as num?)?.toInt() ?? 0;
+      final cantDespues =
+          (despues.first['mesa_extra_cantidad'] as num?)?.toInt() ?? 0;
+      if (jsonAntes != jsonDespues || cantAntes != cantDespues) {
+        actualizados++;
+      }
+    }
+    return actualizados;
+  }
+
   /// Reconstruye JSON de mesas desde pagos + agregados (no modifica pagos).
   Future<void> reconciliarMesasEstadoContrato(String contratoId) async {
     final db = await LocalDatabase.instance;

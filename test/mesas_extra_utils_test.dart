@@ -272,4 +272,58 @@ void main() {
     expect(montos.containsKey('Mesa:1'), false);
     expect(montos['Base'], 30000);
   });
+
+  test('cantidadMesasFisicasSorteo respeta mesas extra contratadas', () {
+    final sinExtra = ContratoAlumno(
+      id: '1',
+      eventoId: 'e1',
+      nombreAlumno: 'A',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 100000,
+      saldoDeudor: 100000,
+    );
+    expect(MesasExtraUtils.cantidadMesasFisicasSorteo(sinExtra), 1);
+
+    final unaExtra = sinExtra.copyWith(
+      mesaExtraPrecio: 70000,
+      mesaExtraCantidad: 1,
+    );
+    expect(MesasExtraUtils.cantidadMesasFisicasSorteo(unaExtra), 2);
+
+    final tresExtra = unaExtra.copyWith(
+      mesaExtraCantidad: 3,
+      mesasExtraEstadoRaw: List.generate(
+        3,
+        (i) => MesaExtraItem(n: i + 1, precio: 23333).toJson(),
+      ),
+    );
+    expect(MesasExtraUtils.cantidadMesasFisicasSorteo(tresExtra), 4);
+  });
+
+  test('tomarMesasDisponibles prefiere consecutivas', () {
+    final libres = [5, 10, 11, 12, 20];
+    final picked = MesasExtraUtils.tomarMesasDisponibles(libres, 3);
+    expect(picked, [10, 11, 12]);
+    expect(libres, [5, 20]);
+  });
+
+  test('lineasResumenGrilla muestra cuota y deuda por mesa', () {
+    final c = ContratoAlumno(
+      id: '1',
+      eventoId: 'e1',
+      nombreAlumno: 'A',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 70000,
+      mesaExtraCuotas: 7,
+      mesaExtraCantidad: 1,
+      mesaExtraPagado: 10000,
+      mesaExtraCuotasPagadas: 1,
+    );
+    final lineas = MesasExtraUtils.lineasResumenGrilla(c);
+    expect(lineas.length, 1);
+    expect(lineas.first, contains('Mesa extra'));
+    expect(lineas.first, contains('1/7'));
+  });
 }

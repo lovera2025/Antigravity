@@ -1,5 +1,6 @@
 import '../../../models/contrato_alumno.dart';
 import '../../../models/mesa_extra_item.dart';
+import '../../common/utils/currency_extensions.dart';
 
 /// Utilidades para mesas extra múltiples (local-first, no destructivo).
 class MesasExtraUtils {
@@ -454,5 +455,83 @@ class MesasExtraUtils {
       if (m.n > nuevaCantidad && m.pagado > 0.01) return false;
     }
     return true;
+  }
+
+  /// Mesas físicas a sortear: 1 base + N extras contratadas.
+  static int cantidadMesasFisicasSorteo(ContratoAlumno c) {
+    if (c.mesaExtraPrecio <= 0.01) return 1;
+    final mesas = estadoDesdeContrato(c);
+    return 1 + cantidadMesasContrato(c, mesas);
+  }
+
+  /// Quita de [disponibles] y devuelve [cantidad] números (preferible consecutivos).
+  static List<int>? tomarMesasDisponibles(List<int> disponibles, int cantidad) {
+    if (cantidad < 1 || disponibles.length < cantidad) return null;
+
+    if (cantidad == 1) {
+      disponibles.shuffle();
+      return [disponibles.removeLast()];
+    }
+
+    disponibles.sort();
+    for (var i = 0; i <= disponibles.length - cantidad; i++) {
+      var consecutivas = true;
+      for (var j = 0; j < cantidad - 1; j++) {
+        if (disponibles[i + j + 1] != disponibles[i + j] + 1) {
+          consecutivas = false;
+          break;
+        }
+      }
+      if (consecutivas) {
+        final picked = [for (var j = 0; j < cantidad; j++) disponibles[i + j]];
+        for (final p in picked) {
+          disponibles.remove(p);
+        }
+        return picked;
+      }
+    }
+
+    disponibles.shuffle();
+    if (disponibles.length < cantidad) return null;
+    final picked = <int>[];
+    for (var k = 0; k < cantidad; k++) {
+      picked.add(disponibles.removeLast());
+    }
+    picked.sort();
+    return picked;
+  }
+
+  static String formatearAsignacionMesas(List<int> numeros) =>
+      numeros.map((n) => '$n').join(', ');
+
+  /// Líneas compactas para la grilla de alumnos (solo lectura).
+  static List<String> lineasResumenGrilla(ContratoAlumno c) {
+    if (c.mesaExtraPrecio <= 0.01) return [];
+    final mesas = estadoDesdeContrato(c);
+    final activas = mesasActivas(mesas);
+    if (activas.isEmpty) return [];
+
+    final cant = cantidadMesasContrato(c, mesas);
+    final cuotas = c.mesaExtraCuotas > 0 ? c.mesaExtraCuotas : 1;
+    final numerar = usarNumeracion(cant);
+
+    if (usarUiCompactaMesasCobro(activas.length)) {
+      final deudaTotal = activas.fold<double>(0, (s, m) => s + m.deuda);
+      if (deudaTotal <= 0.01) {
+        return ['Mesas extra · liquidadas'];
+      }
+      return [
+        'Mesas extra ($cant) · deuda ${deudaTotal.toCurrency()}',
+      ];
+    }
+
+    return activas.map((m) {
+      if (m.liquidada) {
+        final label = numerar ? 'Mesa ${m.n}' : 'Mesa extra';
+        return '$label · liquidada';
+      }
+      final label = numerar ? 'Mesa ${m.n}' : 'Mesa extra';
+      return '$label · ${m.cuotasPagadas}/$cuotas · ${m.deuda.toCurrency()}';
+    }).toList();
   }
 }

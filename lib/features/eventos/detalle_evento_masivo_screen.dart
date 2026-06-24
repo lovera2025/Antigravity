@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -188,6 +189,11 @@ class _DetalleEventoMasivoScreenState
         );
       }
       await _cargarNotasOperativas();
+      unawaited(
+        repo.reconciliarMesasLegacyPendientesEvento(widget.evento.id).then((n) {
+          if (n > 0 && mounted) _refreshAlumnos();
+        }),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1862,6 +1868,21 @@ class _DetalleEventoMasivoScreenState
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
+                                            ...MesasExtraUtils.lineasResumenGrilla(a).map(
+                                              (linea) => Padding(
+                                                padding: EdgeInsets.only(
+                                                  top: layoutCompact ? 1 : 2,
+                                                ),
+                                                child: Text(
+                                                  linea,
+                                                  style: TextStyle(
+                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    color: Colors.grey.shade600,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                             if (a.saldoDeudor > 0.01 &&
                                                 mora.fechaVencimientoProximaCuota !=
                                                     null &&
@@ -2579,52 +2600,29 @@ class _DetalleEventoMasivoScreenState
       disponibles.shuffle();
 
       int actualizados = 0;
+      int sinMesasSuficientes = 0;
       for (final alumno in alumnosSinMesa) {
-        if (disponibles.isEmpty) break;
-
-        final necesitaExtra = alumno.mesaExtraPrecio > 0;
-        String asignacion = '';
-
-        if (necesitaExtra) {
-          disponibles.sort();
-          int idxConsec = -1;
-          for (int i = 0; i < disponibles.length - 1; i++) {
-            if (disponibles[i + 1] == disponibles[i] + 1) {
-              idxConsec = i;
-              break;
-            }
-          }
-
-          if (idxConsec != -1) {
-            final m1 = disponibles.removeAt(idxConsec);
-            final m2 = disponibles.removeAt(idxConsec);
-            asignacion = '$m1, $m2';
-            disponibles.shuffle();
-          } else {
-            disponibles.shuffle();
-            if (disponibles.length >= 2) {
-              final m1 = disponibles.removeLast();
-              final m2 = disponibles.removeLast();
-              asignacion = '$m1, $m2';
-            } else {
-              asignacion = '${disponibles.removeLast()}';
-            }
-          }
-        } else {
-          asignacion = '${disponibles.removeLast()}';
+        final cantFisicas =
+            MesasExtraUtils.cantidadMesasFisicasSorteo(alumno);
+        final picked =
+            MesasExtraUtils.tomarMesasDisponibles(disponibles, cantFisicas);
+        if (picked == null || picked.isEmpty) {
+          sinMesasSuficientes++;
+          continue;
         }
 
-        if (asignacion.isNotEmpty) {
-          await repo.actualizarContrato(alumno.id, {'numero_mesa': asignacion});
-          actualizados++;
-        }
+        final asignacion = MesasExtraUtils.formatearAsignacionMesas(picked);
+        await repo.actualizarContrato(alumno.id, {'numero_mesa': asignacion});
+        actualizados++;
       }
 
       if (mounted) {
+        final msg = sinMesasSuficientes > 0
+            ? 'Se asignaron mesas a $actualizados alumnos. '
+                '$sinMesasSuficientes sin mesas libres suficientes.'
+            : 'Se asignaron mesas a $actualizados alumnos.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Se asignaron mesas a $actualizados alumnos.'),
-          ),
+          SnackBar(content: Text(msg)),
         );
       }
     } catch (e) {
