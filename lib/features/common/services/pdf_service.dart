@@ -20,6 +20,7 @@ import '../../cierre_caja/models/turno_caja.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
+import '../../eventos/services/mesas_extra_utils.dart';
 import '../utils/currency_extensions.dart';
 import 'presupuesto_pdf_sections.dart';
 import 'presupuesto_redaccion_llm_service.dart';
@@ -1445,6 +1446,20 @@ class PdfService {
         : montoPagado;
     final valSaldo = saldoPendiente;
 
+    final mesasEstadoRecibo = MesasExtraUtils.estadoDesdeContrato(alumno);
+    final cantMesasRecibo = MesasExtraUtils.cantidadMesasContrato(
+      alumno,
+      mesasEstadoRecibo,
+    );
+    final conceptosPagadosDisplay = conceptosPagados != null
+        ? agruparConceptosMesasParaPdf(
+            conceptosPagados
+                .map((c) => Map<String, dynamic>.from(c))
+                .toList(),
+            cantMesasRecibo,
+          )
+        : null;
+
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
     final bool reciboMixto =
@@ -1717,14 +1732,15 @@ class PdfService {
                       pw.SizedBox(height: 2),
 
                       // Desglose itemizado de conceptos pagados
-                      if (conceptosPagados != null &&
-                          conceptosPagados.isNotEmpty) ...[
-                        ...conceptosPagados.map((c) {
+                      if (conceptosPagadosDisplay != null &&
+                          conceptosPagadosDisplay.isNotEmpty) ...[
+                        ...conceptosPagadosDisplay.map((c) {
                           final desc = c['concepto'] as String? ?? 'Pago';
                           final montoItem =
                               (c['monto'] as num?)?.toDouble() ?? 0;
                           final grossItem =
                               (c['gross'] as num?)?.toDouble();
+                          final subtexto = c['subtexto'] as String?;
                           final bool plan =
                               c['esPlanLiquidacion'] == true;
                           final String? nominalHint = plan &&
@@ -1754,6 +1770,18 @@ class PdfService {
                                   ),
                                 ],
                               ),
+                              if (subtexto != null && subtexto.isNotEmpty)
+                                pw.Padding(
+                                  padding: const pw.EdgeInsets.only(left: 12),
+                                  child: pw.Text(
+                                    subtexto,
+                                    style: pw.TextStyle(
+                                      fontSize: 8,
+                                      fontStyle: pw.FontStyle.italic,
+                                      color: _greyText,
+                                    ),
+                                  ),
+                                ),
                               if (nominalHint != null)
                                 pw.Padding(
                                   padding: const pw.EdgeInsets.only(left: 12),
@@ -1771,7 +1799,7 @@ class PdfService {
                         }),
                         ..._bloqueDescuentoLiquidacionPdf(
                           porcentajeDescuento: porcentajeDescuentoLiquidacion,
-                          conceptos: conceptosPagados,
+                          conceptos: conceptosPagadosDisplay,
                           fontSize: 9,
                         ),
                         pw.SizedBox(height: 2),
@@ -1873,40 +1901,60 @@ class PdfService {
                                         color: _darkText,
                                       ),
                                     ),
-                                  if (conceptosPagados != null &&
-                                      conceptosPagados.isNotEmpty) ...[
-                                    ...conceptosPagados.map((c) {
+                                  if (conceptosPagadosDisplay != null &&
+                                      conceptosPagadosDisplay.isNotEmpty) ...[
+                                    ...conceptosPagadosDisplay.map((c) {
                                       final desc =
                                           c['concepto'] as String? ?? 'Pago';
                                       final montoItem =
                                           (c['monto'] as num?)?.toDouble() ??
                                           0;
+                                      final subtexto =
+                                          c['subtexto'] as String?;
                                       return pw.Padding(
                                         padding: const pw.EdgeInsets.only(
                                           top: 2,
                                         ),
-                                        child: pw.Row(
-                                          mainAxisAlignment:
-                                              pw.MainAxisAlignment
-                                                  .spaceBetween,
+                                        child: pw.Column(
+                                          crossAxisAlignment:
+                                              pw.CrossAxisAlignment.start,
                                           children: [
-                                            pw.Expanded(
-                                              child: pw.Text(
-                                                '· $desc',
+                                            pw.Row(
+                                              mainAxisAlignment:
+                                                  pw.MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                pw.Expanded(
+                                                  child: pw.Text(
+                                                    '· $desc',
+                                                    style: pw.TextStyle(
+                                                      fontSize: 7,
+                                                      color: _darkText,
+                                                    ),
+                                                  ),
+                                                ),
+                                                pw.Text(
+                                                  montoItem.toCurrency(),
+                                                  style: pw.TextStyle(
+                                                    fontSize: 7,
+                                                    fontWeight:
+                                                        pw.FontWeight.bold,
+                                                    color: _darkText,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            if (subtexto != null &&
+                                                subtexto.isNotEmpty)
+                                              pw.Text(
+                                                subtexto,
                                                 style: pw.TextStyle(
-                                                  fontSize: 7,
-                                                  color: _darkText,
+                                                  fontSize: 6,
+                                                  fontStyle:
+                                                      pw.FontStyle.italic,
+                                                  color: _greyText,
                                                 ),
                                               ),
-                                            ),
-                                            pw.Text(
-                                              montoItem.toCurrency(),
-                                              style: pw.TextStyle(
-                                                fontSize: 7,
-                                                fontWeight: pw.FontWeight.bold,
-                                                color: _darkText,
-                                              ),
-                                            ),
                                           ],
                                         ),
                                       );
@@ -2079,19 +2127,41 @@ class PdfService {
                                                 ),
                                               ),
                                               if (alumno.mesaExtraPrecio > 0.01)
-                                                pw.Padding(
-                                                  padding:
-                                                      const pw.EdgeInsets.only(
-                                                        top: 1,
-                                                      ),
-                                                  child: pw.Text(
-                                                    '· Mesa Extra (Mesa ${alumno.numeroMesa ?? '-'}): ${alumno.mesaExtraPrecio.toCurrency()}  (Resta: ${(saldoMesaRestante > 0.01 ? saldoMesaRestante : 0.0).toCurrency()} | Cuota ${alumno.mesaExtraCuotasPagadas}/${alumno.mesaExtraCuotas})',
-                                                    style: pw.TextStyle(
-                                                      fontSize: 7,
-                                                      color: _greyText,
-                                                    ),
-                                                  ),
-                                                ),
+                                                ...() {
+                                                  final mesas =
+                                                      MesasExtraUtils
+                                                          .estadoDesdeContrato(
+                                                    alumno,
+                                                  );
+                                                  final lineasMesas =
+                                                      lineasDetalleMesasContratoPdf(
+                                                    mesas: mesas,
+                                                    cuotasPlan:
+                                                        alumno.mesaExtraCuotas,
+                                                  );
+                                                  return lineasMesas
+                                                      .map(
+                                                        (linea) => pw.Padding(
+                                                          padding:
+                                                              const pw.EdgeInsets
+                                                                  .only(
+                                                            top: 1,
+                                                          ),
+                                                          child: pw.Text(
+                                                            linea.texto,
+                                                            style: pw.TextStyle(
+                                                              fontSize: 7,
+                                                              color: linea
+                                                                      .liquidada
+                                                                  ? PdfColors
+                                                                      .green800
+                                                                  : _greyText,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      )
+                                                      .toList();
+                                                }(),
                                               if (alumno
                                                       .sillasExtraPrecioTotal >
                                                   0.01)
@@ -2301,11 +2371,21 @@ class PdfService {
     final fechaStr = ArTime.formatFechaHora(now);
     final operacionStr = ArTime.operacionGestionada(now);
 
-    final lineasLiquidacion = conceptosLineas
+    final mesasEstadoResumen = MesasExtraUtils.estadoDesdeContrato(alumno);
+    final cantMesasResumen = MesasExtraUtils.cantidadMesasContrato(
+      alumno,
+      mesasEstadoResumen,
+    );
+    final conceptosLineasDisplay = agruparConceptosMesasParaPdf(
+      conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
+      cantMesasResumen,
+    );
+
+    final lineasLiquidacion = conceptosLineasDisplay
         .where((c) => c['esCargoCanal'] != true)
         .toList();
     final lineasCargo =
-        conceptosLineas.where((c) => c['esCargoCanal'] == true).toList();
+        conceptosLineasDisplay.where((c) => c['esCargoCanal'] == true).toList();
     final double cargoTotal = lineasCargo.fold<double>(
       0,
       (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
@@ -2646,7 +2726,7 @@ class PdfService {
                     ),
                     ..._bloqueDescuentoLiquidacionPdf(
                       porcentajeDescuento: porcentajeDescuentoLiquidacion,
-                      conceptos: conceptosLineas,
+                      conceptos: conceptosLineasDisplay,
                       fontSize: 8,
                     ),
                     if (cargoTotal > 0.01) ...[

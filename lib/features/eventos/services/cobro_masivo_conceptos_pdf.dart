@@ -1,5 +1,174 @@
+import '../../../models/mesa_extra_item.dart';
+import '../../common/utils/currency_extensions.dart';
+import 'mesas_extra_utils.dart';
+
 bool esConceptoPlanLiquidacionPdf(Map<String, dynamic> c) =>
     c['esPlanLiquidacion'] == true;
+
+/// Línea de concepto del recibo/resumen que corresponde a mesa(s) extra.
+bool esLineaMesaConceptoPdf(Map<String, dynamic> c) {
+  if (c['esMora'] == true || c['esCargoCanal'] == true) return false;
+  final t = (c['concepto'] as String? ?? '').toLowerCase();
+  return t.contains('mesa extra') || t.contains('mesas extra');
+}
+
+Map<String, dynamic> _enriquecerMesaNConceptoPdf(Map<String, dynamic> c) {
+  if (c['mesaN'] != null) return c;
+  final n = MesasExtraUtils.mesaNumeroDesdeTexto(c['concepto'] as String?);
+  if (n == null) return Map<String, dynamic>.from(c);
+  return {...c, 'mesaN': n};
+}
+
+Map<String, dynamic> _fusionarLineasMesasConceptoPdf(
+  List<Map<String, dynamic>> lineas,
+) {
+  final enriched = lineas.map(_enriquecerMesaNConceptoPdf).toList();
+  final titulo = MesasExtraUtils.tituloGrupoDesgloseMesas(enriched);
+
+  var monto = 0.0;
+  var gross = 0.0;
+  for (final c in lineas) {
+    monto += (c['monto'] as num?)?.toDouble() ?? 0;
+    gross += (c['gross'] as num?)?.toDouble() ??
+        (c['monto'] as num?)?.toDouble() ??
+        0;
+  }
+  monto = double.parse(monto.toStringAsFixed(2));
+  gross = double.parse(gross.toStringAsFixed(2));
+
+  final nums = enriched
+      .map((c) => c['mesaN'] as int?)
+      .whereType<int>()
+      .toList()
+    ..sort();
+
+  String? subtexto;
+  if (nums.length >= 2) {
+    subtexto = 'incluye mesas ${nums.join(', ')}';
+  } else if (lineas.length >= 2) {
+    subtexto = 'incluye ${lineas.length} mesas';
+  }
+
+  return {
+    'concepto': titulo,
+    'monto': monto,
+    'gross': gross,
+    'esPlanLiquidacion': true,
+    if (subtexto != null) 'subtexto': subtexto,
+  };
+}
+
+/// Agrupa líneas de mesas extra en el PDF cuando el contrato tiene 3+ mesas.
+List<Map<String, dynamic>> agruparConceptosMesasParaPdf(
+  List<Map<String, dynamic>> conceptos,
+  int cantMesasContrato,
+) {
+  if (!MesasExtraUtils.usarUiCompactaMesasCobro(cantMesasContrato)) {
+    return conceptos;
+  }
+  if (!conceptos.any(esLineaMesaConceptoPdf)) return conceptos;
+
+  final out = <Map<String, dynamic>>[];
+  var grupoMesasEmitido = false;
+
+  for (final c in conceptos) {
+    if (esLineaMesaConceptoPdf(c)) {
+      if (grupoMesasEmitido) continue;
+      grupoMesasEmitido = true;
+      final lineasMesas =
+          conceptos.where(esLineaMesaConceptoPdf).toList();
+      out.add(_fusionarLineasMesasConceptoPdf(lineasMesas));
+    } else {
+      out.add(Map<String, dynamic>.from(c));
+    }
+  }
+  return out;
+}
+
+/// Detalle compacto de mesas en "DETALLE DEL CONTRATO" del recibo (3+ mesas).
+List<({String texto, bool liquidada})> lineasDetalleMesasContratoPdf({
+  required List<MesaExtraItem> mesas,
+  required int cuotasPlan,
+}) {
+  if (mesas.isEmpty) return [];
+
+  if (!MesasExtraUtils.usarUiCompactaMesasCobro(mesas.length)) {
+    return mesas
+        .map(
+          (m) => (
+            texto: _textoLineaMesaContratoPdf(m, cuotasPlan, numerada: true),
+            liquidada: m.liquidada,
+          ),
+        )
+        .toList();
+  }
+
+  final buckets = <String, List<MesaExtraItem>>{};
+  for (final m in mesas) {
+    final restaKey = m.liquidada ? 'liq' : m.deuda.toStringAsFixed(0);
+    final key =
+        '${m.liquidada}_${m.cuotasPagadas}_${m.precio.toStringAsFixed(2)}_$restaKey';
+    buckets.putIfAbsent(key, () => []).add(m);
+  }
+
+  final results = <({String texto, bool liquidada, int minN})>[];
+  for (final group in buckets.values) {
+    group.sort((a, b) => a.n.compareTo(b.n));
+    final m = group.first;
+    final nums = group.map((x) => x.n).toList()..sort();
+    final rango = nums.length == 1
+        ? '${nums.first}'
+        : '${nums.first}–${nums.last}';
+
+    if (m.liquidada) {
+      results.add((
+        texto:
+            '· Mesas Extra $rango: ${m.precio.toCurrency()}  (Liquidadas | Cuota $cuotasPlan/$cuotasPlan)',
+        liquidada: true,
+        minN: nums.first,
+      ));
+    } else {
+      final resta = m.deuda.clamp(0.0, double.infinity);
+      final cuotaPart = cuotasPlan <= 1
+          ? ''
+          : ' | Cuota ${m.cuotasPagadas}/$cuotasPlan';
+      if (group.length >= 2) {
+        results.add((
+          texto:
+              '· Mesas Extra $rango: ${m.precio.toCurrency()} c/u  (Resta: ${resta.toCurrency()} c/u$cuotaPart)',
+          liquidada: false,
+          minN: nums.first,
+        ));
+      } else {
+        results.add((
+          texto: _textoLineaMesaContratoPdf(m, cuotasPlan, numerada: true),
+          liquidada: false,
+          minN: m.n,
+        ));
+      }
+    }
+  }
+
+  results.sort((a, b) => a.minN.compareTo(b.minN));
+  return results
+      .map((r) => (texto: r.texto, liquidada: r.liquidada))
+      .toList();
+}
+
+String _textoLineaMesaContratoPdf(
+  MesaExtraItem m,
+  int cuotasPlan, {
+  required bool numerada,
+}) {
+  final resta = m.deuda.clamp(0.0, double.infinity);
+  final label = numerada ? 'Mesa Extra ${m.n}' : 'Mesa Extra';
+  if (m.liquidada) {
+    return '· $label: ${m.precio.toCurrency()}  (Liquidada | Cuota $cuotasPlan/$cuotasPlan)';
+  }
+  final cuotaPart =
+      cuotasPlan <= 1 ? '' : ' | Cuota ${m.cuotasPagadas}/$cuotasPlan';
+  return '· $label: ${m.precio.toCurrency()}  (Resta: ${resta.toCurrency()}$cuotaPart)';
+}
 
 /// Totales del plan (base/mesa/sillas) para bloque de descuento en PDF.
 ({double nominal, double neto, double ahorro}) totalesDescuentoPlanPdf(
@@ -33,6 +202,7 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
   required int mCuotas,
   required int sPagadas,
   required int sCuotas,
+  int cantMesas = 1,
 }) {
   final conceptosFinales = <Map<String, dynamic>>[];
   var contadorBaseFinal = 0;
@@ -92,17 +262,28 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
     } else if (cTexto.toUpperCase().contains('MESA') &&
         !cTexto.toUpperCase().contains('ADELANTO') &&
         !cTexto.toUpperCase().contains('ABONO')) {
-      if (mCuotas <= 1) {
-        cRico = 'Mesa Extra - Entrega';
+      final mesaNPreview = conc['mesaN'] as int?;
+      final mesaEnTexto = mesaNPreview ??
+          MesasExtraUtils.mesaNumeroDesdeTexto(cTexto);
+      final totalMesas = cantMesas > 1
+          ? cantMesas
+          : (mesaEnTexto != null && mesaEnTexto > 1 ? 2 : 1);
+      final prefix = mesaEnTexto != null
+          ? MesasExtraUtils.labelCobro(mesaEnTexto, totalMesas)
+          : 'Mesa Extra';
+      final yaRotuladoPorMesa = mesaEnTexto != null &&
+          RegExp(r'\(\d+/\d+\)').hasMatch(cTexto);
+      if (yaRotuladoPorMesa) {
+        cRico = cTexto;
+      } else if (mCuotas <= 1) {
+        cRico = '$prefix - Entrega';
       } else if (cCuotasConc == 1) {
-        cRico =
-            'Mesa Extra (${mPagadas + contadorMesaFinal + 1}/$mCuotas)';
+        cRico = '$prefix (${mPagadas + contadorMesaFinal + 1}/$mCuotas)';
       } else if (cCuotasConc > 1) {
         cRico =
-            '$cCuotasConc Cuotas Mesa Extra (${mPagadas + contadorMesaFinal + 1}-${mPagadas + contadorMesaFinal + cCuotasConc}/$mCuotas)';
+            '$cCuotasConc Cuotas $prefix (${mPagadas + contadorMesaFinal + 1}-${mPagadas + contadorMesaFinal + cCuotasConc}/$mCuotas)';
       } else {
-        cRico =
-            'Abono Mesa Extra (${mPagadas + contadorMesaFinal + 1}/$mCuotas)';
+        cRico = 'Abono $prefix (${mPagadas + contadorMesaFinal + 1}/$mCuotas)';
       }
       contadorMesaFinal += cCuotasConc;
     } else if (cTexto.toUpperCase().contains('SILLA') &&
@@ -154,7 +335,7 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
     }
   }
 
-  return conceptosFinales;
+  return agruparConceptosMesasParaPdf(conceptosFinales, cantMesas);
 }
 
 /// Suma líneas de liquidación (excluye cargo canal).

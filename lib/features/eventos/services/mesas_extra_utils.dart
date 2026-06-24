@@ -5,6 +5,103 @@ import '../../../models/mesa_extra_item.dart';
 class MesasExtraUtils {
   MesasExtraUtils._();
 
+  /// A partir de esta cantidad de mesas activas, el modal de cobro usa UI compacta.
+  static const int kUmbralUiCompactaMesasCobro = 3;
+
+  static bool usarUiCompactaMesasCobro(int mesasActivas) =>
+      mesasActivas >= kUmbralUiCompactaMesasCobro;
+
+  /// Línea del preview de desglose que corresponde a una mesa extra.
+  static bool esLineaPreviewMesa(Map<String, dynamic> c) {
+    if (c['lineKind'] == 'interes_mora' ||
+        c['lineKind'] == 'cargo_canal_ref') {
+      return false;
+    }
+    if (c['mesaN'] != null) return true;
+    final concepto = (c['concepto'] as String? ?? '').toLowerCase();
+    return concepto.contains('mesa extra');
+  }
+
+  static double sumaMontosPreview(List<Map<String, dynamic>> lineas) =>
+      lineas.fold<double>(
+        0,
+        (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
+      );
+
+  /// Título agrupado para el desglose cuando hay varias mesas en UI compacta.
+  static String tituloGrupoDesgloseMesas(
+    List<Map<String, dynamic>> lineasMesas,
+  ) {
+    if (lineasMesas.isEmpty) return 'Mesas Extra';
+
+    final nums = lineasMesas
+        .map((c) => c['mesaN'] as int?)
+        .whereType<int>()
+        .toList()
+      ..sort();
+    final count = lineasMesas.length;
+    final firstMonto = (lineasMesas.first['monto'] as num?)?.toDouble() ?? 0;
+    final allSameMonto = lineasMesas.every(
+      (c) => ((c['monto'] as num?)?.toDouble() ?? 0) == firstMonto,
+    );
+
+    String? sufijoCuota(String concepto) {
+      final match = RegExp(r'\(\d+/\d+\)').firstMatch(concepto);
+      return match?.group(0);
+    }
+
+    final sufijos = lineasMesas
+        .map((c) => sufijoCuota((c['concepto'] as String? ?? '')))
+        .toSet();
+    final allSameSufijoCuota =
+        sufijos.length == 1 && sufijos.first != null && sufijos.first!.isNotEmpty;
+
+    String rangoNumeros() {
+      if (nums.isEmpty) return '';
+      if (nums.length == 1) return '${nums.first}';
+      if (nums.first == nums.last) return '${nums.first}';
+      return '${nums.first}–${nums.last}';
+    }
+
+    final rango = rangoNumeros();
+    final sufijoCuotaComun = sufijos.first;
+
+    if (rango.isNotEmpty && allSameSufijoCuota && allSameMonto && count > 1) {
+      return 'Mesas Extra $rango $sufijoCuotaComun c/u';
+    }
+    if (count == 1) {
+      final concepto = lineasMesas.first['concepto'] as String? ?? '';
+      return concepto.isNotEmpty ? concepto : 'Mesas Extra $rango';
+    }
+    return 'Mesas Extra ($count seleccionadas)';
+  }
+
+  static int contarMesasSeleccionadasCobro(Map<String, double> montosManuales) =>
+      montosManuales.keys.where((k) => k.startsWith('Mesa:')).length;
+
+  static double sumaBrutaMesasSeleccionadasCobro(
+    Map<String, double> montosManuales,
+  ) =>
+      montosManuales.entries
+          .where((e) => e.key.startsWith('Mesa:'))
+          .fold<double>(0, (s, e) => s + e.value);
+
+  /// Claves `Mesa:N` → monto bruto en el modal de cobro.
+  static Map<String, double> montosManualesMesasDesde(
+    Map<String, double> montosManuales,
+  ) =>
+      Map.fromEntries(
+        montosManuales.entries.where((e) => e.key.startsWith('Mesa:')),
+      );
+
+  static void limpiarClavesMesasEnMontosManuales(
+    Map<String, double> montosManuales,
+  ) {
+    montosManuales.removeWhere(
+      (k, _) => k == 'Mesa' || k.startsWith('Mesa:'),
+    );
+  }
+
   /// Extrae número de mesa del concepto de pago. Legacy sin número → 1.
   static int numeroMesaDesdeConcepto(String? concepto) {
     if (concepto == null || concepto.trim().isEmpty) return 1;
@@ -19,6 +116,78 @@ class MesasExtraUtils {
 
   /// Concepto estándar para registrar un pago sobre mesa [n].
   static String conceptoPagoMesa(int n) => 'Mesa Extra $n';
+
+  /// Clave interna del modal de cobro para mesa [n].
+  static String claveCobro(int n) => 'Mesa:$n';
+
+  static int? mesaNumeroDesdeClave(String key) {
+    if (key.startsWith('Mesa:')) {
+      return int.tryParse(key.split(':').last);
+    }
+    return null;
+  }
+
+  /// Extrae número de mesa de un label/concepto UI (null si no hay dígito).
+  static int? mesaNumeroDesdeTexto(String? texto) {
+    if (texto == null || texto.trim().isEmpty) return null;
+    final match = RegExp(
+      r'mesa\s*extra\s*(\d+)',
+      caseSensitive: false,
+    ).firstMatch(texto);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  static bool usarNumeracion(int cantidadMesas) => cantidadMesas > 1;
+
+  static String labelCobro(int n, int cantidadMesas) =>
+      usarNumeracion(cantidadMesas) ? 'Mesa Extra $n' : 'Mesa Extra';
+
+  static String tituloCobro(int n, int cantidadMesas) =>
+      usarNumeracion(cantidadMesas) ? 'MESA EXTRA $n' : 'MESA EXTRA';
+
+  /// Cantidad de mesas del contrato (fallback a lista parseada).
+  static int cantidadMesasContrato(
+    ContratoAlumno c,
+    List<MesaExtraItem> mesasEstado,
+  ) {
+    if (c.mesaExtraCantidad > 0) return c.mesaExtraCantidad;
+    if (mesasEstado.length > 1) return mesasEstado.length;
+    return mesasEstado.isEmpty ? 0 : 1;
+  }
+
+  /// Resuelve ítem de mesa desde clave de cobro; nunca asume mesa 1 si hay una sola activa distinta.
+  static MesaExtraItem resolveMesa({
+    required String conceptoKey,
+    required List<MesaExtraItem> mesasEstado,
+    required List<MesaExtraItem> mesasActivas,
+    required double precioUnitarioFallback,
+  }) {
+    final fromKey = mesaNumeroDesdeClave(conceptoKey);
+    if (fromKey != null) {
+      for (final m in mesasEstado) {
+        if (m.n == fromKey) return m;
+      }
+      return MesaExtraItem(n: fromKey, precio: precioUnitarioFallback);
+    }
+    if (mesasActivas.length == 1) return mesasActivas.first;
+    if (mesasEstado.length == 1) return mesasEstado.first;
+    return MesaExtraItem(n: 1, precio: precioUnitarioFallback);
+  }
+
+  /// Rotulo estándar de cuota/entrega para una mesa concreta.
+  static String conceptoCuotaDetallado({
+    required MesaExtraItem item,
+    required int cuotasPlan,
+    required int cantidadMesas,
+    int cuotaOffset = 1,
+  }) {
+    final prefix = labelCobro(item.n, cantidadMesas);
+    if (cuotasPlan <= 1) return '$prefix - Entrega';
+    final num =
+        (item.cuotasPagadas + cuotaOffset).clamp(1, cuotasPlan + 99);
+    return '$prefix ($num/$cuotasPlan)';
+  }
 
   /// Estado por mesa a partir del contrato; migra legacy si JSON vacío.
   static List<MesaExtraItem> estadoDesdeContrato(ContratoAlumno c) {
@@ -201,15 +370,44 @@ class MesasExtraUtils {
         return fa.compareTo(fb);
       });
 
+    // FIFO state para pagos legacy sin número de mesa explícito.
+    // Los pagos con número ≥ 2 se atribuyen directamente; los demás
+    // se distribuyen cronológicamente llenando mesa 1 primero.
+    double acumuladoFifo = 0.0;
+    int mesaFifoActual = 1;
+    final _regNumero = RegExp(r'mesa\s*extra\s*\d+', caseSensitive: false);
+
     for (final p in sorted) {
       if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
       final concepto = p['concepto'] as String? ?? '';
       if (!concepto.toLowerCase().contains('mesa')) continue;
-      final n = numeroMesaDesdeConcepto(concepto).clamp(1, cantidad);
       final gross =
           (p['monto_gross'] as num?)?.toDouble() ??
           (p['monto'] as num?)?.toDouble() ??
           0.0;
+      if (gross <= 0.001) continue;
+
+      final mesaExplicita = numeroMesaDesdeConcepto(concepto);
+      // Un pago tiene número explícito si el concepto menciona "Mesa Extra N"
+      // con N dígito (ej: "Mesa Extra 2 (1/7)"). Legacy = "Mesa Extra (2/7)".
+      final tieneNumeroExplicito = _regNumero.hasMatch(concepto);
+
+      int n;
+      if (tieneNumeroExplicito && mesaExplicita > 1) {
+        // Número de mesa ≥ 2 claramente escrito → atribuir directo.
+        n = mesaExplicita.clamp(1, cantidad);
+      } else {
+        // Legacy (sin número o "Mesa Extra 1" ambiguo) → FIFO cronológico.
+        if (mesaFifoActual < cantidad &&
+            acumuladoFifo + gross > unit + 0.01) {
+          mesaFifoActual++;
+          acumuladoFifo = gross;
+        } else {
+          acumuladoFifo += gross;
+        }
+        n = mesaFifoActual;
+      }
+
       pagadoPorMesa[n] = (pagadoPorMesa[n] ?? 0) + gross;
     }
 

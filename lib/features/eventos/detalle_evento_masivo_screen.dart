@@ -2905,7 +2905,13 @@ class _DetalleEventoMasivoScreenState
 
   Future<void> _mostrarModalPagoAlumno(ContratoAlumno alumno) async {
     final cRepo = ref.read(contratosRepositoryProvider);
-    final alumnoFresco = await cRepo.getContratoById(alumno.id) ?? alumno;
+    var alumnoFresco = await cRepo.getContratoById(alumno.id) ?? alumno;
+    // Reconciliar mesas antes de abrir el modal para que el JSON por mesa
+    // esté al día (corrige contratos con pagos legacy sin número de mesa).
+    if (alumnoFresco.mesaExtraCantidad > 1) {
+      await cRepo.reconciliarMesasEstadoContrato(alumnoFresco.id);
+      alumnoFresco = await cRepo.getContratoById(alumnoFresco.id) ?? alumnoFresco;
+    }
     alumno = alumnoFresco;
     if (alumno.saldoDeudor <= 0) {
       if (mounted) {
@@ -2955,7 +2961,10 @@ class _DetalleEventoMasivoScreenState
         MesasExtraUtils.estadoDesdeContrato(alumno);
     final List<MesaExtraItem> mesasActivasCobro =
         MesasExtraUtils.mesasActivas(mesasEstadoList);
-    String mesaCobroKey(int n) => 'Mesa:$n';
+    final int cantMesas =
+        MesasExtraUtils.cantidadMesasContrato(alumno, mesasEstadoList);
+    final double precioUnitMesa = alumno.precioUnitarioMesaExtra;
+    String mesaCobroKey(int n) => MesasExtraUtils.claveCobro(n);
 
     final double deudaMesaTotal = mesasActivasCobro.isEmpty
         ? (alumno.mesaExtraPrecio - (alumno.mesaExtraPagado)).clamp(
@@ -3095,6 +3104,8 @@ class _DetalleEventoMasivoScreenState
       builder: (dialogContext) {
         bool informarPctTransferExterno = informarPctTransferExternoInit;
         String transferCargoModo = transferCargoModoInit;
+        bool mesasGrupoExpandido = false;
+        bool desgloseMesasExpandido = false;
         return StatefulBuilder(
           builder: (context, setModalState) {
             List<MoraCuotaDetalle> moraCuotasSeleccionadasList() {
@@ -3293,32 +3304,31 @@ class _DetalleEventoMasivoScreenState
               return liquidoTransferenciaBaseParaCargoInforme();
             }
 
-            String getConceptoDetallado(String raw, int cuotaOffset) {
+            String getConceptoDetallado(
+              String conceptoKey,
+              String raw,
+              int cuotaOffset,
+            ) {
               if (raw == 'Cuota Base' || raw.contains('CUOTA BASE')) {
                 final num = cPagadas + cuotaOffset;
                 return 'Cuota Base ($num/$tCuotas)';
               }
-              if (raw == 'Mesa Extra' || raw.contains('MESA EXTRA')) {
-                final match = RegExp(
-                  r'mesa\s*extra\s*(\d+)',
-                  caseSensitive: false,
-                ).firstMatch(raw);
-                final mesaN = match != null ? int.parse(match.group(1)!) : 1;
-                MesaExtraItem item;
-                try {
-                  item = mesasEstadoList.firstWhere((m) => m.n == mesaN);
-                } catch (_) {
-                  item = mesasEstadoList.isNotEmpty
-                      ? mesasEstadoList.first
-                      : MesaExtraItem(n: 1, precio: alumno.mesaExtraPrecio);
-                }
-                final prefix = mesasActivasCobro.length > 1 ||
-                        alumno.mesaExtraCantidad > 1
-                    ? 'Mesa Extra $mesaN'
-                    : 'Mesa Extra';
-                if (mCuotas <= 1) return '$prefix - Entrega';
-                final num = item.cuotasPagadas + cuotaOffset;
-                return '$prefix ($num/$mCuotas)';
+              if (conceptoKey == 'Mesa' ||
+                  conceptoKey.startsWith('Mesa:') ||
+                  raw == 'Mesa Extra' ||
+                  raw.contains('MESA EXTRA')) {
+                final item = MesasExtraUtils.resolveMesa(
+                  conceptoKey: conceptoKey,
+                  mesasEstado: mesasEstadoList,
+                  mesasActivas: mesasActivasCobro,
+                  precioUnitarioFallback: precioUnitMesa,
+                );
+                return MesasExtraUtils.conceptoCuotaDetallado(
+                  item: item,
+                  cuotasPlan: mCuotas,
+                  cantidadMesas: cantMesas,
+                  cuotaOffset: cuotaOffset,
+                );
               }
               if (raw == 'Sillas Extras' || raw.contains('SILLAS EXTRAS')) {
                 if (sCuotas <= 1) return 'Sillas Extras - Entrega';
@@ -3326,6 +3336,11 @@ class _DetalleEventoMasivoScreenState
                 return 'Sillas Extras ($num/$sCuotas)';
               }
               return raw;
+            }
+
+            int? mesaNumeroDesdeConceptoKey(String conceptoKey) {
+              return MesasExtraUtils.mesaNumeroDesdeClave(conceptoKey) ??
+                  (conceptoKey == 'Mesa' && cantMesas <= 1 ? 1 : null);
             }
 
             Map<String, dynamic> calcularDesgloseInteligente(
@@ -3359,7 +3374,8 @@ class _DetalleEventoMasivoScreenState
                   }
                   cant = cuotasCompletas;
                 } else if (cuotasCompletas == 1 && esExacto) {
-                  conceptoFinal = getConceptoDetallado(label, 1);
+                  conceptoFinal =
+                      getConceptoDetallado(conceptoKey, label, 1);
                   cant = 1;
                 } else {
                   final int cuotasPagadasClase = () {
@@ -3370,11 +3386,16 @@ class _DetalleEventoMasivoScreenState
                             .firstWhere((m) => m.n == n)
                             .cuotasPagadas;
                       } catch (_) {
-                        return mPagadas;
+                        return 0;
                       }
                     }
+                    if (conceptoKey == 'Mesa') {
+                      if (mesasActivasCobro.length == 1) {
+                        return mesasActivasCobro.first.cuotasPagadas;
+                      }
+                      return mPagadas;
+                    }
                     return switch (conceptoKey) {
-                      'Mesa' => mPagadas,
                       'Sillas' => sPagadas,
                       _ => cPagadas,
                     };
@@ -3385,22 +3406,28 @@ class _DetalleEventoMasivoScreenState
                     grossActual: gross,
                     cuotaPura: qPura,
                     grossHistoricoClase:
-                        historicoGrossPorClave[conceptoKey] ?? 0.0,
-                    getConceptoDetallado: getConceptoDetallado,
+                        historicoGrossPorClave[conceptoKey] ??
+                        (conceptoKey == 'Mesa'
+                            ? historicoGrossPorClave['Mesa'] ?? 0.0
+                            : 0.0),
+                    getConceptoDetallado: (raw, offset) =>
+                        getConceptoDetallado(conceptoKey, raw, offset),
                     cuotasPagadasActuales: cuotasPagadasClase,
                   );
                   conceptoFinal = rotulo.concepto;
                   cant = rotulo.cuotas;
                 }
               } else {
-                conceptoFinal = getConceptoDetallado(label, 1);
+                conceptoFinal = getConceptoDetallado(conceptoKey, label, 1);
               }
 
+              final mesaN = mesaNumeroDesdeConceptoKey(conceptoKey);
               return {
                 'concepto': conceptoFinal,
                 'monto': double.parse(net.toStringAsFixed(2)),
                 'gross': double.parse(gross.toStringAsFixed(2)),
                 'cuotas': cant,
+                if (mesaN != null) 'mesaN': mesaN,
               };
             }
 
@@ -3504,13 +3531,11 @@ class _DetalleEventoMasivoScreenState
                       );
                     }
                     qPura = item.cuotaPura(mCuotas);
-                    label = mesasActivasCobro.length > 1
-                        ? 'Mesa Extra $n'
-                        : 'Mesa Extra';
+                    label = MesasExtraUtils.labelCobro(n, cantMesas);
                   } else if (key == 'Mesa') {
                     qPura =
                         alumno.mesaExtraPrecio / (mCuotas > 0 ? mCuotas : 1);
-                    label = 'Mesa Extra';
+                    label = MesasExtraUtils.labelCobro(1, cantMesas);
                   } else if (key == 'Sillas') {
                     qPura =
                         alumno.sillasExtraPrecioTotal /
@@ -3602,7 +3627,7 @@ class _DetalleEventoMasivoScreenState
               if (mesasActivasCobro.isEmpty && pagarMesa && deudaMesaTotal > 0.01) {
                 procesarConcepto(
                   'Mesa',
-                  'Mesa Extra',
+                  MesasExtraUtils.labelCobro(1, cantMesas),
                   deudaMesaTotal,
                   alumno.mesaExtraPrecio / (mCuotas > 0 ? mCuotas : 1),
                 );
@@ -3610,9 +3635,7 @@ class _DetalleEventoMasivoScreenState
                 for (final mesa in mesasActivasCobro) {
                   final key = mesaCobroKey(mesa.n);
                   if (!montosManuales.containsKey(key)) continue;
-                  final label = mesasActivasCobro.length > 1
-                      ? 'Mesa Extra ${mesa.n}'
-                      : 'Mesa Extra';
+                  final label = MesasExtraUtils.labelCobro(mesa.n, cantMesas);
                   procesarConcepto(
                     key,
                     label,
@@ -3706,6 +3729,7 @@ class _DetalleEventoMasivoScreenState
                 mCuotas: mCuotas,
                 sPagadas: sPagadas,
                 sCuotas: sCuotas,
+                cantMesas: cantMesas,
               );
 
               final double moraIncluida = previewConceptos
@@ -4230,11 +4254,88 @@ class _DetalleEventoMasivoScreenState
                                   },
                                 ),
                               ]
+                            : MesasExtraUtils.usarUiCompactaMesasCobro(
+                                mesasActivasCobro.length,
+                              )
+                            ? [
+                                _buildMesasExtraGrupoCompacto(
+                                  context: context,
+                                  isDark: Theme.of(context).brightness ==
+                                      Brightness.dark,
+                                  mesas: mesasActivasCobro,
+                                  cantMesas: cantMesas,
+                                  deudaMesaTotal: deudaMesaTotal,
+                                  montosManuales: montosManuales,
+                                  expandido: mesasGrupoExpandido,
+                                  onToggleExpandido: () => setModalState(
+                                    () => mesasGrupoExpandido =
+                                        !mesasGrupoExpandido,
+                                  ),
+                                  onElegirMesas: () =>
+                                      _mostrarDialogoElegirMesasExtra(
+                                    context: context,
+                                    mesas: mesasActivasCobro,
+                                    cantMesas: cantMesas,
+                                    montosManuales: montosManuales,
+                                    setModalState: setModalState,
+                                    onMesaChanged: (mesa, v) =>
+                                        _onMesaExtraCobroChanged(
+                                      context: context,
+                                      v: v,
+                                      mesa: mesa,
+                                      mesaLabel: MesasExtraUtils.labelCobro(
+                                        mesa.n,
+                                        cantMesas,
+                                      ),
+                                      mesaKeyStr: mesaCobroKey(mesa.n),
+                                      deuda: mesa.deuda,
+                                      cuotaPura: mesa.cuotaPura(mCuotas),
+                                      cuotasRestantes:
+                                          mesa.cuotasRestantes(mCuotas),
+                                      setModalState: setModalState,
+                                      montosManuales: montosManuales,
+                                      onPagarMesaChanged: (val) =>
+                                          pagarMesa = val,
+                                      recalcular: recalcularDesdeChecks,
+                                      preguntarMontoParcial:
+                                          preguntarMontoParcial,
+                                      mostrarOpcionesPago:
+                                          _mostrarOpcionesPago,
+                                      mostrarDialogoSeleccionCuotas:
+                                          _mostrarDialogoSeleccionCuotas,
+                                    ),
+                                  ),
+                                  onMesaChanged: (mesa, v) =>
+                                      _onMesaExtraCobroChanged(
+                                    context: context,
+                                    v: v,
+                                    mesa: mesa,
+                                    mesaLabel: MesasExtraUtils.labelCobro(
+                                      mesa.n,
+                                      cantMesas,
+                                    ),
+                                    mesaKeyStr: mesaCobroKey(mesa.n),
+                                    deuda: mesa.deuda,
+                                    cuotaPura: mesa.cuotaPura(mCuotas),
+                                    cuotasRestantes:
+                                        mesa.cuotasRestantes(mCuotas),
+                                    setModalState: setModalState,
+                                    montosManuales: montosManuales,
+                                    onPagarMesaChanged: (val) =>
+                                        pagarMesa = val,
+                                    recalcular: recalcularDesdeChecks,
+                                    preguntarMontoParcial:
+                                        preguntarMontoParcial,
+                                    mostrarOpcionesPago: _mostrarOpcionesPago,
+                                    mostrarDialogoSeleccionCuotas:
+                                        _mostrarDialogoSeleccionCuotas,
+                                  ),
+                                ),
+                              ]
                             : mesasActivasCobro.map((mesa) {
                                 final key = mesaCobroKey(mesa.n);
-                                final label = mesasActivasCobro.length > 1
-                                    ? 'MESA EXTRA ${mesa.n}'
-                                    : 'MESA EXTRA';
+                                final label =
+                                    MesasExtraUtils.tituloCobro(mesa.n, cantMesas);
                                 return _buildConceptoTile(
                                   titulo: label,
                                   deuda: mesa.deuda,
@@ -4248,7 +4349,10 @@ class _DetalleEventoMasivoScreenState
                                       context: context,
                                       v: v,
                                       mesa: mesa,
-                                      mesaLabel: 'Mesa Extra ${mesa.n}',
+                                      mesaLabel: MesasExtraUtils.labelCobro(
+                                        mesa.n,
+                                        cantMesas,
+                                      ),
                                       mesaKeyStr: key,
                                       deuda: mesa.deuda,
                                       cuotaPura: mesa.cuotaPura(mCuotas),
@@ -4973,6 +5077,10 @@ class _DetalleEventoMasivoScreenState
                                             0.0,
                                             double.infinity,
                                           );
+                                      final montosMesasActuales =
+                                          MesasExtraUtils.montosManualesMesasDesde(
+                                        montosManuales,
+                                      );
                                       final result =
                                           await _mostrarDialogoDistribucionManual(
                                             context: context,
@@ -4981,28 +5089,36 @@ class _DetalleEventoMasivoScreenState
                                             deudaMesa: deudaMesaTotal,
                                             deudaSillas: deudaSillasTotal,
                                             currentBase: montosManuales['Base'],
-                                            currentMesa: montosManuales['Mesa'],
+                                            currentMesa: montosManuales['Mesa'] ??
+                                                (montosMesasActuales.isEmpty
+                                                    ? null
+                                                    : MesasExtraUtils
+                                                        .sumaBrutaMesasSeleccionadasCobro(
+                                                        montosManuales,
+                                                      )),
                                             currentSillas:
                                                 montosManuales['Sillas'],
+                                            mesasParaReparto:
+                                                cantMesas > 1 &&
+                                                        mesasActivasCobro
+                                                            .isNotEmpty
+                                                    ? mesasActivasCobro
+                                                    : null,
+                                            cantMesas: cantMesas,
+                                            montosMesasActuales:
+                                                montosMesasActuales,
                                           );
                                       if (result != null) {
                                         setModalState(() {
-                                          if (result['Base']! > 0)
-                                            montosManuales['Base'] =
-                                                result['Base']!;
-                                          else
-                                            montosManuales['Base'] =
-                                                deudaBaseTotal;
-                                          if (result['Mesa']! > 0)
-                                            montosManuales['Mesa'] =
-                                                result['Mesa']!;
-                                          else
-                                            montosManuales.remove('Mesa');
-                                          if (result['Sillas']! > 0)
-                                            montosManuales['Sillas'] =
-                                                result['Sillas']!;
-                                          else
-                                            montosManuales.remove('Sillas');
+                                          _aplicarResultadoDistribucionManual(
+                                            montosManuales: montosManuales,
+                                            result: result,
+                                            deudaBaseTotal: deudaBaseTotal,
+                                            deudaSillasTotal: deudaSillasTotal,
+                                            mesasActivasCobro:
+                                                mesasActivasCobro,
+                                            cantMesas: cantMesas,
+                                          );
                                           recalcularDesdeMonto(
                                             total,
                                             manually: true,
@@ -5029,34 +5145,16 @@ class _DetalleEventoMasivoScreenState
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              ...previewConceptos.map(
-                                (c) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          '• ${c['concepto']}',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        (c['monto'] as num)
-                                            .toDouble()
-                                            .toCurrency(),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              ..._buildFilasDesglosePreview(
+                                previewConceptos: previewConceptos,
+                                usarCompactoMesas:
+                                    MesasExtraUtils.usarUiCompactaMesasCobro(
+                                  mesasActivasCobro.length,
+                                ),
+                                desgloseMesasExpandido: desgloseMesasExpandido,
+                                onToggleDesgloseMesas: () => setModalState(
+                                  () => desgloseMesasExpandido =
+                                      !desgloseMesasExpandido,
                                 ),
                               ),
                               (() {
@@ -5289,6 +5387,7 @@ class _DetalleEventoMasivoScreenState
                       mCuotas: mCuotas,
                       sPagadas: sPagadas,
                       sCuotas: sCuotas,
+                      cantMesas: cantMesas,
                     );
 
                     final alumnoFresco = alumno.copyWith(
@@ -5763,6 +5862,19 @@ class _DetalleEventoMasivoScreenState
                                       alumnoUi.mesaExtraCuotas ?? 1;
                                   final Map<int, int> contadoresMesa = {};
 
+                                  // Estado FIFO para pagos legacy sin número de mesa.
+                                  // cronologico itera del más viejo al más reciente.
+                                  final int cantMesasHist = mesasResumen.length;
+                                  final double precioUnitMesaHist =
+                                      cantMesasHist > 1
+                                      ? (mesasResumen.first.precio > 0.01
+                                          ? mesasResumen.first.precio
+                                          : alumnoUi.mesaExtraPrecio /
+                                                cantMesasHist)
+                                      : alumnoUi.mesaExtraPrecio;
+                                  double acumuladoFifoMesa = 0.0;
+                                  int mesaFifoActual = 1;
+
                                   for (var p in cronologico) {
                                     final conceptoOriginal =
                                         p['concepto'] as String? ??
@@ -5779,22 +5891,63 @@ class _DetalleEventoMasivoScreenState
                                     } else if (conceptoOriginal
                                         .toLowerCase()
                                         .contains('mesa')) {
-                                      final mesaN = MesasExtraUtils
+                                      final mesaExplicita = MesasExtraUtils
                                           .numeroMesaDesdeConcepto(
                                         conceptoOriginal,
                                       );
+                                      int mesaN;
+                                      if (mesaExplicita > 1 ||
+                                          cantMesasHist <= 1) {
+                                        // Concepto ya tiene número ≥2, o sola mesa: confiar en él.
+                                        mesaN = mesaExplicita;
+                                      } else {
+                                        // Legacy sin número: asignar FIFO (más viejo → mesa 1).
+                                        final esAnulado =
+                                            ((p['anulado'] as num?)?.toInt() ??
+                                                    0) !=
+                                                0;
+                                        if (!esAnulado) {
+                                          final gross =
+                                              (p['monto_gross'] as num?)
+                                                  ?.toDouble() ??
+                                              (p['monto'] as num?)
+                                                  ?.toDouble() ??
+                                              0.0;
+                                          if (mesaFifoActual < cantMesasHist &&
+                                              acumuladoFifoMesa + gross >
+                                                  precioUnitMesaHist + 0.01) {
+                                            mesaFifoActual++;
+                                            acumuladoFifoMesa = gross;
+                                          } else {
+                                            acumuladoFifoMesa += gross;
+                                          }
+                                        }
+                                        mesaN = mesaFifoActual;
+                                      }
                                       contadoresMesa[mesaN] =
                                           (contadoresMesa[mesaN] ?? 0) + 1;
                                       final cMesa = contadoresMesa[mesaN]!;
-                                      final prefix = mesasResumen.length > 1
-                                          ? 'Mesa Extra $mesaN'
-                                          : 'Mesa Extra 1';
+                                      final pagoGrossMesa =
+                                          (p['monto_gross'] as num?)
+                                              ?.toDouble() ??
+                                          (p['monto'] as num?)?.toDouble() ??
+                                          0.0;
+                                      final esLiquidacionMesa =
+                                          precioUnitMesaHist > 0.01 &&
+                                          pagoGrossMesa >=
+                                              precioUnitMesaHist - 0.01;
+                                      final cMesaDisplay =
+                                          esLiquidacionMesa ? mCuotas : cMesa;
+                                      final prefix = MesasExtraUtils.labelCobro(
+                                        mesaN,
+                                        cantMesasHist,
+                                      );
                                       if (mCuotas <= 1) {
                                         conceptoMejorado =
                                             '$prefix - Entrega';
                                       } else {
                                         conceptoMejorado =
-                                            '$prefix ($cMesa/$mCuotas)';
+                                            '$prefix ($cMesaDisplay/$mCuotas)';
                                       }
                                     } else if (conceptoOriginal.startsWith(
                                       'Sillas Extras',
@@ -5806,6 +5959,20 @@ class _DetalleEventoMasivoScreenState
                                     final pCpy = Map<String, dynamic>.from(p);
                                     pCpy['concepto_detallado'] =
                                         conceptoMejorado;
+                                    // Badge liquidada: aplica a pagos de mesa que cubren el precio completo.
+                                    if (conceptoOriginal
+                                            .toLowerCase()
+                                            .contains('mesa') &&
+                                        precioUnitMesaHist > 0.01) {
+                                      final gm =
+                                          (p['monto_gross'] as num?)
+                                              ?.toDouble() ??
+                                          (p['monto'] as num?)?.toDouble() ??
+                                          0.0;
+                                      if (gm >= precioUnitMesaHist - 0.01) {
+                                        pCpy['es_liquidacion_mesa'] = true;
+                                      }
+                                    }
                                     if ((p['descuento_porcentaje'] as num? ??
                                             0) >
                                         0.01) {
@@ -5922,6 +6089,40 @@ class _DetalleEventoMasivoScreenState
                                                                       FontWeight
                                                                           .bold,
                                                                 ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                      if (p['es_liquidacion_mesa'] ==
+                                                          true) ...[
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 2,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.green
+                                                                .withValues(
+                                                                  alpha: 0.15,
+                                                                ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  6,
+                                                                ),
+                                                          ),
+                                                          child: const Text(
+                                                            'Liquidada',
+                                                            style: TextStyle(
+                                                              fontSize: 9,
+                                                              color:
+                                                                  Colors.green,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
                                                           ),
                                                         ),
                                                       ],
@@ -6256,6 +6457,55 @@ class _DetalleEventoMasivoScreenState
     }
   }
 
+  void _aplicarResultadoDistribucionManual({
+    required Map<String, double> montosManuales,
+    required Map<String, double> result,
+    required double deudaBaseTotal,
+    required double deudaSillasTotal,
+    required List<MesaExtraItem> mesasActivasCobro,
+    required int cantMesas,
+  }) {
+    final base = result['Base'] ?? 0;
+    if (base > 0.01) {
+      montosManuales['Base'] = base;
+    } else {
+      montosManuales['Base'] = deudaBaseTotal;
+    }
+
+    MesasExtraUtils.limpiarClavesMesasEnMontosManuales(montosManuales);
+
+    final bool repartoPorMesa =
+        cantMesas > 1 && mesasActivasCobro.length > 1;
+
+    if (repartoPorMesa) {
+      for (final mesa in mesasActivasCobro) {
+        final key = MesasExtraUtils.claveCobro(mesa.n);
+        final val = result[key] ?? 0;
+        if (val > 0.01) {
+          montosManuales[key] = double.parse(val.toStringAsFixed(2));
+        }
+      }
+    } else if (cantMesas > 1 && mesasActivasCobro.length == 1) {
+      final mesa = result['Mesa'] ?? 0;
+      if (mesa > 0.01) {
+        montosManuales[MesasExtraUtils.claveCobro(mesasActivasCobro.first.n)] =
+            double.parse(mesa.toStringAsFixed(2));
+      }
+    } else {
+      final mesa = result['Mesa'] ?? 0;
+      if (mesa > 0.01) {
+        montosManuales['Mesa'] = mesa;
+      }
+    }
+
+    final sillas = result['Sillas'] ?? 0;
+    if (sillas > 0.01) {
+      montosManuales['Sillas'] = sillas;
+    } else {
+      montosManuales.remove('Sillas');
+    }
+  }
+
   Future<Map<String, double>?> _mostrarDialogoDistribucionManual({
     required BuildContext context,
     required double total,
@@ -6265,29 +6515,120 @@ class _DetalleEventoMasivoScreenState
     double? currentBase,
     double? currentMesa,
     double? currentSillas,
+    List<MesaExtraItem>? mesasParaReparto,
+    int cantMesas = 1,
+    Map<String, double>? montosMesasActuales,
   }) {
+    final bool repartoPorMesa =
+        mesasParaReparto != null && mesasParaReparto.length > 1;
+
     final baseCtrl = TextEditingController(
       text: currentBase?.toFormattedNumber() ?? '',
     );
     final mesaCtrl = TextEditingController(
-      text: currentMesa?.toFormattedNumber() ?? '',
+      text: !repartoPorMesa && (currentMesa ?? 0) > 0.01
+          ? currentMesa!.toFormattedNumber()
+          : '',
     );
     final sillasCtrl = TextEditingController(
       text: currentSillas?.toFormattedNumber() ?? '',
     );
 
+    final Map<String, TextEditingController> mesaCtrlsPorClave = {};
+    if (repartoPorMesa) {
+      final actuales = montosMesasActuales ?? {};
+      for (final mesa in mesasParaReparto) {
+        final key = MesasExtraUtils.claveCobro(mesa.n);
+        final prev = actuales[key];
+        mesaCtrlsPorClave[key] = TextEditingController(
+          text: prev != null && prev > 0.01 ? prev.toFormattedNumber() : '',
+        );
+      }
+    }
+
+    void disposeCtrls() {
+      baseCtrl.dispose();
+      mesaCtrl.dispose();
+      sillasCtrl.dispose();
+      for (final c in mesaCtrlsPorClave.values) {
+        c.dispose();
+      }
+    }
+
     return showDialog<Map<String, double>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setInternalState) {
-          double getSum() =>
-              CurrencyInputFormatter.parse(baseCtrl.text) +
-              CurrencyInputFormatter.parse(mesaCtrl.text) +
-              CurrencyInputFormatter.parse(sillasCtrl.text);
+          double sumMesasIndividuales() {
+            var s = 0.0;
+            for (final c in mesaCtrlsPorClave.values) {
+              s += CurrencyInputFormatter.parse(c.text);
+            }
+            return s;
+          }
+
+          double getSum() {
+            var s = CurrencyInputFormatter.parse(baseCtrl.text) +
+                CurrencyInputFormatter.parse(sillasCtrl.text);
+            if (repartoPorMesa) {
+              s += sumMesasIndividuales();
+            } else {
+              s += CurrencyInputFormatter.parse(mesaCtrl.text);
+            }
+            return s;
+          }
 
           final double currentSum = getSum();
           final double diff = total - currentSum;
           final bool isValid = diff.abs() < 0.01;
+
+          void autoCompletar() {
+            double rem = total;
+            double b = rem >= deudaBase ? deudaBase : rem;
+            rem = double.parse((rem - b).toStringAsFixed(2));
+
+            if (repartoPorMesa) {
+              for (final mesa in mesasParaReparto) {
+                final key = MesasExtraUtils.claveCobro(mesa.n);
+                final ctrl = mesaCtrlsPorClave[key]!;
+                if (rem <= 0.01) {
+                  ctrl.text = '';
+                  continue;
+                }
+                final assign = rem >= mesa.deuda ? mesa.deuda : rem;
+                ctrl.text =
+                    assign > 0.01 ? assign.toFormattedNumber() : '';
+                rem = double.parse((rem - assign).toStringAsFixed(2));
+              }
+            } else {
+              final m = rem >= deudaMesa ? deudaMesa : rem;
+              rem = double.parse((rem - m).toStringAsFixed(2));
+              mesaCtrl.text = m > 0.01 ? m.toFormattedNumber() : '';
+            }
+
+            final s = rem >= deudaSillas ? deudaSillas : rem;
+            setInternalState(() {
+              baseCtrl.text = b > 0.01 ? b.toFormattedNumber() : '';
+              sillasCtrl.text = s > 0.01 ? s.toFormattedNumber() : '';
+            });
+          }
+
+          Map<String, double> buildResult() {
+            final out = <String, double>{
+              'Base': CurrencyInputFormatter.parse(baseCtrl.text),
+              'Sillas': CurrencyInputFormatter.parse(sillasCtrl.text),
+            };
+            if (repartoPorMesa) {
+              for (final entry in mesaCtrlsPorClave.entries) {
+                out[entry.key] =
+                    CurrencyInputFormatter.parse(entry.value.text);
+              }
+              out['Mesa'] = 0;
+            } else {
+              out['Mesa'] = CurrencyInputFormatter.parse(mesaCtrl.text);
+            }
+            return out;
+          }
 
           return AlertDialog(
             title: Column(
@@ -6304,7 +6645,7 @@ class _DetalleEventoMasivoScreenState
               ],
             ),
             content: SizedBox(
-              width: 400,
+              width: 420,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -6313,26 +6654,7 @@ class _DetalleEventoMasivoScreenState
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton.icon(
-                          onPressed: () {
-                            double rem = total;
-                            double b = rem >= deudaBase ? deudaBase : rem;
-                            rem -= b;
-                            double m = rem >= deudaMesa ? deudaMesa : rem;
-                            rem -= m;
-                            double s = rem >= deudaSillas ? deudaSillas : rem;
-
-                            setInternalState(() {
-                              baseCtrl.text = b > 0
-                                  ? b.toFormattedNumber()
-                                  : '';
-                              mesaCtrl.text = m > 0
-                                  ? m.toFormattedNumber()
-                                  : '';
-                              sillasCtrl.text = s > 0
-                                  ? s.toFormattedNumber()
-                                  : '';
-                            });
-                          },
+                          onPressed: autoCompletar,
                           icon: const Icon(
                             Icons.auto_fix_high_rounded,
                             size: 14,
@@ -6353,14 +6675,47 @@ class _DetalleEventoMasivoScreenState
                       onCh: (_) => setInternalState(() {}),
                     ),
                     const SizedBox(height: 12),
-                    _buildManualField(
-                      label: 'MESA EXTRA (Máx: ${deudaMesa.toCurrency()})',
-                      ctrl: mesaCtrl,
-                      onCh: (_) => setInternalState(() {}),
-                    ),
+                    if (repartoPorMesa) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'MESAS EXTRA (${mesasParaReparto.length})',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.grey.shade700,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...mesasParaReparto.map((mesa) {
+                        final key = MesasExtraUtils.claveCobro(mesa.n);
+                        final label = MesasExtraUtils.tituloCobro(
+                          mesa.n,
+                          cantMesas,
+                        );
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _buildManualField(
+                            label:
+                                '$label (Máx: ${mesa.deuda.toCurrency()})',
+                            ctrl: mesaCtrlsPorClave[key]!,
+                            onCh: (_) => setInternalState(() {}),
+                          ),
+                        );
+                      }),
+                    ] else
+                      _buildManualField(
+                        label:
+                            'MESA EXTRA (Máx: ${deudaMesa.toCurrency()})',
+                        ctrl: mesaCtrl,
+                        onCh: (_) => setInternalState(() {}),
+                      ),
                     const SizedBox(height: 12),
                     _buildManualField(
-                      label: 'SILLAS EXTRAS (Máx: ${deudaSillas.toCurrency()})',
+                      label:
+                          'SILLAS EXTRAS (Máx: ${deudaSillas.toCurrency()})',
                       ctrl: sillasCtrl,
                       onCh: (_) => setInternalState(() {}),
                     ),
@@ -6401,11 +6756,7 @@ class _DetalleEventoMasivoScreenState
                 ),
                 onPressed: () {
                   if (!isValid) return;
-                  Navigator.pop(ctx, {
-                    'Base': CurrencyInputFormatter.parse(baseCtrl.text),
-                    'Mesa': CurrencyInputFormatter.parse(mesaCtrl.text),
-                    'Sillas': CurrencyInputFormatter.parse(sillasCtrl.text),
-                  });
+                  Navigator.pop(ctx, buildResult());
                 },
                 child: const Text('CONFIRMAR REPARTO'),
               ),
@@ -6413,7 +6764,7 @@ class _DetalleEventoMasivoScreenState
           );
         },
       ),
-    );
+    ).whenComplete(disposeCtrls);
   }
 
   Widget _buildManualField({
@@ -6731,6 +7082,422 @@ class _DetalleEventoMasivoScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilaDesglosePreview(
+    Map<String, dynamic> c, {
+    bool indentada = false,
+    bool mostrarBullet = true,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: 6,
+        left: indentada ? 16 : 0,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              mostrarBullet
+                  ? '• ${c['concepto']}'
+                  : '${c['concepto']}',
+              style: TextStyle(
+                fontSize: indentada ? 12 : 13,
+                fontWeight: FontWeight.w600,
+                color: indentada ? Colors.grey.shade700 : null,
+              ),
+            ),
+          ),
+          Text(
+            ((c['monto'] as num?)?.toDouble() ?? 0).toCurrency(),
+            style: TextStyle(
+              fontSize: indentada ? 12 : 13,
+              fontWeight: FontWeight.w900,
+              color: Colors.green.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildFilasDesglosePreview({
+    required List<Map<String, dynamic>> previewConceptos,
+    required bool usarCompactoMesas,
+    required bool desgloseMesasExpandido,
+    required VoidCallback onToggleDesgloseMesas,
+  }) {
+    if (previewConceptos.isEmpty) return const [];
+
+    final lineasMesas = previewConceptos
+        .where(MesasExtraUtils.esLineaPreviewMesa)
+        .toList();
+    final agruparMesas = usarCompactoMesas && lineasMesas.isNotEmpty;
+
+    if (!agruparMesas) {
+      return previewConceptos
+          .map((c) => _buildFilaDesglosePreview(c))
+          .toList();
+    }
+
+    final widgets = <Widget>[];
+    var grupoMesasEmitido = false;
+
+    for (final c in previewConceptos) {
+      if (MesasExtraUtils.esLineaPreviewMesa(c)) {
+        if (grupoMesasEmitido) continue;
+        grupoMesasEmitido = true;
+
+        final titulo =
+            MesasExtraUtils.tituloGrupoDesgloseMesas(lineasMesas);
+        final total = MesasExtraUtils.sumaMontosPreview(lineasMesas);
+
+        widgets.add(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '• $titulo',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      total.toCurrency(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.green,
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      tooltip: desgloseMesasExpandido
+                          ? 'Ocultar detalle'
+                          : 'Ver detalle',
+                      onPressed: onToggleDesgloseMesas,
+                      icon: Icon(
+                        desgloseMesasExpandido
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 18,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (desgloseMesasExpandido)
+                ...lineasMesas.map(
+                  (linea) => _buildFilaDesglosePreview(
+                    linea,
+                    indentada: true,
+                    mostrarBullet: false,
+                  ),
+                ),
+            ],
+          ),
+        );
+      } else {
+        widgets.add(_buildFilaDesglosePreview(c));
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildMesasExtraFilaCompacta({
+    required MesaExtraItem mesa,
+    required int cantMesas,
+    required bool isDark,
+    required bool selected,
+    required double? montoManual,
+    required Future<void> Function(bool? v) onChanged,
+  }) {
+    final label = MesasExtraUtils.tituloCobro(mesa.n, cantMesas);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!selected),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: selected,
+                  onChanged: onChanged,
+                  activeColor: const Color(0xFFD4AF37),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Deuda: ${mesa.deuda.toCurrency()}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: selected
+                            ? const Color(0xFFD4AF37)
+                            : Colors.grey,
+                      ),
+                    ),
+                    if (montoManual != null)
+                      Text(
+                        'ENTREGA: ${montoManual.toCurrency()}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.green,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMesasExtraGrupoCompacto({
+    required BuildContext context,
+    required bool isDark,
+    required List<MesaExtraItem> mesas,
+    required int cantMesas,
+    required double deudaMesaTotal,
+    required Map<String, double> montosManuales,
+    required bool expandido,
+    required VoidCallback onToggleExpandido,
+    required Future<void> Function() onElegirMesas,
+    required Future<void> Function(MesaExtraItem mesa, bool? v) onMesaChanged,
+  }) {
+    final seleccionadas =
+        MesasExtraUtils.contarMesasSeleccionadasCobro(montosManuales);
+    final cobrandoBruto =
+        MesasExtraUtils.sumaBrutaMesasSeleccionadasCobro(montosManuales);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: seleccionadas > 0
+            ? const Color(0xFFD4AF37).withValues(alpha: 0.1)
+            : (isDark
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.black.withValues(alpha: 0.02)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: seleccionadas > 0
+              ? const Color(0xFFD4AF37).withValues(alpha: 0.3)
+              : Colors.black.withValues(alpha: 0.06),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onToggleExpandido,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 8, 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.table_bar_rounded,
+                    color: seleccionadas > 0
+                        ? const Color(0xFFD4AF37)
+                        : Colors.grey.shade600,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'MESAS EXTRA ($cantMesas)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Deuda total: ${deudaMesaTotal.toCurrency()}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        if (seleccionadas > 0) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Cobrando: $seleccionadas mesa(s) · ${cobrandoBruto.toCurrency()}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    expandido
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: Colors.grey.shade600,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: onElegirMesas,
+                icon: const Icon(Icons.checklist_rounded, size: 16),
+                label: const Text(
+                  'ELEGIR MESAS…',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFD4AF37),
+                  side: const BorderSide(color: Color(0xFFD4AF37)),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (expandido)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: mesas.length,
+                  separatorBuilder: (_, _) => Divider(
+                    height: 1,
+                    color: Colors.black.withValues(alpha: 0.06),
+                  ),
+                  itemBuilder: (context, index) {
+                    final mesa = mesas[index];
+                    final key = MesasExtraUtils.claveCobro(mesa.n);
+                    final selected = montosManuales.containsKey(key);
+                    return _buildMesasExtraFilaCompacta(
+                      mesa: mesa,
+                      cantMesas: cantMesas,
+                      isDark: isDark,
+                      selected: selected,
+                      montoManual: montosManuales[key],
+                      onChanged: (v) => onMesaChanged(mesa, v),
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _mostrarDialogoElegirMesasExtra({
+    required BuildContext context,
+    required List<MesaExtraItem> mesas,
+    required int cantMesas,
+    required Map<String, double> montosManuales,
+    required StateSetter setModalState,
+    required Future<void> Function(MesaExtraItem mesa, bool? v) onMesaChanged,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text(
+              'Elegir mesas extra',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            content: SizedBox(
+              width: 420,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: mesas.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final mesa = mesas[index];
+                    final key = MesasExtraUtils.claveCobro(mesa.n);
+                    final selected = montosManuales.containsKey(key);
+                    return _buildMesasExtraFilaCompacta(
+                      mesa: mesa,
+                      cantMesas: cantMesas,
+                      isDark: Theme.of(context).brightness == Brightness.dark,
+                      selected: selected,
+                      montoManual: montosManuales[key],
+                      onChanged: (v) async {
+                        await onMesaChanged(mesa, v);
+                        if (ctx.mounted) {
+                          setDialogState(() {});
+                          setModalState(() {});
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('LISTO'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

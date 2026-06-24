@@ -640,24 +640,26 @@ class ContratosRepository {
       return RegExp(r'mesa\s*extra\s*[2-9]', caseSensitive: false).hasMatch(c);
     });
 
-    if (tienePagosMesaNumerados || contrato.mesasExtraParsed.isNotEmpty) {
+    if (tienePagosMesaNumerados) {
+      // Al menos un pago con número de mesa ≥ 2: reconstruir desde concepto.
       mesas = MesasExtraUtils.reconciliarDesdePagos(
         cantidad: cant,
         precioUnitario: unit,
         cuotasPlan: contrato.mesaExtraCuotas,
         pagos: pagos,
       );
+    } else if (cant > 1) {
+      // Pagos legacy sin número de mesa: distribuir FIFO para no asignar
+      // todo a mesa 1 por error de rotulado histórico.
+      mesas = MesasExtraUtils.repartirPagadoFifo(
+        cantidad: cant,
+        precioUnitario: unit,
+        cuotasPlan: contrato.mesaExtraCuotas,
+        pagadoTotal: contrato.mesaExtraPagado,
+        cuotasPagadasLegacy: contrato.mesaExtraCuotasPagadas,
+      );
     } else {
       mesas = MesasExtraUtils.estadoDesdeContrato(contrato);
-      if (cant > 1) {
-        mesas = MesasExtraUtils.repartirPagadoFifo(
-          cantidad: cant,
-          precioUnitario: unit,
-          cuotasPlan: contrato.mesaExtraCuotas,
-          pagadoTotal: contrato.mesaExtraPagado,
-          cuotasPagadasLegacy: contrato.mesaExtraCuotasPagadas,
-        );
-      }
     }
 
     final pagadoTotal = MesasExtraUtils.totalPagado(mesas);
