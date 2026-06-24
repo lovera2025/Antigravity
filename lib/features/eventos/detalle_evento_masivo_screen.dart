@@ -2907,7 +2907,7 @@ class _DetalleEventoMasivoScreenState
     var alumnoFresco = await cRepo.getContratoById(alumno.id) ?? alumno;
     // Reconciliar mesas antes de abrir el modal para que el JSON por mesa
     // esté al día (corrige contratos con pagos legacy sin número de mesa).
-    if (alumnoFresco.mesaExtraCantidad > 1) {
+    if (alumnoFresco.mesaExtraPrecio > 0.01) {
       await cRepo.reconciliarMesasEstadoContrato(alumnoFresco.id);
       alumnoFresco = await cRepo.getContratoById(alumnoFresco.id) ?? alumnoFresco;
     }
@@ -5389,6 +5389,15 @@ class _DetalleEventoMasivoScreenState
                       cantMesas: cantMesas,
                     );
 
+                    final mesasPatchOptimista = grossMesaPagado > 0.01 &&
+                            mesasEstadoList.isNotEmpty
+                        ? MesasExtraUtils.aplicarCobroPreviewAEstado(
+                            estado: mesasEstadoList,
+                            lineasPreview: previewConceptos,
+                            cuotasPlan: mCuotas,
+                          )
+                        : mesasEstadoList;
+
                     final alumnoFresco = alumno.copyWith(
                       saldoDeudor: saldoRestante,
                       cuotasPagadas: currentBasePagadas,
@@ -5398,6 +5407,12 @@ class _DetalleEventoMasivoScreenState
                           (alumno.mesaExtraPagado) + grossMesaPagado,
                       sillasExtraPagado:
                           (alumno.sillasExtraPagado) + grossSillasPagado,
+                      mesasExtraEstadoRaw:
+                          grossMesaPagado > 0.01 && mesasPatchOptimista.isNotEmpty
+                              ? mesasPatchOptimista
+                                  .map((e) => e.toJson())
+                                  .toList()
+                              : alumno.mesasExtraEstadoRaw,
                     );
 
                     final moraEsteCobro = previewConceptos

@@ -446,6 +446,56 @@ class MesasExtraUtils {
   static List<MesaExtraItem> mesasActivas(List<MesaExtraItem> mesas) =>
       mesas.where((m) => m.activa).toList();
 
+  /// Aplica montos del preview de cobro al estado por mesa (update optimista UI).
+  static List<MesaExtraItem> aplicarCobroPreviewAEstado({
+    required List<MesaExtraItem> estado,
+    required Iterable<Map<String, dynamic>> lineasPreview,
+    required int cuotasPlan,
+  }) {
+    if (estado.isEmpty) return estado;
+
+    final byN = {for (final m in estado) m.n: m};
+    var changed = false;
+
+    for (final c in lineasPreview) {
+      if (!esLineaPreviewMesa(c)) continue;
+      final gross =
+          (c['gross'] as num?)?.toDouble() ??
+          (c['monto'] as num?)?.toDouble() ??
+          0.0;
+      if (gross <= 0.001) continue;
+
+      final n = (c['mesaN'] as int?) ??
+          numeroMesaDesdeConcepto(c['concepto'] as String?);
+      final prev = byN[n];
+      if (prev == null) continue;
+
+      final clampedPagado = double.parse(
+        (prev.pagado + gross).clamp(0.0, prev.precio).toStringAsFixed(2),
+      );
+      var cp = prev.cuotasPagadas;
+      if (cuotasPlan > 0 && prev.precio > 0.01) {
+        final cuota = prev.cuotaPura(cuotasPlan);
+        if (cuota > 0.01) {
+          final fromPag =
+              (clampedPagado / cuota).floor().clamp(0, cuotasPlan);
+          if (fromPag > cp) cp = fromPag;
+        }
+      }
+      final liq = clampedPagado >= prev.precio - 0.01;
+      if (liq && cuotasPlan > 0) cp = cuotasPlan;
+      byN[n] = prev.copyWith(
+        pagado: clampedPagado,
+        cuotasPagadas: cp,
+        liquidada: liq,
+      );
+      changed = true;
+    }
+
+    if (!changed) return estado;
+    return _normalizar(byN.values.toList(), cuotasPlan);
+  }
+
   /// ¿Se puede bajar la cantidad a [nuevaCantidad]?
   static bool puedeReducirCantidad(
     List<MesaExtraItem> estado,

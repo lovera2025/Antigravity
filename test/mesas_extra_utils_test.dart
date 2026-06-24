@@ -326,4 +326,34 @@ void main() {
     expect(lineas.first, contains('Mesa extra'));
     expect(lineas.first, contains('1/7'));
   });
+
+  test('aplicarCobroPreviewAEstado actualiza mesa correcta al cobrar', () {
+    final estado = [
+      MesaExtraItem(
+        n: 1,
+        precio: 70000,
+        pagado: 70000,
+        cuotasPagadas: 7,
+        liquidada: true,
+      ),
+      MesaExtraItem(n: 2, precio: 70000, pagado: 0, cuotasPagadas: 0),
+    ];
+    final preview = [
+      {
+        'concepto': 'Mesa Extra 2 (1/7)',
+        'gross': 10000.0,
+        'monto': 10000.0,
+        'mesaN': 2,
+      },
+    ];
+    final next = MesasExtraUtils.aplicarCobroPreviewAEstado(
+      estado: estado,
+      lineasPreview: preview,
+      cuotasPlan: 7,
+    );
+    expect(next[1].pagado, 10000);
+    expect(next[1].cuotasPagadas, 1);
+    expect(next[1].liquidada, false);
+    expect(next[0].pagado, 70000);
+  });
 }

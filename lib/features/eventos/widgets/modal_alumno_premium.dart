@@ -10,6 +10,7 @@ import '../../../models/mesa_extra_item.dart';
 import '../repositories/contratos_repository.dart';
 import '../services/mesas_extra_utils.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../../mi_empresa/providers/finanzas_provider.dart';
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
   final Evento evento;
@@ -321,6 +322,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       }
 
       if (mounted) {
+        ref.read(contratosMutationTickProvider.notifier).bump();
         Navigator.pop(context, true);
       }
     } catch (e) {
