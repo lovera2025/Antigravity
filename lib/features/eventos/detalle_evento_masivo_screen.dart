@@ -5439,6 +5439,11 @@ class _DetalleEventoMasivoScreenState
                     final previewSnapshot = previewConceptos
                         .map((c) => Map<String, dynamic>.from(c))
                         .toList();
+                    final mesasEstadoPatchCaptura =
+                        grossMesaPagado > 0.01 && mesasPatchOptimista.isNotEmpty
+                            ? List<MesaExtraItem>.from(mesasPatchOptimista)
+                            : <MesaExtraItem>[];
+                    final trackedNuevoPersist = trackedNuevoPostCobro;
                     final double pctCargoInforme =
                         double.tryParse(
                           prefsPctStr.replaceAll(',', '.'),
@@ -5538,6 +5543,12 @@ class _DetalleEventoMasivoScreenState
                           Map<String, dynamic> conc,
                         ) async {
                           final cTexto = conc['concepto'] as String;
+                          final conceptoPersistido =
+                              MesasExtraUtils.conceptoPagoPersistido(
+                            previewLinea: conc,
+                            conceptoOriginal: cTexto,
+                            cantidadMesas: cantMesas,
+                          );
                           final monto = (conc['monto'] as num).toDouble();
                           final gross =
                               (conc['gross'] as num?)?.toDouble() ?? monto;
@@ -5602,7 +5613,7 @@ class _DetalleEventoMasivoScreenState
                             await repo.registrarPago(
                               contratoId: alumno.id,
                               monto: m,
-                              concepto: conceptoRegistro ?? cTexto,
+                              concepto: conceptoRegistro ?? conceptoPersistido,
                               montoADescontarDeSaldo: mg,
                               descuentoPorcentaje:
                                   double.tryParse(descStr) ?? 0,
@@ -5682,83 +5693,38 @@ class _DetalleEventoMasivoScreenState
                           await registrarLineaUna(conc);
                         }
 
-                        final Map<String, dynamic> directUpdates = {
-                          'saldo_deudor': saldoRestante,
-                        };
-
-                        if (saldoRestante <= 0.01) {
-                          directUpdates['cuotas_pagadas'] = currentBasePagadas;
-                          directUpdates['mesa_extra_cuotas_pagadas'] =
-                              currentMesaPagadas;
-                          directUpdates['sillas_extra_cuotas_pagadas'] =
-                              currentSillasPagadas;
-                        } else {
-                          // Reconciliar siempre tras cobro base/mesa/sillas (incl. entrega parcial).
-                          if (nuevasBase > 0 ||
-                              previewSnapshot.any(
-                                (c) =>
-                                    !esLineaCargoCanal(c) &&
-                                    !esLineaInteresMora(c) &&
-                                    (c['concepto'] as String)
-                                        .toUpperCase()
-                                        .contains('BASE'),
-                              )) {
-                            directUpdates['cuotas_pagadas'] =
-                                currentBasePagadas;
-                          }
-                          if (nuevasMesa > 0 ||
-                              previewSnapshot.any(
-                                (c) =>
-                                    !esLineaCargoCanal(c) &&
-                                    !esLineaInteresMora(c) &&
-                                    (c['concepto'] as String)
-                                        .toUpperCase()
-                                        .contains('MESA'),
-                              )) {
-                            directUpdates['mesa_extra_cuotas_pagadas'] =
-                                currentMesaPagadas;
-                          }
-                          if (nuevasSillas > 0 ||
-                              previewSnapshot.any(
-                                (c) =>
-                                    !esLineaCargoCanal(c) &&
-                                    !esLineaInteresMora(c) &&
-                                    (c['concepto'] as String)
-                                        .toUpperCase()
-                                        .contains('SILLA'),
-                              )) {
-                            directUpdates['sillas_extra_cuotas_pagadas'] =
-                                currentSillasPagadas;
-                          }
-                        }
-
-                        // Persistir montos pagados de extras para mantener sync exacto
-                        if (grossMesaPagado > 0.01) {
-                          directUpdates['mesa_extra_pagado'] =
-                              double.parse(((alumno.mesaExtraPagado ?? 0) + grossMesaPagado).toStringAsFixed(2));
-                        }
-                        if (grossSillasPagado > 0.01) {
-                          directUpdates['sillas_extra_pagado'] =
-                              double.parse(((alumno.sillasExtraPagado ?? 0) + grossSillasPagado).toStringAsFixed(2));
-                        }
-
-                        final double moraEste = previewSnapshot
-                            .where(esLineaInteresMora)
-                            .fold<double>(
-                              0.0,
-                              (s, c) => s + (c['monto'] as num).toDouble(),
-                            );
-                        final double trackedNuevo = (moraPendienteEfectivo - moraEste)
-                            .clamp(0.0, double.infinity);
-                        directUpdates['mora_pendiente_tracked'] =
-                            double.parse(trackedNuevo.toStringAsFixed(2));
-
-                        await repo.actualizarContrato(alumno.id, directUpdates);
                         await repo.reconciliarMesasEstadoContrato(alumno.id);
 
-                        // Escaneo final automático sin interrumpir al usuario
-                        await _forzarAuditoriaInteligente(silencioso: true);
+                        // Alinear JSON de mesas con el preview/PDF (misma foto que el recibo).
+                        if (mesasEstadoPatchCaptura.isNotEmpty) {
+                          await repo.actualizarContrato(alumno.id, {
+                            'mesas_extra_estado': mesasEstadoPatchCaptura
+                                .map((e) => e.toJson())
+                                .toList(),
+                            'mesa_extra_pagado': double.parse(
+                              MesasExtraUtils.totalPagado(
+                                mesasEstadoPatchCaptura,
+                              ).toStringAsFixed(2),
+                            ),
+                            'mesa_extra_cuotas_pagadas':
+                                MesasExtraUtils.maxCuotasPagadas(
+                              mesasEstadoPatchCaptura,
+                            ),
+                          });
+                        }
+
+                        await repo.actualizarContrato(alumno.id, {
+                          'mora_pendiente_tracked': double.parse(
+                            trackedNuevoPersist.toStringAsFixed(2),
+                          ),
+                        });
+
                         if (!mounted) return;
+                        final fresco =
+                            await repo.getContratoById(alumno.id);
+                        if (fresco != null && mounted) {
+                          _patchAlumnoLocal(alumno.id, fresco);
+                        }
                         ref
                             .read(contratosMutationTickProvider.notifier)
                             .bump();
@@ -5788,8 +5754,7 @@ class _DetalleEventoMasivoScreenState
       pctTransferInfoCtrl,
       transferCargoMontoCtrl,
     ]);
-    // No _refreshAlumnos() aquí: compite con la persistencia async y pisaba
-    // el update optimista. La auditoría silenciosa del microtask reconcilia DB.
+    // La persistencia async actualiza la grilla vía getContratoById al terminar.
   }
 
   Future<void> _mostrarHistorialPagosAlumno(ContratoAlumno alumno) async {

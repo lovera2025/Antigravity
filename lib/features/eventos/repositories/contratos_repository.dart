@@ -693,12 +693,13 @@ class ContratosRepository {
     List<MesaExtraItem> mesas;
     final tienePagosMesaNumerados = pagos.any((p) {
       if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
-      final c = p['concepto'] as String? ?? '';
-      return RegExp(r'mesa\s*extra\s*[2-9]', caseSensitive: false).hasMatch(c);
+      return MesasExtraUtils.pagoConceptoTieneMesaNumeradaExplicita(
+        p['concepto'] as String?,
+      );
     });
 
     if (tienePagosMesaNumerados) {
-      // Al menos un pago con número de mesa ≥ 2: reconstruir desde concepto.
+      // Al menos un pago con "Mesa Extra N" explícito: reconstruir desde concepto.
       mesas = MesasExtraUtils.reconciliarDesdePagos(
         cantidad: cant,
         precioUnitario: unit,

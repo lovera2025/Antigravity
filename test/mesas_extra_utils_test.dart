@@ -136,6 +136,54 @@ void main() {
   // Legacy "Mesa Extra (1/7)"=$70k y "Mesa Extra (2/7)"=$10k deben ir
   // por FIFO (mesa 1 llena → mesa 2). El nuevo "Mesa Extra 2 (1/7)"=$10k
   // va directo a mesa 2. Resultado: mesa1=$70k liquidada, mesa2=$20k (2/7).
+  test('conceptoPagoPersistido agrega número de mesa al guardar', () {
+    expect(
+      MesasExtraUtils.conceptoPagoPersistido(
+        previewLinea: {'mesaN': 3},
+        conceptoOriginal: 'Mesa Extra (3/7)',
+        cantidadMesas: 3,
+      ),
+      'Mesa Extra 3 (3/7)',
+    );
+    expect(
+      MesasExtraUtils.conceptoPagoPersistido(
+        previewLinea: {'mesaN': 1, 'concepto': 'Mesa Extra (1/7)'},
+        conceptoOriginal: 'Mesa Extra (1/7)',
+        cantidadMesas: 1,
+      ),
+      'Mesa Extra (1/7)',
+    );
+    expect(
+      MesasExtraUtils.pagoConceptoTieneMesaNumeradaExplicita('Mesa Extra 3 (3/7)'),
+      true,
+    );
+  });
+
+  test('reconciliarDesdePagos mesa 1 explícita no va por FIFO', () {
+    final pagos = [
+      {
+        'concepto': 'Mesa Extra 1 (3/7)',
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-06-25T12:00:00',
+        'anulado': 0,
+      },
+      {
+        'concepto': 'Mesa Extra 3 (3/7)',
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-06-25T12:01:00',
+        'anulado': 0,
+      },
+    ];
+    final mesas = MesasExtraUtils.reconciliarDesdePagos(
+      cantidad: 3,
+      precioUnitario: 70000,
+      cuotasPlan: 7,
+      pagos: pagos,
+    );
+    expect(mesas[0].cuotasPagadas, 3);
+    expect(mesas[2].cuotasPagadas, 3);
+  });
+
   test('reconciliarDesdePagos híbrido: legacy FIFO + nuevo numerado', () {
     final pagos = [
       {

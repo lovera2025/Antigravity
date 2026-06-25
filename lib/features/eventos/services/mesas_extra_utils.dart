@@ -118,6 +118,34 @@ class MesasExtraUtils {
   /// Concepto estándar para registrar un pago sobre mesa [n].
   static String conceptoPagoMesa(int n) => 'Mesa Extra $n';
 
+  /// Pago guardado con "Mesa Extra N" explícito (no legacy "(2/7)" sin N).
+  static bool pagoConceptoTieneMesaNumeradaExplicita(String? concepto) {
+    if (concepto == null || concepto.trim().isEmpty) return false;
+    if (!concepto.toLowerCase().contains('mesa')) return false;
+    return RegExp(r'mesa\s*extra\s*\d+', caseSensitive: false)
+        .hasMatch(concepto);
+  }
+
+  /// Garantiza número de mesa en el concepto persistido (alineado al preview/PDF).
+  static String conceptoPagoPersistido({
+    required Map<String, dynamic> previewLinea,
+    required String conceptoOriginal,
+    required int cantidadMesas,
+  }) {
+    final c = conceptoOriginal.trim();
+    if (c.isEmpty) return c;
+    if (!c.toLowerCase().contains('mesa')) return c;
+    if (pagoConceptoTieneMesaNumeradaExplicita(c)) return c;
+
+    final mesaN = (previewLinea['mesaN'] as int?) ??
+        mesaNumeroDesdeTexto(c) ??
+        numeroMesaDesdeConcepto(c);
+    final prefix = labelCobro(mesaN, cantidadMesas > 0 ? cantidadMesas : 1);
+    final cuotaSuf = RegExp(r'\(\d+/\d+\)').firstMatch(c)?.group(0);
+    if (cuotaSuf != null) return '$prefix $cuotaSuf';
+    return prefix;
+  }
+
   /// Clave interna del modal de cobro para mesa [n].
   static String claveCobro(int n) => 'Mesa:$n';
 
@@ -394,8 +422,7 @@ class MesasExtraUtils {
       final tieneNumeroExplicito = _regNumero.hasMatch(concepto);
 
       int n;
-      if (tieneNumeroExplicito && mesaExplicita > 1) {
-        // Número de mesa ≥ 2 claramente escrito → atribuir directo.
+      if (tieneNumeroExplicito) {
         n = mesaExplicita.clamp(1, cantidad);
       } else {
         // Legacy (sin número o "Mesa Extra 1" ambiguo) → FIFO cronológico.
@@ -570,9 +597,14 @@ class MesasExtraUtils {
       if (deudaTotal <= 0.01) {
         return ['Mesas extra · liquidadas'];
       }
-      return [
-        'Mesas extra ($cant) · deuda ${deudaTotal.toCurrency()}',
-      ];
+      return activas.map((m) {
+        if (m.liquidada) {
+          final label = numerar ? 'Mesa ${m.n}' : 'Mesa extra';
+          return '$label · liquidada';
+        }
+        final label = numerar ? 'Mesa ${m.n}' : 'Mesa extra';
+        return '$label · ${m.cuotasPagadas}/$cuotas · ${m.deuda.toCurrency()}';
+      }).toList();
     }
 
     return activas.map((m) {

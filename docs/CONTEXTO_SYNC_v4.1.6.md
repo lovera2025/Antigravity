@@ -1,14 +1,67 @@
-# Contexto — Fix sync, mesas y carpeta (v4.1.6)
+# Contexto — Fix sync, mesas y carpeta (v4.1.6 → v4.1.7)
 
-> **Referencia para Cursor / equipo:** `incidente sync 24-jun-2026` · `CONTEXTO_SYNC_v4.1.6`  
-> Si en un chat futuro decís *“leé el contexto del 24 de junio”* o *“el incidente sync v4.1.6”*, apuntá a este archivo.
+> **Referencia para Cursor / equipo:** `incidente sync 24-jun-2026` · `CONTEXTO_SYNC_v4.1.6` · `fix cobro PDF/UI 25-jun-2026`  
+> Si en un chat futuro decís *“leé el contexto del 24 de junio”*, *“el incidente sync v4.1.6”* o *“fix cobro mesas 25-jun-2026”*, apuntá a este archivo.
+
+**Última actualización:** **Miércoles 25 de junio de 2026, 13:00** (hora local PC de build)  
+**Versión actual recomendada:** **4.1.7+10**  
+**Instalador:** `installer/dist/Setup Junior Eventos v4.1.7.exe` · copia en `releases/v4.1.7/`  
+**Rama:** `feature/optimizacion-finanzas`  
+**Archivo:** `docs/CONTEXTO_SYNC_v4.1.6.md`
+
+---
+
+## Actualización 25-jun-2026 (v4.1.7) — PDF ≠ UI al cobrar mesas/cuotas
+
+**Fecha y hora del fix y release:** **25/06/2026, ~13:00**
+
+### Problema reportado
+
+- Alumno (ej. Santino): cobró **cuota base** y **mesa extra**; el **PDF/recibo salía bien** pero la **grilla “Estado de deuda”** no actualizaba (cuotas base `(1/9)` en vez de `(3/9)`, mesa sin `3/7`).
+- Tras intentar “salvar” **editando el contrato**, los datos empeoraron.
+- Consola Windows con spam `Failed to update ui::AXTree` (accesibilidad Flutter; no es la causa del dato malo).
+
+### Causa raíz
+
+1. **Dos fuentes de verdad:** el PDF usaba clon optimista del modal (`skipDbRefresh: true`); la UI se refrescaba desde SQLite tras persistencia distinta.
+2. **`directUpdates` post-cobro** pisaba `cuotas_pagadas` / `mesa_extra_cuotas_pagadas` con valores **congelados al abrir el modal**, contradiciendo `recalcularProgresoContrato`.
+3. **`mesas_extra_estado`** no se persistía igual que el preview; solo `reconciliarMesasEstadoContrato`, con FIFO erróneo si el concepto no tenía `Mesa Extra N`.
+4. **Auditoría silenciosa de todo el evento** tras cada cobro competía con el patch optimista.
+5. Grilla con **3+ mesas** ocultaba progreso `X/7` (solo deuda total).
+
+### Solución técnica (v4.1.7)
+
+| Archivo | Cambio |
+|---------|--------|
+| `detalle_evento_masivo_screen.dart` | Conceptos persistidos con `Mesa Extra N`; sin overwrite manual de contadores; JSON mesas alineado al PDF; refresh vía `getContratoById` (sin auditoría masiva post-cobro) |
+| `mesas_extra_utils.dart` | `conceptoPagoPersistido`, reconciliación mesa 1 explícita, grilla con `Mesa N · X/7` |
+| `contratos_repository.dart` | Detección pagos numerados incluye mesa 1 |
+| `test/mesas_extra_utils_test.dart` | Tests nuevos |
+| `pubspec.yaml` + `.iss` | Versión **4.1.7+10** |
+
+### Operación post-instalación 4.1.7
+
+1. Instalar **`Setup Junior Eventos v4.1.7.exe`** en **cada PC** que cobre.
+2. En eventos con datos viejos: **Auditar y Sincronizar DB** (una vez).
+3. **Cobrar** por el modal normal; **no** “salvar” editando contrato después de un cobro.
+4. Sync entre PCs: igual que siempre — **Subir pendientes** / **Bajar cambios**.
+
+### Build instalador
+
+```powershell
+.\installer\build_installer.ps1
+```
+
+Salida: `installer\dist\Setup Junior Eventos v4.1.7.exe`
+
+---
+
+## Incidente original — 24-jun-2026 (v4.1.6)
 
 **Fecha del incidente y fix:** **Miércoles 24 de junio de 2026**  
 **Versión:** 4.1.6+9  
 **Instalador:** `installer/dist/Setup Junior Eventos v4.1.6.exe`  
-**Commits:** `4966057` (fix código) · `e3c8b0f` (este doc)  
-**Rama:** `feature/optimizacion-finanzas`  
-**Archivo:** `docs/CONTEXTO_SYNC_v4.1.6.md`
+**Commits:** `4966057` (fix código) · `e3c8b0f` (este doc)
 
 Este documento queda en el repositorio (Git) para que cualquier persona del equipo — o el asistente en Cursor — sepa qué pasó ese día, qué se corrigió y cómo operar la app con dos PCs.
 
@@ -101,7 +154,7 @@ Cada pago tiene un **`id` UUID único**. Al bajar se hace `REPLACE`, no se dupli
 |-------|-----------|
 | PC donde se cobra/edita | Al terminar: **Subir pendientes** |
 | La otra PC | **Bajar cambios** |
-| PC nueva o vacía | Instalar 4.1.6 → **Pull completo forzado** |
+| PC nueva o vacía | Instalar **4.1.7** → **Pull completo forzado** |
 | Notebook a la escuela | Opcional: borrar carpetas en Documentos → **Pull completo forzado** → cobrar → al volver **Subir pendientes** |
 
 ### No hacer
@@ -117,9 +170,10 @@ Cada pago tiene un **`id` UUID único**. Al bajar se hace `REPLACE`, no se dupli
 | Síntoma | Qué hacer |
 |---------|-----------|
 | Pagó en PC A, no aparece en B | PC A: **Subir pendientes** → PC B: **Bajar cambios** |
-| Pull trae ~1000 pagos y faltan | Actualizar a **4.1.6+** → **Pull completo forzado** |
-| Dos carpetas en Documentos | Instalar **4.1.6** en todas las PCs; usar solo `Junior Eventos`; borrar `JuniorEventos` vacía si queda |
-| Liquidar Mesa 1 afecta Mesa 2 | Actualizar a **4.1.6**; revisar contrato en app |
+| Pull trae ~1000 pagos y faltan | Actualizar a **4.1.7+** → **Pull completo forzado** |
+| Dos carpetas en Documentos | Instalar **4.1.7** en todas las PCs; usar solo `Junior Eventos`; borrar `JuniorEventos` vacía si queda |
+| Liquidar Mesa 1 afecta Mesa 2 | Actualizar a **4.1.7**; revisar contrato en app |
+| PDF bien pero grilla no actualiza mesa/cuota | Actualizar a **4.1.7**; auditar evento; no editar contrato para “salvar” |
 | PC sin datos | **Pull completo forzado** (no hace falta “Verificar nube” antes) |
 | Datos solo en backup `data.db` | Copiar backup → `Junior Eventos/data.db` → **Subir pendientes** → **Pull completo forzado** |
 
@@ -127,13 +181,13 @@ Cada pago tiene un **`id` UUID único**. Al bajar se hace `REPLACE`, no se dupli
 
 ## Instalación / actualización
 
-1. Ejecutar `Setup Junior Eventos v4.1.6.exe` en **cada PC**.
+1. Ejecutar `Setup Junior Eventos v4.1.7.exe` en **cada PC**.
 2. Misma versión en oficina, segunda PC y notebook.
 3. El instalador compilado **no está en Git** (solo el script); se genera con:
    ```powershell
    .\installer\build_installer.ps1
    ```
-   Salida: `installer\dist\Setup Junior Eventos v4.1.6.exe`
+   Salida: `installer\dist\Setup Junior Eventos v4.1.7.exe`
 
 ---
 
@@ -156,6 +210,7 @@ Decile al asistente cualquiera de estas frases:
 
 - *“Leé `docs/CONTEXTO_SYNC_v4.1.6.md`”*
 - *“Es el incidente sync del **24 de junio de 2026**”*
-- *“CONTEXTO_SYNC_v4.1.6 / incidente sync 24-jun-2026”*
+- *“Fix cobro PDF/UI del **25 de junio de 2026**”*
+- *“CONTEXTO_SYNC_v4.1.6 / incidente sync 24-jun-2026 / v4.1.7”*
 
-Asunto cubierto por este doc: pagos que no sync entre PCs, límite 1000 pagos, mesas extra liquidadas juntas, carpetas `JuniorEventos` duplicadas, recuperación con `data.db` viejo + Subir + Pull completo forzado, release **4.1.6**.
+Asuntos cubiertos: pagos que no sync entre PCs, límite 1000 pagos, mesas extra liquidadas juntas, carpetas `JuniorEventos` duplicadas, recuperación con `data.db` viejo + Subir + Pull completo forzado, releases **4.1.6** y **4.1.7** (alineación PDF/UI post-cobro mesas y cuotas).
