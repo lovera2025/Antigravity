@@ -59,7 +59,7 @@ void main() {
         totalCuotas: 9,
         etiqueta: 'Cuota Base',
       );
-      expect(r.concepto, 'Cuota Base (3/9) + Adelanto cuota 4');
+      expect(r.concepto, 'Cuota Base (3/9) + Cuota Base (4/9) · \$15.000,00');
       expect(r.cuotasLiquidadas, 1);
     });
 
@@ -71,8 +71,22 @@ void main() {
         totalCuotas: 9,
         etiqueta: 'Cuota Base',
       );
-      expect(r.concepto, 'Cuota Base (4/9)');
+      expect(r.concepto, 'Cuota Base (4/9) — Completada');
       expect(r.cuotasLiquidadas, 1);
+      expect(r.subtexto, contains('15.000,00'));
+      expect(r.subtexto, contains('20.000,00'));
+    });
+
+    test('cuota entera sin parcial previo', () {
+      final r = ConceptoPagoDisplay.rotularPlanDesdeGross(
+        grossHistorico: 70000,
+        grossActual: 35000,
+        cuotaPura: 35000,
+        totalCuotas: 9,
+        etiqueta: 'Cuota Base',
+      );
+      expect(r.concepto, 'Cuota Base (3/9)');
+      expect(r.concepto, isNot(contains('Completada')));
     });
   });
 
@@ -114,10 +128,12 @@ void main() {
 
       expect(filas.length, 4);
       expect(filas[0]['concepto_detallado'], contains('Cargo'));
-      expect(filas[1]['concepto_detallado'], 'Cuota Base (4/9)');
+      expect(filas[1]['concepto_detallado'], 'Cuota Base (4/9) — Completada');
+      expect(filas[1]['subtexto_concepto'], isNotNull);
+      expect(filas[1]['subtexto_concepto'], contains('15.000,00'));
       expect(filas[1]['subtitulo_medio'], '· Efectivo');
       expect(filas[2]['concepto_detallado'],
-          'Cuota Base (3/9) + Adelanto cuota 4');
+          'Cuota Base (3/9) + Cuota Base (4/9) · \$15.000,00');
       expect(filas[2]['subtitulo_medio'], '· Transferencia');
       expect(filas[3]['concepto_detallado'], 'Cuotas Base (1–2/9)');
     });
@@ -142,9 +158,9 @@ void main() {
       expect(partes.length, 2);
       expect(partes[0].medio, 'Transferencia');
       expect(partes[0].rotulo.concepto,
-          'Cuota Base (3/9) + Adelanto cuota 4');
+          'Cuota Base (3/9) + Cuota Base (4/9) · \$15.000,00');
       expect(partes[1].medio, 'Efectivo');
-      expect(partes[1].rotulo.concepto, 'Cuota Base (4/9)');
+      expect(partes[1].rotulo.concepto, 'Cuota Base (4/9) — Completada');
     });
   });
 }

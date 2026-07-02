@@ -7,10 +7,12 @@ import 'mesas_extra_utils.dart';
 class RotuloPlanPago {
   final String concepto;
   final int cuotasLiquidadas;
+  final String? subtexto;
 
   const RotuloPlanPago({
     required this.concepto,
     required this.cuotasLiquidadas,
+    this.subtexto,
   });
 }
 
@@ -91,7 +93,7 @@ class ConceptoPagoDisplay {
 
     if (avance.esAbonoSolo) {
       return RotuloPlanPago(
-        concepto: 'Abono $etiqueta ($primera/$totalCuotas)',
+        concepto: rotuloEntregaParcial('$etiqueta ($primera/$totalCuotas)'),
         cuotasLiquidadas: 0,
       );
     }
@@ -105,24 +107,58 @@ class ConceptoPagoDisplay {
 
     if (avance.cierraConAdelanto) {
       final prox = ultima + 1;
+      final habiaParcial = habiaEntregaParcialEnCurso(
+        grossHistorico: grossHistorico,
+        cuotaPura: cuotaPura,
+      );
+      final subCompletada = habiaParcial
+          ? subtextoSiCierraEntregaParcial(
+              grossHistorico: grossHistorico,
+              grossEsteCobro: grossActual,
+              cuotaPura: cuotaPura,
+            )
+          : null;
       if (n == 1) {
+        final rotuloPrimera = rotuloCuotaLiquidada(
+          etiqueta: etiqueta,
+          numeroCuota: ultima,
+          totalCuotas: totalCuotas,
+          cierraEntregaParcialPrevio: habiaParcial,
+        );
         return RotuloPlanPago(
           concepto:
-              '$etiqueta ($ultima/$totalCuotas) + Adelanto cuota $prox',
+              '$rotuloPrimera + $etiqueta ($prox/$totalCuotas) · \$${fmtMontoRotuloCobro(avance.restoAbono)}',
           cuotasLiquidadas: 1,
+          subtexto: subCompletada,
         );
       }
       return RotuloPlanPago(
         concepto:
-            '$n Cuotas $corto ($primera–$ultima/$totalCuotas) + Adelanto cuota $prox',
+            '$n Cuotas $corto ($primera–$ultima/$totalCuotas) + $etiqueta ($prox/$totalCuotas)',
         cuotasLiquidadas: n,
       );
     }
 
     if (n == 1) {
+      final habiaParcial = habiaEntregaParcialEnCurso(
+        grossHistorico: grossHistorico,
+        cuotaPura: cuotaPura,
+      );
       return RotuloPlanPago(
-        concepto: '$etiqueta ($ultima/$totalCuotas)',
+        concepto: rotuloCuotaLiquidada(
+          etiqueta: etiqueta,
+          numeroCuota: ultima,
+          totalCuotas: totalCuotas,
+          cierraEntregaParcialPrevio: habiaParcial,
+        ),
         cuotasLiquidadas: 1,
+        subtexto: habiaParcial
+            ? subtextoSiCierraEntregaParcial(
+                grossHistorico: grossHistorico,
+                grossEsteCobro: grossActual,
+                cuotaPura: cuotaPura,
+              )
+            : null,
       );
     }
 
@@ -230,6 +266,9 @@ class ConceptoPagoDisplay {
           etiqueta: 'Cuota Base',
         );
         conceptoDisplay = rot.concepto;
+        if (rot.subtexto != null) {
+          pCpy['subtexto_concepto'] = rot.subtexto;
+        }
         grossBaseHist += gross;
       } else if (esPlanMesa(p)) {
         final conceptoOriginal = p['concepto'] as String? ?? '';
@@ -274,6 +313,9 @@ class ConceptoPagoDisplay {
             etiqueta: prefix,
           );
           conceptoDisplay = rot.concepto;
+          if (rot.subtexto != null) {
+            pCpy['subtexto_concepto'] = rot.subtexto;
+          }
         }
         grossMesaPorN[mesaN] = histMesa + gross;
 
@@ -289,6 +331,9 @@ class ConceptoPagoDisplay {
           etiqueta: sCuotas <= 1 ? 'Sillas Extras - Entrega' : 'Sillas Extras',
         );
         conceptoDisplay = rot.concepto;
+        if (rot.subtexto != null) {
+          pCpy['subtexto_concepto'] = rot.subtexto;
+        }
         grossSillasHist += gross;
       }
 
@@ -476,9 +521,12 @@ class ConceptoPagoDisplay {
         out['gross'] = gross;
         out['esPlanLiquidacion'] = true;
       }
-      final sub = p['subtitulo_medio'] as String?;
-      if (sub != null && sub.isNotEmpty) {
-        out['subtexto'] = sub.replaceFirst('· ', '');
+      final subConcepto = p['subtexto_concepto'] as String?;
+      final subMedio = p['subtitulo_medio'] as String?;
+      if (subConcepto != null && subConcepto.isNotEmpty) {
+        out['subtexto'] = subConcepto;
+      } else if (subMedio != null && subMedio.isNotEmpty) {
+        out['subtexto'] = subMedio.replaceFirst('· ', '');
       }
       return out;
     }).toList();

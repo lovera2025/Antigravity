@@ -233,8 +233,10 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
+      final cambiaReg = _modificarSoloReg ||
+          (_ajustarReg && sim.puedeAjustarReg);
       final updates = <String, dynamic>{
-        'mora_pendiente_tracked': _modificarSoloReg ? 0.0 : sim.montoMora,
+        'mora_pendiente_tracked': cambiaReg ? 0.0 : sim.montoMora,
       };
 
       if (_modificarSoloReg) {
@@ -256,7 +258,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
           content: Text(
             _modificarSoloReg
                 ? 'Fecha de registro modificada y mora del momento aplicada para ${sel.nombreAlumno}.'
-                : 'Mora para ${sel.nombreAlumno} restaurada a ${sim.montoMora.toCurrency()}.',
+                : cambiaReg
+                    ? 'Reg ajustado para ${sel.nombreAlumno}; la mora queda según el calendario de cuotas.'
+                    : 'Mora para ${sel.nombreAlumno} restaurada a ${sim.montoMora.toCurrency()}.',
           ),
           backgroundColor: const Color(0xFF00B894),
         ),
@@ -425,7 +429,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       final repo = ref.read(contratosRepositoryProvider);
       final updates = <String, double>{};
       for (final c in _candidatos) {
-        if (_seleccionados.contains(c.contrato.id)) {
+        if (_seleccionados.contains(c.contrato.id) &&
+            c.contrato.cuotasPagadas > 0) {
           updates[c.contrato.id] = c.moraAplicar;
         }
       }

@@ -40,6 +40,13 @@ class ContratoAlumno {
   /// Permite aislar la mora de la cuota actual de la mora acumulada de cuotas anteriores.
   final double moraCobradaOffset;
 
+  /// Si está seteada, la mora calendario se calcula como en este día (AR), no hoy.
+  /// Se fija al dar baja temporal; persiste al reincorporar hasta liquidar mora.
+  final DateTime? moraFechaReferencia;
+
+  /// Instante UTC en que se aplicó la baja temporal (solo SQLite local).
+  final DateTime? bajaTemporalDesde;
+
   ContratoAlumno({
     required this.id,
     required this.eventoId,
@@ -72,7 +79,26 @@ class ContratoAlumno {
     this.contratoFirmado = false,
     this.moraPendienteTracked = 0.0,
     this.moraCobradaOffset = 0.0,
+    this.moraFechaReferencia,
+    this.bajaTemporalDesde,
   });
+
+  static const Object _copyUnset = Object();
+
+  /// Alumno suspendido con prefijo [BAJA] en el nombre.
+  bool get esBajaTemporal => nombreAlumno.trim().startsWith('[BAJA]');
+
+  /// Mora calendario congelada a [moraFechaReferencia].
+  bool get moraCongelada => moraFechaReferencia != null;
+
+  static DateTime? _parseFechaDia(dynamic raw) {
+    if (raw == null) return null;
+    final s = raw.toString().trim();
+    if (s.isEmpty) return null;
+    final d = DateTime.tryParse(s);
+    if (d == null) return null;
+    return DateTime(d.year, d.month, d.day);
+  }
 
   factory ContratoAlumno.fromJson(Map<String, dynamic> json) {
     return ContratoAlumno(
@@ -137,6 +163,10 @@ class ContratoAlumno {
       moraCobradaOffset: double.parse(
         (json['mora_cobrada_offset'] ?? 0.0).toString(),
       ),
+      moraFechaReferencia: _parseFechaDia(json['mora_fecha_referencia']),
+      bajaTemporalDesde: json['baja_temporal_desde'] != null
+          ? DateTime.tryParse(json['baja_temporal_desde'] as String)
+          : null,
     );
   }
 
@@ -179,6 +209,13 @@ class ContratoAlumno {
       'contrato_firmado': contratoFirmado,
       'mora_pendiente_tracked': moraPendienteTracked,
       'mora_cobrada_offset': moraCobradaOffset,
+      if (moraFechaReferencia != null)
+        'mora_fecha_referencia':
+            '${moraFechaReferencia!.year.toString().padLeft(4, '0')}-'
+            '${moraFechaReferencia!.month.toString().padLeft(2, '0')}-'
+            '${moraFechaReferencia!.day.toString().padLeft(2, '0')}',
+      if (bajaTemporalDesde != null)
+        'baja_temporal_desde': bajaTemporalDesde!.toIso8601String(),
     };
   }
 
@@ -214,6 +251,8 @@ class ContratoAlumno {
   static Map<String, dynamic> payloadForRemote(Map<String, dynamic> data) {
     final out = Map<String, dynamic>.from(data);
     out.remove('mora_cobrada_offset');
+    out.remove('mora_fecha_referencia');
+    out.remove('baja_temporal_desde');
     if (out.containsKey('nombres_acompanantes')) {
       out['nombres_acompanantes'] = acompanantesForRemote(out['nombres_acompanantes']);
     }
@@ -281,6 +320,8 @@ class ContratoAlumno {
     bool? contratoFirmado,
     double? moraPendienteTracked,
     double? moraCobradaOffset,
+    Object? moraFechaReferencia = _copyUnset,
+    Object? bajaTemporalDesde = _copyUnset,
   }) {
     return ContratoAlumno(
       id: id ?? this.id,
@@ -314,6 +355,12 @@ class ContratoAlumno {
       contratoFirmado: contratoFirmado ?? this.contratoFirmado,
       moraPendienteTracked: moraPendienteTracked ?? this.moraPendienteTracked,
       moraCobradaOffset: moraCobradaOffset ?? this.moraCobradaOffset,
+      moraFechaReferencia: moraFechaReferencia == _copyUnset
+          ? this.moraFechaReferencia
+          : moraFechaReferencia as DateTime?,
+      bajaTemporalDesde: bajaTemporalDesde == _copyUnset
+          ? this.bajaTemporalDesde
+          : bajaTemporalDesde as DateTime?,
     );
   }
 }

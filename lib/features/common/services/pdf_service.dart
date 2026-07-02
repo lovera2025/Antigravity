@@ -40,6 +40,25 @@ const _kPdfPresupuestoIntroSegundoParrafoLegacy =
 
 enum _PdfMenuAccion { ver, guardarComo, abrirCarpeta }
 
+/// Fila para export PDF del listado Cobro por período (Mi Empresa).
+class CobroPeriodoPdfFila {
+  final String nombre;
+  final String curso;
+  final String contratoEstado;
+  final String cuotasPagadas;
+  final String ultimoPago;
+  final String telefono;
+
+  const CobroPeriodoPdfFila({
+    required this.nombre,
+    required this.curso,
+    required this.contratoEstado,
+    required this.cuotasPagadas,
+    required this.ultimoPago,
+    required this.telefono,
+  });
+}
+
 class PdfService {
   /// Tablas más pequeñas evitan que un solo [pw.Table] dispare [TooManyPagesException] en [pw.MultiPage].
   static const int _kCierreCajaFilasPorBloque = 28;
@@ -3206,6 +3225,337 @@ class PdfService {
     }
   }
 
+  /// Listado de alumnos filtrados por fecha de cobro de cuota base (Cobro — eventos masivos).
+  static Future<void> generarListadoCobroPeriodoPdf({
+    required String eventoTitulo,
+    required String filtroTitulo,
+    required DateTime generadoEn,
+    required List<CobroPeriodoPdfFila> filas,
+  }) async {
+    final fontRegular = await PdfGoogleFonts.outfitRegular();
+    final fontBold = await PdfGoogleFonts.outfitBold();
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
+    );
+
+    final fechaTxt = ArTime.formatFechaHora(generadoEn);
+    final tituloSafe = eventoTitulo.trim().isEmpty ? 'Evento' : eventoTitulo.trim();
+    final filtroSafe = filtroTitulo.trim().isEmpty ? 'Listado' : filtroTitulo.trim();
+    final n = filas.length;
+
+    final tituloColor =
+        filtroSafe.toLowerCase().startsWith('no pagaron') ? _redAccent : _greenAccent;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'COBRO — $tituloSafe',
+              style: pw.TextStyle(
+                fontSize: 16,
+                fontWeight: pw.FontWeight.bold,
+                color: _gold,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Emitido: $fechaTxt',
+              style: pw.TextStyle(fontSize: 9, color: _greyText),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: pw.BoxDecoration(
+                color: tituloColor == _redAccent
+                    ? PdfColor.fromInt(0xFFFFF0F0)
+                    : PdfColor.fromInt(0xFFF0FFF5),
+                border: pw.Border(left: pw.BorderSide(color: tituloColor, width: 4)),
+              ),
+              child: pw.Text(
+                '$filtroSafe — $n alumno(s)',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: tituloColor,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Solo cuotas base del plan (sin mora ni mesas). Coincide con el filtro activo en pantalla.',
+              style: pw.TextStyle(fontSize: 8.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+            ),
+            pw.Divider(color: _gold),
+            pw.SizedBox(height: 6),
+          ],
+        ),
+        build: (context) {
+          if (filas.isEmpty) {
+            return [
+              pw.Text(
+                'No hay alumnos en este listado.',
+                style: pw.TextStyle(fontSize: 10, color: _greyText, fontStyle: pw.FontStyle.italic),
+              ),
+            ];
+          }
+
+          const headers = <String>[
+            'ALUMNO',
+            'CURSO',
+            'CONTRATO',
+            'CUOTAS PAGADAS',
+            'ÚLT. PAGO',
+            'TELÉFONO',
+          ];
+
+          final data = filas
+              .map(
+                (f) => [
+                  f.nombre,
+                  f.curso,
+                  f.contratoEstado,
+                  f.cuotasPagadas,
+                  f.ultimoPago,
+                  f.telefono,
+                ],
+              )
+              .toList();
+
+          return [
+            pw.TableHelper.fromTextArray(
+              border: pw.TableBorder.all(color: _greyLight),
+              headerStyle: pw.TextStyle(
+                fontWeight: pw.FontWeight.bold,
+                color: _darkText,
+                fontSize: 8.5,
+              ),
+              headerDecoration: const pw.BoxDecoration(color: _headerBg),
+              cellStyle: pw.TextStyle(fontSize: 8),
+              cellPadding: const pw.EdgeInsets.all(4),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.6),
+                1: const pw.FlexColumnWidth(1.1),
+                2: const pw.FlexColumnWidth(0.8),
+                3: const pw.FlexColumnWidth(0.9),
+                4: const pw.FlexColumnWidth(0.8),
+                5: const pw.FlexColumnWidth(0.9),
+              },
+              data: <List<String>>[headers, ...data],
+            ),
+          ];
+        },
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final safeName = tituloSafe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
+    final filtroFile = filtroSafe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
+    final fname = 'Cobro_${safeName}_$filtroFile.pdf'
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\\.]'), '_')
+        .replaceAll('__', '_');
+
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, fname);
+    } else {
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: fname,
+      );
+    }
+  }
+
+  /// PDF comparativo: pagaron + no pagaron en el mismo período (Cobro — eventos masivos).
+  static Future<void> generarListadoCobroPeriodoComparativoPdf({
+    required String eventoTitulo,
+    required String resumenTitulo,
+    required String bloquePagaronTitulo,
+    required String bloqueNoPagaronTitulo,
+    required DateTime generadoEn,
+    required List<CobroPeriodoPdfFila> pagaron,
+    required List<CobroPeriodoPdfFila> noPagaron,
+  }) async {
+    final fontRegular = await PdfGoogleFonts.outfitRegular();
+    final fontBold = await PdfGoogleFonts.outfitBold();
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
+    );
+
+    final fechaTxt = ArTime.formatFechaHora(generadoEn);
+    final tituloSafe = eventoTitulo.trim().isEmpty ? 'Evento' : eventoTitulo.trim();
+    final nPag = pagaron.length;
+    final nNo = noPagaron.length;
+    final total = nPag + nNo;
+
+    int firmados(List<CobroPeriodoPdfFila> lista) =>
+        lista.where((f) => f.contratoEstado == 'Firmado').length;
+
+    final firmPag = firmados(pagaron);
+    final firmNo = firmados(noPagaron);
+
+    pw.Widget bloqueTitulo(String texto, PdfColor color) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 12, bottom: 8),
+        child: pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: pw.BoxDecoration(
+            color: color == _redAccent
+                ? PdfColor.fromInt(0xFFFFF0F0)
+                : color == _greenAccent
+                    ? PdfColor.fromInt(0xFFF0FFF5)
+                    : PdfColor.fromInt(0xFFF5F5F5),
+            border: pw.Border(left: pw.BorderSide(color: color, width: 4)),
+          ),
+          child: pw.Text(
+            texto,
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ),
+      );
+    }
+
+    pw.Widget tablaAlumnos(List<CobroPeriodoPdfFila> lista) {
+      if (lista.isEmpty) {
+        return pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 6),
+          child: pw.Text(
+            '(Nadie en este bloque.)',
+            style: pw.TextStyle(fontSize: 9.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+          ),
+        );
+      }
+
+      const headers = <String>[
+        'ALUMNO',
+        'CURSO',
+        'CONTRATO',
+        'CUOTAS PAGADAS',
+        'ÚLT. PAGO',
+        'TELÉFONO',
+      ];
+
+      final data = lista
+          .map(
+            (f) => [
+              f.nombre,
+              f.curso,
+              f.contratoEstado,
+              f.cuotasPagadas,
+              f.ultimoPago,
+              f.telefono,
+            ],
+          )
+          .toList();
+
+      return pw.TableHelper.fromTextArray(
+        border: pw.TableBorder.all(color: _greyLight),
+        headerStyle: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          color: _darkText,
+          fontSize: 8.5,
+        ),
+        headerDecoration: const pw.BoxDecoration(color: _headerBg),
+        cellStyle: pw.TextStyle(fontSize: 8),
+        cellPadding: const pw.EdgeInsets.all(4),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(1.6),
+          1: const pw.FlexColumnWidth(1.1),
+          2: const pw.FlexColumnWidth(0.8),
+          3: const pw.FlexColumnWidth(0.9),
+          4: const pw.FlexColumnWidth(0.8),
+          5: const pw.FlexColumnWidth(0.9),
+        },
+        data: <List<String>>[headers, ...data],
+      );
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'COBRO — $tituloSafe',
+              style: pw.TextStyle(
+                fontSize: 16,
+                fontWeight: pw.FontWeight.bold,
+                color: _gold,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Emitido: $fechaTxt',
+              style: pw.TextStyle(fontSize: 9, color: _greyText),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              resumenTitulo.toUpperCase(),
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: _darkText,
+              ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              '· Pagaron: $nPag ($firmPag firmaron · ${nPag - firmPag} sin firmar)',
+              style: pw.TextStyle(fontSize: 9.5, color: _greenAccent, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              '· No pagaron: $nNo ($firmNo firmaron · ${nNo - firmNo} sin firmar)',
+              style: pw.TextStyle(fontSize: 9.5, color: _redAccent, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              '· Total en listado: $total',
+              style: pw.TextStyle(fontSize: 9.5, color: _darkText, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Solo cuotas base del plan (sin mora ni mesas). Columna CONTRATO: firmado o sin firmar.',
+              style: pw.TextStyle(fontSize: 8.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+            ),
+            pw.Divider(color: _gold),
+            pw.SizedBox(height: 6),
+          ],
+        ),
+        build: (context) => [
+          bloqueTitulo('$bloquePagaronTitulo — $nPag persona(s)', _greenAccent),
+          tablaAlumnos(pagaron),
+          bloqueTitulo('$bloqueNoPagaronTitulo — $nNo persona(s)', _redAccent),
+          tablaAlumnos(noPagaron),
+        ],
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final safeName = tituloSafe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
+    final fname = 'Cobro_Comparativo_$safeName.pdf'
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\\.]'), '_')
+        .replaceAll('__', '_');
+
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, fname);
+    } else {
+      await Printing.layoutPdf(
+        onLayout: (_) async => bytes,
+        name: fname,
+      );
+    }
+  }
+
   /// PDF de análisis de rentabilidad (uso interno / gestión).
   static Future<void> generarRentabilidadPdf({
     required ResultadoRentabilidad resultado,
@@ -5669,7 +6019,7 @@ class PdfService {
               _tableCell(fecha, bold: isFirst),
               _tableCell(tr.concepto ?? 'Pago', bold: isFirst),
               _tableCell(
-                esBonif ? 'Bonificación' : 'Efectivo',
+                esBonif ? 'Bonificación' : (tr.medioPago ?? 'Efectivo'),
                 bold: isFirst,
                 color: esBonif ? _gold : _greyText,
               ),

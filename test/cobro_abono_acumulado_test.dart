@@ -138,7 +138,7 @@ void main() {
         cuotasPagadasActuales: 0,
       );
       expect(r.cuotas, 0);
-      expect(r.concepto, contains('Abono'));
+      expect(r.concepto, contains('Entrega parcial'));
     });
 
     test('cuota pagada al cerrar con abonos previos', () {
@@ -152,8 +152,8 @@ void main() {
         cuotasPagadasActuales: 0,
       );
       expect(r.cuotas, 1);
-      expect(r.concepto, 'Cuota Base (1/9)');
-      expect(r.concepto, isNot(contains('Abono')));
+      expect(r.concepto, 'Cuota Base (1/9) — Completada');
+      expect(r.concepto, isNot(contains('Entrega parcial')));
     });
 
     test('regresión Arguello: 2 cuotas pagadas + 20k = abono hacia cuota 3', () {
@@ -174,8 +174,154 @@ void main() {
       );
 
       expect(r.cuotas, 0);
-      expect(r.concepto, 'Abono a Cuota Base (3/9)');
+      expect(r.concepto, contains('Entrega parcial'));
       expect(r.concepto, isNot(contains('2 Cuotas')));
+    });
+  });
+
+  group('rotuloCuotaLiquidada y lineasPreviewDesglosePlan', () {
+    test('cuota entera sin parcial previo', () {
+      expect(
+        rotuloCuotaLiquidada(
+          etiqueta: 'Cuota Base',
+          numeroCuota: 2,
+          totalCuotas: 9,
+          cierraEntregaParcialPrevio: false,
+        ),
+        'Cuota Base (2/9)',
+      );
+    });
+
+    test('cierra entrega parcial previa', () {
+      expect(
+        rotuloCuotaLiquidada(
+          etiqueta: 'Mesa Extra 1',
+          numeroCuota: 1,
+          totalCuotas: 7,
+          cierraEntregaParcialPrevio: true,
+        ),
+        'Mesa Extra 1 (1/7) — Completada',
+      );
+    });
+
+    test('lineasPreview: parcial libre que cierra parcial', () {
+      const cuotaPura = 35000.0;
+      const historico = 30250.0;
+      final lineas = lineasPreviewDesglosePlan(
+        modo: ModoPagoConceptoTipo.parcialLibre,
+        cuotasSeleccionadas: null,
+        grossTotal: 4750,
+        cuotaPura: cuotaPura,
+        totalCuotas: 9,
+        grossHistorico: historico,
+        etiqueta: 'Cuota Base',
+      );
+      expect(lineas.length, 1);
+      expect(lineas.first.concepto, 'Cuota Base (1/9) — Completada');
+      expect(lineas.first.cuotasLiquidadas, 1);
+      expect(
+        lineas.first.subtexto,
+        'Entrega parcial previa: \$30.250,00. '
+            'Este cobro: \$4.750,00 (saldo restante). Cuota al día.',
+      );
+    });
+
+    test('lineasPreview: cuota entera sin parcial', () {
+      final lineas = lineasPreviewDesglosePlan(
+        modo: ModoPagoConceptoTipo.cuotas,
+        cuotasSeleccionadas: {1},
+        grossTotal: 35000,
+        cuotaPura: 35000,
+        totalCuotas: 9,
+        grossHistorico: 0,
+        etiqueta: 'Cuota Base',
+      );
+      expect(lineas.first.concepto, 'Cuota Base (1/9)');
+      expect(lineas.first.concepto, isNot(contains('Completada')));
+    });
+
+    test('lineasPreview: seleccionar cuotas cierra parcial', () {
+      final lineas = lineasPreviewDesglosePlan(
+        modo: ModoPagoConceptoTipo.cuotas,
+        cuotasSeleccionadas: {1},
+        grossTotal: 4750,
+        cuotaPura: 35000,
+        totalCuotas: 9,
+        grossHistorico: 30250,
+        etiqueta: 'Cuota Base',
+      );
+      expect(lineas.first.concepto, 'Cuota Base (1/9) — Completada');
+      expect(lineas.first.cuotasLiquidadas, 1);
+      expect(lineas.first.subtexto, contains('30.250,00'));
+      expect(lineas.first.subtexto, contains('4.750,00'));
+    });
+
+    test('lineasPreview: cierra parcial y otra cuota entera sin subtexto en la 2', () {
+      final lineas = lineasPreviewDesglosePlan(
+        modo: ModoPagoConceptoTipo.cuotas,
+        cuotasSeleccionadas: {1, 2},
+        grossTotal: 39750,
+        cuotaPura: 35000,
+        totalCuotas: 9,
+        grossHistorico: 30250,
+        etiqueta: 'Cuota Base',
+      );
+      expect(lineas.length, 2);
+      expect(lineas[0].concepto, 'Cuota Base (1/9) — Completada');
+      expect(lineas[0].subtexto, isNotNull);
+      expect(lineas[1].concepto, 'Cuota Base (2/9)');
+      expect(lineas[1].subtexto, isNull);
+    });
+
+    test('rotulo Completada no dispara heurística de entrega parcial', () {
+      final c = 'Cuota Base (1/9) — Completada'.toLowerCase();
+      final esEntregaParcial = c.contains('entrega') ||
+          c.contains('adelanto') ||
+          c.contains('parcial') ||
+          c.contains('abono');
+      expect(esEntregaParcial, isFalse);
+      expect(c.contains('cuota'), isTrue);
+    });
+
+    test('regresión Chamorro: adelanto C3 + cobro 66.500 no deja parcial fantasma', () {
+      const cuotaPura = 30000.0;
+      const totalCuotas = 9;
+      const pactado = 270000.0;
+      // 2 cuotas + adelanto $23.500 en C3
+      const grossHistorico = 83500.0;
+      const grossCobro = 66500.0;
+
+      final lineas = lineasPreviewDesglosePlan(
+        modo: ModoPagoConceptoTipo.cuotas,
+        cuotasSeleccionadas: {3, 4, 5},
+        grossTotal: grossCobro,
+        cuotaPura: cuotaPura,
+        totalCuotas: totalCuotas,
+        grossHistorico: grossHistorico,
+        etiqueta: 'Cuota Base',
+      );
+
+      expect(lineas.length, 3);
+      expect(lineas[0].gross, closeTo(6500, 0.01));
+      expect(lineas[0].cuotasLiquidadas, 1);
+      expect(lineas[1].gross, closeTo(30000, 0.01));
+      expect(lineas[2].gross, closeTo(30000, 0.01));
+
+      final grossTotalPagado = grossHistorico + grossCobro;
+      final saldoEsperado = pactado - grossTotalPagado;
+      expect(saldoEsperado, closeTo(120000, 0.01));
+
+      final desglose = desgloseCuotasPlan(
+        grossHistorico: grossTotalPagado,
+        cuotaPura: cuotaPura,
+        totalCuotas: totalCuotas,
+      );
+      final parciales = desglose.where((c) => c.estado == EstadoCuotaPlan.parcial);
+      expect(parciales, isEmpty);
+      expect(
+        desglose.where((c) => c.numero <= 5).every((c) => c.estado == EstadoCuotaPlan.pagada),
+        isTrue,
+      );
     });
   });
 }

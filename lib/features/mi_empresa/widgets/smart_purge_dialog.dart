@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../repositories/finanzas_repository.dart';
 import '../providers/finanzas_provider.dart';
+import '../../eventos/repositories/contratos_repository.dart';
 import '../../dashboard/providers/dashboard_provider.dart';
 
 class SmartPurgeDialog extends ConsumerStatefulWidget {
@@ -162,7 +163,15 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
     try {
       final repo = ref.read(finanzasRepositoryProvider);
       final idsMap = _selectedIds.map((key, value) => MapEntry(key, value.toList()));
-      await repo.eliminarRegistrosVinculados(idsMap);
+      final contratosARecalcular = await repo.eliminarRegistrosVinculados(idsMap);
+
+      if (contratosARecalcular.isNotEmpty) {
+        final contratosRepo = ref.read(contratosRepositoryProvider);
+        for (final contratoId in contratosARecalcular) {
+          await contratosRepo.recalcularProgresoContrato(contratoId);
+        }
+        ref.read(contratosMutationTickProvider.notifier).bump();
+      }
 
       // Invalidar todos los estados para actualización instantánea
       ref.invalidate(finanzasProvider);

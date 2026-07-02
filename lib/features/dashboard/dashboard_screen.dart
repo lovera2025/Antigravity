@@ -974,7 +974,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'JUNIOR EVENTOS  ·  SISTEMA OPERATIVO PREMIUM  ·  v${_versionMarketingLabel(_appVersionLabel)}',
+              'JUNIOR EVENTOS  ·  v${_versionMarketingLabel(_appVersionLabel)}',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
@@ -984,7 +984,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
           Text(
-            'ML · ${now.year}',
+            'DESARROLLADO POR ML · ${now.year}',
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,

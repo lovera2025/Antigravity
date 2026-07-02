@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/pago_interes_mora.dart';
 import '../utils/uuid_utils.dart';
+import '../../models/contrato_alumno.dart';
+import '../../features/eventos/services/mora_tracked_recovery.dart';
 
 /// Base de datos local SQLite — persistencia offline.
 ///
@@ -18,7 +20,7 @@ import '../utils/uuid_utils.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 48;
+  static const int _version = 53;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -214,6 +216,8 @@ class LocalDatabase {
         contrato_firmado INTEGER DEFAULT 0,
         mora_pendiente_tracked REAL DEFAULT 0.0,
         mora_cobrada_offset REAL DEFAULT 0.0,
+        mora_fecha_referencia TEXT,
+        baja_temporal_desde TEXT,
         updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
@@ -1553,6 +1557,161 @@ class LocalDatabase {
         debugPrint('✅ Migración v48 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v48 backfill: $e');
+      }
+    }
+
+    if (oldVersion < 49) {
+      debugPrint(
+        '  🔧 v49: limpiar mora_pendiente_tracked inflado + actualizar mora_cobrada_offset',
+      );
+      try {
+        // tracked solo debe contener remanente de pagos parciales de mora.
+        // Los valores inflados por carry-over de cuotas sin cobrar mora
+        // se resetean a 0. offset = total mora cobrada historial para que
+        // el FIFO calendario arranque limpio.
+        await db.rawUpdate('''
+          UPDATE contratos_alumnos
+          SET mora_pendiente_tracked = 0,
+              mora_cobrada_offset = (
+                SELECT COALESCE(SUM(p.monto), 0.0)
+                FROM pagos_contrato_alumno p
+                WHERE p.contrato_alumno_id = contratos_alumnos.id
+                  AND (p.line_kind = 'interes_mora'
+                       OR LOWER(IFNULL(p.concepto,'')) LIKE '%mora%'
+                       OR LOWER(IFNULL(p.concepto,'')) LIKE '%inter%')
+                  AND (p.anulado IS NULL OR p.anulado = 0)
+              )
+          WHERE mora_pendiente_tracked > 0.01
+        ''');
+        debugPrint('✅ Migración v49 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v49: $e');
+      }
+    }
+
+    if (oldVersion < 50) {
+      debugPrint(
+        '  🔧 v50: mora tracked conservador (historial) + offset/tracked recalculados',
+      );
+      try {
+        // Solo inflados: tracked > 0 sin ningún pago de mora en historial.
+        await db.rawUpdate('''
+          UPDATE contratos_alumnos
+          SET mora_pendiente_tracked = 0,
+              mora_cobrada_offset = 0
+          WHERE mora_pendiente_tracked > 0.01
+            AND NOT EXISTS (
+              SELECT 1 FROM pagos_contrato_alumno p
+              WHERE p.contrato_alumno_id = contratos_alumnos.id
+                AND (p.line_kind = 'interes_mora'
+                     OR LOWER(IFNULL(p.concepto,'')) LIKE '%mora%'
+                     OR LOWER(IFNULL(p.concepto,'')) LIKE '%inter%')
+                AND (p.anulado IS NULL OR p.anulado = 0)
+            )
+        ''');
+
+        final contratos = await db.query('contratos_alumnos');
+        var recalculados = 0;
+        for (final row in contratos) {
+          final contrato = ContratoAlumno.fromJson(row);
+          final pagos = await db.query(
+            'pagos_contrato_alumno',
+            where: 'contrato_alumno_id = ?',
+            whereArgs: [contrato.id],
+          );
+          if (!MoraTrackedRecovery.tieneMoraEnHistorial(pagos)) continue;
+
+          final sim = MoraTrackedRecovery.recomputarDesdeHistorial(
+            contratoBase: contrato.copyWith(
+              moraPendienteTracked: 0,
+              moraCobradaOffset: 0,
+            ),
+            pagos: pagos,
+          );
+
+          final trackedActual =
+              (row['mora_pendiente_tracked'] as num?)?.toDouble() ?? 0;
+          final offsetActual =
+              (row['mora_cobrada_offset'] as num?)?.toDouble() ?? 0;
+
+          final trackedObjetivo = MoraTrackedRecovery.trackedPareceInflado(
+            tracked: trackedActual,
+            pagos: pagos,
+          )
+              ? 0.0
+              : (trackedActual > 0.01
+                  ? trackedActual
+                  : sim.tracked);
+
+          if ((trackedObjetivo - trackedActual).abs() > 0.01 ||
+              (sim.offset - offsetActual).abs() > 0.01) {
+            await db.update(
+              'contratos_alumnos',
+              {
+                'mora_pendiente_tracked': trackedObjetivo,
+                'mora_cobrada_offset': sim.offset,
+              },
+              where: 'id = ?',
+              whereArgs: [contrato.id],
+            );
+            recalculados++;
+          }
+        }
+        debugPrint('✅ Migración v50 completada ($recalculados contratos recalibrados)');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v50: $e');
+      }
+    }
+
+    if (oldVersion < 51) {
+      debugPrint(
+        '  🔧 v51: tracked/offset siempre desde historial (fix carry-over stale + sync)',
+      );
+      try {
+        final recalculados = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          encolarSync: true,
+        );
+        debugPrint(
+          '✅ Migración v51 completada ($recalculados contratos recalibrados)',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v51: $e');
+      }
+    }
+
+    if (oldVersion < 52) {
+      debugPrint(
+        '  🔧 v52: mora_fecha_referencia + baja_temporal_desde (congelar mora en baja)',
+      );
+      for (final col in [
+        'ALTER TABLE contratos_alumnos ADD COLUMN mora_fecha_referencia TEXT',
+        'ALTER TABLE contratos_alumnos ADD COLUMN baja_temporal_desde TEXT',
+      ]) {
+        try {
+          await db.execute(col);
+        } catch (e) {
+          debugPrint('  ⚠️ v52 columna ya existe o error: $e');
+        }
+      }
+      debugPrint('✅ Migración v52 completada');
+    }
+
+    if (oldVersion < 53) {
+      debugPrint(
+        '  🔧 v53: tracked/offset en masivos — cuota sin mora en historial',
+      );
+      try {
+        final recalculados = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          encolarSync: false,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint(
+          '✅ Migración v53 completada ($recalculados contratos masivos recalibrados)',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v53: $e');
       }
     }
   }

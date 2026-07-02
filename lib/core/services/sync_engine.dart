@@ -11,6 +11,7 @@ import '../utils/uuid_utils.dart';
 import 'connectivity_service.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
 import '../../features/mi_empresa/repositories/finanzas_repository.dart';
+import '../../features/eventos/services/mora_tracked_recovery.dart';
 import '../../models/contrato_alumno.dart';
 
 /// Estado del motor de sincronización.
@@ -660,6 +661,20 @@ class SyncEngine {
       _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
     ]);
 
+    try {
+      final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
+        db: db,
+        encolarSync: true,
+      );
+      if (recalibrados > 0) {
+        debugPrint(
+          '  🔧 Post-pull mora: $recalibrados contrato(s) recalibrados desde historial',
+        );
+      }
+    } catch (e) {
+      debugPrint('  ⚠️ Post-pull mora reconcile: $e');
+    }
+
     debugPrint('📥 Pull completado');
   }
 
@@ -742,6 +757,19 @@ class SyncEngine {
         };
       }
 
+      Map<String, double>? preservedMoraOffsetByContratoId;
+      if (table == 'contratos_alumnos') {
+        final localOffsetRows = await db.query(
+          'contratos_alumnos',
+          columns: ['id', 'mora_cobrada_offset'],
+        );
+        preservedMoraOffsetByContratoId = {
+          for (final r in localOffsetRows)
+            r['id'] as String:
+                (r['mora_cobrada_offset'] as num?)?.toDouble() ?? 0,
+        };
+      }
+
       final batch = db.batch();
       int skipped = 0;
       for (var index = 0; index < rows.length; index++) {
@@ -805,6 +833,13 @@ class SyncEngine {
               insertRow['bonificacion_global_pct'] = preserved;
             }
           }
+          batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
+        } else if (table == 'contratos_alumnos' &&
+            preservedMoraOffsetByContratoId != null) {
+          final cid = cleanRow['id'] as String;
+          final insertRow = Map<String, dynamic>.from(cleanRow);
+          insertRow['mora_cobrada_offset'] =
+              preservedMoraOffsetByContratoId[cid] ?? 0;
           batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
         } else {
           batch.insert(table, cleanRow, conflictAlgorithm: ConflictAlgorithm.replace);

@@ -213,4 +213,11 @@ Decile al asistente cualquiera de estas frases:
 - *“Fix cobro PDF/UI del **25 de junio de 2026**”*
 - *“CONTEXTO_SYNC_v4.1.6 / incidente sync 24-jun-2026 / v4.1.7”*
 
+---
+
+## Documentos relacionados
+
+- **`docs/CONTEXTO_MORA_OPERATIVA.md`** — mora pendiente grilla/modal, remanente 0/9, Restaurar mora, limpieza tracked (28-jun-2026).
+- **`docs/CONTEXTO_COBRO_PARCIALES_SALDO.md`** — saldo fantasma adelantos/parciales, `tool/recalcular_contrato.dart`, casos saneados 30-jun-2026.
+
 Asuntos cubiertos: pagos que no sync entre PCs, límite 1000 pagos, mesas extra liquidadas juntas, carpetas `JuniorEventos` duplicadas, recuperación con `data.db` viejo + Subir + Pull completo forzado, releases **4.1.6** y **4.1.7** (alineación PDF/UI post-cobro mesas y cuotas).

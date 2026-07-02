@@ -9,8 +9,10 @@ import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/evento.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../../common/services/pdf_service.dart';
 import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/eventos_repository.dart';
+import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/mora_cuota_calculator.dart';
 import '../providers/finanzas_provider.dart';
 
@@ -24,6 +26,10 @@ class _CobroFila {
   final double moraPendiente;
   final int cuotasVencidasCount;
   final double cuotasVencidasMonto;
+  /// Fechas (solo día, huso AR) en que hubo cobro de cuota base.
+  final List<DateTime> fechasPagoBase;
+  /// Cuota base con entrega parcial en curso (derivada del historial de pagos).
+  final CuotaPlanDetalle? cuotaParcialActual;
 
   const _CobroFila({
     required this.contrato,
@@ -33,7 +39,11 @@ class _CobroFila {
     this.moraPendiente = 0,
     this.cuotasVencidasCount = 0,
     this.cuotasVencidasMonto = 0,
+    this.fechasPagoBase = const [],
+    this.cuotaParcialActual,
   });
+
+  bool get entregaParcialEnCurso => cuotaParcialActual != null;
 }
 
 bool _esInteresPago(String? concepto) =>
@@ -102,6 +112,24 @@ DateTime? _minFechaBase(Iterable<Map<String, dynamic>> pagos) {
   return min;
 }
 
+List<DateTime> _fechasPagoBaseDesdePagos(Iterable<Map<String, dynamic>> pagos) {
+  final out = <DateTime>[];
+  for (final p in pagos) {
+    if (!_pagoEsCuotaBase(p)) continue;
+    final fp = p['fecha_pago']?.toString();
+    if (fp == null) continue;
+    final d = DateTime.tryParse(fp);
+    if (d == null) continue;
+    final ar = ArTime.toAr(d);
+    out.add(DateTime(ar.year, ar.month, ar.day));
+  }
+  return out;
+}
+
+bool _fechaEnRangoInclusive(DateTime dia, DateTime desde, DateTime hasta) {
+  return !dia.isBefore(desde) && !dia.isAfter(hasta);
+}
+
 /// Nombre de institución unificado para el listado COBRO (evita duplicados por typo, sin tocar la DB).
 String _institucionCanonica(String? raw) {
   final t = raw?.trim() ?? '';
@@ -119,8 +147,15 @@ String _institucionCanonica(String? raw) {
 const String _kCobroTodosInstitucion = '__COBRO_TODOS_EL_EVENTO__';
 const String _kCobroMarcaMensaje = 'Junior Eventos';
 
-/// Filtro de cuota base: [todos] | al menos abonó una | ninguna.
-enum _CobroFiltroCuota { todos, conAlMenosUna, ninguna }
+/// Período por fecha real de cobro de cuota base.
+enum _CobroPeriodoTipo { sinFiltro, hoy, esteMes, fecha }
+
+enum _CobroPeriodoResultado { pagaron, noPagaron, comparativo }
+
+const _kMesesNombre = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
 
 bool _contratoEsBaja(ContratoAlumno a) => a.nombreAlumno.trim().startsWith('[BAJA]');
 
@@ -363,7 +398,13 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
   List<String> _instituciones = [];
   List<_CobroFila> _filas = [];
   final _busquedaCtrl = TextEditingController();
-  _CobroFiltroCuota _filtroCuota = _CobroFiltroCuota.todos;
+  /// `null` = todas las cantidades; `0` = sin cuotas pagadas; `n` = exactamente n cuotas del plan.
+  int? _filtroCuotasPagadas;
+  bool _filtroSoloEntregaParcial = false;
+  _CobroPeriodoTipo _periodoTipo = _CobroPeriodoTipo.sinFiltro;
+  _CobroPeriodoResultado _periodoResultado = _CobroPeriodoResultado.comparativo;
+  DateTime? _periodoFechaElegida;
+  bool _exportandoPdf = false;
   final Set<String> _seleccionados = {};
   bool _verSoloCuotasVencidas = true;
 
@@ -381,7 +422,300 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
 
   void _resetFiltrosVista() {
     _busquedaCtrl.clear();
-    _filtroCuota = _CobroFiltroCuota.todos;
+    _filtroCuotasPagadas = null;
+    _filtroSoloEntregaParcial = false;
+    _periodoTipo = _CobroPeriodoTipo.sinFiltro;
+    _periodoResultado = _CobroPeriodoResultado.comparativo;
+    _periodoFechaElegida = null;
+  }
+
+  DateTime _hoySoloAr() {
+    final hoy = ArTime.nowAr();
+    return DateTime(hoy.year, hoy.month, hoy.day);
+  }
+
+  (DateTime desde, DateTime hasta) _rangoPeriodoActivo() {
+    final hoySolo = _hoySoloAr();
+    switch (_periodoTipo) {
+      case _CobroPeriodoTipo.sinFiltro:
+        return (hoySolo, hoySolo);
+      case _CobroPeriodoTipo.hoy:
+        return (hoySolo, hoySolo);
+      case _CobroPeriodoTipo.esteMes:
+        final inicio = DateTime(hoySolo.year, hoySolo.month, 1);
+        final fin = DateTime(hoySolo.year, hoySolo.month + 1, 0);
+        return (inicio, fin);
+      case _CobroPeriodoTipo.fecha:
+        final d = _periodoFechaElegida ?? hoySolo;
+        final solo = DateTime(d.year, d.month, d.day);
+        return (solo, solo);
+    }
+  }
+
+  bool _filaPagoCuotaBaseEnPeriodo(_CobroFila f, DateTime desde, DateTime hasta) {
+    for (final dia in f.fechasPagoBase) {
+      if (_fechaEnRangoInclusive(dia, desde, hasta)) return true;
+    }
+    return false;
+  }
+
+  String _etiquetaPeriodoCorto() {
+    final hoySolo = _hoySoloAr();
+    switch (_periodoTipo) {
+      case _CobroPeriodoTipo.sinFiltro:
+        return '';
+      case _CobroPeriodoTipo.hoy:
+        return ArTime.formatFechaCorta(hoySolo);
+      case _CobroPeriodoTipo.esteMes:
+        return '${_kMesesNombre[hoySolo.month - 1]} ${hoySolo.year}';
+      case _CobroPeriodoTipo.fecha:
+        final d = _periodoFechaElegida ?? hoySolo;
+        return ArTime.formatFechaCorta(DateTime(d.year, d.month, d.day));
+    }
+  }
+
+  String _etiquetaFiltroPeriodoPdf() {
+    final periodo = _etiquetaPeriodoCorto();
+    final accion = switch (_periodoResultado) {
+      _CobroPeriodoResultado.pagaron => 'Pagaron',
+      _CobroPeriodoResultado.noPagaron => 'No pagaron',
+      _CobroPeriodoResultado.comparativo => 'Comparativo',
+    };
+    switch (_periodoTipo) {
+      case _CobroPeriodoTipo.sinFiltro:
+        if (_filtroCuotasPagadas != null) {
+          return 'Listado${_sufijoFiltroCuotasPdf()}';
+        }
+        return 'Listado filtrado';
+      case _CobroPeriodoTipo.hoy:
+      case _CobroPeriodoTipo.fecha:
+        return '$accion el $periodo${_sufijoFiltroCuotasPdf()}';
+      case _CobroPeriodoTipo.esteMes:
+        return '$accion en $periodo${_sufijoFiltroCuotasPdf()}';
+    }
+  }
+
+  String _etiquetaBloquePagaronPdf() {
+    final periodo = _etiquetaPeriodoCorto();
+    switch (_periodoTipo) {
+      case _CobroPeriodoTipo.sinFiltro:
+        return 'PAGARON';
+      case _CobroPeriodoTipo.hoy:
+      case _CobroPeriodoTipo.fecha:
+        return 'PAGARON EL $periodo';
+      case _CobroPeriodoTipo.esteMes:
+        return 'PAGARON EN $periodo'.toUpperCase();
+    }
+  }
+
+  String _etiquetaBloqueNoPagaronPdf() {
+    final periodo = _etiquetaPeriodoCorto();
+    switch (_periodoTipo) {
+      case _CobroPeriodoTipo.sinFiltro:
+        return 'NO PAGARON';
+      case _CobroPeriodoTipo.hoy:
+      case _CobroPeriodoTipo.fecha:
+        return 'NO PAGARON EL $periodo';
+      case _CobroPeriodoTipo.esteMes:
+        return 'NO PAGARON EN $periodo'.toUpperCase();
+    }
+  }
+
+  String _etiquetaResumenPeriodoPdf() {
+    final periodo = _etiquetaPeriodoCorto();
+    switch (_periodoTipo) {
+      case _CobroPeriodoTipo.sinFiltro:
+        return 'Resumen';
+      case _CobroPeriodoTipo.hoy:
+      case _CobroPeriodoTipo.fecha:
+        return 'Resumen del $periodo${_sufijoFiltroCuotasPdf()}';
+      case _CobroPeriodoTipo.esteMes:
+        return 'Resumen de $periodo${_sufijoFiltroCuotasPdf()}';
+    }
+  }
+
+  /// Solo búsqueda por nombre (sin filtro de cuotas ni período).
+  List<_CobroFila> _filasConBusqueda() {
+    final q = _busquedaCtrl.text.trim().toLowerCase();
+    if (q.isEmpty) return _filas;
+    return _filas
+        .where((f) => f.contrato.nombreAlumno.toLowerCase().contains(q))
+        .toList();
+  }
+
+  int _maxCuotasPlanEnVista() {
+    if (_filas.isEmpty) return 1;
+    var max = 1;
+    for (final f in _filas) {
+      final t = f.contrato.totalCuotas > 0 ? f.contrato.totalCuotas : 1;
+      if (t > max) max = t;
+    }
+    return max;
+  }
+
+  Map<int, int> _conteoPorCuotasPagadas(List<_CobroFila> base) {
+    final counts = <int, int>{};
+    for (final f in base) {
+      final n = f.contrato.cuotasPagadas;
+      counts[n] = (counts[n] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  String _etiquetaOpcionCuotas(int? n, int count, int maxPlan) {
+    if (n == null) {
+      return 'Todas ($count)';
+    }
+    if (n == 0) {
+      return '0 cuotas — sin pagos del plan ($count)';
+    }
+    final planHint = n <= maxPlan ? ' de $maxPlan' : '';
+    final label = n == 1 ? '1 cuota pagada$planHint' : '$n cuotas pagadas$planHint';
+    return '$label ($count)';
+  }
+
+  String _sufijoFiltroCuotasPdf() {
+    if (_filtroCuotasPagadas == null) return '';
+    if (_filtroCuotasPagadas == 0) return ' · 0 cuotas del plan';
+    if (_filtroCuotasPagadas == 1) return ' · 1 cuota del plan';
+    return ' · ${_filtroCuotasPagadas} cuotas del plan';
+  }
+
+  int? _filtroCuotasPagadasValido(int maxPlan) {
+    if (_filtroCuotasPagadas == null) return null;
+    if (_filtroCuotasPagadas! < 0 || _filtroCuotasPagadas! > maxPlan) return null;
+    return _filtroCuotasPagadas;
+  }
+
+  int _conteoEntregaParcial(List<_CobroFila> base) =>
+      base.where((f) => f.entregaParcialEnCurso).length;
+
+  /// Búsqueda + cuotas del plan, sin filtro de período.
+  List<_CobroFila> _filasBaseVista() {
+    var list = _filasConBusqueda();
+    final n = _filtroCuotasPagadas;
+    if (n != null) {
+      list = list.where((f) => f.contrato.cuotasPagadas == n).toList();
+    }
+    if (_filtroSoloEntregaParcial) {
+      list = list.where((f) => f.entregaParcialEnCurso).toList();
+    }
+    return list;
+  }
+
+  List<_CobroFila> _filasPagaronEnPeriodo(List<_CobroFila> base) {
+    if (_periodoTipo == _CobroPeriodoTipo.sinFiltro || base.isEmpty) return [];
+    final (desde, hasta) = _rangoPeriodoActivo();
+    return base.where((f) => _filaPagoCuotaBaseEnPeriodo(f, desde, hasta)).toList();
+  }
+
+  List<_CobroFila> _filasNoPagaronEnPeriodo(List<_CobroFila> base) {
+    if (_periodoTipo == _CobroPeriodoTipo.sinFiltro || base.isEmpty) return [];
+    final (desde, hasta) = _rangoPeriodoActivo();
+    return base.where((f) => !_filaPagoCuotaBaseEnPeriodo(f, desde, hasta)).toList();
+  }
+
+  int _contarFirmados(Iterable<_CobroFila> filas) =>
+      filas.where((f) => f.contrato.contratoFirmado).length;
+
+  CobroPeriodoPdfFila _filaToPdf(_CobroFila f) {
+    final a = f.contrato;
+    final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
+    final curso = a.cursoDivision?.trim();
+    return CobroPeriodoPdfFila(
+      nombre: a.nombreAlumno,
+      curso: (curso != null && curso.isNotEmpty) ? curso : '—',
+      contratoEstado: a.contratoFirmado ? 'Firmado' : 'Sin firmar',
+      cuotasPagadas: '${a.cuotasPagadas} de $tCuotas',
+      ultimoPago: f.ultimoPago != null ? ArTime.formatFechaCorta(f.ultimoPago!) : '—',
+      telefono: (a.telefono?.trim().isNotEmpty == true) ? a.telefono!.trim() : '—',
+    );
+  }
+
+  Future<void> _elegirFechaPeriodo() async {
+    final inicial = _periodoFechaElegida ?? _hoySoloAr();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: inicial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      locale: const Locale('es', 'AR'),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _periodoFechaElegida = DateTime(picked.year, picked.month, picked.day);
+      _periodoTipo = _CobroPeriodoTipo.fecha;
+    });
+  }
+
+  Future<void> _exportarPdfFiltrado(List<_CobroFila> filasVista) async {
+    if (_eventoId == null || filasVista.isEmpty || _periodoTipo == _CobroPeriodoTipo.sinFiltro) {
+      return;
+    }
+    final evento = _eventosMasivos.where((e) => e.id == _eventoId).firstOrNull;
+    if (evento == null) return;
+
+    setState(() => _exportandoPdf = true);
+    try {
+      final filasPdf = filasVista.map(_filaToPdf).toList();
+
+      await PdfService.generarListadoCobroPeriodoPdf(
+        eventoTitulo: _etiquetaEvento(evento),
+        filtroTitulo: _etiquetaFiltroPeriodoPdf(),
+        generadoEn: ArTime.nowAr(),
+        filas: filasPdf,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF generado (${filasPdf.length} alumno(s)).')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo generar el PDF: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _exportandoPdf = false);
+    }
+  }
+
+  Future<void> _exportarPdfComparativo() async {
+    if (_eventoId == null || _periodoTipo == _CobroPeriodoTipo.sinFiltro) return;
+    final evento = _eventosMasivos.where((e) => e.id == _eventoId).firstOrNull;
+    if (evento == null) return;
+
+    final base = _filasBaseVista();
+    final pagaron = _filasPagaronEnPeriodo(base);
+    final noPagaron = _filasNoPagaronEnPeriodo(base);
+    if (pagaron.isEmpty && noPagaron.isEmpty) return;
+
+    setState(() => _exportandoPdf = true);
+    try {
+      await PdfService.generarListadoCobroPeriodoComparativoPdf(
+        eventoTitulo: _etiquetaEvento(evento),
+        resumenTitulo: _etiquetaResumenPeriodoPdf(),
+        bloquePagaronTitulo: _etiquetaBloquePagaronPdf(),
+        bloqueNoPagaronTitulo: _etiquetaBloqueNoPagaronPdf(),
+        generadoEn: ArTime.nowAr(),
+        pagaron: pagaron.map(_filaToPdf).toList(),
+        noPagaron: noPagaron.map(_filaToPdf).toList(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'PDF comparativo generado (${pagaron.length} pagaron · ${noPagaron.length} no pagaron).',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo generar el PDF comparativo: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _exportandoPdf = false);
+    }
   }
 
   Future<void> _cargarEventos() async {
@@ -508,16 +842,9 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
         final ultimo = _ultimoPagoAlPlan(list);
         final mora = MoraCuotaCalculator.calcular(a);
         final moraPagada = _sumMoraCobradaDesdePagos(list);
-        final moraPeriodo = moraCobradaDelPeriodoVigente(
-          list,
-          inicioMoraPeriodoVigente(mora.fechaVencimientoProximaCuota),
-        );
-        final moraPend = MoraCuotaCalculator.pendienteDisplay(
-          interesAcumulado: mora.interesAcumulado,
+        final moraPend = MoraCuotaCalculator.moraPendienteOperativa(
+          contrato: a,
           moraCobradaHistorial: moraPagada,
-          moraPendienteTracked: a.moraPendienteTracked,
-          moraCobradaOffset: a.moraCobradaOffset,
-          moraCobradaPeriodo: moraPeriodo,
         );
 
         // Cálculo de cuotas vencidas
@@ -546,6 +873,14 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
           }
         }
         final cuotasVencidasMonto = (cuotasVencidasCount * cuotaBaseR).clamp(0.0, c.saldoDeudor);
+        final fechasBase = _fechasPagoBaseDesdePagos(list);
+        final grossBase =
+            grossHistoricoClaseCobro(list, CobroConceptoClase.base);
+        final cuotaParcial = cuotaParcialEnCurso(
+          grossHistorico: grossBase,
+          cuotaPura: cuotaBaseR,
+          totalCuotas: tCuotas,
+        );
 
         filas.add(_CobroFila(
           contrato: a,
@@ -555,6 +890,8 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
           moraPendiente: moraPend,
           cuotasVencidasCount: cuotasVencidasCount,
           cuotasVencidasMonto: cuotasVencidasMonto,
+          fechasPagoBase: fechasBase,
+          cuotaParcialActual: cuotaParcial,
         ));
       }
       filas.sort((x, y) {
@@ -585,26 +922,126 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
     return '$f · ${e.tipo}';
   }
 
-  /// Filas a mostrar: búsqueda por nombre + filtro de cuota base (el listado base ya excluye [BAJA]).
+  /// Filas a mostrar: búsqueda + cuota base + período (el listado base ya excluye [BAJA]).
   List<_CobroFila> _filasFiltradasVista() {
-    var list = _filas;
-    final q = _busquedaCtrl.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      list = list
-          .where((f) => f.contrato.nombreAlumno.toLowerCase().contains(q))
-          .toList();
+    final base = _filasBaseVista();
+    if (_periodoTipo == _CobroPeriodoTipo.sinFiltro) return base;
+    final pagaron = _filasPagaronEnPeriodo(base);
+    final noPagaron = _filasNoPagaronEnPeriodo(base);
+    return switch (_periodoResultado) {
+      _CobroPeriodoResultado.pagaron => pagaron,
+      _CobroPeriodoResultado.noPagaron => noPagaron,
+      _CobroPeriodoResultado.comparativo => [...pagaron, ...noPagaron],
+    };
+  }
+
+  Widget _buildResumenPeriodoCobro(List<_CobroFila> base, Color muted) {
+    if (_periodoTipo == _CobroPeriodoTipo.sinFiltro) return const SizedBox.shrink();
+    final pagaron = _filasPagaronEnPeriodo(base);
+    final noPagaron = _filasNoPagaronEnPeriodo(base);
+    final firmadosPagaron = _contarFirmados(pagaron);
+    final firmadosNoPagaron = _contarFirmados(noPagaron);
+    final totalFirmados = _contarFirmados(base);
+    final periodo = _etiquetaPeriodoCorto();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: widget.isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _periodoTipo == _CobroPeriodoTipo.esteMes
+                  ? 'Resumen de $periodo'
+                  : 'Resumen del $periodo',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: widget.gold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Pagaron: ${pagaron.length} (${firmadosPagaron} firmaron · ${pagaron.length - firmadosPagaron} sin firmar)',
+              style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'No pagaron: ${noPagaron.length} (${firmadosNoPagaron} firmaron · ${noPagaron.length - firmadosNoPagaron} sin firmar)',
+              style: TextStyle(fontSize: 12, color: Colors.red.shade700, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Total en vista: ${base.length} · Contratos firmados: $totalFirmados · Sin firmar: ${base.length - totalFirmados}',
+              style: TextStyle(fontSize: 11.5, color: muted, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTituloBloqueComparativo(String titulo, int count, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border(left: BorderSide(color: color, width: 4)),
+        ),
+        child: Text(
+          '$titulo — $count alumno(s)',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: color),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListaAlumnosVista(List<_CobroFila> filasBase, List<_CobroFila> filasVista, Color muted) {
+    if (filasVista.isEmpty) {
+      return Text(
+        _periodoTipo != _CobroPeriodoTipo.sinFiltro
+            ? 'Ningún alumno coincide con los filtros (${_etiquetaFiltroPeriodoPdf().toLowerCase()}).'
+            : 'Ningún alumno coincide con la búsqueda o con los filtros.',
+        style: TextStyle(color: muted, fontSize: 13, height: 1.3),
+      );
     }
-    switch (_filtroCuota) {
-      case _CobroFiltroCuota.todos:
-        break;
-      case _CobroFiltroCuota.conAlMenosUna:
-        list = list.where((f) => f.contrato.cuotasPagadas >= 1).toList();
-        break;
-      case _CobroFiltroCuota.ninguna:
-        list = list.where((f) => f.contrato.cuotasPagadas == 0).toList();
-        break;
+
+    if (_periodoTipo != _CobroPeriodoTipo.sinFiltro &&
+        _periodoResultado == _CobroPeriodoResultado.comparativo) {
+      final pagaron = _filasPagaronEnPeriodo(filasBase);
+      final noPagaron = _filasNoPagaronEnPeriodo(filasBase);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (pagaron.isNotEmpty) ...[
+            _buildTituloBloqueComparativo(
+              _periodoTipo == _CobroPeriodoTipo.esteMes
+                  ? 'Pagaron en ${_etiquetaPeriodoCorto()}'
+                  : 'Pagaron el ${_etiquetaPeriodoCorto()}',
+              pagaron.length,
+              Colors.green.shade700,
+            ),
+            ...pagaron.map((f) => _tarjetaAlumno(f, muted)),
+          ],
+          if (noPagaron.isNotEmpty) ...[
+            _buildTituloBloqueComparativo(
+              _periodoTipo == _CobroPeriodoTipo.esteMes
+                  ? 'No pagaron en ${_etiquetaPeriodoCorto()}'
+                  : 'No pagaron el ${_etiquetaPeriodoCorto()}',
+              noPagaron.length,
+              Colors.red.shade700,
+            ),
+            ...noPagaron.map((f) => _tarjetaAlumno(f, muted)),
+          ],
+        ],
+      );
     }
-    return list;
+
+    return Column(
+      children: filasVista.map((f) => _tarjetaAlumno(f, muted)).toList(),
+    );
   }
 
   String _valorFiltroInstitucionValido() {
@@ -770,7 +1207,10 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
       await _cargarContratosYarmar(_eventoId);
     });
 
+    final filasBase = _filasBaseVista();
     final filasVista = _filasFiltradasVista();
+    final pagaronPeriodo = _filasPagaronEnPeriodo(filasBase);
+    final noPagaronPeriodo = _filasNoPagaronEnPeriodo(filasBase);
     final muted = widget.isDark ? Colors.white54 : Colors.black54;
     if (_error != null && _eventosMasivos.isEmpty) {
       return Center(
@@ -800,7 +1240,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Elegí un evento masivo. No se listan alumnos dados de baja. Podés buscar por nombre y filtrar por cuota base del plan: todos, al menos 1 cuota base, o ninguna.',
+                    'Elegí un evento masivo. Podés buscar por nombre, filtrar cuotas del plan y filtrar por fecha de cobro (hoy, este mes o un día) para ver quién pagó o no, y exportar en PDF.',
                     style: TextStyle(fontSize: 12, color: muted),
                   ),
                 ],
@@ -908,37 +1348,206 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                 ),
               ),
               const SizedBox(height: 12),
-              Text('Cuota base (plan)', style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w800)),
+              Builder(
+                builder: (context) {
+                  final paraConteo = _filasConBusqueda();
+                  final maxPlan = _maxCuotasPlanEnVista();
+                  final counts = _conteoPorCuotasPagadas(paraConteo);
+                  final valorCuota = _filtroCuotasPagadasValido(maxPlan);
+                  final items = <DropdownMenuItem<int?>>[
+                    DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text(
+                        _etiquetaOpcionCuotas(null, paraConteo.length, maxPlan),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    for (int k = 0; k <= maxPlan; k++)
+                      DropdownMenuItem<int?>(
+                        value: k,
+                        child: Text(
+                          _etiquetaOpcionCuotas(k, counts[k] ?? 0, maxPlan),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ];
+                  return DropdownButtonFormField<int?>(
+                    // ignore: deprecated_member_use
+                    value: valorCuota,
+                    decoration: InputDecoration(
+                      labelText: 'Cuotas del plan pagadas',
+                      helperText: 'Plan de hasta $maxPlan cuota(s) en este evento',
+                      helperStyle: TextStyle(fontSize: 11, color: muted),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    isExpanded: true,
+                    items: items,
+                    onChanged: (v) => setState(() => _filtroCuotasPagadas = v),
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
+              Builder(
+                builder: (context) {
+                  final paraConteo = _filasConBusqueda();
+                  final parciales = _conteoEntregaParcial(paraConteo);
+                  return FilterChip(
+                    label: Text(
+                      'Entrega parcial en curso ($parciales)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    selected: _filtroSoloEntregaParcial,
+                    onSelected: (v) =>
+                        setState(() => _filtroSoloEntregaParcial = v),
+                    selectedColor: const Color(0xFFD4AF37).withValues(alpha: 0.25),
+                    checkmarkColor: const Color(0xFFB8960C),
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
+              Text('Cobro en período', style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
-              Semantics(
-                label: 'Filtro: todos, al menos 1 cuota base, o ninguna',
-                child: SingleChildScrollView(
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<_CobroPeriodoTipo>(
+                  style: const ButtonStyle(visualDensity: VisualDensity(horizontal: -2, vertical: -2)),
+                  segments: [
+                    const ButtonSegment(
+                      value: _CobroPeriodoTipo.sinFiltro,
+                      label: Text('Sin filtro fecha', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                    ),
+                    ButtonSegment(
+                      value: _CobroPeriodoTipo.hoy,
+                      label: Text(
+                        'Hoy (${ArTime.formatFechaCorta(_hoySoloAr())})',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    ButtonSegment(
+                      value: _CobroPeriodoTipo.esteMes,
+                      label: Text(
+                        'Este mes (${_kMesesNombre[_hoySoloAr().month - 1]})',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const ButtonSegment(
+                      value: _CobroPeriodoTipo.fecha,
+                      label: Text('Elegir fecha…', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                  showSelectedIcon: false,
+                  selected: <_CobroPeriodoTipo>{_periodoTipo},
+                  onSelectionChanged: (Set<_CobroPeriodoTipo> s) {
+                    if (s.isEmpty) return;
+                    final v = s.first;
+                    if (v == _CobroPeriodoTipo.fecha) {
+                      _elegirFechaPeriodo();
+                      return;
+                    }
+                    setState(() => _periodoTipo = v);
+                  },
+                ),
+              ),
+              if (_periodoTipo == _CobroPeriodoTipo.fecha) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Fecha: ${_etiquetaPeriodoCorto()}',
+                        style: TextStyle(fontSize: 12, color: muted, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _elegirFechaPeriodo,
+                      icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                      label: const Text('Cambiar'),
+                    ),
+                  ],
+                ),
+              ],
+              if (_periodoTipo != _CobroPeriodoTipo.sinFiltro) ...[
+                const SizedBox(height: 10),
+                _buildResumenPeriodoCobro(filasBase, muted),
+              ],
+              if (_periodoTipo != _CobroPeriodoTipo.sinFiltro) ...[
+                const SizedBox(height: 8),
+                SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<_CobroFiltroCuota>(
+                  child: SegmentedButton<_CobroPeriodoResultado>(
                     style: const ButtonStyle(visualDensity: VisualDensity(horizontal: -2, vertical: -2)),
-                    segments: const [
+                    segments: [
                       ButtonSegment(
-                        value: _CobroFiltroCuota.todos,
-                        label: Text('Todos', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                        value: _CobroPeriodoResultado.pagaron,
+                        label: Text(
+                          'Pagaron (${pagaronPeriodo.length})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                        ),
                       ),
                       ButtonSegment(
-                        value: _CobroFiltroCuota.conAlMenosUna,
-                        label: Text('Al menos 1 cuota base', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                        value: _CobroPeriodoResultado.noPagaron,
+                        label: Text(
+                          'No pagaron (${noPagaronPeriodo.length})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                        ),
                       ),
                       ButtonSegment(
-                        value: _CobroFiltroCuota.ninguna,
-                        label: Text('Ninguna', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                        value: _CobroPeriodoResultado.comparativo,
+                        label: Text(
+                          'Comparativo (${filasBase.length})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+                        ),
                       ),
                     ],
                     showSelectedIcon: false,
-                    selected: <_CobroFiltroCuota>{_filtroCuota},
-                    onSelectionChanged: (Set<_CobroFiltroCuota> s) {
+                    selected: <_CobroPeriodoResultado>{_periodoResultado},
+                    onSelectionChanged: (Set<_CobroPeriodoResultado> s) {
                       if (s.isEmpty) return;
-                      setState(() => _filtroCuota = s.first);
+                      setState(() => _periodoResultado = s.first);
                     },
                   ),
                 ),
-              ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (_periodoResultado != _CobroPeriodoResultado.comparativo)
+                      FilledButton.icon(
+                        onPressed: _exportandoPdf || filasVista.isEmpty
+                            ? null
+                            : () => _exportarPdfFiltrado(filasVista),
+                        icon: _exportandoPdf
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                        label: Text(
+                          _exportandoPdf
+                              ? 'Generando…'
+                              : 'PDF grupo (${filasVista.length})',
+                        ),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: _exportandoPdf || (pagaronPeriodo.isEmpty && noPagaronPeriodo.isEmpty)
+                          ? null
+                          : _exportarPdfComparativo,
+                      icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                      label: Text(
+                        _exportandoPdf
+                            ? 'Generando…'
+                            : 'PDF comparativo (${pagaronPeriodo.length}+${noPagaronPeriodo.length})',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ],
         ],
@@ -949,20 +1558,18 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
         if (_institucion != null && !_loadingDetalle && _filas.isNotEmpty) ...[
           const SizedBox(height: 20),
           Text(
-            _filas.length == filasVista.length
-                ? '${_filas.length} alumno(s) activo(s) (excl. bajas)'
-                : 'Mostrando ${filasVista.length} de ${_filas.length} alumno(s) activo(s) (excl. bajas)',
+            _periodoTipo != _CobroPeriodoTipo.sinFiltro
+                ? (_periodoResultado == _CobroPeriodoResultado.comparativo
+                    ? 'Comparativo: ${pagaronPeriodo.length} pagaron · ${noPagaronPeriodo.length} no pagaron · ${filasBase.length} en vista'
+                    : 'Mostrando ${filasVista.length} de ${filasBase.length} en vista (${pagaronPeriodo.length} pagaron · ${noPagaronPeriodo.length} no pagaron)')
+                : (_filas.length == filasVista.length
+                    ? '${_filas.length} alumno(s) activo(s) (excl. bajas)'
+                    : 'Mostrando ${filasVista.length} de ${_filas.length} alumno(s) activo(s) (excl. bajas)'),
             style: TextStyle(color: widget.gold, fontWeight: FontWeight.w800, fontSize: 12),
           ),
           const SizedBox(height: 12),
           _buildResumenSeleccion(filasVista),
-          if (filasVista.isEmpty)
-            Text(
-              'Ningún alumno coincide con la búsqueda o con el filtro de cuota.',
-              style: TextStyle(color: muted, fontSize: 13, height: 1.3),
-            )
-          else
-            ...filasVista.map((f) => _tarjetaAlumno(f, muted)),
+          _buildListaAlumnosVista(filasBase, filasVista, muted),
         ],
         if (_institucion != null && !_loadingDetalle && _filas.isEmpty && _error == null) ...[
           const SizedBox(height: 20),
@@ -1078,6 +1685,24 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                   padding: EdgeInsets.zero,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
+                if (f.cuotaParcialActual case final parcial?) ...[
+                  Chip(
+                    label: Text(
+                      'Parcial cuota ${parcial.numero}/${a.totalCuotas > 0 ? a.totalCuotas : 1} · ${parcial.pagadoEnCuota.toCurrency()}/${parcial.montoCuota.toCurrency()}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                    backgroundColor: const Color(0xFFD4AF37).withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: const Color(0xFFD4AF37).withValues(alpha: 0.45),
+                    ),
+                    padding: EdgeInsets.zero,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
                 if (f.primeraCuotaBase != null)
                   Text('1.ª cuota base: ${ArTime.formatFechaHora(f.primeraCuotaBase!)}', style: TextStyle(fontSize: 11, color: muted))
                 else

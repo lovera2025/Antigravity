@@ -15,7 +15,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../services/mesas_extra_utils.dart';
-import '../services/calculadora_financiera.dart';
+import '../services/cobro_abono_acumulado.dart';
 import '../services/mora_cuota_calculator.dart';
 import '../../../models/mesa_extra_item.dart';
 
@@ -231,36 +231,30 @@ class ContratosRepository {
       final bool esInteres =
           lk == kLineKindInteresMora || esPagoInteresMoraPorConcepto(concepto);
 
-      if (esInteres) {
+      if (esInteres && moraPendienteAntesDeLote == null) {
+        // Solo recibos legacy sin snapshot del modal masivo.
         double pendienteAntes;
-        if (moraPendienteAntesDeLote != null) {
-          // Snapshot pre-lote: el caller nos pas├│ la mora que exist├¡a ANTES
-          // de que este mismo recibo avanzara cuotas_pagadas.
-          pendienteAntes = moraPendienteAntesDeLote;
-        } else {
-          // C├ílculo legacy (recibos que solo cobran mora sin cuota base).
-          final cRows = await txn.query(
-            'contratos_alumnos',
-            where: 'id = ?',
-            whereArgs: [contratoId],
-            limit: 1,
+        final cRows = await txn.query(
+          'contratos_alumnos',
+          where: 'id = ?',
+          whereArgs: [contratoId],
+          limit: 1,
+        );
+        if (cRows.isNotEmpty) {
+          final ca = ContratoAlumno.fromJson(cRows.first);
+          final cobradoAntes =
+              await _sumMoraCobradaHistorialTxn(txn, contratoId);
+          final mora = MoraCuotaCalculator.calcular(ca);
+          final formula = (mora.interesAcumulado - cobradoAntes).clamp(
+            0.0,
+            double.infinity,
           );
-          if (cRows.isNotEmpty) {
-            final ca = ContratoAlumno.fromJson(cRows.first);
-            final cobradoAntes =
-                await _sumMoraCobradaHistorialTxn(txn, contratoId);
-            final mora = MoraCuotaCalculator.calcular(ca);
-            final formula = (mora.interesAcumulado - cobradoAntes).clamp(
-              0.0,
-              double.infinity,
-            );
-            final tracked = double.parse(
-              (cRows.first['mora_pendiente_tracked'] ?? 0.0).toString(),
-            );
-            pendienteAntes = math.max(formula, tracked);
-          } else {
-            pendienteAntes = 0;
-          }
+          final tracked = double.parse(
+            (cRows.first['mora_pendiente_tracked'] ?? 0.0).toString(),
+          );
+          pendienteAntes = math.max(formula, tracked);
+        } else {
+          pendienteAntes = 0;
         }
         final nuevoTracked =
             (pendienteAntes - monto).clamp(0.0, double.infinity);
@@ -283,46 +277,9 @@ class ContratosRepository {
       } else if (esInteres) {
         // Ya actualizamos mora_pendiente_tracked; saldo / cuotas no cambian.
       } else if (conceptoLower.contains('base')) {
-        // ÔöÇÔöÇ Snapshot mora ANTES de avanzar cuotas_pagadas ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
-        // Al incrementar cuotas_pagadas, MoraCuotaCalculator mirar├í la
-        // cuota siguiente; si a├║n no venci├│, interesAcumulado caer├í a 0
-        // y la mora acumulada de la cuota anterior se perder├¡a.
-        // Persistimos el valor actual en mora_pendiente_tracked para que
-        // pendienteDisplay lo conserve.
-        // El snapshot solo se necesita cuando cuotasLiquidadas > 0: al
-        // avanzar cuotas_pagadas, interesAcumulado se resetea para la
-        // próxima cuota y hay que preservar la mora pendiente en tracked.
-        // Para abonos parciales (cuotasLiquidadas == 0) cuotas_pagadas no
-        // avanza, interesAcumulado no se resetea, y elevar tracked
-        // innecesariamente hace que la mora siga apareciendo como pendiente
-        // aun después de haberla pagado.
-        if (cuotasLiquidadas > 0) {
-          final snapRows = await txn.query(
-            'contratos_alumnos',
-            where: 'id = ?',
-            whereArgs: [contratoId],
-            limit: 1,
-          );
-          if (snapRows.isNotEmpty) {
-            final caSnap = ContratoAlumno.fromJson(snapRows.first);
-            final cobradoSnap =
-                await _sumMoraCobradaHistorialTxn(txn, contratoId);
-            final moraSnap = MoraCuotaCalculator.calcular(caSnap);
-            final formulaSnap = (moraSnap.interesAcumulado - cobradoSnap)
-                .clamp(0.0, double.infinity);
-            final trackedSnap = caSnap.moraPendienteTracked;
-            final pendienteAhora = math.max(formulaSnap, trackedSnap);
-            if (pendienteAhora > trackedSnap + 0.01) {
-              await txn.update(
-                'contratos_alumnos',
-                {'mora_pendiente_tracked': pendienteAhora},
-                where: 'id = ?',
-                whereArgs: [contratoId],
-              );
-            }
-          }
-        }
-        // ÔöÇÔöÇ Ahora s├¡, avanzar cuota ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+        // tracked y offset se gestionan desde el modal de cobro
+        // (detalle_evento_masivo_screen.dart) que persiste los valores
+        // correctos después de confirmar el pago.
         await txn.rawUpdate('''
           UPDATE contratos_alumnos 
           SET saldo_deudor = saldo_deudor - ?, 
@@ -368,6 +325,7 @@ class ContratosRepository {
         'mesa_extra_pagado': contratoActualizado['mesa_extra_pagado'],
         'sillas_extra_pagado': contratoActualizado['sillas_extra_pagado'],
         'mora_pendiente_tracked': contratoActualizado['mora_pendiente_tracked'] ?? 0.0,
+        'mora_cobrada_offset': contratoActualizado['mora_cobrada_offset'] ?? 0.0,
       };
 
       // Encolar sync del contrato actualizado
@@ -396,182 +354,40 @@ class ContratosRepository {
     return _fromLocalRow(finalRows.first);
   }
 
-  /// Recalcula los contadores de cuotas de un contrato bas├índose en el historial de pagos.
+  /// Recalcula los contadores de cuotas de un contrato basándose en el historial de pagos.
   Future<void> recalcularProgresoContrato(String contratoId) async {
     final db = await LocalDatabase.instance;
-    
-    // 1. Obtener contrato para saber precios base
+
     final cRows = await db.query('contratos_alumnos', where: 'id = ?', whereArgs: [contratoId]);
     if (cRows.isEmpty) return;
     final row = cRows.first;
     final contrato = _fromLocalRow(row);
 
-    // Calcular cuotas puras para saneamiento
-    final cuotaPuraBase = CalculadoraFinanciera.calcularCuotaPura(
-      contrato.montoTotalPactado - contrato.mesaExtraPrecio - contrato.sillasExtraPrecioTotal, 
-      contrato.totalCuotas
-    );
-    final cuotaPuraMesa = contrato.mesaExtraCuotas > 0 ? contrato.precioUnitarioMesaExtra / contrato.mesaExtraCuotas : 0.0;
-    final cuotaPuraSilla = contrato.sillasExtraCuotas > 0 ? contrato.sillasExtraPrecioTotal / contrato.sillasExtraCuotas : 0.0;
-
-    // 2. Obtener todos los pagos
-    final pagos = await db.query('pagos_contrato_alumno', 
+    final pagos = await db.query('pagos_contrato_alumno',
         where: 'contrato_alumno_id = ?', whereArgs: [contratoId]);
-    
-    final validPagos = pagos.where((p) {
-      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
-      final conceptoRaw = p['concepto'] as String? ?? '';
-      final lkRow = (p['line_kind'] as String?)?.trim();
-      if (lkRow == kLineKindInteresMora ||
-          lkRow == kLineKindCargoCanal ||
-          esPagoInteresMoraPorConcepto(conceptoRaw) ||
-          esPagoCargoCanalPorConcepto(conceptoRaw)) {
-        return false;
-      }
-      return true;
-    }).toList();
 
-    final baseList = <Map<String, dynamic>>[];
-    final mesaList = <Map<String, dynamic>>[];
-    final sillasList = <Map<String, dynamic>>[];
+    final recalculo = recalcularSaldoDesdePagos(
+      montoTotalPactado: contrato.montoTotalPactado,
+      totalCuotas: contrato.totalCuotas,
+      mesaExtraPrecio: contrato.mesaExtraPrecio,
+      sillasExtraPrecioTotal: contrato.sillasExtraPrecioTotal,
+      precioUnitarioMesaExtra: contrato.precioUnitarioMesaExtra,
+      mesaExtraCuotas: contrato.mesaExtraCuotas,
+      mesaExtraCantidad: contrato.mesaExtraCantidad,
+      sillasExtraCuotas: contrato.sillasExtraCuotas,
+      pagos: pagos,
+    );
 
-    for (final p in validPagos) {
-      final concepto = (p['concepto'] as String? ?? '').toLowerCase();
-      if (concepto.contains('mesa')) {
-        mesaList.add(p);
-      } else if (concepto.contains('silla')) {
-        sillasList.add(p);
-      } else {
-        baseList.add(p);
-      }
-    }
-
-    Future<double> procesarGrupoYCalcularRecaudado(
-      List<Map<String, dynamic>> pagosDeClase,
-      double cuotaPura,
-      String clase,
-    ) async {
-      if (pagosDeClase.isEmpty) return 0.0;
-
-      // Ordenar por fecha_pago
-      final mutables = List<Map<String, dynamic>>.from(pagosDeClase);
-      mutables.sort((a, b) {
-        final fa = DateTime.tryParse(a['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final fb = DateTime.tryParse(b['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return fa.compareTo(fb);
-      });
-
-      final groups = <List<Map<String, dynamic>>>[];
-      var currentGroup = <Map<String, dynamic>>[];
-
-      for (final p in mutables) {
-        if (currentGroup.isEmpty) {
-          currentGroup.add(p);
-        } else {
-          final fa = DateTime.tryParse(currentGroup.last['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final fb = DateTime.tryParse(p['fecha_pago'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final diff = fb.difference(fa).inSeconds.abs();
-          if (diff <= 3600) {
-            currentGroup.add(p);
-          } else {
-            groups.add(currentGroup);
-            currentGroup = [p];
-          }
-        }
-      }
-      if (currentGroup.isNotEmpty) {
-        groups.add(currentGroup);
-      }
-
-      double totalMontoGrossAcumulado = 0.0;
-
-      for (final g in groups) {
-        final cants = <int>[];
-        double totalMontoGrupo = 0.0;
-
-        for (final p in g) {
-          final concepto = (p['concepto'] as String? ?? '').toLowerCase();
-          final bool esEntregaParcial = concepto.contains('entrega') ||
-                                         concepto.contains('adelanto') ||
-                                         concepto.contains('parcial') ||
-                                         concepto.contains('abono');
-          int cant = 0;
-          final matchLiquidacion = RegExp(r'liquidaci├│n de (\d+)').firstMatch(concepto) ??
-                                   RegExp(r'liquidación de (\d+)').firstMatch(concepto);
-          final matchCuotas = RegExp(r'(\d+)\s+cuota').firstMatch(concepto);
-
-          if (matchLiquidacion != null) {
-            cant = int.parse(matchLiquidacion.group(1)!);
-          } else if (matchCuotas != null) {
-            cant = int.parse(matchCuotas.group(1)!);
-          } else if (!esEntregaParcial && concepto.contains('cuota')) {
-            cant = 1;
-          }
-          cants.add(cant);
-          totalMontoGrupo += (p['monto'] as num).toDouble();
-        }
-
-        int targetCant = 0;
-        if (cants.isNotEmpty) {
-          final setCants = cants.toSet();
-          if (setCants.length == 1) {
-            targetCant = cants.first;
-          } else {
-            targetCant = cants.reduce((a, b) => a > b ? a : b);
-          }
-        }
-
-        final targetGrossTotal = cuotaPura * targetCant;
-        final bool debeInflar = cuotaPura > 0 && targetCant > 0 && totalMontoGrupo < (targetGrossTotal - 0.1);
-
-        for (final p in g) {
-          final double monto = (p['monto'] as num).toDouble();
-          final double mgOriginal = (p['monto_gross'] as num? ?? monto).toDouble();
-          double mgSanado = mgOriginal;
-
-          mgSanado = CalculadoraFinanciera.montoGrossAcumuladoEnAuditoria(
-            montoNeto: monto,
-            montoGrossOriginal: mgOriginal,
-            debeInflar: debeInflar,
-            targetGrossTotal: targetGrossTotal,
-            totalMontoGrupoNeto: totalMontoGrupo,
-            lineasEnGrupo: g.length,
-          );
-
-          mgSanado = double.parse(mgSanado.toStringAsFixed(4));
-
-          if ((mgSanado - mgOriginal).abs() > 0.01) {
-            await db.update('pagos_contrato_alumno', {'monto_gross': mgSanado}, where: 'id = ?', whereArgs: [p['id']]);
-          }
-          totalMontoGrossAcumulado += mgSanado;
-        }
-      }
-
-      return totalMontoGrossAcumulado;
-    }
-
-    final double totalBasePaid = await procesarGrupoYCalcularRecaudado(baseList, cuotaPuraBase, 'base');
-    final double pagadoMesa = await procesarGrupoYCalcularRecaudado(mesaList, cuotaPuraMesa, 'mesa');
-    final double pagadoSilla = await procesarGrupoYCalcularRecaudado(sillasList, cuotaPuraSilla, 'silla');
-    
-    final double totalRecaudadoReal = totalBasePaid + pagadoMesa + pagadoSilla;
-    final double saldoReal = (contrato.montoTotalPactado - totalRecaudadoReal).clamp(0, double.infinity);
-    
-    final int cuotasBaseCount = cuotaPuraBase > 0 
-        ? ((totalBasePaid + 0.1) / cuotaPuraBase).floor().clamp(0, contrato.totalCuotas)
-        : 0;
-        
-    final int cuotasMesaCount = cuotaPuraMesa > 0 
-        ? ((pagadoMesa + 0.1) / cuotaPuraMesa).floor().clamp(0, contrato.mesaExtraCuotas * (contrato.mesaExtraCantidad > 0 ? contrato.mesaExtraCantidad : 1))
-        : 0;
-        
-    final int cuotasSillaCount = cuotaPuraSilla > 0 
-        ? ((pagadoSilla + 0.1) / cuotaPuraSilla).floor().clamp(0, contrato.sillasExtraCuotas > 0 ? contrato.sillasExtraCuotas : 99)
-        : 0;
+    final pagadoMesa = recalculo.grossMesa;
+    final pagadoSilla = recalculo.grossSillas;
+    final saldoReal = recalculo.saldoDeudor;
+    final cuotasBaseCount = recalculo.cuotasBase;
+    final cuotasMesaCount = recalculo.cuotasMesa;
+    final cuotasSillaCount = recalculo.cuotasSillas;
 
     bool hasChanges = false;
     final currentData = row;
-    
+
     final finalUpdates = {
       'cuotas_pagadas': cuotasBaseCount,
       'mesa_extra_cuotas_pagadas': cuotasMesaCount,
@@ -698,6 +514,8 @@ class ContratosRepository {
       );
     });
 
+    final pagadoMesaHistorial = _grossPagadoMesaDesdePagos(pagos);
+
     if (tienePagosMesaNumerados) {
       // Al menos un pago con "Mesa Extra N" explícito: reconstruir desde concepto.
       mesas = MesasExtraUtils.reconciliarDesdePagos(
@@ -706,18 +524,15 @@ class ContratosRepository {
         cuotasPlan: contrato.mesaExtraCuotas,
         pagos: pagos,
       );
-    } else if (cant > 1) {
-      // Pagos legacy sin número de mesa: distribuir FIFO para no asignar
-      // todo a mesa 1 por error de rotulado histórico.
+    } else {
+      // Siempre desde historial de pagos (nunca JSON stale tras purga/auditoría).
       mesas = MesasExtraUtils.repartirPagadoFifo(
         cantidad: cant,
         precioUnitario: unit,
         cuotasPlan: contrato.mesaExtraCuotas,
-        pagadoTotal: contrato.mesaExtraPagado,
-        cuotasPagadasLegacy: contrato.mesaExtraCuotasPagadas,
+        pagadoTotal: pagadoMesaHistorial,
+        cuotasPagadasLegacy: 0,
       );
-    } else {
-      mesas = MesasExtraUtils.estadoDesdeContrato(contrato);
     }
 
     final pagadoTotal = MesasExtraUtils.totalPagado(mesas);
@@ -1041,6 +856,21 @@ class ContratosRepository {
     return ContratoAlumno.fromJson(row);
   }
 
+  /// Suma bruta de pagos activos cuyo concepto corresponde a mesa extra.
+  double _grossPagadoMesaDesdePagos(List<Map<String, dynamic>> pagos) {
+    var total = 0.0;
+    for (final p in pagos) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+      final concepto = (p['concepto'] as String? ?? '').toLowerCase();
+      if (!concepto.contains('mesa')) continue;
+      final gross = (p['monto_gross'] as num?)?.toDouble() ??
+          (p['monto'] as num?)?.toDouble() ??
+          0.0;
+      total += gross;
+    }
+    return double.parse(total.toStringAsFixed(2));
+  }
+
   Map<String, dynamic> _toLocalRow(ContratoAlumno contrato) {
     final data = contrato.toJson();
     if (data.containsKey('nombres_acompanantes')) {
@@ -1270,8 +1100,6 @@ class ContratosRepository {
     return huboCambios;
   }
 }
-
-// ÔöÇÔöÇ Provider ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 final contratosRepositoryProvider = Provider<ContratosRepository>((ref) {
   final supabase = ref.watch(supabaseProvider);

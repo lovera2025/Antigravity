@@ -162,6 +162,34 @@ double interesSugeridoSimpleSobreMonto(
 class MoraCuotaCalculator {
   MoraCuotaCalculator._();
 
+  /// Día AR efectivo para mora calendario. Con [ContratoAlumno.moraFechaReferencia]
+  /// (baja temporal ampliada) el cálculo queda congelado en esa fecha.
+  static DateTime fechaEfectivaMoraAr(ContratoAlumno a, [DateTime? ahoraAr]) {
+    final ref = a.moraFechaReferencia;
+    if (ref != null) {
+      return DateTime(ref.year, ref.month, ref.day);
+    }
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    return DateTime(hoy.year, hoy.month, hoy.day);
+  }
+
+  /// Fecha YYYY-MM-DD para persistir al suspender.
+  static String fechaReferenciaIsoDesde(DateTime diaAr) {
+    return '${diaAr.year.toString().padLeft(4, '0')}-'
+        '${diaAr.month.toString().padLeft(2, '0')}-'
+        '${diaAr.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Descongelar tras cobro si mora operativa o saldo quedaron en cero.
+  static bool debeDescongelarMoraReferencia({
+    required ContratoAlumno contrato,
+    required double moraPendienteOperativaPost,
+    required double saldoDeudorPost,
+  }) {
+    if (contrato.moraFechaReferencia == null) return false;
+    return moraPendienteOperativaPost <= 0.01 || saldoDeudorPost <= 0.01;
+  }
+
   /// Mora operativa a mostrar / cobrar para este contrato.
   ///
   /// - **Fórmula del día** (`interés acum. − historial cobros mora`): lógica real
@@ -226,8 +254,7 @@ class MoraCuotaCalculator {
   /// Vencimiento = último día del mes (inscripción.month + cuotaNumero).
   /// Mora arranca el día 1 del mes siguiente al de vencimiento (= día después del último día).
   static MoraCuotaResumen calcular(ContratoAlumno a, [DateTime? ahoraAr]) {
-    final hoy = ahoraAr ?? ArTime.nowAr();
-    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+    final hoySolo = fechaEfectivaMoraAr(a, ahoraAr);
 
     if (a.saldoDeudor <= 0.01) {
       return MoraCuotaResumen(
@@ -238,9 +265,8 @@ class MoraCuotaCalculator {
       );
     }
 
-    // `hoy` ya viene en huso AR (ArTime.nowAr() / [ahoraAr]); solo `createdAt` necesita conversión
-    // desde UTC. Aplicar `toAr` sobre `hoy` provoca un -3 h adicional que mueve el cálculo de cuotas.
-    final inscAr = a.createdAt != null ? ArTime.toAr(a.createdAt!) : hoy;
+    // `hoySolo` ya es día AR efectivo (congelado o hoy). Solo `createdAt` necesita conversión UTC.
+    final inscAr = a.createdAt != null ? ArTime.toAr(a.createdAt!) : hoySolo;
     final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
 
     final totalBase = (a.montoTotalPactado - a.mesaExtraPrecio - a.sillasExtraPrecioTotal).clamp(0.0, double.infinity);
@@ -536,6 +562,52 @@ class MoraCuotaCalculator {
     return out;
   }
 
+  /// Remanente tracked neto para el modal de cobro: mora congelada al pagar
+  /// cuotas sin liquidar mora, menos lo ya cobrado en historial (misma lógica
+  /// carry-over que [pendienteDisplay] cuando interés calendario = 0).
+  static double remanenteTrackedNeto({
+    required double moraPendienteTracked,
+    required double moraCobradaHistorial,
+    double moraCobradaOffset = 0,
+  }) {
+    final t = moraPendienteTracked.clamp(0.0, double.infinity);
+    if (t <= 0.01) return 0;
+
+    final cobradaDesdeOffset =
+        (moraCobradaHistorial - moraCobradaOffset).clamp(0.0, double.infinity);
+
+    if (cobradaDesdeOffset <= 0.01) {
+      return double.parse(t.toStringAsFixed(2));
+    }
+    if ((t - cobradaDesdeOffset).abs() <= 0.01) {
+      return 0;
+    }
+    if (t > cobradaDesdeOffset + 0.01) {
+      final legacyRemainder =
+          (t - cobradaDesdeOffset).clamp(0.0, double.infinity);
+      if (t > cobradaDesdeOffset * 1.25 + 0.01) {
+        return double.parse(legacyRemainder.toStringAsFixed(2));
+      }
+      return double.parse(t.toStringAsFixed(2));
+    }
+    return double.parse(t.toStringAsFixed(2));
+  }
+
+  /// Remanente tracked para cobro/UI: solo aplica si ya liquidó al menos
+  /// una cuota base (carry-over real). Con 0 cuotas pagadas la mora vive
+  /// solo en el desglose calendario aunque [moraPendienteTracked] > 0 en DB.
+  static double remanenteOperativo({
+    required ContratoAlumno contrato,
+    required double moraCobradaHistorial,
+  }) {
+    if (contrato.cuotasPagadas <= 0) return 0;
+    return remanenteTrackedNeto(
+      moraPendienteTracked: contrato.moraPendienteTracked,
+      moraCobradaHistorial: moraCobradaHistorial,
+      moraCobradaOffset: contrato.moraCobradaOffset,
+    );
+  }
+
   /// Mora operativa del modal: máximo entre [moraPendienteUi] y el desglose neto.
   static double pendienteEfectivoConDesglose({
     required double moraPendienteUi,
@@ -555,15 +627,99 @@ class MoraCuotaCalculator {
     );
   }
 
+  /// Mora cobrada aplicable al desglose FIFO (excluye baseline [offset]).
+  static double moraCobradaParaFifo({
+    required double moraCobradaHistorial,
+    required double moraCobradaOffset,
+  }) =>
+      (moraCobradaHistorial - moraCobradaOffset).clamp(0.0, double.infinity);
+
+  /// Tracked y offset tras confirmar un cobro masivo (reglas v52).
+  ///
+  /// - Cuota liquidada **sin** mora → tracked = mora **neta** solo de las cuotas
+  ///   liquidadas en **este** cobro (no arrastra remanente ni mora de cuotas ya pagadas).
+  /// - Cuota + mora parcial → tracked = resto neto; offset += mora cobrada.
+  /// - Solo mora → FIFO sobre desglose; resto reduce tracked; offset sin cambio.
+  static ({double tracked, double offset}) postCobroTrackedOffset({
+    required double moraPendienteTrackedActual,
+    required double moraCobradaOffsetActual,
+    required double moraEsteCobro,
+    required int cuotasBaseLiquidadasEnCobro,
+    required int cuotasBasePagadasPostCobro,
+    required List<MoraCuotaDetalle> moraDesglosePreCobro,
+    required List<MoraCuotaDetalle> moraDesgloseNetoPreCobro,
+    required double moraDesgloseNetoTotal,
+  }) {
+    final remanente = moraPendienteTrackedActual.clamp(0.0, double.infinity);
+    var tracked = remanente;
+    var offset = moraCobradaOffsetActual;
+
+    if (cuotasBaseLiquidadasEnCobro > 0) {
+      final cuotasPreCobro =
+          cuotasBasePagadasPostCobro - cuotasBaseLiquidadasEnCobro;
+      final moraLiquidadasNeto = moraDesgloseNetoPreCobro
+          .where(
+            (d) =>
+                d.numeroCuota > cuotasPreCobro &&
+                d.numeroCuota <= cuotasBasePagadasPostCobro,
+          )
+          .fold<double>(0, (s, d) => s + d.interesBruto);
+      // No sumar [remanente]: evita doble conteo (Borda: cuota 1 ya pagada + cuota 2).
+      tracked =
+          (moraLiquidadasNeto - moraEsteCobro).clamp(0.0, double.infinity);
+      if (moraEsteCobro > 0.01) {
+        offset = moraCobradaOffsetActual + moraEsteCobro;
+      }
+    } else if (moraEsteCobro > 0.01) {
+      final moraHaciaDesglose =
+          moraEsteCobro.clamp(0.0, moraDesgloseNetoTotal);
+      final moraHaciaTracked = moraEsteCobro - moraHaciaDesglose;
+      tracked = (remanente - moraHaciaTracked).clamp(0.0, double.infinity);
+    }
+
+    return (
+      tracked: double.parse(tracked.toStringAsFixed(2)),
+      offset: double.parse(offset.toStringAsFixed(2)),
+    );
+  }
+
+  /// **desglose neto calendario** + **tracked remanente** (cuotas pagadas sin
+  /// cobrar mora + pagos parciales de mora).
+  ///
+  /// Tracked guarda mora de cuotas ya liquidadas sin cobrar interés; no crece
+  /// día a día. El desglose calendario sigue en cuotas impagas vencidas.
+  static double moraPendienteOperativa({
+    required ContratoAlumno contrato,
+    required double moraCobradaHistorial,
+    double? moraCobradaPeriodo,
+    DateTime? ahoraAr,
+  }) {
+    final desgloseBruto = calcularDesglose(contrato, ahoraAr);
+    final moraCobradaAjustada = moraCobradaParaFifo(
+      moraCobradaHistorial: moraCobradaHistorial,
+      moraCobradaOffset: contrato.moraCobradaOffset,
+    );
+    final desgloseNeto = desglosePendiente(desgloseBruto, moraCobradaAjustada);
+    final moraTotalDesglose =
+        desgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
+
+    final tracked = contrato.moraPendienteTracked.clamp(0.0, double.infinity);
+
+    return double.parse(
+      (moraTotalDesglose + tracked)
+          .clamp(0.0, double.infinity)
+          .toStringAsFixed(2),
+    );
+  }
+
   /// Desglose de mora por cada cuota individualmente vencida.
   /// Retorna una entrada por cuota cuyo vencimiento ya pasó, con su interés bruto.
   static List<MoraCuotaDetalle> calcularDesglose(ContratoAlumno a, [DateTime? ahoraAr]) {
-    final hoy = ahoraAr ?? ArTime.nowAr();
-    final hoySolo = DateTime(hoy.year, hoy.month, hoy.day);
+    final hoySolo = fechaEfectivaMoraAr(a, ahoraAr);
 
     if (a.saldoDeudor <= 0.01) return [];
 
-    final inscAr = a.createdAt != null ? ArTime.toAr(a.createdAt!) : hoy;
+    final inscAr = a.createdAt != null ? ArTime.toAr(a.createdAt!) : hoySolo;
     final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
     final totalBase = (a.montoTotalPactado - a.mesaExtraPrecio - a.sillasExtraPrecioTotal)
         .clamp(0.0, double.infinity);

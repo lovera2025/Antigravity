@@ -261,7 +261,8 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
       cRico = 'Interés mora (cuota base — este cobro)';
     } else if (cTexto.toUpperCase().contains('MESA') &&
         !cTexto.toUpperCase().contains('ADELANTO') &&
-        !cTexto.toUpperCase().contains('ABONO')) {
+        !cTexto.toUpperCase().contains('ABONO') &&
+        !cTexto.toUpperCase().contains('ENTREGA PARCIAL')) {
       final mesaNPreview = conc['mesaN'] as int?;
       final mesaEnTexto = mesaNPreview ??
           MesasExtraUtils.mesaNumeroDesdeTexto(cTexto);
@@ -283,12 +284,13 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
         cRico =
             '$cCuotasConc Cuotas $prefix (${mPagadas + contadorMesaFinal + 1}-${mPagadas + contadorMesaFinal + cCuotasConc}/$mCuotas)';
       } else {
-        cRico = 'Abono $prefix (${mPagadas + contadorMesaFinal + 1}/$mCuotas)';
+        cRico = 'Entrega parcial — $prefix (${mPagadas + contadorMesaFinal + 1}/$mCuotas)';
       }
       contadorMesaFinal += cCuotasConc;
     } else if (cTexto.toUpperCase().contains('SILLA') &&
         !cTexto.toUpperCase().contains('ADELANTO') &&
-        !cTexto.toUpperCase().contains('ABONO')) {
+        !cTexto.toUpperCase().contains('ABONO') &&
+        !cTexto.toUpperCase().contains('ENTREGA PARCIAL')) {
       if (sCuotas <= 1) {
         cRico = 'Sillas Extras - Entrega';
       } else if (cCuotasConc == 1) {
@@ -299,13 +301,17 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
             '$cCuotasConc Cuotas Sillas Extras (${sPagadas + contadorSillasFinal + 1}-${sPagadas + contadorSillasFinal + cCuotasConc}/$sCuotas)';
       } else {
         cRico =
-            'Abono Sillas Extras (${sPagadas + contadorSillasFinal + 1}/$sCuotas)';
+            'Entrega parcial — Sillas Extras (${sPagadas + contadorSillasFinal + 1}/$sCuotas)';
       }
       contadorSillasFinal += cCuotasConc;
     } else if (cTexto.toUpperCase().contains('BASE') &&
         !cTexto.toUpperCase().contains('ADELANTO') &&
-        !cTexto.toUpperCase().contains('ABONO')) {
-      if (cCuotasConc == 1) {
+        !cTexto.toUpperCase().contains('ABONO') &&
+        !cTexto.toUpperCase().contains('ENTREGA PARCIAL')) {
+      final yaRotulado = RegExp(r'\(\d+/\d+\)').hasMatch(cTexto);
+      if (yaRotulado) {
+        cRico = cTexto;
+      } else if (cCuotasConc == 1) {
         cRico =
             'Cuota Base (${cPagadas + contadorBaseFinal + 1}/$tCuotas)';
       } else if (cCuotasConc > 1) {
@@ -313,7 +319,7 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
             '$cCuotasConc Cuotas Base (${cPagadas + contadorBaseFinal + 1}-${cPagadas + contadorBaseFinal + cCuotasConc}/$tCuotas)';
       } else {
         cRico =
-            'Abono Cuota Base (${cPagadas + contadorBaseFinal + 1}/$tCuotas)';
+            'Entrega parcial — Cuota Base (${cPagadas + contadorBaseFinal + 1}/$tCuotas)';
       }
       contadorBaseFinal += cCuotasConc;
     }
@@ -329,6 +335,7 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
       conceptosFinales.add({
         'concepto': cRico,
         'monto': cMonto,
+        if (conc['subtexto'] != null) 'subtexto': conc['subtexto'],
         'gross': double.parse(gross.toStringAsFixed(2)),
         'esPlanLiquidacion': true,
       });

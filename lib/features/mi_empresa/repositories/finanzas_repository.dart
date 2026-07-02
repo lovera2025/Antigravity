@@ -328,11 +328,33 @@ class FinanzasRepository {
   }
 
   /// Elimina registros específicos tanto en Cloud como en Local (SyncQueue).
-  Future<void> eliminarRegistrosVinculados(Map<String, List<String>> idsParaBorrar) async {
+  /// Devuelve IDs de contratos cuyos pagos se borraron y que siguen existiendo
+  /// (para recalcular saldos/mesas tras la purga).
+  Future<Set<String>> eliminarRegistrosVinculados(
+    Map<String, List<String>> idsParaBorrar,
+  ) async {
     final db = await LocalDatabase.instance;
 
     final pagoAlquilerIds = List<String>.from(idsParaBorrar['pagos_alquiler'] ?? []);
     final prestamoAlquilerIds = List<String>.from(idsParaBorrar['prestamos_alquiler'] ?? []);
+
+    final pagosIds = List<String>.from(idsParaBorrar['pagos'] ?? []);
+    final contratosBorrados = (idsParaBorrar['contratos'] ?? []).toSet();
+    final contratosARecalcular = <String>{};
+
+    if (pagosIds.isNotEmpty) {
+      final placeholders = List.filled(pagosIds.length, '?').join(',');
+      final filasPagos = await db.rawQuery(
+        'SELECT contrato_alumno_id FROM pagos_contrato_alumno WHERE id IN ($placeholders)',
+        pagosIds,
+      );
+      for (final row in filasPagos) {
+        final cid = row['contrato_alumno_id'] as String?;
+        if (cid != null && cid.isNotEmpty && !contratosBorrados.contains(cid)) {
+          contratosARecalcular.add(cid);
+        }
+      }
+    }
 
     for (final id in pagoAlquilerIds) {
       await _eliminarFilaSync('pagos_prestamo_alquiler', id);
@@ -386,6 +408,7 @@ class FinanzasRepository {
       }
     }
 
+    return contratosARecalcular;
   }
 
   Future<void> _eliminarFilaSync(String tabla, String id) async {
