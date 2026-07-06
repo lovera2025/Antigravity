@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/pago_interes_mora.dart';
 import '../utils/uuid_utils.dart';
 import '../../models/contrato_alumno.dart';
+import '../../features/eventos/services/cobro_abono_acumulado.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
 
 /// Base de datos local SQLite — persistencia offline.
@@ -20,7 +21,7 @@ import '../../features/eventos/services/mora_tracked_recovery.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 53;
+  static const int _version = 55;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -1712,6 +1713,116 @@ class LocalDatabase {
         );
       } catch (e) {
         debugPrint('  ❌ Error migración v53: $e');
+      }
+    }
+
+    if (oldVersion < 54) {
+      debugPrint(
+        '  🔧 v54: line_kind mora remanente + saldo/tracked corregidos',
+      );
+      try {
+        final moraRows = await db.query(
+          'pagos_contrato_alumno',
+          columns: ['id', 'concepto', 'contrato_alumno_id'],
+        );
+        final contratosAfectados = <String>{};
+        for (final r in moraRows) {
+          final concepto = r['concepto'] as String?;
+          if (!esPagoInteresMoraPorConcepto(concepto)) continue;
+          await db.update(
+            'pagos_contrato_alumno',
+            {'line_kind': kLineKindInteresMora},
+            where: 'id = ? AND (line_kind IS NULL OR line_kind = ?)',
+            whereArgs: [r['id'], ''],
+          );
+          final cid = r['contrato_alumno_id'] as String?;
+          if (cid != null && cid.isNotEmpty) contratosAfectados.add(cid);
+        }
+
+        var saldosCorregidos = 0;
+        for (final contratoId in contratosAfectados) {
+          final cRows = await db.query(
+            'contratos_alumnos',
+            where: 'id = ?',
+            whereArgs: [contratoId],
+            limit: 1,
+          );
+          if (cRows.isEmpty) continue;
+          final row = cRows.first;
+          final contrato = ContratoAlumno.fromJson(row);
+          final pagos = await db.query(
+            'pagos_contrato_alumno',
+            where: 'contrato_alumno_id = ?',
+            whereArgs: [contratoId],
+          );
+          final recalculo = recalcularSaldoDesdePagos(
+            montoTotalPactado: contrato.montoTotalPactado,
+            totalCuotas: contrato.totalCuotas,
+            mesaExtraPrecio: contrato.mesaExtraPrecio,
+            sillasExtraPrecioTotal: contrato.sillasExtraPrecioTotal,
+            precioUnitarioMesaExtra: contrato.precioUnitarioMesaExtra,
+            mesaExtraCuotas: contrato.mesaExtraCuotas,
+            mesaExtraCantidad: contrato.mesaExtraCantidad,
+            sillasExtraCuotas: contrato.sillasExtraCuotas,
+            pagos: pagos,
+          );
+          final saldoNuevo = recalculo.saldoDeudor.clamp(0.0, double.infinity);
+          final updates = <String, dynamic>{
+            'cuotas_pagadas': recalculo.cuotasBase,
+            'mesa_extra_cuotas_pagadas': recalculo.cuotasMesa,
+            'sillas_extra_cuotas_pagadas': recalculo.cuotasSillas,
+            'mesa_extra_pagado': recalculo.grossMesa,
+            'sillas_extra_pagado': recalculo.grossSillas,
+            'saldo_deudor': saldoNuevo,
+          };
+          var cambio = false;
+          for (final e in updates.entries) {
+            final old = (row[e.key] as num?)?.toDouble() ?? 0;
+            if ((old - (e.value as num).toDouble()).abs() > 0.01) {
+              cambio = true;
+              break;
+            }
+          }
+          if (cambio) {
+            await db.update(
+              'contratos_alumnos',
+              updates,
+              where: 'id = ?',
+              whereArgs: [contratoId],
+            );
+            saldosCorregidos++;
+          }
+        }
+
+        final trackedCorregidos = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          encolarSync: false,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint(
+          '✅ Migración v54: $saldosCorregidos saldos, '
+          '$trackedCorregidos tracked/offset',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v54: $e');
+      }
+    }
+
+    if (oldVersion < 55) {
+      debugPrint(
+        '  🔧 v55: offset al cobrar mora remanente (reconciliar tracked)',
+      );
+      try {
+        final recalculados = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          encolarSync: false,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint(
+          '✅ Migración v55 completada ($recalculados contratos recalibrados)',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v55: $e');
       }
     }
   }

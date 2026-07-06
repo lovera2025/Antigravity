@@ -984,7 +984,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
           Text(
-            'DESARROLLADO POR ML · ${now.year}',
+            'DESARROLLADO POR LM · ${now.year}',
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
@@ -1373,7 +1373,7 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'ML · ${DateTime.now().year}',
+                    'LM · ${DateTime.now().year}',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,

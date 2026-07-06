@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "Junior Eventos - Gesti\xF3n de Eventos" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "arguello_events" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 ML. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 LM. All rights reserved." "\0"
             VALUE "OriginalFilename", "arguello_events.exe" "\0"
             VALUE "ProductName", "Junior Eventos" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

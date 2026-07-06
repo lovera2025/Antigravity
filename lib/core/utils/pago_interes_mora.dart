@@ -17,6 +17,8 @@ bool esPagoInteresMoraPorConcepto(String? raw) {
   // Firma del modal masivo aunque falte la palabra "mora" en el texto.
   if (folded.contains('este cobro') && folded.contains('interes')) return true;
   if (folded.contains('interes mora')) return true;
+  // Cobro solo del tracked remanente (cuota pagada sin mora en su día).
+  if (folded.contains('mora remanente')) return true;
   return folded.contains('interes') && folded.contains('mora');
 }
 

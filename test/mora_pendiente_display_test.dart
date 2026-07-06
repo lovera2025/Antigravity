@@ -434,6 +434,71 @@ void main() {
       expect(resultado.tracked, closeTo(8700, 300));
       expect(resultado.offset, closeTo(300, 0.01));
     });
+
+    test('Borda: mora remanente cierra tracked; cuota 3 mora nueva al día', () {
+      final contratoBase = ContratoAlumno(
+        id: 'borda',
+        eventoId: 'evt',
+        nombreAlumno: 'BORDA, LUDMILA AILEN',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 270000,
+        saldoDeudor: 210000,
+        cuotasPagadas: 0,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 25, 10, 20, 40),
+      );
+      final pagos = <Map<String, dynamic>>[
+        {
+          'fecha_pago': '2026-05-20T21:15:11.215229+00:00',
+          'concepto': 'Cuota Base (1/9)',
+          'monto': 30000.0,
+          'monto_gross': 30000.0,
+          'anulado': 0,
+        },
+        {
+          'fecha_pago': '2026-05-20T21:15:11.533734+00:00',
+          'concepto': 'Interés mora (cuota base — este cobro)',
+          'monto': 300.0,
+          'monto_gross': 300.0,
+          'line_kind': 'interes_mora',
+          'anulado': 0,
+        },
+        {
+          'fecha_pago': '2026-06-30T22:46:35.070075+00:00',
+          'concepto': 'Cuota Base (2/9)',
+          'monto': 30000.0,
+          'monto_gross': 30000.0,
+          'anulado': 0,
+        },
+        {
+          'fecha_pago': '2026-07-01T14:16:00.394883+00:00',
+          'concepto': 'Mora remanente',
+          'monto': 9000.0,
+          'monto_gross': 9000.0,
+          'line_kind': 'interes_mora',
+          'anulado': 0,
+        },
+      ];
+      final resultado = MoraTrackedRecovery.recomputarDesdeHistorial(
+        contratoBase: contratoBase,
+        pagos: pagos,
+      );
+      expect(resultado.tracked, closeTo(0, 0.01));
+      expect(resultado.offset, closeTo(9300, 0.01));
+
+      final contratoJul2 = contratoBase.copyWith(
+        cuotasPagadas: 2,
+        moraPendienteTracked: resultado.tracked,
+        moraCobradaOffset: resultado.offset,
+      );
+      final operativa = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contratoJul2,
+        moraCobradaHistorial: 9300,
+        ahoraAr: DateTime(2026, 7, 2),
+      );
+      // Cuota 3 vence 30-jun; al 2-jul ≈ 2 días × $300/día.
+      expect(operativa, closeTo(600, 50));
+    });
   });
 
   group('MoraCuotaCalculator.remanenteTrackedNeto (legacy compat)', () {

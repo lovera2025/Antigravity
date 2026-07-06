@@ -639,7 +639,8 @@ class MoraCuotaCalculator {
   /// - Cuota liquidada **sin** mora → tracked = mora **neta** solo de las cuotas
   ///   liquidadas en **este** cobro (no arrastra remanente ni mora de cuotas ya pagadas).
   /// - Cuota + mora parcial → tracked = resto neto; offset += mora cobrada.
-  /// - Solo mora → FIFO sobre desglose; resto reduce tracked; offset sin cambio.
+  /// - Solo mora → FIFO sobre desglose; resto reduce tracked; si liquida tracked,
+  ///   offset += mora aplicada a tracked (evita que FIFO futuro absorba cuotas nuevas).
   static ({double tracked, double offset}) postCobroTrackedOffset({
     required double moraPendienteTrackedActual,
     required double moraCobradaOffsetActual,
@@ -671,10 +672,22 @@ class MoraCuotaCalculator {
         offset = moraCobradaOffsetActual + moraEsteCobro;
       }
     } else if (moraEsteCobro > 0.01) {
-      final moraHaciaDesglose =
-          moraEsteCobro.clamp(0.0, moraDesgloseNetoTotal);
-      final moraHaciaTracked = moraEsteCobro - moraHaciaDesglose;
+      final double moraHaciaDesglose;
+      final double moraHaciaTracked;
+      // Pago de tracked remanente (modal "Mora remanente"): no descontar
+      // desglose calendario de la próxima cuota impaga.
+      if (remanente > 0.01 && moraEsteCobro <= remanente + 0.01) {
+        moraHaciaDesglose = 0;
+        moraHaciaTracked = moraEsteCobro;
+      } else {
+        moraHaciaDesglose =
+            moraEsteCobro.clamp(0.0, moraDesgloseNetoTotal);
+        moraHaciaTracked = moraEsteCobro - moraHaciaDesglose;
+      }
       tracked = (remanente - moraHaciaTracked).clamp(0.0, double.infinity);
+      if (moraHaciaTracked > 0.01) {
+        offset = moraCobradaOffsetActual + moraHaciaTracked;
+      }
     }
 
     return (
