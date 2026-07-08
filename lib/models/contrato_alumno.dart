@@ -44,6 +44,10 @@ class ContratoAlumno {
   /// Se fija al dar baja temporal; persiste al reincorporar hasta liquidar mora.
   final DateTime? moraFechaReferencia;
 
+  /// Fecha AR hasta la cual la mora calendario no aplica (inclusive).
+  /// Se fija al saldar toda la mora pendiente; vence fin del mes del pago.
+  final DateTime? moraExentaHasta;
+
   /// Instante UTC en que se aplicó la baja temporal (solo SQLite local).
   final DateTime? bajaTemporalDesde;
 
@@ -80,6 +84,7 @@ class ContratoAlumno {
     this.moraPendienteTracked = 0.0,
     this.moraCobradaOffset = 0.0,
     this.moraFechaReferencia,
+    this.moraExentaHasta,
     this.bajaTemporalDesde,
   });
 
@@ -164,6 +169,7 @@ class ContratoAlumno {
         (json['mora_cobrada_offset'] ?? 0.0).toString(),
       ),
       moraFechaReferencia: _parseFechaDia(json['mora_fecha_referencia']),
+      moraExentaHasta: _parseFechaDia(json['mora_exenta_hasta']),
       bajaTemporalDesde: json['baja_temporal_desde'] != null
           ? DateTime.tryParse(json['baja_temporal_desde'] as String)
           : null,
@@ -214,6 +220,11 @@ class ContratoAlumno {
             '${moraFechaReferencia!.year.toString().padLeft(4, '0')}-'
             '${moraFechaReferencia!.month.toString().padLeft(2, '0')}-'
             '${moraFechaReferencia!.day.toString().padLeft(2, '0')}',
+      if (moraExentaHasta != null)
+        'mora_exenta_hasta':
+            '${moraExentaHasta!.year.toString().padLeft(4, '0')}-'
+            '${moraExentaHasta!.month.toString().padLeft(2, '0')}-'
+            '${moraExentaHasta!.day.toString().padLeft(2, '0')}',
       if (bajaTemporalDesde != null)
         'baja_temporal_desde': bajaTemporalDesde!.toIso8601String(),
     };
@@ -252,6 +263,7 @@ class ContratoAlumno {
     final out = Map<String, dynamic>.from(data);
     out.remove('mora_cobrada_offset');
     out.remove('mora_fecha_referencia');
+    out.remove('mora_exenta_hasta');
     out.remove('baja_temporal_desde');
     if (out.containsKey('nombres_acompanantes')) {
       out['nombres_acompanantes'] = acompanantesForRemote(out['nombres_acompanantes']);
@@ -321,6 +333,7 @@ class ContratoAlumno {
     double? moraPendienteTracked,
     double? moraCobradaOffset,
     Object? moraFechaReferencia = _copyUnset,
+    Object? moraExentaHasta = _copyUnset,
     Object? bajaTemporalDesde = _copyUnset,
   }) {
     return ContratoAlumno(
@@ -358,6 +371,9 @@ class ContratoAlumno {
       moraFechaReferencia: moraFechaReferencia == _copyUnset
           ? this.moraFechaReferencia
           : moraFechaReferencia as DateTime?,
+      moraExentaHasta: moraExentaHasta == _copyUnset
+          ? this.moraExentaHasta
+          : moraExentaHasta as DateTime?,
       bajaTemporalDesde: bajaTemporalDesde == _copyUnset
           ? this.bajaTemporalDesde
           : bajaTemporalDesde as DateTime?,

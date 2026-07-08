@@ -197,6 +197,130 @@ class MoraTrackedRecovery {
     return tienePagosCuotaBaseEnHistorial(pagos);
   }
 
+  /// Detecta alumnos cuyo último cobro de mora saldó toda la pendiente en ese
+  /// momento y les asigna [mora_exenta_hasta] = fin del mes del pago.
+  static Future<int> repararExencionDesdeHistorial({
+    required DatabaseExecutor db,
+    bool soloEventosMasivosActivos = false,
+  }) async {
+    final contratos = soloEventosMasivosActivos
+        ? await db.rawQuery('''
+            SELECT c.*
+            FROM contratos_alumnos c
+            INNER JOIN eventos e ON e.id = c.evento_id
+            WHERE e.modalidad = 'masivo'
+              AND e.estado IN ('Confirmado', 'Planificacion')
+              AND c.nombre_alumno NOT LIKE '[BAJA]%'
+          ''')
+        : await db.query('contratos_alumnos');
+
+    var reparados = 0;
+    for (final row in contratos) {
+      final contrato = ContratoAlumno.fromJson(row);
+      if (contrato.saldoDeudor <= 0.01) continue;
+
+      final pagos = await db.query(
+        'pagos_contrato_alumno',
+        where: 'contrato_alumno_id = ?',
+        whereArgs: [contrato.id],
+      );
+
+      final exencion = _calcularExencionDesdeHistorial(
+        contratoBase: contrato,
+        pagos: pagos,
+      );
+      if (exencion == null) continue;
+
+      final exStr = '${exencion.year.toString().padLeft(4, '0')}-'
+          '${exencion.month.toString().padLeft(2, '0')}-'
+          '${exencion.day.toString().padLeft(2, '0')}';
+      final existente = (row['mora_exenta_hasta'] as String?)?.trim() ?? '';
+      if (existente == exStr) continue;
+
+      await db.update(
+        'contratos_alumnos',
+        {'mora_exenta_hasta': exStr},
+        where: 'id = ?',
+        whereArgs: [contrato.id],
+      );
+      reparados++;
+    }
+    return reparados;
+  }
+
+  /// Calcula la fecha de exención para un contrato dado su historial.
+  /// Retorna la fecha si el último lote con mora saldó toda la pendiente.
+  static DateTime? _calcularExencionDesdeHistorial({
+    required ContratoAlumno contratoBase,
+    required List<Map<String, dynamic>> pagos,
+  }) {
+    var tracked = 0.0;
+    var offset = 0.0;
+    var cuotasPagadas = 0;
+    var moraHistAcum = 0.0;
+    DateTime? ultimaExencion;
+
+    final lotes = _lotesCronologicos(pagos);
+    for (final lote in lotes) {
+      final moraEsteCobro = lote
+          .where(_esMora)
+          .fold<double>(0, (s, p) => s + ((p['monto'] as num?)?.toDouble() ?? 0));
+
+      final cuotasLiquidadas = lote
+          .where(_esBaseCuota)
+          .fold<int>(0, (s, p) => s + _cuotasLiquidadasEnLinea(p));
+
+      final alumnoPre = contratoBase.copyWith(
+        cuotasPagadas: cuotasPagadas,
+        moraPendienteTracked: tracked,
+        moraCobradaOffset: offset,
+        moraExentaHasta: ultimaExencion,
+      );
+
+      final fechaLote = _fechaArDelLote(lote);
+      final moraDesgloseBruto =
+          MoraCuotaCalculator.calcularDesglose(alumnoPre, fechaLote);
+      final moraDesgloseNeto = MoraCuotaCalculator.desglosePendiente(
+        moraDesgloseBruto,
+        MoraCuotaCalculator.moraCobradaParaFifo(
+          moraCobradaHistorial: moraHistAcum,
+          moraCobradaOffset: offset,
+        ),
+      );
+      final moraDesgloseNetoTotal =
+          moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
+
+      final trackedPreCobro = tracked;
+
+      final post = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: tracked,
+        moraCobradaOffsetActual: offset,
+        moraEsteCobro: moraEsteCobro,
+        cuotasBaseLiquidadasEnCobro: cuotasLiquidadas,
+        cuotasBasePagadasPostCobro: cuotasPagadas + cuotasLiquidadas,
+        moraDesglosePreCobro: moraDesgloseBruto,
+        moraDesgloseNetoPreCobro: moraDesgloseNeto,
+        moraDesgloseNetoTotal: moraDesgloseNetoTotal,
+      );
+
+      tracked = post.tracked;
+      offset = post.offset;
+      moraHistAcum += moraEsteCobro;
+      cuotasPagadas += cuotasLiquidadas;
+
+      // Evaluar si este cobro saldó toda la mora pre-cobro
+      if (moraEsteCobro > 0.01 && fechaLote != null) {
+        final moraPendientePreCobro = moraDesgloseNetoTotal +
+            trackedPreCobro.clamp(0.0, double.infinity);
+        if (moraEsteCobro >= moraPendientePreCobro - 0.01 &&
+            contratoBase.saldoDeudor > 0.01) {
+          ultimaExencion = MoraCuotaCalculator.calcularFechaExencion(fechaLote);
+        }
+      }
+    }
+    return ultimaExencion;
+  }
+
   /// Recalibración masiva local: solo actualiza tracked/offset; no toca pagos.
   /// [encolarSync]: sube [mora_pendiente_tracked] corregido a Supabase.
   /// [soloEventosMasivosActivos]: limita a eventos masivos Confirmado/Planificacion.

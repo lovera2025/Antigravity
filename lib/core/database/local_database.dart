@@ -12,6 +12,7 @@ import '../utils/pago_interes_mora.dart';
 import '../utils/uuid_utils.dart';
 import '../../models/contrato_alumno.dart';
 import '../../features/eventos/services/cobro_abono_acumulado.dart';
+import '../../features/eventos/services/cronograma_cuotas_utils.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
 
 /// Base de datos local SQLite — persistencia offline.
@@ -21,7 +22,7 @@ import '../../features/eventos/services/mora_tracked_recovery.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 55;
+  static const int _version = 58;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -218,6 +219,7 @@ class LocalDatabase {
         mora_pendiente_tracked REAL DEFAULT 0.0,
         mora_cobrada_offset REAL DEFAULT 0.0,
         mora_fecha_referencia TEXT,
+        mora_exenta_hasta TEXT,
         baja_temporal_desde TEXT,
         updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
@@ -1823,6 +1825,93 @@ class LocalDatabase {
         );
       } catch (e) {
         debugPrint('  ❌ Error migración v55: $e');
+      }
+    }
+
+    if (oldVersion < 56) {
+      debugPrint(
+        '  🔧 v56: mora_exenta_hasta + reparar alumnos que pagaron toda la mora',
+      );
+      try {
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mora_exenta_hasta TEXT',
+        );
+      } catch (e) {
+        debugPrint('  ⚠️ mora_exenta_hasta ya existía: $e');
+      }
+      try {
+        final repaired = await MoraTrackedRecovery.repararExencionDesdeHistorial(
+          db: db,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint('✅ Migración v56 completada ($repaired contratos con exención)');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v56: $e');
+      }
+    }
+
+    if (oldVersion < 57) {
+      debugPrint(
+        '  🔧 v57: reparar exenciones mora borradas por sync (post-fix 4.2.7)',
+      );
+      try {
+        final repaired = await MoraTrackedRecovery.repararExencionDesdeHistorial(
+          db: db,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint('✅ Migración v57 completada ($repaired contratos con exención)');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v57: $e');
+      }
+    }
+
+    if (oldVersion < 58) {
+      debugPrint(
+        '  🔧 v58: Reg unificado 30/03/2026 (masivos, excepto BUENA VISTA / PUERTO VIEJO)',
+      );
+      try {
+        const regIso = '2026-03-30T12:00:00.000Z';
+        final rows = await db.rawQuery('''
+          SELECT ca.id, ca.institucion, c.nombre_completo AS cliente_nombre,
+                 e.tipo AS evento_tipo
+          FROM contratos_alumnos ca
+          INNER JOIN eventos e ON e.id = ca.evento_id
+          LEFT JOIN clientes c ON c.id = e.cliente_id
+          WHERE e.modalidad = 'masivo'
+        ''');
+        final nowUtc = DateTime.now().toUtc().toIso8601String();
+        var updated = 0;
+        for (final row in rows) {
+          if (CronogramaCuotasUtils.excluidoDeRegUnificado(
+            clienteNombre: row['cliente_nombre'] as String?,
+            eventoTipo: row['evento_tipo'] as String?,
+            institucion: row['institucion'] as String?,
+          )) {
+            continue;
+          }
+          await db.update(
+            'contratos_alumnos',
+            {'created_at': regIso, 'updated_at': nowUtc},
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+          updated++;
+        }
+        final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          encolarSync: true,
+          soloEventosMasivosActivos: true,
+        );
+        final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
+          db: db,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint(
+          '✅ Migración v58: $updated Reg actualizados, '
+          '$recalibrados tracked, $exenciones exenciones',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v58: $e');
       }
     }
   }

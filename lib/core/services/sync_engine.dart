@@ -671,6 +671,14 @@ class SyncEngine {
           '  🔧 Post-pull mora: $recalibrados contrato(s) recalibrados desde historial',
         );
       }
+      final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
+        db: db,
+      );
+      if (exenciones > 0) {
+        debugPrint(
+          '  🔧 Post-pull mora: $exenciones contrato(s) con exención reparada',
+        );
+      }
     } catch (e) {
       debugPrint('  ⚠️ Post-pull mora reconcile: $e');
     }
@@ -757,16 +765,26 @@ class SyncEngine {
         };
       }
 
-      Map<String, double>? preservedMoraOffsetByContratoId;
+      Map<String, ({double offset, String? exentaHasta, String? fechaReferencia})>?
+          preservedContratoMoraLocal;
       if (table == 'contratos_alumnos') {
-        final localOffsetRows = await db.query(
+        final localMoraRows = await db.query(
           'contratos_alumnos',
-          columns: ['id', 'mora_cobrada_offset'],
+          columns: [
+            'id',
+            'mora_cobrada_offset',
+            'mora_exenta_hasta',
+            'mora_fecha_referencia',
+          ],
         );
-        preservedMoraOffsetByContratoId = {
-          for (final r in localOffsetRows)
-            r['id'] as String:
-                (r['mora_cobrada_offset'] as num?)?.toDouble() ?? 0,
+        preservedContratoMoraLocal = {
+          for (final r in localMoraRows)
+            r['id'] as String: (
+              offset: (r['mora_cobrada_offset'] as num?)?.toDouble() ?? 0,
+              exentaHasta: (r['mora_exenta_hasta'] as String?)?.trim(),
+              fechaReferencia:
+                  (r['mora_fecha_referencia'] as String?)?.trim(),
+            ),
         };
       }
 
@@ -835,11 +853,19 @@ class SyncEngine {
           }
           batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
         } else if (table == 'contratos_alumnos' &&
-            preservedMoraOffsetByContratoId != null) {
+            preservedContratoMoraLocal != null) {
           final cid = cleanRow['id'] as String;
           final insertRow = Map<String, dynamic>.from(cleanRow);
-          insertRow['mora_cobrada_offset'] =
-              preservedMoraOffsetByContratoId[cid] ?? 0;
+          final preserved = preservedContratoMoraLocal[cid];
+          insertRow['mora_cobrada_offset'] = preserved?.offset ?? 0;
+          final exenta = preserved?.exentaHasta;
+          if (exenta != null && exenta.isNotEmpty) {
+            insertRow['mora_exenta_hasta'] = exenta;
+          }
+          final fechaRef = preserved?.fechaReferencia;
+          if (fechaRef != null && fechaRef.isNotEmpty) {
+            insertRow['mora_fecha_referencia'] = fechaRef;
+          }
           batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
         } else {
           batch.insert(table, cleanRow, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -976,7 +1002,7 @@ class SyncEngine {
         'updated_at',
       ],
       'egresos': ['id', 'evento_id', 'monto', 'proveedor', 'categoria', 'fecha', 'created_by', 'medio_pago', 'updated_at'],
-      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'mesa_extra_cantidad', 'mesas_extra_estado', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked', 'updated_at'],
+      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'mesa_extra_cantidad', 'mesas_extra_estado', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked', 'mora_cobrada_offset', 'mora_fecha_referencia', 'mora_exenta_hasta', 'updated_at'],
       'notas_operativas_contrato': [
         'id',
         'contrato_alumno_id',

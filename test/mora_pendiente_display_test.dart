@@ -501,6 +501,79 @@ void main() {
     });
   });
 
+  group('Exención mora (pago total salda mora → limpio hasta fin de mes)', () {
+    test('Lezcano: pagó cuota 1 + mora 3 cuotas → 0 hasta 31-jul', () {
+      // Inscripción 30-mar-2026 (UTC) → AR idem.
+      // Cuota 1 vence 30-abr, cuota 2 vence 31-may, cuota 3 vence 30-jun.
+      // Pagó el 6-jul: cuota 1 ($30k) + mora ($32.700).
+      // Post-cobro: tracked=0, offset=$32.700, exención=31-jul-2026.
+      final contrato = ContratoAlumno(
+        id: 'lezcano',
+        eventoId: 'evt',
+        nombreAlumno: 'LEZCANO, BLAS',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 270000,
+        saldoDeudor: 240000,
+        cuotasPagadas: 1,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 12, 21, 17),
+        moraPendienteTracked: 0,
+        moraCobradaOffset: 32700,
+        moraExentaHasta: DateTime(2026, 7, 31),
+      );
+
+      // Jul 7: dentro de exención → $0
+      final moraJul7 = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contrato,
+        moraCobradaHistorial: 32700,
+        ahoraAr: DateTime(2026, 7, 7),
+      );
+      expect(moraJul7, closeTo(0, 0.01));
+
+      // Jul 31: último día exento → $0
+      final moraJul31 = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contrato,
+        moraCobradaHistorial: 32700,
+        ahoraAr: DateTime(2026, 7, 31),
+      );
+      expect(moraJul31, closeTo(0, 0.01));
+
+      // Ago 1: exención venció. Cuotas 2,3,4 vencen antes de jul-31 →
+      // cada una cuenta desde jul-31. 1 día × $300 × 3 cuotas = $900.
+      final moraAgo1 = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contrato,
+        moraCobradaHistorial: 32700,
+        ahoraAr: DateTime(2026, 8, 1),
+      );
+      expect(moraAgo1, closeTo(900, 0.01));
+    });
+
+    test('Sin exención, mora sigue acumulando desde vencimiento original', () {
+      final contrato = ContratoAlumno(
+        id: 'sin-exencion',
+        eventoId: 'evt',
+        nombreAlumno: 'TEST',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 270000,
+        saldoDeudor: 240000,
+        cuotasPagadas: 1,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 12, 0, 0),
+        moraPendienteTracked: 0,
+        moraCobradaOffset: 0,
+      );
+
+      // Jul 7 sin exención: cuota 2 vence 31-may (37 días), cuota 3 vence 30-jun (7 días).
+      final mora = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contrato,
+        moraCobradaHistorial: 0,
+        ahoraAr: DateTime(2026, 7, 7),
+      );
+      // 37×300 + 7×300 = 11100 + 2100 = 13200
+      expect(mora, closeTo(13200, 0.01));
+    });
+  });
+
   group('MoraCuotaCalculator.remanenteTrackedNeto (legacy compat)', () {
     test('tracked e historial iguales → remanente 0', () {
       expect(

@@ -56,6 +56,17 @@ class MoraCuotaDetalle {
 
 int _diasEnMes(int year, int month) => DateTime(year, month + 1, 0).day;
 
+/// Último día del mes de [fecha].
+DateTime _finDeMes(DateTime fecha) =>
+    DateTime(fecha.year, fecha.month, _diasEnMes(fecha.year, fecha.month));
+
+/// Si hay exención activa y el vencimiento cae antes, usar la fecha de exención
+/// como punto de partida para contar mora (la mora anterior ya fue pagada).
+DateTime _vencimientoEfectivoConExencion(DateTime venc, DateTime? exentaHasta) {
+  if (exentaHasta == null) return venc;
+  return venc.isBefore(exentaHasta) ? exentaHasta : venc;
+}
+
 /// Último día del mes (inscripción.month + k).
 /// Cuota 1 = mes_inscripción + 1, cuota 2 = mes_inscripción + 2, etc.
 DateTime _ultimoDiaMesK(DateTime inscripcion, int k) {
@@ -286,10 +297,11 @@ class MoraCuotaCalculator {
     final proxN = cPag + 1;
     final vProx = _ultimoDiaMesK(inscAr, proxN);
     final vSolo = DateTime(vProx.year, vProx.month, vProx.day);
+    final vEfectivo = _vencimientoEfectivoConExencion(vSolo, a.moraExentaHasta);
 
     int dias = 0;
-    if (hoySolo.isAfter(vSolo)) {
-      dias = hoySolo.difference(vSolo).inDays;
+    if (hoySolo.isAfter(vEfectivo)) {
+      dias = hoySolo.difference(vEfectivo).inDays;
     }
 
     final bool mora = a.saldoDeudor > 0.01 && dias > 0;
@@ -627,6 +639,11 @@ class MoraCuotaCalculator {
     );
   }
 
+  /// Fecha de exención: último día del mes de [fechaPago].
+  /// Se usa al saldar toda la mora pendiente.
+  static DateTime calcularFechaExencion(DateTime fechaPago) =>
+      _finDeMes(fechaPago);
+
   /// Mora cobrada aplicable al desglose FIFO (excluye baseline [offset]).
   static double moraCobradaParaFifo({
     required double moraCobradaHistorial,
@@ -748,10 +765,11 @@ class MoraCuotaCalculator {
     for (int n = cPag + 1; n <= tCuotas; n++) {
       final venc = _ultimoDiaMesK(inscAr, n);
       final vSolo = DateTime(venc.year, venc.month, venc.day);
+      final vEfectivo = _vencimientoEfectivoConExencion(vSolo, a.moraExentaHasta);
 
-      if (!hoySolo.isAfter(vSolo)) break;
+      if (!hoySolo.isAfter(vEfectivo)) break;
 
-      final dias = hoySolo.difference(vSolo).inDays;
+      final dias = hoySolo.difference(vEfectivo).inDays;
       if (dias <= 0) break;
 
       final interes = interesSugeridoSimpleSobreMonto(

@@ -13,6 +13,7 @@ import '../../common/services/pdf_service.dart';
 import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../../eventos/services/cobro_abono_acumulado.dart';
+import '../../eventos/services/cronograma_cuotas_utils.dart';
 import '../../eventos/services/mora_cuota_calculator.dart';
 import '../providers/finanzas_provider.dart';
 
@@ -895,6 +896,9 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
         ));
       }
       filas.sort((x, y) {
+        final xAtras = x.cuotasVencidasCount > 0 || x.mora.enMora;
+        final yAtras = y.cuotasVencidasCount > 0 || y.mora.enMora;
+        if (xAtras != yAtras) return xAtras ? -1 : 1;
         if (x.mora.enMora != y.mora.enMora) return x.mora.enMora ? -1 : 1;
         return x.contrato.nombreAlumno.toLowerCase().compareTo(y.contrato.nombreAlumno.toLowerCase());
       });
@@ -1588,17 +1592,21 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
     final a = f.contrato;
     final mora = f.mora;
     final saldo = a.saldoDeudor;
-    String estado;
-    Color chipColor;
-    if (saldo <= 0.01) {
-      estado = 'LIQUIDADO';
+    final estadoUi = CronogramaCuotasUtils.resolverEstadoUi(
+      contrato: a,
+      moraEnMora: mora.enMora,
+      moraPendientePesos: f.moraPendiente,
+    );
+    String estado = estadoUi.texto;
+    Color chipColor = estadoUi.color;
+    if (estadoUi.kind == ContratoEstadoDeudaKind.liquidado) {
       chipColor = Colors.green.shade700;
-    } else if (mora.enMora) {
-      estado = 'MORA${mora.diasMora > 0 ? ' · ${mora.diasMora} d' : ''}';
-      chipColor = Colors.red.shade700;
-    } else {
+    } else if (estadoUi.kind == ContratoEstadoDeudaKind.alDia) {
       estado = 'AL DÍA (saldo ${saldo.toCurrency()})';
       chipColor = Colors.blueGrey.shade600;
+    } else if (estadoUi.kind == ContratoEstadoDeudaKind.moraVencida &&
+        mora.diasMora > 0) {
+      estado = 'MORA · ${mora.diasMora} d';
     }
 
     final wUri = _whatsAppUri(a.telefono, contrato: a, todosContratos: _contratos);
@@ -1723,6 +1731,37 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                   style: TextStyle(fontSize: 10, color: muted.withValues(alpha: 0.9)),
                 ),
               ),
+            Builder(builder: (_) {
+              final lineas = CronogramaCuotasUtils.lineasInformativas(
+                a,
+                moraPendientePesos: f.moraPendiente,
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (lineas.proximoVencimiento != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        lineas.proximoVencimiento!,
+                        style: TextStyle(fontSize: 10, color: muted),
+                      ),
+                    ),
+                  if (lineas.moraCongeladaHasta != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        lineas.moraCongeladaHasta!,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blueGrey.shade600,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }),
             if (f.cuotasVencidasCount > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4),

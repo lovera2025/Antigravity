@@ -20,6 +20,7 @@ import 'repositories/contratos_repository.dart';
 import '../../core/utils/ar_time.dart';
 import '../../core/utils/pago_interes_mora.dart';
 import 'services/calculadora_financiera.dart';
+import 'services/cronograma_cuotas_utils.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/cobro_abono_acumulado.dart';
 import 'services/concepto_pago_display.dart';
@@ -1420,35 +1421,21 @@ class _DetalleEventoMasivoScreenState
                           moraCobradaHistorial: cobradoMoraHist,
                         );
 
+                        final estadoUi = CronogramaCuotasUtils.resolverEstadoUi(
+                          contrato: a,
+                          moraEnMora: mora.enMora,
+                          moraPendientePesos: moraPendienteFila,
+                        );
+                        final cronogramaLineas =
+                            CronogramaCuotasUtils.lineasInformativas(
+                          a,
+                          moraPendientePesos: moraPendienteFila,
+                        );
+
                         final bool estaLiquidado = a.saldoDeudor <= 0.01;
-                        final bool esMoraCalendario =
-                            !estaLiquidado && mora.enMora;
-                        final bool tieneMoraRemanente =
-                            !estaLiquidado && moraPendienteFila > 0.01;
-
-                        final Color estadoColor = estaLiquidado
-                            ? Colors.greenAccent
-                            : (esMoraCalendario
-                                  ? Colors.redAccent
-                                  : (tieneMoraRemanente
-                                        ? Colors.deepOrangeAccent
-                                        : const Color(0xFFD4AF37)));
-
-                        final IconData estadoIcono = estaLiquidado
-                            ? Icons.verified_rounded
-                            : (esMoraCalendario
-                                  ? Icons.warning_amber_rounded
-                                  : (tieneMoraRemanente
-                                        ? Icons.pending_actions_rounded
-                                        : Icons.info_outline_rounded));
-
-                        final String estadoTexto = estaLiquidado
-                            ? 'LIQUIDADO'
-                            : (esMoraCalendario
-                                  ? 'MORA VENCIDA'
-                                  : (tieneMoraRemanente
-                                        ? 'MORA PENDIENTE'
-                                        : 'AL DÍA'));
+                        final Color estadoColor = estadoUi.color;
+                        final IconData estadoIcono = estadoUi.icono;
+                        final String estadoTexto = estadoUi.texto;
 
                         final String montoTexto = estaLiquidado
                             ? ''
@@ -1881,18 +1868,39 @@ class _DetalleEventoMasivoScreenState
                                                 ),
                                               ),
                                             ),
-                                            if (a.saldoDeudor > 0.01 &&
-                                                mora.fechaVencimientoProximaCuota !=
-                                                    null &&
-                                                mora.proximaCuotaNumero != null)
+                                            if (cronogramaLineas.cuotaPendiente != null)
                                               Padding(
                                                 padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
                                                 child: Text(
-                                                  'Vto. cuota ${mora.proximaCuotaNumero}: ${ArTime.formatFechaCorta(mora.fechaVencimientoProximaCuota!)}',
+                                                  cronogramaLineas.cuotaPendiente!,
                                                   style: TextStyle(
                                                     fontSize: layoutCompact ? 8 : 9,
                                                     color: Colors.grey.shade600,
                                                     fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            if (cronogramaLineas.proximoVencimiento != null)
+                                              Padding(
+                                                padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
+                                                child: Text(
+                                                  cronogramaLineas.proximoVencimiento!,
+                                                  style: TextStyle(
+                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    color: Colors.grey.shade600,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            if (cronogramaLineas.moraCongeladaHasta != null)
+                                              Padding(
+                                                padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
+                                                child: Text(
+                                                  cronogramaLineas.moraCongeladaHasta!,
+                                                  style: TextStyle(
+                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    color: Colors.blueGrey.shade600,
+                                                    fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
                                               ),
@@ -3026,6 +3034,12 @@ class _DetalleEventoMasivoScreenState
       contrato: alumno,
       moraCobradaHistorial: moraYaCobradaHist,
     );
+    final cronogramaModal = CronogramaCuotasUtils.lineasInformativas(
+      alumno,
+      moraPendientePesos: moraPendienteEfectivo,
+    );
+    final cuotasAtrasadasModal =
+        CronogramaCuotasUtils.cuotasImpagasVencidas(alumno) > 0;
 
     bool pagarBase = false;
     bool pagarMesa = false;
@@ -3892,6 +3906,75 @@ class _DetalleEventoMasivoScreenState
                           ],
                         ),
                       ),
+                      if (cronogramaModal.tieneAlguna)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: cuotasAtrasadasModal
+                                  ? Colors.red.withValues(alpha: 0.06)
+                                  : Colors.blueGrey.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: cuotasAtrasadasModal
+                                    ? Colors.red.withValues(alpha: 0.25)
+                                    : Colors.blueGrey.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (cuotasAtrasadasModal)
+                                  Text(
+                                    'CUOTAS ATRASADAS EN EL PLAN',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.red.shade800,
+                                      letterSpacing: 0.6,
+                                    ),
+                                  ),
+                                if (cuotasAtrasadasModal &&
+                                    cronogramaModal.cuotaPendiente != null)
+                                  const SizedBox(height: 6),
+                                if (cronogramaModal.cuotaPendiente != null)
+                                  Text(
+                                    cronogramaModal.cuotaPendiente!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade800,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                if (cronogramaModal.proximoVencimiento != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      cronogramaModal.proximoVencimiento!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade800,
+                                      ),
+                                    ),
+                                  ),
+                                if (cronogramaModal.moraCongeladaHasta != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      cronogramaModal.moraCongeladaHasta!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blueGrey.shade700,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (moraPendienteEfectivo > 0.01)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -5389,11 +5472,28 @@ class _DetalleEventoMasivoScreenState
                       saldoDeudorPost: saldoRestante,
                     );
 
+                    // Exención: si el cobro pagó toda la mora que estaba
+                    // pendiente PRE-cobro, eximir hasta fin de mes.
+                    final double moraPendientePreCobro =
+                        moraDesgloseNetoTotal + remanenteMora;
+                    final DateTime? nuevaExencion;
+                    if (moraEsteCobro > 0.01 &&
+                        moraEsteCobro >= moraPendientePreCobro - 0.01 &&
+                        saldoRestante > 0.01) {
+                      nuevaExencion =
+                          MoraCuotaCalculator.calcularFechaExencion(
+                        DateTime.now(),
+                      );
+                    } else {
+                      nuevaExencion = alumno.moraExentaHasta;
+                    }
+
                     final alumnoPatchLocal = alumnoFresco.copyWith(
                       moraPendienteTracked: postTrackedOffset.tracked,
                       moraCobradaOffset: postTrackedOffset.offset,
                       moraFechaReferencia:
                           limpiarMoraRef ? null : alumno.moraFechaReferencia,
+                      moraExentaHasta: nuevaExencion,
                     );
 
                     // Capturar valores del modal antes de cerrarlo (evita usar
@@ -5412,6 +5512,7 @@ class _DetalleEventoMasivoScreenState
                     final trackedNuevoPersist = postTrackedOffset.tracked;
                     final offsetNuevoPersist = postTrackedOffset.offset;
                     final limpiarMoraRefPersist = limpiarMoraRef;
+                    final exencionPersist = nuevaExencion;
                     final double pctCargoInforme =
                         double.tryParse(
                           prefsPctStr.replaceAll(',', '.'),
@@ -5688,6 +5789,11 @@ class _DetalleEventoMasivoScreenState
                           'mora_cobrada_offset': offsetNuevoPersist,
                           if (limpiarMoraRefPersist)
                             'mora_fecha_referencia': null,
+                          if (exencionPersist != null)
+                            'mora_exenta_hasta':
+                                '${exencionPersist.year.toString().padLeft(4, '0')}-'
+                                '${exencionPersist.month.toString().padLeft(2, '0')}-'
+                                '${exencionPersist.day.toString().padLeft(2, '0')}',
                         });
 
                         // Alinear saldo/cuotas con suma de gross en pagos (fuente de verdad).
