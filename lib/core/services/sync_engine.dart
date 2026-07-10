@@ -765,7 +765,7 @@ class SyncEngine {
         };
       }
 
-      Map<String, ({double offset, String? exentaHasta, String? fechaReferencia})>?
+      Map<String, ({double offset, String? exentaHasta, String? fechaReferencia, int reinicia})>?
           preservedContratoMoraLocal;
       if (table == 'contratos_alumnos') {
         final localMoraRows = await db.query(
@@ -775,6 +775,7 @@ class SyncEngine {
             'mora_cobrada_offset',
             'mora_exenta_hasta',
             'mora_fecha_referencia',
+            'mora_exencion_reinicia',
           ],
         );
         preservedContratoMoraLocal = {
@@ -784,6 +785,12 @@ class SyncEngine {
               exentaHasta: (r['mora_exenta_hasta'] as String?)?.trim(),
               fechaReferencia:
                   (r['mora_fecha_referencia'] as String?)?.trim(),
+              reinicia: () {
+                final v = r['mora_exencion_reinicia'];
+                if (v == null) return 1;
+                if (v is num) return v.toInt();
+                return int.tryParse(v.toString()) ?? 1;
+              }(),
             ),
         };
       }
@@ -866,6 +873,7 @@ class SyncEngine {
           if (fechaRef != null && fechaRef.isNotEmpty) {
             insertRow['mora_fecha_referencia'] = fechaRef;
           }
+          insertRow['mora_exencion_reinicia'] = preserved?.reinicia ?? 1;
           batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
         } else {
           batch.insert(table, cleanRow, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -934,6 +942,9 @@ class SyncEngine {
   Map<String, dynamic> _cleanForRemote(String table, Map<String, dynamic> row) {
     final copy = Map<String, dynamic>.from(row);
     copy.remove('mora_cobrada_offset');
+    copy.remove('mora_exenta_hasta');
+    copy.remove('mora_exencion_reinicia');
+    copy.remove('mora_fecha_referencia');
     copy.remove('line_kind');
 
     final cleaned = _cleanForSqlite(table, copy);
@@ -956,7 +967,7 @@ class SyncEngine {
   Map<String, dynamic> _cleanForSqlite(String table, Map<String, dynamic> row) {
     const tableColumns = {
       'clientes': ['id', 'nombre_completo', 'telefono', 'email', 'is_archived', 'created_at', 'updated_at'],
-      'eventos': ['id', 'cliente_id', 'tipo', 'fecha_evento', 'cantidad_cuotas', 'modalidad', 'estado', 'pin_operador', 'observaciones', 'bonificacion_global_pct', 'created_at', 'updated_at'],
+      'eventos': ['id', 'cliente_id', 'tipo', 'fecha_evento', 'cantidad_cuotas', 'modalidad', 'estado', 'pin_operador', 'observaciones', 'titulo_festejado', 'nombre_festejado', 'encabezado_evento', 'bonificacion_global_pct', 'created_at', 'updated_at'],
       'servicios': ['id', 'nombre', 'categoria', 'costo_base', 'margen_ganancia', 'costo_interno', 'evento_id', 'is_archived', 'updated_at'],
       'eventos_servicios': ['id', 'evento_id', 'servicio_id', 'precio_final_acordado', 'cantidad', 'grupo', 'detalle_servicio', 'combo_orden', 'es_extra', 'updated_at'],
       'presupuestos': [
@@ -972,6 +983,8 @@ class SyncEngine {
         'telefono',
         'vendedor_nombre',
         'titulo_festejado',
+        'nombre_festejado',
+        'encabezado_evento',
         'notificado_vencimiento',
         'created_at',
         'updated_at',
@@ -1002,7 +1015,7 @@ class SyncEngine {
         'updated_at',
       ],
       'egresos': ['id', 'evento_id', 'monto', 'proveedor', 'categoria', 'fecha', 'created_by', 'medio_pago', 'updated_at'],
-      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'mesa_extra_cantidad', 'mesas_extra_estado', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked', 'mora_cobrada_offset', 'mora_fecha_referencia', 'mora_exenta_hasta', 'updated_at'],
+      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'mesa_extra_cantidad', 'mesas_extra_estado', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked', 'mora_cobrada_offset', 'mora_fecha_referencia', 'mora_exenta_hasta', 'mora_exencion_reinicia', 'updated_at'],
       'notas_operativas_contrato': [
         'id',
         'contrato_alumno_id',

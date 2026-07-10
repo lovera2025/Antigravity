@@ -5474,9 +5474,11 @@ class _DetalleEventoMasivoScreenState
 
                     // Exención: si el cobro pagó toda la mora que estaba
                     // pendiente PRE-cobro, eximir hasta fin de mes.
+                    // Con liquidación de cuota → reinicia; solo mora/abono → permanente.
                     final double moraPendientePreCobro =
                         moraDesgloseNetoTotal + remanenteMora;
                     final DateTime? nuevaExencion;
+                    final bool nuevaExencionReinicia;
                     if (moraEsteCobro > 0.01 &&
                         moraEsteCobro >= moraPendientePreCobro - 0.01 &&
                         saldoRestante > 0.01) {
@@ -5484,8 +5486,10 @@ class _DetalleEventoMasivoScreenState
                           MoraCuotaCalculator.calcularFechaExencion(
                         DateTime.now(),
                       );
+                      nuevaExencionReinicia = cuotasLiquidadasEnCobro > 0;
                     } else {
                       nuevaExencion = alumno.moraExentaHasta;
+                      nuevaExencionReinicia = alumno.moraExencionReinicia;
                     }
 
                     final alumnoPatchLocal = alumnoFresco.copyWith(
@@ -5494,6 +5498,7 @@ class _DetalleEventoMasivoScreenState
                       moraFechaReferencia:
                           limpiarMoraRef ? null : alumno.moraFechaReferencia,
                       moraExentaHasta: nuevaExencion,
+                      moraExencionReinicia: nuevaExencionReinicia,
                     );
 
                     // Capturar valores del modal antes de cerrarlo (evita usar
@@ -5513,6 +5518,7 @@ class _DetalleEventoMasivoScreenState
                     final offsetNuevoPersist = postTrackedOffset.offset;
                     final limpiarMoraRefPersist = limpiarMoraRef;
                     final exencionPersist = nuevaExencion;
+                    final exencionReiniciaPersist = nuevaExencionReinicia;
                     final double pctCargoInforme =
                         double.tryParse(
                           prefsPctStr.replaceAll(',', '.'),
@@ -5794,6 +5800,8 @@ class _DetalleEventoMasivoScreenState
                                 '${exencionPersist.year.toString().padLeft(4, '0')}-'
                                 '${exencionPersist.month.toString().padLeft(2, '0')}-'
                                 '${exencionPersist.day.toString().padLeft(2, '0')}',
+                          'mora_exencion_reinicia':
+                              exencionReiniciaPersist ? 1 : 0,
                         });
 
                         // Alinear saldo/cuotas con suma de gross en pagos (fuente de verdad).

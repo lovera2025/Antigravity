@@ -388,6 +388,21 @@ void main() {
       expect(r.offset, closeTo(0, 0.01));
     });
 
+    test('solo mora completa → offset absorbe desglose (exención permanente)', () {
+      final r = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: 0,
+        moraCobradaOffsetActual: 0,
+        moraEsteCobro: 8700,
+        cuotasBaseLiquidadasEnCobro: 0,
+        cuotasBasePagadasPostCobro: 0,
+        moraDesglosePreCobro: desgloseCuota1,
+        moraDesgloseNetoPreCobro: desgloseCuota1,
+        moraDesgloseNetoTotal: 8700,
+      );
+      expect(r.tracked, closeTo(0, 0.01));
+      expect(r.offset, closeTo(8700, 0.01));
+    });
+
     test('Borda: cuota 2 sin mora no arrastra mora de cuota 1 pagada', () {
       // Inscripción 25-mar-2026; cuota 1 cobrada 20-may con mora parcial $300;
       // cuota 2 cobrada 30-jun sin mora → tracked ≈ mora neta cuota 2 solamente.
@@ -507,6 +522,7 @@ void main() {
       // Cuota 1 vence 30-abr, cuota 2 vence 31-may, cuota 3 vence 30-jun.
       // Pagó el 6-jul: cuota 1 ($30k) + mora ($32.700).
       // Post-cobro: tracked=0, offset=$32.700, exención=31-jul-2026.
+      // moraExencionReinicia=true (default): tras vencer, reinicia desde exención.
       final contrato = ContratoAlumno(
         id: 'lezcano',
         eventoId: 'evt',
@@ -520,6 +536,7 @@ void main() {
         moraPendienteTracked: 0,
         moraCobradaOffset: 32700,
         moraExentaHasta: DateTime(2026, 7, 31),
+        moraExencionReinicia: true,
       );
 
       // Jul 7: dentro de exención → $0
@@ -546,6 +563,43 @@ void main() {
         ahoraAr: DateTime(2026, 8, 1),
       );
       expect(moraAgo1, closeTo(900, 0.01));
+    });
+
+    test('Espíndola: abono+mora Abr/May → permanente; al 9-jul solo C3', () {
+      // Inscripción 31-mar → C1 Abr, C2 May, C3 Jun.
+      // 27-jun: abono + mora Abr+May → exención 30-jun, reinicia=false.
+      // Al 9-jul: Abr/May omitidos; C3 = 9 días × $350 = $3.150.
+      final contrato = ContratoAlumno(
+        id: 'espindola',
+        eventoId: 'evt',
+        nombreAlumno: 'ESPINDOLA, BENJAMIN TOMAS',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 315000,
+        saldoDeudor: 284750,
+        cuotasPagadas: 0,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 31, 3, 0, 0),
+        moraPendienteTracked: 0,
+        moraCobradaOffset: 29750,
+        moraExentaHasta: DateTime(2026, 6, 30),
+        moraExencionReinicia: false,
+      );
+
+      final desglose = MoraCuotaCalculator.calcularDesglose(
+        contrato,
+        DateTime(2026, 7, 9),
+      );
+      expect(desglose.length, 1);
+      expect(desglose.first.numeroCuota, 3);
+      expect(desglose.first.diasMora, 9);
+      expect(desglose.first.interesBruto, closeTo(3150, 0.01));
+
+      final operativa = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contrato,
+        moraCobradaHistorial: 29750,
+        ahoraAr: DateTime(2026, 7, 9),
+      );
+      expect(operativa, closeTo(3150, 0.01));
     });
 
     test('Sin exención, mora sigue acumulando desde vencimiento original', () {
@@ -789,6 +843,126 @@ void main() {
         moraCobradaOffset: 0,
       );
       expect(MoraTrackedRecovery.necesitaReconciliar(c, const []), isFalse);
+    });
+  });
+
+  group('resolverExencionPreservandoLocal (perdón admin)', () {
+    test('sin historial conserva exención admin permanente', () {
+      final r = MoraTrackedRecovery.resolverExencionPreservandoLocal(
+        localHasta: DateTime(2026, 7, 31),
+        localReinicia: false,
+        desdeHistorial: null,
+      );
+      expect(r.escribir, isFalse);
+      expect(r.reinicia, isFalse);
+      expect(r.hasta, DateTime(2026, 7, 31));
+    });
+
+    test('no acorta fecha local más lejana que historial', () {
+      final r = MoraTrackedRecovery.resolverExencionPreservandoLocal(
+        localHasta: DateTime(2026, 7, 31),
+        localReinicia: false,
+        desdeHistorial: (hasta: DateTime(2026, 6, 30), reinicia: true),
+      );
+      expect(r.escribir, isFalse);
+      expect(r.hasta, DateTime(2026, 7, 31));
+      expect(r.reinicia, isFalse);
+    });
+
+    test('historial más lejano extiende sin forzar reinicia=true', () {
+      final r = MoraTrackedRecovery.resolverExencionPreservandoLocal(
+        localHasta: DateTime(2026, 6, 30),
+        localReinicia: false,
+        desdeHistorial: (hasta: DateTime(2026, 7, 31), reinicia: true),
+      );
+      expect(r.escribir, isTrue);
+      expect(r.hasta, DateTime(2026, 7, 31));
+      expect(r.reinicia, isFalse);
+    });
+
+    test('sin local aplica historial', () {
+      final r = MoraTrackedRecovery.resolverExencionPreservandoLocal(
+        localHasta: null,
+        localReinicia: true,
+        desdeHistorial: (hasta: DateTime(2026, 7, 31), reinicia: true),
+      );
+      expect(r.escribir, isTrue);
+      expect(r.hasta, DateTime(2026, 7, 31));
+      expect(r.reinicia, isTrue);
+    });
+  });
+
+  group('simularPerdonMora (exención sin Reg)', () {
+    final contrato = ContratoAlumno(
+      id: 'perdon-test',
+      eventoId: 'evt',
+      nombreAlumno: 'TEST PERDON',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 270000,
+      saldoDeudor: 270000,
+      cuotasPagadas: 0,
+      totalCuotas: 9,
+      createdAt: DateTime.utc(2026, 3, 31, 3, 0, 0),
+      moraPendienteTracked: 0,
+      moraCobradaOffset: 0,
+    );
+
+    test('prefijo normaliza selección a cuotas ≤ max pedida', () {
+      expect(
+        MoraCuotaCalculator.normalizarSeleccionPerdonPrefijo(
+          disponibles: {1, 2, 3},
+          pedidas: {2},
+        ),
+        {1, 2},
+      );
+    });
+
+    test('perdonar todo → fin de mes, reinicia=false, Reg intacto', () {
+      final hoy = DateTime(2026, 7, 9);
+      final bruto = MoraCuotaCalculator.calcularDesglose(contrato, hoy);
+      expect(bruto.length, greaterThanOrEqualTo(2));
+      final nums = bruto.map((d) => d.numeroCuota).toSet();
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: contrato,
+        numerosCuotaSeleccionados: nums,
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.cubreHastaFinDeMes, isTrue);
+      expect(sim.exentaHasta, DateTime(2026, 7, 31));
+      expect(sim.moraExencionReinicia, isFalse);
+      expect(sim.moraOperativaPost, closeTo(0, 0.01));
+      expect(
+        MoraCuotaCalculator.payloadPerdonMora(sim).containsKey('created_at'),
+        isFalse,
+      );
+    });
+
+    test('perdonar solo prefijo Abr deja mora de cuotas posteriores', () {
+      final hoy = DateTime(2026, 7, 9);
+      final bruto = MoraCuotaCalculator.calcularDesglose(contrato, hoy);
+      expect(bruto.first.numeroCuota, 1);
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: contrato,
+        numerosCuotaSeleccionados: {1},
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.cubreHastaFinDeMes, isFalse);
+      expect(sim.cuotasPerdonadas.map((d) => d.numeroCuota), [1]);
+      expect(sim.cuotasRestantes, isNotEmpty);
+      expect(sim.moraOperativaPost, greaterThan(0.01));
+      // Tras aplicar, Abr no aparece; posteriores sí.
+      final post = contrato.copyWith(
+        moraExentaHasta: sim.exentaHasta,
+        moraExencionReinicia: false,
+      );
+      final desglosePost =
+          MoraCuotaCalculator.calcularDesglose(post, hoy);
+      expect(desglosePost.any((d) => d.numeroCuota == 1), isFalse);
+      expect(desglosePost, isNotEmpty);
     });
   });
 

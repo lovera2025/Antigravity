@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,6 +35,10 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
   List<ContratoAlumno> _resultados = [];
   ContratoAlumno? _seleccion;
   DateTime _fechaCalculo = DateTime.now();
+  double _moraHistSeleccion = 0;
+  List<MoraCuotaDetalle> _desgloseNeto = [];
+  final Set<int> _cuotasPerdonSeleccion = {};
+  bool _incluirTrackedEnPerdon = true;
 
   AjusteMoraModo _ajusteModo = AjusteMoraModo.monto;
   bool _ajustarReg = true;
@@ -109,8 +115,72 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       _nuevaFechaReg = contrato.createdAt != null
           ? ArTime.toAr(contrato.createdAt!)
           : ArTime.nowAr();
+      _desgloseNeto = [];
+      _cuotasPerdonSeleccion.clear();
+      _moraHistSeleccion = 0;
+      _incluirTrackedEnPerdon = true;
     });
     _recalcularMora();
+    unawaited(_cargarDesglosePerdon(contrato));
+  }
+
+  Future<void> _cargarDesglosePerdon(ContratoAlumno contrato) async {
+    try {
+      final repo = ref.read(contratosRepositoryProvider);
+      final hist = await repo.sumMoraCobradaHistorial(contrato.id);
+      if (!mounted || _seleccion?.id != contrato.id) return;
+      final fifo = MoraCuotaCalculator.moraCobradaParaFifo(
+        moraCobradaHistorial: hist,
+        moraCobradaOffset: contrato.moraCobradaOffset,
+      );
+      final bruto =
+          MoraCuotaCalculator.calcularDesglose(contrato, _fechaCalculo);
+      final neto = MoraCuotaCalculator.desglosePendiente(bruto, fifo);
+      setState(() {
+        _moraHistSeleccion = hist;
+        _desgloseNeto = neto;
+        _cuotasPerdonSeleccion
+          ..clear()
+          ..addAll(neto.map((d) => d.numeroCuota));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo cargar el desglose de mora: $e')),
+      );
+    }
+  }
+
+  void _toggleCuotaPerdon(int numeroCuota, bool marcar) {
+    setState(() {
+      final disponibles =
+          _desgloseNeto.map((d) => d.numeroCuota).toList()..sort();
+      if (marcar) {
+        // Prefijo: al marcar N se incluyen todas las ≤ N.
+        _cuotasPerdonSeleccion.addAll(
+          disponibles.where((n) => n <= numeroCuota),
+        );
+      } else {
+        // Al destildar N se sueltan N y todas las posteriores.
+        _cuotasPerdonSeleccion.removeWhere((n) => n >= numeroCuota);
+      }
+    });
+  }
+
+  MoraPerdonSimulacion? get _perdonSim {
+    final sel = _seleccion;
+    if (sel == null) return null;
+    if (_cuotasPerdonSeleccion.isEmpty &&
+        (!_incluirTrackedEnPerdon || sel.moraPendienteTracked <= 0.01)) {
+      return null;
+    }
+    return MoraCuotaCalculator.simularPerdonMora(
+      contrato: sel,
+      numerosCuotaSeleccionados: _cuotasPerdonSeleccion,
+      moraCobradaHistorial: _moraHistSeleccion,
+      ahoraAr: _fechaCalculo,
+      incluirTracked: _incluirTrackedEnPerdon,
+    );
   }
 
   void _recalcularMora() {
@@ -278,26 +348,45 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     final sel = _seleccion;
     if (sel == null) return;
 
-    final sim = MoraCuotaCalculator.simularQuitarMora(sel, ahoraAr: _fechaCalculo);
-    if (sim.regSugerido == null) {
+    final sim = _perdonSim;
+    if (sim == null || sim.montoPerdonado <= 0.01) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El alumno ya está al día o no se puede calcular.')),
+        const SnackBar(
+          content: Text(
+            'Seleccioná al menos una cuota con mora (o el remanente) para perdonar.',
+          ),
+        ),
       );
       return;
     }
 
+    final labels = sim.cuotasPerdonadas
+        .map((d) => 'C${d.numeroCuota} (${d.mesLabel})')
+        .join(', ');
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar quitar mora'),
+        title: const Text('Confirmar perdón de mora'),
         content: Text(
-          'Se dejará al alumno sin mora. Esto ajustará su fecha de alta (Reg) '
-          'al ${ArTime.formatFechaCorta(sim.regSugerido!)} para que quede al día.\n\n'
+          'Se perdonará la mora de: ${labels.isEmpty ? '(solo remanente)' : labels}'
+          '${sim.incluyeTracked ? ' + remanente parcial' : ''}.\n\n'
+          'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
+          'Exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}'
+          '${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}.\n'
+          'Las cuotas base siguen atrasadas; no se mueve Reg.\n'
+          'Mora operativa: ${sim.moraOperativaPre.toCurrency()} → '
+          '${sim.moraOperativaPost.toCurrency()}.\n\n'
           '¿Continuar?',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quitar mora')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Perdonar mora'),
+          ),
         ],
       ),
     );
@@ -311,17 +400,21 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
-      await repo.actualizarContrato(sel.id, {
-        'mora_pendiente_tracked': 0.0,
-        'created_at': MoraCuotaCalculator.regArAUtcIso(sim.regSugerido!),
-      });
+      await repo.actualizarContrato(
+        sel.id,
+        MoraCuotaCalculator.payloadPerdonMora(sim),
+      );
       ref.read(finanzasProvider.notifier).recargar();
 
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Mora quitada y Reg ajustado para ${sel.nombreAlumno}.'),
+          content: Text(
+            'Mora perdonada para ${sel.nombreAlumno} '
+            'hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}. '
+            'Las cuotas siguen pendientes.',
+          ),
           backgroundColor: const Color(0xFF00B894),
         ),
       );
@@ -329,7 +422,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo quitar la mora: $e')),
+        SnackBar(content: Text('No se pudo perdonar la mora: $e')),
       );
     }
   }
@@ -790,25 +883,174 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
               const SizedBox(height: 8),
               _buildVistaPrevia(isDark, gold),
             ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                FilledButton.icon(
-                  onPressed: busy ? null : _quitarMora,
-                  icon: const Icon(Icons.cleaning_services_rounded, size: 18),
-                  label: const Text('Quitar mora'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                    foregroundColor: Colors.redAccent,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: const BorderSide(color: Colors.redAccent),
+            const SizedBox(height: 20),
+            _buildPanelPerdonMora(isDark, gold, busy),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanelPerdonMora(bool isDark, Color gold, bool busy) {
+    final sel = _seleccion!;
+    final sim = _perdonSim;
+    final tieneTracked = sel.moraPendienteTracked > 0.01;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cleaning_services_rounded, color: Colors.redAccent.shade200, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Perdonar mora (sin mover Reg)',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Marcá las cuotas desde la más vieja. Si tildás una, se incluyen las anteriores. '
+            'El alumno sigue atrasado en cuotas; solo se congela/perdona el interés.',
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.35,
+              color: isDark ? Colors.white60 : Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_desgloseNeto.isEmpty && !tieneTracked)
+            Text(
+              'No hay mora operativa para perdonar en este alumno.',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white54 : Colors.grey.shade600,
+              ),
+            )
+          else ...[
+            if (_desgloseNeto.isNotEmpty) ...[
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => setState(() {
+                              _cuotasPerdonSeleccion
+                                ..clear()
+                                ..addAll(_desgloseNeto.map((d) => d.numeroCuota));
+                            }),
+                    child: const Text('Todas'),
+                  ),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => setState(() => _cuotasPerdonSeleccion.clear()),
+                    child: const Text('Ninguna'),
+                  ),
+                ],
+              ),
+              ..._desgloseNeto.map((d) {
+                final checked = _cuotasPerdonSeleccion.contains(d.numeroCuota);
+                return CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  checkboxShape: const CircleBorder(),
+                  activeColor: Colors.redAccent,
+                  value: checked,
+                  onChanged: busy
+                      ? null
+                      : (v) => _toggleCuotaPerdon(d.numeroCuota, v ?? false),
+                  title: Text(
+                    'C${d.numeroCuota} · ${d.mesLabel}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    '${d.diasMora}d · ${d.interesBruto.toCurrency()}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? Colors.white54 : Colors.grey.shade600,
                     ),
                   ),
+                );
+              }),
+            ],
+            if (tieneTracked &&
+                (_desgloseNeto.isEmpty ||
+                    _cuotasPerdonSeleccion.length == _desgloseNeto.length))
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                checkboxShape: const CircleBorder(),
+                activeColor: Colors.redAccent,
+                value: _incluirTrackedEnPerdon,
+                onChanged: busy
+                    ? null
+                    : (v) => setState(() => _incluirTrackedEnPerdon = v ?? true),
+                title: const Text(
+                  'Incluir remanente parcial (tracked)',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 ),
-              ],
+                subtitle: Text(
+                  sel.moraPendienteTracked.toCurrency(),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: isDark ? Colors.white54 : Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            if (sim != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Perdona ≈ ${sim.montoPerdonado.toCurrency()} · '
+                'exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}'
+                '${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}\n'
+                'Mora: ${sim.moraOperativaPre.toCurrency()} → ${sim.moraOperativaPost.toCurrency()}',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : Colors.grey.shade800,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: busy || sim == null || sim.montoPerdonado <= 0.01
+                    ? null
+                    : _quitarMora,
+                icon: const Icon(Icons.cleaning_services_rounded, size: 18),
+                label: Text(
+                  sim == null
+                      ? 'Perdonar mora'
+                      : 'Perdonar (${sim.cuotasPerdonadas.length}'
+                          '${sim.incluyeTracked ? '+R' : ''})',
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.redAccent.withValues(alpha: 0.12),
+                  foregroundColor: Colors.redAccent,
+                  disabledForegroundColor: Colors.redAccent.withValues(alpha: 0.35),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Colors.redAccent),
+                  ),
+                ),
+              ),
             ),
           ],
         ],

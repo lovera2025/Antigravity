@@ -141,6 +141,9 @@ class EventosRepository {
     int cantidadCuotas = 1,
     String modalidad = 'particular',
     String? observaciones,
+    String? tituloFestejado,
+    String? nombreFestejado,
+    String? encabezadoEvento,
     /// [lineaId] -> { 'servicio_id', 'precio', 'cantidad', 'grupo', 'combo_orden', 'detalle_servicio' } (mismo servicio varias filas)
     required Map<String, Map<String, dynamic>> serviciosSeleccionados,
   }) async {
@@ -176,6 +179,12 @@ class EventosRepository {
       'estado': 'Planificacion',
       'modalidad': modalidad,
       'observaciones': observaciones,
+      if (nombreFestejado != null && nombreFestejado.trim().isNotEmpty)
+        'nombre_festejado': nombreFestejado.trim(),
+      if (encabezadoEvento != null && encabezadoEvento.trim().isNotEmpty)
+        'encabezado_evento': encabezadoEvento.trim(),
+      if (tituloFestejado != null && tituloFestejado.trim().isNotEmpty)
+        'titulo_festejado': tituloFestejado.trim(),
       'created_at': now,
     };
     await db.insert('eventos', eventoData, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -392,11 +401,17 @@ class EventosRepository {
   }
 
   /// Actualiza información básica del evento.
-  Future<void> actualizarEventoInfo(String eventoId, {String? tipo, String? observaciones}) async {
+  Future<void> actualizarEventoInfo(
+    String eventoId, {
+    String? tipo,
+    String? observaciones,
+    String? tituloFestejado,
+  }) async {
     final db = await LocalDatabase.instance;
     final Map<String, dynamic> data = {};
     if (tipo != null) data['tipo'] = tipo;
     if (observaciones != null) data['observaciones'] = observaciones;
+    if (tituloFestejado != null) data['titulo_festejado'] = tituloFestejado.trim();
 
     if (data.isEmpty) return;
 
@@ -408,6 +423,55 @@ class EventosRepository {
       payload: {'id': eventoId, ...data},
     );
 
+  }
+
+  /// Configuración maestra de evento particular: homenajeado + solicitante + detalles.
+  Future<void> actualizarConfiguracionMaestra({
+    required String eventoId,
+    required String? nombreFestejado,
+    required String? encabezadoEvento,
+    required String? tipo,
+    required String? observaciones,
+    required String clienteId,
+    required String clienteNombre,
+    String? clienteTelefono,
+    String? clienteEmail,
+  }) async {
+    final db = await LocalDatabase.instance;
+
+    final nombre = nombreFestejado?.trim();
+    final encabezado = encabezadoEvento?.trim();
+    final tituloSync = (encabezado != null && encabezado.isNotEmpty)
+        ? encabezado
+        : nombre;
+
+    final eventoData = <String, dynamic>{
+      'nombre_festejado': nombre,
+      'encabezado_evento': encabezado,
+      'titulo_festejado': tituloSync,
+      if (tipo != null) 'tipo': tipo.trim(),
+      if (observaciones != null) 'observaciones': observaciones,
+    };
+    await db.update('eventos', eventoData, where: 'id = ?', whereArgs: [eventoId]);
+    await SyncQueue.enqueue(
+      tabla: 'eventos',
+      operacion: SyncOperation.update,
+      registroId: eventoId,
+      payload: {'id': eventoId, ...eventoData},
+    );
+
+    final clientData = {
+      'nombre_completo': clienteNombre.trim(),
+      'telefono': clienteTelefono,
+      'email': clienteEmail,
+    };
+    await db.update('clientes', clientData, where: 'id = ?', whereArgs: [clienteId]);
+    await SyncQueue.enqueue(
+      tabla: 'clientes',
+      operacion: SyncOperation.update,
+      registroId: clienteId,
+      payload: {'id': clienteId, ...clientData},
+    );
   }
 
   /// Persiste el % de bonificación global acordado (sobre presupuesto total del evento).
@@ -604,6 +668,9 @@ class EventosRepository {
           'estado': row['estado'] ?? 'Planificacion',
           'pin_operador': row['pin_operador'],
           'observaciones': row['observaciones'],
+          'titulo_festejado': row['titulo_festejado'],
+          'nombre_festejado': row['nombre_festejado'],
+          'encabezado_evento': row['encabezado_evento'],
           'bonificacion_global_pct': cloudPct ?? preservedPct,
           'created_at': row['created_at'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -738,6 +805,9 @@ class EventosRepository {
       modalidad: (row['modalidad'] as String?) ?? 'particular',
       pinOperador: row['pin_operador'] as String?,
       observaciones: row['observaciones'] as String?,
+      tituloFestejado: row['titulo_festejado'] as String?,
+      nombreFestejado: row['nombre_festejado'] as String?,
+      encabezadoEvento: row['encabezado_evento'] as String?,
       bonificacionGlobalPct: row['bonificacion_global_pct'] != null
           ? (row['bonificacion_global_pct'] as num).toDouble()
           : null,

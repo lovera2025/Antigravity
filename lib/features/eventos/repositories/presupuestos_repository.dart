@@ -61,6 +61,11 @@ class PresupuestosRepository {
 
   // ── ESCRITURA ─────────────────────────────────────────────────────────────
 
+  static String _fechaEventoSql(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
   Future<String> crearPresupuesto({
     String? id, // <-- Parámetro de vinculación añadido
     String? clienteId,
@@ -70,6 +75,10 @@ class PresupuestosRepository {
     required String tipoEvento,
     String? lugar,
     String? detalleAnclaje,
+    String? tituloFestejado,
+    String? nombreFestejado,
+    String? encabezadoEvento,
+    DateTime? fechaEvento,
     int diasValidez = 7,
     String? instagram,
     String? telefonoPublicidad,
@@ -105,6 +114,13 @@ class PresupuestosRepository {
       'tipo_evento': tipoEvento,
       'lugar': lugar,
       'detalle_anclaje': detalleAnclaje,
+      if (nombreFestejado != null && nombreFestejado.trim().isNotEmpty)
+        'nombre_festejado': nombreFestejado.trim(),
+      if (encabezadoEvento != null && encabezadoEvento.trim().isNotEmpty)
+        'encabezado_evento': encabezadoEvento.trim(),
+      if (tituloFestejado != null && tituloFestejado.trim().isNotEmpty)
+        'titulo_festejado': tituloFestejado.trim(),
+      if (fechaEvento != null) 'fecha_evento': _fechaEventoSql(fechaEvento),
       'fecha_vencimiento': fechaVencimiento.toUtc().toIso8601String(),
       'estado': 'activo',
       'instagram': instagram,
@@ -172,6 +188,9 @@ class PresupuestosRepository {
       fechaEvento: p.fechaEvento ?? DateTime.now().add(const Duration(days: 30)),
       modalidad: 'particular',
       observaciones: p.detalleAnclaje,
+      nombreFestejado: p.nombreFestejado,
+      encabezadoEvento: p.encabezadoEvento,
+      tituloFestejado: p.encabezadoEvento ?? p.tituloFestejado ?? p.nombreFestejado,
       serviciosSeleccionados: serviciosMap,
     );
 
@@ -214,6 +233,7 @@ class PresupuestosRepository {
     required String tipoEvento,
     String? lugar,
     String? detalleAnclaje,
+    DateTime? fechaEvento,
     int diasValidez = 7,
     required List<Map<String, dynamic>> servicios,
   }) async {
@@ -225,6 +245,7 @@ class PresupuestosRepository {
       'tipo_evento': tipoEvento,
       'lugar': lugar,
       'detalle_anclaje': detalleAnclaje,
+      if (fechaEvento != null) 'fecha_evento': _fechaEventoSql(fechaEvento),
       'fecha_vencimiento': now.add(Duration(days: diasValidez)).toUtc().toIso8601String(),
     };
     
@@ -287,12 +308,14 @@ class PresupuestosRepository {
   Future<void> actualizarConfiguracionIntegral({
     required String presupuestoId,
     required String? vendedorNombre,
-    required String? tituloFestejado,
+    required String? nombreFestejado,
+    required String? encabezadoEvento,
     required String? telefonoPublicidad,
     required String? instagram,
     required String? lugar,
     required String? detalleAnclaje,
     required DateTime fechaVencimiento,
+    DateTime? fechaEvento,
     required String? clienteId,
     required String? clienteNombre,
     required String? clienteTelefono,
@@ -300,15 +323,24 @@ class PresupuestosRepository {
   }) async {
     final db = await LocalDatabase.instance;
     
+    final nombre = nombreFestejado?.trim();
+    final encabezado = encabezadoEvento?.trim();
+    final tituloSync = (encabezado != null && encabezado.isNotEmpty)
+        ? encabezado
+        : nombre;
+
     // 1. Actualizar Presupuesto
     final budgetData = {
       'vendedor_nombre': vendedorNombre,
-      'titulo_festejado': tituloFestejado,
+      'nombre_festejado': nombre,
+      'encabezado_evento': encabezado,
+      'titulo_festejado': tituloSync,
       'telefono': telefonoPublicidad,
       'instagram': instagram,
       'lugar': lugar,
       'detalle_anclaje': detalleAnclaje,
       'fecha_vencimiento': fechaVencimiento.toUtc().toIso8601String(),
+      if (fechaEvento != null) 'fecha_evento': _fechaEventoSql(fechaEvento),
     };
     
     await db.update('presupuestos', budgetData, where: 'id = ?', whereArgs: [presupuestoId]);
@@ -399,6 +431,8 @@ class PresupuestosRepository {
           'telefono': row['telefono'],
           'vendedor_nombre': row['vendedor_nombre'],
           'titulo_festejado': row['titulo_festejado'],
+          'nombre_festejado': row['nombre_festejado'],
+          'encabezado_evento': row['encabezado_evento'],
           'notificado_vencimiento': row['notificado_vencimiento'] == true ? 1 : 0,
           'created_at': row['created_at'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);

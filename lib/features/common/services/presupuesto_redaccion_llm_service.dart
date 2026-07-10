@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../models/evento.dart';
-import '../../../models/presupuesto.dart';
+import 'package:arguello_events/models/presupuesto.dart';
+import '../../eventos/utils/evento_presentacion.dart';
 import 'presupuesto_pdf_sections.dart';
 
 /// Opcional: texto comercial más humano para el PDF usando un LLM compatible con OpenAI Chat Completions.
@@ -14,15 +14,19 @@ import 'presupuesto_pdf_sections.dart';
 /// - `PRESUPUESTO_LLM_MODEL` — ej. `gpt-4o-mini`.
 class PresupuestoRedaccionLlmResult {
   PresupuestoRedaccionLlmResult({
+    required this.fraseIntro,
     required this.parrafoPresentacion,
     required List<String?> cuerpos,
   }) : _cuerpos = List<String?>.from(cuerpos);
 
+  final String? fraseIntro;
   final String? parrafoPresentacion;
   final List<String?> _cuerpos;
 
   List<String?> cuerpoOverridesFor(int esperadoCantidadSecciones) {
-    if (_cuerpos.length != esperadoCantidadSecciones) return List<String?>.filled(esperadoCantidadSecciones, null);
+    if (_cuerpos.length != esperadoCantidadSecciones) {
+      return List<String?>.filled(esperadoCantidadSecciones, null);
+    }
     return [
       for (final s in _cuerpos)
         if (s == null || s.trim().isEmpty)
@@ -32,7 +36,13 @@ class PresupuestoRedaccionLlmResult {
     ];
   }
 
-  /// Párrafo que sustituye el texto después de “Esta propuesta ha sido diseñada…”. Si null, se deja el original.
+  String? fraseIntroUsable() {
+    final t = fraseIntro?.trim();
+    if (t == null || t.isEmpty) return null;
+    return t;
+  }
+
+  /// Párrafo que sustituye el texto después de la frase intro. Si null, se deja el original.
   String? parrafoPresentacionUsable() {
     final t = parrafoPresentacion?.trim();
     if (t == null || t.isEmpty) return null;
@@ -60,6 +70,7 @@ class PresupuestoRedaccionLlmService {
 
     final variationSeed = p.id.hashCode.abs() % 100000;
     final userPayload = jsonEncode(payloadRedaccionSecciones(p, secciones, variationSeed));
+    final nombres = EventoPresentacion.payloadNombresPresupuesto(p);
 
     const system = '''Sos redactor comercial de eventos en Argentina (español rioplatense, tono cálido y profesional).
 Tu salida es SOLO un JSON válido UTF-8 (sin markdown fenced, sin texto fuera del JSON).
@@ -67,27 +78,22 @@ Tu salida es SOLO un JSON válido UTF-8 (sin markdown fenced, sin texto fuera de
 Objetivo: texto que ayude a vender la propuesta, sonando humano y NO repetitivo entre presupuestos.
 
 Esquema exacto obligatorio:
-{"parrafo_presentacion":"...","cuerpos":["...","..."]}
+{"frase_intro":"...","parrafo_presentacion":"...","cuerpos":["...","..."]}
 
 Reglas estrictas:
+- Usá EXACTAMENTE los nombres del JSON de entrada (nombre_festejado, solicitante, encabezado_pdf). No inventes personas.
 - No inventes servicios, precios, fechas, lugares ni datos que no estén en el JSON de entrada del usuario.
 - No listes precios ni totales en la redacción (los muestra el PDF).
 - Cambiá aperturas y ritmo entre bloques; evitá clones de frases entre ítems.
-- parrafo_presentacion: 2 a 4 oraciones sustituye el segundo párrafo de bienvenida (tras el saludo "Esta propuesta ha sido diseñada...").
+- frase_intro: 1 oración clara que presente la propuesta usando festejado y solicitante cuando corresponda.
+- parrafo_presentacion: 2 a 4 oraciones de bienvenida comercial (después de frase_intro).
 - cuerpos: un string por cada entrada en secciones[], MISMO orden y MISMA cantidad de elementos que el array `secciones` del usuario.
 - Si la sección es grupo/combo: una sola narrativa unificada (no repetir plantillas robot).
 - Cantidades y nombres de servicio: respetalos literalmente cuando importen; si el cliente cargó "detalle_cargado_por_usuario_para_pdf", priorizalo.''';
 
     final user = StringBuffer()
-      ..writeln('Presupuesto (contexto):')
-      ..writeln(jsonEncode({
-        'titulo_documento': (p.tituloFestejado != null && p.tituloFestejado!.isNotEmpty)
-            ? p.tituloFestejado
-            : '${Evento.formatearTipo(p.tipoEvento)} - ${p.cliente?.nombreCompleto ?? 'CLIENTE'}',
-        'cliente': p.cliente?.nombreCompleto ?? '',
-        'festejado_o_motivo': p.tituloFestejado ?? '',
-        'tipo_evento': Evento.formatearTipo(p.tipoEvento),
-      }))
+      ..writeln('Nombres estructurados (usar tal cual en la redacción):')
+      ..writeln(jsonEncode(nombres))
       ..writeln()
       ..writeln('Datos estructurados para redactar (variation_seed y secciones):')
       ..writeln(userPayload);
@@ -126,6 +132,7 @@ Reglas estrictas:
       final parsed = _parseJsonFromAssistant(content);
       if (parsed == null) return null;
 
+      final fraseIntro = parsed['frase_intro']?.toString();
       final parrafo = parsed['parrafo_presentacion']?.toString();
       final bloquesRaw = parsed['cuerpos'];
       if (bloquesRaw is! List) return null;
@@ -135,6 +142,7 @@ Reglas estrictas:
       ];
 
       return PresupuestoRedaccionLlmResult(
+        fraseIntro: fraseIntro,
         parrafoPresentacion: parrafo,
         cuerpos: cuerpos,
       );

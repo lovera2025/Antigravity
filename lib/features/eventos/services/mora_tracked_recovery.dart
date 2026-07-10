@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../core/database/sync_queue.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
+import 'cobro_abono_acumulado.dart';
 import 'mora_cuota_calculator.dart';
 
 /// Recalcula [mora_pendiente_tracked] y [mora_cobrada_offset] desde el
@@ -89,6 +92,23 @@ class MoraTrackedRecovery {
     return ArTime.toAr(parsed);
   }
 
+  static int _cuotasBaseDesdePagosAcumulados({
+    required ContratoAlumno contratoBase,
+    required List<Map<String, dynamic>> pagosHasta,
+  }) {
+    return recalcularSaldoDesdePagos(
+      montoTotalPactado: contratoBase.montoTotalPactado,
+      totalCuotas: contratoBase.totalCuotas,
+      mesaExtraPrecio: contratoBase.mesaExtraPrecio,
+      sillasExtraPrecioTotal: contratoBase.sillasExtraPrecioTotal,
+      precioUnitarioMesaExtra: contratoBase.precioUnitarioMesaExtra,
+      mesaExtraCuotas: contratoBase.mesaExtraCuotas,
+      mesaExtraCantidad: contratoBase.mesaExtraCantidad,
+      sillasExtraCuotas: contratoBase.sillasExtraCuotas,
+      pagos: pagosHasta,
+    ).cuotasBase;
+  }
+
   /// Simula tracked/offset aplicando las reglas actuales sobre el historial.
   static ({double tracked, double offset}) recomputarDesdeHistorial({
     required ContratoAlumno contratoBase,
@@ -98,20 +118,34 @@ class MoraTrackedRecovery {
     var offset = 0.0;
     var cuotasPagadas = 0;
     var moraHistAcum = 0.0;
+    DateTime? ultimaExencion;
+    var ultimaReinicia = true;
+    final pagosAcum = <Map<String, dynamic>>[];
 
     for (final lote in _lotesCronologicos(pagos)) {
       final moraEsteCobro = lote
           .where(_esMora)
           .fold<double>(0, (s, p) => s + ((p['monto'] as num?)?.toDouble() ?? 0));
 
-      final cuotasLiquidadas = lote
+      // Heurística de concepto (líneas "N Cuotas") + abonos vía gross acumulado.
+      final cuotasPorConcepto = lote
           .where(_esBaseCuota)
           .fold<int>(0, (s, p) => s + _cuotasLiquidadasEnLinea(p));
+
+      pagosAcum.addAll(lote);
+      final cuotasPost = _cuotasBaseDesdePagosAcumulados(
+        contratoBase: contratoBase,
+        pagosHasta: pagosAcum,
+      );
+      final cuotasLiquidadas =
+          math.max(cuotasPorConcepto, cuotasPost - cuotasPagadas);
 
       final alumnoPre = contratoBase.copyWith(
         cuotasPagadas: cuotasPagadas,
         moraPendienteTracked: tracked,
         moraCobradaOffset: offset,
+        moraExentaHasta: ultimaExencion,
+        moraExencionReinicia: ultimaReinicia,
       );
 
       final fechaLote = _fechaArDelLote(lote);
@@ -127,6 +161,8 @@ class MoraTrackedRecovery {
       final moraDesgloseNetoTotal =
           moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
 
+      final trackedPreCobro = tracked;
+
       final post = MoraCuotaCalculator.postCobroTrackedOffset(
         moraPendienteTrackedActual: tracked,
         moraCobradaOffsetActual: offset,
@@ -141,7 +177,20 @@ class MoraTrackedRecovery {
       tracked = post.tracked;
       offset = post.offset;
       moraHistAcum += moraEsteCobro;
-      cuotasPagadas += cuotasLiquidadas;
+      cuotasPagadas = (cuotasPagadas + cuotasLiquidadas)
+          .clamp(0, contratoBase.totalCuotas > 0 ? contratoBase.totalCuotas : 9);
+
+      if (moraEsteCobro > 0.01 && fechaLote != null) {
+        final moraPendientePreCobro = moraDesgloseNetoTotal +
+            trackedPreCobro.clamp(0.0, double.infinity);
+        if (moraEsteCobro >= moraPendientePreCobro - 0.01 &&
+            contratoBase.saldoDeudor > 0.01) {
+          ultimaExencion =
+              MoraCuotaCalculator.calcularFechaExencion(fechaLote);
+          // Cuota base liquidada → reinicia; solo mora/abono → permanente.
+          ultimaReinicia = cuotasLiquidadas > 0;
+        }
+      }
     }
 
     return (
@@ -197,8 +246,63 @@ class MoraTrackedRecovery {
     return tienePagosCuotaBaseEnHistorial(pagos);
   }
 
+  /// Fusiona exención local con la inferida del historial **sin degradar**
+  /// un perdón admin (fecha más lejana o `reinicia=false`).
+  ///
+  /// - Sin historial: conserva local (no fuerza `reinicia=true`).
+  /// - Sin local: aplica historial.
+  /// - Ambos: `hasta = max(local, hist)`; `reinicia = false` gana.
+  static ({DateTime? hasta, bool reinicia, bool escribir})
+      resolverExencionPreservandoLocal({
+    required DateTime? localHasta,
+    required bool localReinicia,
+    required ({DateTime hasta, bool reinicia})? desdeHistorial,
+  }) {
+    final hist = desdeHistorial;
+    if (localHasta == null && hist == null) {
+      return (hasta: null, reinicia: true, escribir: false);
+    }
+    if (localHasta == null && hist != null) {
+      return (hasta: hist.hasta, reinicia: hist.reinicia, escribir: true);
+    }
+    if (localHasta != null && hist == null) {
+      // Perdón admin / exención local sin cobro que la justifique: no tocar.
+      return (hasta: localHasta, reinicia: localReinicia, escribir: false);
+    }
+
+    final localDay = DateTime(
+      localHasta!.year,
+      localHasta.month,
+      localHasta.day,
+    );
+    final histDay = DateTime(
+      hist!.hasta.year,
+      hist.hasta.month,
+      hist.hasta.day,
+    );
+    final mergedHasta =
+        histDay.isAfter(localDay) ? hist.hasta : localHasta;
+    // Permanente (false) gana: no regenerar mora ya perdonada.
+    final mergedReinicia = localReinicia && hist.reinicia;
+
+    final mismoHasta = mergedHasta.year == localHasta.year &&
+        mergedHasta.month == localHasta.month &&
+        mergedHasta.day == localHasta.day;
+    final mismoReinicia = mergedReinicia == localReinicia;
+    if (mismoHasta && mismoReinicia) {
+      return (hasta: localHasta, reinicia: localReinicia, escribir: false);
+    }
+    return (hasta: mergedHasta, reinicia: mergedReinicia, escribir: true);
+  }
+
+  static String _exentaHastaIso(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
   /// Detecta alumnos cuyo último cobro de mora saldó toda la pendiente en ese
-  /// momento y les asigna [mora_exenta_hasta] = fin del mes del pago.
+  /// momento y les asigna [mora_exenta_hasta] + [mora_exencion_reinicia].
+  /// No acorta ni vuelve `reinicia=true` sobre una exención local más protectora.
   static Future<int> repararExencionDesdeHistorial({
     required DatabaseExecutor db,
     bool soloEventosMasivosActivos = false,
@@ -229,17 +333,20 @@ class MoraTrackedRecovery {
         contratoBase: contrato,
         pagos: pagos,
       );
-      if (exencion == null) continue;
 
-      final exStr = '${exencion.year.toString().padLeft(4, '0')}-'
-          '${exencion.month.toString().padLeft(2, '0')}-'
-          '${exencion.day.toString().padLeft(2, '0')}';
-      final existente = (row['mora_exenta_hasta'] as String?)?.trim() ?? '';
-      if (existente == exStr) continue;
+      final resolved = resolverExencionPreservandoLocal(
+        localHasta: contrato.moraExentaHasta,
+        localReinicia: contrato.moraExencionReinicia,
+        desdeHistorial: exencion,
+      );
+      if (!resolved.escribir || resolved.hasta == null) continue;
 
       await db.update(
         'contratos_alumnos',
-        {'mora_exenta_hasta': exStr},
+        {
+          'mora_exenta_hasta': _exentaHastaIso(resolved.hasta!),
+          'mora_exencion_reinicia': resolved.reinicia ? 1 : 0,
+        },
         where: 'id = ?',
         whereArgs: [contrato.id],
       );
@@ -248,9 +355,20 @@ class MoraTrackedRecovery {
     return reparados;
   }
 
+  /// Calcula exención (fecha + modalidad reinicia) desde el historial de pagos.
+  /// Público para tools/auditoría; misma lógica que [repararExencionDesdeHistorial].
+  static ({DateTime hasta, bool reinicia})? calcularExencionDesdeHistorial({
+    required ContratoAlumno contratoBase,
+    required List<Map<String, dynamic>> pagos,
+  }) =>
+      _calcularExencionDesdeHistorial(
+        contratoBase: contratoBase,
+        pagos: pagos,
+      );
+
   /// Calcula la fecha de exención para un contrato dado su historial.
   /// Retorna la fecha si el último lote con mora saldó toda la pendiente.
-  static DateTime? _calcularExencionDesdeHistorial({
+  static ({DateTime hasta, bool reinicia})? _calcularExencionDesdeHistorial({
     required ContratoAlumno contratoBase,
     required List<Map<String, dynamic>> pagos,
   }) {
@@ -259,6 +377,8 @@ class MoraTrackedRecovery {
     var cuotasPagadas = 0;
     var moraHistAcum = 0.0;
     DateTime? ultimaExencion;
+    var ultimaReinicia = true;
+    final pagosAcum = <Map<String, dynamic>>[];
 
     final lotes = _lotesCronologicos(pagos);
     for (final lote in lotes) {
@@ -266,15 +386,24 @@ class MoraTrackedRecovery {
           .where(_esMora)
           .fold<double>(0, (s, p) => s + ((p['monto'] as num?)?.toDouble() ?? 0));
 
-      final cuotasLiquidadas = lote
+      final cuotasPorConcepto = lote
           .where(_esBaseCuota)
           .fold<int>(0, (s, p) => s + _cuotasLiquidadasEnLinea(p));
+
+      pagosAcum.addAll(lote);
+      final cuotasPost = _cuotasBaseDesdePagosAcumulados(
+        contratoBase: contratoBase,
+        pagosHasta: pagosAcum,
+      );
+      final cuotasLiquidadas =
+          math.max(cuotasPorConcepto, cuotasPost - cuotasPagadas);
 
       final alumnoPre = contratoBase.copyWith(
         cuotasPagadas: cuotasPagadas,
         moraPendienteTracked: tracked,
         moraCobradaOffset: offset,
         moraExentaHasta: ultimaExencion,
+        moraExencionReinicia: ultimaReinicia,
       );
 
       final fechaLote = _fechaArDelLote(lote);
@@ -306,7 +435,8 @@ class MoraTrackedRecovery {
       tracked = post.tracked;
       offset = post.offset;
       moraHistAcum += moraEsteCobro;
-      cuotasPagadas += cuotasLiquidadas;
+      cuotasPagadas = (cuotasPagadas + cuotasLiquidadas)
+          .clamp(0, contratoBase.totalCuotas > 0 ? contratoBase.totalCuotas : 9);
 
       // Evaluar si este cobro saldó toda la mora pre-cobro
       if (moraEsteCobro > 0.01 && fechaLote != null) {
@@ -315,10 +445,12 @@ class MoraTrackedRecovery {
         if (moraEsteCobro >= moraPendientePreCobro - 0.01 &&
             contratoBase.saldoDeudor > 0.01) {
           ultimaExencion = MoraCuotaCalculator.calcularFechaExencion(fechaLote);
+          ultimaReinicia = cuotasLiquidadas > 0;
         }
       }
     }
-    return ultimaExencion;
+    if (ultimaExencion == null) return null;
+    return (hasta: ultimaExencion, reinicia: ultimaReinicia);
   }
 
   /// Recalibración masiva local: solo actualiza tracked/offset; no toca pagos.
@@ -355,27 +487,46 @@ class MoraTrackedRecovery {
         contrato: contrato,
         pagos: pagos,
       );
+      final exencion = calcularExencionDesdeHistorial(
+        contratoBase: contrato,
+        pagos: pagos,
+      );
       final trackedActual = contrato.moraPendienteTracked;
       final offsetActual = contrato.moraCobradaOffset;
 
-      if ((objetivo.tracked - trackedActual).abs() <= 0.01 &&
-          (objetivo.offset - offsetActual).abs() <= 0.01) {
+      final resolved = resolverExencionPreservandoLocal(
+        localHasta: contrato.moraExentaHasta,
+        localReinicia: contrato.moraExencionReinicia,
+        desdeHistorial: exencion,
+      );
+
+      final trackedDiff = (objetivo.tracked - trackedActual).abs() > 0.01;
+      final offsetDiff = (objetivo.offset - offsetActual).abs() > 0.01;
+
+      if (!trackedDiff && !offsetDiff && !resolved.escribir) {
         continue;
+      }
+
+      final updates = <String, Object?>{
+        'mora_pendiente_tracked': objetivo.tracked,
+        'mora_cobrada_offset': objetivo.offset,
+        'updated_at': nowUtc,
+      };
+      // Solo escribe exención si el merge la mejora; nunca degrada admin.
+      if (resolved.escribir && resolved.hasta != null) {
+        updates['mora_exenta_hasta'] = _exentaHastaIso(resolved.hasta!);
+        updates['mora_exencion_reinicia'] = resolved.reinicia ? 1 : 0;
       }
 
       await db.update(
         'contratos_alumnos',
-        {
-          'mora_pendiente_tracked': objetivo.tracked,
-          'mora_cobrada_offset': objetivo.offset,
-          'updated_at': nowUtc,
-        },
+        updates,
         where: 'id = ?',
         whereArgs: [contrato.id],
       );
       actualizados++;
 
-      if (encolarSync && (objetivo.tracked - trackedActual).abs() > 0.01) {
+      if (encolarSync && trackedDiff) {
         await SyncQueue.enqueue(
           executor: db,
           tabla: 'contratos_alumnos',

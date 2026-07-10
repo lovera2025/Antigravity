@@ -3,9 +3,10 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Domingo 29 de junio de 2026 (v50)**  
+**Última actualización:** **Jueves 9 de julio de 2026 (v4.3.0 — perdón admin + recovery)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
-**Tests:** `test/mora_pendiente_display_test.dart` (17 tests)
+**Tests:** `test/mora_pendiente_display_test.dart` (43 tests)  
+**Release notes del día:** `docs/CONTEXTO_v4.3.0_2026-07-09.md`
 
 ---
 
@@ -150,7 +151,8 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 1. **Cobro normal:** Grilla y modal coinciden. Tracked solo aparece si hubo pago parcial de mora previo.
 2. **Cobro sin mora:** La mora de la cuota pagada queda perdonada. No infla tracked.
 3. **Restaurar mora (admin):** Preferir ajustar Reg sin tracked; si se setea tracked manual, el sistema lo trata como remanente parcial.
-4. **Migración v49:** Automática al actualizar app. Limpia tracked inflado y calibra offset.
+4. **Perdonar mora (admin, individual):** Exención hasta fin de mes (o corte de prefijo) con `reinicia=false`. **No mueve Reg.** El alumno sigue atrasado en cuotas. Recovery post-sync **no degrada** esa exención.
+5. **Migración v49:** Automática al actualizar app. Limpia tracked inflado y calibra offset.
 
 ---
 
@@ -169,6 +171,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 | Fecha | Qué |
 |-------|-----|
+| 9-jul-2026 (**v4.3.0**) | Perdón admin por exención (sin Reg); multi-cuotas prefijo; recovery no degrada exención local; release + smoke 9 masivos. Ver `CONTEXTO_v4.3.0_2026-07-09.md`. |
 | 29-jun-2026 (v50) | Migración conservadora por historial; `postCobroTrackedOffset`; offset solo con cuota+mora; UI checkbox maestro restaurado; recovery tracked legítimo. |
 | 29-jun-2026 (v49) | Fix double-counting: tracked solo remanente parcial, offset-adjusted FIFO. |
 | 28-jun-2026 | Alineación grilla/modal (`moraPendienteOperativa`), `remanenteOperativo` 0/9, fix Restaurar mora + Reg, limpieza 20 contratos. |

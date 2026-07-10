@@ -1,5 +1,5 @@
-import '../../../models/evento.dart';
 import '../../../models/presupuesto.dart';
+import '../../eventos/utils/evento_presentacion.dart';
 
 /// Una fila visible del PDF: combo (agrupado) o ítem sin grupo.
 ///
@@ -83,9 +83,7 @@ Map<String, dynamic> payloadRedaccionSecciones(
 ) {
   return {
     'variation_seed': variationSeed,
-    'cliente_o_solicitante': p.cliente?.nombreCompleto ?? '',
-    'titulo_festejado': p.tituloFestejado ?? '',
-    'tipo_evento': Evento.formatearTipo(p.tipoEvento),
+    ...EventoPresentacion.payloadNombresPresupuesto(p),
     if (p.lugar != null && p.lugar!.trim().isNotEmpty) 'lugar': p.lugar,
     if (p.fechaEvento != null)
       'fecha_evento_hint': '${p.fechaEvento!.day}/${p.fechaEvento!.month}/${p.fechaEvento!.year}',

@@ -21,6 +21,8 @@ import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
+import '../../eventos/utils/evento_presentacion.dart';
+import '../../eventos/utils/presupuesto_desde_evento.dart';
 import '../utils/currency_extensions.dart';
 import 'presupuesto_pdf_sections.dart';
 import 'presupuesto_redaccion_llm_service.dart';
@@ -69,6 +71,8 @@ class PdfService {
   static Future<void> generarPresupuestoElite(
     Presupuesto p, {
     BuildContext? context,
+    String tituloHeader = 'PRESUPUESTO',
+    String nombreArchivoPrefix = 'Presupuesto',
   }) async {
     final secciones = buildPresupuestoPdfSecciones(p);
     final seccionesExtras = buildPresupuestoPdfSecciones(p, soloExtras: true);
@@ -79,9 +83,6 @@ class PdfService {
     final cuerpoOv =
         llmTxt?.cuerpoOverridesFor(secciones.length) ??
         List<String?>.filled(secciones.length, null);
-    final segundoParrafoPdf =
-        llmTxt?.parrafoPresentacionUsable() ??
-        _kPdfPresupuestoIntroSegundoParrafoLegacy;
 
     final fontRegular = await PdfGoogleFonts.outfitRegular();
     final fontBold = await PdfGoogleFonts.outfitBold();
@@ -105,6 +106,13 @@ class PdfService {
     final now = ArTime.nowUtc();
     final fechaEmision = ArTime.formatFechaHora(now);
     final fechaVencimiento = ArTime.formatFechaCorta(p.fechaVencimiento);
+    final motivoHeader = EventoPresentacion.encabezadoDesdePresupuesto(p);
+    final subtituloHeader = EventoPresentacion.subtituloDesdePresupuesto(p);
+    final fraseIntroPdf = llmTxt?.fraseIntroUsable() ??
+        EventoPresentacion.fraseIntroPresupuesto(p);
+    final segundoParrafoPdf =
+        llmTxt?.parrafoPresentacionUsable() ??
+        _kPdfPresupuestoIntroSegundoParrafoLegacy;
 
     pdf.addPage(
       pw.MultiPage(
@@ -112,10 +120,10 @@ class PdfService {
         margin: const pw.EdgeInsets.all(0),
         header: (context) => _buildHeaderElite(
           logoImage,
-          'PRESUPUESTO',
+          tituloHeader,
           fechaEmision,
-          p.cliente?.nombreCompleto ?? 'Cliente',
-          Evento.formatearTipo(p.tipoEvento),
+          motivoHeader,
+          subtituloHeader,
           p.id,
         ),
         footer: (context) => _buildFooterPublicitario(p),
@@ -125,21 +133,8 @@ class PdfService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // Introducción Elegante y Humana
                 pw.Text(
-                  (p.tituloFestejado != null && p.tituloFestejado!.isNotEmpty)
-                      ? p.tituloFestejado!.toUpperCase()
-                      : '${Evento.formatearTipo(p.tipoEvento)} - ${p.cliente?.nombreCompleto ?? 'CLIENTE'}',
-                  style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold,
-                    fontSize: 14,
-                    color: _gold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                pw.SizedBox(height: 6),
-                pw.Text(
-                  'Esta propuesta ha sido diseñada para ${(p.tituloFestejado != null && p.tituloFestejado!.isNotEmpty) ? p.tituloFestejado : (p.cliente?.nombreCompleto ?? 'usted')}, a solicitud de ${p.cliente?.nombreCompleto ?? 'quien suscribe'}.',
+                  fraseIntroPdf,
                   style: pw.TextStyle(
                     fontSize: 10,
                     fontWeight: pw.FontWeight.bold,
@@ -230,14 +225,30 @@ class PdfService {
     );
 
     final bytes = await pdf.save();
-    final fileName =
-        'Presupuesto_${p.cliente?.nombreCompleto.replaceAll(' ', '_')}.pdf';
+    final safeCliente =
+        (p.cliente?.nombreCompleto ?? 'Cliente').replaceAll(' ', '_');
+    final fileName = '${nombreArchivoPrefix}_$safeCliente.pdf';
 
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, fileName, context: context);
     } else {
       await Printing.layoutPdf(onLayout: (_) async => bytes, name: fileName);
     }
+  }
+
+  /// Regenera el PDF tipo presupuesto élite desde un evento particular activo (preview).
+  static Future<void> generarPresupuestoPreviewDesdeEvento({
+    required Evento evento,
+    required List<EventosServicios> servicios,
+    BuildContext? context,
+  }) async {
+    final p = presupuestoVirtualDesdeEvento(evento: evento, servicios: servicios);
+    await generarPresupuestoElite(
+      p,
+      context: context,
+      tituloHeader: 'PROPUESTA ACTUALIZADA',
+      nombreArchivoPrefix: 'Propuesta',
+    );
   }
 
   /// PDF de préstamo / alquiler de ítems — mismo encabezado élite que presupuesto, contexto ALQUILER.
@@ -1114,10 +1125,11 @@ class PdfService {
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.Text(
-                tipoEvento.toUpperCase(),
-                style: pw.TextStyle(color: _greyText, fontSize: 8),
-              ),
+              if (tipoEvento.trim().isNotEmpty)
+                pw.Text(
+                  tipoEvento,
+                  style: pw.TextStyle(color: _greyText, fontSize: 8),
+                ),
             ],
           ),
         ],
@@ -5818,19 +5830,31 @@ class PdfService {
                 'Emitido: $fecha',
                 style: pw.TextStyle(fontSize: 9, color: _greyText),
               ),
-              pw.SizedBox(height: 4),
+              pw.SizedBox(height: 6),
               pw.Text(
-                evento.cliente?.nombreCompleto.toUpperCase() ?? 'CLIENTE',
+                EventoPresentacion.tituloPrincipal(evento),
                 style: pw.TextStyle(
                   fontSize: 13,
                   fontWeight: pw.FontWeight.bold,
                   color: _darkText,
                 ),
               ),
+              pw.SizedBox(height: 3),
               pw.Text(
-                '${evento.tipoParaMostrar.toUpperCase()}  ·  Fecha evento: $fechaEvento',
+                EventoPresentacion.subtituloEvento(evento),
                 style: pw.TextStyle(fontSize: 9, color: _greyText),
               ),
+              if (EventoPresentacion.nombreFestejadoEfectivoEvento(evento) != null) ...[
+                pw.SizedBox(height: 6),
+                pw.Text(
+                  EventoPresentacion.fraseIntroEvento(evento),
+                  style: pw.TextStyle(
+                    fontSize: 8.5,
+                    fontStyle: pw.FontStyle.italic,
+                    color: _greyText,
+                  ),
+                ),
+              ],
             ],
           ),
         ],

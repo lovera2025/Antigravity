@@ -16,6 +16,8 @@ class Presupuesto {
   final String? telefono;
   final String? vendedorNombre;
   final String? tituloFestejado;
+  final String? nombreFestejado;
+  final String? encabezadoEvento;
   final bool notificadoVencimiento;
   final DateTime createdAt;
   final Cliente? cliente;
@@ -34,6 +36,8 @@ class Presupuesto {
     this.telefono,
     this.vendedorNombre,
     this.tituloFestejado,
+    this.nombreFestejado,
+    this.encabezadoEvento,
     this.notificadoVencimiento = false,
     required this.createdAt,
     this.cliente,
@@ -78,6 +82,8 @@ class Presupuesto {
       telefono: json['telefono'],
       vendedorNombre: json['vendedor_nombre'],
       tituloFestejado: json['titulo_festejado'],
+      nombreFestejado: json['nombre_festejado'],
+      encabezadoEvento: json['encabezado_evento'],
       notificadoVencimiento: (json['notificado_vencimiento'] ?? 0) == 1,
       createdAt: json['created_at'] != null 
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
@@ -105,6 +111,8 @@ class Presupuesto {
       'telefono': telefono,
       'vendedor_nombre': vendedorNombre,
       'titulo_festejado': tituloFestejado,
+      'nombre_festejado': nombreFestejado,
+      'encabezado_evento': encabezadoEvento,
       'notificado_vencimiento': notificadoVencimiento ? 1 : 0,
       'created_at': createdAt.toIso8601String(),
     };

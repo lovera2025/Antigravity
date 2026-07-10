@@ -6,6 +6,7 @@ import '../../models/evento.dart';
 import 'crear_evento_screen.dart';
 import 'detalle_evento_masivo_screen.dart';
 import 'detalle_evento_particular_screen.dart';
+import 'utils/evento_presentacion.dart';
 import '../common/widgets/animated_background.dart';
 import 'repositories/eventos_repository.dart';
 
@@ -306,9 +307,23 @@ class _EventosScreenState extends ConsumerState<EventosScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            evento.cliente?.nombreCompleto ?? 'CLIENTE PREMIUM',
+                            esMasivo
+                                ? (evento.cliente?.nombreCompleto ?? 'CLIENTE PREMIUM')
+                                : EventoPresentacion.tituloPrincipal(evento),
                             style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.5),
                           ),
+                          if (!esMasivo &&
+                              EventoPresentacion.homenajeadoEfectivo(evento) != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Solicitante: ${EventoPresentacion.solicitanteNombre(evento)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: primaryGold.withValues(alpha: 0.65),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 4),
                           Row(
                             children: [

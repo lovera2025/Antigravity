@@ -14,6 +14,12 @@ class Evento {
   final String? pinOperador;
   final String modalidad; // 'particular' o 'masivo'
   final String? observaciones;
+  /// Homenajeado / motivo del festejo (legacy; preferir [nombreFestejado]).
+  final String? tituloFestejado;
+  /// Nombre corto del festejado/a (para redacción IA y frases).
+  final String? nombreFestejado;
+  /// Título grande en PDF y pantalla (opcional; si vacío se compone desde [nombreFestejado]).
+  final String? encabezadoEvento;
   /// Porcentaje de bonificación acordado sobre el presupuesto total (persistido en eventos).
   final double? bonificacionGlobalPct;
 
@@ -35,6 +41,9 @@ class Evento {
     this.pinOperador,
     this.modalidad = 'particular',
     this.observaciones,
+    this.tituloFestejado,
+    this.nombreFestejado,
+    this.encabezadoEvento,
     this.bonificacionGlobalPct,
     this.cliente,
     this.presupuesto,
@@ -66,6 +75,9 @@ class Evento {
       pinOperador: json['pin_operador'] as String?,
       modalidad: (json['modalidad'] ?? 'particular') as String,
       observaciones: json['observaciones'] as String?,
+      tituloFestejado: json['titulo_festejado'] as String?,
+      nombreFestejado: json['nombre_festejado'] as String?,
+      encabezadoEvento: json['encabezado_evento'] as String?,
       bonificacionGlobalPct: json['bonificacion_global_pct'] != null
           ? double.tryParse(json['bonificacion_global_pct'].toString())
           : null,
@@ -101,6 +113,9 @@ class Evento {
       'modalidad': modalidad,
       if (pinOperador != null) 'pin_operador': pinOperador,
       if (observaciones != null) 'observaciones': observaciones,
+      if (tituloFestejado != null) 'titulo_festejado': tituloFestejado,
+      if (nombreFestejado != null) 'nombre_festejado': nombreFestejado,
+      if (encabezadoEvento != null) 'encabezado_evento': encabezadoEvento,
       if (bonificacionGlobalPct != null) 'bonificacion_global_pct': bonificacionGlobalPct,
     };
   }

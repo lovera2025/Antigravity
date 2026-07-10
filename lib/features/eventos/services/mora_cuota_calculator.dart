@@ -67,6 +67,19 @@ DateTime _vencimientoEfectivoConExencion(DateTime venc, DateTime? exentaHasta) {
   return venc.isBefore(exentaHasta) ? exentaHasta : venc;
 }
 
+/// Exención permanente vencida: omitir cuotas con vencimiento estrictamente
+/// anterior a [exentaHasta] (esos meses ya se saldaron y no reinician).
+bool _omitirCuotaExencionPermanente({
+  required DateTime vencSolo,
+  required DateTime hoySolo,
+  required DateTime? exentaHasta,
+  required bool reinicia,
+}) {
+  if (reinicia || exentaHasta == null) return false;
+  final exSolo = DateTime(exentaHasta.year, exentaHasta.month, exentaHasta.day);
+  return vencSolo.isBefore(exSolo) && hoySolo.isAfter(exSolo);
+}
+
 /// Último día del mes (inscripción.month + k).
 /// Cuota 1 = mes_inscripción + 1, cuota 2 = mes_inscripción + 2, etc.
 DateTime _ultimoDiaMesK(DateTime inscripcion, int k) {
@@ -297,6 +310,21 @@ class MoraCuotaCalculator {
     final proxN = cPag + 1;
     final vProx = _ultimoDiaMesK(inscAr, proxN);
     final vSolo = DateTime(vProx.year, vProx.month, vProx.day);
+    if (_omitirCuotaExencionPermanente(
+      vencSolo: vSolo,
+      hoySolo: hoySolo,
+      exentaHasta: a.moraExentaHasta,
+      reinicia: a.moraExencionReinicia,
+    )) {
+      return MoraCuotaResumen(
+        diasMora: 0,
+        fechaVencimientoProximaCuota: vProx,
+        proximaCuotaNumero: proxN,
+        montoCuotaBaseAprox: cuotaPuraR,
+        enMora: false,
+        fechaInscripcionUsada: inscAr,
+      );
+    }
     final vEfectivo = _vencimientoEfectivoConExencion(vSolo, a.moraExentaHasta);
 
     int dias = 0;
@@ -656,8 +684,10 @@ class MoraCuotaCalculator {
   /// - Cuota liquidada **sin** mora → tracked = mora **neta** solo de las cuotas
   ///   liquidadas en **este** cobro (no arrastra remanente ni mora de cuotas ya pagadas).
   /// - Cuota + mora parcial → tracked = resto neto; offset += mora cobrada.
-  /// - Solo mora → FIFO sobre desglose; resto reduce tracked; si liquida tracked,
-  ///   offset += mora aplicada a tracked (evita que FIFO futuro absorba cuotas nuevas).
+  /// - Solo mora → FIFO sobre desglose; resto reduce tracked.
+  ///   Si liquida el desglose completo, offset += esa parte (exención permanente /
+  ///   evita que FIFO futuro absorba cuotas nuevas). Si liquida tracked,
+  ///   offset += mora aplicada a tracked.
   static ({double tracked, double offset}) postCobroTrackedOffset({
     required double moraPendienteTrackedActual,
     required double moraCobradaOffsetActual,
@@ -702,8 +732,13 @@ class MoraCuotaCalculator {
         moraHaciaTracked = moraEsteCobro - moraHaciaDesglose;
       }
       tracked = (remanente - moraHaciaTracked).clamp(0.0, double.infinity);
+      // Desglose liquidado por completo → offset absorbe esa mora (FIFO limpio).
+      if (moraHaciaDesglose > 0.01 &&
+          moraHaciaDesglose >= moraDesgloseNetoTotal - 0.01) {
+        offset = offset + moraHaciaDesglose;
+      }
       if (moraHaciaTracked > 0.01) {
-        offset = moraCobradaOffsetActual + moraHaciaTracked;
+        offset = offset + moraHaciaTracked;
       }
     }
 
@@ -765,6 +800,17 @@ class MoraCuotaCalculator {
     for (int n = cPag + 1; n <= tCuotas; n++) {
       final venc = _ultimoDiaMesK(inscAr, n);
       final vSolo = DateTime(venc.year, venc.month, venc.day);
+
+      // Exención permanente: Abr/May saldados no vuelven tras vencer exención.
+      if (_omitirCuotaExencionPermanente(
+        vencSolo: vSolo,
+        hoySolo: hoySolo,
+        exentaHasta: a.moraExentaHasta,
+        reinicia: a.moraExencionReinicia,
+      )) {
+        continue;
+      }
+
       final vEfectivo = _vencimientoEfectivoConExencion(vSolo, a.moraExentaHasta);
 
       if (!hoySolo.isAfter(vEfectivo)) break;
@@ -813,4 +859,150 @@ class MoraCuotaCalculator {
       moraAplicar: moraAplicar,
     );
   }
+
+  /// Resultado de simular un perdón admin de mora (exención, sin tocar Reg).
+  static MoraPerdonSimulacion? simularPerdonMora({
+    required ContratoAlumno contrato,
+    required Set<int> numerosCuotaSeleccionados,
+    required double moraCobradaHistorial,
+    DateTime? ahoraAr,
+    bool incluirTracked = true,
+  }) {
+    final hoy = ahoraAr ?? ArTime.nowAr();
+    final fifo = moraCobradaParaFifo(
+      moraCobradaHistorial: moraCobradaHistorial,
+      moraCobradaOffset: contrato.moraCobradaOffset,
+    );
+    final bruto = calcularDesglose(contrato, hoy);
+    final neto = desglosePendiente(bruto, fifo);
+    if (neto.isEmpty &&
+        (!incluirTracked || contrato.moraPendienteTracked <= 0.01)) {
+      return null;
+    }
+
+    final ordenados = List<MoraCuotaDetalle>.from(neto)
+      ..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
+    final seleccion = normalizarSeleccionPerdonPrefijo(
+      disponibles: ordenados.map((d) => d.numeroCuota).toSet(),
+      pedidas: numerosCuotaSeleccionados,
+    );
+    if (seleccion.isEmpty &&
+        (!incluirTracked || contrato.moraPendienteTracked <= 0.01)) {
+      return null;
+    }
+
+    final perdonadas =
+        ordenados.where((d) => seleccion.contains(d.numeroCuota)).toList();
+    final restantes =
+        ordenados.where((d) => !seleccion.contains(d.numeroCuota)).toList();
+
+    // Todo el desglose vivo → fin de mes (tiempo para ponerse al día).
+    // Prefijo parcial → corte al día siguiente del último vencimiento
+    // perdonado (reinicia=false omite solo vencimientos estrictamente anteriores).
+    final DateTime exentaHasta;
+    if (perdonadas.isEmpty) {
+      exentaHasta = calcularFechaExencion(hoy);
+    } else if (restantes.isEmpty) {
+      exentaHasta = calcularFechaExencion(hoy);
+    } else {
+      final last = perdonadas.last.vencimiento;
+      final lastSolo = DateTime(last.year, last.month, last.day);
+      exentaHasta = lastSolo.add(const Duration(days: 1));
+    }
+
+    // Tracked solo se limpia si se perdona todo el desglose (o no había líneas).
+    final limpiaTracked = incluirTracked && restantes.isEmpty;
+    final trackedPost = limpiaTracked
+        ? 0.0
+        : contrato.moraPendienteTracked.clamp(0.0, double.infinity);
+
+    final contratoPost = contrato.copyWith(
+      moraExentaHasta: exentaHasta,
+      moraExencionReinicia: false,
+      moraPendienteTracked: trackedPost,
+    );
+    final moraPost = moraPendienteOperativa(
+      contrato: contratoPost,
+      moraCobradaHistorial: moraCobradaHistorial,
+      ahoraAr: hoy,
+    );
+    final moraPre = moraPendienteOperativa(
+      contrato: contrato,
+      moraCobradaHistorial: moraCobradaHistorial,
+      ahoraAr: hoy,
+    );
+    final montoPerdonado = double.parse(
+      (perdonadas.fold<double>(0, (s, d) => s + d.interesBruto) +
+              (limpiaTracked
+                  ? contrato.moraPendienteTracked.clamp(0.0, double.infinity)
+                  : 0))
+          .toStringAsFixed(2),
+    );
+
+    return MoraPerdonSimulacion(
+      cuotasPerdonadas: perdonadas,
+      cuotasRestantes: restantes,
+      exentaHasta: exentaHasta,
+      moraExencionReinicia: false,
+      trackedPost: trackedPost,
+      moraOperativaPre: moraPre,
+      moraOperativaPost: moraPost,
+      montoPerdonado: montoPerdonado,
+      incluyeTracked: limpiaTracked && contrato.moraPendienteTracked > 0.01,
+      cubreHastaFinDeMes: restantes.isEmpty,
+    );
+  }
+
+  /// Si se marca una cuota, incluye todas las anteriores del desglose neto
+  /// (la exención es un corte por fecha, no cherry-pick).
+  static Set<int> normalizarSeleccionPerdonPrefijo({
+    required Set<int> disponibles,
+    required Set<int> pedidas,
+  }) {
+    if (disponibles.isEmpty || pedidas.isEmpty) return {};
+    final orden = disponibles.toList()..sort();
+    final maxPedida = pedidas.reduce(math.max);
+    return orden.where((n) => n <= maxPedida).toSet();
+  }
+
+  /// Payload local para [ContratosRepository.actualizarContrato] tras perdón.
+  /// No incluye `created_at` / Reg.
+  static Map<String, dynamic> payloadPerdonMora(MoraPerdonSimulacion sim) {
+    return {
+      'mora_exenta_hasta':
+          '${sim.exentaHasta.year.toString().padLeft(4, '0')}-'
+          '${sim.exentaHasta.month.toString().padLeft(2, '0')}-'
+          '${sim.exentaHasta.day.toString().padLeft(2, '0')}',
+      'mora_exencion_reinicia': 0,
+      'mora_pendiente_tracked': sim.trackedPost,
+    };
+  }
+}
+
+/// Vista previa de perdón admin (exención permanente hasta fin de mes).
+class MoraPerdonSimulacion {
+  final List<MoraCuotaDetalle> cuotasPerdonadas;
+  final List<MoraCuotaDetalle> cuotasRestantes;
+  final DateTime exentaHasta;
+  final bool moraExencionReinicia;
+  final double trackedPost;
+  final double moraOperativaPre;
+  final double moraOperativaPost;
+  final double montoPerdonado;
+  final bool incluyeTracked;
+  /// True si se perdonó todo el desglose vivo → exención hasta fin de mes.
+  final bool cubreHastaFinDeMes;
+
+  const MoraPerdonSimulacion({
+    required this.cuotasPerdonadas,
+    required this.cuotasRestantes,
+    required this.exentaHasta,
+    required this.moraExencionReinicia,
+    required this.trackedPost,
+    required this.moraOperativaPre,
+    required this.moraOperativaPost,
+    required this.montoPerdonado,
+    required this.incluyeTracked,
+    required this.cubreHastaFinDeMes,
+  });
 }

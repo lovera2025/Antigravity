@@ -14,6 +14,7 @@ import '../../models/contrato_alumno.dart';
 import '../../features/eventos/services/cobro_abono_acumulado.dart';
 import '../../features/eventos/services/cronograma_cuotas_utils.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
+import '../../features/eventos/utils/evento_presentacion.dart';
 
 /// Base de datos local SQLite — persistencia offline.
 ///
@@ -22,7 +23,7 @@ import '../../features/eventos/services/mora_tracked_recovery.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 58;
+  static const int _version = 61;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -108,6 +109,9 @@ class LocalDatabase {
         estado TEXT DEFAULT 'Planificacion',
         pin_operador TEXT,
         observaciones TEXT,
+        titulo_festejado TEXT,
+        nombre_festejado TEXT,
+        encabezado_evento TEXT,
         bonificacion_global_pct REAL,
         created_at TEXT,
         updated_at TEXT,
@@ -220,6 +224,7 @@ class LocalDatabase {
         mora_cobrada_offset REAL DEFAULT 0.0,
         mora_fecha_referencia TEXT,
         mora_exenta_hasta TEXT,
+        mora_exencion_reinicia INTEGER DEFAULT 1,
         baja_temporal_desde TEXT,
         updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
@@ -340,6 +345,8 @@ class LocalDatabase {
         telefono TEXT,
         vendedor_nombre TEXT,
         titulo_festejado TEXT,
+        nombre_festejado TEXT,
+        encabezado_evento TEXT,
         notificado_vencimiento INTEGER DEFAULT 0,
         created_at TEXT,
         updated_at TEXT,
@@ -1912,6 +1919,106 @@ class LocalDatabase {
         );
       } catch (e) {
         debugPrint('  ❌ Error migración v58: $e');
+      }
+    }
+
+    if (oldVersion < 59) {
+      debugPrint('  🔧 v59: titulo_festejado en eventos (homenajeado)');
+      try {
+        await db.execute('ALTER TABLE eventos ADD COLUMN titulo_festejado TEXT');
+        debugPrint('✅ Migración v59 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v59: $e');
+      }
+    }
+
+    if (oldVersion < 60) {
+      debugPrint('  🔧 v60: nombre_festejado + encabezado_evento (particulares)');
+      try {
+        await db.execute('ALTER TABLE eventos ADD COLUMN nombre_festejado TEXT');
+        await db.execute('ALTER TABLE eventos ADD COLUMN encabezado_evento TEXT');
+        await db.execute('ALTER TABLE presupuestos ADD COLUMN nombre_festejado TEXT');
+        await db.execute('ALTER TABLE presupuestos ADD COLUMN encabezado_evento TEXT');
+
+        final eventos = await db.query(
+          'eventos',
+          columns: ['id', 'tipo', 'titulo_festejado'],
+          where: 'titulo_festejado IS NOT NULL AND TRIM(titulo_festejado) != ?',
+          whereArgs: [''],
+        );
+        for (final row in eventos) {
+          final titulo = (row['titulo_festejado'] as String?)?.trim();
+          if (titulo == null || titulo.isEmpty) continue;
+          final tipo = (row['tipo'] as String?) ?? '';
+          final partes = EventoPresentacion.dividirTituloFestejadoLegacy(titulo, tipo);
+          await db.update(
+            'eventos',
+            {
+              if (partes.nombreFestejado != null) 'nombre_festejado': partes.nombreFestejado,
+              if (partes.encabezadoEvento != null) 'encabezado_evento': partes.encabezadoEvento,
+            },
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+
+        final presupuestos = await db.query(
+          'presupuestos',
+          columns: ['id', 'tipo_evento', 'titulo_festejado'],
+          where: 'titulo_festejado IS NOT NULL AND TRIM(titulo_festejado) != ?',
+          whereArgs: [''],
+        );
+        for (final row in presupuestos) {
+          final titulo = (row['titulo_festejado'] as String?)?.trim();
+          if (titulo == null || titulo.isEmpty) continue;
+          final tipo = (row['tipo_evento'] as String?) ?? '';
+          final partes = EventoPresentacion.dividirTituloFestejadoLegacy(titulo, tipo);
+          await db.update(
+            'presupuestos',
+            {
+              if (partes.nombreFestejado != null) 'nombre_festejado': partes.nombreFestejado,
+              if (partes.encabezadoEvento != null) 'encabezado_evento': partes.encabezadoEvento,
+            },
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        }
+
+        debugPrint('✅ Migración v60 completada (${eventos.length} eventos, ${presupuestos.length} presupuestos)');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v60: $e');
+      }
+    }
+
+    if (oldVersion < 61) {
+      debugPrint(
+        '  🔧 v61: mora_exencion_reinicia + reparar 5 contratos drift',
+      );
+      try {
+        await db.execute(
+          'ALTER TABLE contratos_alumnos '
+          'ADD COLUMN mora_exencion_reinicia INTEGER DEFAULT 1',
+        );
+      } catch (e) {
+        debugPrint('  ⚠️ mora_exencion_reinicia ya existía: $e');
+      }
+
+      try {
+        // Exenciones existentes: default reinicia=1 (comportamiento Lezcano).
+        // Casos solo-mora (abono sin liquidar cuota) → permanente (0).
+        final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
+          db: db,
+          soloEventosMasivosActivos: true,
+        );
+        final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          soloEventosMasivosActivos: true,
+        );
+        debugPrint(
+          '✅ Migración v61: $exenciones exenciones, $recalibrados tracked',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v61 repair: $e');
       }
     }
   }

@@ -9,6 +9,7 @@ import '../common/widgets/animated_background.dart';
 import '../common/services/pdf_service.dart';
 import 'repositories/presupuestos_repository.dart';
 import 'selector_servicios_screen.dart';
+import 'utils/evento_presentacion.dart';
 import '../rentabilidad/calculador_rentabilidad_screen.dart';
 
 class PresupuestosScreen extends ConsumerStatefulWidget {
@@ -595,6 +596,9 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
           descripcionesIniciales: { for (var s in p.servicios) s.id: s.detalleServicio },
           detalleAnclajeIA: p.detalleAnclaje,
           lugar: p.lugar,
+          nombreFestejado: p.nombreFestejado,
+          encabezadoEvento: p.encabezadoEvento,
+          tituloFestejado: p.encabezadoEvento ?? p.tituloFestejado ?? p.nombreFestejado,
         ),
       ),
     ).then((_) {
@@ -775,7 +779,8 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
   late TextEditingController _instagramController;
   
   // Solicitante y Evento
-  late TextEditingController _tituloFestejadoController;
+  late TextEditingController _nombreFestejadoController;
+  late TextEditingController _encabezadoController;
   late TextEditingController _clienteNombreController;
   late TextEditingController _clienteTelefonoController;
   late TextEditingController _clienteEmailController;
@@ -784,6 +789,7 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
   late TextEditingController _lugarController;
   late TextEditingController _detalleAnclajeController;
   late DateTime _fechaVencimiento;
+  late DateTime _fechaEvento;
 
   bool _isSaving = false;
 
@@ -791,13 +797,32 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
   void initState() {
     super.initState();
     final p = widget.presupuesto;
+    final legacy = EventoPresentacion.dividirTituloFestejadoLegacy(
+      p.tituloFestejado,
+      p.tipoEvento,
+    );
+    final nombreInicial = p.nombreFestejado?.trim().isNotEmpty == true
+        ? p.nombreFestejado!
+        : (legacy.nombreFestejado ?? '');
+    _nombreFestejadoController = TextEditingController(text: nombreInicial);
+    _encabezadoController = TextEditingController(
+      text: p.encabezadoEvento?.trim().isNotEmpty == true
+          ? p.encabezadoEvento!
+          : (legacy.encabezadoEvento ??
+              (nombreInicial.isNotEmpty
+                  ? EventoPresentacion.resolverEncabezado(
+                      nombreFestejado: nombreInicial,
+                      tipoEvento: p.tipoEvento,
+                    )
+                  : '')),
+    );
     _vendedorController = TextEditingController(text: p.vendedorNombre);
     _telefonoPubController = TextEditingController(text: p.telefono);
     _instagramController = TextEditingController(text: p.instagram);
-    _tituloFestejadoController = TextEditingController(text: p.tituloFestejado);
     _lugarController = TextEditingController(text: p.lugar);
     _detalleAnclajeController = TextEditingController(text: p.detalleAnclaje);
     _fechaVencimiento = p.fechaVencimiento;
+    _fechaEvento = p.fechaEvento ?? DateTime.now().add(const Duration(days: 30));
     
     _clienteNombreController = TextEditingController(text: p.cliente?.nombreCompleto);
     _clienteTelefonoController = TextEditingController(text: p.cliente?.telefono);
@@ -809,7 +834,8 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
     _vendedorController.dispose();
     _telefonoPubController.dispose();
     _instagramController.dispose();
-    _tituloFestejadoController.dispose();
+    _nombreFestejadoController.dispose();
+    _encabezadoController.dispose();
     _lugarController.dispose();
     _detalleAnclajeController.dispose();
     _clienteNombreController.dispose();
@@ -820,6 +846,33 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
 
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_encabezadoController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Indicá cómo debe verse el encabezado en el PDF.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    if (_nombreFestejadoController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Indicá el nombre del homenajeado/a.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    if (_clienteNombreController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El solicitante es obligatorio.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
     
     setState(() => _isSaving = true);
     
@@ -828,12 +881,14 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
       await repo.actualizarConfiguracionIntegral(
         presupuestoId: widget.presupuesto.id,
         vendedorNombre: _vendedorController.text.trim(),
-        tituloFestejado: _tituloFestejadoController.text.trim(),
+        nombreFestejado: _nombreFestejadoController.text.trim(),
+        encabezadoEvento: _encabezadoController.text.trim(),
         telefonoPublicidad: _telefonoPubController.text.trim(),
         instagram: _instagramController.text.trim(),
         lugar: _lugarController.text.trim(),
         detalleAnclaje: _detalleAnclajeController.text.trim(),
         fechaVencimiento: _fechaVencimiento,
+        fechaEvento: _fechaEvento,
         clienteId: widget.presupuesto.clienteId,
         clienteNombre: _clienteNombreController.text.trim(),
         clienteTelefono: _clienteTelefonoController.text.trim(),
@@ -885,17 +940,39 @@ class _PanelMaestroContenidoState extends ConsumerState<_PanelMaestroContenido> 
               _buildTextField(controller: _instagramController, label: 'Instagram', hint: 'junior_eventos_ok', icon: Icons.camera_alt_outlined, prefix: '@ '),
               
               const SizedBox(height: 32),
-              _buildSectionHeader(Icons.person_pin_rounded, 'A NOMBRE DE QUIÉN (¿QUIÉN SOLICITA?)'),
-              _buildTextField(controller: _tituloFestejadoController, label: 'Motivo del Festejo / Para quién', hint: 'Eje: Los 15 de Morena', icon: Icons.star_border_rounded),
-              _buildTextField(controller: _clienteNombreController, label: 'Nombre del Cliente (Solicitante)', icon: Icons.person),
+              _buildSectionHeader(Icons.title_rounded, 'ENCABEZADO Y PERSONAS'),
+              _buildTextField(controller: _encabezadoController, label: 'Cómo se verá arriba en el PDF', hint: 'Ej: LOS 15 DE PAULI', icon: Icons.title_rounded),
+              _buildTextField(controller: _nombreFestejadoController, label: 'Homenajeado/a', hint: 'Ej: Morena, Pauli', icon: Icons.person_outline_rounded),
+              _buildTextField(controller: _clienteNombreController, label: 'Solicitante', icon: Icons.person),
               _buildTextField(controller: _clienteTelefonoController, label: 'Teléfono de contacto privado', icon: Icons.phone, keyboardType: TextInputType.phone),
               _buildTextField(controller: _clienteEmailController, label: 'Email para envío', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
 
               const SizedBox(height: 32),
               _buildSectionHeader(Icons.location_on_outlined, 'LOGÍSTICA Y TIEMPOS'),
               _buildTextField(controller: _lugarController, label: 'Lugar del Evento', hint: 'A definir o Salón específico', icon: Icons.map_outlined),
-              _buildTextField(controller: _detalleAnclajeController, label: 'Anotaciones Especiales / Detalle para el PDF', hint: 'Eje: SERVICIO INTEGRAL...', icon: Icons.description_outlined, maxLines: 3),
+              _buildTextField(controller: _detalleAnclajeController, label: 'Anotaciones especiales', hint: 'Ej: SERVICIO INTEGRAL...', icon: Icons.description_outlined, maxLines: 3),
               const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.celebration_outlined, color: gold, size: 20),
+                title: const Text('Fecha del Evento', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                subtitle: Text(
+                  '${_fechaEvento.day}/${_fechaEvento.month}/${_fechaEvento.year}',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                trailing: TextButton(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _fechaEvento,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+                    );
+                    if (picked != null) setState(() => _fechaEvento = picked);
+                  },
+                  child: const Text('CAMBIAR', style: TextStyle(color: gold, fontWeight: FontWeight.bold)),
+                ),
+              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.calendar_today_rounded, color: gold, size: 20),

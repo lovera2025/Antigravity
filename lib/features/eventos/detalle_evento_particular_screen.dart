@@ -12,6 +12,8 @@ import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import 'repositories/eventos_repository.dart';
 import 'repositories/transacciones_repository.dart';
+import 'utils/evento_presentacion.dart';
+import 'widgets/panel_maestro_evento_sheet.dart';
 
 class DetalleEventoParticularScreen extends ConsumerStatefulWidget {
   final Evento evento;
@@ -30,6 +32,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   List<Transaccion> _transacciones = [];
   RealtimeChannel? _eventoChannel;
   RealtimeChannel? _transaccionesChannel;
+  bool _maestroPromptMostrado = false;
 
   List<Transaccion> get _transaccionesActivas =>
       _transacciones.where((t) => !t.esAnulada).toList();
@@ -82,6 +85,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           if (evFresh != null) _eventoActual = evFresh;
           _isLoading = false;
         });
+        _maybePromptConfigMaestra();
       }
     } catch (e) {
       if (mounted) {
@@ -91,6 +95,107 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       }
       debugPrint('Error al cargar datos en DetalleEvento: $e');
       if (mounted && !cargaSilenciosa) setState(() => _isLoading = false);
+    }
+  }
+
+  void _maybePromptConfigMaestra() {
+    if (_maestroPromptMostrado) return;
+    if (!EventoPresentacion.necesitaConfiguracionMaestra(_eventoActual)) return;
+    _maestroPromptMostrado = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mostrarPanelMaestro(sugerenciaInicial: true);
+    });
+  }
+
+  void _mostrarPanelMaestro({bool sugerenciaInicial = false}) {
+    if (sugerenciaInicial) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Text(
+            'COMPLETAR CONFIGURACIÓN',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+          ),
+          content: const Text(
+            'Indicá para quién es el evento (homenajeado) y quién lo solicita. '
+            'Así el encabezado y los PDF quedarán correctos.',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('DESPUÉS', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _abrirPanelMaestro();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD4AF37),
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('CONFIGURAR AHORA'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    _abrirPanelMaestro();
+  }
+
+  void _abrirPanelMaestro() {
+    showPanelMaestroEventoSheet(
+      context: context,
+      ref: ref,
+      evento: _eventoActual,
+      onSaved: () => _fetchDatos(cargaSilenciosa: true),
+    );
+  }
+
+  Future<void> _generarVistaPresupuesto() async {
+    if (_servicios.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Agregá al menos un servicio para generar la propuesta.'),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Row(children: [
+          SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+          SizedBox(width: 12),
+          Text('Generando vista presupuesto...'),
+        ]),
+        duration: Duration(seconds: 30),
+      ),
+    );
+    try {
+      await PdfService.generarPresupuestoPreviewDesdeEvento(
+        evento: _eventoActual,
+        servicios: _servicios,
+        context: context,
+      );
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('✓ Propuesta actualizada generada'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error al generar propuesta: $e'), backgroundColor: Colors.redAccent),
+      );
     }
   }
 
@@ -112,7 +217,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       final saldoRestante = totalPresupuesto - totalPagado;
 
       await PdfService.generarReciboCompacto(
-        evento: widget.evento,
+        evento: _eventoActual,
         montoEntregado: totalPagado,
         saldoActual: saldoRestante,
         transacciones: _transaccionesActivas,
@@ -148,7 +253,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       final saldoRestante = totalPresupuesto - totalPagado;
 
       await PdfService.compartirRecibo(
-        evento: widget.evento,
+        evento: _eventoActual,
         montoEntregado: totalPagado,
         saldoActual: saldoRestante,
         transacciones: _transaccionesActivas,
@@ -383,6 +488,11 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           modalidad: widget.evento.modalidad,
           observaciones: widget.evento.observaciones,
           tipoEvento: widget.evento.tipo,
+          nombreFestejado: _eventoActual.nombreFestejado,
+          encabezadoEvento: _eventoActual.encabezadoEvento,
+          tituloFestejado: _eventoActual.encabezadoEvento ??
+              _eventoActual.tituloFestejado ??
+              _eventoActual.nombreFestejado,
         ),
       ),
     );
@@ -622,7 +732,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           children: [
             Expanded(
               child: Text(
-                (widget.evento.cliente?.nombreCompleto ?? 'DETALLE PARTICULAR').toUpperCase(), 
+                EventoPresentacion.tituloPrincipal(_eventoActual),
                 style: const TextStyle(fontSize: 14, letterSpacing: 1),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -633,14 +743,24 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
         actions: [
           if (!_isLoading) ...[
             IconButton(
+              icon: const Icon(Icons.settings_suggest_rounded, color: Color(0xFFD4AF37)),
+              onPressed: () => _mostrarPanelMaestro(),
+              tooltip: 'Configuración Maestro (Pro)',
+            ),
+            IconButton(
               icon: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFFD4AF37)),
               onPressed: _mostrarHistorialPagos,
               tooltip: 'Ver Estado de Cuenta',
             ),
             IconButton(
+              icon: const Icon(Icons.request_quote_outlined, color: Color(0xFFD4AF37)),
+              onPressed: _generarVistaPresupuesto,
+              tooltip: 'Vista presupuesto (preview)',
+            ),
+            IconButton(
               icon: const Icon(Icons.picture_as_pdf_outlined),
               onPressed: _imprimirComprobante,
-              tooltip: 'Imprimir',
+              tooltip: 'Recibo de cuenta',
             ),
             IconButton(
               icon: const Icon(Icons.share_outlined),
@@ -855,6 +975,106 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     );
   }
 
+  Widget _buildEncabezadoIdentidadEvento() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const gold = Color(0xFFD4AF37);
+    final frase = EventoPresentacion.fraseIntroEvento(_eventoActual);
+    final tieneHomenajeado =
+        EventoPresentacion.nombreFestejadoEfectivoEvento(_eventoActual) != null;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: gold.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  EventoPresentacion.tituloPrincipal(_eventoActual),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    letterSpacing: 0.5,
+                    color: isDark ? Colors.white : const Color(0xFF2C3E50),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => _mostrarPanelMaestro(),
+                icon: const Icon(Icons.settings_suggest_rounded, color: gold),
+                tooltip: 'Config Maestro Pro',
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            EventoPresentacion.subtituloEvento(_eventoActual),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: gold.withValues(alpha: 0.85),
+              letterSpacing: 0.8,
+            ),
+          ),
+          if (tieneHomenajeado) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Solicitante: ${EventoPresentacion.solicitanteNombre(_eventoActual)}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+            ),
+          ],
+          if (frase.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              frase,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                fontStyle: FontStyle.italic,
+                color: isDark ? Colors.white70 : const Color(0xFF636E72),
+              ),
+            ),
+          ],
+          if (EventoPresentacion.necesitaConfiguracionMaestra(_eventoActual)) ...[
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () => _mostrarPanelMaestro(),
+              icon: const Icon(Icons.edit_note_rounded, size: 16),
+              label: const Text(
+                'COMPLETAR HOMENAJEADO / SOLICITANTE',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+              ),
+              style: TextButton.styleFrom(foregroundColor: gold),
+            ),
+          ],
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _servicios.isEmpty ? null : _generarVistaPresupuesto,
+            icon: const Icon(Icons.request_quote_outlined, size: 16),
+            label: const Text(
+              'REGENERAR VISTA PRESUPUESTO (PDF)',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: gold,
+              side: BorderSide(color: gold.withValues(alpha: 0.5)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPanelContent() {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     
@@ -868,6 +1088,8 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildEncabezadoIdentidadEvento(),
+          const SizedBox(height: 20),
           _buildResumenCards(presupuestoTotal, saldo),
           const SizedBox(height: 24),
           _buildSeccionInformacionEvento(),
@@ -1013,7 +1235,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   }
 
   Widget _buildSeccionInformacionEvento() {
-    final observaciones = widget.evento.observaciones;
+    final observaciones = _eventoActual.observaciones;
     if (observaciones == null || observaciones.trim().isEmpty) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1120,7 +1342,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
               ),
               const SizedBox(height: 4),
               Text(
-                (widget.evento.cliente?.nombreCompleto ?? 'CLIENTE').toUpperCase(),
+                EventoPresentacion.tituloPrincipal(_eventoActual),
                 style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.bold),
               ),
             ],

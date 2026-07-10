@@ -94,6 +94,17 @@ class _CrearEventoScreenState extends ConsumerState<CrearEventoScreen> {
     String? observacionesAmpliadas;
     String? lugarPresupuesto;
     String? detalleAnclajeIA;
+    String? nombreFestejado;
+
+    final tipoLower = _tipoEvento.toLowerCase();
+    if (_homenajeado1Controller.text.isNotEmpty) {
+      if (tipoLower == 'boda' && _homenajeado2Controller.text.isNotEmpty) {
+        nombreFestejado =
+            '${_homenajeado1Controller.text.trim()} & ${_homenajeado2Controller.text.trim()}';
+      } else {
+        nombreFestejado = _homenajeado1Controller.text.trim();
+      }
+    }
 
     if (_modalidad == 'presupuesto') {
       lugarPresupuesto = _extrasController.text;
@@ -130,6 +141,8 @@ class _CrearEventoScreenState extends ConsumerState<CrearEventoScreen> {
           clienteId: _selectedClientId,
           modalidad: _modalidad,
           observaciones: observacionesAmpliadas,
+          tituloFestejado: nombreFestejado,
+          nombreFestejado: nombreFestejado,
           lugar: lugarPresupuesto,
           detalleAnclajeIA: detalleAnclajeIA,
           isPresupuesto: _modalidad == 'presupuesto',

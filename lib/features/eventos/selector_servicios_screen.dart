@@ -22,6 +22,11 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
   final Map<String, String>? servicioIdPorLineaInicial;
   final String modalidad;
   final String? observaciones;
+  final String? tituloFestejado;
+  /// Nombre corto del festejado/a (Maestro Pro). Si null, se usa [tituloFestejado].
+  final String? nombreFestejado;
+  /// Encabezado PDF/UI opcional (Maestro Pro).
+  final String? encabezadoEvento;
   final String? lugar;
   final String? detalleAnclajeIA;
   final bool isPresupuesto;
@@ -50,6 +55,9 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
     this.servicioIdPorLineaInicial,
     this.modalidad = 'particular',
     this.observaciones,
+    this.tituloFestejado,
+    this.nombreFestejado,
+    this.encabezadoEvento,
     this.lugar,
     this.detalleAnclajeIA,
     this.isPresupuesto = false,
@@ -482,6 +490,7 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
             tipoEvento: widget.tipoEvento ?? 'Otro',
             lugar: widget.lugar,
             detalleAnclaje: widget.detalleAnclajeIA,
+            fechaEvento: widget.fechaEvento,
             servicios: serviciosFinales,
             diasValidez: widget.validezDias,
           );
@@ -495,6 +504,12 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
             tipoEvento: widget.tipoEvento ?? 'Otro',
             lugar: widget.lugar,
             detalleAnclaje: widget.detalleAnclajeIA,
+            nombreFestejado: widget.nombreFestejado ?? widget.tituloFestejado,
+            encabezadoEvento: widget.encabezadoEvento,
+            tituloFestejado: widget.encabezadoEvento ??
+                widget.tituloFestejado ??
+                widget.nombreFestejado,
+            fechaEvento: widget.fechaEvento,
             instagram: widget.instagramPublicidad ?? 'junior_eventos_ok',
             telefonoPublicidad: widget.telefonoPublicidad ?? 'Maxi',
             servicios: serviciosFinales,
@@ -547,6 +562,11 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
             cantidadCuotas: widget.cantidadCuotas,
             modalidad: widget.modalidad,
             observaciones: widget.observaciones,
+            nombreFestejado: widget.nombreFestejado ?? widget.tituloFestejado,
+            encabezadoEvento: widget.encabezadoEvento,
+            tituloFestejado: widget.encabezadoEvento ??
+                widget.tituloFestejado ??
+                widget.nombreFestejado,
             serviciosSeleccionados: serviciosConDescripcion,
           );
         }
@@ -565,7 +585,15 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
         );
         
         setState(() => _confirmado = true);
-        Navigator.popUntil(context, (route) => route.isFirst);
+        // Edición: volver al detalle/lista que abrió el selector (refresca).
+        // Creación: volver al root (flujo crear_evento → selector).
+        final esEdicion =
+            widget.eventoId != null || widget.presupuestoId != null;
+        if (esEdicion) {
+          Navigator.pop(context, true);
+        } else {
+          Navigator.popUntil(context, (route) => route.isFirst);
+        }
       }
     } catch (e) {
       if (mounted) {
