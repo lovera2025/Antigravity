@@ -1041,6 +1041,7 @@ class ContratosRepository {
       );
 
       MoraPerdonSimulacion? sim;
+      MoraPerdonSimulacion? simSoloTracked;
       if (operativa > 0.01) {
         final fifo = MoraCuotaCalculator.moraCobradaParaFifo(
           moraCobradaHistorial: hist,
@@ -1059,6 +1060,15 @@ class ContratosRepository {
           incluirTracked: true,
         );
       }
+      if (c.moraPendienteTracked > 0.01) {
+        simSoloTracked = MoraCuotaCalculator.simularPerdonMora(
+          contrato: c,
+          numerosCuotaSeleccionados: const {},
+          moraCobradaHistorial: hist,
+          ahoraAr: hoy,
+          incluirTracked: true,
+        );
+      }
 
       out.add(MoraPerdonListadoItem(
         contrato: c,
@@ -1066,6 +1076,7 @@ class ContratosRepository {
         moraOperativa: operativa,
         enMoraCalendario: resumen.enMora,
         simPerdonCompleto: sim,
+        simPerdonSoloTracked: simSoloTracked,
       ));
     }
     return out;

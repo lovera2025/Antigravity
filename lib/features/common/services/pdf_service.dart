@@ -2689,7 +2689,7 @@ class PdfService {
                       ),
                     pw.SizedBox(height: 10),
                     pw.Text(
-                      'Documento previo al cobro — no registra pago.',
+                      'Documento previo al cobro - no registra pago.',
                       style: pw.TextStyle(
                         fontSize: 8,
                         fontStyle: pw.FontStyle.italic,

@@ -65,6 +65,10 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
   final Set<String> _perdonSeleccionados = {};
   /// null = todos | true = solo con mora | false = solo al día / sin mora operable
   bool? _filtroSoloConMora;
+  /// Si true, el masivo limpia solo saldo en ficha (tracked), sin eximir calendario.
+  bool _perdonMasivoSoloFicha = false;
+  /// Filtro extra: solo alumnos con tracked > 0.
+  bool _filtroSoloFicha = false;
 
   @override
   void initState() {
@@ -380,17 +384,29 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar perdón de mora'),
+        title: Text(
+          sim.soloTracked
+              ? 'Confirmar limpieza de ficha'
+              : 'Confirmar perdón de mora',
+        ),
         content: Text(
-          'Se perdonará la mora de: ${labels.isEmpty ? '(solo remanente)' : labels}'
-          '${sim.incluyeTracked ? ' + remanente parcial' : ''}.\n\n'
-          'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
-          'Exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}'
-          '${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}.\n'
-          'Las cuotas base siguen atrasadas; no se mueve Reg.\n'
-          'Mora operativa: ${sim.moraOperativaPre.toCurrency()} → '
-          '${sim.moraOperativaPost.toCurrency()}.\n\n'
-          '¿Continuar?',
+          sim.soloTracked
+              ? 'Se limpiará el saldo en ficha (tracked)'
+                  '${sim.incluyeTracked ? ' ${sel.moraPendienteTracked.toCurrency()}' : ''}.\n\n'
+                  'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
+                  'La mora calendario NO se toca'
+                  '${sim.cuotasRestantes.isNotEmpty ? ' (queda ${sim.cuotasRestantes.map((d) => 'C${d.numeroCuota}').join(', ')})' : ''}.\n'
+                  'Mora operativa: ${sim.moraOperativaPre.toCurrency()} → '
+                  '${sim.moraOperativaPost.toCurrency()}.\n\n'
+                  '¿Continuar?'
+              : 'Se perdonará la mora de: ${labels.isEmpty ? '(ninguna cuota)' : labels}'
+                  '${sim.incluyeTracked ? ' + remanente en ficha' : ''}.\n\n'
+                  'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
+                  '${sim.aplicaExencion ? 'Exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}.\n' : ''}'
+                  'Las cuotas base siguen atrasadas; no se mueve Reg.\n'
+                  'Mora operativa: ${sim.moraOperativaPre.toCurrency()} → '
+                  '${sim.moraOperativaPost.toCurrency()}.\n\n'
+                  '¿Continuar?',
         ),
         actions: [
           TextButton(
@@ -399,7 +415,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Perdonar mora'),
+            child: Text(sim.soloTracked ? 'Limpiar ficha' : 'Perdonar mora'),
           ),
         ],
       ),
@@ -425,9 +441,13 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Mora perdonada para ${sel.nombreAlumno} '
-            'hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}. '
-            'Las cuotas siguen pendientes.',
+            sim.soloTracked
+                ? 'Ficha limpiada para ${sel.nombreAlumno}. '
+                    'Mora calendario intacta '
+                    '(${sim.moraOperativaPost.toCurrency()}).'
+                : 'Mora perdonada para ${sel.nombreAlumno}'
+                    '${sim.aplicaExencion ? ' hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}' : ''}. '
+                    'Las cuotas siguen pendientes.',
           ),
           backgroundColor: const Color(0xFF00B894),
         ),
@@ -577,18 +597,29 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
   }
 
   List<MoraPerdonListadoItem> get _perdonItemsVisibles {
-    if (_filtroSoloConMora == null) return _perdonItems;
-    if (_filtroSoloConMora == true) {
-      return _perdonItems.where((i) => i.puedePerdonar).toList();
+    Iterable<MoraPerdonListadoItem> list = _perdonItems;
+    if (_filtroSoloFicha) {
+      list = list.where((i) => i.tieneTracked);
     }
-    return _perdonItems.where((i) => !i.puedePerdonar).toList();
+    if (_filtroSoloConMora == true) {
+      list = list.where((i) => _itemPuedePerdonarEnModo(i));
+    } else if (_filtroSoloConMora == false) {
+      list = list.where((i) => !_itemPuedePerdonarEnModo(i));
+    }
+    return list.toList();
   }
+
+  bool _itemPuedePerdonarEnModo(MoraPerdonListadoItem i) =>
+      _perdonMasivoSoloFicha ? i.puedePerdonarSoloFicha : i.puedePerdonarCompleto;
+
+  MoraPerdonSimulacion? _simParaItem(MoraPerdonListadoItem i) =>
+      _perdonMasivoSoloFicha ? i.simPerdonSoloTracked : i.simPerdonCompleto;
 
   double get _totalPerdonSeleccionado {
     var t = 0.0;
     for (final i in _perdonItems) {
       if (!_perdonSeleccionados.contains(i.contrato.id)) continue;
-      t += i.simPerdonCompleto?.montoPerdonado ?? 0;
+      t += _simParaItem(i)?.montoPerdonado ?? 0;
     }
     return double.parse(t.toStringAsFixed(2));
   }
@@ -616,7 +647,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
         _perdonSeleccionados
           ..clear()
           ..addAll(
-            list.where((i) => i.puedePerdonar).map((i) => i.contrato.id),
+            list.where(_itemPuedePerdonarEnModo).map((i) => i.contrato.id),
           );
         _loadingPerdon = false;
       });
@@ -633,7 +664,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     final elegibles = _perdonItems
         .where(
           (i) =>
-              _perdonSeleccionados.contains(i.contrato.id) && i.puedePerdonar,
+              _perdonSeleccionados.contains(i.contrato.id) &&
+              _itemPuedePerdonarEnModo(i),
         )
         .toList();
     if (elegibles.isEmpty) {
@@ -647,21 +679,35 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
 
     final n = elegibles.length;
     final total = _totalPerdonSeleccionado;
-    final hasta = elegibles.first.simPerdonCompleto!.exentaHasta;
+    final modoFicha = _perdonMasivoSoloFicha;
+    final hasta = elegibles.first.simPerdonCompleto?.exentaHasta;
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar perdón masivo'),
+        title: Text(
+          modoFicha
+              ? 'Confirmar perdón (solo ficha)'
+              : 'Confirmar perdón masivo',
+        ),
         content: Text(
-          'Se perdonará la mora de $n alumno${n == 1 ? '' : 's'} '
-          '(${_institucionPerdon ?? ''}'
-          '${_cuotasPagadasFiltro != null ? ', cuota $_cuotasPagadasFiltro' : ''}).\n\n'
-          'Total ≈ ${total.toCurrency()}\n'
-          'Exención hasta ${ArTime.formatFechaCorta(hasta)} (fin de mes).\n'
-          'No se modifica el Reg.\n'
-          'Las cuotas base siguen pendientes.\n\n'
-          '¿Continuar?',
+          modoFicha
+              ? 'Se limpiará el saldo en ficha (tracked) de $n alumno'
+                  '${n == 1 ? '' : 's'} '
+                  '(${_institucionPerdon ?? ''}'
+                  '${_cuotasPagadasFiltro != null ? ', cuota $_cuotasPagadasFiltro' : ''}).\n\n'
+                  'Total ≈ ${total.toCurrency()}\n'
+                  'La mora calendario (cuotas vencidas) NO se toca.\n'
+                  'No se modifica el Reg ni la exención.\n\n'
+                  '¿Continuar?'
+              : 'Se perdonará la mora de $n alumno${n == 1 ? '' : 's'} '
+                  '(${_institucionPerdon ?? ''}'
+                  '${_cuotasPagadasFiltro != null ? ', cuota $_cuotasPagadasFiltro' : ''}).\n\n'
+                  'Total ≈ ${total.toCurrency()}\n'
+                  'Exención hasta ${hasta != null ? ArTime.formatFechaCorta(hasta) : '—'} (fin de mes).\n'
+                  'No se modifica el Reg.\n'
+                  'Las cuotas base siguen pendientes.\n\n'
+                  '¿Continuar?',
         ),
         actions: [
           TextButton(
@@ -670,7 +716,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Perdonar mora'),
+            child: Text(modoFicha ? 'Limpiar ficha' : 'Perdonar mora'),
           ),
         ],
       ),
@@ -684,7 +730,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
     try {
       final repo = ref.read(contratosRepositoryProvider);
       final map = <String, MoraPerdonSimulacion>{
-        for (final i in elegibles) i.contrato.id: i.simPerdonCompleto!,
+        for (final i in elegibles) i.contrato.id: _simParaItem(i)!,
       };
       final count = await repo.perdonarMoraBulk(map);
       ref.read(finanzasProvider.notifier).recargar();
@@ -697,8 +743,11 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Mora perdonada en $count contrato${count == 1 ? '' : 's'} '
-            '(${total.toCurrency()}). Sync encolado.',
+            modoFicha
+                ? 'Ficha limpiada en $count contrato${count == 1 ? '' : 's'} '
+                    '(${total.toCurrency()}). Sync encolado.'
+                : 'Mora perdonada en $count contrato${count == 1 ? '' : 's'} '
+                    '(${total.toCurrency()}). Sync encolado.',
           ),
           backgroundColor: const Color(0xFF00B894),
         ),
@@ -819,7 +868,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     !_perdonItems.any(
                       (i) =>
                           _perdonSeleccionados.contains(i.contrato.id) &&
-                          i.puedePerdonar,
+                          _itemPuedePerdonarEnModo(i),
                     )
                 ? null
                 : _aplicarPerdonMasivo,
@@ -835,7 +884,9 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : Text(
-                    'Perdonar (${_perdonSeleccionados.where((id) => _perdonItems.any((i) => i.contrato.id == id && i.puedePerdonar)).length})',
+                    _perdonMasivoSoloFicha
+                        ? 'Limpiar ficha (${_perdonSeleccionados.where((id) => _perdonItems.any((i) => i.contrato.id == id && _itemPuedePerdonarEnModo(i))).length})'
+                        : 'Perdonar (${_perdonSeleccionados.where((id) => _perdonItems.any((i) => i.contrato.id == id && _itemPuedePerdonarEnModo(i))).length})',
                     style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
           ),
@@ -1111,7 +1162,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
           const SizedBox(height: 6),
           Text(
             'Marcá las cuotas desde la más vieja. Si tildás una, se incluyen las anteriores. '
-            'El alumno sigue atrasado en cuotas; solo se congela/perdona el interés.',
+            'El remanente en ficha (tracked) se puede limpiar solo, sin tocar el calendario. '
+            'Las cuotas base siguen atrasadas; solo se congela/perdona el interés.',
             style: TextStyle(
               fontSize: 11.5,
               height: 1.35,
@@ -1148,6 +1200,16 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                         : () => setState(() => _cuotasPerdonSeleccion.clear()),
                     child: const Text('Ninguna'),
                   ),
+                  if (tieneTracked)
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () => setState(() {
+                                _cuotasPerdonSeleccion.clear();
+                                _incluirTrackedEnPerdon = true;
+                              }),
+                      child: const Text('Solo ficha'),
+                    ),
                 ],
               ),
               ..._desgloseNeto.map((d) {
@@ -1176,9 +1238,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                 );
               }),
             ],
-            if (tieneTracked &&
-                (_desgloseNeto.isEmpty ||
-                    _cuotasPerdonSeleccion.length == _desgloseNeto.length))
+            if (tieneTracked)
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
@@ -1190,11 +1250,12 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     ? null
                     : (v) => setState(() => _incluirTrackedEnPerdon = v ?? true),
                 title: const Text(
-                  'Incluir remanente parcial (tracked)',
+                  'Saldo en ficha (tracked)',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 ),
                 subtitle: Text(
-                  sel.moraPendienteTracked.toCurrency(),
+                  '${sel.moraPendienteTracked.toCurrency()}'
+                  '${_cuotasPerdonSeleccion.isEmpty && _incluirTrackedEnPerdon ? ' · solo limpia ficha, calendario intacto' : ''}',
                   style: TextStyle(
                     fontSize: 11.5,
                     color: isDark ? Colors.white54 : Colors.grey.shade600,
@@ -1204,10 +1265,14 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
             if (sim != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Perdona ≈ ${sim.montoPerdonado.toCurrency()} · '
-                'exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}'
-                '${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}\n'
-                'Mora: ${sim.moraOperativaPre.toCurrency()} → ${sim.moraOperativaPost.toCurrency()}',
+                sim.soloTracked
+                    ? 'Limpia ficha ≈ ${sim.montoPerdonado.toCurrency()} · '
+                        'queda calendario ${sim.moraOperativaPost.toCurrency()}\n'
+                        'Mora: ${sim.moraOperativaPre.toCurrency()} → ${sim.moraOperativaPost.toCurrency()}'
+                    : 'Perdona ≈ ${sim.montoPerdonado.toCurrency()}'
+                        '${sim.aplicaExencion ? ' · exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}' : ''}'
+                        '${sim.incluyeTracked ? ' · +ficha' : ''}\n'
+                        'Mora: ${sim.moraOperativaPre.toCurrency()} → ${sim.moraOperativaPost.toCurrency()}',
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.4,
@@ -1227,8 +1292,10 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                 label: Text(
                   sim == null
                       ? 'Perdonar mora'
-                      : 'Perdonar (${sim.cuotasPerdonadas.length}'
-                          '${sim.incluyeTracked ? '+R' : ''})',
+                      : sim.soloTracked
+                          ? 'Limpiar ficha'
+                          : 'Perdonar (${sim.cuotasPerdonadas.length}'
+                              '${sim.incluyeTracked ? '+F' : ''})',
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.redAccent.withValues(alpha: 0.12),
@@ -1574,12 +1641,54 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Filtrá por institución y cuotas pagadas. El estado es el mismo que la grilla '
-          'de eventos masivos. Perdonar congela la mora hasta fin de mes sin tocar el Reg.',
+          'Filtrá por institución y cuotas pagadas. Podés perdonar todo (calendario + ficha) '
+          'o solo el saldo en ficha (tracked), dejando viva la mora de cuotas vencidas.',
           style: TextStyle(
             fontSize: 12.5,
             color: isDark ? Colors.white70 : Colors.grey.shade700,
             height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment<bool>(
+              value: false,
+              label: Text('Todo (cal+ficha)', style: TextStyle(fontSize: 11.5)),
+              icon: Icon(Icons.cleaning_services_rounded, size: 16),
+            ),
+            ButtonSegment<bool>(
+              value: true,
+              label: Text('Solo ficha', style: TextStyle(fontSize: 11.5)),
+              icon: Icon(Icons.folder_shared_outlined, size: 16),
+            ),
+          ],
+          selected: {_perdonMasivoSoloFicha},
+          onSelectionChanged: busy
+              ? null
+              : (s) {
+                  setState(() {
+                    _perdonMasivoSoloFicha = s.first;
+                    if (_perdonMasivoSoloFicha) {
+                      _filtroSoloFicha = true;
+                    }
+                    _perdonSeleccionados
+                      ..clear()
+                      ..addAll(
+                        _perdonItems
+                            .where(_itemPuedePerdonarEnModo)
+                            .map((i) => i.contrato.id),
+                      );
+                  });
+                },
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return _perdonMasivoSoloFicha ? Colors.deepOrange : gold;
+              }
+              return isDark ? Colors.white70 : Colors.grey.shade700;
+            }),
           ),
         ),
         const SizedBox(height: 10),
@@ -1656,10 +1765,13 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                 padding: const EdgeInsets.only(right: 6),
                 child: FilterChip(
                   label: Text('Todos (${_perdonItems.length})'),
-                  selected: _filtroSoloConMora == null,
+                  selected: _filtroSoloConMora == null && !_filtroSoloFicha,
                   onSelected: busy
                       ? null
-                      : (_) => setState(() => _filtroSoloConMora = null),
+                      : (_) => setState(() {
+                            _filtroSoloConMora = null;
+                            _filtroSoloFicha = false;
+                          }),
                   selectedColor: gold.withValues(alpha: 0.25),
                   checkmarkColor: gold,
                 ),
@@ -1668,24 +1780,47 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                 padding: const EdgeInsets.only(right: 6),
                 child: FilterChip(
                   label: Text(
-                    'Con mora (${_perdonItems.where((i) => i.puedePerdonar).length})',
+                    'Con mora (${_perdonItems.where(_itemPuedePerdonarEnModo).length})',
                   ),
-                  selected: _filtroSoloConMora == true,
+                  selected: _filtroSoloConMora == true && !_filtroSoloFicha,
                   onSelected: busy
                       ? null
-                      : (_) => setState(() => _filtroSoloConMora = true),
+                      : (_) => setState(() {
+                            _filtroSoloConMora = true;
+                            _filtroSoloFicha = false;
+                          }),
                   selectedColor: Colors.redAccent.withValues(alpha: 0.2),
                   checkmarkColor: Colors.redAccent,
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FilterChip(
+                  label: Text(
+                    'Solo ficha (${_perdonItems.where((i) => i.tieneTracked).length})',
+                  ),
+                  selected: _filtroSoloFicha,
+                  onSelected: busy
+                      ? null
+                      : (_) => setState(() {
+                            _filtroSoloFicha = true;
+                            _filtroSoloConMora = null;
+                          }),
+                  selectedColor: Colors.deepOrange.withValues(alpha: 0.2),
+                  checkmarkColor: Colors.deepOrange,
+                ),
+              ),
               FilterChip(
                 label: Text(
-                  'Al día / sin mora (${_perdonItems.where((i) => !i.puedePerdonar).length})',
+                  'Al día / sin mora (${_perdonItems.where((i) => !_itemPuedePerdonarEnModo(i)).length})',
                 ),
-                selected: _filtroSoloConMora == false,
+                selected: _filtroSoloConMora == false && !_filtroSoloFicha,
                 onSelected: busy
                     ? null
-                    : (_) => setState(() => _filtroSoloConMora = false),
+                    : (_) => setState(() {
+                          _filtroSoloConMora = false;
+                          _filtroSoloFicha = false;
+                        }),
                 selectedColor: CronogramaCuotasUtils.colorAlDia.withValues(alpha: 0.2),
                 checkmarkColor: CronogramaCuotasUtils.colorAlDia,
               ),
@@ -1702,11 +1837,14 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     : () => setState(() {
                           _perdonSeleccionados.addAll(
                             visibles
-                                .where((i) => i.puedePerdonar)
+                                .where(_itemPuedePerdonarEnModo)
                                 .map((i) => i.contrato.id),
                           );
                         }),
-                child: const Text('Todos con mora', style: TextStyle(fontSize: 12)),
+                child: Text(
+                  _perdonMasivoSoloFicha ? 'Todos con ficha' : 'Todos con mora',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
               TextButton(
                 onPressed: busy
@@ -1727,8 +1865,8 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                 )
               else
                 Text(
-                  '${_perdonSeleccionados.where((id) => _perdonItems.any((i) => i.contrato.id == id && i.puedePerdonar)).length}'
-                  '/${_perdonItems.where((i) => i.puedePerdonar).length}'
+                  '${_perdonSeleccionados.where((id) => _perdonItems.any((i) => i.contrato.id == id && _itemPuedePerdonarEnModo(i))).length}'
+                  '/${_perdonItems.where(_itemPuedePerdonarEnModo).length}'
                   ' · ${_totalPerdonSeleccionado.toCurrency()}',
                   style: const TextStyle(
                     fontSize: 12.5,
@@ -1784,13 +1922,17 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                               );
                               final tCuotas =
                                   c.totalCuotas > 0 ? c.totalCuotas : 1;
-                              final puede = item.puedePerdonar;
+                              final puede = _itemPuedePerdonarEnModo(item);
+                              final simModo = _simParaItem(item);
                               final checked = _perdonSeleccionados.contains(id);
+                              final tracked = c.moraPendienteTracked;
 
                               return CheckboxListTile(
                                 dense: true,
                                 value: puede ? checked : false,
-                                activeColor: Colors.redAccent,
+                                activeColor: _perdonMasivoSoloFicha
+                                    ? Colors.deepOrange
+                                    : Colors.redAccent,
                                 onChanged: busy || !puede
                                     ? null
                                     : (v) => setState(() {
@@ -1839,12 +1981,21 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                                       ],
                                     ),
                                     Text(
-                                      puede
-                                          ? 'Mora ${item.moraOperativa.toCurrency()}'
-                                              '${item.simPerdonCompleto != null ? ' → perdón ≈ ${item.simPerdonCompleto!.montoPerdonado.toCurrency()} hasta ${ArTime.formatFechaCorta(item.simPerdonCompleto!.exentaHasta)}' : ''}'
-                                          : item.moraOperativa > 0.01
+                                      _perdonMasivoSoloFicha
+                                          ? (puede
+                                              ? 'Ficha ${tracked.toCurrency()} → limpia · '
+                                                  'queda cal. ${simModo!.moraOperativaPost.toCurrency()}'
+                                              : tracked > 0.01
+                                                  ? 'Ficha ${tracked.toCurrency()}'
+                                                  : 'Sin ficha')
+                                          : puede
                                               ? 'Mora ${item.moraOperativa.toCurrency()}'
-                                              : 'Sin mora operable',
+                                                  '${simModo != null ? ' → perdón ≈ ${simModo.montoPerdonado.toCurrency()}${simModo.aplicaExencion ? ' hasta ${ArTime.formatFechaCorta(simModo.exentaHasta)}' : ''}' : ''}'
+                                                  '${tracked > 0.01 ? ' · ficha ${tracked.toCurrency()}' : ''}'
+                                              : item.moraOperativa > 0.01
+                                                  ? 'Mora ${item.moraOperativa.toCurrency()}'
+                                                      '${tracked > 0.01 ? ' · ficha ${tracked.toCurrency()}' : ''}'
+                                                  : 'Sin mora operable',
                                       style: TextStyle(
                                         fontSize: 10.5,
                                         color: isDark

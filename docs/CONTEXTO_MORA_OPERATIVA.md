@@ -3,10 +3,10 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Jueves 9 de julio de 2026 (v4.3.0 — perdón admin + recovery)**  
+**Última actualización:** **Viernes 10 de julio de 2026 (v4.3.1 — perdón solo ficha)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
-**Tests:** `test/mora_pendiente_display_test.dart` (43 tests)  
-**Release notes del día:** `docs/CONTEXTO_v4.3.0_2026-07-09.md`
+**Tests:** `test/mora_pendiente_display_test.dart` (46+ tests)  
+**Release notes del día:** `docs/CONTEXTO_v4.3.1_2026-07-10.md`
 
 ---
 
@@ -171,6 +171,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 | Fecha | Qué |
 |-------|-----|
+| 10-jul-2026 (**v4.3.1**) | Perdón solo ficha (tracked independiente, sin exención); filtro masivo Solo ficha. Ver `CONTEXTO_v4.3.1_2026-07-10.md`. |
 | 9-jul-2026 (**v4.3.0**) | Perdón admin por exención (sin Reg); multi-cuotas prefijo; recovery no degrada exención local; release + smoke 9 masivos. Ver `CONTEXTO_v4.3.0_2026-07-09.md`. |
 | 29-jun-2026 (v50) | Migración conservadora por historial; `postCobroTrackedOffset`; offset solo con cuota+mora; UI checkbox maestro restaurado; recovery tracked legítimo. |
 | 29-jun-2026 (v49) | Fix double-counting: tracked solo remanente parcial, offset-adjusted FIFO. |

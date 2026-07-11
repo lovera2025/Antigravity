@@ -951,6 +951,7 @@ void main() {
       );
       expect(sim, isNotNull);
       expect(sim!.cubreHastaFinDeMes, isFalse);
+      expect(sim.aplicaExencion, isTrue);
       expect(sim.cuotasPerdonadas.map((d) => d.numeroCuota), [1]);
       expect(sim.cuotasRestantes, isNotEmpty);
       expect(sim.moraOperativaPost, greaterThan(0.01));
@@ -963,6 +964,106 @@ void main() {
           MoraCuotaCalculator.calcularDesglose(post, hoy);
       expect(desglosePost.any((d) => d.numeroCuota == 1), isFalse);
       expect(desglosePost, isNotEmpty);
+    });
+
+    test('solo ficha (tracked) no escribe exención y deja calendario', () {
+      final hoy = DateTime(2026, 7, 10);
+      // Como Aranda: 2/9, C3 vencida + tracked de cobros sin mora.
+      final aranda = ContratoAlumno(
+        id: 'aranda',
+        eventoId: 'evt',
+        nombreAlumno: 'ARANDA',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 360000,
+        saldoDeudor: 280000,
+        cuotasPagadas: 2,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        moraPendienteTracked: 8800,
+        moraCobradaOffset: 0,
+      );
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: aranda,
+        numerosCuotaSeleccionados: const {},
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        incluirTracked: true,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.soloTracked, isTrue);
+      expect(sim.aplicaExencion, isFalse);
+      expect(sim.incluyeTracked, isTrue);
+      expect(sim.trackedPost, 0);
+      expect(sim.montoPerdonado, closeTo(8800, 0.01));
+      // Calendario C3 (~10d × $400) sigue vivo.
+      expect(sim.moraOperativaPost, closeTo(4000, 0.01));
+      expect(sim.cuotasRestantes, isNotEmpty);
+      expect(sim.cuotasRestantes.first.numeroCuota, 3);
+
+      final payload = MoraCuotaCalculator.payloadPerdonMora(sim);
+      expect(payload['mora_pendiente_tracked'], 0.0);
+      expect(payload.containsKey('mora_exenta_hasta'), isFalse);
+      expect(payload.containsKey('mora_exencion_reinicia'), isFalse);
+    });
+
+    test('cuotas + ficha limpia tracked aunque queden cuotas', () {
+      final hoy = DateTime(2026, 7, 10);
+      final c = ContratoAlumno(
+        id: 'mix',
+        eventoId: 'evt',
+        nombreAlumno: 'MIX',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 360000,
+        saldoDeudor: 280000,
+        cuotasPagadas: 2,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        moraPendienteTracked: 8800,
+      );
+      // Sin cuotas seleccionadas no aplica; con C3 + tracked:
+      final bruto = MoraCuotaCalculator.calcularDesglose(c, hoy);
+      final nums = bruto.map((d) => d.numeroCuota).toSet();
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: nums,
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        incluirTracked: true,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.incluyeTracked, isTrue);
+      expect(sim.trackedPost, 0);
+      expect(sim.aplicaExencion, isTrue);
+      expect(sim.moraOperativaPost, closeTo(0, 0.01));
+    });
+
+    test('prefijo sin incluir tracked conserva ficha', () {
+      final hoy = DateTime(2026, 7, 10);
+      final c = ContratoAlumno(
+        id: 'keep-tr',
+        eventoId: 'evt',
+        nombreAlumno: 'KEEP',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 360000,
+        saldoDeudor: 280000,
+        cuotasPagadas: 2,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        moraPendienteTracked: 8800,
+      );
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: {3},
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        incluirTracked: false,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.incluyeTracked, isFalse);
+      expect(sim.trackedPost, closeTo(8800, 0.01));
+      expect(sim.aplicaExencion, isTrue);
+      // Solo queda tracked como mora operativa.
+      expect(sim.moraOperativaPost, closeTo(8800, 0.01));
     });
   });
 
