@@ -923,7 +923,7 @@ class ContratosRepository {
     return rows.map(_fromLocalRow).toList();
   }
 
-  /// Alumnos masivos con cuota vencida y mora neta a restaurar (1% cuota ├ù d├¡as atraso).
+  /// Alumnos masivos con cuota vencida y mora neta a restaurar (1% cuota × días atraso).
   Future<List<MoraRestauracionCandidato>> listarCandidatosRestauracionMora({
     bool excluirBuenaVista = true,
   }) async {
@@ -975,6 +975,142 @@ class ContratosRepository {
       ));
     }
     return out;
+  }
+
+  /// Instituciones de eventos masivos activos (para filtro de perdón).
+  Future<List<String>> listarInstitucionesMasivosActivos() async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT TRIM(IFNULL(ca.institucion, '')) AS inst
+      FROM contratos_alumnos ca
+      INNER JOIN eventos ev ON ca.evento_id = ev.id
+      WHERE ev.modalidad = 'masivo'
+        AND ev.estado IN ('Confirmado', 'Planificacion')
+        AND ca.nombre_alumno NOT LIKE '[BAJA]%'
+        AND TRIM(IFNULL(ca.institucion, '')) != ''
+      ORDER BY inst COLLATE NOCASE ASC
+    ''');
+    return rows
+        .map((r) => (r['inst'] as String?)?.trim() ?? '')
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  /// Listado para perdón masivo: misma mora operativa / calendario que la grilla.
+  /// [cuotasPagadasExactas] null = todas; si no, filtra `cuotas_pagadas == N`.
+  Future<List<MoraPerdonListadoItem>> listarParaPerdonMora({
+    required String institucion,
+    int? cuotasPagadasExactas,
+  }) async {
+    final inst = institucion.trim();
+    if (inst.isEmpty) return [];
+
+    final db = await LocalDatabase.instance;
+    final args = <Object>[inst];
+    var sql = '''
+      SELECT ca.* FROM contratos_alumnos ca
+      INNER JOIN eventos ev ON ca.evento_id = ev.id
+      WHERE ev.modalidad = 'masivo'
+        AND ev.estado IN ('Confirmado', 'Planificacion')
+        AND ca.nombre_alumno NOT LIKE '[BAJA]%'
+        AND TRIM(IFNULL(ca.institucion, '')) = ?
+    ''';
+    if (cuotasPagadasExactas != null) {
+      sql += ' AND ca.cuotas_pagadas = ?';
+      args.add(cuotasPagadasExactas);
+    }
+    sql += ' ORDER BY ca.nombre_alumno COLLATE NOCASE ASC';
+
+    final rows = await db.rawQuery(sql, args);
+    final contratos = rows.map(_fromLocalRow).toList();
+    if (contratos.isEmpty) return [];
+
+    final moraMap = await sumMoraCobradaHistorialPorContratos(
+      contratos.map((c) => c.id).toList(),
+    );
+    final hoy = ArTime.nowAr();
+    final out = <MoraPerdonListadoItem>[];
+
+    for (final c in contratos) {
+      final hist = moraMap[c.id] ?? 0.0;
+      final resumen = MoraCuotaCalculator.calcular(c, hoy);
+      final operativa = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: c,
+        moraCobradaHistorial: hist,
+        ahoraAr: hoy,
+      );
+
+      MoraPerdonSimulacion? sim;
+      if (operativa > 0.01) {
+        final fifo = MoraCuotaCalculator.moraCobradaParaFifo(
+          moraCobradaHistorial: hist,
+          moraCobradaOffset: c.moraCobradaOffset,
+        );
+        final neto = MoraCuotaCalculator.desglosePendiente(
+          MoraCuotaCalculator.calcularDesglose(c, hoy),
+          fifo,
+        );
+        final nums = neto.map((d) => d.numeroCuota).toSet();
+        sim = MoraCuotaCalculator.simularPerdonMora(
+          contrato: c,
+          numerosCuotaSeleccionados: nums,
+          moraCobradaHistorial: hist,
+          ahoraAr: hoy,
+          incluirTracked: true,
+        );
+      }
+
+      out.add(MoraPerdonListadoItem(
+        contrato: c,
+        moraCobradaHistorial: hist,
+        moraOperativa: operativa,
+        enMoraCalendario: resumen.enMora,
+        simPerdonCompleto: sim,
+      ));
+    }
+    return out;
+  }
+
+  /// Aplica perdón de mora en lote (exención; no toca Reg) y encola sync.
+  Future<int> perdonarMoraBulk(
+    Map<String, MoraPerdonSimulacion> porContratoId,
+  ) async {
+    if (porContratoId.isEmpty) return 0;
+
+    final db = await LocalDatabase.instance;
+    var count = 0;
+    final nowUtc = DateTime.now().toUtc().toIso8601String();
+
+    await db.transaction((txn) async {
+      for (final e in porContratoId.entries) {
+        final sim = e.value;
+        if (sim.montoPerdonado <= 0.01) continue;
+        final payload = MoraCuotaCalculator.payloadPerdonMora(sim);
+        final local = {
+          ...payload,
+          'updated_at': nowUtc,
+        };
+        await txn.update(
+          'contratos_alumnos',
+          local,
+          where: 'id = ?',
+          whereArgs: [e.key],
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'contratos_alumnos',
+          operacion: SyncOperation.update,
+          registroId: e.key,
+          payload: ContratoAlumno.payloadForRemote({
+            'id': e.key,
+            ...payload,
+          }),
+        );
+        count++;
+      }
+    });
+
+    return count;
   }
 
   /// Persiste [mora_pendiente_tracked] en lote y encola sync por contrato.

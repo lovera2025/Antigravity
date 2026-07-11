@@ -345,6 +345,100 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
   return agruparConceptosMesasParaPdf(conceptosFinales, cantMesas);
 }
 
+final _reCuotaBaseSimple = RegExp(
+  r'^Cuota Base \((\d+)/(\d+)\)$',
+  caseSensitive: false,
+);
+
+/// Compacta cuotas base consecutivas del mismo monto (resumen a abonar).
+/// Ej.: 9× "Cuota Base (n/9)" → "Cuotas base (1–9/9)".
+List<Map<String, dynamic>> compactarCuotasBaseParaResumenPdf(
+  List<Map<String, dynamic>> lineas,
+) {
+  final out = <Map<String, dynamic>>[];
+  var i = 0;
+  while (i < lineas.length) {
+    final c = Map<String, dynamic>.from(lineas[i]);
+    final concepto = (c['concepto'] as String? ?? '').trim();
+    final match = _reCuotaBaseSimple.firstMatch(concepto);
+    if (c['esPlanLiquidacion'] != true ||
+        c['esMora'] == true ||
+        c['esCargoCanal'] == true ||
+        match == null) {
+      out.add(c);
+      i++;
+      continue;
+    }
+
+    final nums = <int>[int.parse(match.group(1)!)];
+    final totalCuotas = int.parse(match.group(2)!);
+    final unitMonto = (c['monto'] as num?)?.toDouble() ?? 0;
+    var sumMonto = unitMonto;
+    var sumGross = (c['gross'] as num?)?.toDouble() ?? unitMonto;
+    var j = i + 1;
+
+    while (j < lineas.length) {
+      final n = lineas[j];
+      if (n['esPlanLiquidacion'] != true ||
+          n['esMora'] == true ||
+          n['esCargoCanal'] == true) {
+        break;
+      }
+      final mj = _reCuotaBaseSimple.firstMatch(
+        (n['concepto'] as String? ?? '').trim(),
+      );
+      if (mj == null) break;
+      if (int.parse(mj.group(2)!) != totalCuotas) break;
+      final nNum = int.parse(mj.group(1)!);
+      if (nNum != nums.last + 1) break;
+      final nMonto = (n['monto'] as num?)?.toDouble() ?? 0;
+      if ((nMonto - unitMonto).abs() > 0.02) break;
+      nums.add(nNum);
+      sumMonto += nMonto;
+      sumGross += (n['gross'] as num?)?.toDouble() ?? nMonto;
+      j++;
+    }
+
+    if (nums.length >= 2) {
+      out.add({
+        'concepto':
+            'Cuotas base (${nums.first}–${nums.last}/$totalCuotas)',
+        'monto': double.parse(sumMonto.toStringAsFixed(2)),
+        'gross': double.parse(sumGross.toStringAsFixed(2)),
+        'esPlanLiquidacion': true,
+      });
+      i = j;
+    } else {
+      out.add(c);
+      i++;
+    }
+  }
+  return out;
+}
+
+/// Gross del plan en la selección (reduce saldo_deudor; excluye mora/cargo).
+double grossPlanSeleccionadoPdf(Iterable<Map<String, dynamic>> conceptos) {
+  var sum = 0.0;
+  for (final c in conceptos) {
+    if (c['esPlanLiquidacion'] != true) continue;
+    if (c['esMora'] == true || c['esCargoCanal'] == true) continue;
+    final g = (c['gross'] as num?)?.toDouble() ??
+        (c['monto'] as num?)?.toDouble() ??
+        0;
+    sum += g;
+  }
+  return double.parse(sum.toStringAsFixed(2));
+}
+
+double moraSeleccionadaPdf(Iterable<Map<String, dynamic>> conceptos) {
+  return conceptos
+      .where((c) => c['esMora'] == true)
+      .fold<double>(
+        0,
+        (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
+      );
+}
+
 /// Suma líneas de liquidación (excluye cargo canal).
 double sumLiquidoConceptosFinales(List<Map<String, dynamic>> conceptos) {
   return conceptos

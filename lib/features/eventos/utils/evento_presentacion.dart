@@ -88,6 +88,24 @@ class EventoPresentacion {
           ? evento.cliente!.nombreCompleto.trim()
           : 'Cliente';
 
+  /// Colegio / institución para PDFs de masivos (nunca solo el tipo genérico).
+  ///
+  /// Orden: institución del alumno → encabezado del evento → cliente → tipo.
+  static String institucionOEventoParaPdf({
+    required Evento evento,
+    String? institucionAlumno,
+  }) {
+    final a = institucionAlumno?.trim();
+    if (a != null && a.isNotEmpty) return a;
+    final enc = evento.encabezadoEvento?.trim();
+    if (enc != null && enc.isNotEmpty) return enc;
+    final cli = evento.cliente?.nombreCompleto.trim();
+    if (cli != null && cli.isNotEmpty) return cli;
+    final tit = evento.tituloFestejado?.trim();
+    if (tit != null && tit.isNotEmpty) return tit;
+    return evento.tipoParaMostrar;
+  }
+
   static String solicitantePresupuesto(Presupuesto p) =>
       p.cliente?.nombreCompleto.trim().isNotEmpty == true
           ? p.cliente!.nombreCompleto.trim()

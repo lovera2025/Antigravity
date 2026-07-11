@@ -276,12 +276,9 @@ class ContratoAlumno {
   }
 
   /// Filtra campos que no existen en la nube (p. ej. cola de sync legacy).
+  /// Los campos de mora operativa (`mora_exenta_hasta`, offset, etc.) SÍ van a Supabase.
   static Map<String, dynamic> payloadForRemote(Map<String, dynamic> data) {
     final out = Map<String, dynamic>.from(data);
-    out.remove('mora_cobrada_offset');
-    out.remove('mora_fecha_referencia');
-    out.remove('mora_exenta_hasta');
-    out.remove('mora_exencion_reinicia');
     out.remove('baja_temporal_desde');
     if (out.containsKey('nombres_acompanantes')) {
       out['nombres_acompanantes'] = acompanantesForRemote(out['nombres_acompanantes']);

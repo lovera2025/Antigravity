@@ -1835,7 +1835,10 @@ class PdfService {
                         ),
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          alumno.institucion ?? evento.tipoParaMostrar,
+                          EventoPresentacion.institucionOEventoParaPdf(
+                            evento: evento,
+                            institucionAlumno: alumno.institucion,
+                          ),
                           style: pw.TextStyle(fontSize: 8, color: _greyText),
                         ),
                         pw.SizedBox(height: 3),
@@ -1859,7 +1862,10 @@ class PdfService {
                         ),
                         pw.SizedBox(height: 2),
                         pw.Text(
-                          alumno.institucion ?? evento.tipoParaMostrar,
+                          EventoPresentacion.institucionOEventoParaPdf(
+                            evento: evento,
+                            institucionAlumno: alumno.institucion,
+                          ),
                           style: pw.TextStyle(fontSize: 8, color: _greyText),
                         ),
                         pw.SizedBox(height: 3),
@@ -2407,9 +2413,11 @@ class PdfService {
       alumno,
       mesasEstadoResumen,
     );
-    final conceptosLineasDisplay = agruparConceptosMesasParaPdf(
-      conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
-      cantMesasResumen,
+    final conceptosLineasDisplay = compactarCuotasBaseParaResumenPdf(
+      agruparConceptosMesasParaPdf(
+        conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
+        cantMesasResumen,
+      ),
     );
 
     final lineasLiquidacion = conceptosLineasDisplay
@@ -2421,6 +2429,22 @@ class PdfService {
       0,
       (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
     );
+
+    final double planSeleccionado =
+        grossPlanSeleccionadoPdf(conceptosLineasDisplay);
+    final double moraSeleccionada =
+        moraSeleccionadaPdf(conceptosLineasDisplay);
+    final double saldoPlanDespues = double.parse(
+      (saldoActualPlan - planSeleccionado)
+          .clamp(0.0, double.infinity)
+          .toStringAsFixed(2),
+    );
+    final double moraDespues = moraPendienteNoIncluida ?? 0;
+    final bool hayDescuento = porcentajeDescuentoLiquidacion > 0.01;
+    final bool mostrarSubtotalLiquido =
+        cargoTotal > 0.01 ||
+        hayDescuento ||
+        (subtotalLiquidacion - totalAbonar).abs() > 0.03;
 
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
@@ -2644,58 +2668,36 @@ class PdfService {
                         color: _darkText,
                       ),
                     ),
-                    if (alumno.institucion != null &&
-                        alumno.institucion!.trim().isNotEmpty)
-                      pw.Text(
-                        alumno.institucion!,
-                        style: pw.TextStyle(fontSize: 9, color: _greyText),
+                    pw.Text(
+                      EventoPresentacion.institucionOEventoParaPdf(
+                        evento: evento,
+                        institucionAlumno: alumno.institucion,
                       ),
+                      style: pw.TextStyle(fontSize: 9, color: _greyText),
+                    ),
                     if (alumno.cursoDivision != null &&
                         alumno.cursoDivision!.trim().isNotEmpty)
                       pw.Text(
                         alumno.cursoDivision!,
                         style: pw.TextStyle(fontSize: 9, color: _greyText),
                       ),
-                    pw.Text(
-                      evento.tipoParaMostrar,
-                      style: pw.TextStyle(fontSize: 9, color: _greyText),
-                    ),
-                    pw.SizedBox(height: 10),
-                    pw.Container(
-                      width: double.infinity,
-                      padding: const pw.EdgeInsets.all(10),
-                      decoration: pw.BoxDecoration(
-                        color: _cardBg,
-                        borderRadius: const pw.BorderRadius.all(
-                          pw.Radius.circular(6),
-                        ),
-                        border: pw.Border.all(color: _greyLight, width: 0.5),
+                    if (evento.modalidad != 'masivo' &&
+                        evento.tipoParaMostrar.trim().isNotEmpty)
+                      pw.Text(
+                        evento.tipoParaMostrar,
+                        style: pw.TextStyle(fontSize: 9, color: _greyText),
                       ),
-                      child: pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(
-                            'SALDO ACTUAL DEL PLAN',
-                            style: pw.TextStyle(
-                              fontSize: 8,
-                              fontWeight: pw.FontWeight.bold,
-                              color: _greyText,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          pw.Text(
-                            saldoActualPlan.toCurrency(),
-                            style: pw.TextStyle(
-                              fontSize: 12,
-                              fontWeight: pw.FontWeight.bold,
-                              color: _darkText,
-                            ),
-                          ),
-                        ],
+                    pw.SizedBox(height: 10),
+                    pw.Text(
+                      'Documento previo al cobro — no registra pago.',
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        fontStyle: pw.FontStyle.italic,
+                        color: _greyText,
                       ),
                     ),
                     if (medioStr.isNotEmpty) ...[
-                      pw.SizedBox(height: 8),
+                      pw.SizedBox(height: 6),
                       if (esMixto)
                         pw.Text(
                           'Medio de pago: Mixto — Efectivo '
@@ -2721,7 +2723,7 @@ class PdfService {
                     ],
                     pw.SizedBox(height: 12),
                     pw.Text(
-                      'LIQUIDACIÓN DEL PLAN',
+                      'DETALLE DE ESTA SELECCIÓN',
                       style: pw.TextStyle(
                         fontSize: 8,
                         fontWeight: pw.FontWeight.bold,
@@ -2731,30 +2733,46 @@ class PdfService {
                     ),
                     pw.SizedBox(height: 4),
                     ...lineasLiquidacion.map(lineaConcepto),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(top: 2, bottom: 8),
-                      child: pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(
-                            'Subtotal liquidación',
-                            style: pw.TextStyle(
-                              fontSize: 9,
-                              fontWeight: pw.FontWeight.bold,
-                              color: _darkText,
-                            ),
+                    if (planSeleccionado > 0.01 && moraSeleccionada > 0.01)
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 2, bottom: 2),
+                        child: pw.Text(
+                          'Plan ${planSeleccionado.toCurrency()} · '
+                          'Mora ${moraSeleccionada.toCurrency()}',
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontStyle: pw.FontStyle.italic,
+                            color: _greyText,
                           ),
-                          pw.Text(
-                            subtotalLiquidacion.toCurrency(),
-                            style: pw.TextStyle(
-                              fontSize: 9,
-                              fontWeight: pw.FontWeight.bold,
-                              color: _darkText,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                    if (mostrarSubtotalLiquido)
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 2, bottom: 6),
+                        child: pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Text(
+                              'Subtotal liquidación',
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _darkText,
+                              ),
+                            ),
+                            pw.Text(
+                              subtotalLiquidacion.toCurrency(),
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _darkText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      pw.SizedBox(height: 6),
                     ..._bloqueDescuentoLiquidacionPdf(
                       porcentajeDescuento: porcentajeDescuentoLiquidacion,
                       conceptos: conceptosLineasDisplay,
@@ -2787,7 +2805,7 @@ class PdfService {
                     ],
                     pw.Container(
                       width: double.infinity,
-                      padding: const pw.EdgeInsets.all(10),
+                      padding: const pw.EdgeInsets.all(12),
                       decoration: pw.BoxDecoration(
                         color: _greyLight,
                         borderRadius: const pw.BorderRadius.all(
@@ -2799,8 +2817,8 @@ class PdfService {
                         children: [
                           pw.Text(
                             esTransferencia && cargoTotal > 0.01
-                                ? 'TOTAL A TRANSFERIR'
-                                : 'TOTAL A ABONAR',
+                                ? 'TOTAL A TRANSFERIR AHORA'
+                                : 'TOTAL A PAGAR AHORA',
                             style: pw.TextStyle(
                               fontSize: 10,
                               fontWeight: pw.FontWeight.bold,
@@ -2811,7 +2829,7 @@ class PdfService {
                           pw.Text(
                             totalAbonar.toCurrency(),
                             style: pw.TextStyle(
-                              fontSize: 14,
+                              fontSize: 16,
                               fontWeight: pw.FontWeight.bold,
                               color: _darkText,
                             ),
@@ -2819,32 +2837,92 @@ class PdfService {
                         ],
                       ),
                     ),
-                    if (moraPendienteNoIncluida != null &&
-                        moraPendienteNoIncluida > 0.01) ...[
-                      pw.SizedBox(height: 8),
-                      pw.Text(
-                        'Interés por mora no incluido en este resumen: '
-                        '${moraPendienteNoIncluida.toCurrency()}',
-                        style: pw.TextStyle(
-                          fontSize: 8,
-                          fontStyle: pw.FontStyle.italic,
-                          color: _greyText,
-                        ),
-                      ),
-                    ],
                     pw.SizedBox(height: 10),
-                    pw.Text(
-                      'El interés por mora no forma parte del saldo del plan '
-                      'de cuotas.',
-                      style: pw.TextStyle(
-                        fontSize: 7.5,
-                        fontStyle: pw.FontStyle.italic,
-                        color: _greyText,
+                    pw.Container(
+                      width: double.infinity,
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        color: _cardBg,
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(6),
+                        ),
+                        border: pw.Border.all(color: _greyLight, width: 0.5),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'SI ABONÁS ESTE TOTAL, QUEDARÍA',
+                            style: pw.TextStyle(
+                              fontSize: 8,
+                              fontWeight: pw.FontWeight.bold,
+                              color: _greyText,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Row(
+                            mainAxisAlignment:
+                                pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text(
+                                'Saldo del plan',
+                                style: pw.TextStyle(
+                                  fontSize: 9,
+                                  color: _darkText,
+                                ),
+                              ),
+                              pw.Text(
+                                saldoPlanDespues.toCurrency(),
+                                style: pw.TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: _darkText,
+                                ),
+                              ),
+                            ],
+                          ),
+                          pw.SizedBox(height: 3),
+                          pw.Row(
+                            mainAxisAlignment:
+                                pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Text(
+                                'Mora pendiente',
+                                style: pw.TextStyle(
+                                  fontSize: 9,
+                                  color: _darkText,
+                                ),
+                              ),
+                              pw.Text(
+                                moraDespues.toCurrency(),
+                                style: pw.TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: _darkText,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (saldoActualPlan > 0.01) ...[
+                            pw.SizedBox(height: 4),
+                            pw.Text(
+                              'Saldo del plan hoy (sin mora): '
+                              '${saldoActualPlan.toCurrency()}',
+                              style: pw.TextStyle(
+                                fontSize: 7.5,
+                                fontStyle: pw.FontStyle.italic,
+                                color: _greyText,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    pw.SizedBox(height: 4),
+                    pw.SizedBox(height: 10),
                     pw.Text(
-                      'Documento informativo. No implica cobro registrado.',
+                      'La mora no forma parte del saldo del plan de cuotas; '
+                      'sí suma al total a pagar ahora si está en la selección.',
                       style: pw.TextStyle(
                         fontSize: 7.5,
                         fontStyle: pw.FontStyle.italic,

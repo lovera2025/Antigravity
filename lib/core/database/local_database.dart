@@ -13,8 +13,10 @@ import '../utils/uuid_utils.dart';
 import '../../models/contrato_alumno.dart';
 import '../../features/eventos/services/cobro_abono_acumulado.dart';
 import '../../features/eventos/services/cronograma_cuotas_utils.dart';
+import '../../features/eventos/services/mora_cuota_calculator.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
 import '../../features/eventos/utils/evento_presentacion.dart';
+import 'sync_queue.dart';
 
 /// Base de datos local SQLite — persistencia offline.
 ///
@@ -23,7 +25,7 @@ import '../../features/eventos/utils/evento_presentacion.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 61;
+  static const int _version = 62;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -2019,6 +2021,118 @@ class LocalDatabase {
         );
       } catch (e) {
         debugPrint('  ❌ Error migración v61 repair: $e');
+      }
+    }
+
+    if (oldVersion < 62) {
+      debugPrint(
+        '  🔧 v62: nombres institución + Reg 30/03/2026 (9 masivos activos, sin exclusiones)',
+      );
+      try {
+        final regIso = MoraCuotaCalculator.regArAUtcIso(DateTime(2026, 3, 30));
+        final nowUtc = DateTime.now().toUtc().toIso8601String();
+
+        final eventos = await db.rawQuery('''
+          SELECT e.id, c.nombre_completo AS cliente_nombre
+          FROM eventos e
+          LEFT JOIN clientes c ON c.id = e.cliente_id
+          WHERE e.modalidad = 'masivo'
+            AND UPPER(COALESCE(e.estado, '')) NOT IN ('FINALIZADO', 'CANCELADO')
+        ''');
+
+        var eventosNombrados = 0;
+        var contratosInst = 0;
+        var contratosReg = 0;
+
+        for (final ev in eventos) {
+          final eventoId = ev['id'] as String;
+          final nombre = (ev['cliente_nombre'] as String?)?.trim() ?? '';
+          if (nombre.isEmpty) continue;
+
+          await db.update(
+            'eventos',
+            {
+              'encabezado_evento': nombre,
+              'updated_at': nowUtc,
+            },
+            where: 'id = ?',
+            whereArgs: [eventoId],
+          );
+          eventosNombrados++;
+          await SyncQueue.enqueue(
+            executor: db,
+            tabla: 'eventos',
+            operacion: SyncOperation.update,
+            registroId: eventoId,
+            payload: {
+              'id': eventoId,
+              'encabezado_evento': nombre,
+            },
+          );
+
+          final contratos = await db.query(
+            'contratos_alumnos',
+            columns: ['id', 'institucion', 'created_at', 'nombre_alumno'],
+            where: 'evento_id = ?',
+            whereArgs: [eventoId],
+          );
+
+          for (final ca in contratos) {
+            final contratoId = ca['id'] as String;
+            final nombreAlumno = (ca['nombre_alumno'] as String?) ?? '';
+            if (nombreAlumno.toUpperCase().startsWith('[BAJA]')) continue;
+
+            final instActual = (ca['institucion'] as String?)?.trim() ?? '';
+            final regActual = (ca['created_at'] as String?) ?? '';
+            final updates = <String, Object?>{'updated_at': nowUtc};
+            final syncPayload = <String, dynamic>{'id': contratoId};
+
+            if (instActual != nombre) {
+              updates['institucion'] = nombre;
+              syncPayload['institucion'] = nombre;
+              contratosInst++;
+            }
+            if (!regActual.startsWith('2026-03-30')) {
+              updates['created_at'] = regIso;
+              syncPayload['created_at'] = regIso;
+              contratosReg++;
+            }
+
+            if (updates.length == 1) continue; // solo updated_at
+
+            await db.update(
+              'contratos_alumnos',
+              updates,
+              where: 'id = ?',
+              whereArgs: [contratoId],
+            );
+            await SyncQueue.enqueue(
+              executor: db,
+              tabla: 'contratos_alumnos',
+              operacion: SyncOperation.update,
+              registroId: contratoId,
+              payload: syncPayload,
+            );
+          }
+        }
+
+        final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
+          db: db,
+          encolarSync: true,
+          soloEventosMasivosActivos: true,
+        );
+        final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
+          db: db,
+          soloEventosMasivosActivos: true,
+        );
+
+        debugPrint(
+          '✅ Migración v62: $eventosNombrados eventos, '
+          '$contratosInst instituciones, $contratosReg Reg, '
+          '$recalibrados tracked, $exenciones exenciones',
+        );
+      } catch (e) {
+        debugPrint('  ❌ Error migración v62: $e');
       }
     }
   }

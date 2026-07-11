@@ -173,6 +173,29 @@ class MoraRestauracionCandidato {
       double.parse((cuotaBase * 0.01).toStringAsFixed(2));
 }
 
+/// Fila de listado para perdón masivo (estado de grilla se resuelve en UI).
+class MoraPerdonListadoItem {
+  final ContratoAlumno contrato;
+  final double moraCobradaHistorial;
+  final double moraOperativa;
+  final bool enMoraCalendario;
+  final MoraPerdonSimulacion? simPerdonCompleto;
+
+  const MoraPerdonListadoItem({
+    required this.contrato,
+    required this.moraCobradaHistorial,
+    required this.moraOperativa,
+    required this.enMoraCalendario,
+    this.simPerdonCompleto,
+  });
+
+  String get institucionLabel =>
+      (contrato.institucion ?? 'Sin colegio').trim();
+
+  bool get puedePerdonar =>
+      simPerdonCompleto != null && simPerdonCompleto!.montoPerdonado > 0.01;
+}
+
 /// [porcentajeDiario] 1.0 = 1% / día. Interés lineal simple (solo proyección; no contable).
 double interesSugeridoSimpleSobreMonto(
   double monto, {
