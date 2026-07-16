@@ -840,6 +840,7 @@ class _DetalleEventoMasivoScreenState
 
   Widget _buildAlumnosTab() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool modoJefe = ref.watch(adminAuthProvider).esModoJefe;
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -2135,58 +2136,60 @@ class _DetalleEventoMasivoScreenState
                                           onPressed: () => _imprimirReciboAlumno(a),
                                         ),
                                   _buildNotaOperativaButton(a, notaOp, layoutCompact),
-                                  esBajaTemporal
-                                      ? IconButton(
-                                          visualDensity: layoutCompact
-                                              ? VisualDensity.compact
-                                              : VisualDensity.standard,
-                                          constraints: BoxConstraints(
-                                            minWidth: layoutCompact ? 34 : 40,
-                                            minHeight: layoutCompact ? 34 : 40,
+                                  if (modoJefe) ...[
+                                    esBajaTemporal
+                                        ? IconButton(
+                                            visualDensity: layoutCompact
+                                                ? VisualDensity.compact
+                                                : VisualDensity.standard,
+                                            constraints: BoxConstraints(
+                                              minWidth: layoutCompact ? 34 : 40,
+                                              minHeight: layoutCompact ? 34 : 40,
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                            icon: Icon(
+                                              Icons.play_circle_outline_rounded,
+                                              color: Colors.greenAccent.shade700,
+                                              size: layoutCompact ? 18 : 20,
+                                            ),
+                                            tooltip: 'Reincorporar alumno',
+                                            onPressed: () => _toggleBajaTemporal(a),
+                                          )
+                                        : IconButton(
+                                            visualDensity: layoutCompact
+                                                ? VisualDensity.compact
+                                                : VisualDensity.standard,
+                                            constraints: BoxConstraints(
+                                              minWidth: layoutCompact ? 34 : 40,
+                                              minHeight: layoutCompact ? 34 : 40,
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                            icon: Icon(
+                                              Icons.pause_circle_outline_rounded,
+                                              color: Colors.orangeAccent,
+                                              size: layoutCompact ? 18 : 20,
+                                            ),
+                                            tooltip: 'Baja temporal (suspender)',
+                                            onPressed: () => _toggleBajaTemporal(a),
                                           ),
-                                          padding: EdgeInsets.zero,
-                                          icon: Icon(
-                                            Icons.play_circle_outline_rounded,
-                                            color: Colors.greenAccent.shade700,
-                                            size: layoutCompact ? 18 : 20,
-                                          ),
-                                          tooltip: 'Reincorporar alumno',
-                                          onPressed: () => _toggleBajaTemporal(a),
-                                        )
-                                      : IconButton(
-                                          visualDensity: layoutCompact
-                                              ? VisualDensity.compact
-                                              : VisualDensity.standard,
-                                          constraints: BoxConstraints(
-                                            minWidth: layoutCompact ? 34 : 40,
-                                            minHeight: layoutCompact ? 34 : 40,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          icon: Icon(
-                                            Icons.pause_circle_outline_rounded,
-                                            color: Colors.orangeAccent,
-                                            size: layoutCompact ? 18 : 20,
-                                          ),
-                                          tooltip: 'Baja temporal (suspender)',
-                                          onPressed: () => _toggleBajaTemporal(a),
-                                        ),
-                                  IconButton(
-                                    visualDensity: layoutCompact
-                                        ? VisualDensity.compact
-                                        : VisualDensity.standard,
-                                    constraints: BoxConstraints(
-                                      minWidth: layoutCompact ? 34 : 40,
-                                      minHeight: layoutCompact ? 34 : 40,
+                                    IconButton(
+                                      visualDensity: layoutCompact
+                                          ? VisualDensity.compact
+                                          : VisualDensity.standard,
+                                      constraints: BoxConstraints(
+                                        minWidth: layoutCompact ? 34 : 40,
+                                        minHeight: layoutCompact ? 34 : 40,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      icon: Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                        size: layoutCompact ? 18 : 20,
+                                      ),
+                                      tooltip: 'Eliminar definitivamente',
+                                      onPressed: () => _eliminarAlumnoPermanente(a),
                                     ),
-                                    padding: EdgeInsets.zero,
-                                    icon: Icon(
-                                      Icons.delete_outline,
-                                      color: Colors.redAccent,
-                                      size: layoutCompact ? 18 : 20,
-                                    ),
-                                    tooltip: 'Eliminar definitivamente',
-                                    onPressed: () => _eliminarAlumnoPermanente(a),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),

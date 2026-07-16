@@ -11,6 +11,7 @@ import '../repositories/contratos_repository.dart';
 import '../services/mesas_extra_utils.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
+import '../../common/providers/admin_provider.dart';
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
   final Evento evento;
@@ -163,6 +164,12 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     return CurrencyInputFormatter.parse(_montoCtrl.text);
   }
 
+  /// Base del contrato al editar sin modo jefe (no se toma del controller).
+  double _montoBaseContratoOriginal() {
+    final al = widget.alumno!;
+    return al.montoTotalPactado - al.mesaExtraPrecio - al.sillasExtraPrecioTotal;
+  }
+
   double get _montoMesa {
     final unit = CurrencyInputFormatter.parse(_mesaPrecioCtrl.text);
     return unit * _mesasExtraCant;
@@ -188,8 +195,18 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    if (_montoBase <= 0) {
+
+    final modoJefe = ref.read(adminAuthProvider).esModoJefe;
+    final bool baseBloqueada = isEdit && !modoJefe;
+    final double montoBaseEfectivo =
+        baseBloqueada ? _montoBaseContratoOriginal() : _montoBase;
+    final int planCuotasEfectivo = baseBloqueada
+        ? widget.alumno!.totalCuotas
+        : (int.tryParse(_cuotasCtrl.text) ?? 9);
+    final double totalGeneralEfectivo =
+        montoBaseEfectivo + _montoMesa + _montoSillas;
+
+    if (montoBaseEfectivo <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('El monto base es requerido'), backgroundColor: Colors.orangeAccent)
       );
@@ -202,7 +219,6 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       final repo = ref.read(contratosRepositoryProvider);
       
       final nombre = _nombreCtrl.text.trim();
-      final planCuotas = int.tryParse(_cuotasCtrl.text) ?? 9;
       final mesaCuotas = int.tryParse(_mesaCuotasCtrl.text) ?? 1;
       
       final sillasCuotasParsed = int.tryParse(_sillasCuotasCtrl.text) ?? 1;
@@ -250,7 +266,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       if (isEdit) {
         // Modo Edición
         final al = widget.alumno!;
-        final diffMontoPactado = _totalGeneral - al.montoTotalPactado;
+        final diffMontoPactado = totalGeneralEfectivo - al.montoTotalPactado;
         final nuevoSaldoDeudor = al.saldoDeudor + diffMontoPactado;
         
         if (nuevoSaldoDeudor < 0) {
@@ -273,9 +289,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           numeroMesa: _numeroMesaCtrl.text.trim(),
           nombresAcompanantes: _acompanantes,
           cantidadAcompanantes: _acompanantes.length,
-          montoTotalPactado: _totalGeneral,
+          montoTotalPactado: totalGeneralEfectivo,
           saldoDeudor: nuevoSaldoDeudor,
-          totalCuotas: planCuotas,
+          totalCuotas: planCuotasEfectivo,
           mesaExtraPrecio: _montoMesa,
           mesaExtraCuotas: mesaCuotasSafe,
           mesaExtraCantidad: cantMesas,
@@ -296,10 +312,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           nombreAlumno: nombre,
           cantidadAcompanantes: _acompanantes.length,
           nombresAcompanantes: _acompanantes,
-          montoTotalPactado: _totalGeneral,
-          saldoDeudor: _totalGeneral,
+          montoTotalPactado: totalGeneralEfectivo,
+          saldoDeudor: totalGeneralEfectivo,
           porcentajeDescuento: 0.0,
-          totalCuotas: planCuotas,
+          totalCuotas: planCuotasEfectivo,
           mesaExtraPrecio: _montoMesa,
           mesaExtraCuotas: mesaCuotasSafe,
           mesaExtraCantidad: cantMesas,
@@ -318,7 +334,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
         await repo.registrarContrato(nuevoContrato);
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble('ultimo_monto_${widget.evento.id}', _montoBase);
+        await prefs.setDouble('ultimo_monto_${widget.evento.id}', montoBaseEfectivo);
       }
 
       if (mounted) {
@@ -340,6 +356,8 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const gold = Color(0xFFD4AF37);
+    final bool modoJefe = ref.watch(adminAuthProvider).esModoJefe;
+    final bool baseBloqueada = isEdit && !modoJefe;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -515,28 +533,67 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                     _buildSectionTitle('Cotización Base', Icons.attach_money_rounded, gold),
                     _buildCard(
                       isDark: isDark,
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: _montoCtrl,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [CurrencyInputFormatter()],
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                              decoration: _premiumInputDecoration('Valor del Contrato Base *', isDark, prefixText: '\$ '),
-                            ),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: _montoCtrl,
+                                  readOnly: baseBloqueada,
+                                  enableInteractiveSelection: !baseBloqueada,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [CurrencyInputFormatter()],
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: baseBloqueada
+                                        ? (isDark ? Colors.white54 : Colors.black54)
+                                        : null,
+                                  ),
+                                  decoration: _premiumInputDecoration(
+                                    'Valor del Contrato Base *',
+                                    isDark,
+                                    prefixText: '\$ ',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _cuotasCtrl,
+                                  readOnly: baseBloqueada,
+                                  enableInteractiveSelection: !baseBloqueada,
+                                  keyboardType: TextInputType.number,
+                                  style: TextStyle(
+                                    color: baseBloqueada
+                                        ? (isDark ? Colors.white54 : Colors.black54)
+                                        : null,
+                                  ),
+                                  decoration: _premiumInputDecoration(
+                                    'Cuotas Base',
+                                    isDark,
+                                    prefixIcon: Icons.calendar_today_rounded,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _cuotasCtrl,
-                              keyboardType: TextInputType.number,
-                              decoration: _premiumInputDecoration('Cuotas Base', isDark, prefixIcon: Icons.calendar_today_rounded),
+                          if (baseBloqueada) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              'Activá modo jefe para modificar el contrato base',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white54 : Colors.black54,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      )
+                      ),
                     ),
                     const SizedBox(height: 24),
 
