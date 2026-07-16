@@ -481,7 +481,21 @@ class ContratosRepository {
     return actualizados;
   }
 
-  /// Reconstruye JSON de mesas desde pagos + agregados (no modifica pagos).
+  /// Reconcilia mesas extra de todos los contratos del evento (antes del sorteo).
+  Future<void> reconciliarMesasExtrasEvento(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'contratos_alumnos',
+      columns: ['id'],
+      where: 'evento_id = ? AND mesa_extra_precio > 0.01',
+      whereArgs: [eventoId],
+    );
+    for (final row in rows) {
+      await reconciliarMesasEstadoContrato(row['id'] as String);
+    }
+  }
+
+  /// Reconstruye JSON de mesas desde pagos + agregados; repara rótulos legacy si aplica.
   Future<void> reconciliarMesasEstadoContrato(String contratoId) async {
     final db = await LocalDatabase.instance;
     final cRows = await db.query(
@@ -495,37 +509,78 @@ class ContratosRepository {
     final contrato = _fromLocalRow(row);
     if (contrato.mesaExtraPrecio <= 0.01) return;
 
-    final cant = contrato.mesaExtraCantidad > 0 ? contrato.mesaExtraCantidad : 1;
-    final unit = cant > 0
-        ? double.parse((contrato.mesaExtraPrecio / cant).toStringAsFixed(2))
-        : contrato.mesaExtraPrecio;
-
     final pagos = await db.query(
       'pagos_contrato_alumno',
       where: 'contrato_alumno_id = ?',
       whereArgs: [contratoId],
     );
 
+    final inferenciaEntregas = MesasExtraUtils.inferirEntregasMesasColapsadas(
+      c: contrato,
+      pagos: pagos,
+    );
+    if (inferenciaEntregas != null) {
+      for (final r in inferenciaEntregas.renombres) {
+        final pagoRows = await db.query(
+          'pagos_contrato_alumno',
+          where: 'id = ?',
+          whereArgs: [r.pagoId],
+          limit: 1,
+        );
+        if (pagoRows.isEmpty) continue;
+        final oldConcepto = pagoRows.first['concepto'] as String? ?? '';
+        if (oldConcepto == r.conceptoNuevo) continue;
+        await db.update(
+          'pagos_contrato_alumno',
+          {'concepto': r.conceptoNuevo},
+          where: 'id = ?',
+          whereArgs: [r.pagoId],
+        );
+        final payload = Map<String, dynamic>.from(pagoRows.first);
+        payload['concepto'] = r.conceptoNuevo;
+        await SyncQueue.enqueue(
+          tabla: 'pagos_contrato_alumno',
+          operacion: SyncOperation.update,
+          registroId: r.pagoId,
+          payload: payload,
+        );
+      }
+    }
+
+    final pagosFrescos = inferenciaEntregas != null
+        ? await db.query(
+            'pagos_contrato_alumno',
+            where: 'contrato_alumno_id = ?',
+            whereArgs: [contratoId],
+          )
+        : pagos;
+
+    final cant = MesasExtraUtils.inferirCantidadMesasExtraContrato(
+      contrato,
+      pagos: pagosFrescos,
+    );
+    final unit = cant > 0
+        ? double.parse((contrato.mesaExtraPrecio / cant).toStringAsFixed(2))
+        : contrato.mesaExtraPrecio;
+
     List<MesaExtraItem> mesas;
-    final tienePagosMesaNumerados = pagos.any((p) {
+    final tienePagosMesaNumerados = pagosFrescos.any((p) {
       if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
       return MesasExtraUtils.pagoConceptoTieneMesaNumeradaExplicita(
         p['concepto'] as String?,
       );
     });
 
-    final pagadoMesaHistorial = _grossPagadoMesaDesdePagos(pagos);
+    final pagadoMesaHistorial = _grossPagadoMesaDesdePagos(pagosFrescos);
 
     if (tienePagosMesaNumerados) {
-      // Al menos un pago con "Mesa Extra N" explícito: reconstruir desde concepto.
       mesas = MesasExtraUtils.reconciliarDesdePagos(
         cantidad: cant,
         precioUnitario: unit,
         cuotasPlan: contrato.mesaExtraCuotas,
-        pagos: pagos,
+        pagos: pagosFrescos,
       );
     } else {
-      // Siempre desde historial de pagos (nunca JSON stale tras purga/auditoría).
       mesas = MesasExtraUtils.repartirPagadoFifo(
         cantidad: cant,
         precioUnitario: unit,

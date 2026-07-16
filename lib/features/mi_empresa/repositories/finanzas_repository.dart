@@ -8,6 +8,8 @@ import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
+import '../../../models/contrato_alumno.dart';
+import '../../eventos/services/mora_tracked_recovery.dart';
 import '../models/ingreso_detallado.dart';
 
 class FinanzasRepository {
@@ -612,15 +614,43 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
       if (esInteres) {
         final cid = row['contrato_alumno_id']?.toString();
         if (cid != null && cid.isNotEmpty) {
-          final monto = (row['monto'] as num?)?.toDouble() ?? 0.0;
-          if (monto > 0.001) {
-            await db.rawUpdate(
-              '''
-              UPDATE contratos_alumnos
-              SET mora_pendiente_tracked = COALESCE(mora_pendiente_tracked, 0) + ?
-              WHERE id = ?
-              ''',
-              [monto, cid],
+          final cRows = await db.query(
+            'contratos_alumnos',
+            where: 'id = ?',
+            whereArgs: [cid],
+            limit: 1,
+          );
+          if (cRows.isNotEmpty) {
+            final contrato = ContratoAlumno.fromJson(cRows.first);
+            final pagos = await db.query(
+              'pagos_contrato_alumno',
+              where: 'contrato_alumno_id = ?',
+              whereArgs: [cid],
+            );
+            final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+              contrato: contrato,
+              pagos: pagos,
+            );
+            final nowUtc = ArTime.nowUtcIso();
+            await db.update(
+              'contratos_alumnos',
+              {
+                'mora_pendiente_tracked': objetivo.tracked,
+                'mora_cobrada_offset': objetivo.offset,
+                'updated_at': nowUtc,
+              },
+              where: 'id = ?',
+              whereArgs: [cid],
+            );
+            await SyncQueue.enqueue(
+              tabla: 'contratos_alumnos',
+              operacion: SyncOperation.update,
+              registroId: cid,
+              payload: {
+                'id': cid,
+                'mora_pendiente_tracked': objetivo.tracked,
+                'mora_cobrada_offset': objetivo.offset,
+              },
             );
           }
         }

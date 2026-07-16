@@ -1065,6 +1065,53 @@ void main() {
       // Solo queda tracked como mora operativa.
       expect(sim.moraOperativaPost, closeTo(8800, 0.01));
     });
+
+    test('modos masivos: completo escribe exención; solo ficha no', () {
+      final hoy = DateTime(2026, 7, 10);
+      final c = ContratoAlumno(
+        id: 'bulk-modes',
+        eventoId: 'evt',
+        nombreAlumno: 'BULK',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 360000,
+        saldoDeudor: 280000,
+        cuotasPagadas: 2,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        moraPendienteTracked: 5000,
+      );
+      final bruto = MoraCuotaCalculator.calcularDesglose(c, hoy);
+      final nums = bruto.map((d) => d.numeroCuota).toSet();
+
+      final completo = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: nums,
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        incluirTracked: true,
+      );
+      expect(completo, isNotNull);
+      expect(completo!.montoPerdonado, greaterThan(0.01));
+      final payloadCompleto =
+          MoraCuotaCalculator.payloadPerdonMora(completo);
+      expect(payloadCompleto.containsKey('mora_exenta_hasta'), isTrue);
+      expect(payloadCompleto['mora_exencion_reinicia'], 0);
+      expect(payloadCompleto['mora_pendiente_tracked'], 0.0);
+
+      final soloFicha = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: const {},
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        incluirTracked: true,
+      );
+      expect(soloFicha, isNotNull);
+      expect(soloFicha!.soloTracked, isTrue);
+      expect(soloFicha.montoPerdonado, greaterThan(0.01));
+      final payloadFicha = MoraCuotaCalculator.payloadPerdonMora(soloFicha);
+      expect(payloadFicha.containsKey('mora_exenta_hasta'), isFalse);
+      expect(payloadFicha['mora_pendiente_tracked'], 0.0);
+    });
   });
 
   group('Baja temporal — mora congelada (v52)', () {

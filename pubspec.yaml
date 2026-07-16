@@ -17,7 +17,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
 # Instalador Windows: misma X.Y.Z en installer/junior_eventos_setup.iss (#define MyAppVersion) → Setup Junior Eventos vX.Y.Z.exe
-version: 4.3.1+22
+version: 4.3.2+23
 
 environment:
   sdk: ^3.11.1

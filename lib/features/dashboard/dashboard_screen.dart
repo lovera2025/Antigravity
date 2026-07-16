@@ -172,6 +172,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryGold = Color(0xFFD4AF37);
     final statsAsync = ref.watch(dashboardStatsProvider);
+    final modoJefe = ref.watch(adminAuthProvider).esModoJefe;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -182,6 +183,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const AnimatedBrandLogo(height: 28),
             const SizedBox(width: 10),
             const Text('JUNIOR EVENTOS', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+            if (modoJefe) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: primaryGold.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: primaryGold.withValues(alpha: 0.45)),
+                ),
+                child: const Text(
+                  'MODO JEFE',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: Color(0xFFD4AF37),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
         backgroundColor: Colors.transparent,
@@ -210,7 +231,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      drawer: _buildEliteDrawer(context),
+      drawer: _buildEliteDrawer(context, modoJefe: modoJefe),
       body: Stack(
         children: [
           AnimatedBackground(
@@ -230,17 +251,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           _buildSlimHeader(isDark, primaryGold),
                           const SizedBox(height: 20),
 
-                          // ── Notificación QR pendiente ─────────────────────────
-                          if (_pendingRequestsCount > 0) ...[
+                          // ── Notificación QR pendiente (solo modo jefe) ────────
+                          if (modoJefe && _pendingRequestsCount > 0) ...[
                             _buildQrAlert(primaryGold),
                             const SizedBox(height: 16),
                           ],
 
-                          // ── KPI Cards (solo operativos) ────────────────────────
+                          // ── KPI Cards ─────────────────────────────────────────
                           statsAsync.when(
                             skipLoadingOnReload: true,
-                            data: (stats) =>
-                                _buildKpiRow(stats, isDark, primaryGold),
+                            data: (stats) => _buildKpiRow(
+                              stats,
+                              isDark,
+                              primaryGold,
+                              modoJefe: modoJefe,
+                            ),
                             loading: () => const SizedBox(
                               height: 90,
                               child: Center(
@@ -256,35 +281,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           // ── Próximos Eventos ──────────────────────────────────
                           statsAsync.when(
                             skipLoadingOnReload: true,
-                            data: (stats) =>
-                                _buildProximosEventos(stats, isDark, primaryGold),
+                            data: (stats) => _buildProximosEventos(
+                              stats,
+                              isDark,
+                              primaryGold,
+                              soloMasivos: !modoJefe,
+                            ),
                             loading: () => const SizedBox.shrink(),
                             error: (e, _) => const SizedBox.shrink(),
                           ),
                           const SizedBox(height: 20),
 
-                          statsAsync.when(
-                            skipLoadingOnReload: true,
-                            data: (stats) {
-                              final operationalAlerts = stats.alertas
-                                  .where((a) => !a.isFinanciera)
-                                  .toList();
-                              return operationalAlerts.isNotEmpty
-                                  ? _buildAlertas(operationalAlerts, isDark)
-                                  : _buildTodoOk(isDark, primaryGold);
-                            },
-                            loading: () => const SizedBox.shrink(),
-                            error: (e, _) => const SizedBox.shrink(),
-                          ),
+                          if (modoJefe)
+                            statsAsync.when(
+                              skipLoadingOnReload: true,
+                              data: (stats) {
+                                final operationalAlerts = stats.alertas
+                                    .where((a) => !a.isFinanciera)
+                                    .toList();
+                                return operationalAlerts.isNotEmpty
+                                    ? _buildAlertas(operationalAlerts, isDark)
+                                    : _buildTodoOk(isDark, primaryGold);
+                              },
+                              loading: () => const SizedBox.shrink(),
+                              error: (e, _) => const SizedBox.shrink(),
+                            )
+                          else
+                            _buildTodoOk(isDark, primaryGold),
                           const SizedBox(height: 20),
 
-                          // ── Centro de Comando ─────────────────────────────────
-                          _buildSectionLabel('CENTRO DE COMANDO', Icons.bolt_outlined),
-                          const SizedBox(height: 12),
-                          _buildCommandCenter(isDark, primaryGold),
-
-                          // ── Espaciador flexible (Eliminado para evitar crash con IntrinsicHeight) ──
-                          const SizedBox(height: 40),
+                          // ── Centro de Comando (solo modo jefe) ────────────────
+                          if (modoJefe) ...[
+                            _buildSectionLabel('CENTRO DE COMANDO', Icons.bolt_outlined),
+                            const SizedBox(height: 12),
+                            _buildCommandCenter(isDark, primaryGold),
+                            const SizedBox(height: 40),
+                          ] else
+                            const SizedBox(height: 40),
 
                           // ── Footer ────────────────────────────────────────────
                           _buildFooter(isDark, primaryGold),
@@ -402,7 +435,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   // ── KPI Row (solo operativos) ──────────────────────────────────────────────
-  Widget _buildKpiRow(DashboardStats stats, bool isDark, Color gold) {
+  Widget _buildKpiRow(
+    DashboardStats stats,
+    bool isDark,
+    Color gold, {
+    required bool modoJefe,
+  }) {
     return Row(
       children: [
         _buildKpiCard(
@@ -418,20 +456,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
         ),
-        const SizedBox(width: 10),
-        _buildKpiCard(
-          title: 'EVENTOS PARTICULARES',
-          value: '${stats.eventosParticularesActivos}',
-          icon: Icons.person_outline,
-          color: gold,
-          isDark: isDark,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const EventosScreen(modalidad: 'particular'),
+        if (modoJefe) ...[
+          const SizedBox(width: 10),
+          _buildKpiCard(
+            title: 'EVENTOS PARTICULARES',
+            value: '${stats.eventosParticularesActivos}',
+            icon: Icons.person_outline,
+            color: gold,
+            isDark: isDark,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const EventosScreen(modalidad: 'particular'),
+              ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -510,7 +550,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   // ── Próximos eventos ───────────────────────────────────────────────────────
-  Widget _buildProximosEventos(DashboardStats stats, bool isDark, Color gold) {
+  Widget _buildProximosEventos(
+    DashboardStats stats,
+    bool isDark,
+    Color gold, {
+    bool soloMasivos = false,
+  }) {
+    final eventos = soloMasivos
+        ? stats.proximosEventos
+            .where((ev) => (ev['modalidad'] as String?) == 'masivo')
+            .toList()
+        : stats.proximosEventos;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -525,11 +576,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         children: [
           _buildSectionLabel('PRÓXIMOS EVENTOS', Icons.event_rounded),
           const SizedBox(height: 14),
-          if (stats.proximosEventos.isEmpty)
+          if (eventos.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
-                'No hay eventos próximos agendados.',
+                soloMasivos
+                    ? 'No hay eventos masivos próximos agendados.'
+                    : 'No hay eventos próximos agendados.',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? Colors.white38 : Colors.black38,
@@ -537,7 +590,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             )
           else
-            ...stats.proximosEventos.map((ev) {
+            ...eventos.map((ev) {
               final fecha = DateTime.tryParse(ev['fecha_evento'] ?? '');
               final diff = fecha != null ? fecha.difference(DateTime.now()).inDays : 0;
               final cliente = ev['clientes']?['nombre_completo'] ?? 'Cliente';
@@ -997,132 +1050,161 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Future<void> _onModoJefeSwitch(bool value) async {
+    if (value) {
+      final ok = await AdminGate.check(context, ref, forceVerification: true);
+      if (!mounted) return;
+      if (ok) {
+        await ref.read(adminAuthProvider.notifier).enableModoJefe();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Modo jefe activo'),
+            backgroundColor: Color(0xFFD4AF37),
+          ),
+        );
+      }
+      return;
+    }
+    await ref.read(adminAuthProvider.notifier).disableModoJefe();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Modo operativo')),
+    );
+  }
+
+  void _abrirCierreCaja(BuildContext context) {
+    final roleAsync = ref.read(userRoleProvider);
+    final role = roleAsync.asData?.value;
+    final puede = role?.isAdmin == true || role?.permisos.puedeCierreCaja == true;
+    if (!puede) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No tenés permiso para Cierre de Caja.')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CierreCajaScreen()),
+    );
+  }
+
   // ── Drawer ─────────────────────────────────────────────────────────────────
-  Widget _buildEliteDrawer(BuildContext context) {
+  Widget _buildEliteDrawer(BuildContext context, {required bool modoJefe}) {
     final primaryGold = const Color(0xFFD4AF37);
 
-    return NavigationDrawer(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      indicatorColor: primaryGold.withValues(alpha: 0.1),
-      selectedIndex: -1, // No hay selección en el Dashboard actual tras quitar el botón home
-      onDestinationSelected: (idx) {
-        Navigator.pop(context);
-        if (idx == 0) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const EventosScreen(
-                modalidad: 'particular',
-              ),
-            ),
-          );
-        }
-        if (idx == 1) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const EventosScreen(
-                modalidad: 'masivo',
-              ),
-            ),
-          );
-        }
-        if (idx == 2) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const PresupuestosScreen()));
-        }
-        if (idx == 3) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const ClientesScreen()));
-        }
-        if (idx == 4) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogoServiciosScreen()));
-        }
-        if (idx == 5) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PrestamosAlquilerListScreen()),
-          );
-        }
-        if (idx == 6) {
-          // El acceso a Cierre de caja se regula por permisos.puedeCierreCaja
-          // (no por AdminGate): los Admin lo tienen siempre por UserPermissions.admin().
-          final roleAsync = ref.read(userRoleProvider);
-          final role = roleAsync.asData?.value;
-          final puede = role?.isAdmin == true || role?.permisos.puedeCierreCaja == true;
-          if (!puede) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No tenés permiso para Cierre de Caja.')),
-            );
-            return;
-          }
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CierreCajaScreen()),
-          );
-        }
-        if (idx == 7) {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanzasView()));
-        }
-        if (idx == 8) {
-          _showConfiguracionDialog(context);
-        }
-      },
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 48, 28, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const AnimatedBrandLogo(height: 50),
-              const SizedBox(height: 24),
-              const Text('JUNIOR', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 3)),
-              Text('EVENTOS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryGold, letterSpacing: 8)),
-            ],
-          ),
-        ),
-        const NavigationDrawerDestination(
+    final actions = <VoidCallback>[];
+    final destinations = <Widget>[];
+
+    void addDest({
+      required Widget destination,
+      required VoidCallback onTap,
+    }) {
+      destinations.add(destination);
+      actions.add(onTap);
+    }
+
+    if (modoJefe) {
+      addDest(
+        destination: const NavigationDrawerDestination(
           icon: Icon(Icons.event_available_outlined),
           selectedIcon: Icon(Icons.event_available, color: Color(0xFFD4AF37)),
           label: Text('EVENTOS PARTICULARES'),
         ),
-        const NavigationDrawerDestination(
-          icon: Icon(Icons.groups_2_outlined),
-          selectedIcon: Icon(Icons.groups_2, color: Color(0xFFD4AF37)),
-          label: Text('EVENTOS MASIVOS'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const EventosScreen(modalidad: 'particular'),
+          ),
         ),
-        const NavigationDrawerDestination(
+      );
+    }
+
+    addDest(
+      destination: const NavigationDrawerDestination(
+        icon: Icon(Icons.groups_2_outlined),
+        selectedIcon: Icon(Icons.groups_2, color: Color(0xFFD4AF37)),
+        label: Text('EVENTOS MASIVOS'),
+      ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const EventosScreen(modalidad: 'masivo'),
+        ),
+      ),
+    );
+
+    if (modoJefe) {
+      addDest(
+        destination: const NavigationDrawerDestination(
           icon: Icon(Icons.sticky_note_2_outlined),
           selectedIcon: Icon(Icons.sticky_note_2, color: Color(0xFFD4AF37)),
           label: Text('PRESUPUESTOS'),
         ),
-        const NavigationDrawerDestination(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PresupuestosScreen()),
+        ),
+      );
+      addDest(
+        destination: const NavigationDrawerDestination(
           icon: Icon(Icons.people_outline),
           selectedIcon: Icon(Icons.people, color: Color(0xFFD4AF37)),
           label: Text('CLIENTES'),
         ),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ClientesScreen()),
+        ),
+      );
+      destinations.add(
         const Padding(
           padding: EdgeInsets.fromLTRB(28, 16, 28, 16),
           child: Divider(color: Colors.white10),
         ),
-        const NavigationDrawerDestination(
+      );
+      addDest(
+        destination: const NavigationDrawerDestination(
           icon: Icon(Icons.settings_suggest_outlined),
           selectedIcon: Icon(Icons.settings_suggest, color: Color(0xFFD4AF37)),
           label: Text('CATÁLOGO'),
         ),
-        const NavigationDrawerDestination(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CatalogoServiciosScreen()),
+        ),
+      );
+      addDest(
+        destination: const NavigationDrawerDestination(
           icon: Icon(Icons.inventory_2_outlined),
           selectedIcon: Icon(Icons.inventory_2_rounded, color: Color(0xFFD4AF37)),
           label: Text('ALQUILER DE ÍTEMS'),
         ),
-        const NavigationDrawerDestination(
-          icon: Icon(Icons.point_of_sale_outlined),
-          selectedIcon: Icon(Icons.point_of_sale_rounded, color: Color(0xFFD4AF37)),
-          label: Text('CIERRE DE CAJA'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PrestamosAlquilerListScreen()),
         ),
+      );
+    }
+
+    addDest(
+      destination: const NavigationDrawerDestination(
+        icon: Icon(Icons.point_of_sale_outlined),
+        selectedIcon: Icon(Icons.point_of_sale_rounded, color: Color(0xFFD4AF37)),
+        label: Text('CIERRE DE CAJA'),
+      ),
+      onTap: () => _abrirCierreCaja(context),
+    );
+
+    if (modoJefe) {
+      destinations.add(
         const Padding(
           padding: EdgeInsets.fromLTRB(28, 16, 28, 8),
           child: Divider(color: Colors.white10),
         ),
-        NavigationDrawerDestination(
+      );
+      addDest(
+        destination: NavigationDrawerDestination(
           icon: Icon(Icons.business_center_outlined, color: primaryGold.withValues(alpha: 0.8)),
           selectedIcon: const Icon(Icons.business_center_rounded, color: Color(0xFFD4AF37)),
           label: Row(
@@ -1151,11 +1233,87 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ],
           ),
         ),
-        const NavigationDrawerDestination(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const FinanzasView()),
+        ),
+      );
+      addDest(
+        destination: const NavigationDrawerDestination(
           icon: Icon(Icons.settings_outlined),
           selectedIcon: Icon(Icons.settings, color: Color(0xFFD4AF37)),
           label: Text('CONFIGURACIÓN'),
         ),
+        onTap: () => _showConfiguracionDialog(context),
+      );
+    }
+
+    return NavigationDrawer(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      indicatorColor: primaryGold.withValues(alpha: 0.1),
+      selectedIndex: -1,
+      onDestinationSelected: (idx) {
+        Navigator.pop(context);
+        if (idx >= 0 && idx < actions.length) {
+          actions[idx]();
+        }
+      },
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 48, 28, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AnimatedBrandLogo(height: 50),
+              const SizedBox(height: 24),
+              const Text('JUNIOR', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 3)),
+              Text('EVENTOS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryGold, letterSpacing: 8)),
+              const SizedBox(height: 20),
+              if (modoJefe)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Modo jefe',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.4,
+                      color: primaryGold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Menú completo activo',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white54
+                          : Colors.black45,
+                    ),
+                  ),
+                  trailing: TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _onModoJefeSwitch(false);
+                    },
+                    child: const Text('Salir'),
+                  ),
+                )
+              else
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPress: () {
+                    Navigator.pop(context);
+                    _onModoJefeSwitch(true);
+                  },
+                  child: const SizedBox(width: double.infinity, height: 56),
+                ),
+            ],
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(28, 0, 28, 8),
+          child: Divider(color: Colors.white10),
+        ),
+        ...destinations,
       ],
     );
   }

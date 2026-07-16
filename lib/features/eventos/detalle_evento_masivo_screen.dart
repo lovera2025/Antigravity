@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../common/widgets/admin_gate.dart';
+import '../common/providers/admin_provider.dart';
 import '../../core/config/app_config.dart';
 
 import '../../models/evento.dart';
@@ -27,6 +28,7 @@ import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
 import '../../models/mesa_extra_item.dart';
+import 'widgets/sorteo_mesas_dialog.dart';
 import 'widgets/dialogo_seleccion_cuotas_plan.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
@@ -630,6 +632,7 @@ class _DetalleEventoMasivoScreenState
     final primaryGold = const Color(0xFFD4AF37);
     final screenW = MediaQuery.sizeOf(context).width;
     final layoutCompactScreen = screenW < 1520;
+    final modoJefe = ref.watch(adminAuthProvider).esModoJefe;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -645,7 +648,7 @@ class _DetalleEventoMasivoScreenState
         ),
         backgroundColor: Colors.transparent,
         actions: [
-          if (!_isLoading) ...[
+          if (!_isLoading && modoJefe) ...[
             IconButton(
               icon: const Icon(Icons.sync_rounded, color: Color(0xFFD4AF37)),
               onPressed: () => _forzarAuditoriaInteligente(silencioso: false),
@@ -705,7 +708,7 @@ class _DetalleEventoMasivoScreenState
           SafeArea(
             child: Column(
               children: [
-                if (!_isLoading) _buildMetricsPanel(),
+                if (!_isLoading && modoJefe) _buildMetricsPanel(),
                 Expanded(child: _buildAlumnosTab()),
               ],
             ),
@@ -906,12 +909,13 @@ class _DetalleEventoMasivoScreenState
         final double tableWidth = availableWidth - (horizontalPad * 2);
 
         final double innerTable = tableWidth - (_modoSeleccionContratos ? 52 : 0);
-        final double colAlumno = innerTable * 0.20;
-        final double colTelefono = innerTable * 0.11;
-        final double colAcomp = innerTable * 0.14;
-        final double colContrato = innerTable * 0.08;
-        final double colEstado = innerTable * 0.25;
-                        final double colAcciones = innerTable * 0.26;
+        final double colAlumno = innerTable * 0.18;
+        final double colTelefono = innerTable * 0.10;
+        final double colAcomp = innerTable * 0.12;
+        final double colMesa = innerTable * 0.08;
+        final double colContrato = innerTable * 0.07;
+        final double colEstado = innerTable * 0.22;
+                        final double colAcciones = innerTable * 0.23;
 
         final int contratosFirmados = alumnosFiltrados
             .where((a) => a.contratoFirmado && !a.nombreAlumno.startsWith('[BAJA]'))
@@ -1387,6 +1391,12 @@ class _DetalleEventoMasivoScreenState
                         ),
                         DataColumn(
                           label: SizedBox(
+                            width: colMesa,
+                            child: Text('MESA', style: tableHeaderStyle),
+                          ),
+                        ),
+                        DataColumn(
+                          label: SizedBox(
                             width: colContrato,
                             child: Text('CONT.', style: tableHeaderStyle),
                           ),
@@ -1724,6 +1734,30 @@ class _DetalleEventoMasivoScreenState
                                       ),
                               ),
                             ),
+
+                            DataCell(
+                              SizedBox(
+                                width: colMesa,
+                                child: Opacity(
+                                  opacity: esBajaTemporal ? 0.55 : 1,
+                                  child: Text(
+                                    a.numeroMesa?.isNotEmpty == true
+                                        ? a.numeroMesa!
+                                        : '-',
+                                    style: TextStyle(
+                                      fontSize: layoutCompact ? 11 : 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: a.numeroMesa?.isNotEmpty == true
+                                          ? Colors.indigo
+                                          : Colors.grey.shade500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+
                             DataCell(
                               SizedBox(
                                 width: colContrato,
@@ -2535,64 +2569,11 @@ class _DetalleEventoMasivoScreenState
   }
 
   Future<void> _sortearMesas() async {
-    final maxMesasCtrl = TextEditingController();
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sortear Mesas al Azar'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Se asignarán números de mesa a los alumnos que aún no tienen una asignada.',
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: maxMesasCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Cantidad Total de Mesas Posibles (ej: 100)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCELAR'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final val = int.tryParse(maxMesasCtrl.text);
-              if (val != null && val > 0) {
-                Navigator.pop(context, val);
-              }
-            },
-            child: const Text('SORTEAR'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == null) return;
-
     setState(() => _isLoading = true);
     try {
       final repo = ref.read(contratosRepositoryProvider);
-
-      final todosGlobal = await repo.getAllContratos();
-      final ocupadas = <int>{};
-      for (final c in todosGlobal) {
-        if (c.numeroMesa != null && c.numeroMesa!.isNotEmpty) {
-          final parts = c.numeroMesa!.split(',');
-          for (final p in parts) {
-            final num = int.tryParse(p.trim());
-            if (num != null) ocupadas.add(num);
-          }
-        }
-      }
+      await repo.reconciliarMesasExtrasEvento(widget.evento.id);
+      await _refreshAlumnos();
 
       final alumnosSinMesa = _alumnos
           .where(
@@ -2601,54 +2582,86 @@ class _DetalleEventoMasivoScreenState
                 (a.numeroMesa == null || a.numeroMesa!.isEmpty),
           )
           .toList();
+
       if (alumnosSinMesa.isEmpty) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Todos los alumnos ya tienen mesa asignada.'),
             ),
           );
+        }
         return;
       }
 
-      final disponibles = <int>[];
-      for (int i = 1; i <= result; i++) {
-        if (!ocupadas.contains(i)) disponibles.add(i);
+      final demanda = MesasExtraUtils.calcularDemandaSorteo(_alumnos);
+      final titulo =
+          widget.evento.cliente?.nombreCompleto ?? 'Evento masivo';
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      final config = await mostrarSorteoMesasDialog(
+        context: context,
+        tituloInstitucion: titulo,
+        alumnosSinMesa: alumnosSinMesa,
+        demanda: demanda,
+      );
+      if (config == null) return;
+
+      setState(() => _isLoading = true);
+
+      final ocupadas = <int>{};
+      for (final c in _alumnos) {
+        ocupadas.addAll(MesasExtraUtils.numerosMesaDesdeTexto(c.numeroMesa));
       }
-      disponibles.shuffle();
 
-      int actualizados = 0;
-      int sinMesasSuficientes = 0;
-      for (final alumno in alumnosSinMesa) {
-        final cantFisicas =
-            MesasExtraUtils.cantidadMesasFisicasSorteo(alumno);
-        final picked =
-            MesasExtraUtils.tomarMesasDisponibles(disponibles, cantFisicas);
-        if (picked == null || picked.isEmpty) {
-          sinMesasSuficientes++;
-          continue;
+      final asignaciones = MesasExtraUtils.asignarMesasSorteo(
+        alumnos: _alumnos,
+        capacidadSalon: config.capacidadSalon,
+        ocupadasIniciales: ocupadas,
+        separaciones: config.separaciones,
+      );
+
+      if (asignaciones == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No hay mesas libres suficientes en el rango del salón. '
+                'Subí la capacidad e intentá de nuevo.',
+              ),
+            ),
+          );
         }
+        return;
+      }
 
-        final asignacion = MesasExtraUtils.formatearAsignacionMesas(picked);
-        await repo.actualizarContrato(alumno.id, {'numero_mesa': asignacion});
-        actualizados++;
+      for (final entry in asignaciones.entries) {
+        final asignacion =
+            MesasExtraUtils.formatearAsignacionMesas(entry.value);
+        await repo.actualizarContrato(entry.key, {'numero_mesa': asignacion});
       }
 
       if (mounted) {
-        final msg = sinMesasSuficientes > 0
-            ? 'Se asignaron mesas a $actualizados alumnos. '
-                '$sinMesasSuficientes sin mesas libres suficientes.'
-            : 'Se asignaron mesas a $actualizados alumnos.';
+        final sepTxt = config.separaciones.isEmpty
+            ? ''
+            : ' · ${config.separaciones.length} alumno(s) con mesa(s) alejada(s)';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
+          SnackBar(
+            content: Text(
+              'Sorteo listo: ${asignaciones.length} alumno(s) con mesa asignada$sepTxt.',
+            ),
+          ),
         );
       }
     } catch (e) {
       debugPrint('Error en sorteo: $e');
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
       if (mounted) {
         _fetchDatos(cargaSilenciosa: true);
@@ -2662,7 +2675,9 @@ class _DetalleEventoMasivoScreenState
       builder: (context) => AlertDialog(
         title: const Text('Deshacer Asignación de Mesas'),
         content: const Text(
-          '¿Estás seguro de que deseas eliminar las mesas asignadas a TODOS los alumnos de este evento?',
+          'Se eliminarán los números de mesa de TODOS los alumnos de este evento, '
+          'incluidas las asignaciones manuales.\n\n'
+          'Podés sortear de nuevo cuando quieras.',
         ),
         actions: [
           TextButton(
@@ -2715,7 +2730,9 @@ class _DetalleEventoMasivoScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Se eliminaron las mesas de $actualizados alumnos.'),
+            content: Text(
+              'Mesas desasignadas ($actualizados). Podés sortear de nuevo.',
+            ),
           ),
         );
       }
@@ -3115,6 +3132,7 @@ class _DetalleEventoMasivoScreenState
         String transferCargoModo = transferCargoModoInit;
         bool mesasGrupoExpandido = false;
         bool desgloseMesasExpandido = false;
+        bool confirmandoCobro = false;
         return StatefulBuilder(
           builder: (context, setModalState) {
             List<MoraCuotaDetalle> moraCuotasSeleccionadasList() {
@@ -5201,7 +5219,9 @@ class _DetalleEventoMasivoScreenState
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context, false),
+                  onPressed: confirmandoCobro
+                      ? null
+                      : () => Navigator.pop(context, false),
                   child: const Text('CANCELAR'),
                 ),
                 OutlinedButton.icon(
@@ -5218,10 +5238,20 @@ class _DetalleEventoMasivoScreenState
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: emitirResumenAbonarPdf,
+                  onPressed:
+                      confirmandoCobro ? null : emitirResumenAbonarPdf,
                 ),
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.check_circle_outline_rounded),
+                  icon: confirmandoCobro
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_circle_outline_rounded),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD4AF37),
                     foregroundColor: Colors.white,
@@ -5233,7 +5263,9 @@ class _DetalleEventoMasivoScreenState
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: () async {
+                  onPressed: confirmandoCobro
+                      ? null
+                      : () async {
                     final montoIngresado = CurrencyInputFormatter.parse(
                       montoPagarCtrl.text,
                     );
@@ -5527,303 +5559,313 @@ class _DetalleEventoMasivoScreenState
                     final double montoCargoInformeParsed =
                         CurrencyInputFormatter.parse(prefsCargoMontoStr);
 
-                    if (!context.mounted) return;
-                    Navigator.pop(context, true);
+                    setModalState(() => confirmandoCobro = true);
 
-                    _patchAlumnoLocal(
-                      alumno.id,
-                      alumnoPatchLocal,
-                      moraCobradaExtra: moraEsteCobro,
-                    );
-
-                    await prefsMedio.setString(
-                      'medio_pago_cobro_masivo',
-                      modoMedioPago,
-                    );
-                    await prefsMedio.setString(
-                      'cobro_masivo_pct_transfer_info',
-                      prefsPctStr,
-                    );
-                    await prefsMedio.setString(
-                      'cobro_masivo_transfer_cargo_modo',
-                      transferCargoModo,
-                    );
-                    await prefsMedio.setString(
-                      'cobro_masivo_transfer_cargo_monto',
-                      prefsCargoMontoStr,
-                    );
-                    await prefsMedio.setBool(
-                      'cobro_masivo_informar_pct_transfer',
-                      informarPctTransferExterno,
-                    );
-
-                    final double pctDescuentoConfirm =
-                        double.tryParse(
-                          descStrPersist.replaceAll(',', '.').trim(),
-                        ) ??
-                        0;
-
-                    _imprimirReciboAlumno(
-                      alumnoFresco,
-                      montoPagado: montoIngresado,
-                      saldoPendiente: saldoRestante,
-                      conceptosPagados: conceptosFinales,
-                      fechaManual: DateTime.now(),
-                      porcentajeDescuentoLiquidacion: pctDescuentoConfirm,
-                      medioPago: modoMedioPago == 'Mixto'
-                          ? 'Mixto'
-                          : modoMedioPago,
-                      montoEfectivoDetalle: modoMedioPago == 'Mixto'
-                          ? parteEfectivo
-                          : null,
-                      montoTransferenciaDetalle: modoMedioPago == 'Mixto'
-                          ? transferCanalMixtoPdf
-                          : null,
-                      informarCargoTransferenciaExterno:
-                          informarPctTransferExterno,
-                      porcentajeCargoTransferenciaExterno:
-                          informarPctTransferExterno &&
-                              transferCargoModo == 'pct' &&
-                              pctCargoInforme > 0.01
-                          ? pctCargoInforme
-                          : null,
-                      montoCargoTransferenciaInformado:
-                          informarPctTransferExterno &&
-                              transferCargoModo == 'pesos' &&
-                              montoCargoInformeParsed > 0.01
-                          ? montoCargoInformeParsed
-                          : null,
-                      skipDbRefresh:
-                          true, // EXIGE que se use el clon local, ignorando los tiempos de Supabase
-                    );
-
-                    // 3. SINCRONIZACIÓN DE LA BASE DE DATOS EN SEGUNDO PLANO (SILENCIOSA)
-                    Future.microtask(() async {
-                      try {
-                        final repo = ref.read(contratosRepositoryProvider);
-                        final descStr = descStrPersist;
-                        final tIng = parteEfectivo + parteTransferencia;
-                        final sumNetas = previewSnapshot
-                            .where((c) => !esLineaCargoCanal(c))
-                            .fold<double>(
-                              0,
-                              (s, c) =>
-                                  s + (c['monto'] as num).toDouble(),
-                            );
-                        final loteHistAcum = Map<String, double>.from(
-                          historicoGrossPorClave,
-                        );
-
-                        Future<void> registrarLineaUna(
-                          Map<String, dynamic> conc,
-                        ) async {
-                          final cTexto = conc['concepto'] as String;
-                          final conceptoPersistido =
-                              MesasExtraUtils.conceptoPagoPersistido(
-                            previewLinea: conc,
-                            conceptoOriginal: cTexto,
-                            cantidadMesas: cantMesas,
+                    try {
+                      final repo = ref.read(contratosRepositoryProvider);
+                      final descStr = descStrPersist;
+                      final tIng = parteEfectivo + parteTransferencia;
+                      final sumNetas = previewSnapshot
+                          .where((c) => !esLineaCargoCanal(c))
+                          .fold<double>(
+                            0,
+                            (s, c) => s + (c['monto'] as num).toDouble(),
                           );
-                          final monto = (conc['monto'] as num).toDouble();
-                          final gross =
-                              (conc['gross'] as num?)?.toDouble() ?? monto;
-                          final cCuotas =
-                              ((conc['cuotas'] as num?)?.toInt() ?? 0).clamp(
-                                0,
-                                99,
-                              );
-                          final lineKind = conc['lineKind'] as String?;
+                      final loteHistAcum = Map<String, double>.from(
+                        historicoGrossPorClave,
+                      );
 
-                          // Cargo canal: se registra como ingreso real
-                          // (Transferencia) para que figure en cierre de caja,
-                          // pero con gross=0 para no afectar saldo del alumno.
-                          if (lineKind == 'cargo_canal_ref') {
-                            if (monto > 0.004) {
-                              await repo.registrarPago(
-                                contratoId: alumno.id,
-                                monto: monto,
-                                concepto: cTexto,
-                                montoADescontarDeSaldo: 0,
-                                descuentoPorcentaje: 0,
-                                cuotasLiquidadas: 0,
-                                medioPago: 'Transferencia',
-                                lineKind: lineKind,
-                              );
-                            }
-                            return;
-                          }
+                      Future<void> registrarLineaUna(
+                        Map<String, dynamic> conc,
+                      ) async {
+                        final cTexto = conc['concepto'] as String;
+                        final conceptoPersistido =
+                            MesasExtraUtils.conceptoPagoPersistido(
+                          previewLinea: conc,
+                          conceptoOriginal: cTexto,
+                          cantidadMesas: cantMesas,
+                        );
+                        final monto = (conc['monto'] as num).toDouble();
+                        final gross =
+                            (conc['gross'] as num?)?.toDouble() ?? monto;
+                        final cCuotas =
+                            ((conc['cuotas'] as num?)?.toInt() ?? 0).clamp(
+                              0,
+                              99,
+                            );
+                        final lineKind = conc['lineKind'] as String?;
 
-                          if (tIng < 0.01 || sumNetas < 0.01) return;
-
-                          double mE;
-                          double mT;
-                          double gE;
-                          double gT;
-                          if (modoMedioPago == 'Mixto') {
-                            final rE = parteEfectivo / tIng;
-                            mE = double.parse((monto * rE).toStringAsFixed(2));
-                            mT = double.parse((monto - mE).toStringAsFixed(2));
-                            gE = double.parse((gross * rE).toStringAsFixed(2));
-                            gT = double.parse((gross - gE).toStringAsFixed(2));
-                          } else if (modoMedioPago == 'Efectivo') {
-                            mE = monto;
-                            mT = 0;
-                            gE = gross;
-                            gT = 0;
-                          } else {
-                            mE = 0;
-                            mT = monto;
-                            gE = 0;
-                            gT = gross;
-                          }
-
-                          Future<void> uno(
-                            double m,
-                            double mg,
-                            String med,
-                            int cq, {
-                            String? conceptoRegistro,
-                          }) async {
-                            if (m <= 0.004) return;
+                        if (lineKind == 'cargo_canal_ref') {
+                          if (monto > 0.004) {
                             await repo.registrarPago(
                               contratoId: alumno.id,
-                              monto: m,
-                              concepto: conceptoRegistro ?? conceptoPersistido,
-                              montoADescontarDeSaldo: mg,
-                              descuentoPorcentaje:
-                                  double.tryParse(descStr) ?? 0,
-                              cuotasLiquidadas: cq,
-                              medioPago: med,
+                              monto: monto,
+                              concepto: cTexto,
+                              montoADescontarDeSaldo: 0,
+                              descuentoPorcentaje: 0,
+                              cuotasLiquidadas: 0,
+                              medioPago: 'Transferencia',
                               lineKind: lineKind,
-                              moraPendienteAntesDeLote:
-                                  lineKind == kLineKindInteresMora
-                                      ? moraPendienteEfectivo
-                                      : null,
                             );
                           }
-
-                          final esPlanLinea = lineKind != kLineKindCargoCanal &&
-                              lineKind != kLineKindInteresMora &&
-                              !esLineaCargoCanal(conc) &&
-                              !esLineaInteresMora(conc);
-
-                          if (modoMedioPago == 'Mixto' &&
-                              mE > 0.004 &&
-                              mT > 0.004 &&
-                              esPlanLinea) {
-                            final histClase =
-                                ConceptoPagoDisplay.grossHistoricoClasePreview(
-                              loteHistAcum,
-                              conc,
-                            );
-                            final partes =
-                                ConceptoPagoDisplay.rotularPartesMixtoPlan(
-                              contrato: alumno,
-                              previewLinea: conc,
-                              grossHistoricoClase: histClase,
-                              grossLinea: gross,
-                              netLinea: monto,
-                              parteEfectivo: parteEfectivo,
-                              totalIngresado: tIng,
-                            );
-                            for (final part in partes) {
-                              await uno(
-                                part.net,
-                                part.gross,
-                                part.medio,
-                                part.rotulo.cuotasLiquidadas,
-                                conceptoRegistro: part.rotulo.concepto,
-                              );
-                            }
-                            ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
-                              loteHistAcum,
-                              conc,
-                              gross,
-                            );
-                            return;
-                          }
-
-                          if (mE <= 0.004 && mT > 0.004) {
-                            await uno(mT, gT, 'Transferencia', cCuotas);
-                          } else if (mT <= 0.004 && mE > 0.004) {
-                            await uno(mE, gE, 'Efectivo', cCuotas);
-                          } else if (mE >= mT) {
-                            await uno(mE, gE, 'Efectivo', cCuotas);
-                            await uno(mT, gT, 'Transferencia', 0);
-                          } else {
-                            await uno(mT, gT, 'Transferencia', cCuotas);
-                            await uno(mE, gE, 'Efectivo', 0);
-                          }
-
-                          if (esPlanLinea) {
-                            ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
-                              loteHistAcum,
-                              conc,
-                              gross,
-                            );
-                          }
+                          return;
                         }
 
+                        // Mixto se registra agregado más abajo (no por línea).
+                        if (modoMedioPago == 'Mixto') return;
+
+                        if (tIng < 0.01 || sumNetas < 0.01) return;
+
+                        final mE = modoMedioPago == 'Efectivo' ? monto : 0.0;
+                        final mT =
+                            modoMedioPago == 'Transferencia' ? monto : 0.0;
+                        final gE = modoMedioPago == 'Efectivo' ? gross : 0.0;
+                        final gT =
+                            modoMedioPago == 'Transferencia' ? gross : 0.0;
+
+                        Future<void> uno(
+                          double m,
+                          double mg,
+                          String med,
+                          int cq, {
+                          String? conceptoRegistro,
+                          String? lineKindOverride,
+                        }) async {
+                          if (m <= 0.004) return;
+                          await repo.registrarPago(
+                            contratoId: alumno.id,
+                            monto: m,
+                            concepto: conceptoRegistro ?? conceptoPersistido,
+                            montoADescontarDeSaldo: mg,
+                            descuentoPorcentaje:
+                                double.tryParse(descStr) ?? 0,
+                            cuotasLiquidadas: cq,
+                            medioPago: med,
+                            lineKind: lineKindOverride ?? lineKind,
+                            moraPendienteAntesDeLote:
+                                (lineKindOverride ?? lineKind) ==
+                                        kLineKindInteresMora
+                                    ? moraPendienteEfectivo
+                                    : null,
+                          );
+                        }
+
+                        final esPlanLinea = lineKind != kLineKindCargoCanal &&
+                            lineKind != kLineKindInteresMora &&
+                            !esLineaCargoCanal(conc) &&
+                            !esLineaInteresMora(conc);
+
+                        if (mE <= 0.004 && mT > 0.004) {
+                          await uno(mT, gT, 'Transferencia', cCuotas);
+                        } else if (mT <= 0.004 && mE > 0.004) {
+                          await uno(mE, gE, 'Efectivo', cCuotas);
+                        }
+
+                        if (esPlanLinea) {
+                          ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
+                            loteHistAcum,
+                            conc,
+                            gross,
+                          );
+                        }
+                      }
+
+                      if (modoMedioPago == 'Mixto') {
+                        // Cargo canal primero (siempre transferencia).
+                        for (final conc in previewSnapshot) {
+                          if (!esLineaCargoCanal(conc)) continue;
+                          final monto = (conc['monto'] as num).toDouble();
+                          if (monto <= 0.004) continue;
+                          await repo.registrarPago(
+                            contratoId: alumno.id,
+                            monto: monto,
+                            concepto: conc['concepto'] as String,
+                            montoADescontarDeSaldo: 0,
+                            descuentoPorcentaje: 0,
+                            cuotasLiquidadas: 0,
+                            medioPago: 'Transferencia',
+                            lineKind: kLineKindCargoCanal,
+                          );
+                        }
+
+                        final partes =
+                            ConceptoPagoDisplay.armarRegistroMixtoAgregado(
+                          contrato: alumno,
+                          previewLineas: previewSnapshot,
+                          parteEfectivo: parteEfectivo,
+                          parteTransferencia: parteTransferencia,
+                          historicoGrossPorClave: loteHistAcum,
+                          esLineaCargoCanal: esLineaCargoCanal,
+                          esLineaInteresMora: esLineaInteresMora,
+                        );
+                        for (final part in partes) {
+                          if (part.net <= 0.004) continue;
+                          await repo.registrarPago(
+                            contratoId: alumno.id,
+                            monto: part.net,
+                            concepto: part.concepto,
+                            montoADescontarDeSaldo: part.gross,
+                            descuentoPorcentaje:
+                                double.tryParse(descStr) ?? 0,
+                            cuotasLiquidadas: part.cuotasLiquidadas,
+                            medioPago: part.medio,
+                            lineKind: part.lineKind,
+                            moraPendienteAntesDeLote:
+                                part.lineKind == kLineKindInteresMora
+                                    ? moraPendienteEfectivo
+                                    : null,
+                          );
+                        }
+                      } else {
                         for (final conc in previewSnapshot) {
                           await registrarLineaUna(conc);
                         }
-
-                        await repo.reconciliarMesasEstadoContrato(alumno.id);
-
-                        // Alinear JSON de mesas con el preview/PDF (misma foto que el recibo).
-                        if (mesasEstadoPatchCaptura.isNotEmpty) {
-                          await repo.actualizarContrato(alumno.id, {
-                            'mesas_extra_estado': mesasEstadoPatchCaptura
-                                .map((e) => e.toJson())
-                                .toList(),
-                            'mesa_extra_pagado': double.parse(
-                              MesasExtraUtils.totalPagado(
-                                mesasEstadoPatchCaptura,
-                              ).toStringAsFixed(2),
-                            ),
-                            'mesa_extra_cuotas_pagadas':
-                                MesasExtraUtils.maxCuotasPagadas(
-                              mesasEstadoPatchCaptura,
-                            ),
-                          });
-                        }
-
-                        await repo.actualizarContrato(alumno.id, {
-                          'mora_pendiente_tracked': double.parse(
-                            trackedNuevoPersist.toStringAsFixed(2),
-                          ),
-                          'mora_cobrada_offset': offsetNuevoPersist,
-                          if (limpiarMoraRefPersist)
-                            'mora_fecha_referencia': null,
-                          if (exencionPersist != null)
-                            'mora_exenta_hasta':
-                                '${exencionPersist.year.toString().padLeft(4, '0')}-'
-                                '${exencionPersist.month.toString().padLeft(2, '0')}-'
-                                '${exencionPersist.day.toString().padLeft(2, '0')}',
-                          'mora_exencion_reinicia':
-                              exencionReiniciaPersist ? 1 : 0,
-                        });
-
-                        // Alinear saldo/cuotas con suma de gross en pagos (fuente de verdad).
-                        await repo.recalcularProgresoContrato(alumno.id);
-
-                        if (!mounted) return;
-                        final fresco =
-                            await repo.getContratoById(alumno.id);
-                        if (fresco != null && mounted) {
-                          _patchAlumnoLocal(alumno.id, fresco);
-                        }
-                        ref
-                            .read(contratosMutationTickProvider.notifier)
-                            .bump();
-                      } catch (e) {
-                        debugPrint('Registro asíncrono demorado: $e');
                       }
-                    });
+
+                      await repo.reconciliarMesasEstadoContrato(alumno.id);
+
+                      if (mesasEstadoPatchCaptura.isNotEmpty) {
+                        await repo.actualizarContrato(alumno.id, {
+                          'mesas_extra_estado': mesasEstadoPatchCaptura
+                              .map((e) => e.toJson())
+                              .toList(),
+                          'mesa_extra_pagado': double.parse(
+                            MesasExtraUtils.totalPagado(
+                              mesasEstadoPatchCaptura,
+                            ).toStringAsFixed(2),
+                          ),
+                          'mesa_extra_cuotas_pagadas':
+                              MesasExtraUtils.maxCuotasPagadas(
+                            mesasEstadoPatchCaptura,
+                          ),
+                        });
+                      }
+
+                      await repo.actualizarContrato(alumno.id, {
+                        'mora_pendiente_tracked': double.parse(
+                          trackedNuevoPersist.toStringAsFixed(2),
+                        ),
+                        'mora_cobrada_offset': offsetNuevoPersist,
+                        if (limpiarMoraRefPersist)
+                          'mora_fecha_referencia': null,
+                        if (exencionPersist != null)
+                          'mora_exenta_hasta':
+                              '${exencionPersist.year.toString().padLeft(4, '0')}-'
+                              '${exencionPersist.month.toString().padLeft(2, '0')}-'
+                              '${exencionPersist.day.toString().padLeft(2, '0')}',
+                        'mora_exencion_reinicia':
+                            exencionReiniciaPersist ? 1 : 0,
+                      });
+
+                      await repo.recalcularProgresoContrato(alumno.id);
+
+                      final fresco = await repo.getContratoById(alumno.id);
+
+                      await prefsMedio.setString(
+                        'medio_pago_cobro_masivo',
+                        modoMedioPago,
+                      );
+                      await prefsMedio.setString(
+                        'cobro_masivo_pct_transfer_info',
+                        prefsPctStr,
+                      );
+                      await prefsMedio.setString(
+                        'cobro_masivo_transfer_cargo_modo',
+                        transferCargoModo,
+                      );
+                      await prefsMedio.setString(
+                        'cobro_masivo_transfer_cargo_monto',
+                        prefsCargoMontoStr,
+                      );
+                      await prefsMedio.setBool(
+                        'cobro_masivo_informar_pct_transfer',
+                        informarPctTransferExterno,
+                      );
+
+                      final double pctDescuentoConfirm =
+                          double.tryParse(
+                            descStrPersist.replaceAll(',', '.').trim(),
+                          ) ??
+                          0;
+
+                      if (context.mounted) {
+                        Navigator.pop(context, true);
+                      }
+
+                      if (!mounted) return;
+
+                      final paraUi = fresco ?? alumnoPatchLocal;
+                      _patchAlumnoLocal(
+                        alumno.id,
+                        paraUi,
+                        moraCobradaExtra: moraEsteCobro,
+                      );
+
+                      // PDF solo tras lote OK; mismos conceptos que se persistieron.
+                      _imprimirReciboAlumno(
+                        fresco ?? alumnoFresco,
+                        montoPagado: montoIngresado,
+                        saldoPendiente:
+                            fresco?.saldoDeudor ?? saldoRestante,
+                        conceptosPagados: conceptosFinales,
+                        fechaManual: DateTime.now(),
+                        porcentajeDescuentoLiquidacion: pctDescuentoConfirm,
+                        medioPago: modoMedioPago == 'Mixto'
+                            ? 'Mixto'
+                            : modoMedioPago,
+                        montoEfectivoDetalle: modoMedioPago == 'Mixto'
+                            ? parteEfectivo
+                            : null,
+                        montoTransferenciaDetalle: modoMedioPago == 'Mixto'
+                            ? transferCanalMixtoPdf
+                            : null,
+                        informarCargoTransferenciaExterno:
+                            informarPctTransferExterno,
+                        porcentajeCargoTransferenciaExterno:
+                            informarPctTransferExterno &&
+                                transferCargoModo == 'pct' &&
+                                pctCargoInforme > 0.01
+                            ? pctCargoInforme
+                            : null,
+                        montoCargoTransferenciaInformado:
+                            informarPctTransferExterno &&
+                                transferCargoModo == 'pesos' &&
+                                montoCargoInformeParsed > 0.01
+                            ? montoCargoInformeParsed
+                            : null,
+                        skipDbRefresh: true,
+                      );
+
+                      ref
+                          .read(contratosMutationTickProvider.notifier)
+                          .bump();
+                    } catch (e) {
+                      debugPrint('Error al registrar cobro masivo: $e');
+                      if (context.mounted) {
+                        setModalState(() => confirmandoCobro = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'No se pudo guardar el cobro. Reintentá. ($e)',
+                            ),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      } else if (mounted) {
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'No se pudo guardar el cobro. Reintentá. ($e)',
+                            ),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    }
                   },
-                  label: const Text(
-                    'CONFIRMAR PAGO',
-                    style: TextStyle(fontWeight: FontWeight.w900),
+                  label: Text(
+                    confirmandoCobro ? 'GUARDANDO...' : 'CONFIRMAR PAGO',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),
               ],
@@ -5842,7 +5884,6 @@ class _DetalleEventoMasivoScreenState
       pctTransferInfoCtrl,
       transferCargoMontoCtrl,
     ]);
-    // La persistencia async actualiza la grilla vía getContratoById al terminar.
   }
 
   Future<void> _mostrarHistorialPagosAlumno(ContratoAlumno alumno) async {

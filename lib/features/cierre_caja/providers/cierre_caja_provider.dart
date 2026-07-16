@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
+import '../../common/providers/admin_provider.dart';
 import '../../egresos/repositories/egresos_repository.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../mi_empresa/repositories/finanzas_repository.dart';
@@ -188,15 +189,20 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       final p = await SharedPreferences.getInstance();
       final hoyAr = _diaArHoy();
       DateTime diaVista = hoyAr;
-      final iso = p.getString(_kPrefsDiaKey);
-      if (iso != null && iso.isNotEmpty) {
-        final guardado = _fechaDesdeAString(iso);
-        if (guardado != null) {
-          diaVista = guardado.isBefore(hoyAr) ? hoyAr : guardado;
+      final modoJefe = ref.read(adminAuthProvider).esModoJefe;
+      late final TurnoCaja turnoVista;
+      if (modoJefe) {
+        final iso = p.getString(_kPrefsDiaKey);
+        if (iso != null && iso.isNotEmpty) {
+          final guardado = _fechaDesdeAString(iso);
+          if (guardado != null) {
+            diaVista = guardado.isBefore(hoyAr) ? hoyAr : guardado;
+          }
         }
+        turnoVista = _turnoDesdeSlug(p.getString(_kPrefsTurnoKey)?.trim());
+      } else {
+        turnoVista = turnoActualAr(corteHora: state.corteHorarioAr);
       }
-      final turnoVista =
-          _turnoDesdeSlug(p.getString(_kPrefsTurnoKey)?.trim());
 
       state = state.copyWith(dia: diaVista, turno: turnoVista);
       await _guardarVistaSeleccion(state.dia, state.turno);
@@ -210,10 +216,18 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     ref.onDispose(() {
       _channel?.unsubscribe();
     });
+    ref.listen(adminAuthProvider, (prev, next) {
+      if (prev == null) return;
+      if (prev.modoJefe && !next.modoJefe) {
+        Future.microtask(aplicarRestriccionOperativa);
+      } else if (prev.modoJefe != next.modoJefe) {
+        Future.microtask(_refrescar);
+      }
+    });
     Future.microtask(_bootstrap);
     return CierreCajaState(
       dia: _diaArHoy(),
-      turno: TurnoCaja.dia,
+      turno: turnoActualAr(),
       corteHorarioAr: 14,
       cargando: true,
     );
@@ -226,22 +240,44 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
   }
 
   Future<void> setDia(DateTime nuevoDia) async {
-    final n = DateTime(nuevoDia.year, nuevoDia.month, nuevoDia.day);
+    var n = DateTime(nuevoDia.year, nuevoDia.month, nuevoDia.day);
+    if (!ref.read(adminAuthProvider).esModoJefe) {
+      n = _diaArHoy();
+    }
     state = state.copyWith(dia: n);
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
   }
 
   Future<void> setTurno(TurnoCaja t) async {
+    if (!ref.read(adminAuthProvider).esModoJefe) {
+      final actual = turnoActualAr(corteHora: state.corteHorarioAr);
+      state = state.copyWith(dia: _diaArHoy(), turno: actual);
+      await _guardarVistaSeleccion(state.dia, state.turno);
+      await _refrescar();
+      return;
+    }
     state = state.copyWith(turno: t);
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
   }
 
   Future<void> avanzarANuevaJornadaVisual() async {
+    if (!ref.read(adminAuthProvider).esModoJefe) {
+      await aplicarRestriccionOperativa();
+      return;
+    }
     final siguiente = state.dia.add(const Duration(days: 1));
     final n = DateTime(siguiente.year, siguiente.month, siguiente.day);
     state = state.copyWith(dia: n, turno: TurnoCaja.dia);
+    await _guardarVistaSeleccion(state.dia, state.turno);
+    await _refrescar();
+  }
+
+  /// Al salir de modo jefe: fuerza hoy + turno actual AR y recalcula.
+  Future<void> aplicarRestriccionOperativa() async {
+    final turno = turnoActualAr(corteHora: state.corteHorarioAr);
+    state = state.copyWith(dia: _diaArHoy(), turno: turno);
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
   }
@@ -376,11 +412,16 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       double efectivoBruto = 0;
       double transferenciaBruta = 0;
       final ingresosTurno = <IngresoDetallado>[];
+      final modoJefe = ref.read(adminAuthProvider).esModoJefe;
       for (final i in ingresosFull) {
         if (!ArTime.mismoDia(i.fecha, state.dia)) continue;
         if (!rango.contiene(i.fecha)) continue;
-        ingresosTurno.add(i);
         final mp = i.medioPago?.toLowerCase().trim();
+        // Modo operativo: no mostrar ingresos de eventos particulares (efectivo ni transferencia).
+        if (!modoJefe && i.fuente == 'Particular') {
+          continue;
+        }
+        ingresosTurno.add(i);
         if (mp == 'transferencia') {
           transferenciaBruta += i.monto;
         } else {

@@ -435,6 +435,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
         MoraCuotaCalculator.payloadPerdonMora(sim),
       );
       ref.read(finanzasProvider.notifier).recargar();
+      ref.read(contratosMutationTickProvider.notifier).bump();
 
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -734,6 +735,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       };
       final count = await repo.perdonarMoraBulk(map);
       ref.read(finanzasProvider.notifier).recargar();
+      ref.read(contratosMutationTickProvider.notifier).bump();
       if (!mounted) return;
 
       // Refresco en vivo del listado (mismos filtros).

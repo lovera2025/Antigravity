@@ -248,10 +248,134 @@ class ConceptoPagoDisplay {
 
     final enriquecidos = <Map<String, dynamic>>[];
 
-    for (final p in activos) {
+    String? medioNorm(Map<String, dynamic> p) {
+      final m = (p['medio_pago'] as String?)?.trim().toLowerCase() ?? '';
+      if (m == 'efectivo') return 'E';
+      if (m.contains('transfer')) return 'T';
+      return null;
+    }
+
+    String loteClave(Map<String, dynamic> p) {
+      final raw = p['fecha_pago']?.toString() ?? '';
+      final f = DateTime.tryParse(raw);
+      if (f == null) return raw;
+      final u = f.toUtc();
+      return '${u.year}-${u.month}-${u.day}T${u.hour}:${u.minute}';
+    }
+
+    bool esParMixtoPlan(Map<String, dynamic> a, Map<String, dynamic> b) {
+      if (esMora(a) || esMora(b) || esCargoCanal(a) || esCargoCanal(b)) {
+        return false;
+      }
+      final ma = medioNorm(a);
+      final mb = medioNorm(b);
+      if (ma == null || mb == null || ma == mb) return false;
+      if (loteClave(a) != loteClave(b)) return false;
+      if (esPlanBase(a) && esPlanBase(b)) return true;
+      if (esPlanSillas(a) && esPlanSillas(b)) return true;
+      if (esPlanMesa(a) && esPlanMesa(b)) return true;
+      return false;
+    }
+
+    void appendEnriquecido(
+      Map<String, dynamic> p, {
+      required String conceptoDisplay,
+      String? subtextoConcepto,
+    }) {
       final pCpy = Map<String, dynamic>.from(p);
+      pCpy['concepto_detallado'] = conceptoDisplay;
+      if (subtextoConcepto != null) {
+        pCpy['subtexto_concepto'] = subtextoConcepto;
+      }
+      pCpy['subtitulo_medio'] = subtituloMedio(p);
+      if ((p['descuento_porcentaje'] as num? ?? 0) > 0.01) {
+        pCpy['label_descuento'] =
+            '${(p['descuento_porcentaje'] as num).toStringAsFixed(0)}% OFF';
+      }
+      enriquecidos.add(pCpy);
+    }
+
+    for (var i = 0; i < activos.length; i++) {
+      final p = activos[i];
+      final next = i + 1 < activos.length ? activos[i + 1] : null;
+
+      if (next != null && esParMixtoPlan(p, next)) {
+        final g1 = grossPago(p);
+        final g2 = grossPago(next);
+        final combined = double.parse((g1 + g2).toStringAsFixed(2));
+        String conceptoDisplay;
+        String? subtexto;
+
+        if (esPlanBase(p)) {
+          final rot = rotularPlanDesdeGross(
+            grossHistorico: grossBaseHist,
+            grossActual: combined,
+            cuotaPura: cuotaBase,
+            totalCuotas: tCuotas,
+            etiqueta: 'Cuota Base',
+          );
+          conceptoDisplay = rot.concepto;
+          subtexto = rot.subtexto;
+          grossBaseHist += combined;
+        } else if (esPlanSillas(p)) {
+          final rot = rotularPlanDesdeGross(
+            grossHistorico: grossSillasHist,
+            grossActual: combined,
+            cuotaPura: cuotaSillas,
+            totalCuotas: sCuotas,
+            etiqueta:
+                sCuotas <= 1 ? 'Sillas Extras - Entrega' : 'Sillas Extras',
+          );
+          conceptoDisplay = rot.concepto;
+          subtexto = rot.subtexto;
+          grossSillasHist += combined;
+        } else {
+          // Mesa: usar número de la primera pata.
+          final conceptoOriginal = p['concepto'] as String? ?? '';
+          final mesaN =
+              MesasExtraUtils.numeroMesaDesdeConcepto(conceptoOriginal)
+                  .clamp(1, 99);
+          final unitMesa = cantMesasHist > 0 && precioUnitMesaHist > 0.01
+              ? precioUnitMesaHist
+              : (contrato.mesaExtraCantidad > 0
+                  ? contrato.precioUnitarioMesaExtra
+                  : contrato.mesaExtraPrecio);
+          final cuotaPuraMesaN = mCuotas > 0 && unitMesa > 0.01
+              ? double.parse((unitMesa / mCuotas).toStringAsFixed(2))
+              : unitMesa;
+          final histMesa = grossMesaPorN[mesaN] ?? 0.0;
+          final prefix = MesasExtraUtils.labelCobro(
+            mesaN,
+            cantMesasHist > 0 ? cantMesasHist : 1,
+          );
+          if (mCuotas <= 1) {
+            conceptoDisplay = '$prefix - Entrega';
+          } else {
+            final rot = rotularPlanDesdeGross(
+              grossHistorico: histMesa,
+              grossActual: combined,
+              cuotaPura: cuotaPuraMesaN,
+              totalCuotas: mCuotas,
+              etiqueta: prefix,
+            );
+            conceptoDisplay = rot.concepto;
+            subtexto = rot.subtexto;
+          }
+          grossMesaPorN[mesaN] = histMesa + combined;
+        }
+
+        // Mayor gross primero en la lista temporal (orden cronológico de entrada).
+        appendEnriquecido(p,
+            conceptoDisplay: conceptoDisplay, subtextoConcepto: subtexto);
+        appendEnriquecido(next,
+            conceptoDisplay: conceptoDisplay, subtextoConcepto: subtexto);
+        i++; // skip next
+        continue;
+      }
+
       final gross = grossPago(p);
       String conceptoDisplay = p['concepto'] as String? ?? 'Pago';
+      String? subtexto;
 
       if (esMora(p) || esCargoCanal(p)) {
         conceptoDisplay = conceptoDisplay.trim().isEmpty
@@ -266,9 +390,7 @@ class ConceptoPagoDisplay {
           etiqueta: 'Cuota Base',
         );
         conceptoDisplay = rot.concepto;
-        if (rot.subtexto != null) {
-          pCpy['subtexto_concepto'] = rot.subtexto;
-        }
+        subtexto = rot.subtexto;
         grossBaseHist += gross;
       } else if (esPlanMesa(p)) {
         final conceptoOriginal = p['concepto'] as String? ?? '';
@@ -313,15 +435,9 @@ class ConceptoPagoDisplay {
             etiqueta: prefix,
           );
           conceptoDisplay = rot.concepto;
-          if (rot.subtexto != null) {
-            pCpy['subtexto_concepto'] = rot.subtexto;
-          }
+          subtexto = rot.subtexto;
         }
         grossMesaPorN[mesaN] = histMesa + gross;
-
-        if (unitMesa > 0.01 && gross >= unitMesa - 0.01) {
-          pCpy['es_liquidacion_mesa'] = true;
-        }
       } else if (esPlanSillas(p)) {
         final rot = rotularPlanDesdeGross(
           grossHistorico: grossSillasHist,
@@ -331,27 +447,220 @@ class ConceptoPagoDisplay {
           etiqueta: sCuotas <= 1 ? 'Sillas Extras - Entrega' : 'Sillas Extras',
         );
         conceptoDisplay = rot.concepto;
-        if (rot.subtexto != null) {
-          pCpy['subtexto_concepto'] = rot.subtexto;
-        }
+        subtexto = rot.subtexto;
         grossSillasHist += gross;
       }
 
-      pCpy['concepto_detallado'] = conceptoDisplay;
-      pCpy['subtitulo_medio'] = subtituloMedio(p);
-
-      if ((p['descuento_porcentaje'] as num? ?? 0) > 0.01) {
-        pCpy['label_descuento'] =
-            '${(p['descuento_porcentaje'] as num).toStringAsFixed(0)}% OFF';
-      }
-
-      enriquecidos.add(pCpy);
+      appendEnriquecido(p,
+          conceptoDisplay: conceptoDisplay, subtextoConcepto: subtexto);
     }
 
     return enriquecidos.reversed.toList();
   }
 
-  /// Rotula partes de un cobro mixto al registrar (futuros cobros más claros).
+  /// Arma el registro de un cobro **mixto** agregado por clase (Base / Mesa / Sillas / Mora).
+  ///
+  /// Montos de efectivo/transferencia son los exactos del operador (waterfill:
+  /// primero Efectivo por clase en orden Base → Mesa → Sillas → Mora).
+  /// Un solo rótulo por clase (gross combinado), aplicado a ambas patas.
+  static List<
+      ({
+        String concepto,
+        double net,
+        double gross,
+        String medio,
+        int cuotasLiquidadas,
+        String? lineKind,
+        String? subtexto,
+      })> armarRegistroMixtoAgregado({
+    required ContratoAlumno contrato,
+    required List<Map<String, dynamic>> previewLineas,
+    required double parteEfectivo,
+    required double parteTransferencia,
+    required Map<String, double> historicoGrossPorClave,
+    bool Function(Map<String, dynamic> c)? esLineaCargoCanal,
+    bool Function(Map<String, dynamic> c)? esLineaInteresMora,
+  }) {
+    bool isCargo(Map<String, dynamic> c) {
+      if (esLineaCargoCanal != null) return esLineaCargoCanal(c);
+      return c['lineKind'] == kLineKindCargoCanal;
+    }
+
+    bool isMora(Map<String, dynamic> c) {
+      if (esLineaInteresMora != null) return esLineaInteresMora(c);
+      return c['lineKind'] == kLineKindInteresMora;
+    }
+
+    final grupos = <String, _MixtoClaseAcum>{};
+    final ordenClaves = <String>[];
+
+    void addToGroup(String key, Map<String, dynamic> conc) {
+      final net = (conc['monto'] as num).toDouble();
+      final gross = (conc['gross'] as num?)?.toDouble() ?? net;
+      final existing = grupos[key];
+      if (existing == null) {
+        ordenClaves.add(key);
+        grupos[key] = _MixtoClaseAcum(
+          key: key,
+          net: net,
+          gross: gross,
+          lineKind: isMora(conc) ? kLineKindInteresMora : null,
+          conceptoMora: isMora(conc)
+              ? (conc['concepto'] as String? ?? 'Interés mora')
+              : null,
+          previewSample: conc,
+          cuotasSum: ((conc['cuotas'] as num?)?.toInt() ?? 0),
+        );
+      } else {
+        existing.net =
+            double.parse((existing.net + net).toStringAsFixed(2));
+        existing.gross =
+            double.parse((existing.gross + gross).toStringAsFixed(2));
+        existing.cuotasSum += ((conc['cuotas'] as num?)?.toInt() ?? 0);
+      }
+    }
+
+    for (final conc in previewLineas) {
+      if (isCargo(conc)) continue;
+      if (isMora(conc)) {
+        addToGroup('Mora', conc);
+        continue;
+      }
+      addToGroup(_claseKeyDesdePreview(conc), conc);
+    }
+
+    // Orden determinístico: Base, Mesa*, Sillas, Mora.
+    int rank(String k) {
+      if (k == 'Base') return 0;
+      if (k.startsWith('Mesa')) return 1;
+      if (k == 'Sillas') return 2;
+      if (k == 'Mora') return 3;
+      return 9;
+    }
+
+    ordenClaves.sort((a, b) {
+      final ra = rank(a);
+      final rb = rank(b);
+      if (ra != rb) return ra.compareTo(rb);
+      return a.compareTo(b);
+    });
+
+    var remE = double.parse(parteEfectivo.toStringAsFixed(2));
+    var remT = double.parse(parteTransferencia.toStringAsFixed(2));
+    final histLocal = Map<String, double>.from(historicoGrossPorClave);
+    final out = <
+        ({
+          String concepto,
+          double net,
+          double gross,
+          String medio,
+          int cuotasLiquidadas,
+          String? lineKind,
+          String? subtexto,
+        })>[];
+
+    for (var i = 0; i < ordenClaves.length; i++) {
+      final key = ordenClaves[i];
+      final g = grupos[key]!;
+      if (g.net <= 0.004) continue;
+
+      final isLast = i == ordenClaves.length - 1;
+      double mE;
+      double mT;
+      if (isLast) {
+        // Cierra exacto con lo que queda (evita deriva de centavos).
+        mE = remE;
+        mT = remT;
+        // Si la clase es menor que remE+remT por cargo ya separado, clamp a g.net
+        final sum = double.parse((mE + mT).toStringAsFixed(2));
+        if ((sum - g.net).abs() > 0.02) {
+          mE = remE >= g.net ? g.net : remE;
+          mT = double.parse((g.net - mE).toStringAsFixed(2));
+        }
+      } else {
+        mE = remE >= g.net
+            ? g.net
+            : (remE > 0.004 ? remE : 0.0);
+        mE = double.parse(mE.toStringAsFixed(2));
+        if (mE > g.net) mE = g.net;
+        mT = double.parse((g.net - mE).toStringAsFixed(2));
+      }
+      remE = double.parse((remE - mE).toStringAsFixed(2));
+      remT = double.parse((remT - mT).toStringAsFixed(2));
+      if (remE < 0) remE = 0;
+      if (remT < 0) remT = 0;
+
+      double gE = 0;
+      double gT = 0;
+      if (g.net > 0.01) {
+        gE = mE > 0.004
+            ? double.parse((g.gross * (mE / g.net)).toStringAsFixed(2))
+            : 0;
+        gT = double.parse((g.gross - gE).toStringAsFixed(2));
+      }
+
+      late final String concepto;
+      late final int cuotasLiq;
+      String? subtexto;
+      if (key == 'Mora') {
+        concepto = g.conceptoMora ?? 'Interés mora';
+        cuotasLiq = 0;
+      } else {
+        final hist = key.startsWith('Mesa:')
+            ? (histLocal[key] ?? histLocal['Mesa'] ?? 0.0)
+            : (histLocal[key] ?? 0.0);
+        final params = _planParamsDesdePreview(contrato, g.previewSample);
+        if (params == null) {
+          concepto = g.previewSample['concepto'] as String? ?? 'Pago';
+          cuotasLiq = g.cuotasSum;
+        } else {
+          final rot = rotularPlanDesdeGross(
+            grossHistorico: hist,
+            grossActual: g.gross,
+            cuotaPura: params.cuotaPura,
+            totalCuotas: params.totalCuotas,
+            etiqueta: params.etiqueta,
+          );
+          concepto = rot.concepto;
+          cuotasLiq = rot.cuotasLiquidadas;
+          subtexto = rot.subtexto;
+        }
+        histLocal[key] = double.parse(
+          ((histLocal[key] ?? 0) + g.gross).toStringAsFixed(2),
+        );
+        if (key.startsWith('Mesa:')) {
+          histLocal['Mesa'] = double.parse(
+            ((histLocal['Mesa'] ?? 0) + g.gross).toStringAsFixed(2),
+          );
+        }
+      }
+
+      final partes = <({double net, double gross, String medio})>[
+        if (mT > 0.004) (net: mT, gross: gT, medio: 'Transferencia'),
+        if (mE > 0.004) (net: mE, gross: gE, medio: 'Efectivo'),
+      ]..sort((a, b) => b.gross.compareTo(a.gross));
+
+      var cuotasAsignadas = false;
+      for (final p in partes) {
+        final cq = !cuotasAsignadas ? cuotasLiq : 0;
+        cuotasAsignadas = true;
+        out.add((
+          concepto: concepto,
+          net: p.net,
+          gross: p.gross,
+          medio: p.medio,
+          cuotasLiquidadas: cq,
+          lineKind: g.lineKind,
+          subtexto: subtexto,
+        ));
+      }
+    }
+
+    return out;
+  }
+
+  /// Rotula partes de un cobro mixto al registrar (legacy: split proporcional por línea).
+  /// Preferir [armarRegistroMixtoAgregado] para cobros nuevos.
   static List<({double gross, double net, String medio, RotuloPlanPago rotulo})>
       rotularPartesMixtoPlan({
     required ContratoAlumno contrato,
@@ -396,31 +705,34 @@ class ConceptoPagoDisplay {
       ];
     }
 
+    // Nuevo comportamiento prolijo: un solo rótulo con gross combinado.
+    final rot = rotularPlanDesdeGross(
+      grossHistorico: grossHistoricoClase,
+      grossActual: grossLinea,
+      cuotaPura: params.cuotaPura,
+      totalCuotas: params.totalCuotas,
+      etiqueta: params.etiqueta,
+    );
     final partes = <({double gross, double net, String medio})>[
       if (gT > 0.004) (gross: gT, net: mT, medio: 'Transferencia'),
       if (gE > 0.004) (gross: gE, net: mE, medio: 'Efectivo'),
     ]..sort((a, b) => b.gross.compareTo(a.gross));
 
-    var hist = grossHistoricoClase;
-    final out =
-        <({double gross, double net, String medio, RotuloPlanPago rotulo})>[];
-    for (final part in partes) {
-      final rot = rotularPlanDesdeGross(
-        grossHistorico: hist,
-        grossActual: part.gross,
-        cuotaPura: params.cuotaPura,
-        totalCuotas: params.totalCuotas,
-        etiqueta: params.etiqueta,
-      );
-      out.add((
+    var assigned = false;
+    return partes.map((part) {
+      final cq = !assigned ? rot.cuotasLiquidadas : 0;
+      assigned = true;
+      return (
         gross: part.gross,
         net: part.net,
         medio: part.medio,
-        rotulo: rot,
-      ));
-      hist += part.gross;
-    }
-    return out;
+        rotulo: RotuloPlanPago(
+          concepto: rot.concepto,
+          cuotasLiquidadas: cq,
+          subtexto: rot.subtexto,
+        ),
+      );
+    }).toList();
   }
 
   static double grossHistoricoClasePreview(
@@ -531,4 +843,24 @@ class ConceptoPagoDisplay {
       return out;
     }).toList();
   }
+}
+
+class _MixtoClaseAcum {
+  final String key;
+  double net;
+  double gross;
+  final String? lineKind;
+  final String? conceptoMora;
+  final Map<String, dynamic> previewSample;
+  int cuotasSum;
+
+  _MixtoClaseAcum({
+    required this.key,
+    required this.net,
+    required this.gross,
+    required this.lineKind,
+    required this.conceptoMora,
+    required this.previewSample,
+    required this.cuotasSum,
+  });
 }

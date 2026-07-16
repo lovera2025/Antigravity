@@ -105,3 +105,9 @@ RangoHorarioAr rangoHorarioAr(
       return RangoHorarioAr(inicioAr: inicio0, finAr: fin);
   }
 }
+
+/// Turno operativo según reloj AR: `< corteHora` → mañana, `>= corteHora` → tarde.
+TurnoCaja turnoActualAr({int corteHora = 14}) {
+  final ar = ArTime.nowAr();
+  return ar.hour < corteHora ? TurnoCaja.manana : TurnoCaja.tarde;
+}

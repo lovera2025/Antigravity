@@ -273,6 +273,43 @@ void main() {
       expect(lineas[1].subtexto, isNull);
     });
 
+    test('parcialLibre: excedente cierra cuota y deja parcial en la siguiente (Castañeda)', () {
+      // Histórico $123.300 = 4 cuotas + $3.300 parcial en C5; cuota $30.000.
+      // Cobro $50.000 → $26.700 completa C5 + $23.300 parcial C6.
+      final lineas = lineasPreviewDesglosePlan(
+        modo: ModoPagoConceptoTipo.parcialLibre,
+        cuotasSeleccionadas: null,
+        grossTotal: 50000,
+        cuotaPura: 30000,
+        totalCuotas: 9,
+        grossHistorico: 123300,
+        etiqueta: 'Cuota Base',
+      );
+      expect(lineas.length, 2);
+      expect(lineas[0].concepto, 'Cuota Base (5/9) — Completada');
+      expect(lineas[0].gross, closeTo(26700, 0.01));
+      expect(lineas[0].cuotasLiquidadas, 1);
+      expect(lineas[0].subtexto, contains('3.300'));
+      expect(lineas[0].subtexto, contains('26.700'));
+      expect(lineas[1].concepto, 'Entrega parcial — Cuota Base (6/9)');
+      expect(lineas[1].gross, closeTo(23300, 0.01));
+      expect(lineas[1].cuotasLiquidadas, 0);
+    });
+
+    test('reparación: Completada sobredimensionada detecta 2 líneas', () {
+      final lineas = lineasReparacionCompletadaConExcedente(
+        concepto: 'Cuota Base (5/9) — Completada',
+        montoGross: 50000,
+        grossHistoricoAntes: 123300,
+        cuotaPura: 30000,
+        totalCuotas: 9,
+      );
+      expect(lineas, isNotNull);
+      expect(lineas!.length, 2);
+      expect(lineas[0].gross, closeTo(26700, 0.01));
+      expect(lineas[1].gross, closeTo(23300, 0.01));
+    });
+
     test('rotulo Completada no dispara heurística de entrega parcial', () {
       final c = 'Cuota Base (1/9) — Completada'.toLowerCase();
       final esEntregaParcial = c.contains('entrega') ||

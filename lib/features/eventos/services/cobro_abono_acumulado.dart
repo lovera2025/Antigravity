@@ -425,38 +425,47 @@ List<LineaPreviewDesglose> lineasPreviewDesglosePlan({
         ),
       ];
     }
-    final faltDespues = double.parse(
-      (objetivo.faltante - grossTotal).clamp(0.0, objetivo.faltante).toStringAsFixed(2),
-    );
-    final cierra = faltDespues <= 0.01;
-    final habiaParcial = objetivo.estado == EstadoCuotaPlan.parcial;
-    final concepto = cierra
-        ? rotuloCuotaLiquidada(
-            etiqueta: etiqueta,
-            numeroCuota: objetivo.numero,
-            totalCuotas: totalCuotas,
-            cierraEntregaParcialPrevio: habiaParcial,
-          )
-        : rotuloEntregaParcial(
-            '$etiqueta (${objetivo.numero}/$totalCuotas)',
-          );
-    String? subtexto;
-    if (cierra && habiaParcial) {
-      subtexto = subtextoCuotaCompletadaEntregaParcial(
-        montoEntregaParcialPrevia: objetivo.pagadoEnCuota,
-        montoEsteCobro: grossTotal,
+    // Si el parcial supera el faltante de la cuota en curso, repartir FIFO
+    // (completada + parcial/adelanto siguientes). Antes se etiquetaba todo
+    // el monto como una sola línea "— Completada".
+    if (grossTotal > objetivo.faltante + 0.01) {
+      // cae al reparto compartido abajo (sin limitar a una sola cuota)
+    } else {
+      final faltDespues = double.parse(
+        (objetivo.faltante - grossTotal)
+            .clamp(0.0, objetivo.faltante)
+            .toStringAsFixed(2),
       );
-    } else if (!cierra) {
-      subtexto = 'Faltan \$${_fmtMonto(faltDespues)} para completar';
+      final cierra = faltDespues <= 0.01;
+      final habiaParcial = objetivo.estado == EstadoCuotaPlan.parcial;
+      final concepto = cierra
+          ? rotuloCuotaLiquidada(
+              etiqueta: etiqueta,
+              numeroCuota: objetivo.numero,
+              totalCuotas: totalCuotas,
+              cierraEntregaParcialPrevio: habiaParcial,
+            )
+          : rotuloEntregaParcial(
+              '$etiqueta (${objetivo.numero}/$totalCuotas)',
+            );
+      String? subtexto;
+      if (cierra && habiaParcial) {
+        subtexto = subtextoCuotaCompletadaEntregaParcial(
+          montoEntregaParcialPrevia: objetivo.pagadoEnCuota,
+          montoEsteCobro: grossTotal,
+        );
+      } else if (!cierra) {
+        subtexto = 'Faltan \$${_fmtMonto(faltDespues)} para completar';
+      }
+      return [
+        LineaPreviewDesglose(
+          concepto: concepto,
+          subtexto: subtexto,
+          gross: grossTotal,
+          cuotasLiquidadas: cierra ? 1 : 0,
+        ),
+      ];
     }
-    return [
-      LineaPreviewDesglose(
-        concepto: concepto,
-        subtexto: subtexto,
-        gross: grossTotal,
-        cuotasLiquidadas: cierra ? 1 : 0,
-      ),
-    ];
   }
 
   final soloCuotas = modo == ModoPagoConceptoTipo.cuotas
@@ -783,4 +792,48 @@ Map<String, double> grossHistoricoPorConceptoKeyExtended(
   }
 
   return (concepto: '$n Cuotas ($label)', cuotas: n);
+}
+
+/// Extrae etiqueta de un concepto tipo `Cuota Base (5/9) — Completada`.
+String? etiquetaDesdeConceptoCuotaCompletada(String concepto) {
+  final m = RegExp(r'^(.+?)\s*\(\d+\s*/\s*\d+\)').firstMatch(concepto.trim());
+  return m?.group(1)?.trim();
+}
+
+/// Si un pago guardado como "— Completada" debió partirse (excedente),
+/// devuelve el desglose correcto; si no aplica, `null`.
+List<LineaPreviewDesglose>? lineasReparacionCompletadaConExcedente({
+  required String concepto,
+  required double montoGross,
+  required double grossHistoricoAntes,
+  required double cuotaPura,
+  required int totalCuotas,
+}) {
+  final c = concepto.toLowerCase();
+  if (!c.contains('completada')) return null;
+  // Mesas/sillas: planes por ítem; fuera de alcance de esta reparación.
+  if (c.contains('mesa') || c.contains('silla')) return null;
+  if (montoGross <= 0.01 || cuotaPura <= 0.001 || totalCuotas <= 0) {
+    return null;
+  }
+
+  final etiqueta = etiquetaDesdeConceptoCuotaCompletada(concepto) ?? 'Cuota Base';
+  final lineas = lineasPreviewDesglosePlan(
+    modo: ModoPagoConceptoTipo.parcialLibre,
+    cuotasSeleccionadas: null,
+    grossTotal: montoGross,
+    cuotaPura: cuotaPura,
+    totalCuotas: totalCuotas,
+    grossHistorico: grossHistoricoAntes,
+    etiqueta: etiqueta,
+  );
+  if (lineas.length < 2) return null;
+
+  final suma = double.parse(
+    lineas.fold<double>(0, (a, l) => a + l.gross).toStringAsFixed(2),
+  );
+  if ((suma - montoGross).abs() > 0.05) return null;
+  // Síntoma del bug: una sola línea con todo el monto.
+  if (lineas.first.gross >= montoGross - 0.01) return null;
+  return lineas;
 }

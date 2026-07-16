@@ -35,3 +35,4 @@ Salida: `installer\dist\Setup Junior Eventos v4.3.1.exe`
 |-------|---------|--------|
 | 9-jul-2026 | **4.3.0** | Perdón mora admin + smoke 9 masivos |
 | 10-jul-2026 | **4.3.1** | Perdón solo ficha + fix PDF previo cobro |
+| 16-jul-2026 | **4.3.2** | **WIP** — ver `docs/CONTEXTO_v4.3.2_2026-07-16.md` |

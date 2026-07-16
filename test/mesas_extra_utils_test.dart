@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -348,11 +350,489 @@ void main() {
     expect(MesasExtraUtils.cantidadMesasFisicasSorteo(tresExtra), 4);
   });
 
-  test('tomarMesasDisponibles prefiere consecutivas', () {
+  test('tomarMesasDisponibles elige bloque consecutivo valido', () {
     final libres = [5, 10, 11, 12, 20];
     final picked = MesasExtraUtils.tomarMesasDisponibles(libres, 3);
     expect(picked, [10, 11, 12]);
     expect(libres, [5, 20]);
+  });
+
+  test('tomarMesasDisponibles elige al azar entre bloques consecutivos', () {
+    final resultados = <String>{};
+    for (var i = 0; i < 40; i++) {
+      final libres = [5, 10, 11, 12, 13, 20];
+      final picked = MesasExtraUtils.tomarMesasDisponibles(libres, 3);
+      resultados.add(picked!.join(','));
+    }
+    expect(resultados.length, greaterThan(1));
+  });
+
+  test('tomarMesasDisponibles no usa fallback suelto si no hay bloque', () {
+    final libres = [5, 10, 12, 20];
+    expect(MesasExtraUtils.tomarMesasDisponibles(libres, 3), isNull);
+    expect(libres, [5, 10, 12, 20]);
+  });
+
+  test('tomarMesasDisponibles prefiere bloque lejano', () {
+    final libres = [1, 2, 3, 18, 19, 20];
+    final picked = MesasExtraUtils.tomarMesasDisponibles(
+      libres,
+      3,
+      preferirLejosDe: {2},
+    );
+    expect(picked, [18, 19, 20]);
+  });
+
+  test('cantidadMesasFisicasSorteo caso Ojeda: campo 1 pero estado 2 extras', () {
+    final ojeda = ContratoAlumno(
+      id: 'ojeda',
+      eventoId: 'rotonda',
+      nombreAlumno: 'OJEDA, VICTORIA',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 300000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 1,
+      mesasExtraEstadoRaw: [
+        MesaExtraItem(n: 1, precio: 70000, pagado: 70000).toJson(),
+        MesaExtraItem(n: 2, precio: 70000, pagado: 70000).toJson(),
+      ],
+    );
+    expect(MesasExtraUtils.cantidadMesasFisicasSorteo(ojeda), 3);
+  });
+
+  test('inferirCantidadMesasExtraContrato desde pagos numerados', () {
+    final c = ContratoAlumno(
+      id: '1',
+      eventoId: 'e1',
+      nombreAlumno: 'A',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 1,
+    );
+    final pagos = [
+      {'concepto': 'Mesa Extra 1 (1/7)', 'monto_gross': 10000.0, 'anulado': 0},
+      {'concepto': 'Mesa Extra 2 - Entrega', 'monto_gross': 70000.0, 'anulado': 0},
+    ];
+    expect(
+      MesasExtraUtils.inferirCantidadMesasExtraContrato(c, pagos: pagos),
+      2,
+    );
+  });
+
+  test('inferirEntregasMesasColapsadas caso Ojeda 2x70k lotes distintos', () {
+    final c = ContratoAlumno(
+      id: 'ojeda',
+      eventoId: 'rotonda',
+      nombreAlumno: 'OJEDA, VICTORIA',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 300000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 1,
+      mesaExtraCuotas: 1,
+    );
+    final pagos = [
+      {
+        'id': 'p1',
+        'concepto': 'Mesa Extra - Entrega',
+        'monto_gross': 70000.0,
+        'anulado': 0,
+        'fecha_pago': '2026-05-13T17:32:00.000',
+      },
+      {
+        'id': 'p2',
+        'concepto': 'Mesa Extra - Entrega',
+        'monto_gross': 70000.0,
+        'anulado': 0,
+        'fecha_pago': '2026-05-13T17:35:00.000',
+      },
+    ];
+    final inf = MesasExtraUtils.inferirEntregasMesasColapsadas(
+      c: c,
+      pagos: pagos,
+    );
+    expect(inf, isNotNull);
+    expect(inf!.cantidad, 2);
+    expect(inf.renombres.map((r) => r.conceptoNuevo).toSet(), {
+      'Mesa Extra 1 - Entrega',
+      'Mesa Extra 2 - Entrega',
+    });
+    expect(
+      MesasExtraUtils.inferirCantidadMesasExtraContrato(c, pagos: pagos),
+      2,
+    );
+  });
+
+  test('inferirEntregasMesasColapsadas no parte mixto mismo minuto', () {
+    final c = ContratoAlumno(
+      id: '1',
+      eventoId: 'e1',
+      nombreAlumno: 'A',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 1,
+      mesaExtraCuotas: 1,
+    );
+    final pagos = [
+      {
+        'id': 'p1',
+        'concepto': 'Mesa Extra - Entrega',
+        'monto_gross': 70000.0,
+        'anulado': 0,
+        'fecha_pago': '2026-05-13T17:32:00.000',
+      },
+      {
+        'id': 'p2',
+        'concepto': 'Mesa Extra - Entrega',
+        'monto_gross': 70000.0,
+        'anulado': 0,
+        'fecha_pago': '2026-05-13T17:32:40.000',
+      },
+    ];
+    expect(
+      MesasExtraUtils.inferirEntregasMesasColapsadas(c: c, pagos: pagos),
+      isNull,
+    );
+  });
+
+  test('inferirEntregasMesasColapsadas no aplica si plan en cuotas', () {
+    final c = ContratoAlumno(
+      id: '1',
+      eventoId: 'e1',
+      nombreAlumno: 'A',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 70000,
+      mesaExtraCantidad: 1,
+      mesaExtraCuotas: 7,
+    );
+    final pagos = [
+      {
+        'id': 'p1',
+        'concepto': 'Mesa Extra (1/7)',
+        'monto_gross': 10000.0,
+        'anulado': 0,
+        'fecha_pago': '2026-05-01T10:00:00.000',
+      },
+      {
+        'id': 'p2',
+        'concepto': 'Mesa Extra (2/7)',
+        'monto_gross': 10000.0,
+        'anulado': 0,
+        'fecha_pago': '2026-05-08T10:00:00.000',
+      },
+    ];
+    expect(
+      MesasExtraUtils.inferirEntregasMesasColapsadas(c: c, pagos: pagos),
+      isNull,
+    );
+    expect(
+      MesasExtraUtils.inferirCantidadMesasExtraContrato(c, pagos: pagos),
+      1,
+    );
+  });
+
+  test('asignarMesasSorteo garantiza bloques consecutivos con extras', () {
+    final conExtras = ContratoAlumno(
+      id: 'a1',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Extra',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 2,
+      mesasExtraEstadoRaw: [
+        MesaExtraItem(n: 1, precio: 70000).toJson(),
+        MesaExtraItem(n: 2, precio: 70000).toJson(),
+      ],
+    );
+    final solo = ContratoAlumno(
+      id: 'a2',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Solo',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 100000,
+      saldoDeudor: 100000,
+    );
+    for (var seed = 0; seed < 25; seed++) {
+      final asignados = MesasExtraUtils.asignarMesasSorteo(
+        alumnos: [conExtras, solo],
+        capacidadSalon: 20,
+        ocupadasIniciales: {},
+        random: Random(seed),
+      );
+      expect(asignados, isNotNull);
+      final bloque = asignados!['a1']!;
+      expect(bloque.length, 3);
+      expect(MesasExtraUtils.bloqueEsConsecutivo(bloque), isTrue);
+      expect(asignados['a2']!.length, 1);
+    }
+  });
+
+  test('asignarMesasSorteo no falla con capacidad = demanda (salón limpio)', () {
+    final alumnos = List.generate(15, (i) {
+      if (i < 3) {
+        return ContratoAlumno(
+          id: 'e$i',
+          eventoId: 'e1',
+          nombreAlumno: 'Extra $i',
+          cantidadAcompanantes: 0,
+          montoTotalPactado: 200000,
+          saldoDeudor: 100000,
+          mesaExtraPrecio: 140000,
+          mesaExtraCantidad: 2,
+          mesasExtraEstadoRaw: [
+            MesaExtraItem(n: 1, precio: 70000).toJson(),
+            MesaExtraItem(n: 2, precio: 70000).toJson(),
+          ],
+        );
+      }
+      return ContratoAlumno(
+        id: 's$i',
+        eventoId: 'e1',
+        nombreAlumno: 'Solo $i',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 100000,
+        saldoDeudor: 100000,
+      );
+    });
+    // 3*(1+2) + 12*1 = 21
+    for (var seed = 0; seed < 20; seed++) {
+      final asignados = MesasExtraUtils.asignarMesasSorteo(
+        alumnos: alumnos,
+        capacidadSalon: 21,
+        ocupadasIniciales: {},
+        random: Random(seed),
+      );
+      expect(asignados, isNotNull, reason: 'seed $seed');
+      expect(asignados!.length, 15);
+      for (final e in asignados.entries) {
+        expect(MesasExtraUtils.bloqueEsConsecutivo(e.value), isTrue);
+      }
+    }
+  });
+
+  test('asignarMesasSorteo 2 físicas + 1 alejada: no vecinas', () {
+    final a1 = ContratoAlumno(
+      id: 'a1',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Extra',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 70000,
+      mesaExtraCantidad: 1,
+    );
+    final cap = MesasExtraUtils.capacidadMinimaSorteo(
+      demanda: const DemandaSorteoMesas(
+        alumnos: 1,
+        mesasBase: 1,
+        mesasExtras: 1,
+        total: 2,
+      ),
+      totalAlejadas: 1,
+    );
+    for (var seed = 0; seed < 20; seed++) {
+      final asignados = MesasExtraUtils.asignarMesasSorteo(
+        alumnos: [a1],
+        capacidadSalon: cap < 20 ? 20 : cap,
+        ocupadasIniciales: {},
+        separaciones: const [
+          AlumnoMesasSeparadas(alumnoId: 'a1', cantidadAlejadas: 1),
+        ],
+        random: Random(seed),
+      );
+      expect(asignados, isNotNull, reason: 'seed $seed');
+      final nums = asignados!['a1']!;
+      expect(nums.length, 2);
+      expect(MesasExtraUtils.bloqueEsConsecutivo(nums), isFalse);
+      expect(MesasExtraUtils.numerosSonVecinos(nums[0], nums[1]), isFalse);
+      expect((nums[0] - nums[1]).abs(), greaterThan(1));
+    }
+  });
+
+  test('asignarMesasSorteo 3 físicas + 1 alejada: bloque de 2 + 1 lejos', () {
+    final a1 = ContratoAlumno(
+      id: 'a1',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Extra',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 2,
+      mesasExtraEstadoRaw: [
+        MesaExtraItem(n: 1, precio: 70000).toJson(),
+        MesaExtraItem(n: 2, precio: 70000).toJson(),
+      ],
+    );
+    for (var seed = 0; seed < 20; seed++) {
+      final asignados = MesasExtraUtils.asignarMesasSorteo(
+        alumnos: [a1],
+        capacidadSalon: 30,
+        ocupadasIniciales: {},
+        separaciones: const [
+          AlumnoMesasSeparadas(alumnoId: 'a1', cantidadAlejadas: 1),
+        ],
+        random: Random(seed),
+      );
+      expect(asignados, isNotNull, reason: 'seed $seed');
+      final nums = List<int>.from(asignados!['a1']!)..sort();
+      expect(nums.length, 3);
+
+      // Exactamente un par consecutivo y una mesa aislada.
+      final gaps = <int>[];
+      for (var i = 1; i < nums.length; i++) {
+        gaps.add(nums[i] - nums[i - 1]);
+      }
+      expect(gaps.where((g) => g == 1).length, 1);
+      expect(gaps.any((g) => g > 1), isTrue);
+
+      // La aislada no es vecina del bloque.
+      int? bloqueA;
+      int? bloqueB;
+      int? aislada;
+      if (nums[1] == nums[0] + 1) {
+        bloqueA = nums[0];
+        bloqueB = nums[1];
+        aislada = nums[2];
+      } else if (nums[2] == nums[1] + 1) {
+        bloqueA = nums[1];
+        bloqueB = nums[2];
+        aislada = nums[0];
+      }
+      expect(bloqueA, isNotNull, reason: 'seed $seed nums=$nums');
+      expect(
+        MesasExtraUtils.bloquesSonVecinos([aislada!], [bloqueA!, bloqueB!]),
+        isFalse,
+      );
+    }
+  });
+
+  test('asignarMesasSorteo 3 físicas + 2 alejadas: singles mutuamente lejos',
+      () {
+    final a1 = ContratoAlumno(
+      id: 'a1',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Extra',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 2,
+      mesasExtraEstadoRaw: [
+        MesaExtraItem(n: 1, precio: 70000).toJson(),
+        MesaExtraItem(n: 2, precio: 70000).toJson(),
+      ],
+    );
+    for (var seed = 0; seed < 20; seed++) {
+      final asignados = MesasExtraUtils.asignarMesasSorteo(
+        alumnos: [a1],
+        capacidadSalon: 40,
+        ocupadasIniciales: {},
+        separaciones: const [
+          AlumnoMesasSeparadas(alumnoId: 'a1', cantidadAlejadas: 2),
+        ],
+        random: Random(seed),
+      );
+      expect(asignados, isNotNull, reason: 'seed $seed');
+      final nums = List<int>.from(asignados!['a1']!)..sort();
+      expect(nums.length, 3);
+      expect(MesasExtraUtils.bloqueEsConsecutivo(nums), isFalse);
+      for (var i = 0; i < nums.length; i++) {
+        for (var j = i + 1; j < nums.length; j++) {
+          expect(
+            MesasExtraUtils.numerosSonVecinos(nums[i], nums[j]),
+            isFalse,
+            reason: 'seed $seed ${nums[i]}~${nums[j]}',
+          );
+          expect((nums[i] - nums[j]).abs(), greaterThan(1));
+        }
+      }
+    }
+  });
+
+  test('asignarMesasSorteo sin marcar mantiene bloque entero consecutivo', () {
+    final a1 = ContratoAlumno(
+      id: 'a1',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Extra',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 2,
+      mesasExtraEstadoRaw: [
+        MesaExtraItem(n: 1, precio: 70000).toJson(),
+        MesaExtraItem(n: 2, precio: 70000).toJson(),
+      ],
+    );
+    final asignados = MesasExtraUtils.asignarMesasSorteo(
+      alumnos: [a1],
+      capacidadSalon: 10,
+      ocupadasIniciales: {},
+      separaciones: const [],
+      random: Random(1),
+    );
+    expect(asignados, isNotNull);
+    expect(MesasExtraUtils.bloqueEsConsecutivo(asignados!['a1']!), isTrue);
+  });
+
+  test('asignarMesasSorteo null si capacidad insuficiente', () {
+    final a1 = ContratoAlumno(
+      id: 'a1',
+      eventoId: 'e1',
+      nombreAlumno: 'Alumno Extra',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 200000,
+      saldoDeudor: 100000,
+      mesaExtraPrecio: 140000,
+      mesaExtraCantidad: 2,
+      mesasExtraEstadoRaw: [
+        MesaExtraItem(n: 1, precio: 70000).toJson(),
+        MesaExtraItem(n: 2, precio: 70000).toJson(),
+      ],
+    );
+    final asignados = MesasExtraUtils.asignarMesasSorteo(
+      alumnos: [a1],
+      capacidadSalon: 2, // necesita 3
+      ocupadasIniciales: {},
+      separaciones: const [
+        AlumnoMesasSeparadas(alumnoId: 'a1', cantidadAlejadas: 1),
+      ],
+      random: Random(1),
+    );
+    expect(asignados, isNull);
+  });
+
+  test('capacidadMinimaSorteo suma hueco por mesa alejada', () {
+    const demanda = DemandaSorteoMesas(
+      alumnos: 10,
+      mesasBase: 10,
+      mesasExtras: 5,
+      total: 15,
+    );
+    expect(
+      MesasExtraUtils.capacidadMinimaSorteo(
+        demanda: demanda,
+        totalAlejadas: 0,
+      ),
+      15,
+    );
+    expect(
+      MesasExtraUtils.capacidadMinimaSorteo(
+        demanda: demanda,
+        totalAlejadas: 2,
+      ),
+      17,
+    );
   });
 
   test('lineasResumenGrilla muestra cuota y deuda por mesa', () {

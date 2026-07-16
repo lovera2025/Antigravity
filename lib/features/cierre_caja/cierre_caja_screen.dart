@@ -9,6 +9,7 @@ import '../../models/egreso.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/widgets/admin_gate.dart';
+import '../common/providers/admin_provider.dart';
 import '../egresos/providers/egresos_provider.dart';
 import '../egresos/repositories/egresos_repository.dart';
 import '../mi_empresa/models/ingreso_detallado.dart';
@@ -32,6 +33,19 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   static const _efectivoColor = Color(0xFF00B894);
   static const _transferColor = Color(0xFF6C63FF);
   static const _redAccent = Color(0xFFE74C3C);
+  bool _forzoHoyOperativo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _forzoHoyOperativo) return;
+      if (!ref.read(adminAuthProvider).esModoJefe) {
+        _forzoHoyOperativo = true;
+        ref.read(cierreCajaProvider.notifier).aplicarRestriccionOperativa();
+      }
+    });
+  }
 
   Future<void> _elegirDia(BuildContext context, DateTime actual) async {
     final picked = await showDatePicker(
@@ -191,6 +205,16 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     final state = ref.watch(cierreCajaProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = isDark ? Colors.white60 : Colors.black54;
+    final modoJefe = ref.watch(adminAuthProvider).esModoJefe;
+
+    ref.listen(adminAuthProvider, (prev, next) {
+      if (prev == null) return;
+      if (prev.modoJefe && !next.modoJefe) {
+        ref.read(cierreCajaProvider.notifier).aplicarRestriccionOperativa();
+      } else if (prev.modoJefe != next.modoJefe) {
+        ref.read(cierreCajaProvider.notifier).refrescarManual();
+      }
+    });
 
     return Scaffold(
       body: Container(
@@ -233,11 +257,12 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         ? null
                         : () => ref.read(cierreCajaProvider.notifier).refrescarManual(),
                   ),
-                  IconButton(
-                    tooltip: 'Nueva jornada (solo visual)',
-                    icon: const Icon(Icons.event_available_rounded, color: _gold),
-                    onPressed: state.cargando ? null : () => _nuevaJornadaVisual(context),
-                  ),
+                  if (modoJefe)
+                    IconButton(
+                      tooltip: 'Nueva jornada (solo visual)',
+                      icon: const Icon(Icons.event_available_rounded, color: _gold),
+                      onPressed: state.cargando ? null : () => _nuevaJornadaVisual(context),
+                    ),
                   const SizedBox(width: 4),
                 ],
               ),
@@ -247,15 +272,24 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _selectorDia(context, state, isDark, muted),
-                      const SizedBox(height: 14),
-                      TurnoCierreSelector(
-                        turnoActivo: state.turno,
-                        corteHorarioAr: state.corteHorarioAr,
-                        isDark: isDark,
-                        onTurnoChanged: (t) =>
-                            ref.read(cierreCajaProvider.notifier).setTurno(t),
+                      _selectorDia(
+                        context,
+                        state,
+                        isDark,
+                        muted,
+                        puedeCambiarDia: modoJefe,
                       ),
+                      const SizedBox(height: 14),
+                      if (modoJefe)
+                        TurnoCierreSelector(
+                          turnoActivo: state.turno,
+                          corteHorarioAr: state.corteHorarioAr,
+                          isDark: isDark,
+                          onTurnoChanged: (t) =>
+                              ref.read(cierreCajaProvider.notifier).setTurno(t),
+                        )
+                      else
+                        _turnoOperativoChip(state, isDark, muted),
                       const SizedBox(height: 14),
                       const GuiaCambioSection(),
                       const SizedBox(height: 10),
@@ -326,14 +360,20 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     );
   }
 
-  Widget _selectorDia(BuildContext context, CierreCajaState state, bool isDark, Color muted) {
+  Widget _selectorDia(
+    BuildContext context,
+    CierreCajaState state,
+    bool isDark,
+    Color muted, {
+    required bool puedeCambiarDia,
+  }) {
     final txt = ArTime.formatFechaLarga(state.dia);
     final esHoy = ArTime.mismoDia(state.dia, ArTime.nowAr());
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => _elegirDia(context, state.dia),
+        onTap: puedeCambiarDia ? () => _elegirDia(context, state.dia) : null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
@@ -358,14 +398,87 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       esHoy ? '$txt · HOY' : txt,
                       style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700),
                     ),
+                    if (!puedeCambiarDia) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Solo jornada de hoy (modo operativo)',
+                        style: TextStyle(fontSize: 10, color: muted),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              const Icon(Icons.edit_calendar_outlined, size: 18, color: _gold),
+              if (puedeCambiarDia)
+                const Icon(Icons.edit_calendar_outlined, size: 18, color: _gold),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _turnoOperativoChip(CierreCajaState state, bool isDark, Color muted) {
+    final corte = state.corteHorarioAr.toString().padLeft(2, '0');
+    final rango = switch (state.turno) {
+      TurnoCaja.manana => '00:00 – $corte:00',
+      TurnoCaja.tarde => '$corte:00 – 23:59',
+      TurnoCaja.dia => '00:00 – 23:59',
+    };
+    final accent = switch (state.turno) {
+      TurnoCaja.manana => const Color(0xFFE8A317),
+      TurnoCaja.tarde => const Color(0xFF6C63FF),
+      TurnoCaja.dia => _gold,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'TURNO DE CIERRE',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            color: muted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: accent.withValues(alpha: 0.65), width: 1.5),
+            color: accent.withValues(alpha: isDark ? 0.2 : 0.14),
+          ),
+          child: Column(
+            children: [
+              Text(
+                'TURNO ${state.turno.labelCorto.toUpperCase()}',
+                style: GoogleFonts.oswald(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: accent,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                rango,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: accent.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Solo tu turno (modo operativo)',
+                style: TextStyle(fontSize: 10, color: muted),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

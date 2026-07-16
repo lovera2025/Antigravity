@@ -25,7 +25,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 62;
+  static const int _version = 63;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -2135,6 +2135,181 @@ class LocalDatabase {
         debugPrint('  ❌ Error migración v62: $e');
       }
     }
+
+    if (oldVersion < 63) {
+      debugPrint(
+        '  🔧 v63: reparar pagos "— Completada" con excedente (parcialLibre)',
+      );
+      try {
+        final reparados =
+            await _repararPagosCompletadaConExcedente(db, encolarSync: true);
+        debugPrint('✅ Migración v63 completada ($reparados pagos reparados)');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v63: $e');
+      }
+    }
+  }
+
+  /// Parte pagos base guardados como una sola línea "— Completada" cuando el
+  /// monto superaba el faltante (bug parcialLibre). Conserva fecha/hora.
+  static Future<int> _repararPagosCompletadaConExcedente(
+    Database db, {
+    required bool encolarSync,
+  }) async {
+    final candidatos = await db.rawQuery('''
+      SELECT p.*
+      FROM pagos_contrato_alumno p
+      WHERE (p.anulado IS NULL OR p.anulado = 0)
+        AND LOWER(IFNULL(p.concepto, '')) LIKE '%completada%'
+        AND LOWER(IFNULL(p.concepto, '')) NOT LIKE '%mesa%'
+        AND LOWER(IFNULL(p.concepto, '')) NOT LIKE '%silla%'
+      ORDER BY p.fecha_pago ASC, p.id ASC
+    ''');
+    if (candidatos.isEmpty) return 0;
+
+    var reparados = 0;
+    for (final pago in candidatos) {
+      final pagoId = pago['id']?.toString();
+      final contratoId = pago['contrato_alumno_id']?.toString();
+      if (pagoId == null ||
+          pagoId.isEmpty ||
+          contratoId == null ||
+          contratoId.isEmpty) {
+        continue;
+      }
+
+      final concepto = pago['concepto']?.toString() ?? '';
+      final montoGross = (pago['monto_gross'] as num?)?.toDouble() ??
+          (pago['monto'] as num?)?.toDouble() ??
+          0.0;
+      final montoNet = (pago['monto'] as num?)?.toDouble() ?? montoGross;
+      if (montoGross <= 0.01) continue;
+
+      final cRows = await db.query(
+        'contratos_alumnos',
+        where: 'id = ?',
+        whereArgs: [contratoId],
+        limit: 1,
+      );
+      if (cRows.isEmpty) continue;
+      final contrato = ContratoAlumno.fromJson(cRows.first);
+      final totalCuotas =
+          contrato.totalCuotas > 0 ? contrato.totalCuotas : 1;
+      final basePlan = (contrato.montoTotalPactado -
+              contrato.mesaExtraPrecio -
+              contrato.sillasExtraPrecioTotal)
+          .clamp(0.0, double.infinity);
+      final cuotaPura = totalCuotas > 0 ? basePlan / totalCuotas : basePlan;
+
+      final fechaPago = pago['fecha_pago']?.toString() ?? '';
+      final historicos = await db.rawQuery(
+        '''
+        SELECT * FROM pagos_contrato_alumno
+        WHERE contrato_alumno_id = ?
+          AND id != ?
+          AND (anulado IS NULL OR anulado = 0)
+          AND (
+            fecha_pago < ?
+            OR (fecha_pago = ? AND id < ?)
+          )
+        ORDER BY fecha_pago ASC, id ASC
+        ''',
+        [contratoId, pagoId, fechaPago, fechaPago, pagoId],
+      );
+      final grossAntes = grossHistoricoClaseCobro(
+        historicos,
+        CobroConceptoClase.base,
+      );
+
+      final lineas = lineasReparacionCompletadaConExcedente(
+        concepto: concepto,
+        montoGross: montoGross,
+        grossHistoricoAntes: grossAntes,
+        cuotaPura: cuotaPura,
+        totalCuotas: totalCuotas,
+      );
+      if (lineas == null || lineas.length < 2) continue;
+
+      final descPct =
+          (pago['descuento_porcentaje'] as num?)?.toDouble() ?? 0.0;
+      final medio = pago['medio_pago'];
+      final createdAt = pago['created_at'] ?? fechaPago;
+      final updatedAt = DateTime.now().toUtc().toIso8601String();
+      final lineKind = pago['line_kind'];
+
+      var netAcum = 0.0;
+      for (var i = 0; i < lineas.length; i++) {
+        final l = lineas[i];
+        late double netLine;
+        if (i == lineas.length - 1) {
+          netLine = double.parse((montoNet - netAcum).toStringAsFixed(2));
+        } else if (montoGross > 0.011) {
+          netLine = double.parse(
+            (montoNet * (l.gross / montoGross)).toStringAsFixed(2),
+          );
+          netAcum += netLine;
+        } else {
+          netLine = 0;
+        }
+
+        if (i == 0) {
+          await db.update(
+            'pagos_contrato_alumno',
+            {
+              'concepto': l.concepto,
+              'monto': netLine,
+              'monto_gross': l.gross,
+              'updated_at': updatedAt,
+            },
+            where: 'id = ?',
+            whereArgs: [pagoId],
+          );
+          if (encolarSync) {
+            await SyncQueue.enqueue(
+              executor: db,
+              tabla: 'pagos_contrato_alumno',
+              operacion: SyncOperation.update,
+              registroId: pagoId,
+              payload: {
+                'id': pagoId,
+                'concepto': l.concepto,
+                'monto': netLine,
+                'monto_gross': l.gross,
+                'fecha_pago': fechaPago,
+              },
+            );
+          }
+        } else {
+          final nuevoId = UuidUtils.generate();
+          final row = <String, dynamic>{
+            'id': nuevoId,
+            'contrato_alumno_id': contratoId,
+            'monto': netLine,
+            'monto_gross': l.gross,
+            'descuento_porcentaje': descPct,
+            'concepto': l.concepto,
+            'fecha_pago': fechaPago,
+            'created_at': createdAt,
+            'updated_at': updatedAt,
+            'medio_pago': medio,
+            'anulado': 0,
+            if (lineKind != null) 'line_kind': lineKind,
+          };
+          await db.insert('pagos_contrato_alumno', row);
+          if (encolarSync) {
+            await SyncQueue.enqueue(
+              executor: db,
+              tabla: 'pagos_contrato_alumno',
+              operacion: SyncOperation.insert,
+              registroId: nuevoId,
+              payload: row,
+            );
+          }
+        }
+      }
+      reparados++;
+    }
+    return reparados;
   }
 
   /// Cierra la conexión a la base de datos.
