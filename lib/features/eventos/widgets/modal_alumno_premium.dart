@@ -12,16 +12,13 @@ import '../services/mesas_extra_utils.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
 import '../../common/providers/admin_provider.dart';
+import '../../caja_sesiones/services/caja_auto_sync_service.dart';
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
   final Evento evento;
   final ContratoAlumno? alumno;
 
-  const ModalAlumnoPremium({
-    super.key,
-    required this.evento,
-    this.alumno,
-  });
+  const ModalAlumnoPremium({super.key, required this.evento, this.alumno});
 
   @override
   ConsumerState<ModalAlumnoPremium> createState() => _ModalAlumnoPremiumState();
@@ -63,7 +60,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   void initState() {
     super.initState();
     final al = widget.alumno;
-    
+
     _nombreCtrl = TextEditingController(text: al?.nombreAlumno ?? '');
     _telefonoCtrl = TextEditingController(text: al?.telefono ?? '');
     _cursoDivisionCtrl = TextEditingController(text: al?.cursoDivision ?? '');
@@ -72,10 +69,11 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
     if (al != null) {
       _acompanantes = List.from(al.nombresAcompanantes);
-      final double montoBaseUI = al.montoTotalPactado - al.mesaExtraPrecio - al.sillasExtraPrecioTotal;
+      final double montoBaseUI =
+          al.montoTotalPactado - al.mesaExtraPrecio - al.sillasExtraPrecioTotal;
       _montoCtrl = TextEditingController(text: montoBaseUI.toFormattedNumber());
       _cuotasCtrl = TextEditingController(text: al.totalCuotas.toString());
-      
+
       _mesasExtraCant = al.mesaExtraPrecio > 0
           ? (al.mesaExtraCantidad > 0 ? al.mesaExtraCantidad : 1)
           : 0;
@@ -83,16 +81,22 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       _mesaPrecioCtrl = TextEditingController(
         text: _mesasExtraCant > 0 ? unitMesa.toFormattedNumber() : '',
       );
-      _mesaCuotasCtrl = TextEditingController(text: al.mesaExtraCuotas.toString());
-      
+      _mesaCuotasCtrl = TextEditingController(
+        text: al.mesaExtraCuotas.toString(),
+      );
+
       _sillasExtraCant = al.sillasExtraCantidad;
       final double sillasUnitInicial = al.sillasExtraCantidad > 0
           ? al.sillasExtraPrecioTotal / al.sillasExtraCantidad
           : 0.0;
       _sillasPrecioUnitCtrl = TextEditingController(
-        text: sillasUnitInicial > 0 ? sillasUnitInicial.toFormattedNumber() : '',
+        text: sillasUnitInicial > 0
+            ? sillasUnitInicial.toFormattedNumber()
+            : '',
       );
-      _sillasCuotasCtrl = TextEditingController(text: al.sillasExtraCuotas.toString());
+      _sillasCuotasCtrl = TextEditingController(
+        text: al.sillasExtraCuotas.toString(),
+      );
     } else {
       _montoCtrl = TextEditingController();
       _cuotasCtrl = TextEditingController(text: '9');
@@ -131,7 +135,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
   Future<void> _cargarUltimoMontoBase() async {
     final prefs = await SharedPreferences.getInstance();
-    final double? ultimoMonto = prefs.getDouble('ultimo_monto_${widget.evento.id}');
+    final double? ultimoMonto = prefs.getDouble(
+      'ultimo_monto_${widget.evento.id}',
+    );
     if (ultimoMonto != null && mounted) {
       setState(() {
         _montoCtrl.text = ultimoMonto.toFormattedNumber();
@@ -167,7 +173,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   /// Base del contrato al editar sin modo jefe (no se toma del controller).
   double _montoBaseContratoOriginal() {
     final al = widget.alumno!;
-    return al.montoTotalPactado - al.mesaExtraPrecio - al.sillasExtraPrecioTotal;
+    return al.montoTotalPactado -
+        al.mesaExtraPrecio -
+        al.sillasExtraPrecioTotal;
   }
 
   double get _montoMesa {
@@ -198,8 +206,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
     final modoJefe = ref.read(adminAuthProvider).esModoJefe;
     final bool baseBloqueada = isEdit && !modoJefe;
-    final double montoBaseEfectivo =
-        baseBloqueada ? _montoBaseContratoOriginal() : _montoBase;
+    final double montoBaseEfectivo = baseBloqueada
+        ? _montoBaseContratoOriginal()
+        : _montoBase;
     final int planCuotasEfectivo = baseBloqueada
         ? widget.alumno!.totalCuotas
         : (int.tryParse(_cuotasCtrl.text) ?? 9);
@@ -208,19 +217,23 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
     if (montoBaseEfectivo <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El monto base es requerido'), backgroundColor: Colors.orangeAccent)
+        const SnackBar(
+          content: Text('El monto base es requerido'),
+          backgroundColor: Colors.orangeAccent,
+        ),
       );
       return;
     }
 
     setState(() => _isSubmitting = true);
+    final autoSyncCheckpoint = DateTime.now().toUtc();
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
-      
+
       final nombre = _nombreCtrl.text.trim();
       final mesaCuotas = int.tryParse(_mesaCuotasCtrl.text) ?? 1;
-      
+
       final sillasCuotasParsed = int.tryParse(_sillasCuotasCtrl.text) ?? 1;
       final sillasExtraCuotas = sillasCuotasParsed < 1 ? 1 : sillasCuotasParsed;
 
@@ -268,13 +281,15 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
         final al = widget.alumno!;
         final diffMontoPactado = totalGeneralEfectivo - al.montoTotalPactado;
         final nuevoSaldoDeudor = al.saldoDeudor + diffMontoPactado;
-        
+
         if (nuevoSaldoDeudor < 0) {
-           ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('El nuevo total es inferior a lo que el alumno ya pagó. No se puede reducir tanto.'),
-                backgroundColor: Colors.redAccent,
-            )
+              content: Text(
+                'El nuevo total es inferior a lo que el alumno ya pagó. No se puede reducir tanto.',
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
           );
           setState(() => _isSubmitting = false);
           return;
@@ -324,19 +339,36 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           sillasExtraCuotas: sillasExtraCuotas,
           sillasExtraPrecioTotal: totalSillasParse,
           institucion: _institucionParaPersistir(),
-          cursoDivision: _cursoDivisionCtrl.text.trim().isNotEmpty ? _cursoDivisionCtrl.text.trim() : null,
-          musicaElegida: _musicaElegidaCtrl.text.trim().isNotEmpty ? _musicaElegidaCtrl.text.trim() : null,
-          numeroMesa: _numeroMesaCtrl.text.trim().isNotEmpty ? _numeroMesaCtrl.text.trim() : null,
-          telefono: _telefonoCtrl.text.trim().isNotEmpty ? _telefonoCtrl.text.trim() : null,
+          cursoDivision: _cursoDivisionCtrl.text.trim().isNotEmpty
+              ? _cursoDivisionCtrl.text.trim()
+              : null,
+          musicaElegida: _musicaElegidaCtrl.text.trim().isNotEmpty
+              ? _musicaElegidaCtrl.text.trim()
+              : null,
+          numeroMesa: _numeroMesaCtrl.text.trim().isNotEmpty
+              ? _numeroMesaCtrl.text.trim()
+              : null,
+          telefono: _telefonoCtrl.text.trim().isNotEmpty
+              ? _telefonoCtrl.text.trim()
+              : null,
           createdAt: DateTime.now(),
         );
 
         await repo.registrarContrato(nuevoContrato);
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setDouble('ultimo_monto_${widget.evento.id}', montoBaseEfectivo);
+        await prefs.setDouble(
+          'ultimo_monto_${widget.evento.id}',
+          montoBaseEfectivo,
+        );
       }
 
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
       if (mounted) {
         ref.read(contratosMutationTickProvider.notifier).bump();
         Navigator.pop(context, true);
@@ -344,7 +376,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent)
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     } finally {
@@ -384,14 +419,16 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
                 color: gold.withValues(alpha: 0.1),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(23)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(23),
+                ),
               ),
               child: Row(
                 children: [
                   Icon(
-                    isEdit ? Icons.edit_note_rounded : Icons.person_add_rounded, 
-                    color: gold, 
-                    size: 28
+                    isEdit ? Icons.edit_note_rounded : Icons.person_add_rounded,
+                    color: gold,
+                    size: 28,
                   ),
                   const SizedBox(width: 12),
                   Text(
@@ -410,7 +447,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                 ],
               ),
             ),
-            
+
             // ── Body ──
             Expanded(
               child: Form(
@@ -418,15 +455,25 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                 child: ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
-                    _buildSectionTitle('Datos Personales', Icons.badge_outlined, gold),
+                    _buildSectionTitle(
+                      'Datos Personales',
+                      Icons.badge_outlined,
+                      gold,
+                    ),
                     _buildCard(
                       isDark: isDark,
                       child: Column(
                         children: [
                           TextFormField(
                             controller: _nombreCtrl,
-                            decoration: _premiumInputDecoration('Nombre completo del alumno *', isDark),
-                            validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
+                            decoration: _premiumInputDecoration(
+                              'Nombre completo del alumno *',
+                              isDark,
+                            ),
+                            validator: (val) =>
+                                val == null || val.trim().isEmpty
+                                ? 'El nombre es obligatorio'
+                                : null,
                             textCapitalization: TextCapitalization.words,
                           ),
                           const SizedBox(height: 16),
@@ -436,14 +483,21 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 child: TextFormField(
                                   controller: _telefonoCtrl,
                                   keyboardType: TextInputType.phone,
-                                  decoration: _premiumInputDecoration('Teléfono (WhatsApp)', isDark, prefixIcon: Icons.phone_outlined),
+                                  decoration: _premiumInputDecoration(
+                                    'Teléfono (WhatsApp)',
+                                    isDark,
+                                    prefixIcon: Icons.phone_outlined,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
                                 child: TextFormField(
                                   controller: _cursoDivisionCtrl,
-                                  decoration: _premiumInputDecoration('Curso / División (Ej: 6 "A")', isDark),
+                                  decoration: _premiumInputDecoration(
+                                    'Curso / División (Ej: 6 "A")',
+                                    isDark,
+                                  ),
                                 ),
                               ),
                             ],
@@ -451,19 +505,31 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _musicaElegidaCtrl,
-                            decoration: _premiumInputDecoration('Música Elegida', isDark, prefixIcon: Icons.music_note_outlined),
+                            decoration: _premiumInputDecoration(
+                              'Música Elegida',
+                              isDark,
+                              prefixIcon: Icons.music_note_outlined,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: _numeroMesaCtrl,
-                            decoration: _premiumInputDecoration('N° de Mesa Asignada / Contrato', isDark, prefixIcon: Icons.table_restaurant_outlined),
+                            decoration: _premiumInputDecoration(
+                              'N° de Mesa Asignada / Contrato',
+                              isDark,
+                              prefixIcon: Icons.table_restaurant_outlined,
+                            ),
                           ),
                         ],
-                      )
+                      ),
                     ),
                     const SizedBox(height: 24),
-                    
-                    _buildSectionTitle('Acompañantes', Icons.group_outlined, gold),
+
+                    _buildSectionTitle(
+                      'Acompañantes',
+                      Icons.group_outlined,
+                      gold,
+                    ),
                     _buildCard(
                       isDark: isDark,
                       child: Column(
@@ -474,7 +540,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _acompNombreCtrl,
-                                  decoration: _premiumInputDecoration('Agregar nombre de acompañante', isDark),
+                                  decoration: _premiumInputDecoration(
+                                    'Agregar nombre de acompañante',
+                                    isDark,
+                                  ),
                                   onFieldSubmitted: (val) {
                                     if (val.trim().isNotEmpty) {
                                       setState(() {
@@ -490,7 +559,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 onPressed: () {
                                   if (_acompNombreCtrl.text.trim().isNotEmpty) {
                                     setState(() {
-                                      _acompanantes.add(_acompNombreCtrl.text.trim());
+                                      _acompanantes.add(
+                                        _acompNombreCtrl.text.trim(),
+                                      );
                                       _acompNombreCtrl.clear();
                                     });
                                   }
@@ -499,8 +570,13 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                   backgroundColor: gold.withValues(alpha: 0.2),
                                   foregroundColor: gold,
                                   elevation: 0,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                                 child: const Icon(Icons.add_rounded),
                               ),
@@ -511,26 +587,52 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: _acompanantes.map((name) => Chip(
-                                label: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                backgroundColor: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
-                                deleteIconColor: Colors.redAccent,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide.none),
-                                onDeleted: () => setState(() => _acompanantes.remove(name)),
-                              )).toList(),
+                              children: _acompanantes
+                                  .map(
+                                    (name) => Chip(
+                                      label: Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      backgroundColor: isDark
+                                          ? Colors.white10
+                                          : Colors.black.withValues(
+                                              alpha: 0.05,
+                                            ),
+                                      deleteIconColor: Colors.redAccent,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        side: BorderSide.none,
+                                      ),
+                                      onDeleted: () => setState(
+                                        () => _acompanantes.remove(name),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'Total: ${_acompanantes.length} acompañantes',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: gold),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: gold,
+                              ),
                             ),
                           ],
                         ],
-                      )
+                      ),
                     ),
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('Cotización Base', Icons.attach_money_rounded, gold),
+                    _buildSectionTitle(
+                      'Cotización Base',
+                      Icons.attach_money_rounded,
+                      gold,
+                    ),
                     _buildCard(
                       isDark: isDark,
                       child: Column(
@@ -550,7 +652,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
                                     color: baseBloqueada
-                                        ? (isDark ? Colors.white54 : Colors.black54)
+                                        ? (isDark
+                                              ? Colors.white54
+                                              : Colors.black54)
                                         : null,
                                   ),
                                   decoration: _premiumInputDecoration(
@@ -569,7 +673,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                   keyboardType: TextInputType.number,
                                   style: TextStyle(
                                     color: baseBloqueada
-                                        ? (isDark ? Colors.white54 : Colors.black54)
+                                        ? (isDark
+                                              ? Colors.white54
+                                              : Colors.black54)
                                         : null,
                                   ),
                                   decoration: _premiumInputDecoration(
@@ -597,29 +703,46 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                     ),
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('Mesa Extra', Icons.table_restaurant_outlined, gold),
+                    _buildSectionTitle(
+                      'Mesa Extra',
+                      Icons.table_restaurant_outlined,
+                      gold,
+                    ),
                     _buildCard(
                       isDark: isDark,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Cantidad de Mesas Extras a agregar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Text(
+                            'Cantidad de Mesas Extras a agregar:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           Row(
                             children: [
                               _buildPremiumStepper(
-                                isDark, 
-                                gold, 
-                                _mesasExtraCant, 
+                                isDark,
+                                gold,
+                                _mesasExtraCant,
                                 () {
                                   setState(() {
                                     final prev = isEdit && widget.alumno != null
-                                        ? MesasExtraUtils.estadoDesdeContrato(widget.alumno!)
+                                        ? MesasExtraUtils.estadoDesdeContrato(
+                                            widget.alumno!,
+                                          )
                                         : <MesaExtraItem>[];
                                     final next = _mesasExtraCant - 1;
                                     if (next >= 0 &&
-                                        !MesasExtraUtils.puedeReducirCantidad(prev, next)) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        !MesasExtraUtils.puedeReducirCantidad(
+                                          prev,
+                                          next,
+                                        )) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         const SnackBar(
                                           content: Text(
                                             'Esa mesa ya tiene pagos — no se puede quitar.',
@@ -630,10 +753,11 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                       return;
                                     }
                                     _mesasExtraCant--;
-                                    if (_mesasExtraCant == 0) _mesaPrecioCtrl.clear();
+                                    if (_mesasExtraCant == 0)
+                                      _mesaPrecioCtrl.clear();
                                   });
                                 },
-                                () => setState(() => _mesasExtraCant++)
+                                () => setState(() => _mesasExtraCant++),
                               ),
                               const SizedBox(width: 24),
                               Expanded(
@@ -641,7 +765,11 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                   controller: _mesaPrecioCtrl,
                                   keyboardType: TextInputType.number,
                                   inputFormatters: [CurrencyInputFormatter()],
-                                  decoration: _premiumInputDecoration('Precio x Mesa', isDark, prefixText: '\$ '),
+                                  decoration: _premiumInputDecoration(
+                                    'Precio x Mesa',
+                                    isDark,
+                                    prefixText: '\$ ',
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -649,7 +777,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 child: TextFormField(
                                   controller: _mesaCuotasCtrl,
                                   keyboardType: TextInputType.number,
-                                  decoration: _premiumInputDecoration('Cuotas Mesa', isDark),
+                                  decoration: _premiumInputDecoration(
+                                    'Cuotas Mesa',
+                                    isDark,
+                                  ),
                                 ),
                               ),
                             ],
@@ -661,18 +792,30 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               decoration: BoxDecoration(
                                 color: gold.withValues(alpha: 0.05),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: gold.withValues(alpha: 0.2)),
+                                border: Border.all(
+                                  color: gold.withValues(alpha: 0.2),
+                                ),
                               ),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'Total Mesas Extras (${_mesasExtraCant}x):',
-                                    style: TextStyle(fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : Colors.black87),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black87,
+                                    ),
                                   ),
                                   Text(
                                     _montoMesa.toCurrency(),
-                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFFD4AF37)),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                      color: Color(0xFFD4AF37),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -719,22 +862,32 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                     ),
                     const SizedBox(height: 24),
 
-                    _buildSectionTitle('Sillas Extras', Icons.chair_alt_outlined, gold),
+                    _buildSectionTitle(
+                      'Sillas Extras',
+                      Icons.chair_alt_outlined,
+                      gold,
+                    ),
                     _buildCard(
                       isDark: isDark,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Cantidad de Sillas Extras a agregar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Text(
+                            'Cantidad de Sillas Extras a agregar:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           Row(
                             children: [
                               _buildPremiumStepper(
-                                isDark, 
-                                gold, 
-                                _sillasExtraCant, 
-                                () => setState(() => _sillasExtraCant--), 
-                                () => setState(() => _sillasExtraCant++)
+                                isDark,
+                                gold,
+                                _sillasExtraCant,
+                                () => setState(() => _sillasExtraCant--),
+                                () => setState(() => _sillasExtraCant++),
                               ),
                               const SizedBox(width: 24),
                               Expanded(
@@ -742,7 +895,11 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                   controller: _sillasPrecioUnitCtrl,
                                   keyboardType: TextInputType.number,
                                   inputFormatters: [CurrencyInputFormatter()],
-                                  decoration: _premiumInputDecoration('Precio x Silla', isDark, prefixText: '\$ '),
+                                  decoration: _premiumInputDecoration(
+                                    'Precio x Silla',
+                                    isDark,
+                                    prefixText: '\$ ',
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -750,7 +907,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 child: TextFormField(
                                   controller: _sillasCuotasCtrl,
                                   keyboardType: TextInputType.number,
-                                  decoration: _premiumInputDecoration('Cuotas Sillas', isDark),
+                                  decoration: _premiumInputDecoration(
+                                    'Cuotas Sillas',
+                                    isDark,
+                                  ),
                                 ),
                               ),
                             ],
@@ -762,18 +922,30 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               decoration: BoxDecoration(
                                 color: gold.withValues(alpha: 0.05),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: gold.withValues(alpha: 0.2)),
+                                border: Border.all(
+                                  color: gold.withValues(alpha: 0.2),
+                                ),
                               ),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'Total Sillas Extras (${_sillasExtraCant}x):',
-                                    style: TextStyle(fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : Colors.black87),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black87,
+                                    ),
                                   ),
                                   Text(
                                     _montoSillas.toCurrency(),
-                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFFD4AF37)),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 16,
+                                      color: Color(0xFFD4AF37),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -786,14 +958,22 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                 ),
               ),
             ),
-            
+
             // ── Footer / Total Bar ──
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF151515) : const Color(0xFFFAFAFA),
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(23)),
-                border: Border(top: BorderSide(color: isDark ? Colors.white10 : Colors.black12)),
+                color: isDark
+                    ? const Color(0xFF151515)
+                    : const Color(0xFFFAFAFA),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(23),
+                ),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? Colors.white10 : Colors.black12,
+                  ),
+                ),
               ),
               child: Row(
                 children: [
@@ -803,12 +983,21 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                     children: [
                       const Text(
                         'TOTAL ACUERDO PACTADO',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1, color: Colors.grey),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          letterSpacing: 1,
+                          color: Colors.grey,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _totalGeneral.toCurrency(),
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: Color(0xFFD4AF37)),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 24,
+                          color: Color(0xFFD4AF37),
+                        ),
                       ),
                     ],
                   ),
@@ -821,13 +1010,21 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                       icon: const Icon(Icons.check_circle_outline_rounded),
                       label: Text(
                         isEdit ? 'GUARDAR CAMBIOS' : 'CONFIRMAR REGISTRO',
-                        style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: gold,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                 ],
@@ -859,7 +1056,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Colors.black.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
       ),
@@ -867,7 +1066,13 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     );
   }
 
-  Widget _buildPremiumStepper(bool isDark, Color gold, int value, VoidCallback onDecrement, VoidCallback onIncrement) {
+  Widget _buildPremiumStepper(
+    bool isDark,
+    Color gold,
+    int value,
+    VoidCallback onDecrement,
+    VoidCallback onIncrement,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? Colors.black26 : Colors.white,
@@ -880,11 +1085,19 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: const BorderRadius.horizontal(left: Radius.circular(11)),
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(11),
+              ),
               onTap: value > 0 ? onDecrement : null,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Icon(Icons.remove_rounded, color: value > 0 ? gold : Colors.grey),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Icon(
+                  Icons.remove_rounded,
+                  color: value > 0 ? gold : Colors.grey,
+                ),
               ),
             ),
           ),
@@ -899,11 +1112,19 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: const BorderRadius.horizontal(right: Radius.circular(11)),
+              borderRadius: const BorderRadius.horizontal(
+                right: Radius.circular(11),
+              ),
               onTap: value < 100 ? onIncrement : null,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Icon(Icons.add_rounded, color: value < 100 ? gold : Colors.grey),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Icon(
+                  Icons.add_rounded,
+                  color: value < 100 ? gold : Colors.grey,
+                ),
               ),
             ),
           ),
@@ -912,11 +1133,18 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     );
   }
 
-  InputDecoration _premiumInputDecoration(String label, bool isDark, {String? prefixText, IconData? prefixIcon}) {
+  InputDecoration _premiumInputDecoration(
+    String label,
+    bool isDark, {
+    String? prefixText,
+    IconData? prefixIcon,
+  }) {
     return InputDecoration(
       labelText: label,
       prefixText: prefixText,
-      prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 20, color: Colors.grey) : null,
+      prefixIcon: prefixIcon != null
+          ? Icon(prefixIcon, size: 20, color: Colors.grey)
+          : null,
       filled: true,
       fillColor: isDark ? Colors.black26 : Colors.white,
       border: OutlineInputBorder(

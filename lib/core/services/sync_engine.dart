@@ -15,14 +15,7 @@ import '../../features/eventos/services/mora_tracked_recovery.dart';
 import '../../models/contrato_alumno.dart';
 
 /// Estado del motor de sincronización.
-enum SyncStatus {
-  idle,
-  wakingUp,
-  syncing,
-  probing,
-  error,
-  offline,
-}
+enum SyncStatus { idle, wakingUp, syncing, probing, error, offline }
 
 /// Resultado del último chequeo remoto (sin descargar datos).
 class RemoteProbeInfo {
@@ -71,6 +64,8 @@ class SyncEngine {
     'rentabilidad_config': 'updated_at',
     'cierre_caja_guia_movimientos': 'updated_at',
     'cierre_caja_anotaciones': 'updated_at',
+    'operadores_caja': 'updated_at',
+    'sesiones_caja': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -109,15 +104,16 @@ class SyncEngine {
   Stream<int> get pendingStream => _pendingController.stream;
 
   final _remoteProbeController = StreamController<RemoteProbeInfo>.broadcast();
-  Stream<RemoteProbeInfo> get remoteProbeStream => _remoteProbeController.stream;
+  Stream<RemoteProbeInfo> get remoteProbeStream =>
+      _remoteProbeController.stream;
 
   StreamSubscription<AppConnectivity>? _connectivitySub;
 
   SyncEngine({
     required ConnectivityService connectivity,
     SupabaseClient? supabase,
-  })  : _connectivity = connectivity,
-        _supabase = supabase ?? Supabase.instance.client;
+  }) : _connectivity = connectivity,
+       _supabase = supabase ?? Supabase.instance.client;
 
   /// Inicia el motor — solo contadores locales, sin sync automático.
   void start() {
@@ -151,7 +147,7 @@ class SyncEngine {
       _status == SyncStatus.probing;
 
   /// Sube todos los cambios locales pendientes a la nube.
-  Future<void> flushPending() async {
+  Future<void> flushPending({DateTime? createdSince}) async {
     if (_isBusy) {
       debugPrint('🔄 Sync ocupado, ignorando flush...');
       return;
@@ -177,7 +173,10 @@ class SyncEngine {
       var rounds = 0;
       const maxRounds = 50;
       while (rounds < maxRounds) {
-        final progress = await _flushQueue(unlimited: true);
+        final progress = await _flushQueue(
+          unlimited: true,
+          createdSince: createdSince,
+        );
         if (!progress) break;
         rounds++;
       }
@@ -230,6 +229,46 @@ class SyncEngine {
       debugPrint('❌ Error pullRemote: $e');
       _lastError = e.toString();
       _updateStatus(SyncStatus.error);
+    } finally {
+      await refreshPendingCount();
+    }
+  }
+
+  /// Pull corto para la operación simultánea de cajas. Nunca sube la cola
+  /// local: el jefe conserva sus pendientes manuales.
+  Future<bool> pullOperationalUpdates() async {
+    if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
+      return false;
+    }
+    try {
+      _updateStatus(SyncStatus.wakingUp);
+      if (!await _connectivity.wakeUpCloud()) {
+        _lastError = 'Supabase no disponible';
+        _updateStatus(SyncStatus.error);
+        return false;
+      }
+      _updateStatus(SyncStatus.syncing);
+      _lastError = null;
+      final db = await LocalDatabase.instance;
+      await Future.wait([
+        _pullTable(db, 'operadores_caja', 'updated_at'),
+        _pullTable(db, 'sesiones_caja', 'updated_at'),
+        _pullTable(db, 'contratos_alumnos', 'updated_at'),
+        _pullTable(db, 'pagos_contrato_alumno', 'updated_at'),
+        _pullTable(db, 'notas_operativas_contrato', 'updated_at'),
+        _pullTable(db, 'egresos', 'updated_at'),
+        _pullTable(db, 'cierre_caja_guia_movimientos', 'updated_at'),
+        _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
+      ]);
+      FinanzasRepository.invalidateProyeccionCache();
+      _lastPullTime = DateTime.now();
+      _updateStatus(SyncStatus.idle);
+      return true;
+    } catch (e) {
+      debugPrint('❌ Error pull operativo: $e');
+      _lastError = e.toString();
+      _updateStatus(SyncStatus.error);
+      return false;
     } finally {
       await refreshPendingCount();
     }
@@ -310,7 +349,9 @@ class SyncEngine {
   Future<void> resetPullTimestamps() async {
     final db = await LocalDatabase.instance;
     await db.delete('_sync_meta');
-    debugPrint('🔄 Timestamps de pull reseteados — el próximo pull será completo');
+    debugPrint(
+      '🔄 Timestamps de pull reseteados — el próximo pull será completo',
+    );
   }
 
   /// Resetea timestamps y hace pull completo de inmediato.
@@ -325,13 +366,16 @@ class SyncEngine {
 
     try {
       final claveMeta = 'last_pull_$table';
-      final metaRows =
-          await db.query('_sync_meta', where: 'clave = ?', whereArgs: [claveMeta]);
-      final lastPullStr =
-          metaRows.isNotEmpty ? metaRows.first['valor'] as String? : null;
+      final metaRows = await db.query(
+        '_sync_meta',
+        where: 'clave = ?',
+        whereArgs: [claveMeta],
+      );
+      final lastPullStr = metaRows.isNotEmpty
+          ? metaRows.first['valor'] as String?
+          : null;
 
-      final countRes =
-          await db.rawQuery('SELECT COUNT(*) as c FROM $table');
+      final countRes = await db.rawQuery('SELECT COUNT(*) as c FROM $table');
       final localCount = (countRes.first['c'] as int?) ?? 0;
 
       dynamic query = _supabase.from(table).select('id');
@@ -364,8 +408,16 @@ class SyncEngine {
 
   /// Envía los cambios locales pendientes a la nube.
   /// Devuelve true si al menos una operación se completó con éxito.
-  Future<bool> _flushQueue({bool unlimited = false}) async {
-    final pending = await SyncQueue.getPending(limit: unlimited ? null : 50);
+  Future<bool> _flushQueue({
+    bool unlimited = false,
+    DateTime? createdSince,
+  }) async {
+    var pending = await SyncQueue.getPending(limit: unlimited ? null : 50);
+    if (createdSince != null) {
+      pending = pending
+          .where((e) => !e.createdAt.isBefore(createdSince))
+          .toList();
+    }
     if (pending.isEmpty) return false;
 
     bool anySuccess = false;
@@ -375,18 +427,25 @@ class SyncEngine {
     int getPriority(SyncQueueEntry entry) {
       final table = entry.tabla;
       final payload = entry.payload;
-      
+
       if (table == 'clientes') return 0;
-      if (table == 'eventos' || table == 'presupuestos' || table == 'prestamos_alquiler') return 1;
-      
+      if (table == 'eventos' ||
+          table == 'presupuestos' ||
+          table == 'prestamos_alquiler')
+        return 1;
+
       // Los servicios globales son prioridad 0, los ad-hoc (con evento_id) son prioridad 2
       if (table == 'servicios') {
         return (payload['evento_id'] != null) ? 2 : 0;
       }
-      
-      if (table == 'pagos_contrato_alumno' || table == 'pagos_prestamo_alquiler') return 4;
+
+      if (table == 'pagos_contrato_alumno' ||
+          table == 'pagos_prestamo_alquiler')
+        return 4;
       if (table == 'notas_operativas_contrato') return 4;
-      if (table == 'eventos_servicios' || table == 'presupuesto_servicios' || table == 'prestamo_alquiler_lineas') {
+      if (table == 'eventos_servicios' ||
+          table == 'presupuesto_servicios' ||
+          table == 'prestamo_alquiler_lineas') {
         return 3;
       } // Depende de padre y servicio / préstamo
 
@@ -395,7 +454,12 @@ class SyncEngine {
       // Caja fuerte (Mi empresa PERSONAL): sin FK a eventos; cola estable
       if (table == 'caja_fuerte_movimientos') return 5;
       if (table == 'cierre_caja_guia_movimientos' ||
-          table == 'cierre_caja_anotaciones') return 5;
+          table == 'cierre_caja_anotaciones')
+        return 5;
+      if (table == 'operadores_caja') return 1;
+      if (table == 'sesiones_caja') {
+        return entry.operacion == SyncOperation.delete ? 6 : 2;
+      }
 
       // Resto de tablas (transacciones, egresos, invitados, etc) dependen de evento
       return 2;
@@ -410,14 +474,18 @@ class SyncEngine {
       return a.createdAt.compareTo(b.createdAt);
     });
 
-    debugPrint('📤 Procesando ${sortedPending.length} operaciones (Orden Jerárquico)...');
+    debugPrint(
+      '📤 Procesando ${sortedPending.length} operaciones (Orden Jerárquico)...',
+    );
 
     // Mantenemos un set de los IDs que están en esta cola para detectar dependencias pendientes
     final pendingIdsInQueue = pending.map((e) => e.registroId).toSet();
 
     for (final entry in sortedPending) {
       if (entry.intentos >= 10) {
-        debugPrint('  ! Registro agotado: ${entry.tabla}/${entry.registroId} (falló 10 veces)');
+        debugPrint(
+          '  ! Registro agotado: ${entry.tabla}/${entry.registroId} (falló 10 veces)',
+        );
         continue;
       }
 
@@ -428,31 +496,39 @@ class SyncEngine {
       String? parentTable;
       String? parentId;
 
-      if (payload['evento_id'] != null && pendingIdsInQueue.contains(payload['evento_id'])) {
+      if (payload['evento_id'] != null &&
+          pendingIdsInQueue.contains(payload['evento_id'])) {
         hasPendingParent = true;
         // Detectar si el ID es de un evento o presupuesto en la cola
-        final isPresupuesto = sortedPending.any((e) => e.tabla == 'presupuestos' && e.registroId == payload['evento_id']);
+        final isPresupuesto = sortedPending.any(
+          (e) =>
+              e.tabla == 'presupuestos' && e.registroId == payload['evento_id'],
+        );
         parentTable = isPresupuesto ? 'presupuestos' : 'eventos';
         parentId = payload['evento_id'];
-      } else if (payload['presupuesto_id'] != null && pendingIdsInQueue.contains(payload['presupuesto_id'])) {
+      } else if (payload['presupuesto_id'] != null &&
+          pendingIdsInQueue.contains(payload['presupuesto_id'])) {
         hasPendingParent = true;
         parentTable = 'presupuestos';
         parentId = payload['presupuesto_id'];
-      } else if (payload['cliente_id'] != null && pendingIdsInQueue.contains(payload['cliente_id'])) {
+      } else if (payload['cliente_id'] != null &&
+          pendingIdsInQueue.contains(payload['cliente_id'])) {
         hasPendingParent = true;
         parentTable = 'clientes';
         parentId = payload['cliente_id'];
-      } else if (payload['contrato_alumno_id'] != null && pendingIdsInQueue.contains(payload['contrato_alumno_id'])) {
+      } else if (payload['contrato_alumno_id'] != null &&
+          pendingIdsInQueue.contains(payload['contrato_alumno_id'])) {
         hasPendingParent = true;
         parentTable = 'contratos_alumnos';
         parentId = payload['contrato_alumno_id'];
-      } else if (payload['prestamo_id'] != null && pendingIdsInQueue.contains(payload['prestamo_id'])) {
+      } else if (payload['prestamo_id'] != null &&
+          pendingIdsInQueue.contains(payload['prestamo_id'])) {
         hasPendingParent = true;
         parentTable = 'prestamos_alquiler';
         parentId = payload['prestamo_id'];
       } else if (entry.tabla == 'eventos_servicios' &&
-                 payload['servicio_id'] != null &&
-                 pendingIdsInQueue.contains(payload['servicio_id'])) {
+          payload['servicio_id'] != null &&
+          pendingIdsInQueue.contains(payload['servicio_id'])) {
         // Caso especial: línea de servicio cuyo servicio (catálogo o ad-hoc) aún no subió.
         hasPendingParent = true;
         parentTable = 'servicios';
@@ -460,47 +536,56 @@ class SyncEngine {
       }
 
       if (hasPendingParent) {
-        debugPrint('  ⏳ Posponiendo ${entry.tabla}/${entry.registroId}: esperando a $parentTable/$parentId');
+        debugPrint(
+          '  ⏳ Posponiendo ${entry.tabla}/${entry.registroId}: esperando a $parentTable/$parentId',
+        );
         continue;
       }
 
       try {
         await _executeSyncOperation(entry);
         await SyncQueue.markCompleted(entry.id!);
-        debugPrint('  √ ${entry.operacion.name} ${entry.tabla}/${entry.registroId}');
+        debugPrint(
+          '  √ ${entry.operacion.name} ${entry.tabla}/${entry.registroId}',
+        );
         anySuccess = true;
-        
+
         // ACELERACIÓN TURBO: Si acabamos de subir un "padre", notificamos al loop
         // para que re-intente procesar hijos pausados en esta misma vuelta si es posible.
       } catch (e) {
         debugPrint('  ✗ Error sync ${entry.tabla}/${entry.registroId}: $e');
-        
+
         bool isNonRetryable = _isNonRetryableError(e);
-        
+
         // Detección de Código 23503 (FK Violation / Huérfamos) -> AUTOCURACIÓN
-        if (e is PostgrestException && (e.code == '23503' || e.message.contains('violates'))) {
-           isNonRetryable = false;
-           debugPrint('  ⏳ Pausa Referencial (${entry.tabla}/${entry.registroId}): Esperando integridad en la nube.');
-           
-           // Intentar Autocuración en silencio
-           final healed = await _attemptSelfHealing(entry);
-           
-           if (healed) {
-             await SyncQueue.markPaused(entry.id!, 'ESPERANDO_PADRE: $e'); 
-           } else {
-             // Si el padre no existe localmente, es un error referencial insalvable localmente.
-             // Incrementa los intentos. Al llegar a 10 se marcará como ERROR_PERMANENTE.
-             final isPermanent = entry.intentos >= 9;
-             final errorMsg = isPermanent ? 'ERROR_PERMANENTE: Padre no encontrado localmente' : 'ESPERANDO_PADRE: Padre no encontrado localmente';
-             await SyncQueue.markFailed(entry.id!, errorMsg);
-           }
-           continue; 
+        if (e is PostgrestException &&
+            (e.code == '23503' || e.message.contains('violates'))) {
+          isNonRetryable = false;
+          debugPrint(
+            '  ⏳ Pausa Referencial (${entry.tabla}/${entry.registroId}): Esperando integridad en la nube.',
+          );
+
+          // Intentar Autocuración en silencio
+          final healed = await _attemptSelfHealing(entry);
+
+          if (healed) {
+            await SyncQueue.markPaused(entry.id!, 'ESPERANDO_PADRE: $e');
+          } else {
+            // Si el padre no existe localmente, es un error referencial insalvable localmente.
+            // Incrementa los intentos. Al llegar a 10 se marcará como ERROR_PERMANENTE.
+            final isPermanent = entry.intentos >= 9;
+            final errorMsg = isPermanent
+                ? 'ERROR_PERMANENTE: Padre no encontrado localmente'
+                : 'ESPERANDO_PADRE: Padre no encontrado localmente';
+            await SyncQueue.markFailed(entry.id!, errorMsg);
+          }
+          continue;
         }
 
         if (isNonRetryable) {
           await SyncQueue.markCompleted(entry.id!);
         } else {
-          final isPermanent = entry.intentos >= 9; 
+          final isPermanent = entry.intentos >= 9;
           final errorMsg = isPermanent ? 'ERROR_PERMANENTE: $e' : e.toString();
           await SyncQueue.markFailed(entry.id!, errorMsg);
         }
@@ -529,22 +614,28 @@ class SyncEngine {
     for (final entry in parentDependencies.entries) {
       final fkField = entry.key;
       final parentTable = entry.value;
-      
+
       final parentId = payload[fkField] as String?;
       if (parentId == null || parentId.isEmpty) continue;
 
       hasAnyFkToCheck = true;
 
       // SOPORTE CASCADA: Si es evento_id, también podría estar en 'presupuestos'
-      final potentialTables = (fkField == 'evento_id') 
-          ? ['eventos', 'presupuestos'] 
+      final potentialTables = (fkField == 'evento_id')
+          ? ['eventos', 'presupuestos']
           : [parentTable];
 
       bool parentFound = false;
       for (final table in potentialTables) {
-        final parentRows = await db.query(table, where: 'id = ?', whereArgs: [parentId]);
+        final parentRows = await db.query(
+          table,
+          where: 'id = ?',
+          whereArgs: [parentId],
+        );
         if (parentRows.isNotEmpty) {
-          debugPrint('  [Self-Healing] Re-encolando padre $table/$parentId para desbloquear ${childEntry.tabla}');
+          debugPrint(
+            '  [Self-Healing] Re-encolando padre $table/$parentId para desbloquear ${childEntry.tabla}',
+          );
           await SyncQueue.enqueue(
             tabla: table,
             operacion: SyncOperation.insert,
@@ -558,7 +649,9 @@ class SyncEngine {
       }
 
       if (!parentFound) {
-        debugPrint('  [Self-Healing] Padre $parentId no encontrado en ${potentialTables.join('/')} localmente.');
+        debugPrint(
+          '  [Self-Healing] Padre $parentId no encontrado en ${potentialTables.join('/')} localmente.',
+        );
       }
     }
 
@@ -595,7 +688,9 @@ class SyncEngine {
     // Pre-validación: rechazar cualquier operación con UUID malformado
     final badField = _validateUuidFields(payload);
     if (badField != null) {
-      throw Exception('UUID_INVALIDO: El campo "$badField" contiene un valor no-UUID en ${entry.tabla}');
+      throw Exception(
+        'UUID_INVALIDO: El campo "$badField" contiene un valor no-UUID en ${entry.tabla}',
+      );
     }
 
     switch (entry.operacion) {
@@ -603,29 +698,30 @@ class SyncEngine {
         await _supabase.from(entry.tabla).upsert(payload);
         break;
       case SyncOperation.update:
-        await _supabase.from(entry.tabla)
+        await _supabase
+            .from(entry.tabla)
             .update(payload)
             .eq('id', entry.registroId);
         break;
       case SyncOperation.delete:
         if (entry.registroId.length == 36) {
-          await _supabase.from(entry.tabla)
-              .delete()
-              .eq('id', entry.registroId);
-        } else if (entry.tabla == 'eventos_servicios' || entry.tabla == 'presupuesto_servicios') {
+          await _supabase.from(entry.tabla).delete().eq('id', entry.registroId);
+        } else if (entry.tabla == 'eventos_servicios' ||
+            entry.tabla == 'presupuesto_servicios') {
           // Legado: eventoId_servicioId
           final parts = entry.registroId.split('_');
           if (parts.length == 2) {
-            final parentField = entry.tabla == 'eventos_servicios' ? 'evento_id' : 'presupuesto_id';
-            await _supabase.from(entry.tabla)
+            final parentField = entry.tabla == 'eventos_servicios'
+                ? 'evento_id'
+                : 'presupuesto_id';
+            await _supabase
+                .from(entry.tabla)
                 .delete()
                 .eq(parentField, parts[0])
                 .eq('servicio_id', parts[1]);
           }
         } else {
-          await _supabase.from(entry.tabla)
-              .delete()
-              .eq('id', entry.registroId);
+          await _supabase.from(entry.tabla).delete().eq('id', entry.registroId);
         }
         break;
     }
@@ -659,6 +755,8 @@ class SyncEngine {
       _pullTable(db, 'rentabilidad_config', 'updated_at'),
       _pullTable(db, 'cierre_caja_guia_movimientos', 'updated_at'),
       _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
+      _pullTable(db, 'operadores_caja', 'updated_at'),
+      _pullTable(db, 'sesiones_caja', 'updated_at'),
     ]);
 
     try {
@@ -671,9 +769,8 @@ class SyncEngine {
           '  🔧 Post-pull mora: $recalibrados contrato(s) recalibrados desde historial',
         );
       }
-      final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
-        db: db,
-      );
+      final exenciones =
+          await MoraTrackedRecovery.repararExencionDesdeHistorial(db: db);
       if (exenciones > 0) {
         debugPrint(
           '  🔧 Post-pull mora: $exenciones contrato(s) con exención reparada',
@@ -687,12 +784,23 @@ class SyncEngine {
   }
 
   /// Descarga y upsert de una tabla. Soporta pull incremental mediante _sync_meta.
-  Future<void> _pullTable(Database db, String table, String? orderBy, {String primaryKey = 'id'}) async {
+  Future<void> _pullTable(
+    Database db,
+    String table,
+    String? orderBy, {
+    String primaryKey = 'id',
+  }) async {
     try {
       final String claveMeta = 'last_pull_$table';
       // Consultar última fecha de sincronización exitosa
-      final metaRows = await db.query('_sync_meta', where: 'clave = ?', whereArgs: [claveMeta]);
-      final String? lastSyncStr = metaRows.isNotEmpty ? metaRows.first['valor'] as String : null;
+      final metaRows = await db.query(
+        '_sync_meta',
+        where: 'clave = ?',
+        whereArgs: [claveMeta],
+      );
+      final String? lastSyncStr = metaRows.isNotEmpty
+          ? metaRows.first['valor'] as String
+          : null;
 
       final String? dateColumn = _incrementalColumns[table];
       dynamic query = _supabase.from(table).select();
@@ -703,7 +811,9 @@ class SyncEngine {
       if (lastSyncStr != null && dateColumn != null) {
         // Pull Incremental: traer solo lo nuevo/modificado
         query = query.gt(dateColumn, lastSyncStr);
-        debugPrint('  📥 $table: Solicitando cambios incremental desde $lastSyncStr (usando $dateColumn)...');
+        debugPrint(
+          '  📥 $table: Solicitando cambios incremental desde $lastSyncStr (usando $dateColumn)...',
+        );
       } else {
         debugPrint('  📥 $table: Solicitando pull completo...');
       }
@@ -722,7 +832,10 @@ class SyncEngine {
       final allData = <Map<String, dynamic>>[];
       int fromIdx = 0;
       while (true) {
-        final List<dynamic> page = await query.range(fromIdx, fromIdx + kPageSize - 1);
+        final List<dynamic> page = await query.range(
+          fromIdx,
+          fromIdx + kPageSize - 1,
+        );
         final pageRows = page.cast<Map<String, dynamic>>();
         allData.addAll(pageRows);
         if (pageRows.length < kPageSize) break;
@@ -733,11 +846,10 @@ class SyncEngine {
       if (rows.isEmpty) {
         // Aunque no haya nuevos registros, actualizamos el timestamp del último pull
         if (dateColumn != null) {
-          await db.insert(
-            '_sync_meta',
-            {'clave': claveMeta, 'valor': currentSyncStr},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await db.insert('_sync_meta', {
+            'clave': claveMeta,
+            'valor': currentSyncStr,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         return;
       }
@@ -749,14 +861,25 @@ class SyncEngine {
         where: 'tabla = ?',
         whereArgs: [table],
       );
-      final pendingIds =
-          pendingRows.map((r) => r['registro_id'] as String).toSet();
+      final pendingIds = pendingRows
+          .map((r) => r['registro_id'] as String)
+          .toSet();
 
-      const fkFields = ['evento_id', 'cliente_id', 'contrato_alumno_id', 'servicio_id', 'invitado_id', 'prestamo_id'];
+      const fkFields = [
+        'evento_id',
+        'cliente_id',
+        'contrato_alumno_id',
+        'servicio_id',
+        'invitado_id',
+        'prestamo_id',
+      ];
 
       Map<String, double?>? preservedBonifPctByEventoId;
       if (table == 'eventos') {
-        final localPctRows = await db.query('eventos', columns: ['id', 'bonificacion_global_pct']);
+        final localPctRows = await db.query(
+          'eventos',
+          columns: ['id', 'bonificacion_global_pct'],
+        );
         preservedBonifPctByEventoId = {
           for (final r in localPctRows)
             r['id'] as String: r['bonificacion_global_pct'] != null
@@ -765,8 +888,16 @@ class SyncEngine {
         };
       }
 
-      Map<String, ({double offset, String? exentaHasta, String? fechaReferencia, int reinicia})>?
-          preservedContratoMoraLocal;
+      Map<
+        String,
+        ({
+          double offset,
+          String? exentaHasta,
+          String? fechaReferencia,
+          int reinicia,
+        })
+      >?
+      preservedContratoMoraLocal;
       if (table == 'contratos_alumnos') {
         final localMoraRows = await db.query(
           'contratos_alumnos',
@@ -783,8 +914,7 @@ class SyncEngine {
             r['id'] as String: (
               offset: (r['mora_cobrada_offset'] as num?)?.toDouble() ?? 0,
               exentaHasta: (r['mora_exenta_hasta'] as String?)?.trim(),
-              fechaReferencia:
-                  (r['mora_fecha_referencia'] as String?)?.trim(),
+              fechaReferencia: (r['mora_fecha_referencia'] as String?)?.trim(),
               reinicia: () {
                 final v = r['mora_exencion_reinicia'];
                 if (v == null) return 1;
@@ -812,7 +942,8 @@ class SyncEngine {
           continue;
         }
         if (id != null && id.length != 36) {
-          if (table != 'eventos_servicios' && table != 'presupuesto_servicios') {
+          if (table != 'eventos_servicios' &&
+              table != 'presupuesto_servicios') {
             skipped++;
             continue;
           }
@@ -834,7 +965,9 @@ class SyncEngine {
           final insertMap = Map<String, dynamic>.from(cleanRow);
           final rawId = (insertMap['id'] as String?)?.trim() ?? '';
           if (rawId.length != 36) {
-            final parentKey = table == 'eventos_servicios' ? 'evento_id' : 'presupuesto_id';
+            final parentKey = table == 'eventos_servicios'
+                ? 'evento_id'
+                : 'presupuesto_id';
             final pid = (insertMap[parentKey] as String?)?.trim() ?? '';
             final sid = (insertMap['servicio_id'] as String?)?.trim() ?? '';
             if (pid.isEmpty || sid.isEmpty) {
@@ -842,7 +975,12 @@ class SyncEngine {
               continue;
             }
             final ctx = table == 'eventos_servicios' ? 'es' : 'ps';
-            insertMap['id'] = UuidUtils.lineaIdDeterministic(ctx, pid, sid, index);
+            insertMap['id'] = UuidUtils.lineaIdDeterministic(
+              ctx,
+              pid,
+              sid,
+              index,
+            );
           }
           cleanRow = insertMap;
         }
@@ -851,14 +989,20 @@ class SyncEngine {
           final cloudPctRaw = row['bonificacion_global_pct'];
           final insertRow = Map<String, dynamic>.from(cleanRow);
           if (cloudPctRaw != null) {
-            insertRow['bonificacion_global_pct'] = double.tryParse(cloudPctRaw.toString());
+            insertRow['bonificacion_global_pct'] = double.tryParse(
+              cloudPctRaw.toString(),
+            );
           } else {
             final preserved = preservedBonifPctByEventoId[eid];
             if (preserved != null) {
               insertRow['bonificacion_global_pct'] = preserved;
             }
           }
-          batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+            table,
+            insertRow,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         } else if (table == 'contratos_alumnos' &&
             preservedContratoMoraLocal != null) {
           final cid = cleanRow['id'] as String;
@@ -874,20 +1018,27 @@ class SyncEngine {
             insertRow['mora_fecha_referencia'] = fechaRef;
           }
           insertRow['mora_exencion_reinicia'] = preserved?.reinicia ?? 1;
-          batch.insert(table, insertRow, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+            table,
+            insertRow,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         } else {
-          batch.insert(table, cleanRow, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+            table,
+            cleanRow,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         }
       }
       await batch.commit(noResult: true);
 
       // Guardar última marca de tiempo de sincronización exitosa
       if (dateColumn != null) {
-        await db.insert(
-          '_sync_meta',
-          {'clave': claveMeta, 'valor': currentSyncStr},
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        await db.insert('_sync_meta', {
+          'clave': claveMeta,
+          'valor': currentSyncStr,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
 
       // Prune orphan rows for line-item tables (eventos_servicios / presupuesto_servicios).
@@ -901,7 +1052,9 @@ class SyncEngine {
           if (rawId.length == 36) {
             cloudIds.add(rawId);
           } else {
-            final parentKey = table == 'eventos_servicios' ? 'evento_id' : 'presupuesto_id';
+            final parentKey = table == 'eventos_servicios'
+                ? 'evento_id'
+                : 'presupuesto_id';
             final pid = (rows[i][parentKey] as String?)?.trim() ?? '';
             final sid = (rows[i]['servicio_id'] as String?)?.trim() ?? '';
             if (pid.isNotEmpty && sid.isNotEmpty) {
@@ -911,28 +1064,38 @@ class SyncEngine {
           }
         }
 
-        final pendingRows = await db.query('_sync_queue',
-            columns: ['registro_id'],
-            where: "tabla = ?",
-            whereArgs: [table]);
-        final pendingIds = pendingRows.map((r) => r['registro_id'] as String).toSet();
+        final pendingRows = await db.query(
+          '_sync_queue',
+          columns: ['registro_id'],
+          where: "tabla = ?",
+          whereArgs: [table],
+        );
+        final pendingIds = pendingRows
+            .map((r) => r['registro_id'] as String)
+            .toSet();
 
         final localRows = await db.query(table, columns: ['id']);
         int pruned = 0;
         for (final r in localRows) {
           final localId = (r['id'] as String?) ?? '';
-          if (localId.isNotEmpty && !cloudIds.contains(localId) && !pendingIds.contains(localId)) {
+          if (localId.isNotEmpty &&
+              !cloudIds.contains(localId) &&
+              !pendingIds.contains(localId)) {
             await db.delete(table, where: 'id = ?', whereArgs: [localId]);
             pruned++;
           }
         }
         if (pruned > 0) {
-          debugPrint('  🧹 $table: $pruned filas huérfanas eliminadas (dedup post-migración)');
+          debugPrint(
+            '  🧹 $table: $pruned filas huérfanas eliminadas (dedup post-migración)',
+          );
         }
       }
 
       final stored = rows.length - skipped;
-      debugPrint('  📥 $table: $stored registros${skipped > 0 ? " ($skipped corruptos omitidos)" : ""}');
+      debugPrint(
+        '  📥 $table: $stored registros${skipped > 0 ? " ($skipped corruptos omitidos)" : ""}',
+      );
     } catch (e) {
       debugPrint('  ⚠️ Error pull $table: $e');
     }
@@ -951,8 +1114,9 @@ class SyncEngine {
 
     if (table == 'contratos_alumnos') {
       if (cleaned.containsKey('nombres_acompanantes')) {
-        cleaned['nombres_acompanantes'] =
-            ContratoAlumno.acompanantesForRemote(cleaned['nombres_acompanantes']);
+        cleaned['nombres_acompanantes'] = ContratoAlumno.acompanantesForRemote(
+          cleaned['nombres_acompanantes'],
+        );
       }
       if (cleaned.containsKey('contrato_firmado')) {
         final v = cleaned['contrato_firmado'];
@@ -966,10 +1130,55 @@ class SyncEngine {
   /// Limpia un mapa de datos para que solo contenga columnas de la tabla SQLite.
   Map<String, dynamic> _cleanForSqlite(String table, Map<String, dynamic> row) {
     const tableColumns = {
-      'clientes': ['id', 'nombre_completo', 'telefono', 'email', 'is_archived', 'created_at', 'updated_at'],
-      'eventos': ['id', 'cliente_id', 'tipo', 'fecha_evento', 'cantidad_cuotas', 'modalidad', 'estado', 'pin_operador', 'observaciones', 'titulo_festejado', 'nombre_festejado', 'encabezado_evento', 'bonificacion_global_pct', 'created_at', 'updated_at'],
-      'servicios': ['id', 'nombre', 'categoria', 'costo_base', 'margen_ganancia', 'costo_interno', 'evento_id', 'is_archived', 'updated_at'],
-      'eventos_servicios': ['id', 'evento_id', 'servicio_id', 'precio_final_acordado', 'cantidad', 'grupo', 'detalle_servicio', 'combo_orden', 'es_extra', 'updated_at'],
+      'clientes': [
+        'id',
+        'nombre_completo',
+        'telefono',
+        'email',
+        'is_archived',
+        'created_at',
+        'updated_at',
+      ],
+      'eventos': [
+        'id',
+        'cliente_id',
+        'tipo',
+        'fecha_evento',
+        'cantidad_cuotas',
+        'modalidad',
+        'estado',
+        'pin_operador',
+        'observaciones',
+        'titulo_festejado',
+        'nombre_festejado',
+        'encabezado_evento',
+        'bonificacion_global_pct',
+        'created_at',
+        'updated_at',
+      ],
+      'servicios': [
+        'id',
+        'nombre',
+        'categoria',
+        'costo_base',
+        'margen_ganancia',
+        'costo_interno',
+        'evento_id',
+        'is_archived',
+        'updated_at',
+      ],
+      'eventos_servicios': [
+        'id',
+        'evento_id',
+        'servicio_id',
+        'precio_final_acordado',
+        'cantidad',
+        'grupo',
+        'detalle_servicio',
+        'combo_orden',
+        'es_extra',
+        'updated_at',
+      ],
       'presupuestos': [
         'id',
         'cliente_id',
@@ -1014,8 +1223,54 @@ class SyncEngine {
         'fecha_anulacion',
         'updated_at',
       ],
-      'egresos': ['id', 'evento_id', 'monto', 'proveedor', 'categoria', 'fecha', 'created_by', 'medio_pago', 'updated_at'],
-      'contratos_alumnos': ['id', 'evento_id', 'nombre_alumno', 'institucion', 'cantidad_acompanantes', 'monto_total_pactado', 'saldo_deudor', 'cuotas_pagadas', 'total_cuotas', 'nombres_acompanantes', 'dia_vencimiento_mensual', 'mesa_extra_precio', 'mesa_extra_cuotas', 'mesa_extra_cuotas_pagadas', 'mesa_extra_cantidad', 'mesas_extra_estado', 'sillas_extra_cantidad', 'sillas_extra_cuotas', 'sillas_extra_precio_total', 'sillas_extra_cuotas_pagadas', 'mesa_extra_pagado', 'sillas_extra_pagado', 'curso_division', 'musica_elegida', 'numero_mesa', 'telefono', 'created_at', 'contrato_firmado', 'mora_pendiente_tracked', 'mora_cobrada_offset', 'mora_fecha_referencia', 'mora_exenta_hasta', 'mora_exencion_reinicia', 'updated_at'],
+      'egresos': [
+        'id',
+        'evento_id',
+        'monto',
+        'proveedor',
+        'categoria',
+        'fecha',
+        'created_by',
+        'medio_pago',
+        'sesion_caja_id',
+        'updated_at',
+      ],
+      'contratos_alumnos': [
+        'id',
+        'evento_id',
+        'nombre_alumno',
+        'institucion',
+        'cantidad_acompanantes',
+        'monto_total_pactado',
+        'saldo_deudor',
+        'cuotas_pagadas',
+        'total_cuotas',
+        'nombres_acompanantes',
+        'dia_vencimiento_mensual',
+        'mesa_extra_precio',
+        'mesa_extra_cuotas',
+        'mesa_extra_cuotas_pagadas',
+        'mesa_extra_cantidad',
+        'mesas_extra_estado',
+        'sillas_extra_cantidad',
+        'sillas_extra_cuotas',
+        'sillas_extra_precio_total',
+        'sillas_extra_cuotas_pagadas',
+        'mesa_extra_pagado',
+        'sillas_extra_pagado',
+        'curso_division',
+        'musica_elegida',
+        'numero_mesa',
+        'telefono',
+        'created_at',
+        'contrato_firmado',
+        'mora_pendiente_tracked',
+        'mora_cobrada_offset',
+        'mora_fecha_referencia',
+        'mora_exenta_hasta',
+        'mora_exencion_reinicia',
+        'updated_at',
+      ],
       'notas_operativas_contrato': [
         'id',
         'contrato_alumno_id',
@@ -1037,10 +1292,51 @@ class SyncEngine {
         'anulado',
         'motivo_anulacion',
         'fecha_anulacion',
+        'sesion_caja_id',
         'updated_at',
       ],
-      'invitados': ['id', 'evento_id', 'nombre_completo', 'dni', 'numero_mesa', 'estado_ingreso', 'intentos_fallidos', 'updated_at', 'created_at'],
-      'solicitudes_cotizacion': ['id', 'cliente_nombre', 'cliente_celular', 'servicios_seleccionados', 'estado', 'updated_at'],
+      'operadores_caja': [
+        'id',
+        'nombre',
+        'pin',
+        'activo',
+        'created_at',
+        'updated_at',
+      ],
+      'sesiones_caja': [
+        'id',
+        'operador_id',
+        'abierta_at',
+        'cerrada_at',
+        'cambio_inicial',
+        'nota_apertura',
+        'etiqueta',
+        'arqueo_cierre',
+        'nota_cierre',
+        'device_id',
+        'last_heartbeat',
+        'created_at',
+        'updated_at',
+      ],
+      'invitados': [
+        'id',
+        'evento_id',
+        'nombre_completo',
+        'dni',
+        'numero_mesa',
+        'estado_ingreso',
+        'intentos_fallidos',
+        'updated_at',
+        'created_at',
+      ],
+      'solicitudes_cotizacion': [
+        'id',
+        'cliente_nombre',
+        'cliente_celular',
+        'servicios_seleccionados',
+        'estado',
+        'updated_at',
+      ],
       'prestamos_alquiler': [
         'id',
         'cliente_id',
@@ -1123,6 +1419,7 @@ class SyncEngine {
         'saldo_antes',
         'saldo_despues',
         'nota',
+        'sesion_caja_id',
         'fecha_mov',
         'created_at',
         'updated_at',
@@ -1131,6 +1428,7 @@ class SyncEngine {
         'id',
         'fecha',
         'turno',
+        'sesion_caja_id',
         'texto',
         'created_at',
         'updated_at',
@@ -1167,12 +1465,16 @@ class SyncEngine {
       }
     }
 
-    if (table == 'contratos_alumnos' && row.containsKey('cantidad_acompañantes')) {
+    if (table == 'contratos_alumnos' &&
+        row.containsKey('cantidad_acompañantes')) {
       clean['cantidad_acompanantes'] = row['cantidad_acompañantes'];
     }
-    if (table == 'contratos_alumnos' && row.containsKey('nombres_acompañantes')) {
+    if (table == 'contratos_alumnos' &&
+        row.containsKey('nombres_acompañantes')) {
       final val = row['nombres_acompañantes'];
-      clean['nombres_acompanantes'] = val is List ? jsonEncode(val) : (val ?? '[]');
+      clean['nombres_acompanantes'] = val is List
+          ? jsonEncode(val)
+          : (val ?? '[]');
     }
 
     return clean;
@@ -1184,8 +1486,12 @@ class SyncEngine {
     final db = await LocalDatabase.instance;
 
     const reconcileTables = [
-      'clientes', 'eventos', 'presupuestos',
-      'contratos_alumnos', 'prestamos_alquiler', 'servicios',
+      'clientes',
+      'eventos',
+      'presupuestos',
+      'contratos_alumnos',
+      'prestamos_alquiler',
+      'servicios',
     ];
 
     debugPrint('🔄 Reconciliación periódica de deletes remotos...');
@@ -1202,11 +1508,15 @@ class SyncEngine {
         final localRows = await db.query(table, columns: ['id']);
 
         // Excluir IDs pendientes en la cola de sync (no eliminar lo que aún no subió)
-        final pendingRows = await db.query('_sync_queue',
-            columns: ['registro_id'],
-            where: "tabla = ?",
-            whereArgs: [table]);
-        final pendingIds = pendingRows.map((r) => r['registro_id'] as String).toSet();
+        final pendingRows = await db.query(
+          '_sync_queue',
+          columns: ['registro_id'],
+          where: "tabla = ?",
+          whereArgs: [table],
+        );
+        final pendingIds = pendingRows
+            .map((r) => r['registro_id'] as String)
+            .toSet();
 
         int removed = 0;
         for (final row in localRows) {
@@ -1218,7 +1528,9 @@ class SyncEngine {
         }
 
         if (removed > 0) {
-          debugPrint('  🗑️ $table: $removed registros eliminados (no existen en cloud)');
+          debugPrint(
+            '  🗑️ $table: $removed registros eliminados (no existen en cloud)',
+          );
         }
       } catch (e) {
         debugPrint('  ⚠️ Error reconciliando $table: $e');
@@ -1229,11 +1541,11 @@ class SyncEngine {
   bool _isNonRetryableError(dynamic e) {
     final msg = e.toString().toLowerCase();
     return msg.contains('unique') ||
-           msg.contains('duplicate') ||
-           msg.contains('not found') ||
-           msg.contains('22p02') ||
-           msg.contains('uuid_invalido') ||
-           msg.contains('invalid input syntax for type uuid');
+        msg.contains('duplicate') ||
+        msg.contains('not found') ||
+        msg.contains('22p02') ||
+        msg.contains('uuid_invalido') ||
+        msg.contains('invalid input syntax for type uuid');
   }
 
   Future<void> refreshPendingCount() async {

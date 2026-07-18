@@ -5,6 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
 import '../../common/providers/admin_provider.dart';
+import '../../caja_sesiones/models/sesion_caja.dart';
+import '../../caja_sesiones/providers/app_role_provider.dart';
+import '../../caja_sesiones/repositories/sesiones_caja_repository.dart';
 import '../../egresos/repositories/egresos_repository.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../mi_empresa/repositories/finanzas_repository.dart';
@@ -15,6 +18,9 @@ import '../repositories/cierre_caja_repository.dart';
 class CierreCajaState {
   final DateTime dia;
   final TurnoCaja turno;
+  final List<SesionCaja> sesionesDia;
+  final String? sesionSeleccionadaId;
+  final bool consolidado;
 
   /// Hora AR (0..23) en la que termina la mañana y arranca la tarde.
   final int corteHorarioAr;
@@ -51,6 +57,9 @@ class CierreCajaState {
   const CierreCajaState({
     required this.dia,
     required this.turno,
+    this.sesionesDia = const [],
+    this.sesionSeleccionadaId,
+    this.consolidado = false,
     required this.corteHorarioAr,
     this.ingresosTurno = const [],
     this.egresosTurno = const [],
@@ -79,6 +88,10 @@ class CierreCajaState {
   CierreCajaState copyWith({
     DateTime? dia,
     TurnoCaja? turno,
+    List<SesionCaja>? sesionesDia,
+    String? sesionSeleccionadaId,
+    bool? consolidado,
+    bool clearSesionSeleccionada = false,
     int? corteHorarioAr,
     List<IngresoDetallado>? ingresosTurno,
     List<Egreso>? egresosTurno,
@@ -107,6 +120,11 @@ class CierreCajaState {
     return CierreCajaState(
       dia: dia ?? this.dia,
       turno: turno ?? this.turno,
+      sesionesDia: sesionesDia ?? this.sesionesDia,
+      sesionSeleccionadaId: clearSesionSeleccionada
+          ? null
+          : (sesionSeleccionadaId ?? this.sesionSeleccionadaId),
+      consolidado: consolidado ?? this.consolidado,
       corteHorarioAr: corteHorarioAr ?? this.corteHorarioAr,
       ingresosTurno: ingresosTurno ?? this.ingresosTurno,
       egresosTurno: egresosTurno ?? this.egresosTurno,
@@ -122,15 +140,36 @@ class CierreCajaState {
       transferenciaNeta: transferenciaNeta ?? this.transferenciaNeta,
       totalNeto: totalNeto ?? this.totalNeto,
       fondoCambioGuia: fondoCambioGuia ?? this.fondoCambioGuia,
-      guiaCambioMovimientos: guiaCambioMovimientos ?? this.guiaCambioMovimientos,
+      guiaCambioMovimientos:
+          guiaCambioMovimientos ?? this.guiaCambioMovimientos,
       guiaCantReposiciones: guiaCantReposiciones ?? this.guiaCantReposiciones,
       guiaCantUsos: guiaCantUsos ?? this.guiaCantUsos,
-      guiaTotalReposiciones: guiaTotalReposiciones ?? this.guiaTotalReposiciones,
+      guiaTotalReposiciones:
+          guiaTotalReposiciones ?? this.guiaTotalReposiciones,
       guiaTotalUsos: guiaTotalUsos ?? this.guiaTotalUsos,
       anotacionTurno: anotacionTurno ?? this.anotacionTurno,
       cargando: cargando ?? this.cargando,
       error: clearError ? null : (error ?? this.error),
     );
+  }
+
+  SesionCaja? get sesionSeleccionada {
+    final id = sesionSeleccionadaId;
+    if (id == null) return null;
+    for (final s in sesionesDia) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+
+  String get alcanceLabel {
+    if (consolidado) return 'Día completo · sesiones de operarios';
+    final s = sesionSeleccionada;
+    if (s == null) return 'Sin sesión';
+    return [
+      s.operadorNombre ?? 'Operario',
+      if ((s.etiqueta ?? '').isNotEmpty) s.etiqueta!,
+    ].join(' · ');
   }
 }
 
@@ -144,6 +183,10 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
   static DateTime _diaArHoy() {
     final ar = ArTime.nowAr();
     return DateTime(ar.year, ar.month, ar.day);
+  }
+
+  static TurnoCaja _turnoDeSesion(SesionCaja sesion) {
+    return sesion.etiqueta == 'Tarde' ? TurnoCaja.tarde : TurnoCaja.manana;
   }
 
   static String _fechaAString(DateTime dia) =>
@@ -213,6 +256,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
   @override
   CierreCajaState build() {
+    final appRole = ref.read(appRoleProvider);
     ref.onDispose(() {
       _channel?.unsubscribe();
     });
@@ -227,7 +271,11 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     Future.microtask(_bootstrap);
     return CierreCajaState(
       dia: _diaArHoy(),
-      turno: turnoActualAr(),
+      turno: appRole.sesionActiva == null
+          ? TurnoCaja.dia
+          : _turnoDeSesion(appRole.sesionActiva!),
+      sesionSeleccionadaId: appRole.sesionActiva?.id,
+      consolidado: appRole.esJefe,
       corteHorarioAr: 14,
       cargando: true,
     );
@@ -262,6 +310,28 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     await _refrescar();
   }
 
+  Future<void> setSesion(String sesionId) async {
+    if (!ref.read(appRoleProvider).esJefe) return;
+    final sesion = state.sesionesDia.where((s) => s.id == sesionId).firstOrNull;
+    if (sesion == null) return;
+    state = state.copyWith(
+      sesionSeleccionadaId: sesionId,
+      consolidado: false,
+      turno: _turnoDeSesion(sesion),
+    );
+    await _refrescar();
+  }
+
+  Future<void> setConsolidado() async {
+    if (!ref.read(appRoleProvider).esJefe) return;
+    state = state.copyWith(
+      consolidado: true,
+      clearSesionSeleccionada: true,
+      turno: TurnoCaja.dia,
+    );
+    await _refrescar();
+  }
+
   Future<void> avanzarANuevaJornadaVisual() async {
     if (!ref.read(adminAuthProvider).esModoJefe) {
       await aplicarRestriccionOperativa();
@@ -276,8 +346,13 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
   /// Al salir de modo jefe: fuerza hoy + turno actual AR y recalcula.
   Future<void> aplicarRestriccionOperativa() async {
-    final turno = turnoActualAr(corteHora: state.corteHorarioAr);
-    state = state.copyWith(dia: _diaArHoy(), turno: turno);
+    final sesion = ref.read(appRoleProvider).sesionActiva;
+    state = state.copyWith(
+      dia: _diaArHoy(),
+      turno: sesion == null ? turnoActualAr() : _turnoDeSesion(sesion),
+      sesionSeleccionadaId: sesion?.id,
+      consolidado: false,
+    );
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
   }
@@ -290,31 +365,74 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
   Future<void> refrescarManual() => _refrescar();
 
+  String _sesionEditableId() {
+    final id = state.sesionSeleccionadaId;
+    if (state.consolidado || id == null) {
+      throw StateError('Seleccioná una sesión para registrar movimientos.');
+    }
+    return id;
+  }
+
+  Future<void> _autoSyncCaja(DateTime checkpoint) async {
+    if (!ref.read(appRoleProvider).esCaja) return;
+    await ref
+        .read(sesionesCajaRepositoryProvider)
+        .flushBestEffort(createdSince: checkpoint);
+  }
+
   Future<void> registrarReposicionGuia(double monto, {String? nota}) async {
+    final checkpoint = DateTime.now().toUtc();
     final repo = ref.read(cierreCajaRepositoryProvider);
     final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    await repo.registrarReposicion(dia: dia, monto: monto, nota: nota);
+    await repo.registrarReposicion(
+      dia: dia,
+      sesionCajaId: _sesionEditableId(),
+      monto: monto,
+      nota: nota,
+    );
+    await _autoSyncCaja(checkpoint);
     await _refrescar();
   }
 
   Future<void> registrarUsoCambioGuia(double monto, {String? nota}) async {
+    final checkpoint = DateTime.now().toUtc();
     final repo = ref.read(cierreCajaRepositoryProvider);
     final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    await repo.registrarUso(dia: dia, monto: monto, nota: nota);
+    await repo.registrarUso(
+      dia: dia,
+      sesionCajaId: _sesionEditableId(),
+      monto: monto,
+      nota: nota,
+    );
+    await _autoSyncCaja(checkpoint);
     await _refrescar();
   }
 
   Future<void> registrarAjusteGuia(double saldoReal, {String? nota}) async {
+    final checkpoint = DateTime.now().toUtc();
     final repo = ref.read(cierreCajaRepositoryProvider);
     final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    await repo.registrarAjuste(dia: dia, saldoReal: saldoReal, nota: nota);
+    await repo.registrarAjuste(
+      dia: dia,
+      sesionCajaId: _sesionEditableId(),
+      saldoReal: saldoReal,
+      nota: nota,
+    );
+    await _autoSyncCaja(checkpoint);
     await _refrescar();
   }
 
   Future<void> setAnotacionTurno(String texto) async {
+    final checkpoint = DateTime.now().toUtc();
     final repo = ref.read(cierreCajaRepositoryProvider);
     final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    await repo.guardarAnotacion(dia: dia, turno: state.turno, texto: texto);
+    await repo.guardarAnotacion(
+      dia: dia,
+      turno: state.turno,
+      sesionCajaId: _sesionEditableId(),
+      texto: texto,
+    );
+    await _autoSyncCaja(checkpoint);
     state = state.copyWith(anotacionTurno: texto.trim());
   }
 
@@ -364,6 +482,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     }
 
     try {
+      final checkpoint = DateTime.now().toUtc();
       final egRepo = ref.read(egresosRepositoryProvider);
       final concepto = (notas ?? '').trim().isNotEmpty
           ? 'Retiro de caja — ${notas!.trim()}'
@@ -374,8 +493,10 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         proveedor: concepto,
         categoria: kCategoriaRetiroCaja,
         medioPago: medio,
+        sesionCajaId: _sesionEditableId(),
       );
 
+      await _autoSyncCaja(checkpoint);
       await _refrescar();
     } finally {
       _registrandoRetiro = false;
@@ -388,13 +509,43 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       final finanzasRepo = ref.read(finanzasRepositoryProvider);
       final egresosRepo = ref.read(egresosRepositoryProvider);
       final cierreRepo = ref.read(cierreCajaRepositoryProvider);
+      final sesionesRepo = ref.read(sesionesCajaRepositoryProvider);
+      final appRole = ref.read(appRoleProvider);
       final diaNorm = DateTime(state.dia.year, state.dia.month, state.dia.day);
+
+      var sesiones = await sesionesRepo.sesionesDelDia(diaNorm);
+      String? seleccionadaId = state.sesionSeleccionadaId;
+      var consolidado = state.consolidado;
+      if (appRole.esCaja) {
+        final activa = appRole.sesionActiva;
+        sesiones = activa == null ? const [] : [activa];
+        seleccionadaId = activa?.id;
+        consolidado = false;
+      } else if (!consolidado && !sesiones.any((s) => s.id == seleccionadaId)) {
+        seleccionadaId = sesiones.firstOrNull?.id;
+        consolidado = seleccionadaId == null;
+      }
+
+      final ids = consolidado
+          ? sesiones.map((s) => s.id).toSet()
+          : <String>{if (seleccionadaId != null) seleccionadaId};
+      SesionCaja? seleccionada;
+      if (seleccionadaId != null) {
+        seleccionada = sesiones
+            .where((s) => s.id == seleccionadaId)
+            .firstOrNull;
+      }
+      final turno = consolidado
+          ? TurnoCaja.dia
+          : (seleccionada == null ? state.turno : _turnoDeSesion(seleccionada));
 
       final results = await Future.wait([
         finanzasRepo.obtenerIngresosDetallados(),
         egresosRepo.getEgresosConEvento(),
-        cierreRepo.obtenerGuiaCambioDia(diaNorm),
-        cierreRepo.obtenerAnotacionTexto(diaNorm, state.turno),
+        cierreRepo.obtenerGuiaCambioSesiones(ids),
+        seleccionadaId == null || consolidado
+            ? Future<String?>.value(null)
+            : cierreRepo.obtenerAnotacionTexto(seleccionadaId),
       ]);
 
       final ingresosFull = results[0] as List<IngresoDetallado>;
@@ -403,24 +554,13 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       final guia = results[2] as GuiaCambioResumen;
       final anotacion = results[3] as String?;
 
-      final rango = rangoHorarioAr(
-        state.dia,
-        state.turno,
-        corteHora: state.corteHorarioAr,
-      );
-
       double efectivoBruto = 0;
       double transferenciaBruta = 0;
       final ingresosTurno = <IngresoDetallado>[];
-      final modoJefe = ref.read(adminAuthProvider).esModoJefe;
       for (final i in ingresosFull) {
-        if (!ArTime.mismoDia(i.fecha, state.dia)) continue;
-        if (!rango.contiene(i.fecha)) continue;
+        final sid = i.sesionCajaId;
+        if (sid == null || !ids.contains(sid)) continue;
         final mp = i.medioPago?.toLowerCase().trim();
-        // Modo operativo: no mostrar ingresos de eventos particulares (efectivo ni transferencia).
-        if (!modoJefe && i.fuente == 'Particular') {
-          continue;
-        }
         ingresosTurno.add(i);
         if (mp == 'transferencia') {
           transferenciaBruta += i.monto;
@@ -437,9 +577,8 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       double retirosEfectivo = 0;
       double retirosTransferencia = 0;
       for (final e in egresosFull) {
-        if (e.fecha == null) continue;
-        if (!ArTime.mismoDia(e.fecha!, state.dia)) continue;
-        if (!rango.contiene(e.fecha!)) continue;
+        final sid = e.sesionCajaId;
+        if (sid == null || !ids.contains(sid)) continue;
         egresosTurno.add(e);
         final mp = (e.medioPago ?? '').toLowerCase().trim();
         if (mp == 'transferencia') {
@@ -482,6 +621,11 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       final totalNeto = efectivoNeto + transferenciaNeta;
 
       state = state.copyWith(
+        sesionesDia: sesiones,
+        sesionSeleccionadaId: seleccionadaId,
+        clearSesionSeleccionada: seleccionadaId == null,
+        consolidado: consolidado,
+        turno: turno,
         ingresosTurno: ingresosTurno,
         egresosTurno: egresosTurno,
         retirosTurno: retirosTurno,
@@ -513,5 +657,5 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
 final cierreCajaProvider =
     NotifierProvider<CierreCajaNotifier, CierreCajaState>(
-  CierreCajaNotifier.new,
-);
+      CierreCajaNotifier.new,
+    );

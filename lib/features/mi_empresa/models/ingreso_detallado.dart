@@ -9,9 +9,11 @@ class IngresoDetallado {
   final String nombreEvento;
   final String? eventoId;
   final String? clienteId;
+
   /// Cuando [fuente] es Alquiler, enlace al préstamo (pantalla detalle).
   final String? prestamoId;
   final String? medioPago;
+  final String? sesionCajaId;
 
   IngresoDetallado({
     required this.id,
@@ -25,6 +27,7 @@ class IngresoDetallado {
     this.clienteId,
     this.prestamoId,
     this.medioPago,
+    this.sesionCajaId,
   });
 
   // Utilidad para ordenar

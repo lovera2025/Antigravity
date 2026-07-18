@@ -16,11 +16,7 @@ const String kCategoriaGastoEmpresa = 'Gasto empresa';
 
 /// Turnos de cierre de caja. El corte mañana/tarde se decide por hora AR
 /// (default 14:00) y `dia` engloba ambos (00:00 a 23:59 AR).
-enum TurnoCaja {
-  manana,
-  tarde,
-  dia,
-}
+enum TurnoCaja { manana, tarde, dia }
 
 extension TurnoCajaX on TurnoCaja {
   String get label {
@@ -79,8 +75,13 @@ class RangoHorarioAr {
 }
 
 /// Instante “pared AR” para comparar con [ArTime.toAr] sin mezclar TZ del SO.
-DateTime _arWall(int year, int month, int day, [int hour = 0, int minute = 0]) =>
-    DateTime.utc(year, month, day, hour, minute);
+DateTime _arWall(
+  int year,
+  int month,
+  int day, [
+  int hour = 0,
+  int minute = 0,
+]) => DateTime.utc(year, month, day, hour, minute);
 
 /// Calcula el rango horario AR de un turno para un día calendario AR puntual.
 ///

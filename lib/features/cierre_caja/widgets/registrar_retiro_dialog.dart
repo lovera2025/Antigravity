@@ -10,7 +10,8 @@ class RegistrarRetiroDialog extends ConsumerStatefulWidget {
   const RegistrarRetiroDialog({super.key});
 
   @override
-  ConsumerState<RegistrarRetiroDialog> createState() => _RegistrarRetiroDialogState();
+  ConsumerState<RegistrarRetiroDialog> createState() =>
+      _RegistrarRetiroDialogState();
 }
 
 class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
@@ -42,8 +43,10 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
       return;
     }
     if (_monto > disponible + 0.001) {
-      setState(() => _error =
-          'El monto excede el disponible en $_medio (${disponible.toCurrency()}).');
+      setState(
+        () => _error =
+            'El monto excede el disponible en $_medio (${disponible.toCurrency()}).',
+      );
       return;
     }
     setState(() {
@@ -51,10 +54,14 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
       _error = null;
     });
     try {
-      await ref.read(cierreCajaProvider.notifier).registrarRetiro(
+      await ref
+          .read(cierreCajaProvider.notifier)
+          .registrarRetiro(
             monto: _monto,
             medioPago: _medio,
-            notas: _notasCtrl.text.trim().isEmpty ? null : _notasCtrl.text.trim(),
+            notas: _notasCtrl.text.trim().isEmpty
+                ? null
+                : _notasCtrl.text.trim(),
           );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -84,7 +91,8 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
     final disponible = _medio == 'efectivo'
         ? state.efectivoNeto
         : state.transferenciaNeta;
-    final puedeConfirmar = !_enviando && _monto > 0 && _monto <= disponible + 0.001;
+    final puedeConfirmar =
+        !_enviando && _monto > 0 && _monto <= disponible + 0.001;
 
     return Dialog(
       backgroundColor: isDark ? const Color(0xFF141414) : Colors.white,
@@ -105,7 +113,11 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
                       color: gold.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.south_west_rounded, color: gold, size: 20),
+                    child: const Icon(
+                      Icons.south_west_rounded,
+                      color: gold,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -128,12 +140,17 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
               const SizedBox(height: 6),
               TextField(
                 controller: _montoCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                 ],
                 onChanged: (_) => setState(() => _error = null),
-                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700),
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
                 decoration: InputDecoration(
                   prefixText: '\$ ',
                   hintText: '0,00',
@@ -150,7 +167,11 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
                 children: [
                   ChoiceChip(
                     label: const Text('Efectivo'),
-                    avatar: Icon(Icons.payments_outlined, size: 16, color: efectivoColor),
+                    avatar: Icon(
+                      Icons.payments_outlined,
+                      size: 16,
+                      color: efectivoColor,
+                    ),
                     selected: _medio == 'efectivo',
                     selectedColor: efectivoColor.withValues(alpha: 0.2),
                     onSelected: (_) => setState(() {
@@ -160,7 +181,11 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
                   ),
                   ChoiceChip(
                     label: const Text('Transferencia'),
-                    avatar: Icon(Icons.swap_horiz_rounded, size: 16, color: transferColor),
+                    avatar: Icon(
+                      Icons.swap_horiz_rounded,
+                      size: 16,
+                      color: transferColor,
+                    ),
                     selected: _medio == 'transferencia',
                     selectedColor: transferColor.withValues(alpha: 0.2),
                     onSelected: (_) => setState(() {
@@ -188,7 +213,9 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: _enviando ? null : () => Navigator.of(context).pop(false),
+                    onPressed: _enviando
+                        ? null
+                        : () => Navigator.of(context).pop(false),
                     child: const Text('Cancelar'),
                   ),
                   const SizedBox(width: 8),
@@ -198,15 +225,24 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
                         ? const SizedBox(
                             width: 14,
                             height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.check_rounded, size: 18),
                     label: const Text('Confirmar retiro'),
                     style: FilledButton.styleFrom(
                       backgroundColor: gold,
                       foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      textStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      textStyle: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
@@ -219,11 +255,11 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
   }
 
   TextStyle _labelStyle(Color gold) => TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 1.2,
-        color: gold.withValues(alpha: 0.9),
-      );
+    fontSize: 10,
+    fontWeight: FontWeight.w900,
+    letterSpacing: 1.2,
+    color: gold.withValues(alpha: 0.9),
+  );
 
   Widget _bucketsLine(
     CierreCajaState state,
@@ -279,9 +315,19 @@ class _RegistrarRetiroDialogState extends ConsumerState<RegistrarRetiroDialog> {
 
     return Row(
       children: [
-        tile('DISP. EFECTIVO', state.efectivoNeto, efectivoColor, Icons.payments_outlined),
+        tile(
+          'DISP. EFECTIVO',
+          state.efectivoNeto,
+          efectivoColor,
+          Icons.payments_outlined,
+        ),
         const SizedBox(width: 8),
-        tile('DISP. TRANSF.', state.transferenciaNeta, transferColor, Icons.swap_horiz_rounded),
+        tile(
+          'DISP. TRANSF.',
+          state.transferenciaNeta,
+          transferColor,
+          Icons.swap_horiz_rounded,
+        ),
       ],
     );
   }

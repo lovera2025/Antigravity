@@ -6,6 +6,7 @@ class CierreCajaAnotacion {
   final String id;
   final String fecha;
   final TurnoCaja turno;
+  final String? sesionCajaId;
   final String texto;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -14,6 +15,7 @@ class CierreCajaAnotacion {
     required this.id,
     required this.fecha,
     required this.turno,
+    this.sesionCajaId,
     required this.texto,
     required this.createdAt,
     required this.updatedAt,
@@ -26,6 +28,7 @@ class CierreCajaAnotacion {
       id: m['id']?.toString() ?? '',
       fecha: m['fecha']?.toString() ?? '',
       turno: _turnoFromSlug(m['turno']?.toString()),
+      sesionCajaId: m['sesion_caja_id']?.toString(),
       texto: m['texto']?.toString() ?? '',
       createdAt: ca != null
           ? (DateTime.tryParse(ca) ?? ArTime.nowUtc())
@@ -50,11 +53,12 @@ class CierreCajaAnotacion {
   }
 
   Map<String, dynamic> toSyncPayload() => {
-        'id': id,
-        'fecha': fecha,
-        'turno': turno.slug,
-        'texto': texto,
-        'created_at': createdAt.toUtc().toIso8601String(),
-        'updated_at': updatedAt.toUtc().toIso8601String(),
-      };
+    'id': id,
+    'fecha': fecha,
+    'turno': turno.slug,
+    'sesion_caja_id': sesionCajaId,
+    'texto': texto,
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'updated_at': updatedAt.toUtc().toIso8601String(),
+  };
 }

@@ -7,6 +7,7 @@ class Egreso {
   final DateTime? fecha;
   final String? createdBy;
   final String? medioPago;
+  final String? sesionCajaId;
 
   Egreso({
     required this.id,
@@ -17,6 +18,7 @@ class Egreso {
     this.fecha,
     this.createdBy,
     this.medioPago,
+    this.sesionCajaId,
   });
 
   /// ISO desde SQLite/Supabase → instante UTC canónico (misma política que ingresos).
@@ -35,9 +37,11 @@ class Egreso {
       monto: double.tryParse(json['monto']?.toString() ?? '0') ?? 0.0,
       proveedor: json['proveedor'] ?? json['concepto'] ?? 'Gasto sin nombre',
       categoria: json['categoria'] ?? 'Otro',
-      fecha: _parseFechaUtc(json['fecha']) ?? _parseFechaUtc(json['fecha_pago']),
+      fecha:
+          _parseFechaUtc(json['fecha']) ?? _parseFechaUtc(json['fecha_pago']),
       createdBy: json['created_by'],
       medioPago: json['medio_pago'],
+      sesionCajaId: json['sesion_caja_id']?.toString(),
     );
   }
 
@@ -50,6 +54,7 @@ class Egreso {
       'categoria': categoria,
       'fecha': fecha?.toIso8601String(),
       'medio_pago': medioPago,
+      'sesion_caja_id': sesionCajaId,
     };
   }
 }

@@ -17,7 +17,7 @@ class EgresosRepository {
   /// Obtiene todos los egresos con información de eventos y clientes desde SQLite.
   Future<List<Map<String, dynamic>>> getEgresosConEvento() async {
     final db = await LocalDatabase.instance;
-    
+
     // JOIN SQL para traer datos complementarios offline
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT 
@@ -29,7 +29,7 @@ class EgresosRepository {
       LEFT JOIN clientes c ON ev.cliente_id = c.id
       ORDER BY e.fecha DESC
     ''');
-    
+
     // Transformar al formato esperado por la UI (evitando romper el resto del código)
     // Supabase devuelve el objeto join anidado, lo emulamos aquí.
     return maps.map((row) {
@@ -38,10 +38,8 @@ class EgresosRepository {
         'eventos': {
           'id': row['evento_id'],
           'tipo': row['evento_tipo'],
-          'clientes': {
-            'nombre_completo': row['cliente_nombre']
-          }
-        }
+          'clientes': {'nombre_completo': row['cliente_nombre']},
+        },
       };
     }).toList();
   }
@@ -90,6 +88,7 @@ class EgresosRepository {
     required String categoria,
     DateTime? fecha,
     String? medioPago,
+    String? sesionCajaId,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
@@ -104,6 +103,8 @@ class EgresosRepository {
       'fecha': now,
       'created_by': _supabase.auth.currentUser?.id,
       'medio_pago': medioPago,
+      'sesion_caja_id': sesionCajaId,
+      'updated_at': now,
     };
 
     // 1. Guardar localmente (sin evento_id)
@@ -116,7 +117,6 @@ class EgresosRepository {
       registroId: id,
       payload: data,
     );
-
   }
 
   /// Actualiza campos de un egreso existente (offline-first).
@@ -138,11 +138,14 @@ class EgresosRepository {
     if (medioPago != null) updates['medio_pago'] = medioPago;
     if (monto != null) updates['monto'] = monto;
     if (updates.isEmpty) return;
+    updates['updated_at'] = ArTime.nowUtcIso();
 
     await db.update('egresos', updates, where: 'id = ?', whereArgs: [id]);
 
     final fullRow = await db.query('egresos', where: 'id = ?', whereArgs: [id]);
-    final payload = fullRow.isNotEmpty ? Map<String, dynamic>.from(fullRow.first) : {'id': id, ...updates};
+    final payload = fullRow.isNotEmpty
+        ? Map<String, dynamic>.from(fullRow.first)
+        : {'id': id, ...updates};
 
     await SyncQueue.enqueue(
       tabla: 'egresos',
@@ -172,12 +175,14 @@ class EgresosRepository {
   RealtimeChannel subscribeToChanges(void Function() onUpdate) {
     // Sigue usando Supabase Realtime para cambios remotos
     final channel = _supabase.channel('public:egresos_repo_changes');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'egresos',
-      callback: (_) => onUpdate(),
-    ).subscribe();
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'egresos',
+          callback: (_) => onUpdate(),
+        )
+        .subscribe();
     return channel;
   }
 }

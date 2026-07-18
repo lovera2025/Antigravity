@@ -9,17 +9,18 @@ import '../../models/egreso.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/widgets/admin_gate.dart';
+import '../common/widgets/operational_sync_coordinator.dart';
 import '../common/providers/admin_provider.dart';
 import '../egresos/providers/egresos_provider.dart';
 import '../egresos/repositories/egresos_repository.dart';
 import '../mi_empresa/models/ingreso_detallado.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
+import '../caja_sesiones/repositories/sesiones_caja_repository.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
 import 'widgets/anotacion_pdf_section.dart';
 import 'widgets/guia_cambio_section.dart';
 import 'widgets/registrar_retiro_dialog.dart';
-import 'widgets/turno_cierre_selector.dart';
 
 class CierreCajaScreen extends ConsumerStatefulWidget {
   const CierreCajaScreen({super.key});
@@ -67,7 +68,46 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     );
   }
 
-  Future<void> _eliminarRetiroCajaPorEgreso(BuildContext context, Egreso e) async {
+  Future<void> _eliminarSesionSeleccionada(
+    BuildContext context,
+    CierreCajaState state,
+  ) async {
+    final sesion = state.sesionSeleccionada;
+    if (sesion == null) return;
+    final total = await ref
+        .read(sesionesCajaRepositoryProvider)
+        .totalCobradoSesion(sesion.id);
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar sesión de caja'),
+        content: Text(
+          '¿Eliminar ${state.alcanceLabel}?'
+          '${total > 0.01 ? '\nTiene ${total.toCurrency()} en cobros; los pagos no se borrarán, solo quedarán sin sesión.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(sesionesCajaRepositoryProvider).eliminar(sesion.id);
+    await ref.read(cierreCajaProvider.notifier).setConsolidado();
+  }
+
+  Future<void> _eliminarRetiroCajaPorEgreso(
+    BuildContext context,
+    Egreso e,
+  ) async {
     if ((e.id).length != 36) return;
     final okPin = await AdminGate.check(context, ref);
     if (!okPin || !context.mounted) return;
@@ -109,9 +149,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       );
     } catch (err) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo eliminar: $err')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $err')));
     }
   }
 
@@ -127,6 +167,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         transferenciaBruta: state.transferenciaBruta,
         retirosEfectivo: state.egresosEfectivo,
         retirosTransferencia: state.egresosTransferencia,
+        emitidoPor: state.alcanceLabel,
         anotacionTurno: state.anotacionTurno.trim().isEmpty
             ? null
             : state.anotacionTurno.trim(),
@@ -138,9 +179,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo generar el PDF: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo generar el PDF: $e')));
     }
   }
 
@@ -149,7 +190,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Nueva jornada lista. Solo cambió la vista; el historial sigue intacto.'),
+        content: Text(
+          'Nueva jornada lista. Solo cambió la vista; el historial sigue intacto.',
+        ),
       ),
     );
   }
@@ -172,7 +215,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       return mp == 'transferencia';
     }).toList();
     final accent = isEfectivo ? _efectivoColor : _transferColor;
-    final icon = isEfectivo ? Icons.payments_outlined : Icons.swap_horiz_rounded;
+    final icon = isEfectivo
+        ? Icons.payments_outlined
+        : Icons.swap_horiz_rounded;
     final titulo = isEfectivo ? 'EFECTIVO' : 'TRANSFERENCIA';
 
     showModalBottomSheet(
@@ -215,6 +260,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         ref.read(cierreCajaProvider.notifier).refrescarManual();
       }
     });
+    ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
+      if (prev != next) {
+        ref.read(cierreCajaProvider.notifier).refrescarManual();
+      }
+    });
 
     return Scaffold(
       body: Container(
@@ -250,18 +300,28 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: _gold),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _gold,
+                            ),
                           )
                         : const Icon(Icons.refresh_rounded, color: _gold),
                     onPressed: state.cargando
                         ? null
-                        : () => ref.read(cierreCajaProvider.notifier).refrescarManual(),
+                        : () => ref
+                              .read(cierreCajaProvider.notifier)
+                              .refrescarManual(),
                   ),
                   if (modoJefe)
                     IconButton(
                       tooltip: 'Nueva jornada (solo visual)',
-                      icon: const Icon(Icons.event_available_rounded, color: _gold),
-                      onPressed: state.cargando ? null : () => _nuevaJornadaVisual(context),
+                      icon: const Icon(
+                        Icons.event_available_rounded,
+                        color: _gold,
+                      ),
+                      onPressed: state.cargando
+                          ? null
+                          : () => _nuevaJornadaVisual(context),
                     ),
                   const SizedBox(width: 4),
                 ],
@@ -281,31 +341,33 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       ),
                       const SizedBox(height: 14),
                       if (modoJefe)
-                        TurnoCierreSelector(
-                          turnoActivo: state.turno,
-                          corteHorarioAr: state.corteHorarioAr,
-                          isDark: isDark,
-                          onTurnoChanged: (t) =>
-                              ref.read(cierreCajaProvider.notifier).setTurno(t),
-                        )
+                        _selectorSesiones(state, isDark)
                       else
-                        _turnoOperativoChip(state, isDark, muted),
+                        _sesionOperativaChip(state, isDark, muted),
                       const SizedBox(height: 14),
-                      const GuiaCambioSection(),
-                      const SizedBox(height: 10),
-                      const AnotacionPdfSection(),
+                      if (!state.consolidado) ...[
+                        const GuiaCambioSection(),
+                        const SizedBox(height: 10),
+                        const AnotacionPdfSection(),
+                      ],
                       if (state.error != null) ...[
                         const SizedBox(height: 8),
                         Text(
                           'Aviso: ${state.error}',
-                          style: const TextStyle(color: Colors.orange, fontSize: 12),
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                       const SizedBox(height: 18),
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 220),
                         child: KeyedSubtree(
-                          key: ValueKey('${state.turno.slug}_${state.dia.toIso8601String()}'),
+                          key: ValueKey(
+                            '${state.sesionSeleccionadaId ?? 'dia'}_'
+                            '${state.dia.toIso8601String()}',
+                          ),
                           child: _bucketsRow(context, state, isDark),
                         ),
                       ),
@@ -323,7 +385,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       Container(width: 3, height: 14, color: _gold),
                       const SizedBox(width: 8),
                       Text(
-                        'MOVIMIENTOS DEL TURNO',
+                        state.consolidado
+                            ? 'MOVIMIENTOS DEL DÍA'
+                            : 'MOVIMIENTOS DE LA SESIÓN',
                         style: GoogleFonts.oswald(
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
@@ -334,7 +398,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       const Spacer(),
                       Text(
                         '${state.ingresosTurno.length + state.egresosTurno.length} ítem(s)',
-                        style: TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: muted,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
@@ -378,7 +446,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.04),
+            color: (isDark ? Colors.white : Colors.black).withValues(
+              alpha: 0.04,
+            ),
             border: Border.all(color: _gold.withValues(alpha: 0.35)),
           ),
           child: Row(
@@ -391,12 +461,20 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   children: [
                     Text(
                       'DÍA',
-                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: muted),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                        color: muted,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       esHoy ? '$txt · HOY' : txt,
-                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     if (!puedeCambiarDia) ...[
                       const SizedBox(height: 2),
@@ -409,7 +487,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                 ),
               ),
               if (puedeCambiarDia)
-                const Icon(Icons.edit_calendar_outlined, size: 18, color: _gold),
+                const Icon(
+                  Icons.edit_calendar_outlined,
+                  size: 18,
+                  color: _gold,
+                ),
             ],
           ),
         ),
@@ -417,13 +499,70 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     );
   }
 
-  Widget _turnoOperativoChip(CierreCajaState state, bool isDark, Color muted) {
-    final corte = state.corteHorarioAr.toString().padLeft(2, '0');
-    final rango = switch (state.turno) {
-      TurnoCaja.manana => '00:00 – $corte:00',
-      TurnoCaja.tarde => '$corte:00 – 23:59',
-      TurnoCaja.dia => '00:00 – 23:59',
-    };
+  Widget _selectorSesiones(CierreCajaState state, bool isDark) {
+    const allKey = '__all__';
+    final value = state.consolidado
+        ? allKey
+        : (state.sesionSeleccionadaId ??
+              (state.sesionesDia.isEmpty
+                  ? allKey
+                  : state.sesionesDia.first.id));
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: value,
+            decoration: const InputDecoration(
+              labelText: 'Sesión de caja',
+              prefixIcon: Icon(Icons.badge_outlined),
+            ),
+            items: [
+              const DropdownMenuItem(
+                value: allKey,
+                child: Text('Día completo · todas las sesiones'),
+              ),
+              for (final s in state.sesionesDia)
+                DropdownMenuItem(
+                  value: s.id,
+                  child: Text(
+                    [
+                      s.operadorNombre ?? 'Operario',
+                      s.etiqueta ?? 'Turno anterior',
+                      ArTime.formatHora(s.abiertaAt),
+                    ].join(' · '),
+                  ),
+                ),
+            ],
+            onChanged: state.cargando
+                ? null
+                : (id) {
+                    if (id == null) return;
+                    final notifier = ref.read(cierreCajaProvider.notifier);
+                    if (id == allKey) {
+                      notifier.setConsolidado();
+                    } else {
+                      notifier.setSesion(id);
+                    }
+                  },
+          ),
+        ),
+        if (!state.consolidado && state.sesionSeleccionadaId != null) ...[
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Eliminar sesión',
+            color: Colors.redAccent,
+            onPressed: state.cargando
+                ? null
+                : () => _eliminarSesionSeleccionada(context, state),
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _sesionOperativaChip(CierreCajaState state, bool isDark, Color muted) {
+    final sesion = state.sesionSeleccionada;
     final accent = switch (state.turno) {
       TurnoCaja.manana => const Color(0xFFE8A317),
       TurnoCaja.tarde => const Color(0xFF6C63FF),
@@ -433,7 +572,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'TURNO DE CIERRE',
+          'TU SESIÓN DE CAJA',
           style: TextStyle(
             fontSize: 9,
             fontWeight: FontWeight.w900,
@@ -447,13 +586,16 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: accent.withValues(alpha: 0.65), width: 1.5),
+            border: Border.all(
+              color: accent.withValues(alpha: 0.65),
+              width: 1.5,
+            ),
             color: accent.withValues(alpha: isDark ? 0.2 : 0.14),
           ),
           child: Column(
             children: [
               Text(
-                'TURNO ${state.turno.labelCorto.toUpperCase()}',
+                state.alcanceLabel.toUpperCase(),
                 style: GoogleFonts.oswald(
                   fontSize: 13,
                   fontWeight: FontWeight.w800,
@@ -463,7 +605,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                rango,
+                sesion == null
+                    ? 'No hay sesión activa'
+                    : 'Abrió ${ArTime.formatFechaHora(sesion.abiertaAt)}',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -472,7 +616,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Solo tu turno (modo operativo)',
+                'Solo movimientos ligados a esta sesión',
                 style: TextStyle(fontSize: 10, color: muted),
               ),
             ],
@@ -484,46 +628,50 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
 
   Widget _bucketsRow(BuildContext context, CierreCajaState state, bool isDark) {
     final cantEgEfectivo = state.egresosTurno
-        .where((e) => (e.medioPago ?? '').toLowerCase().trim() != 'transferencia')
+        .where(
+          (e) => (e.medioPago ?? '').toLowerCase().trim() != 'transferencia',
+        )
         .length;
     final cantEgTransf = state.egresosTurno
-        .where((e) => (e.medioPago ?? '').toLowerCase().trim() == 'transferencia')
+        .where(
+          (e) => (e.medioPago ?? '').toLowerCase().trim() == 'transferencia',
+        )
         .length;
     return IntrinsicHeight(
       child: Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _bucketCard(
-            context: context,
-            isDark: isDark,
-            label: 'EFECTIVO',
-            accent: _efectivoColor,
-            icon: Icons.payments_outlined,
-            ingresoBruto: state.efectivoBruto,
-            egresosBruto: state.egresosEfectivo,
-            neto: state.efectivoNeto,
-            cantEgresos: cantEgEfectivo,
-            onTap: () => _abrirDetalleBucket(context, state, 'efectivo'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _bucketCard(
+              context: context,
+              isDark: isDark,
+              label: 'EFECTIVO',
+              accent: _efectivoColor,
+              icon: Icons.payments_outlined,
+              ingresoBruto: state.efectivoBruto,
+              egresosBruto: state.egresosEfectivo,
+              neto: state.efectivoNeto,
+              cantEgresos: cantEgEfectivo,
+              onTap: () => _abrirDetalleBucket(context, state, 'efectivo'),
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _bucketCard(
-            context: context,
-            isDark: isDark,
-            label: 'TRANSFERENCIA',
-            accent: _transferColor,
-            icon: Icons.swap_horiz_rounded,
-            ingresoBruto: state.transferenciaBruta,
-            egresosBruto: state.egresosTransferencia,
-            neto: state.transferenciaNeta,
-            cantEgresos: cantEgTransf,
-            onTap: () => _abrirDetalleBucket(context, state, 'transferencia'),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _bucketCard(
+              context: context,
+              isDark: isDark,
+              label: 'TRANSFERENCIA',
+              accent: _transferColor,
+              icon: Icons.swap_horiz_rounded,
+              ingresoBruto: state.transferenciaBruta,
+              egresosBruto: state.egresosTransferencia,
+              neto: state.transferenciaNeta,
+              cantEgresos: cantEgTransf,
+              onTap: () => _abrirDetalleBucket(context, state, 'transferencia'),
+            ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 
@@ -583,7 +731,8 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       Icon(
                         Icons.chevron_right_rounded,
                         size: 18,
-                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.3),
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withValues(alpha: 0.3),
                       ),
                     ],
                   ),
@@ -607,13 +756,15 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.55),
+                      color: (isDark ? Colors.white : Colors.black).withValues(
+                        alpha: 0.55,
+                      ),
                     ),
                   ),
                   if (egresosBruto > 0)
                     Text(
                       'Egresos: −${egresosBruto.toCurrency()}'
-                          '${cantEgresos > 1 ? '  ($cantEgresos egresos)' : ''}',
+                      '${cantEgresos > 1 ? '  ($cantEgresos egresos)' : ''}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -626,7 +777,8 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.35),
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withValues(alpha: 0.35),
                       ),
                     ),
                 ],
@@ -645,8 +797,14 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         const SizedBox(width: 6),
         Expanded(
           child: Text(
-            'TOTAL NETO · ${state.turno.labelCorto.toUpperCase()}: ${state.totalNeto.toCurrency()}',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1, color: muted),
+            'TOTAL NETO · ${state.alcanceLabel.toUpperCase()}: '
+            '${state.totalNeto.toCurrency()}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+              color: muted,
+            ),
           ),
         ),
       ],
@@ -660,10 +818,16 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox_rounded, size: 56, color: muted.withValues(alpha: 0.6)),
+            Icon(
+              Icons.inbox_rounded,
+              size: 56,
+              color: muted.withValues(alpha: 0.6),
+            ),
             const SizedBox(height: 12),
             Text(
-              'Sin movimientos en este turno',
+              state.consolidado
+                  ? 'Sin movimientos en las sesiones del día'
+                  : 'Sin movimientos en esta sesión',
               style: GoogleFonts.oswald(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
@@ -673,7 +837,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Probá cambiar el turno o el día.',
+              state.consolidado
+                  ? 'Elegí otro día o verificá las sesiones abiertas.'
+                  : 'Los cobros deben estar ligados a la sesión seleccionada.',
               style: TextStyle(fontSize: 12, color: muted),
             ),
           ],
@@ -698,7 +864,12 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     return lista;
   }
 
-  Widget _movimientoTile(BuildContext context, _Movimiento m, bool isDark, Color muted) {
+  Widget _movimientoTile(
+    BuildContext context,
+    _Movimiento m,
+    bool isDark,
+    Color muted,
+  ) {
     final Color accent;
     final IconData icon;
     switch (m.kind) {
@@ -747,7 +918,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                 children: [
                   Text(
                     m.titulo,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -780,7 +954,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                 tooltip: 'Eliminar retiro',
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                icon: Icon(Icons.delete_outline_rounded, color: muted, size: 20),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: muted,
+                  size: 20,
+                ),
                 onPressed: () {
                   final e = m.retiroParaEliminar;
                   if (e != null) _eliminarRetiroCajaPorEgreso(context, e);
@@ -808,7 +986,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         children: [
           Expanded(
             child: FilledButton.icon(
-              onPressed: () => _abrirRegistrarRetiro(context),
+              onPressed: state.consolidado || state.sesionSeleccionadaId == null
+                  ? null
+                  : () => _abrirRegistrarRetiro(context),
               icon: const Icon(Icons.south_west_rounded, size: 18),
               label: const Text(
                 'REGISTRAR RETIRO',
@@ -824,13 +1004,17 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: OutlinedButton.icon(
-              onPressed: state.ingresosTurno.isEmpty && state.egresosTurno.isEmpty
+              onPressed:
+                  state.ingresosTurno.isEmpty && state.egresosTurno.isEmpty
                   ? null
                   : () => _exportarPdf(context, state),
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
               label: Text(
-                'PDF · ${state.turno.labelPdf}',
-                style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
+                state.consolidado ? 'PDF · DÍA' : 'PDF · SESIÓN',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _gold,
@@ -854,6 +1038,7 @@ class _Movimiento {
   final String? subtitulo;
   final String? medioPago;
   final _MovKind kind;
+
   /// Solo [retiroCaja]: permite anular el egreso desde la lista (PIN admin).
   final Egreso? retiroParaEliminar;
 
@@ -868,33 +1053,33 @@ class _Movimiento {
   });
 
   factory _Movimiento.ingreso(IngresoDetallado i) => _Movimiento(
-        fecha: i.fecha,
-        monto: i.monto,
-        titulo: i.concepto,
-        subtitulo: i.alumnoOCliente,
-        medioPago: i.medioPago,
-        kind: _MovKind.ingreso,
-      );
+    fecha: i.fecha,
+    monto: i.monto,
+    titulo: i.concepto,
+    subtitulo: i.alumnoOCliente,
+    medioPago: i.medioPago,
+    kind: _MovKind.ingreso,
+  );
 
   factory _Movimiento.retiroCaja(Egreso e) => _Movimiento(
-        fecha: e.fecha ?? ArTime.nowUtc(),
-        monto: e.monto,
-        titulo: e.proveedor ?? 'Retiro de caja',
-        subtitulo: 'Retiro de caja',
-        medioPago: e.medioPago,
-        kind: _MovKind.retiroCaja,
-        retiroParaEliminar: e,
-      );
+    fecha: e.fecha ?? ArTime.nowUtc(),
+    monto: e.monto,
+    titulo: e.proveedor ?? 'Retiro de caja',
+    subtitulo: 'Retiro de caja',
+    medioPago: e.medioPago,
+    kind: _MovKind.retiroCaja,
+    retiroParaEliminar: e,
+  );
 
   /// Gastos ya guardados en [egresos] (p. ej. personal): mismo registro que Finanzas.
   factory _Movimiento.otroEgreso(Egreso e) => _Movimiento(
-        fecha: e.fecha ?? ArTime.nowUtc(),
-        monto: e.monto,
-        titulo: e.proveedor ?? 'Egreso',
-        subtitulo: (e.categoria ?? '').trim().isEmpty ? 'Egreso' : e.categoria,
-        medioPago: e.medioPago,
-        kind: _MovKind.otroEgreso,
-      );
+    fecha: e.fecha ?? ArTime.nowUtc(),
+    monto: e.monto,
+    titulo: e.proveedor ?? 'Egreso',
+    subtitulo: (e.categoria ?? '').trim().isEmpty ? 'Egreso' : e.categoria,
+    medioPago: e.medioPago,
+    kind: _MovKind.otroEgreso,
+  );
 }
 
 class _DetalleBucketSheet extends StatelessWidget {
@@ -902,6 +1087,7 @@ class _DetalleBucketSheet extends StatelessWidget {
   final IconData icon;
   final String titulo;
   final List<IngresoDetallado> ingresos;
+
   /// Todos los egresos del bucket (retiros formales + otros). Solo los de
   /// categoría [kCategoriaRetiroCaja] muestran el botón de eliminar.
   final List<Egreso> egresos;
@@ -972,7 +1158,11 @@ class _DetalleBucketSheet extends StatelessWidget {
                     ),
                     Text(
                       'NETO ${neto.toCurrency()}',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: muted),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: muted,
+                      ),
                     ),
                   ],
                 ),
@@ -1005,7 +1195,9 @@ class _DetalleBucketSheet extends StatelessWidget {
           else ...[
             Text('EGRESOS', style: _headerStyle(const Color(0xFFE74C3C))),
             const SizedBox(height: 6),
-            ...egresos.map((e) => _filaEgreso(e, muted, isDark, onEliminarRetiro)),
+            ...egresos.map(
+              (e) => _filaEgreso(e, muted, isDark, onEliminarRetiro),
+            ),
           ],
         ],
       ),
@@ -1013,11 +1205,11 @@ class _DetalleBucketSheet extends StatelessWidget {
   }
 
   TextStyle _headerStyle(Color color) => TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w900,
-        letterSpacing: 1.5,
-        color: color,
-      );
+    fontSize: 11,
+    fontWeight: FontWeight.w900,
+    letterSpacing: 1.5,
+    color: color,
+  );
 
   Widget _filaIngreso(IngresoDetallado i, Color muted, bool isDark) {
     return Padding(
@@ -1030,7 +1222,10 @@ class _DetalleBucketSheet extends StatelessWidget {
               children: [
                 Text(
                   i.concepto,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1057,8 +1252,12 @@ class _DetalleBucketSheet extends StatelessWidget {
     );
   }
 
-  Widget _filaEgreso(Egreso e, Color muted, bool isDark,
-      Future<void> Function(Egreso)? onEliminarRetiro,) {
+  Widget _filaEgreso(
+    Egreso e,
+    Color muted,
+    bool isDark,
+    Future<void> Function(Egreso)? onEliminarRetiro,
+  ) {
     final hora = e.fecha != null ? ArTime.formatHora(e.fecha!) : '—';
     final esRetiroFormal = (e.categoria ?? '').trim() == kCategoriaRetiroCaja;
     final cat = (e.categoria ?? '').trim();
@@ -1072,7 +1271,10 @@ class _DetalleBucketSheet extends StatelessWidget {
               children: [
                 Text(
                   e.proveedor ?? (esRetiroFormal ? 'Retiro de caja' : 'Egreso'),
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1090,7 +1292,11 @@ class _DetalleBucketSheet extends StatelessWidget {
               tooltip: 'Eliminar retiro',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Color(0xFFE74C3C)),
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                size: 20,
+                color: Color(0xFFE74C3C),
+              ),
               onPressed: () => onEliminarRetiro(e),
             ),
           Text(

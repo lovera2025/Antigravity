@@ -47,7 +47,9 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
             return false;
           }
           try {
-            await ref.read(cierreCajaProvider.notifier).registrarReposicionGuia(v);
+            await ref
+                .read(cierreCajaProvider.notifier)
+                .registrarReposicionGuia(v);
             return true;
           } catch (e) {
             setLocal(() => error = '$e');
@@ -68,7 +70,8 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
       builder: (ctx) => _montoDialog(
         ctx: ctx,
         titulo: 'Usé cambio del fondo',
-        subtitulo: 'Solo guía operativa. No registra egreso ni mueve la caja contable.',
+        subtitulo:
+            'Solo guía operativa. No registra egreso ni mueve la caja contable.',
         label: 'Monto usado',
         ctrl: ctrl,
         error: error,
@@ -78,7 +81,9 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
             return false;
           }
           try {
-            await ref.read(cierreCajaProvider.notifier).registrarUsoCambioGuia(v);
+            await ref
+                .read(cierreCajaProvider.notifier)
+                .registrarUsoCambioGuia(v);
             return true;
           } catch (e) {
             setLocal(() => error = '$e');
@@ -132,7 +137,11 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
     required String label,
     required TextEditingController ctrl,
     required String? error,
-    required Future<bool> Function(double v, void Function(void Function()) setLocal) onConfirm,
+    required Future<bool> Function(
+      double v,
+      void Function(void Function()) setLocal,
+    )
+    onConfirm,
     required String boton,
   }) {
     final isDark = Theme.of(ctx).brightness == Brightness.dark;
@@ -161,7 +170,9 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
               ],
@@ -169,13 +180,18 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
               decoration: InputDecoration(
                 labelText: label,
                 errorText: error,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () async {
               final ok = await onConfirm(_parseMonto(ctrl.text), setLocal);
@@ -192,7 +208,9 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
   Widget build(BuildContext context) {
     final state = ref.watch(cierreCajaProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.45);
+    final muted = (isDark ? Colors.white : Colors.black).withValues(
+      alpha: 0.45,
+    );
     final fechaIso = CierreCajaRepositoryFecha.fecha(state.dia);
     final syncOk = cierreCajaFechaElegibleSync(fechaIso);
 
@@ -214,7 +232,11 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
           children: [
             Row(
               children: [
-                Icon(Icons.paid_outlined, size: 20, color: _gold.withValues(alpha: 0.95)),
+                Icon(
+                  Icons.paid_outlined,
+                  size: 20,
+                  color: _gold.withValues(alpha: 0.95),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -232,13 +254,22 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
             const SizedBox(height: 4),
             Text(
               'Solo para vueltos. No afecta el recaudado. El fondo es del día (sync desde $kCierreCajaSyncFechaCorte).',
-              style: TextStyle(fontSize: 11, height: 1.25, fontWeight: FontWeight.w600, color: muted),
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.25,
+                fontWeight: FontWeight.w600,
+                color: muted,
+              ),
             ),
             if (!syncOk) ...[
               const SizedBox(height: 4),
               Text(
                 'Este día es anterior al corte de sync; la guía no se guarda en nube.',
-                style: TextStyle(fontSize: 10, color: Colors.orange.shade700, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.orange.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
             const SizedBox(height: 10),
@@ -261,7 +292,11 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
               Text(
                 'Reposiciones: ${state.guiaCantReposiciones} (+${state.guiaTotalReposiciones.toCurrency()})  ·  '
                 'Usos: ${state.guiaCantUsos} (−${state.guiaTotalUsos.toCurrency()})',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: muted),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: muted,
+                ),
               ),
             ],
             const SizedBox(height: 12),
@@ -269,39 +304,63 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: !syncOk || state.cargando ? null : () => _dialogReposicion(context),
+                    onPressed: !syncOk || state.cargando
+                        ? null
+                        : () => _dialogReposicion(context),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _repColor,
-                      side: BorderSide(color: _repColor.withValues(alpha: 0.55)),
+                      side: BorderSide(
+                        color: _repColor.withValues(alpha: 0.55),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 11),
                     ),
-                    child: const Text('+ CAMBIO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                    child: const Text(
+                      '+ CAMBIO',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
-                    onPressed: !syncOk || state.cargando ? null : () => _dialogUso(context),
+                    onPressed: !syncOk || state.cargando
+                        ? null
+                        : () => _dialogUso(context),
                     style: FilledButton.styleFrom(
                       backgroundColor: _gold.withValues(alpha: 0.85),
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 11),
                     ),
-                    child: const Text('USÉ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                    child: const Text(
+                      'USÉ',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
                   tooltip: 'Ajustar tras conteo',
-                  onPressed: !syncOk || state.cargando ? null : () => _dialogAjuste(context),
-                  icon: Icon(Icons.tune_rounded, color: _gold.withValues(alpha: 0.9)),
+                  onPressed: !syncOk || state.cargando
+                      ? null
+                      : () => _dialogAjuste(context),
+                  icon: Icon(
+                    Icons.tune_rounded,
+                    color: _gold.withValues(alpha: 0.9),
+                  ),
                 ),
               ],
             ),
             if (state.guiaCambioMovimientos.isNotEmpty) ...[
               const SizedBox(height: 8),
               InkWell(
-                onTap: () => setState(() => _historialExpandido = !_historialExpandido),
+                onTap: () =>
+                    setState(() => _historialExpandido = !_historialExpandido),
                 child: Row(
                   children: [
                     Text(
@@ -315,7 +374,9 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
                     ),
                     const Spacer(),
                     Icon(
-                      _historialExpandido ? Icons.expand_less : Icons.expand_more,
+                      _historialExpandido
+                          ? Icons.expand_less
+                          : Icons.expand_more,
                       size: 18,
                       color: muted,
                     ),
@@ -324,8 +385,9 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
               ),
               AnimatedCrossFade(
                 duration: const Duration(milliseconds: 200),
-                crossFadeState:
-                    _historialExpandido ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                crossFadeState: _historialExpandido
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
                 firstChild: const SizedBox.shrink(),
                 secondChild: Column(
                   children: state.guiaCambioMovimientos.take(12).map((m) {
@@ -356,18 +418,30 @@ class _GuiaCambioSectionState extends ConsumerState<GuiaCambioSection> {
         children: [
           Text(
             ArTime.formatHora(m.fechaMov),
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: muted),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: muted,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               m.tipo.label,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
             ),
           ),
           Text(
             montoTxt,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: color),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              color: color,
+            ),
           ),
           const SizedBox(width: 6),
           Text(

@@ -54,13 +54,13 @@ class CierreCajaRepository {
     }
   }
 
-  Future<double> _saldoActualDia(String fechaIso) async {
+  Future<double> _saldoActualSesion(String sesionCajaId) async {
     final db = await LocalDatabase.instance;
     final rows = await db.query(
       'cierre_caja_guia_movimientos',
       columns: ['saldo_despues'],
-      where: 'fecha = ?',
-      whereArgs: [fechaIso],
+      where: 'sesion_caja_id = ?',
+      whereArgs: [sesionCajaId],
       orderBy: 'fecha_mov DESC, created_at DESC',
       limit: 1,
     );
@@ -68,14 +68,20 @@ class CierreCajaRepository {
     return (rows.first['saldo_despues'] as num?)?.toDouble() ?? 0;
   }
 
-  Future<GuiaCambioResumen> obtenerGuiaCambioDia(DateTime dia) async {
-    final fechaIso = fechaIsoDia(dia);
+  Future<GuiaCambioResumen> obtenerGuiaCambioSesiones(
+    Iterable<String> sesionIds,
+  ) async {
+    final ids = sesionIds.toSet().toList();
+    if (ids.isEmpty) {
+      return const GuiaCambioResumen(saldoActual: 0, movimientos: []);
+    }
     final db = await LocalDatabase.instance;
-    final rows = await db.query(
-      'cierre_caja_guia_movimientos',
-      where: 'fecha = ?',
-      whereArgs: [fechaIso],
-      orderBy: 'fecha_mov DESC, created_at DESC',
+    final marks = List.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT * FROM cierre_caja_guia_movimientos '
+      'WHERE sesion_caja_id IN ($marks) '
+      'ORDER BY fecha_mov DESC, created_at DESC',
+      ids,
     );
     final movs = rows.map((r) => GuiaCambioMovimiento.fromMap(r)).toList();
 
@@ -94,7 +100,12 @@ class CierreCajaRepository {
       }
     }
 
-    final saldo = movs.isEmpty ? 0.0 : movs.first.saldoDespues;
+    final saldos = <String, double>{};
+    for (final m in movs) {
+      final sid = m.sesionCajaId;
+      if (sid != null) saldos.putIfAbsent(sid, () => m.saldoDespues);
+    }
+    final saldo = saldos.values.fold<double>(0, (a, b) => a + b);
     return GuiaCambioResumen(
       saldoActual: saldo,
       movimientos: movs,
@@ -110,6 +121,7 @@ class CierreCajaRepository {
 
   Future<void> _insertarMovimientoGuia({
     required String fechaIso,
+    required String sesionCajaId,
     required TipoGuiaCambioMovimiento tipo,
     required double monto,
     required double saldoAntes,
@@ -127,6 +139,7 @@ class CierreCajaRepository {
       'saldo_antes': saldoAntes,
       'saldo_despues': saldoDespues,
       'nota': nota?.trim().isEmpty == true ? null : nota?.trim(),
+      'sesion_caja_id': sesionCajaId,
       'fecha_mov': nowIso,
       'created_at': nowIso,
       'updated_at': nowIso,
@@ -144,6 +157,7 @@ class CierreCajaRepository {
 
   Future<void> registrarReposicion({
     required DateTime dia,
+    required String sesionCajaId,
     required double monto,
     String? nota,
   }) async {
@@ -151,9 +165,10 @@ class CierreCajaRepository {
       throw ArgumentError('El monto debe ser mayor a cero.');
     }
     final f = fechaIsoDia(dia);
-    final antes = await _saldoActualDia(f);
+    final antes = await _saldoActualSesion(sesionCajaId);
     await _insertarMovimientoGuia(
       fechaIso: f,
+      sesionCajaId: sesionCajaId,
       tipo: TipoGuiaCambioMovimiento.reposicion,
       monto: monto,
       saldoAntes: antes,
@@ -164,6 +179,7 @@ class CierreCajaRepository {
 
   Future<void> registrarUso({
     required DateTime dia,
+    required String sesionCajaId,
     required double monto,
     String? nota,
   }) async {
@@ -171,10 +187,11 @@ class CierreCajaRepository {
       throw ArgumentError('El monto debe ser mayor a cero.');
     }
     final f = fechaIsoDia(dia);
-    final antes = await _saldoActualDia(f);
+    final antes = await _saldoActualSesion(sesionCajaId);
     final despues = (antes - monto).clamp(0.0, double.infinity);
     await _insertarMovimientoGuia(
       fechaIso: f,
+      sesionCajaId: sesionCajaId,
       tipo: TipoGuiaCambioMovimiento.uso,
       monto: monto,
       saldoAntes: antes,
@@ -185,6 +202,7 @@ class CierreCajaRepository {
 
   Future<void> registrarAjuste({
     required DateTime dia,
+    required String sesionCajaId,
     required double saldoReal,
     String? nota,
   }) async {
@@ -192,10 +210,11 @@ class CierreCajaRepository {
       throw ArgumentError('El saldo no puede ser negativo.');
     }
     final f = fechaIsoDia(dia);
-    final antes = await _saldoActualDia(f);
+    final antes = await _saldoActualSesion(sesionCajaId);
     if ((antes - saldoReal).abs() < 0.001) return;
     await _insertarMovimientoGuia(
       fechaIso: f,
+      sesionCajaId: sesionCajaId,
       tipo: TipoGuiaCambioMovimiento.ajuste,
       monto: (saldoReal - antes).abs(),
       saldoAntes: antes,
@@ -204,12 +223,12 @@ class CierreCajaRepository {
     );
   }
 
-  Future<String?> obtenerAnotacionTexto(DateTime dia, TurnoCaja turno) async {
+  Future<String?> obtenerAnotacionTexto(String sesionCajaId) async {
     final db = await LocalDatabase.instance;
     final rows = await db.query(
       'cierre_caja_anotaciones',
-      where: 'fecha = ? AND turno = ?',
-      whereArgs: [fechaIsoDia(dia), turno.slug],
+      where: 'sesion_caja_id = ?',
+      whereArgs: [sesionCajaId],
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -219,18 +238,19 @@ class CierreCajaRepository {
   Future<void> guardarAnotacion({
     required DateTime dia,
     required TurnoCaja turno,
+    required String sesionCajaId,
     required String texto,
   }) async {
     final f = fechaIsoDia(dia);
     _validarFechaSync(f);
     final t = texto.trim();
-    final id = UuidUtils.cierreCajaAnotacionId(f, turno.slug);
+    final id = sesionCajaId;
     final db = await LocalDatabase.instance;
     final nowIso = ArTime.nowUtcIso();
     final existente = await db.query(
       'cierre_caja_anotaciones',
-      where: 'fecha = ? AND turno = ?',
-      whereArgs: [f, turno.slug],
+      where: 'sesion_caja_id = ?',
+      whereArgs: [sesionCajaId],
       limit: 1,
     );
 
@@ -256,6 +276,7 @@ class CierreCajaRepository {
         'id': id,
         'fecha': f,
         'turno': turno.slug,
+        'sesion_caja_id': sesionCajaId,
         'texto': t,
         'created_at': nowIso,
         'updated_at': nowIso,
@@ -268,8 +289,7 @@ class CierreCajaRepository {
         payload: data,
       );
     } else {
-      final createdIso =
-          existente.first['created_at']?.toString() ?? nowIso;
+      final createdIso = existente.first['created_at']?.toString() ?? nowIso;
       await db.update(
         'cierre_caja_anotaciones',
         {'texto': t, 'updated_at': nowIso},
@@ -284,6 +304,7 @@ class CierreCajaRepository {
           'id': id,
           'fecha': f,
           'turno': turno.slug,
+          'sesion_caja_id': sesionCajaId,
           'texto': t,
           'created_at': createdIso,
           'updated_at': nowIso,

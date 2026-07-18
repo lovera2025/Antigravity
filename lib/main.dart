@@ -11,6 +11,8 @@ import 'dart:io' show Platform;
 import 'dart:convert';
 
 import 'features/auth/login_screen.dart';
+import 'features/caja_sesiones/providers/app_role_provider.dart';
+import 'features/caja_sesiones/widgets/role_gate_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/cotizacion/public_selection_screen.dart';
@@ -22,6 +24,7 @@ import 'features/totem/totem_display.dart';
 import 'features/totem/totem_checkin_screen.dart';
 import 'features/asesor/asesor_home_screen.dart';
 import 'features/common/providers/user_role_provider.dart';
+import 'features/common/widgets/operational_sync_coordinator.dart';
 import 'services/supabase_service.dart';
 import 'core/database/local_database.dart';
 
@@ -42,7 +45,7 @@ void main(List<String> args) async {
     final String argumentJson = args.length > 2 ? args[2] : '{}';
     final Map<String, dynamic> arguments = jsonDecode(argumentJson);
 
-    // No inicializamos el singleton global de Supabase en la ventana secundaria 
+    // No inicializamos el singleton global de Supabase en la ventana secundaria
     // para evitar el crash del plugin 'app_links' (MissingPluginException).
     // En su lugar, creamos un cliente independiente.
     final standaloneClient = SupabaseClient(supabaseUrl, supabaseAnonKey);
@@ -134,7 +137,9 @@ void main(List<String> args) async {
         await LocalDatabase.instance;
         debugPrint('✅ SQLite local inicializado correctamente');
       } catch (e) {
-        debugPrint('⚠️ Error al inicializar SQLite: $e (continuando sin cache local)');
+        debugPrint(
+          '⚠️ Error al inicializar SQLite: $e (continuando sin cache local)',
+        );
       }
     }
     debugPrint('V4 >>> LANZANDO SECTOR PRIVADO: Junior Eventos App');
@@ -162,9 +167,7 @@ class CatalogApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       home: const PublicSelectionScreen(),
     );
@@ -191,9 +194,7 @@ class OpApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       home: OpCheckinScreen(eventoId: eventoId),
     );
@@ -220,11 +221,13 @@ class TotemWebApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
-      home: TotemDisplay(eventoId: eventoId, showExitButton: true, svc: SupabaseService()),
+      home: TotemDisplay(
+        eventoId: eventoId,
+        showExitButton: true,
+        svc: SupabaseService(),
+      ),
     );
   }
 }
@@ -249,9 +252,7 @@ class BuscarApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       home: TotemCheckinScreen(eventoId: eventoId),
     );
@@ -278,9 +279,7 @@ class ListaApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       home: ListaInvitadosScreen(eventoId: eventoId),
     );
@@ -317,9 +316,7 @@ class TotemWindowApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       home: TotemDisplay(
         eventoId: eventoId,
@@ -360,6 +357,8 @@ class JuniorEventsApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Junior Eventos',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) =>
+          OperationalSyncCoordinator(child: child ?? const SizedBox.shrink()),
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       themeMode: themeMode,
@@ -368,9 +367,7 @@ class JuniorEventsApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'),
-      ],
+      supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       onGenerateRoute: (settings) {
         // Rutas adicionales: operador (admin), tótem (pantalla vertical fullscreen), recepción unificada
@@ -379,7 +376,8 @@ class JuniorEventsApp extends ConsumerWidget {
           final eventoId = args?['eventoId'] as String? ?? '';
           return MaterialPageRoute(
             settings: settings,
-            builder: (_) => TotemDisplay(eventoId: eventoId, svc: SupabaseService()),
+            builder: (_) =>
+                TotemDisplay(eventoId: eventoId, svc: SupabaseService()),
           );
         }
         if (settings.name == '/operador') {
@@ -535,14 +533,18 @@ class AuthWrapper extends ConsumerStatefulWidget {
 
 class _AuthWrapperState extends ConsumerState<AuthWrapper> {
   /// Un solo [Future.delayed] para el failsafe: si se recrea en cada build, el timer nunca termina.
-  late final Future<void> _authSplashTimeout =
-      Future.delayed(const Duration(seconds: 6));
+  late final Future<void> _authSplashTimeout = Future.delayed(
+    const Duration(seconds: 6),
+  );
 
   /// Evita invalidar el rol en cada rebuild del [StreamBuilder] (podía provocar ciclos de actualización).
   String? _invalidatedRoleForUserId;
 
   /// Rehidrata sesión desde disco si el stream de auth tarda o falla (p. ej. sin internet).
-  Session? _effectiveSession(AsyncSnapshot<AuthState> snapshot, SupabaseClient supabase) {
+  Session? _effectiveSession(
+    AsyncSnapshot<AuthState> snapshot,
+    SupabaseClient supabase,
+  ) {
     if (snapshot.data?.session != null) {
       return snapshot.data!.session;
     }
@@ -659,6 +661,7 @@ class _RoleRouter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final roleAsync = ref.watch(userRoleProvider);
+    final appRole = ref.watch(appRoleProvider);
 
     return roleAsync.when(
       loading: () => const Scaffold(
@@ -688,6 +691,12 @@ class _RoleRouter extends ConsumerWidget {
       },
       data: (role) {
         if (role.isAdmin) {
+          if (appRole.kind == AppRoleKind.none) {
+            return const RoleGateScreen();
+          }
+          if (appRole.esCaja && !appRole.tieneSesionCaja) {
+            return const RoleGateScreen();
+          }
           return const DashboardScreen();
         }
         return const AsesorHomeScreen();
@@ -695,4 +704,3 @@ class _RoleRouter extends ConsumerWidget {
     );
   }
 }
-

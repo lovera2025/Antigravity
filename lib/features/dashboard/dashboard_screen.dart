@@ -27,6 +27,10 @@ import '../../core/services/user_role_cache.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
+import '../caja_sesiones/providers/app_role_provider.dart';
+import '../caja_sesiones/widgets/cerrar_caja_dialog.dart';
+import '../caja_sesiones/widgets/operadores_caja_screen.dart';
+import '../caja_sesiones/widgets/sesion_caja_status_chip.dart';
 import 'dart:async';
 import 'dart:ui';
 import '../common/widgets/sync_menu_sheet.dart';
@@ -62,8 +66,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   static const _diasSemana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   static const _meses = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
 
   @override
@@ -137,15 +151,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   void _setupSolicitudesRealtime() {
     _solicitudesChannel = _supabase.channel('public:solicitudes_changes');
-    _solicitudesChannel!.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'solicitudes_cotizacion',
-      callback: (payload) {
-        debugPrint('REALTIME: Cambio en solicitudes detectado');
-        _fetchPendingRequestsCount();
-      },
-    ).subscribe();
+    _solicitudesChannel!
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'solicitudes_cotizacion',
+          callback: (payload) {
+            debugPrint('REALTIME: Cambio en solicitudes detectado');
+            _fetchPendingRequestsCount();
+          },
+        )
+        .subscribe();
   }
 
   void _setupFinanzasRealtime() {
@@ -172,7 +188,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     const primaryGold = Color(0xFFD4AF37);
     final statsAsync = ref.watch(dashboardStatsProvider);
-    final modoJefe = ref.watch(adminAuthProvider).esModoJefe;
+    final appRole = ref.watch(appRoleProvider);
+    final modoJefe = appRole.esJefe || ref.watch(adminAuthProvider).esModoJefe;
+    final modoCaja = appRole.esCaja;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -182,7 +200,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           children: [
             const AnimatedBrandLogo(height: 28),
             const SizedBox(width: 10),
-            const Text('JUNIOR EVENTOS', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+            const Text(
+              'JUNIOR EVENTOS',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+              ),
+            ),
             if (modoJefe) ...[
               const SizedBox(width: 10),
               Container(
@@ -190,7 +215,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 decoration: BoxDecoration(
                   color: primaryGold.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: primaryGold.withValues(alpha: 0.45)),
+                  border: Border.all(
+                    color: primaryGold.withValues(alpha: 0.45),
+                  ),
                 ),
                 child: const Text(
                   'MODO JEFE',
@@ -202,11 +229,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 ),
               ),
+            ] else if (modoCaja) ...[
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.teal.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Text(
+                  'CAJA · ${(appRole.operador?.nombre ?? '').toUpperCase()}',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: Colors.tealAccent,
+                  ),
+                ),
+              ),
             ],
           ],
         ),
         backgroundColor: Colors.transparent,
         actions: [
+          if (modoJefe)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CierreCajaScreen()),
+                  ),
+                  child: const SesionCajaStatusChip(),
+                ),
+              ),
+            ),
           // ── Indicador offline/sync ─────────────────────────────
           if (!kIsWeb) const SyncCloudIndicator(),
           IconButton(
@@ -239,11 +300,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final w = constraints.maxWidth;
-                  final hPad = w > 900 ? 40.0 : w > 600 ? 24.0 : 16.0;
+                  final hPad = w > 900
+                      ? 40.0
+                      : w > 600
+                      ? 24.0
+                      : 16.0;
                   return SingleChildScrollView(
                     padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 32),
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: constraints.maxHeight - 12),
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight - 12,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -285,7 +352,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               stats,
                               isDark,
                               primaryGold,
-                              soloMasivos: !modoJefe,
+                              soloMasivos: !modoJefe || modoCaja,
                             ),
                             loading: () => const SizedBox.shrink(),
                             error: (e, _) => const SizedBox.shrink(),
@@ -312,7 +379,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
                           // ── Centro de Comando (solo modo jefe) ────────────────
                           if (modoJefe) ...[
-                            _buildSectionLabel('CENTRO DE COMANDO', Icons.bolt_outlined),
+                            _buildSectionLabel(
+                              'CENTRO DE COMANDO',
+                              Icons.bolt_outlined,
+                            ),
                             const SizedBox(height: 12),
                             _buildCommandCenter(isDark, primaryGold),
                             const SizedBox(height: 40),
@@ -368,7 +438,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   Container(
                     width: 7,
                     height: 7,
-                    decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(
+                      color: Colors.greenAccent,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -412,7 +485,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             onPressed: () async {
               final remaining = await Navigator.push<int>(
                 context,
-                MaterialPageRoute(builder: (_) => const SolicitudesCotizacionScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const SolicitudesCotizacionScreen(),
+                ),
               );
               if (mounted && remaining != null) {
                 setState(() => _pendingRequestsCount = remaining);
@@ -427,7 +502,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('REVISAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+            child: const Text(
+              'REVISAR',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+            ),
           ),
         ],
       ),
@@ -492,10 +570,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.04) : Theme.of(context).cardColor,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.06),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.06),
             ),
           ),
           child: Row(
@@ -530,7 +612,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         value,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: -0.3),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.3,
+                        ),
                       ),
                     ),
                     if (detailBottom != null) ...[
@@ -541,7 +627,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ),
               if (onTap != null)
-                Icon(Icons.chevron_right_rounded, size: 14, color: Colors.grey.withValues(alpha: 0.4)),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 14,
+                  color: Colors.grey.withValues(alpha: 0.4),
+                ),
             ],
           ),
         ),
@@ -558,17 +648,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }) {
     final eventos = soloMasivos
         ? stats.proximosEventos
-            .where((ev) => (ev['modalidad'] as String?) == 'masivo')
-            .toList()
+              .where((ev) => (ev['modalidad'] as String?) == 'masivo')
+              .toList()
         : stats.proximosEventos;
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.03) : Theme.of(context).cardColor,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.05),
         ),
       ),
       child: Column(
@@ -592,7 +686,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           else
             ...eventos.map((ev) {
               final fecha = DateTime.tryParse(ev['fecha_evento'] ?? '');
-              final diff = fecha != null ? fecha.difference(DateTime.now()).inDays : 0;
+              final diff = fecha != null
+                  ? fecha.difference(DateTime.now()).inDays
+                  : 0;
               final cliente = ev['clientes']?['nombre_completo'] ?? 'Cliente';
               final tipo = Evento.formatearTipo(ev['tipo'] as String?);
               final urgente = diff <= 7;
@@ -605,7 +701,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: (urgente ? Colors.orangeAccent : gold).withValues(alpha: 0.12),
+                        color: (urgente ? Colors.orangeAccent : gold)
+                            .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
@@ -621,7 +718,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         children: [
                           Text(
                             cliente,
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -636,9 +736,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
-                        color: (urgente ? Colors.orangeAccent : gold).withValues(alpha: 0.12),
+                        color: (urgente ? Colors.orangeAccent : gold)
+                            .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -686,7 +790,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     constraints: const BoxConstraints(maxWidth: 320),
                     child: Text(
                       a.mensaje,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: a.color),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: a.color,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -705,13 +813,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.02) : Theme.of(context).cardColor,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.02)
+            : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_outline_rounded, color: Colors.greenAccent, size: 18),
+          const Icon(
+            Icons.check_circle_outline_rounded,
+            color: Colors.greenAccent,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Text(
             '¡TODO BAJO CONTROL! NO HAY ALERTAS CRÍTICAS HOY.',
@@ -735,35 +849,47 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         icon: Icons.add_circle_outline_rounded,
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => const EventosScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const EventosScreen()),
         ),
       ),
       _CommandAction(
         label: 'CLIENTES',
         icon: Icons.people_alt_outlined,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ClientesScreen())),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ClientesScreen()),
+        ),
       ),
       _CommandAction(
         label: 'RECEPCIÓN',
         icon: Icons.door_front_door_rounded,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecepcionUnifiedScreen())),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const RecepcionUnifiedScreen()),
+        ),
       ),
       _CommandAction(
         label: 'CATÁLOGO',
         icon: Icons.settings_suggest_outlined,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CatalogoServiciosScreen())),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CatalogoServiciosScreen()),
+        ),
       ),
       _CommandAction(
         label: 'QR',
         icon: Icons.qr_code_2_rounded,
         badge: _pendingRequestsCount > 0 ? '$_pendingRequestsCount' : null,
-        onTap: () => showDialog(context: context, builder: (_) => const GenerarQRDialog()),
+        onTap: () => showDialog(
+          context: context,
+          builder: (_) => const GenerarQRDialog(),
+        ),
         onLongPress: () async {
           final remaining = await Navigator.push<int>(
             context,
-            MaterialPageRoute(builder: (_) => const SolicitudesCotizacionScreen()),
+            MaterialPageRoute(
+              builder: (_) => const SolicitudesCotizacionScreen(),
+            ),
           );
           if (mounted && remaining != null) {
             setState(() => _pendingRequestsCount = remaining);
@@ -783,7 +909,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 _triggerPortal(eventos.first.id);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No hay eventos activos para el tótem')),
+                  const SnackBar(
+                    content: Text('No hay eventos activos para el tótem'),
+                  ),
                 );
               }
             });
@@ -793,16 +921,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ];
 
     final double screenWidth = MediaQuery.of(context).size.width;
-    final int crossAxisCount = screenWidth > 900 ? 6 : (screenWidth > 600 ? 4 : 3);
+    final int crossAxisCount = screenWidth > 900
+        ? 6
+        : (screenWidth > 600 ? 4 : 3);
     final double spacing = screenWidth > 900 ? 16 : 10;
-    
+
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: crossAxisCount,
       mainAxisSpacing: spacing,
       crossAxisSpacing: spacing,
-      childAspectRatio: 0.85, 
+      childAspectRatio: 0.85,
       children: actions.map((a) {
         return GestureDetector(
           onLongPress: a.onLongPress,
@@ -821,8 +951,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       width: double.infinity,
                       height: double.infinity,
                       decoration: BoxDecoration(
-                        color: isDark 
-                            ? Colors.white.withValues(alpha: 0.05) 
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
                             : Colors.white.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
@@ -854,11 +984,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                               ],
                             ),
-                            child: Icon(
-                              a.icon, 
-                              color: gold, 
-                              size: 26,
-                            ),
+                            child: Icon(a.icon, color: gold, size: 26),
                           ),
                           const SizedBox(height: 12),
                           // Refined Text
@@ -903,8 +1029,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       child: Text(
                         a.badge!,
                         style: const TextStyle(
-                          fontSize: 9, 
-                          fontWeight: FontWeight.w900, 
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
                         ),
                       ),
@@ -921,7 +1047,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _triggerPortal(String eventoId) {
     setState(() => _isLaunchingPortal = true);
     KioskLauncher.launch(eventoId);
-    
+
     // Desactivar portal después de un tiempo para que el Dashboard vuelva a ser usable
     Future.delayed(const Duration(milliseconds: 2500), () {
       if (mounted) setState(() => _isLaunchingPortal = false);
@@ -955,7 +1081,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     height: 120,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: gold.withValues(alpha: 0.5), width: 2),
+                      border: Border.all(
+                        color: gold.withValues(alpha: 0.5),
+                        width: 2,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: gold.withValues(alpha: 0.3),
@@ -964,7 +1093,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       ],
                     ),
-                    child: Icon(Icons.auto_awesome_rounded, color: gold, size: 60),
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      color: gold,
+                      size: 60,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -1002,7 +1135,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         const SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.grey),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            color: Colors.grey,
+          ),
         ),
       ],
     );
@@ -1050,33 +1188,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Future<void> _onModoJefeSwitch(bool value) async {
-    if (value) {
-      final ok = await AdminGate.check(context, ref, forceVerification: true);
-      if (!mounted) return;
-      if (ok) {
-        await ref.read(adminAuthProvider.notifier).enableModoJefe();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Modo jefe activo'),
-            backgroundColor: Color(0xFFD4AF37),
-          ),
-        );
-      }
-      return;
-    }
-    await ref.read(adminAuthProvider.notifier).disableModoJefe();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Modo operativo')),
-    );
-  }
-
   void _abrirCierreCaja(BuildContext context) {
     final roleAsync = ref.read(userRoleProvider);
     final role = roleAsync.asData?.value;
-    final puede = role?.isAdmin == true || role?.permisos.puedeCierreCaja == true;
+    final puede =
+        role?.isAdmin == true || role?.permisos.puedeCierreCaja == true;
     if (!puede) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No tenés permiso para Cierre de Caja.')),
@@ -1096,10 +1212,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final actions = <VoidCallback>[];
     final destinations = <Widget>[];
 
-    void addDest({
-      required Widget destination,
-      required VoidCallback onTap,
-    }) {
+    void addDest({required Widget destination, required VoidCallback onTap}) {
       destinations.add(destination);
       actions.add(onTap);
     }
@@ -1177,12 +1290,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       addDest(
         destination: const NavigationDrawerDestination(
           icon: Icon(Icons.inventory_2_outlined),
-          selectedIcon: Icon(Icons.inventory_2_rounded, color: Color(0xFFD4AF37)),
+          selectedIcon: Icon(
+            Icons.inventory_2_rounded,
+            color: Color(0xFFD4AF37),
+          ),
           label: Text('ALQUILER DE ÍTEMS'),
         ),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const PrestamosAlquilerListScreen()),
+          MaterialPageRoute(
+            builder: (_) => const PrestamosAlquilerListScreen(),
+          ),
         ),
       );
     }
@@ -1190,7 +1308,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     addDest(
       destination: const NavigationDrawerDestination(
         icon: Icon(Icons.point_of_sale_outlined),
-        selectedIcon: Icon(Icons.point_of_sale_rounded, color: Color(0xFFD4AF37)),
+        selectedIcon: Icon(
+          Icons.point_of_sale_rounded,
+          color: Color(0xFFD4AF37),
+        ),
         label: Text('CIERRE DE CAJA'),
       ),
       onTap: () => _abrirCierreCaja(context),
@@ -1205,13 +1326,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
       addDest(
         destination: NavigationDrawerDestination(
-          icon: Icon(Icons.business_center_outlined, color: primaryGold.withValues(alpha: 0.8)),
-          selectedIcon: const Icon(Icons.business_center_rounded, color: Color(0xFFD4AF37)),
+          icon: Icon(
+            Icons.business_center_outlined,
+            color: primaryGold.withValues(alpha: 0.8),
+          ),
+          selectedIcon: const Icon(
+            Icons.business_center_rounded,
+            color: Color(0xFFD4AF37),
+          ),
           label: Row(
             children: [
               const Text(
                 'MI EMPRESA',
-                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
               ),
               const SizedBox(width: 6),
               Container(
@@ -1246,6 +1376,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         onTap: () => _showConfiguracionDialog(context),
       );
+      addDest(
+        destination: const NavigationDrawerDestination(
+          icon: Icon(Icons.badge_outlined),
+          selectedIcon: Icon(Icons.badge, color: Color(0xFFD4AF37)),
+          label: Text('OPERADORES DE CAJA'),
+        ),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OperadoresCajaScreen()),
+        ),
+      );
+    }
+
+    if (!modoJefe) {
+      addDest(
+        destination: const NavigationDrawerDestination(
+          icon: Icon(Icons.lock_outlined),
+          selectedIcon: Icon(Icons.lock, color: Color(0xFFD4AF37)),
+          label: Text('CERRAR CAJA / SALIR'),
+        ),
+        onTap: () async {
+          final ok = await showCerrarCajaDialog(context);
+          if (ok == true && context.mounted) {
+            // logout ya ocurrió en el provider al cerrar
+          }
+        },
+      );
     }
 
     return NavigationDrawer(
@@ -1266,8 +1423,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               const AnimatedBrandLogo(height: 50),
               const SizedBox(height: 24),
-              const Text('JUNIOR', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 3)),
-              Text('EVENTOS', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: primaryGold, letterSpacing: 8)),
+              const Text(
+                'JUNIOR',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 3,
+                ),
+              ),
+              Text(
+                'EVENTOS',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: primaryGold,
+                  letterSpacing: 8,
+                ),
+              ),
               const SizedBox(height: 20),
               if (modoJefe)
                 ListTile(
@@ -1290,21 +1462,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   trailing: TextButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(context);
-                      _onModoJefeSwitch(false);
+                      await ref.read(appRoleProvider.notifier).logoutApp();
                     },
                     child: const Text('Salir'),
                   ),
                 )
               else
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPress: () {
-                    Navigator.pop(context);
-                    _onModoJefeSwitch(true);
-                  },
-                  child: const SizedBox(width: double.infinity, height: 56),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Modo caja',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  subtitle: Text(
+                    ref.watch(appRoleProvider).operador?.nombre ?? 'Operativo',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await showCerrarCajaDialog(context);
+                    },
+                    child: const Text('Cerrar'),
+                  ),
                 ),
             ],
           ),
@@ -1317,7 +1499,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ],
     );
   }
-  
+
   void _showConfiguracionDialog(BuildContext context) {
     final isAdmin = ref.read(adminAuthProvider).isAdmin;
     if (!isAdmin) {
@@ -1331,10 +1513,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _ConfiguracionSheet(
-            supabase: _supabase,
-            appVersionDisplay:
-                '${_versionMarketingLabel(_appVersionLabel)}${_appBuildNumber.isNotEmpty ? ' · compilación $_appBuildNumber' : ''}',
-          ),
+        supabase: _supabase,
+        appVersionDisplay:
+            '${_versionMarketingLabel(_appVersionLabel)}${_appBuildNumber.isNotEmpty ? ' · compilación $_appBuildNumber' : ''}',
+      ),
     );
   }
 }
@@ -1344,6 +1526,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 class _ConfiguracionSheet extends ConsumerStatefulWidget {
   final SupabaseClient supabase;
+
   /// Texto listo para mostrar (ej. "0.1 · compilación 1")
   final String appVersionDisplay;
 
@@ -1353,7 +1536,8 @@ class _ConfiguracionSheet extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_ConfiguracionSheet> createState() => _ConfiguracionSheetState();
+  ConsumerState<_ConfiguracionSheet> createState() =>
+      _ConfiguracionSheetState();
 }
 
 class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
@@ -1377,15 +1561,27 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
     final nuevo = _pinNuevoCtrl.text.trim();
     final confirmar = _pinConfirmCtrl.text.trim();
     if (actual.isEmpty || nuevo.isEmpty || confirmar.isEmpty) {
-      setState(() { _pinError = 'Completá todos los campos.'; _pinSuccess = null; });
+      setState(() {
+        _pinError = 'Completá todos los campos.';
+        _pinSuccess = null;
+      });
       return;
     }
     if (nuevo != confirmar) {
-      setState(() { _pinError = 'El PIN nuevo y la confirmación no coinciden.'; _pinSuccess = null; });
+      setState(() {
+        _pinError = 'El PIN nuevo y la confirmación no coinciden.';
+        _pinSuccess = null;
+      });
       return;
     }
-    setState(() { _pinLoading = true; _pinError = null; _pinSuccess = null; });
-    final error = await ref.read(adminAuthProvider.notifier).changePin(actual, nuevo);
+    setState(() {
+      _pinLoading = true;
+      _pinError = null;
+      _pinSuccess = null;
+    });
+    final error = await ref
+        .read(adminAuthProvider.notifier)
+        .changePin(actual, nuevo);
     if (mounted) {
       setState(() {
         _pinLoading = false;
@@ -1401,8 +1597,6 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1414,7 +1608,9 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.only(
-        left: 24, right: 24, top: 24,
+        left: 24,
+        right: 24,
+        top: 24,
         bottom: MediaQuery.of(context).viewInsets.bottom + 32,
       ),
       child: SingleChildScrollView(
@@ -1424,7 +1620,8 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
           children: [
             Center(
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white24 : Colors.black12,
@@ -1435,25 +1632,39 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
             Text(
               'CONFIGURACIÓN',
               style: GoogleFonts.oswald(
-                fontSize: 22, fontWeight: FontWeight.w900,
-                letterSpacing: 2, color: gold,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+                color: gold,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               'Sistema Operativo Jr. Eventos',
-              style: TextStyle(fontSize: 12, color: isDark ? Colors.white38 : Colors.black38),
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white38 : Colors.black38,
+              ),
             ),
             const SizedBox(height: 28),
 
             // ── PIN ────────────────────────────────────────────────────────
             _sectionHeader('🔐  SEGURIDAD — PIN MAESTRO', isDark),
             const SizedBox(height: 12),
-            if (_pinError != null) _statusMsg(_pinError!, Colors.redAccent, Icons.error_outline),
-            if (_pinSuccess != null) _statusMsg(_pinSuccess!, Colors.greenAccent, Icons.check_circle_outline),
+            if (_pinError != null)
+              _statusMsg(_pinError!, Colors.redAccent, Icons.error_outline),
+            if (_pinSuccess != null)
+              _statusMsg(
+                _pinSuccess!,
+                Colors.greenAccent,
+                Icons.check_circle_outline,
+              ),
             TextField(
               controller: _pinActualCtrl,
-              decoration: const InputDecoration(labelText: 'PIN actual', prefixIcon: Icon(Icons.lock_outline)),
+              decoration: const InputDecoration(
+                labelText: 'PIN actual',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
               obscureText: true,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.next,
@@ -1461,7 +1672,10 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _pinNuevoCtrl,
-              decoration: const InputDecoration(labelText: 'Nuevo PIN', prefixIcon: Icon(Icons.key_rounded)),
+              decoration: const InputDecoration(
+                labelText: 'Nuevo PIN',
+                prefixIcon: Icon(Icons.key_rounded),
+              ),
               obscureText: true,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.next,
@@ -1469,7 +1683,10 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _pinConfirmCtrl,
-              decoration: const InputDecoration(labelText: 'Confirmar nuevo PIN', prefixIcon: Icon(Icons.key_off_outlined)),
+              decoration: const InputDecoration(
+                labelText: 'Confirmar nuevo PIN',
+                prefixIcon: Icon(Icons.key_off_outlined),
+              ),
               obscureText: true,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.done,
@@ -1482,12 +1699,25 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
               child: ElevatedButton.icon(
                 onPressed: _pinLoading ? null : _cambiarPin,
                 icon: _pinLoading
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.black,
+                        ),
+                      )
                     : const Icon(Icons.save_outlined),
-                label: const Text('ACTUALIZAR PIN', style: TextStyle(fontWeight: FontWeight.w900)),
+                label: const Text(
+                  'ACTUALIZAR PIN',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: gold, foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: gold,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -1499,7 +1729,9 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.black.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: gold.withValues(alpha: 0.25)),
               ),
@@ -1518,7 +1750,10 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
                   const SizedBox(height: 6),
                   Text(
                     'Sistema de gestión operativa para eventos.',
-                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : Colors.black54),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(
@@ -1553,7 +1788,9 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
   Widget _sectionHeader(String text, bool isDark) => Text(
     text,
     style: TextStyle(
-      fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.2,
+      fontSize: 11,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 1.2,
       color: isDark ? Colors.white54 : Colors.black45,
     ),
   );
@@ -1570,7 +1807,9 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
       children: [
         Icon(icon, color: color, size: 16),
         const SizedBox(width: 8),
-        Expanded(child: Text(msg, style: TextStyle(color: color, fontSize: 12.5))),
+        Expanded(
+          child: Text(msg, style: TextStyle(color: color, fontSize: 12.5)),
+        ),
       ],
     ),
   );

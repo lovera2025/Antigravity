@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/pago_interes_mora.dart';
+import '../utils/ar_time.dart';
 import '../utils/uuid_utils.dart';
 import '../../models/contrato_alumno.dart';
 import '../../features/eventos/services/cobro_abono_acumulado.dart';
@@ -25,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 63;
+  static const int _version = 65;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -37,8 +38,12 @@ class LocalDatabase {
   static Future<String> get dbPath async {
     // Almacenar en Mis Documentos/Junior Eventos/
     final docsDir = await getApplicationDocumentsDirectory();
-    final oldDir = Directory('${docsDir.path}${Platform.pathSeparator}JuniorEventos');
-    final appDir = Directory('${docsDir.path}${Platform.pathSeparator}Junior Eventos');
+    final oldDir = Directory(
+      '${docsDir.path}${Platform.pathSeparator}JuniorEventos',
+    );
+    final appDir = Directory(
+      '${docsDir.path}${Platform.pathSeparator}Junior Eventos',
+    );
 
     // Migración automática: mover data.db de la carpeta vieja a la nueva si existe.
     final oldDb = File('${oldDir.path}${Platform.pathSeparator}$_dbName');
@@ -154,7 +159,9 @@ class LocalDatabase {
         FOREIGN KEY (servicio_id) REFERENCES servicios(id)
       )
     ''');
-    await db.execute('CREATE INDEX idx_es_evento ON eventos_servicios(evento_id)');
+    await db.execute(
+      'CREATE INDEX idx_es_evento ON eventos_servicios(evento_id)',
+    );
 
     // ── Transacciones (Ingresos) ─────────────────────────────────────────────
     await db.execute('''
@@ -185,6 +192,7 @@ class LocalDatabase {
         fecha TEXT,
         created_by TEXT,
         medio_pago TEXT,
+        sesion_caja_id TEXT,
         updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
@@ -249,10 +257,51 @@ class LocalDatabase {
         anulado INTEGER DEFAULT 0,
         motivo_anulacion TEXT,
         fecha_anulacion TEXT,
+        sesion_caja_id TEXT,
         updated_at TEXT,
         FOREIGN KEY (contrato_alumno_id) REFERENCES contratos_alumnos(id)
       )
     ''');
+
+    // ── Operadores / sesiones de caja ────────────────────────────────────────
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS operadores_caja (
+        id TEXT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        activo INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sesiones_caja (
+        id TEXT PRIMARY KEY,
+        operador_id TEXT NOT NULL,
+        abierta_at TEXT NOT NULL,
+        cerrada_at TEXT,
+        cambio_inicial REAL NOT NULL DEFAULT 0,
+        nota_apertura TEXT,
+        etiqueta TEXT,
+        arqueo_cierre REAL,
+        nota_cierre TEXT,
+        device_id TEXT,
+        last_heartbeat TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (operador_id) REFERENCES operadores_caja(id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sesiones_caja_abierta ON sesiones_caja(cerrada_at, abierta_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sesiones_caja_operador ON sesiones_caja(operador_id)',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sesiones_caja_operador_unica_abierta '
+      'ON sesiones_caja(operador_id) WHERE cerrada_at IS NULL',
+    );
 
     // ── Invitados ────────────────────────────────────────────────────────────
     await db.execute('''
@@ -373,7 +422,9 @@ class LocalDatabase {
         FOREIGN KEY (servicio_id) REFERENCES servicios(id)
       )
     ''');
-    await db.execute('CREATE INDEX idx_ps_presupuesto ON presupuesto_servicios(presupuesto_id)');
+    await db.execute(
+      'CREATE INDEX idx_ps_presupuesto ON presupuesto_servicios(presupuesto_id)',
+    );
 
     // ── Préstamo / alquiler de ítems ─────────────────────────────────────────
     await db.execute('''
@@ -485,6 +536,7 @@ class LocalDatabase {
         saldo_antes REAL,
         saldo_despues REAL NOT NULL,
         nota TEXT,
+        sesion_caja_id TEXT,
         fecha_mov TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -496,12 +548,25 @@ class LocalDatabase {
         id TEXT PRIMARY KEY,
         fecha TEXT NOT NULL,
         turno TEXT NOT NULL,
+        sesion_caja_id TEXT,
         texto TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        UNIQUE(fecha, turno)
+        UNIQUE(sesion_caja_id)
       )
     ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_egresos_sesion_caja '
+      'ON egresos(sesion_caja_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_guia_cambio_sesion '
+      'ON cierre_caja_guia_movimientos(sesion_caja_id, fecha_mov)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_cierre_anotacion_sesion '
+      'ON cierre_caja_anotaciones(sesion_caja_id)',
+    );
 
     // ── Configuración de Rentabilidad Fija ───────────────────────────────────
     await db.execute('''
@@ -523,18 +588,36 @@ class LocalDatabase {
     // Índices para performance
     await db.execute('CREATE INDEX idx_eventos_cliente ON eventos(cliente_id)');
     await db.execute('CREATE INDEX idx_eventos_estado ON eventos(estado)');
-    await db.execute('CREATE INDEX idx_transacciones_evento ON transacciones(evento_id)');
+    await db.execute(
+      'CREATE INDEX idx_transacciones_evento ON transacciones(evento_id)',
+    );
     await db.execute('CREATE INDEX idx_egresos_evento ON egresos(evento_id)');
-    await db.execute('CREATE INDEX idx_contratos_evento ON contratos_alumnos(evento_id)');
-    await db.execute('CREATE INDEX idx_pagos_contrato ON pagos_contrato_alumno(contrato_alumno_id)');
-    await db.execute('CREATE INDEX idx_invitados_evento ON invitados(evento_id)');
+    await db.execute(
+      'CREATE INDEX idx_contratos_evento ON contratos_alumnos(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_pagos_contrato ON pagos_contrato_alumno(contrato_alumno_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_invitados_evento ON invitados(evento_id)',
+    );
     await db.execute('CREATE INDEX idx_sync_queue_tabla ON _sync_queue(tabla)');
-    await db.execute('CREATE INDEX idx_prestamos_cliente ON prestamos_alquiler(cliente_id)');
-    await db.execute('CREATE INDEX idx_prestamos_visible ON prestamos_alquiler(visible_listado)');
-    await db.execute('CREATE INDEX idx_lineas_prestamo ON prestamo_alquiler_lineas(prestamo_id)');
-    await db.execute('CREATE INDEX idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)');
+    await db.execute(
+      'CREATE INDEX idx_prestamos_cliente ON prestamos_alquiler(cliente_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_prestamos_visible ON prestamos_alquiler(visible_listado)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_lineas_prestamo ON prestamo_alquiler_lineas(prestamo_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)',
+    );
 
-    await db.execute('CREATE INDEX idx_caja_fuerte_created ON caja_fuerte_movimientos(created_at)');
+    await db.execute(
+      'CREATE INDEX idx_caja_fuerte_created ON caja_fuerte_movimientos(created_at)',
+    );
     await db.execute(
       'CREATE INDEX idx_guia_cambio_fecha ON cierre_caja_guia_movimientos(fecha, fecha_mov)',
     );
@@ -548,11 +631,15 @@ class LocalDatabase {
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
 
-  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  static Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     debugPrint('🔄 Migrando SQLite de v$oldVersion a v$newVersion...');
     if (oldVersion < 2) {
       debugPrint('  🔧 Aplicando migración v2...');
-      
+
       // 1. Agregar created_at a invitados
       try {
         await db.execute('ALTER TABLE invitados ADD COLUMN created_at TEXT');
@@ -577,33 +664,45 @@ class LocalDatabase {
               FOREIGN KEY (evento_id) REFERENCES eventos(id)
             )
           ''');
-          
+
           // Copiar datos
           await txn.execute('INSERT INTO egresos_new SELECT * FROM egresos');
-          
+
           // Eliminar vieja y renombrar
           await txn.execute('DROP TABLE egresos');
           await txn.execute('ALTER TABLE egresos_new RENAME TO egresos');
-          
+
           // Re-crear índice
-          await txn.execute('CREATE INDEX idx_egresos_evento ON egresos(evento_id)');
+          await txn.execute(
+            'CREATE INDEX idx_egresos_evento ON egresos(evento_id)',
+          );
         });
       } catch (e) {
         debugPrint('  ❌ Error migrando tabla egresos: $e');
       }
-      
+
       debugPrint('✅ Migración v2 completada');
     }
 
     if (oldVersion < 3) {
       debugPrint('  🔧 Aplicando migración v3...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_precio REAL DEFAULT 0.0');
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_cuotas INTEGER DEFAULT 1');
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_cantidad INTEGER DEFAULT 0');
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_precio_total REAL DEFAULT 0.0');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_precio REAL DEFAULT 0.0',
+        );
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_cuotas INTEGER DEFAULT 1',
+        );
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_cantidad INTEGER DEFAULT 0',
+        );
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_precio_total REAL DEFAULT 0.0',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columnas de extras a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columnas de extras a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v3 completada');
     }
@@ -611,10 +710,16 @@ class LocalDatabase {
     if (oldVersion < 4) {
       debugPrint('  🔧 Aplicando migración v4...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN curso_division TEXT');
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN musica_elegida TEXT');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN curso_division TEXT',
+        );
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN musica_elegida TEXT',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columnas curso_division y musica_elegida a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columnas curso_division y musica_elegida a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v4 completada');
     }
@@ -622,9 +727,13 @@ class LocalDatabase {
     if (oldVersion < 5) {
       debugPrint('  🔧 Aplicando migración v5...');
       try {
-        await db.execute("ALTER TABLE pagos_contrato_alumno ADD COLUMN concepto TEXT DEFAULT 'Cuota Base'");
+        await db.execute(
+          "ALTER TABLE pagos_contrato_alumno ADD COLUMN concepto TEXT DEFAULT 'Cuota Base'",
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columna concepto a pagos_contrato_alumno: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columna concepto a pagos_contrato_alumno: $e',
+        );
       }
       debugPrint('✅ Migración v5 completada');
     }
@@ -632,9 +741,13 @@ class LocalDatabase {
     if (oldVersion < 6) {
       debugPrint('  🔧 Aplicando migración v6...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN numero_mesa TEXT');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN numero_mesa TEXT',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columna numero_mesa a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columna numero_mesa a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v6 completada');
     }
@@ -642,10 +755,16 @@ class LocalDatabase {
     if (oldVersion < 7) {
       debugPrint('  🔧 Aplicando migración v7...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_cuotas_pagadas INTEGER DEFAULT 0');
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_cuotas_pagadas INTEGER DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_cuotas_pagadas INTEGER DEFAULT 0',
+        );
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_cuotas_pagadas INTEGER DEFAULT 0',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columnas de cuotas extras pagadas a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columnas de cuotas extras pagadas a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v7 completada');
     }
@@ -653,9 +772,13 @@ class LocalDatabase {
     if (oldVersion < 8) {
       debugPrint('  🔧 Aplicando migración v8...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN telefono TEXT');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN telefono TEXT',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columna telefono a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columna telefono a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v8 completada');
     }
@@ -663,10 +786,16 @@ class LocalDatabase {
     if (oldVersion < 9) {
       debugPrint('  🔧 Aplicando migración v9...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_pagado REAL DEFAULT 0.0');
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_pagado REAL DEFAULT 0.0');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mesa_extra_pagado REAL DEFAULT 0.0',
+        );
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_pagado REAL DEFAULT 0.0',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columnas mesa_extra_pagado y sillas_extra_pagado a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columnas mesa_extra_pagado y sillas_extra_pagado a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v9 completada');
     }
@@ -676,7 +805,9 @@ class LocalDatabase {
       try {
         await db.execute('ALTER TABLE eventos ADD COLUMN observaciones TEXT');
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columna observaciones a eventos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columna observaciones a eventos: $e',
+        );
       }
       debugPrint('✅ Migración v10 completada');
     }
@@ -684,9 +815,13 @@ class LocalDatabase {
     if (oldVersion < 11) {
       debugPrint('  🔧 Aplicando migración v11...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_cuotas INTEGER DEFAULT 1');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN sillas_extra_cuotas INTEGER DEFAULT 1',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columna sillas_extra_cuotas a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columna sillas_extra_cuotas a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v11 completada');
     }
@@ -694,9 +829,13 @@ class LocalDatabase {
     if (oldVersion < 12) {
       debugPrint('  🔧 Aplicando migración v12...');
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN porcentaje_descuento REAL DEFAULT 0.0');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN porcentaje_descuento REAL DEFAULT 0.0',
+        );
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir columna porcentaje_descuento a contratos_alumnos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir columna porcentaje_descuento a contratos_alumnos: $e',
+        );
       }
       debugPrint('✅ Migración v12 completada');
     }
@@ -704,12 +843,18 @@ class LocalDatabase {
     if (oldVersion < 13) {
       debugPrint('  🔧 Aplicando migración v13 (Persistencia de descuentos)');
       try {
-        await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN monto_gross REAL');
-        await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN descuento_porcentaje REAL DEFAULT 0.0');
-        
+        await db.execute(
+          'ALTER TABLE pagos_contrato_alumno ADD COLUMN monto_gross REAL',
+        );
+        await db.execute(
+          'ALTER TABLE pagos_contrato_alumno ADD COLUMN descuento_porcentaje REAL DEFAULT 0.0',
+        );
+
         // Actualizar datos existentes para que monto_gross = monto inicial
-        await db.execute('UPDATE pagos_contrato_alumno SET monto_gross = monto WHERE monto_gross IS NULL');
-        
+        await db.execute(
+          'UPDATE pagos_contrato_alumno SET monto_gross = monto WHERE monto_gross IS NULL',
+        );
+
         debugPrint('✅ Migración v13 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v13: $e');
@@ -747,7 +892,7 @@ class LocalDatabase {
             FOREIGN KEY (servicio_id) REFERENCES servicios(id)
           )
         ''');
-        
+
         debugPrint('✅ Migración v14 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v14: $e');
@@ -756,19 +901,29 @@ class LocalDatabase {
     if (oldVersion < 15) {
       debugPrint('  🔧 Aplicando migración v15 (Categorización de Servicios)');
       try {
-        await db.execute("ALTER TABLE servicios ADD COLUMN categoria TEXT DEFAULT 'General'");
-        await db.execute("ALTER TABLE servicios ADD COLUMN costo_interno REAL DEFAULT 0.0");
+        await db.execute(
+          "ALTER TABLE servicios ADD COLUMN categoria TEXT DEFAULT 'General'",
+        );
+        await db.execute(
+          "ALTER TABLE servicios ADD COLUMN costo_interno REAL DEFAULT 0.0",
+        );
         debugPrint('✅ Migración v15 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v15: $e');
       }
     }
     if (oldVersion < 16) {
-      debugPrint('  🔧 Aplicando migración v16 (Servicios Personalizados y Cantidades)');
+      debugPrint(
+        '  🔧 Aplicando migración v16 (Servicios Personalizados y Cantidades)',
+      );
       try {
         await db.execute('ALTER TABLE servicios ADD COLUMN evento_id TEXT');
-        await db.execute('ALTER TABLE eventos_servicios ADD COLUMN cantidad REAL DEFAULT 1.0');
-        await db.execute('ALTER TABLE presupuesto_servicios ADD COLUMN cantidad REAL DEFAULT 1.0');
+        await db.execute(
+          'ALTER TABLE eventos_servicios ADD COLUMN cantidad REAL DEFAULT 1.0',
+        );
+        await db.execute(
+          'ALTER TABLE presupuesto_servicios ADD COLUMN cantidad REAL DEFAULT 1.0',
+        );
         debugPrint('✅ Migración v16 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v16: $e');
@@ -777,7 +932,9 @@ class LocalDatabase {
     if (oldVersion < 17) {
       debugPrint('  🔧 Aplicando migración v17 (Identidad del Emisor)');
       try {
-        await db.execute('ALTER TABLE presupuestos ADD COLUMN vendedor_nombre TEXT');
+        await db.execute(
+          'ALTER TABLE presupuestos ADD COLUMN vendedor_nombre TEXT',
+        );
         debugPrint('✅ Migración v17 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v17: $e');
@@ -786,7 +943,9 @@ class LocalDatabase {
     if (oldVersion < 18) {
       debugPrint('  🔧 Aplicando migración v18 (Oratoria del Evento)');
       try {
-        await db.execute('ALTER TABLE presupuestos ADD COLUMN titulo_festejado TEXT');
+        await db.execute(
+          'ALTER TABLE presupuestos ADD COLUMN titulo_festejado TEXT',
+        );
         debugPrint('✅ Migración v18 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v18: $e');
@@ -795,7 +954,9 @@ class LocalDatabase {
     if (oldVersion < 19) {
       debugPrint('  🔧 Aplicando migración v19 (Archivado de Clientes)');
       try {
-        await db.execute('ALTER TABLE clientes ADD COLUMN is_archived INTEGER DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE clientes ADD COLUMN is_archived INTEGER DEFAULT 0',
+        );
         debugPrint('✅ Migración v19 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v19: $e');
@@ -804,7 +965,9 @@ class LocalDatabase {
     if (oldVersion < 20) {
       debugPrint('  🔧 Aplicando migración v20 (Agrupación de Servicios)');
       try {
-        await db.execute('ALTER TABLE presupuesto_servicios ADD COLUMN grupo TEXT');
+        await db.execute(
+          'ALTER TABLE presupuesto_servicios ADD COLUMN grupo TEXT',
+        );
         await db.execute('ALTER TABLE eventos_servicios ADD COLUMN grupo TEXT');
         debugPrint('✅ Migración v20 completada');
       } catch (e) {
@@ -813,9 +976,13 @@ class LocalDatabase {
     }
 
     if (oldVersion < 22) {
-      debugPrint('  🔧 Aplicando migración v22 (Descripción Técnica en Eventos)');
+      debugPrint(
+        '  🔧 Aplicando migración v22 (Descripción Técnica en Eventos)',
+      );
       try {
-        await db.execute('ALTER TABLE eventos_servicios ADD COLUMN detalle_servicio TEXT');
+        await db.execute(
+          'ALTER TABLE eventos_servicios ADD COLUMN detalle_servicio TEXT',
+        );
         debugPrint('✅ Migración v22 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v22: $e');
@@ -825,7 +992,9 @@ class LocalDatabase {
     if (oldVersion < 23) {
       debugPrint('  🔧 Aplicando migración v23 (Archivado de Servicios)');
       try {
-        await db.execute('ALTER TABLE servicios ADD COLUMN is_archived INTEGER DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE servicios ADD COLUMN is_archived INTEGER DEFAULT 0',
+        );
         debugPrint('✅ Migración v23 completada');
       } catch (e) {
         debugPrint('  ⚠️ Nota: is_archived ya existía o error al añadir: $e');
@@ -833,9 +1002,13 @@ class LocalDatabase {
     }
 
     if (oldVersion < 24) {
-      debugPrint('  🔧 Aplicando migración v24 (grupo en presupuesto_servicios — BDs nuevas sin v20)');
+      debugPrint(
+        '  🔧 Aplicando migración v24 (grupo en presupuesto_servicios — BDs nuevas sin v20)',
+      );
       try {
-        await db.execute('ALTER TABLE presupuesto_servicios ADD COLUMN grupo TEXT');
+        await db.execute(
+          'ALTER TABLE presupuesto_servicios ADD COLUMN grupo TEXT',
+        );
         debugPrint('✅ Migración v24 completada');
       } catch (e) {
         debugPrint('  ⚠️ Nota: grupo ya existía o error al añadir: $e');
@@ -843,20 +1016,32 @@ class LocalDatabase {
     }
 
     if (oldVersion < 25) {
-      debugPrint('  🔧 Aplicando migración v25 (Bonificación global % sobre presupuesto del evento)');
+      debugPrint(
+        '  🔧 Aplicando migración v25 (Bonificación global % sobre presupuesto del evento)',
+      );
       try {
-        await db.execute('ALTER TABLE eventos ADD COLUMN bonificacion_global_pct REAL');
+        await db.execute(
+          'ALTER TABLE eventos ADD COLUMN bonificacion_global_pct REAL',
+        );
         debugPrint('✅ Migración v25 completada');
       } catch (e) {
-        debugPrint('  ⚠️ Nota: error al añadir bonificacion_global_pct a eventos: $e');
+        debugPrint(
+          '  ⚠️ Nota: error al añadir bonificacion_global_pct a eventos: $e',
+        );
       }
     }
 
     if (oldVersion < 26) {
-      debugPrint('  🔧 Aplicando migración v26 (Orden de combo en presupuesto/evento)');
+      debugPrint(
+        '  🔧 Aplicando migración v26 (Orden de combo en presupuesto/evento)',
+      );
       try {
-        await db.execute('ALTER TABLE eventos_servicios ADD COLUMN combo_orden INTEGER DEFAULT 0');
-        await db.execute('ALTER TABLE presupuesto_servicios ADD COLUMN combo_orden INTEGER DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE eventos_servicios ADD COLUMN combo_orden INTEGER DEFAULT 0',
+        );
+        await db.execute(
+          'ALTER TABLE presupuesto_servicios ADD COLUMN combo_orden INTEGER DEFAULT 0',
+        );
         debugPrint('✅ Migración v26 completada');
       } catch (e) {
         debugPrint('  ⚠️ Nota: error al añadir combo_orden: $e');
@@ -908,10 +1093,18 @@ class LocalDatabase {
             FOREIGN KEY (prestamo_id) REFERENCES prestamos_alquiler(id) ON DELETE CASCADE
           )
         ''');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_prestamos_cliente ON prestamos_alquiler(cliente_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_prestamos_visible ON prestamos_alquiler(visible_listado)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_lineas_prestamo ON prestamo_alquiler_lineas(prestamo_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_prestamos_cliente ON prestamos_alquiler(cliente_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_prestamos_visible ON prestamos_alquiler(visible_listado)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_lineas_prestamo ON prestamo_alquiler_lineas(prestamo_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_pagos_prestamo ON pagos_prestamo_alquiler(prestamo_id)',
+        );
         debugPrint('✅ Migración v27 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v27: $e');
@@ -919,19 +1112,29 @@ class LocalDatabase {
     }
 
     if (oldVersion < 28) {
-      debugPrint('  🔧 Aplicando migración v28 (pagos_contrato_alumno: gross/descuento en BDs nuevas sin v13)');
+      debugPrint(
+        '  🔧 Aplicando migración v28 (pagos_contrato_alumno: gross/descuento en BDs nuevas sin v13)',
+      );
       try {
         try {
-          await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN monto_gross REAL');
+          await db.execute(
+            'ALTER TABLE pagos_contrato_alumno ADD COLUMN monto_gross REAL',
+          );
         } catch (e) {
           debugPrint('  ⚠️ Nota: monto_gross ya existía o error al añadir: $e');
         }
         try {
-          await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN descuento_porcentaje REAL DEFAULT 0.0');
+          await db.execute(
+            'ALTER TABLE pagos_contrato_alumno ADD COLUMN descuento_porcentaje REAL DEFAULT 0.0',
+          );
         } catch (e) {
-          debugPrint('  ⚠️ Nota: descuento_porcentaje ya existía o error al añadir: $e');
+          debugPrint(
+            '  ⚠️ Nota: descuento_porcentaje ya existía o error al añadir: $e',
+          );
         }
-        await db.execute('UPDATE pagos_contrato_alumno SET monto_gross = monto WHERE monto_gross IS NULL');
+        await db.execute(
+          'UPDATE pagos_contrato_alumno SET monto_gross = monto WHERE monto_gross IS NULL',
+        );
         debugPrint('✅ Migración v28 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v28: $e');
@@ -939,23 +1142,45 @@ class LocalDatabase {
     }
 
     if (oldVersion < 29) {
-      debugPrint('  🔧 Aplicando migración v29 (Clasificación de Medios de Pago)');
+      debugPrint(
+        '  🔧 Aplicando migración v29 (Clasificación de Medios de Pago)',
+      );
       try {
         try {
-          await db.execute('ALTER TABLE transacciones ADD COLUMN medio_pago TEXT');
-        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a transacciones: $e'); }
-        
+          await db.execute(
+            'ALTER TABLE transacciones ADD COLUMN medio_pago TEXT',
+          );
+        } catch (e) {
+          debugPrint(
+            '  ⚠️ Nota: error al añadir medio_pago a transacciones: $e',
+          );
+        }
+
         try {
-          await db.execute('ALTER TABLE pagos_contrato_alumno ADD COLUMN medio_pago TEXT');
-        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a pagos_contrato_alumno: $e'); }
-        
+          await db.execute(
+            'ALTER TABLE pagos_contrato_alumno ADD COLUMN medio_pago TEXT',
+          );
+        } catch (e) {
+          debugPrint(
+            '  ⚠️ Nota: error al añadir medio_pago a pagos_contrato_alumno: $e',
+          );
+        }
+
         try {
-          await db.execute('ALTER TABLE pagos_prestamo_alquiler ADD COLUMN medio_pago TEXT');
-        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a pagos_prestamo_alquiler: $e'); }
-        
+          await db.execute(
+            'ALTER TABLE pagos_prestamo_alquiler ADD COLUMN medio_pago TEXT',
+          );
+        } catch (e) {
+          debugPrint(
+            '  ⚠️ Nota: error al añadir medio_pago a pagos_prestamo_alquiler: $e',
+          );
+        }
+
         try {
           await db.execute('ALTER TABLE egresos ADD COLUMN medio_pago TEXT');
-        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir medio_pago a egresos: $e'); }
+        } catch (e) {
+          debugPrint('  ⚠️ Nota: error al añadir medio_pago a egresos: $e');
+        }
 
         debugPrint('✅ Migración v29 completada');
       } catch (e) {
@@ -964,11 +1189,19 @@ class LocalDatabase {
     }
 
     if (oldVersion < 31) {
-      debugPrint('  🔧 Aplicando migración v30/v31 (fecha_evento en presupuestos)');
+      debugPrint(
+        '  🔧 Aplicando migración v30/v31 (fecha_evento en presupuestos)',
+      );
       try {
         try {
-          await db.execute('ALTER TABLE presupuestos ADD COLUMN fecha_evento TEXT');
-        } catch (e) { debugPrint('  ⚠️ Nota: error al añadir fecha_evento a presupuestos: $e'); }
+          await db.execute(
+            'ALTER TABLE presupuestos ADD COLUMN fecha_evento TEXT',
+          );
+        } catch (e) {
+          debugPrint(
+            '  ⚠️ Nota: error al añadir fecha_evento a presupuestos: $e',
+          );
+        }
         debugPrint('✅ Migración v31 completada');
       } catch (e) {
         debugPrint('  ❌ Error en migración v31: $e');
@@ -1025,7 +1258,9 @@ class LocalDatabase {
     }
 
     if (oldVersion < 34) {
-      debugPrint('  🔧 Aplicando migración v34 (Sistema de Avisos y Reminders)');
+      debugPrint(
+        '  🔧 Aplicando migración v34 (Sistema de Avisos y Reminders)',
+      );
       try {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS obligaciones_pago (
@@ -1046,7 +1281,9 @@ class LocalDatabase {
     }
 
     if (oldVersion < 35) {
-      debugPrint('  🔧 Aplicando migración v35 (líneas de presupuesto: id propio, mismo servicio varias veces)...');
+      debugPrint(
+        '  🔧 Aplicando migración v35 (líneas de presupuesto: id propio, mismo servicio varias veces)...',
+      );
       try {
         await db.transaction((txn) async {
           final esRows = await txn.query('eventos_servicios');
@@ -1080,7 +1317,9 @@ class LocalDatabase {
               'detalle_servicio': r['detalle_servicio'],
             });
           }
-          await txn.execute('CREATE INDEX IF NOT EXISTS idx_es_evento ON eventos_servicios(evento_id)');
+          await txn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_es_evento ON eventos_servicios(evento_id)',
+          );
 
           await txn.execute('DROP TABLE IF EXISTS presupuesto_servicios');
           await txn.execute('''
@@ -1110,7 +1349,9 @@ class LocalDatabase {
               'detalle_servicio': r['detalle_servicio'],
             });
           }
-          await txn.execute('CREATE INDEX IF NOT EXISTS idx_ps_presupuesto ON presupuesto_servicios(presupuesto_id)');
+          await txn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_ps_presupuesto ON presupuesto_servicios(presupuesto_id)',
+          );
         });
         debugPrint('✅ Migración v35 completada');
       } catch (e) {
@@ -1119,9 +1360,13 @@ class LocalDatabase {
     }
 
     if (oldVersion < 36) {
-      debugPrint('  🔧 Aplicando migración v36 (contrato_firmado en contratos_alumnos)');
+      debugPrint(
+        '  🔧 Aplicando migración v36 (contrato_firmado en contratos_alumnos)',
+      );
       try {
-        await db.execute('ALTER TABLE contratos_alumnos ADD COLUMN contrato_firmado INTEGER DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN contrato_firmado INTEGER DEFAULT 0',
+        );
         debugPrint('✅ Migración v36 completada');
       } catch (e) {
         debugPrint('  ⚠️ Nota: error al añadir columna contrato_firmado: $e');
@@ -1129,11 +1374,19 @@ class LocalDatabase {
     }
 
     if (oldVersion < 37) {
-      debugPrint('  🔧 Aplicando migración v37 (anulación no destructiva de cobros)');
+      debugPrint(
+        '  🔧 Aplicando migración v37 (anulación no destructiva de cobros)',
+      );
       try {
-        for (final t in ['transacciones', 'pagos_contrato_alumno', 'pagos_prestamo_alquiler']) {
+        for (final t in [
+          'transacciones',
+          'pagos_contrato_alumno',
+          'pagos_prestamo_alquiler',
+        ]) {
           try {
-            await db.execute('ALTER TABLE $t ADD COLUMN anulado INTEGER DEFAULT 0');
+            await db.execute(
+              'ALTER TABLE $t ADD COLUMN anulado INTEGER DEFAULT 0',
+            );
           } catch (e) {
             debugPrint('  ⚠️ Nota: anulado en $t: $e');
           }
@@ -1155,16 +1408,21 @@ class LocalDatabase {
     }
 
     if (oldVersion < 38) {
-      debugPrint('  🔧 Aplicando migración v38 (line_kind en pagos_contrato_alumno)');
+      debugPrint(
+        '  🔧 Aplicando migración v38 (line_kind en pagos_contrato_alumno)',
+      );
       try {
         try {
           await db.execute(
-              'ALTER TABLE pagos_contrato_alumno ADD COLUMN line_kind TEXT');
+            'ALTER TABLE pagos_contrato_alumno ADD COLUMN line_kind TEXT',
+          );
         } catch (e) {
           debugPrint('  ⚠️ Nota: line_kind en pagos_contrato_alumno: $e');
         }
-        final rows =
-            await db.query('pagos_contrato_alumno', columns: ['id', 'concepto']);
+        final rows = await db.query(
+          'pagos_contrato_alumno',
+          columns: ['id', 'concepto'],
+        );
         for (final r in rows) {
           final concepto = r['concepto'] as String?;
           if (!esPagoInteresMoraPorConcepto(concepto)) continue;
@@ -1243,8 +1501,9 @@ class LocalDatabase {
         '  🔧 Aplicando migración v42 (notas_operativas_contrato: id PK + sync)',
       );
       try {
-        final info =
-            await db.rawQuery('PRAGMA table_info(notas_operativas_contrato)');
+        final info = await db.rawQuery(
+          'PRAGMA table_info(notas_operativas_contrato)',
+        );
         if (info.isEmpty) {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS notas_operativas_contrato (
@@ -1282,7 +1541,9 @@ class LocalDatabase {
             final nowIso = DateTime.now().toUtc().toIso8601String();
             for (final r in oldRows) {
               await db.insert('notas_operativas_contrato', {
-                'id': UuidUtils.notaOperativaContratoId(r['contrato_alumno_id'] as String),
+                'id': UuidUtils.notaOperativaContratoId(
+                  r['contrato_alumno_id'] as String,
+                ),
                 'contrato_alumno_id': r['contrato_alumno_id'],
                 'texto': r['texto'] ?? '',
                 'resuelto': r['resuelto'] ?? 0,
@@ -1317,8 +1578,12 @@ class LocalDatabase {
         for (final r in rows) {
           final id = r['id']?.toString();
           if (id == null || id.isEmpty) continue;
-          final prov = (r['proveedor'] ?? 'Retiro bolsillo personal').toString().trim();
-          final newProv = prov.startsWith('[empresa]') ? prov : '[empresa] $prov';
+          final prov = (r['proveedor'] ?? 'Retiro bolsillo personal')
+              .toString()
+              .trim();
+          final newProv = prov.startsWith('[empresa]')
+              ? prov
+              : '[empresa] $prov';
           await db.update(
             'egresos',
             {'categoria': 'Gasto personal', 'proveedor': newProv},
@@ -1369,13 +1634,21 @@ class LocalDatabase {
       try {
         // Agregar updated_at a todas las tablas que no lo tienen
         final tablasUpdatedAt = [
-          'clientes', 'eventos', 'servicios', 'eventos_servicios',
-          'presupuestos', 'presupuesto_servicios',
-          'transacciones', 'egresos',
-          'contratos_alumnos', 'pagos_contrato_alumno',
+          'clientes',
+          'eventos',
+          'servicios',
+          'eventos_servicios',
+          'presupuestos',
+          'presupuesto_servicios',
+          'transacciones',
+          'egresos',
+          'contratos_alumnos',
+          'pagos_contrato_alumno',
           'solicitudes_cotizacion',
-          'prestamo_alquiler_lineas', 'pagos_prestamo_alquiler',
-          'calculos_rentabilidad', 'obligaciones_pago',
+          'prestamo_alquiler_lineas',
+          'pagos_prestamo_alquiler',
+          'calculos_rentabilidad',
+          'obligaciones_pago',
           'caja_fuerte_movimientos',
         ];
         for (final tabla in tablasUpdatedAt) {
@@ -1388,10 +1661,16 @@ class LocalDatabase {
 
         // Inicializar updated_at con created_at donde exista
         final tablasConCreatedAt = [
-          'clientes', 'eventos', 'presupuestos', 'contratos_alumnos',
-          'pagos_contrato_alumno', 'pagos_prestamo_alquiler',
-          'calculos_rentabilidad', 'obligaciones_pago',
-          'caja_fuerte_movimientos', 'solicitudes_cotizacion',
+          'clientes',
+          'eventos',
+          'presupuestos',
+          'contratos_alumnos',
+          'pagos_contrato_alumno',
+          'pagos_prestamo_alquiler',
+          'calculos_rentabilidad',
+          'obligaciones_pago',
+          'caja_fuerte_movimientos',
+          'solicitudes_cotizacion',
         ];
         for (final tabla in tablasConCreatedAt) {
           try {
@@ -1405,7 +1684,9 @@ class LocalDatabase {
         // Tablas sin created_at: inicializar con now()
         final nowIso = DateTime.now().toUtc().toIso8601String();
         final tablasSinCreatedAt = [
-          'servicios', 'eventos_servicios', 'presupuesto_servicios',
+          'servicios',
+          'eventos_servicios',
+          'presupuesto_servicios',
           'prestamo_alquiler_lineas',
         ];
         for (final tabla in tablasSinCreatedAt) {
@@ -1439,7 +1720,9 @@ class LocalDatabase {
     }
 
     if (oldVersion < 46) {
-      debugPrint('  🔧 v46: es_extra en presupuesto_servicios y eventos_servicios');
+      debugPrint(
+        '  🔧 v46: es_extra en presupuesto_servicios y eventos_servicios',
+      );
       try {
         await db.execute(
           'ALTER TABLE presupuesto_servicios ADD COLUMN es_extra INTEGER DEFAULT 0',
@@ -1454,7 +1737,9 @@ class LocalDatabase {
     }
 
     if (oldVersion < 47) {
-      debugPrint('  🔧 v47: cierre_caja_guia_movimientos + cierre_caja_anotaciones');
+      debugPrint(
+        '  🔧 v47: cierre_caja_guia_movimientos + cierre_caja_anotaciones',
+      );
       try {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS cierre_caja_guia_movimientos (
@@ -1494,11 +1779,10 @@ class LocalDatabase {
           'cierre_caja_guia_movimientos',
           'cierre_caja_anotaciones',
         ]) {
-          await db.insert(
-            '_sync_meta',
-            {'clave': 'last_pull_$tabla', 'valor': nowIso},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await db.insert('_sync_meta', {
+            'clave': 'last_pull_$tabla',
+            'valor': nowIso,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         debugPrint('✅ Migración v47 completada');
       } catch (e) {
@@ -1538,12 +1822,10 @@ class LocalDatabase {
           final estado = row['mesas_extra_estado'] as String?;
           if (estado != null && estado.trim().isNotEmpty) continue;
 
-          final precio =
-              (row['mesa_extra_precio'] as num?)?.toDouble() ?? 0.0;
+          final precio = (row['mesa_extra_precio'] as num?)?.toDouble() ?? 0.0;
           if (precio <= 0.01) continue;
 
-          final pagado =
-              (row['mesa_extra_pagado'] as num?)?.toDouble() ?? 0.0;
+          final pagado = (row['mesa_extra_pagado'] as num?)?.toDouble() ?? 0.0;
           final cuotasPagadas =
               (row['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
           final liquidada = pagado >= precio - 0.01;
@@ -1558,10 +1840,7 @@ class LocalDatabase {
           ]);
           await db.update(
             'contratos_alumnos',
-            {
-              'mesa_extra_cantidad': 1,
-              'mesas_extra_estado': jsonEstado,
-            },
+            {'mesa_extra_cantidad': 1, 'mesas_extra_estado': jsonEstado},
             where: 'id = ?',
             whereArgs: [row['id']],
           );
@@ -1646,14 +1925,13 @@ class LocalDatabase {
           final offsetActual =
               (row['mora_cobrada_offset'] as num?)?.toDouble() ?? 0;
 
-          final trackedObjetivo = MoraTrackedRecovery.trackedPareceInflado(
-            tracked: trackedActual,
-            pagos: pagos,
-          )
+          final trackedObjetivo =
+              MoraTrackedRecovery.trackedPareceInflado(
+                tracked: trackedActual,
+                pagos: pagos,
+              )
               ? 0.0
-              : (trackedActual > 0.01
-                  ? trackedActual
-                  : sim.tracked);
+              : (trackedActual > 0.01 ? trackedActual : sim.tracked);
 
           if ((trackedObjetivo - trackedActual).abs() > 0.01 ||
               (sim.offset - offsetActual).abs() > 0.01) {
@@ -1669,7 +1947,9 @@ class LocalDatabase {
             recalculados++;
           }
         }
-        debugPrint('✅ Migración v50 completada ($recalculados contratos recalibrados)');
+        debugPrint(
+          '✅ Migración v50 completada ($recalculados contratos recalibrados)',
+        );
       } catch (e) {
         debugPrint('  ❌ Error migración v50: $e');
       }
@@ -1849,11 +2129,14 @@ class LocalDatabase {
         debugPrint('  ⚠️ mora_exenta_hasta ya existía: $e');
       }
       try {
-        final repaired = await MoraTrackedRecovery.repararExencionDesdeHistorial(
-          db: db,
-          soloEventosMasivosActivos: true,
+        final repaired =
+            await MoraTrackedRecovery.repararExencionDesdeHistorial(
+              db: db,
+              soloEventosMasivosActivos: true,
+            );
+        debugPrint(
+          '✅ Migración v56 completada ($repaired contratos con exención)',
         );
-        debugPrint('✅ Migración v56 completada ($repaired contratos con exención)');
       } catch (e) {
         debugPrint('  ❌ Error migración v56: $e');
       }
@@ -1864,11 +2147,14 @@ class LocalDatabase {
         '  🔧 v57: reparar exenciones mora borradas por sync (post-fix 4.2.7)',
       );
       try {
-        final repaired = await MoraTrackedRecovery.repararExencionDesdeHistorial(
-          db: db,
-          soloEventosMasivosActivos: true,
+        final repaired =
+            await MoraTrackedRecovery.repararExencionDesdeHistorial(
+              db: db,
+              soloEventosMasivosActivos: true,
+            );
+        debugPrint(
+          '✅ Migración v57 completada ($repaired contratos con exención)',
         );
-        debugPrint('✅ Migración v57 completada ($repaired contratos con exención)');
       } catch (e) {
         debugPrint('  ❌ Error migración v57: $e');
       }
@@ -1911,10 +2197,11 @@ class LocalDatabase {
           encolarSync: true,
           soloEventosMasivosActivos: true,
         );
-        final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
-          db: db,
-          soloEventosMasivosActivos: true,
-        );
+        final exenciones =
+            await MoraTrackedRecovery.repararExencionDesdeHistorial(
+              db: db,
+              soloEventosMasivosActivos: true,
+            );
         debugPrint(
           '✅ Migración v58: $updated Reg actualizados, '
           '$recalibrados tracked, $exenciones exenciones',
@@ -1927,7 +2214,9 @@ class LocalDatabase {
     if (oldVersion < 59) {
       debugPrint('  🔧 v59: titulo_festejado en eventos (homenajeado)');
       try {
-        await db.execute('ALTER TABLE eventos ADD COLUMN titulo_festejado TEXT');
+        await db.execute(
+          'ALTER TABLE eventos ADD COLUMN titulo_festejado TEXT',
+        );
         debugPrint('✅ Migración v59 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v59: $e');
@@ -1935,12 +2224,22 @@ class LocalDatabase {
     }
 
     if (oldVersion < 60) {
-      debugPrint('  🔧 v60: nombre_festejado + encabezado_evento (particulares)');
+      debugPrint(
+        '  🔧 v60: nombre_festejado + encabezado_evento (particulares)',
+      );
       try {
-        await db.execute('ALTER TABLE eventos ADD COLUMN nombre_festejado TEXT');
-        await db.execute('ALTER TABLE eventos ADD COLUMN encabezado_evento TEXT');
-        await db.execute('ALTER TABLE presupuestos ADD COLUMN nombre_festejado TEXT');
-        await db.execute('ALTER TABLE presupuestos ADD COLUMN encabezado_evento TEXT');
+        await db.execute(
+          'ALTER TABLE eventos ADD COLUMN nombre_festejado TEXT',
+        );
+        await db.execute(
+          'ALTER TABLE eventos ADD COLUMN encabezado_evento TEXT',
+        );
+        await db.execute(
+          'ALTER TABLE presupuestos ADD COLUMN nombre_festejado TEXT',
+        );
+        await db.execute(
+          'ALTER TABLE presupuestos ADD COLUMN encabezado_evento TEXT',
+        );
 
         final eventos = await db.query(
           'eventos',
@@ -1952,12 +2251,17 @@ class LocalDatabase {
           final titulo = (row['titulo_festejado'] as String?)?.trim();
           if (titulo == null || titulo.isEmpty) continue;
           final tipo = (row['tipo'] as String?) ?? '';
-          final partes = EventoPresentacion.dividirTituloFestejadoLegacy(titulo, tipo);
+          final partes = EventoPresentacion.dividirTituloFestejadoLegacy(
+            titulo,
+            tipo,
+          );
           await db.update(
             'eventos',
             {
-              if (partes.nombreFestejado != null) 'nombre_festejado': partes.nombreFestejado,
-              if (partes.encabezadoEvento != null) 'encabezado_evento': partes.encabezadoEvento,
+              if (partes.nombreFestejado != null)
+                'nombre_festejado': partes.nombreFestejado,
+              if (partes.encabezadoEvento != null)
+                'encabezado_evento': partes.encabezadoEvento,
             },
             where: 'id = ?',
             whereArgs: [row['id']],
@@ -1974,19 +2278,26 @@ class LocalDatabase {
           final titulo = (row['titulo_festejado'] as String?)?.trim();
           if (titulo == null || titulo.isEmpty) continue;
           final tipo = (row['tipo_evento'] as String?) ?? '';
-          final partes = EventoPresentacion.dividirTituloFestejadoLegacy(titulo, tipo);
+          final partes = EventoPresentacion.dividirTituloFestejadoLegacy(
+            titulo,
+            tipo,
+          );
           await db.update(
             'presupuestos',
             {
-              if (partes.nombreFestejado != null) 'nombre_festejado': partes.nombreFestejado,
-              if (partes.encabezadoEvento != null) 'encabezado_evento': partes.encabezadoEvento,
+              if (partes.nombreFestejado != null)
+                'nombre_festejado': partes.nombreFestejado,
+              if (partes.encabezadoEvento != null)
+                'encabezado_evento': partes.encabezadoEvento,
             },
             where: 'id = ?',
             whereArgs: [row['id']],
           );
         }
 
-        debugPrint('✅ Migración v60 completada (${eventos.length} eventos, ${presupuestos.length} presupuestos)');
+        debugPrint(
+          '✅ Migración v60 completada (${eventos.length} eventos, ${presupuestos.length} presupuestos)',
+        );
       } catch (e) {
         debugPrint('  ❌ Error migración v60: $e');
       }
@@ -2008,10 +2319,11 @@ class LocalDatabase {
       try {
         // Exenciones existentes: default reinicia=1 (comportamiento Lezcano).
         // Casos solo-mora (abono sin liquidar cuota) → permanente (0).
-        final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
-          db: db,
-          soloEventosMasivosActivos: true,
-        );
+        final exenciones =
+            await MoraTrackedRecovery.repararExencionDesdeHistorial(
+              db: db,
+              soloEventosMasivosActivos: true,
+            );
         final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
           db: db,
           soloEventosMasivosActivos: true,
@@ -2051,10 +2363,7 @@ class LocalDatabase {
 
           await db.update(
             'eventos',
-            {
-              'encabezado_evento': nombre,
-              'updated_at': nowUtc,
-            },
+            {'encabezado_evento': nombre, 'updated_at': nowUtc},
             where: 'id = ?',
             whereArgs: [eventoId],
           );
@@ -2064,10 +2373,7 @@ class LocalDatabase {
             tabla: 'eventos',
             operacion: SyncOperation.update,
             registroId: eventoId,
-            payload: {
-              'id': eventoId,
-              'encabezado_evento': nombre,
-            },
+            payload: {'id': eventoId, 'encabezado_evento': nombre},
           );
 
           final contratos = await db.query(
@@ -2121,10 +2427,11 @@ class LocalDatabase {
           encolarSync: true,
           soloEventosMasivosActivos: true,
         );
-        final exenciones = await MoraTrackedRecovery.repararExencionDesdeHistorial(
-          db: db,
-          soloEventosMasivosActivos: true,
-        );
+        final exenciones =
+            await MoraTrackedRecovery.repararExencionDesdeHistorial(
+              db: db,
+              soloEventosMasivosActivos: true,
+            );
 
         debugPrint(
           '✅ Migración v62: $eventosNombrados eventos, '
@@ -2141,11 +2448,151 @@ class LocalDatabase {
         '  🔧 v63: reparar pagos "— Completada" con excedente (parcialLibre)',
       );
       try {
-        final reparados =
-            await _repararPagosCompletadaConExcedente(db, encolarSync: true);
+        final reparados = await _repararPagosCompletadaConExcedente(
+          db,
+          encolarSync: true,
+        );
         debugPrint('✅ Migración v63 completada ($reparados pagos reparados)');
       } catch (e) {
         debugPrint('  ❌ Error migración v63: $e');
+      }
+    }
+
+    if (oldVersion < 64) {
+      debugPrint(
+        '  🔧 v64: operadores_caja + sesiones_caja + sesion_caja_id en pagos',
+      );
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS operadores_caja (
+            id TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            pin TEXT NOT NULL,
+            activo INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS sesiones_caja (
+            id TEXT PRIMARY KEY,
+            operador_id TEXT NOT NULL,
+            abierta_at TEXT NOT NULL,
+            cerrada_at TEXT,
+            cambio_inicial REAL NOT NULL DEFAULT 0,
+            nota_apertura TEXT,
+            etiqueta TEXT,
+            arqueo_cierre REAL,
+            nota_cierre TEXT,
+            device_id TEXT,
+            last_heartbeat TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (operador_id) REFERENCES operadores_caja(id)
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sesiones_caja_abierta ON sesiones_caja(cerrada_at, abierta_at)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sesiones_caja_operador ON sesiones_caja(operador_id)',
+        );
+        try {
+          await db.execute(
+            'ALTER TABLE pagos_contrato_alumno ADD COLUMN sesion_caja_id TEXT',
+          );
+        } catch (e) {
+          debugPrint('  ⚠️ Nota: sesion_caja_id ya existía o error: $e');
+        }
+        debugPrint('✅ Migración v64 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v64: $e');
+      }
+    }
+
+    if (oldVersion < 65) {
+      debugPrint('  🔧 v65: cierre de caja por sesión + sesión abierta única');
+      try {
+        for (final statement in [
+          'ALTER TABLE egresos ADD COLUMN sesion_caja_id TEXT',
+          'ALTER TABLE cierre_caja_guia_movimientos ADD COLUMN sesion_caja_id TEXT',
+        ]) {
+          try {
+            await db.execute(statement);
+          } catch (e) {
+            debugPrint('  ⚠️ Columna v65 ya existente o no aplicable: $e');
+          }
+        }
+
+        // Si una versión de prueba dejó más de una sesión abierta para el mismo
+        // operador, conserva la más reciente antes de crear el índice único.
+        final nowIso = ArTime.nowUtcIso();
+        await db.rawUpdate(
+          '''
+          UPDATE sesiones_caja
+          SET cerrada_at = ?, updated_at = ?
+          WHERE cerrada_at IS NULL
+            AND EXISTS (
+              SELECT 1
+              FROM sesiones_caja newer
+              WHERE newer.operador_id = sesiones_caja.operador_id
+                AND newer.cerrada_at IS NULL
+                AND (
+                  newer.abierta_at > sesiones_caja.abierta_at OR
+                  (newer.abierta_at = sesiones_caja.abierta_at
+                    AND newer.id > sesiones_caja.id)
+                )
+            )
+        ''',
+          [nowIso, nowIso],
+        );
+        await db.execute(
+          'CREATE UNIQUE INDEX IF NOT EXISTS '
+          'idx_sesiones_caja_operador_unica_abierta '
+          'ON sesiones_caja(operador_id) WHERE cerrada_at IS NULL',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_egresos_sesion_caja '
+          'ON egresos(sesion_caja_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_guia_cambio_sesion '
+          'ON cierre_caja_guia_movimientos(sesion_caja_id, fecha_mov)',
+        );
+
+        // La clave legacy (fecha, turno) impedía dos operadores en el mismo
+        // turno. Se reemplaza por una anotación opcional por sesión.
+        await db.execute('DROP TABLE IF EXISTS cierre_caja_anotaciones_v65');
+        await db.execute('''
+          CREATE TABLE cierre_caja_anotaciones_v65 (
+            id TEXT PRIMARY KEY,
+            fecha TEXT NOT NULL,
+            turno TEXT NOT NULL,
+            sesion_caja_id TEXT,
+            texto TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(sesion_caja_id)
+          )
+        ''');
+        await db.execute('''
+          INSERT INTO cierre_caja_anotaciones_v65
+            (id, fecha, turno, sesion_caja_id, texto, created_at, updated_at)
+          SELECT id, fecha, turno, NULL, texto, created_at, updated_at
+          FROM cierre_caja_anotaciones
+        ''');
+        await db.execute('DROP TABLE cierre_caja_anotaciones');
+        await db.execute(
+          'ALTER TABLE cierre_caja_anotaciones_v65 '
+          'RENAME TO cierre_caja_anotaciones',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_cierre_anotacion_sesion '
+          'ON cierre_caja_anotaciones(sesion_caja_id)',
+        );
+        debugPrint('✅ Migración v65 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v65: $e');
       }
     }
   }
@@ -2179,7 +2626,8 @@ class LocalDatabase {
       }
 
       final concepto = pago['concepto']?.toString() ?? '';
-      final montoGross = (pago['monto_gross'] as num?)?.toDouble() ??
+      final montoGross =
+          (pago['monto_gross'] as num?)?.toDouble() ??
           (pago['monto'] as num?)?.toDouble() ??
           0.0;
       final montoNet = (pago['monto'] as num?)?.toDouble() ?? montoGross;
@@ -2193,12 +2641,12 @@ class LocalDatabase {
       );
       if (cRows.isEmpty) continue;
       final contrato = ContratoAlumno.fromJson(cRows.first);
-      final totalCuotas =
-          contrato.totalCuotas > 0 ? contrato.totalCuotas : 1;
-      final basePlan = (contrato.montoTotalPactado -
-              contrato.mesaExtraPrecio -
-              contrato.sillasExtraPrecioTotal)
-          .clamp(0.0, double.infinity);
+      final totalCuotas = contrato.totalCuotas > 0 ? contrato.totalCuotas : 1;
+      final basePlan =
+          (contrato.montoTotalPactado -
+                  contrato.mesaExtraPrecio -
+                  contrato.sillasExtraPrecioTotal)
+              .clamp(0.0, double.infinity);
       final cuotaPura = totalCuotas > 0 ? basePlan / totalCuotas : basePlan;
 
       final fechaPago = pago['fecha_pago']?.toString() ?? '';
@@ -2230,8 +2678,7 @@ class LocalDatabase {
       );
       if (lineas == null || lineas.length < 2) continue;
 
-      final descPct =
-          (pago['descuento_porcentaje'] as num?)?.toDouble() ?? 0.0;
+      final descPct = (pago['descuento_porcentaje'] as num?)?.toDouble() ?? 0.0;
       final medio = pago['medio_pago'];
       final createdAt = pago['created_at'] ?? fechaPago;
       final updatedAt = DateTime.now().toUtc().toIso8601String();
@@ -2327,10 +2774,19 @@ class LocalDatabase {
 
     final db = await instance;
     final tables = [
-      'pagos_contrato_alumno', 'notas_operativas_contrato', 'contratos_alumnos', 'transacciones',
-      'egresos', 'eventos_servicios', 'solicitudes_cotizacion',
-      'accesos', 'invitados', 'eventos', 'clientes',
-      '_sync_queue', '_sync_meta',
+      'pagos_contrato_alumno',
+      'notas_operativas_contrato',
+      'contratos_alumnos',
+      'transacciones',
+      'egresos',
+      'eventos_servicios',
+      'solicitudes_cotizacion',
+      'accesos',
+      'invitados',
+      'eventos',
+      'clientes',
+      '_sync_queue',
+      '_sync_meta',
     ];
     for (final table in tables) {
       await db.delete(table);
@@ -2343,9 +2799,18 @@ class LocalDatabase {
   static Future<void> sanitizeLegacyData() async {
     final db = await instance;
     final tables = [
-      'clientes', 'eventos', 'servicios', 'eventos_servicios', 
-      'transacciones', 'egresos', 'contratos_alumnos',
-      'pagos_contrato_alumno', 'notas_operativas_contrato', 'invitados', 'accesos', 'solicitudes_cotizacion'
+      'clientes',
+      'eventos',
+      'servicios',
+      'eventos_servicios',
+      'transacciones',
+      'egresos',
+      'contratos_alumnos',
+      'pagos_contrato_alumno',
+      'notas_operativas_contrato',
+      'invitados',
+      'accesos',
+      'solicitudes_cotizacion',
     ];
 
     int totalBorrados = 0;
@@ -2355,99 +2820,132 @@ class LocalDatabase {
         final columns = await txn.rawQuery('PRAGMA table_info($table)');
         final hasId = columns.any((c) => c['name'] == 'id');
         final hasEventoId = columns.any((c) => c['name'] == 'evento_id');
-        final hasContratoId = columns.any((c) => c['name'] == 'contrato_alumno_id');
+        final hasContratoId = columns.any(
+          (c) => c['name'] == 'contrato_alumno_id',
+        );
 
         int b1 = 0, b2 = 0, b3 = 0;
 
         // 1. Borrar por ID malformado (cualquier ID que no sea UUID de 36 chars o sea la palabra "null")
         if (hasId) {
-          b1 = await txn.delete(table, 
-            where: "id IS NOT NULL AND (LENGTH(id) != 36 OR id = 'null')");
+          b1 = await txn.delete(
+            table,
+            where: "id IS NOT NULL AND (LENGTH(id) != 36 OR id = 'null')",
+          );
         }
-        
+
         // 2. Borrar por evento_id malformado
         if (hasEventoId) {
-          b2 = await txn.delete(table, 
-            where: "evento_id IS NOT NULL AND (LENGTH(evento_id) != 36 OR evento_id = 'null')");
+          b2 = await txn.delete(
+            table,
+            where:
+                "evento_id IS NOT NULL AND (LENGTH(evento_id) != 36 OR evento_id = 'null')",
+          );
         }
 
         // 3. Borrar por contrato_alumno_id malformado
         if (hasContratoId) {
-          b3 = await txn.delete(table, 
-            where: "contrato_alumno_id IS NOT NULL AND (LENGTH(contrato_alumno_id) != 36 OR contrato_alumno_id = 'null')");
-          if (b3 > 0) debugPrint('  🧼 Saneados $b3 registros de $table (contrato_alumno_id malformado)');
+          b3 = await txn.delete(
+            table,
+            where:
+                "contrato_alumno_id IS NOT NULL AND (LENGTH(contrato_alumno_id) != 36 OR contrato_alumno_id = 'null')",
+          );
+          if (b3 > 0)
+            debugPrint(
+              '  🧼 Saneados $b3 registros de $table (contrato_alumno_id malformado)',
+            );
         }
-        
+
         totalBorrados += (b1 + b2 + b3);
         if (b1 + b2 > 0) {
           debugPrint('  🧼 Saneados ${b1 + b2} registros de $table');
         }
       }
-      
+
       // 4. LIMPIEZA NUCLEAR DE HUÉRFANOS (Registros que apuntan a eventos inexistentes)
       // Esto elimina el ruido de sincronización de eventos borrados
-      final tablesToCleanup = ['contratos_alumnos', 'transacciones', 'egresos', 'invitados', 'servicios'];
+      final tablesToCleanup = [
+        'contratos_alumnos',
+        'transacciones',
+        'egresos',
+        'invitados',
+        'servicios',
+      ];
       int orfanosBorrados = 0;
-      
+
       for (final table in tablesToCleanup) {
         // En servicios, solo borramos los que tienen evento_id (los globales tienen NULL)
         final count = await txn.rawDelete(
-          "DELETE FROM $table WHERE evento_id IS NOT NULL AND evento_id NOT IN (SELECT id FROM eventos)"
+          "DELETE FROM $table WHERE evento_id IS NOT NULL AND evento_id NOT IN (SELECT id FROM eventos)",
         );
         if (count > 0) {
           orfanosBorrados += count.toInt();
-          debugPrint('  ☢️ Purga Nuclear: Eliminados $count huérfanos de $table (evento inexistente)');
+          debugPrint(
+            '  ☢️ Purga Nuclear: Eliminados $count huérfanos de $table (evento inexistente)',
+          );
         }
       }
 
       // Limpiar pagos sin contrato padre
       final pBorrados = await txn.rawDelete(
-        "DELETE FROM pagos_contrato_alumno WHERE contrato_alumno_id NOT IN (SELECT id FROM contratos_alumnos)"
+        "DELETE FROM pagos_contrato_alumno WHERE contrato_alumno_id NOT IN (SELECT id FROM contratos_alumnos)",
       );
       if (pBorrados > 0) {
         orfanosBorrados += pBorrados.toInt();
-        debugPrint('  ☢️ Purga Nuclear: Eliminados $pBorrados pagos sin contrato');
+        debugPrint(
+          '  ☢️ Purga Nuclear: Eliminados $pBorrados pagos sin contrato',
+        );
       }
 
       final nBorrados = await txn.rawDelete(
-        "DELETE FROM notas_operativas_contrato WHERE contrato_alumno_id NOT IN (SELECT id FROM contratos_alumnos)"
+        "DELETE FROM notas_operativas_contrato WHERE contrato_alumno_id NOT IN (SELECT id FROM contratos_alumnos)",
       );
       if (nBorrados > 0) {
         orfanosBorrados += nBorrados.toInt();
-        debugPrint('  ☢️ Purga Nuclear: Eliminadas $nBorrados notas operativas sin contrato');
+        debugPrint(
+          '  ☢️ Purga Nuclear: Eliminadas $nBorrados notas operativas sin contrato',
+        );
       }
 
       // 5. Limpiar la cola de sincronización (_sync_queue) de operaciones huérfanas
       final qBorrados = await txn.rawDelete(
-        "DELETE FROM _sync_queue WHERE tabla = 'contratos_alumnos' AND registro_id NOT IN (SELECT id FROM contratos_alumnos)"
+        "DELETE FROM _sync_queue WHERE tabla = 'contratos_alumnos' AND registro_id NOT IN (SELECT id FROM contratos_alumnos)",
       );
       if (qBorrados > 0) {
-         orfanosBorrados += qBorrados.toInt();
-         debugPrint('  ☢️ Purga Nuclear: Eliminadas $qBorrados operaciones de sync huérfanas');
+        orfanosBorrados += qBorrados.toInt();
+        debugPrint(
+          '  ☢️ Purga Nuclear: Eliminadas $qBorrados operaciones de sync huérfanas',
+        );
       }
 
       final qNotas = await txn.rawDelete(
-        "DELETE FROM _sync_queue WHERE tabla = 'notas_operativas_contrato' AND registro_id NOT IN (SELECT id FROM notas_operativas_contrato)"
+        "DELETE FROM _sync_queue WHERE tabla = 'notas_operativas_contrato' AND registro_id NOT IN (SELECT id FROM notas_operativas_contrato)",
       );
       if (qNotas > 0) {
         orfanosBorrados += qNotas.toInt();
-        debugPrint('  ☢️ Purga Nuclear: Eliminadas $qNotas ops sync notas operativas huérfanas');
+        debugPrint(
+          '  ☢️ Purga Nuclear: Eliminadas $qNotas ops sync notas operativas huérfanas',
+        );
       }
 
       // Permitir IDs de 36 chars (UUID) o 73 chars (clave compuesta uuid_uuid)
       // Eliminar todo lo que no cumpla ninguno de los dos formatos
       final bQueue = await txn.rawDelete(
-        "DELETE FROM _sync_queue WHERE LENGTH(registro_id) != 36 AND LENGTH(registro_id) != 73"
+        "DELETE FROM _sync_queue WHERE LENGTH(registro_id) != 36 AND LENGTH(registro_id) != 73",
       );
-        
+
       if (bQueue > 0) {
-        debugPrint('  🧼 Saneada la cola de sync: $bQueue operaciones con IDs malformados eliminadas');
+        debugPrint(
+          '  🧼 Saneada la cola de sync: $bQueue operaciones con IDs malformados eliminadas',
+        );
       }
       totalBorrados += (bQueue.toInt() + orfanosBorrados);
     });
-    
+
     if (totalBorrados > 0) {
-      debugPrint('✅ Saneamiento completo: $totalBorrados rastros de IDs corruptos eliminados');
+      debugPrint(
+        '✅ Saneamiento completo: $totalBorrados rastros de IDs corruptos eliminados',
+      );
     } else {
       debugPrint('✅ Saneamiento: Base de datos limpia, sin IDs corruptos');
     }

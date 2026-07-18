@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
 import '../repositories/notas_operativas_contrato_repository.dart';
+import '../../caja_sesiones/services/caja_auto_sync_service.dart';
 
 const _gold = Color(0xFFD4AF37);
 
@@ -75,11 +76,17 @@ class _NotaOperativaSheetBodyState
       _error = null;
     });
     try {
-      await ref.read(notasOperativasContratoRepositoryProvider).guardar(
+      final checkpoint = DateTime.now().toUtc();
+      await ref
+          .read(notasOperativasContratoRepositoryProvider)
+          .guardar(
             contratoAlumnoId: widget.alumno.id,
             texto: texto,
             resuelto: _resuelto,
           );
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(startedAt: checkpoint, isPayment: false);
       widget.onChanged();
       if (mounted) Navigator.of(context).pop();
       if (mounted) {
@@ -88,7 +95,9 @@ class _NotaOperativaSheetBodyState
             content: const Text('Nota guardada'),
             behavior: SnackBarBehavior.floating,
             backgroundColor: Colors.green.shade700,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -116,7 +125,10 @@ class _NotaOperativaSheetBodyState
           'Se elimina solo este recordatorio. No cambia pagos ni saldos.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(ctx, true),
@@ -128,7 +140,13 @@ class _NotaOperativaSheetBodyState
     if (ok != true || !mounted) return;
     setState(() => _guardando = true);
     try {
-      await ref.read(notasOperativasContratoRepositoryProvider).eliminar(widget.alumno.id);
+      final checkpoint = DateTime.now().toUtc();
+      await ref
+          .read(notasOperativasContratoRepositoryProvider)
+          .eliminar(widget.alumno.id);
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(startedAt: checkpoint, isPayment: false);
       widget.onChanged();
       if (mounted) Navigator.of(context).pop();
       if (mounted) {
@@ -136,15 +154,17 @@ class _NotaOperativaSheetBodyState
           SnackBar(
             content: const Text('Nota eliminada'),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo eliminar: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
       }
     } finally {
       if (mounted) setState(() => _guardando = false);
@@ -158,9 +178,12 @@ class _NotaOperativaSheetBodyState
     final inset = MediaQuery.viewInsetsOf(context).bottom;
 
     final bgTop = isDark ? const Color(0xFF161018) : const Color(0xFFFFFBF5);
-    final subtle = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06);
+    final subtle = (isDark ? Colors.white : Colors.black).withValues(
+      alpha: 0.06,
+    );
 
-    final tieneGuardada = widget.existente != null && widget.existente!.tieneTexto;
+    final tieneGuardada =
+        widget.existente != null && widget.existente!.tieneTexto;
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -192,7 +215,9 @@ class _NotaOperativaSheetBodyState
                     width: 44,
                     height: 5,
                     decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15),
+                      color: (isDark ? Colors.white : Colors.black).withValues(
+                        alpha: 0.15,
+                      ),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -213,7 +238,9 @@ class _NotaOperativaSheetBodyState
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: _gold.withValues(alpha: 0.35)),
+                        border: Border.all(
+                          color: _gold.withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Icon(
                         Icons.edit_note_rounded,
@@ -251,7 +278,8 @@ class _NotaOperativaSheetBodyState
                             style: TextStyle(
                               fontSize: 12,
                               height: 1.35,
-                              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.48),
+                              color: (isDark ? Colors.white : Colors.black)
+                                  .withValues(alpha: 0.48),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -270,9 +298,11 @@ class _NotaOperativaSheetBodyState
                     minLines: 3,
                     style: GoogleFonts.outfit(fontSize: 15, height: 1.45),
                     decoration: InputDecoration(
-                      hintText: 'Ej.: Quedaron \$50 del mes pasado para el próximo cobro…',
+                      hintText:
+                          'Ej.: Quedaron \$50 del mes pasado para el próximo cobro…',
                       hintStyle: TextStyle(
-                        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.28),
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withValues(alpha: 0.28),
                         fontWeight: FontWeight.w500,
                       ),
                       border: OutlineInputBorder(
@@ -301,11 +331,15 @@ class _NotaOperativaSheetBodyState
                       onChanged: _guardando
                           ? null
                           : (v) => setState(() {
-                                _resuelto = v;
-                              }),
-                      activeThumbColor: _resuelto ? Colors.green.shade600 : _gold,
+                              _resuelto = v;
+                            }),
+                      activeThumbColor: _resuelto
+                          ? Colors.green.shade600
+                          : _gold,
                       title: Text(
-                        _resuelto ? 'Marcado como hecho' : 'Pendiente de resolver',
+                        _resuelto
+                            ? 'Marcado como hecho'
+                            : 'Pendiente de resolver',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.w800,
                           fontSize: 14,
@@ -319,13 +353,18 @@ class _NotaOperativaSheetBodyState
                         style: TextStyle(
                           fontSize: 11,
                           height: 1.3,
-                          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.5),
+                          color: (isDark ? Colors.white : Colors.black)
+                              .withValues(alpha: 0.5),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       secondary: Icon(
-                        _resuelto ? Icons.task_alt_rounded : Icons.pending_actions_rounded,
-                        color: _resuelto ? Colors.green.shade600 : Colors.orange.shade700,
+                        _resuelto
+                            ? Icons.task_alt_rounded
+                            : Icons.pending_actions_rounded,
+                        color: _resuelto
+                            ? Colors.green.shade600
+                            : Colors.orange.shade700,
                       ),
                     ),
                   ),
@@ -335,7 +374,10 @@ class _NotaOperativaSheetBodyState
                   children: [
                     TextButton.icon(
                       onPressed: _guardando ? null : _eliminar,
-                      icon: Icon(Icons.delete_outline_rounded, color: Colors.redAccent.withValues(alpha: 0.9)),
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent.withValues(alpha: 0.9),
+                      ),
                       label: Text(
                         tieneGuardada ? 'Eliminar' : 'Cerrar',
                         style: TextStyle(
@@ -344,7 +386,9 @@ class _NotaOperativaSheetBodyState
                         ),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: tieneGuardada ? Colors.redAccent : null,
+                        foregroundColor: tieneGuardada
+                            ? Colors.redAccent
+                            : null,
                       ),
                     ),
                     const Spacer(),
@@ -353,19 +397,30 @@ class _NotaOperativaSheetBodyState
                       style: FilledButton.styleFrom(
                         backgroundColor: _gold,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                       icon: _guardando
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black54,
+                              ),
                             )
                           : const Icon(Icons.save_rounded, size: 20),
                       label: Text(
                         _guardando ? 'GUARDANDO…' : 'GUARDAR',
-                        style: GoogleFonts.oswald(fontWeight: FontWeight.w900, letterSpacing: 1),
+                        style: GoogleFonts.oswald(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
+                        ),
                       ),
                     ),
                   ],

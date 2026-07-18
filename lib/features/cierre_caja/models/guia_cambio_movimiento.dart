@@ -1,10 +1,6 @@
 import '../../../core/utils/ar_time.dart';
 
-enum TipoGuiaCambioMovimiento {
-  reposicion,
-  uso,
-  ajuste,
-}
+enum TipoGuiaCambioMovimiento { reposicion, uso, ajuste }
 
 extension TipoGuiaCambioMovimientoX on TipoGuiaCambioMovimiento {
   String get slug {
@@ -46,6 +42,7 @@ extension TipoGuiaCambioMovimientoX on TipoGuiaCambioMovimiento {
 /// Movimiento de la guía de cambio (vueltos). No contable; SQLite + sync.
 class GuiaCambioMovimiento {
   final String id;
+
   /// Día calendario AR `yyyy-mm-dd`.
   final String fecha;
   final TipoGuiaCambioMovimiento tipo;
@@ -53,6 +50,7 @@ class GuiaCambioMovimiento {
   final double? saldoAntes;
   final double saldoDespues;
   final String? nota;
+  final String? sesionCajaId;
   final DateTime fechaMov;
   final DateTime createdAt;
 
@@ -64,6 +62,7 @@ class GuiaCambioMovimiento {
     this.saldoAntes,
     required this.saldoDespues,
     this.nota,
+    this.sesionCajaId,
     required this.fechaMov,
     required this.createdAt,
   });
@@ -81,6 +80,7 @@ class GuiaCambioMovimiento {
           : null,
       saldoDespues: (m['saldo_despues'] as num?)?.toDouble() ?? 0,
       nota: m['nota']?.toString(),
+      sesionCajaId: m['sesion_caja_id']?.toString(),
       fechaMov: fm != null
           ? (DateTime.tryParse(fm) ?? ArTime.nowUtc())
           : ArTime.nowUtc(),
@@ -91,15 +91,16 @@ class GuiaCambioMovimiento {
   }
 
   Map<String, dynamic> toSyncPayload(String updatedAtIso) => {
-        'id': id,
-        'fecha': fecha,
-        'tipo': tipo.slug,
-        'monto': monto,
-        'saldo_antes': saldoAntes,
-        'saldo_despues': saldoDespues,
-        'nota': nota,
-        'fecha_mov': fechaMov.toUtc().toIso8601String(),
-        'created_at': createdAt.toUtc().toIso8601String(),
-        'updated_at': updatedAtIso,
-      };
+    'id': id,
+    'fecha': fecha,
+    'tipo': tipo.slug,
+    'monto': monto,
+    'saldo_antes': saldoAntes,
+    'saldo_despues': saldoDespues,
+    'nota': nota,
+    'sesion_caja_id': sesionCajaId,
+    'fecha_mov': fechaMov.toUtc().toIso8601String(),
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'updated_at': updatedAtIso,
+  };
 }

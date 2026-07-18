@@ -203,6 +203,7 @@ class ContratosRepository {
     /// cuotas_pagadas. Si se provee, se usa directamente en vez de
     /// recalcular desde el contrato (que ya fue mutado por la l├¡nea base).
     double? moraPendienteAntesDeLote,
+    String? sesionCajaId,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
@@ -211,6 +212,7 @@ class ContratosRepository {
     final now = ArTime.nowUtcIso();
 
     final lk = lineKind?.trim();
+    final sid = sesionCajaId?.trim();
     final pagoData = <String, dynamic>{
       'id': id,
       'contrato_alumno_id': contratoId,
@@ -223,6 +225,7 @@ class ContratosRepository {
       'updated_at': now,
       'medio_pago': medioPago,
       if (lk != null && lk.isNotEmpty) 'line_kind': lk,
+      if (sid != null && sid.isNotEmpty) 'sesion_caja_id': sid,
     };
 
     await db.transaction((txn) async {

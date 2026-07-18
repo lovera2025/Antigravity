@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
+import '../caja_sesiones/providers/app_role_provider.dart';
+import '../caja_sesiones/services/caja_auto_sync_service.dart';
 import '../../core/config/app_config.dart';
 
 import '../../models/evento.dart';
@@ -67,8 +69,10 @@ class _DetalleEventoMasivoScreenState
 
   /// Suma de pagos `interes_mora` por contrato (local) para mostrar mora pendiente.
   Map<String, double> _moraCobradaPorContrato = {};
+
   /// Mora cobrada solo en el período vigente (desde el último pago de cuota base).
   Map<String, double> _moraCobradaPeriodoPorContrato = {};
+
   /// Notas operativas locales por contrato (no sincronizan; no contables).
   Map<String, NotaOperativaContrato> _notasOperativasPorContrato = {};
   String _busquedaAlumno = '';
@@ -82,7 +86,8 @@ class _DetalleEventoMasivoScreenState
   void initState() {
     super.initState();
     _lazyScrollController.addListener(() {
-      if (_lazyScrollController.position.pixels >= _lazyScrollController.position.maxScrollExtent - 200) {
+      if (_lazyScrollController.position.pixels >=
+          _lazyScrollController.position.maxScrollExtent - 200) {
         if (_itemsRenderizados < _alumnos.length) {
           setState(() {
             _itemsRenderizados += 50;
@@ -137,9 +142,11 @@ class _DetalleEventoMasivoScreenState
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
-      
+
       // Ejecutar la auditoría en lote súper veloz dentro de una sola transacción
-      final huboCambios = await repo.ejecutarAuditoriaInteligente(widget.evento.id);
+      final huboCambios = await repo.ejecutarAuditoriaInteligente(
+        widget.evento.id,
+      );
 
       final listos = await repo.getByEvento(widget.evento.id);
       final moraMap = await _cargarMoraHistorialMap(repo, listos);
@@ -213,14 +220,14 @@ class _DetalleEventoMasivoScreenState
   Future<Map<String, double>> _cargarMoraHistorialMap(
     ContratosRepository repo,
     List<ContratoAlumno> alumnos,
-  ) =>
-      repo.sumMoraCobradaHistorialPorContratos(alumnos.map((e) => e.id).toList());
+  ) => repo.sumMoraCobradaHistorialPorContratos(
+    alumnos.map((e) => e.id).toList(),
+  );
 
   Future<Map<String, double>> _cargarMoraPeriodoMap(
     ContratosRepository repo,
     List<ContratoAlumno> alumnos,
-  ) =>
-      repo.sumMoraCobradaPeriodoPorContratos(alumnos);
+  ) => repo.sumMoraCobradaPeriodoPorContratos(alumnos);
 
   /// Aplica lista + mora cobrada y reconstruye la UI en un solo paso.
   void _aplicarSnapshotAlumnos(
@@ -254,7 +261,7 @@ class _DetalleEventoMasivoScreenState
             (_moraCobradaPorContrato[contratoId] ?? 0.0) + moraCobradaExtra;
         _moraCobradaPeriodoPorContrato[contratoId] =
             (_moraCobradaPeriodoPorContrato[contratoId] ?? 0.0) +
-                moraCobradaExtra;
+            moraCobradaExtra;
       }
       _alumnos[index] = actualizado;
     });
@@ -780,8 +787,9 @@ class _DetalleEventoMasivoScreenState
                   ),
                   SizedBox(width: layoutCompact ? 4 : 12),
                   IconButton(
-                    visualDensity:
-                        layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                    visualDensity: layoutCompact
+                        ? VisualDensity.compact
+                        : VisualDensity.standard,
                     padding: layoutCompact ? EdgeInsets.zero : null,
                     constraints: layoutCompact
                         ? const BoxConstraints(minWidth: 36, minHeight: 36)
@@ -909,17 +917,20 @@ class _DetalleEventoMasivoScreenState
             : (availableWidth > 800 ? 32 : 16);
         final double tableWidth = availableWidth - (horizontalPad * 2);
 
-        final double innerTable = tableWidth - (_modoSeleccionContratos ? 52 : 0);
+        final double innerTable =
+            tableWidth - (_modoSeleccionContratos ? 52 : 0);
         final double colAlumno = innerTable * 0.18;
         final double colTelefono = innerTable * 0.10;
         final double colAcomp = innerTable * 0.12;
         final double colMesa = innerTable * 0.08;
         final double colContrato = innerTable * 0.07;
         final double colEstado = innerTable * 0.22;
-                        final double colAcciones = innerTable * 0.23;
+        final double colAcciones = innerTable * 0.23;
 
         final int contratosFirmados = alumnosFiltrados
-            .where((a) => a.contratoFirmado && !a.nombreAlumno.startsWith('[BAJA]'))
+            .where(
+              (a) => a.contratoFirmado && !a.nombreAlumno.startsWith('[BAJA]'),
+            )
             .length;
 
         final double tbIcon = layoutCompact ? 15.0 : 18.0;
@@ -1094,7 +1105,9 @@ class _DetalleEventoMasivoScreenState
                 decoration: BoxDecoration(
                   color: Colors.teal.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
-                  border: Border.all(color: Colors.teal.withValues(alpha: 0.45)),
+                  border: Border.all(
+                    color: Colors.teal.withValues(alpha: 0.45),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1181,7 +1194,9 @@ class _DetalleEventoMasivoScreenState
                   });
                 },
                 icon: Icon(
-                  _modoSeleccionContratos ? Icons.close : Icons.checklist_rounded,
+                  _modoSeleccionContratos
+                      ? Icons.close
+                      : Icons.checklist_rounded,
                   size: tbIcon,
                 ),
                 label: Text(
@@ -1194,7 +1209,10 @@ class _DetalleEventoMasivoScreenState
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.teal.shade800,
-                  side: BorderSide(color: Colors.teal.shade700, width: layoutCompact ? 1.2 : 1.5),
+                  side: BorderSide(
+                    color: Colors.teal.shade700,
+                    width: layoutCompact ? 1.2 : 1.5,
+                  ),
                   padding: tbPadMd,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(tbRadius),
@@ -1221,8 +1239,9 @@ class _DetalleEventoMasivoScreenState
                   // alineados al borde final (ancho del buscador / contenido).
                   Theme(
                     data: Theme.of(context).copyWith(
-                      visualDensity:
-                          layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                      visualDensity: layoutCompact
+                          ? VisualDensity.compact
+                          : VisualDensity.standard,
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -1252,7 +1271,10 @@ class _DetalleEventoMasivoScreenState
                             prefixIcon: const Icon(Icons.search, size: 20),
                             isDense: layoutCompact,
                             contentPadding: layoutCompact
-                                ? const EdgeInsets.symmetric(horizontal: 10, vertical: 10)
+                                ? const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 10,
+                                  )
                                 : null,
                           ),
                           onChanged: (value) {
@@ -1295,13 +1317,20 @@ class _DetalleEventoMasivoScreenState
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         child: Wrap(
                           spacing: 12,
                           runSpacing: 8,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Icon(Icons.touch_app, size: 20, color: Colors.teal.shade800),
+                            Icon(
+                              Icons.touch_app,
+                              size: 20,
+                              color: Colors.teal.shade800,
+                            ),
                             Text(
                               '${_idsSeleccionContratos.length} seleccionado(s)',
                               style: TextStyle(
@@ -1312,23 +1341,36 @@ class _DetalleEventoMasivoScreenState
                             ),
                             Text(
                               '· Usá los checkboxes o tocá filas. El encabezado marca todos los visibles.',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
                             FilledButton.tonalIcon(
                               onPressed: _idsSeleccionContratos.isEmpty
                                   ? null
-                                  : () => _aplicarContratoFirmadoSeleccionTabla(true),
-                              icon: const Icon(Icons.assignment_turned_in_outlined, size: 18),
+                                  : () => _aplicarContratoFirmadoSeleccionTabla(
+                                      true,
+                                    ),
+                              icon: const Icon(
+                                Icons.assignment_turned_in_outlined,
+                                size: 18,
+                              ),
                               label: const Text('Marcar firmado'),
                             ),
                             FilledButton.tonalIcon(
                               onPressed: _idsSeleccionContratos.isEmpty
                                   ? null
-                                  : () => _aplicarContratoFirmadoSeleccionTabla(false),
+                                  : () => _aplicarContratoFirmadoSeleccionTabla(
+                                      false,
+                                    ),
                               style: FilledButton.styleFrom(
                                 foregroundColor: Colors.deepOrange.shade900,
                               ),
-                              icon: const Icon(Icons.remove_done_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.remove_done_rounded,
+                                size: 18,
+                              ),
                               label: const Text('Quitar firma'),
                             ),
                           ],
@@ -1405,7 +1447,10 @@ class _DetalleEventoMasivoScreenState
                         DataColumn(
                           label: SizedBox(
                             width: colEstado,
-                            child: Text('ESTADO DE DEUDA', style: tableHeaderStyle),
+                            child: Text(
+                              'ESTADO DE DEUDA',
+                              style: tableHeaderStyle,
+                            ),
                           ),
                         ),
                         DataColumn(
@@ -1428,9 +1473,9 @@ class _DetalleEventoMasivoScreenState
                             _moraCobradaPorContrato[a.id] ?? 0.0;
                         final moraPendienteFila =
                             MoraCuotaCalculator.moraPendienteOperativa(
-                          contrato: a,
-                          moraCobradaHistorial: cobradoMoraHist,
-                        );
+                              contrato: a,
+                              moraCobradaHistorial: cobradoMoraHist,
+                            );
 
                         final estadoUi = CronogramaCuotasUtils.resolverEstadoUi(
                           contrato: a,
@@ -1439,9 +1484,9 @@ class _DetalleEventoMasivoScreenState
                         );
                         final cronogramaLineas =
                             CronogramaCuotasUtils.lineasInformativas(
-                          a,
-                          moraPendientePesos: moraPendienteFila,
-                        );
+                              a,
+                              moraPendientePesos: moraPendienteFila,
+                            );
 
                         final bool estaLiquidado = a.saldoDeudor <= 0.01;
                         final Color estadoColor = estadoUi.color;
@@ -1458,12 +1503,18 @@ class _DetalleEventoMasivoScreenState
                         final cuotaInfo =
                             '($cuotasMostrar/$totalCuotas cuotas)';
 
-                        final bool esBajaTemporal = a.nombreAlumno.startsWith('[BAJA]');
-                        final String nombreLimpio = a.nombreAlumno.replaceFirst('[BAJA]', '').trim();
+                        final bool esBajaTemporal = a.nombreAlumno.startsWith(
+                          '[BAJA]',
+                        );
+                        final String nombreLimpio = a.nombreAlumno
+                            .replaceFirst('[BAJA]', '')
+                            .trim();
                         final notaOp = _notasOperativasPorContrato[a.id];
 
                         return DataRow(
-                          color: WidgetStateProperty.resolveWith<Color?>((states) {
+                          color: WidgetStateProperty.resolveWith<Color?>((
+                            states,
+                          ) {
                             if (esBajaTemporal) {
                               return isDark
                                   ? Colors.white.withValues(alpha: 0.01)
@@ -1472,7 +1523,8 @@ class _DetalleEventoMasivoScreenState
                             return null;
                           }),
                           selected:
-                              _modoSeleccionContratos && _idsSeleccionContratos.contains(a.id),
+                              _modoSeleccionContratos &&
+                              _idsSeleccionContratos.contains(a.id),
                           onSelectChanged: _modoSeleccionContratos
                               ? (selected) {
                                   setState(() {
@@ -1492,8 +1544,10 @@ class _DetalleEventoMasivoScreenState
                                     ? Opacity(
                                         opacity: 0.55,
                                         child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               nombreLimpio,
@@ -1501,28 +1555,46 @@ class _DetalleEventoMasivoScreenState
                                               maxLines: 1,
                                               style: TextStyle(
                                                 fontWeight: FontWeight.w700,
-                                                fontSize: layoutCompact ? 12 : 13,
-                                                decoration: TextDecoration.lineThrough,
+                                                fontSize: layoutCompact
+                                                    ? 12
+                                                    : 13,
+                                                decoration:
+                                                    TextDecoration.lineThrough,
                                                 fontStyle: FontStyle.italic,
                                                 color: Colors.grey,
                                               ),
                                             ),
-                                            if (a.cursoDivision != null && a.cursoDivision!.isNotEmpty)
+                                            if (a.cursoDivision != null &&
+                                                a.cursoDivision!.isNotEmpty)
                                               Container(
-                                                margin: EdgeInsets.only(top: layoutCompact ? 2 : 3),
+                                                margin: EdgeInsets.only(
+                                                  top: layoutCompact ? 2 : 3,
+                                                ),
                                                 padding: EdgeInsets.symmetric(
-                                                  horizontal: layoutCompact ? 6 : 8,
-                                                  vertical: layoutCompact ? 1 : 2,
+                                                  horizontal: layoutCompact
+                                                      ? 6
+                                                      : 8,
+                                                  vertical: layoutCompact
+                                                      ? 1
+                                                      : 2,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.blue.withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                                                  color: Colors.blue.withValues(
+                                                    alpha: 0.1,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: Colors.blue
+                                                        .withValues(alpha: 0.3),
+                                                  ),
                                                 ),
                                                 child: Text(
                                                   a.cursoDivision!,
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 10 : 11,
+                                                    fontSize: layoutCompact
+                                                        ? 10
+                                                        : 11,
                                                     fontWeight: FontWeight.w600,
                                                     color: Colors.blue,
                                                   ),
@@ -1530,12 +1602,18 @@ class _DetalleEventoMasivoScreenState
                                               ),
                                             if (a.createdAt != null)
                                               Padding(
-                                                padding: EdgeInsets.only(top: layoutCompact ? 2 : 4, left: 2),
+                                                padding: EdgeInsets.only(
+                                                  top: layoutCompact ? 2 : 4,
+                                                  left: 2,
+                                                ),
                                                 child: Text(
                                                   'Reg: ${a.createdAt!.day}/${a.createdAt!.month}/${a.createdAt!.year % 100}',
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 9 : 10,
-                                                    color: Colors.grey.withValues(alpha: 0.6),
+                                                    fontSize: layoutCompact
+                                                        ? 9
+                                                        : 10,
+                                                    color: Colors.grey
+                                                        .withValues(alpha: 0.6),
                                                     fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
@@ -1544,8 +1622,10 @@ class _DetalleEventoMasivoScreenState
                                         ),
                                       )
                                     : Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             a.nombreAlumno,
@@ -1559,18 +1639,21 @@ class _DetalleEventoMasivoScreenState
                                           if (a.cursoDivision != null &&
                                               a.cursoDivision!.isNotEmpty)
                                             Container(
-                                              margin: EdgeInsets.only(top: layoutCompact ? 2 : 3),
+                                              margin: EdgeInsets.only(
+                                                top: layoutCompact ? 2 : 3,
+                                              ),
                                               padding: EdgeInsets.symmetric(
-                                                horizontal: layoutCompact ? 6 : 8,
+                                                horizontal: layoutCompact
+                                                    ? 6
+                                                    : 8,
                                                 vertical: layoutCompact ? 1 : 2,
                                               ),
                                               decoration: BoxDecoration(
                                                 color: Colors.blue.withValues(
                                                   alpha: 0.1,
                                                 ),
-                                                borderRadius: BorderRadius.circular(
-                                                  6,
-                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                                 border: Border.all(
                                                   color: Colors.blue.withValues(
                                                     alpha: 0.3,
@@ -1580,7 +1663,9 @@ class _DetalleEventoMasivoScreenState
                                               child: Text(
                                                 a.cursoDivision!,
                                                 style: TextStyle(
-                                                  fontSize: layoutCompact ? 10 : 11,
+                                                  fontSize: layoutCompact
+                                                      ? 10
+                                                      : 11,
                                                   fontWeight: FontWeight.w600,
                                                   color: Colors.blue,
                                                 ),
@@ -1595,7 +1680,9 @@ class _DetalleEventoMasivoScreenState
                                               child: Text(
                                                 'Reg: ${a.createdAt!.day}/${a.createdAt!.month}/${a.createdAt!.year % 100}',
                                                 style: TextStyle(
-                                                  fontSize: layoutCompact ? 9 : 10,
+                                                  fontSize: layoutCompact
+                                                      ? 9
+                                                      : 10,
                                                   color: Colors.grey.withValues(
                                                     alpha: 0.6,
                                                   ),
@@ -1615,11 +1702,16 @@ class _DetalleEventoMasivoScreenState
                                     ? Opacity(
                                         opacity: 0.55,
                                         child: Text(
-                                          a.telefono?.isNotEmpty == true ? a.telefono! : '-',
+                                          a.telefono?.isNotEmpty == true
+                                              ? a.telefono!
+                                              : '-',
                                           style: TextStyle(
                                             fontSize: layoutCompact ? 11 : 12,
                                             fontWeight: FontWeight.w500,
-                                            color: a.telefono?.isNotEmpty == true ? null : Colors.grey.shade500,
+                                            color:
+                                                a.telefono?.isNotEmpty == true
+                                                ? null
+                                                : Colors.grey.shade500,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -1647,32 +1739,64 @@ class _DetalleEventoMasivoScreenState
                                     ? Opacity(
                                         opacity: 0.55,
                                         child: GestureDetector(
-                                          onTap: () => _mostrarModalDetalleAcompanantes(a),
+                                          onTap: () =>
+                                              _mostrarModalDetalleAcompanantes(
+                                                a,
+                                              ),
                                           child: MouseRegion(
                                             cursor: SystemMouseCursors.click,
                                             child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
                                                 Chip(
                                                   label: Text(
                                                     '+$cantAcomp',
-                                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                    ),
                                                   ),
-                                                  backgroundColor: Colors.blue.withValues(alpha: 0.1),
-                                                  side: BorderSide(color: Colors.blue.withValues(alpha: 0.3)),
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                                                  visualDensity: VisualDensity.compact,
-                                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                  backgroundColor: Colors.blue
+                                                      .withValues(alpha: 0.1),
+                                                  side: BorderSide(
+                                                    color: Colors.blue
+                                                        .withValues(alpha: 0.3),
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 0,
+                                                      ),
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                  materialTapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
                                                 ),
-                                                if (a.nombresAcompanantes.isNotEmpty)
+                                                if (a
+                                                    .nombresAcompanantes
+                                                    .isNotEmpty)
                                                   Padding(
-                                                    padding: const EdgeInsets.only(top: 2),
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 2,
+                                                        ),
                                                     child: Text(
-                                                      a.nombresAcompanantes.join(', '),
+                                                      a.nombresAcompanantes
+                                                          .join(', '),
                                                       maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors
+                                                            .grey
+                                                            .shade600,
+                                                      ),
                                                     ),
                                                   ),
                                               ],
@@ -1706,26 +1830,36 @@ class _DetalleEventoMasivoScreenState
                                                     alpha: 0.3,
                                                   ),
                                                 ),
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 0,
-                                                ),
-                                                visualDensity: VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 0,
+                                                    ),
+                                                visualDensity:
+                                                    VisualDensity.compact,
                                                 materialTapTargetSize:
-                                                    MaterialTapTargetSize.shrinkWrap,
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
                                               ),
-                                              if (a.nombresAcompanantes.isNotEmpty)
+                                              if (a
+                                                  .nombresAcompanantes
+                                                  .isNotEmpty)
                                                 Padding(
-                                                  padding: const EdgeInsets.only(
-                                                    top: 2,
-                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 2,
+                                                      ),
                                                   child: Text(
-                                                    a.nombresAcompanantes.join(', '),
+                                                    a.nombresAcompanantes.join(
+                                                      ', ',
+                                                    ),
                                                     maxLines: 2,
-                                                    overflow: TextOverflow.ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      color: Colors.grey.shade600,
+                                                      color:
+                                                          Colors.grey.shade600,
                                                     ),
                                                   ),
                                                 ),
@@ -1770,14 +1904,19 @@ class _DetalleEventoMasivoScreenState
                                             padding: EdgeInsets.zero,
                                             constraints: BoxConstraints(
                                               minWidth: layoutCompact ? 32 : 36,
-                                              minHeight: layoutCompact ? 32 : 36,
+                                              minHeight: layoutCompact
+                                                  ? 32
+                                                  : 36,
                                             ),
-                                            visualDensity: layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                                            visualDensity: layoutCompact
+                                                ? VisualDensity.compact
+                                                : VisualDensity.standard,
                                             tooltip: 'Contrato inactivo',
                                             icon: Icon(
                                               a.contratoFirmado
                                                   ? Icons.assignment_turned_in
-                                                  : Icons.pending_actions_outlined,
+                                                  : Icons
+                                                        .pending_actions_outlined,
                                               size: layoutCompact ? 20 : 22,
                                               color: a.contratoFirmado
                                                   ? Colors.teal.shade700
@@ -1793,8 +1932,9 @@ class _DetalleEventoMasivoScreenState
                                           minWidth: layoutCompact ? 32 : 36,
                                           minHeight: layoutCompact ? 32 : 36,
                                         ),
-                                        visualDensity:
-                                            layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                                        visualDensity: layoutCompact
+                                            ? VisualDensity.compact
+                                            : VisualDensity.standard,
                                         tooltip: a.contratoFirmado
                                             ? 'Contrato firmado (tocar para desmarcar)'
                                             : 'Marcar contrato firmado',
@@ -1807,7 +1947,8 @@ class _DetalleEventoMasivoScreenState
                                               ? Colors.teal.shade700
                                               : Colors.grey.shade500,
                                         ),
-                                        onPressed: () => _toggleContratoFirmado(a),
+                                        onPressed: () =>
+                                            _toggleContratoFirmado(a),
                                       ),
                               ),
                             ),
@@ -1816,17 +1957,33 @@ class _DetalleEventoMasivoScreenState
                                 width: colEstado,
                                 child: esBajaTemporal
                                     ? Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                                          color: isDark
+                                              ? Colors.white.withValues(
+                                                  alpha: 0.05,
+                                                )
+                                              : Colors.black.withValues(
+                                                  alpha: 0.04,
+                                                ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.grey.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          ),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
-                                              Icons.pause_circle_outline_rounded,
+                                              Icons
+                                                  .pause_circle_outline_rounded,
                                               color: Colors.grey.shade600,
                                               size: layoutCompact ? 14 : 16,
                                             ),
@@ -1836,7 +1993,9 @@ class _DetalleEventoMasivoScreenState
                                               style: TextStyle(
                                                 color: Colors.grey.shade600,
                                                 fontWeight: FontWeight.w900,
-                                                fontSize: layoutCompact ? 10 : 11,
+                                                fontSize: layoutCompact
+                                                    ? 10
+                                                    : 11,
                                                 letterSpacing: 0.5,
                                               ),
                                             ),
@@ -1845,8 +2004,10 @@ class _DetalleEventoMasivoScreenState
                                       )
                                     : SingleChildScrollView(
                                         child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               mainAxisSize: MainAxisSize.min,
@@ -1856,14 +2017,19 @@ class _DetalleEventoMasivoScreenState
                                                   color: estadoColor,
                                                   size: layoutCompact ? 14 : 16,
                                                 ),
-                                                SizedBox(width: layoutCompact ? 4 : 6),
+                                                SizedBox(
+                                                  width: layoutCompact ? 4 : 6,
+                                                ),
                                                 Flexible(
                                                   child: Text(
                                                     estadoTexto,
                                                     style: TextStyle(
-                                                    color: estadoColor,
-                                                    fontWeight: FontWeight.w700,
-                                                    fontSize: layoutCompact ? 11 : 12,
+                                                      color: estadoColor,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: layoutCompact
+                                                          ? 11
+                                                          : 12,
                                                     ),
                                                   ),
                                                 ),
@@ -1876,19 +2042,25 @@ class _DetalleEventoMasivoScreenState
                                                   color: estadoColor.withValues(
                                                     alpha: 0.8,
                                                   ),
-                                                  fontSize: layoutCompact ? 10 : 11,
+                                                  fontSize: layoutCompact
+                                                      ? 10
+                                                      : 11,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                               ),
                                             Text(
                                               cuotaInfo,
                                               style: TextStyle(
-                                                fontSize: layoutCompact ? 9 : 10,
+                                                fontSize: layoutCompact
+                                                    ? 9
+                                                    : 10,
                                                 color: Colors.grey,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
-                                            ...MesasExtraUtils.lineasResumenGrilla(a).map(
+                                            ...MesasExtraUtils.lineasResumenGrilla(
+                                              a,
+                                            ).map(
                                               (linea) => Padding(
                                                 padding: EdgeInsets.only(
                                                   top: layoutCompact ? 1 : 2,
@@ -1896,79 +2068,127 @@ class _DetalleEventoMasivoScreenState
                                                 child: Text(
                                                   linea,
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    fontSize: layoutCompact
+                                                        ? 8
+                                                        : 9,
                                                     color: Colors.grey.shade600,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                            if (cronogramaLineas.cuotaPendiente != null)
+                                            if (cronogramaLineas
+                                                    .cuotaPendiente !=
+                                                null)
                                               Padding(
-                                                padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
+                                                padding: EdgeInsets.only(
+                                                  top: layoutCompact ? 1 : 2,
+                                                ),
                                                 child: Text(
-                                                  cronogramaLineas.cuotaPendiente!,
+                                                  cronogramaLineas
+                                                      .cuotaPendiente!,
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    fontSize: layoutCompact
+                                                        ? 8
+                                                        : 9,
                                                     color: Colors.grey.shade600,
                                                     fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
                                               ),
-                                            if (cronogramaLineas.proximoVencimiento != null)
+                                            if (cronogramaLineas
+                                                    .proximoVencimiento !=
+                                                null)
                                               Padding(
-                                                padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
+                                                padding: EdgeInsets.only(
+                                                  top: layoutCompact ? 1 : 2,
+                                                ),
                                                 child: Text(
-                                                  cronogramaLineas.proximoVencimiento!,
+                                                  cronogramaLineas
+                                                      .proximoVencimiento!,
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    fontSize: layoutCompact
+                                                        ? 8
+                                                        : 9,
                                                     color: Colors.grey.shade600,
                                                     fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
                                               ),
-                                            if (cronogramaLineas.moraCongeladaHasta != null)
+                                            if (cronogramaLineas
+                                                    .moraCongeladaHasta !=
+                                                null)
                                               Padding(
-                                                padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
+                                                padding: EdgeInsets.only(
+                                                  top: layoutCompact ? 1 : 2,
+                                                ),
                                                 child: Text(
-                                                  cronogramaLineas.moraCongeladaHasta!,
+                                                  cronogramaLineas
+                                                      .moraCongeladaHasta!,
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 8 : 9,
-                                                    color: Colors.blueGrey.shade600,
+                                                    fontSize: layoutCompact
+                                                        ? 8
+                                                        : 9,
+                                                    color: Colors
+                                                        .blueGrey
+                                                        .shade600,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
                                               ),
                                             if (moraPendienteFila > 0.01) ...[
                                               Padding(
-                                                padding: EdgeInsets.only(top: layoutCompact ? 1 : 2),
+                                                padding: EdgeInsets.only(
+                                                  top: layoutCompact ? 1 : 2,
+                                                ),
                                                 child: Text(
                                                   'Mora pendiente: ${moraPendienteFila.toCurrency()}',
                                                   style: TextStyle(
-                                                    fontSize: layoutCompact ? 8 : 9,
+                                                    fontSize: layoutCompact
+                                                        ? 8
+                                                        : 9,
                                                     fontWeight: FontWeight.w700,
-                                                    color: Colors.orange.shade800,
+                                                    color:
+                                                        Colors.orange.shade800,
                                                   ),
                                                 ),
                                               ),
-                                              Builder(builder: (_) {
-                                                final desglose = MoraCuotaCalculator.calcularDesglose(a);
-                                                if (desglose.isEmpty) return const SizedBox.shrink();
-                                                final resumen = desglose
-                                                    .map((d) => 'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) ${d.diasMora}d')
-                                                    .join(' · ');
-                                                return Padding(
-                                                  padding: EdgeInsets.only(top: layoutCompact ? 0 : 1),
-                                                  child: Text(
-                                                    resumen,
-                                                    style: TextStyle(
-                                                      fontSize: layoutCompact ? 7 : 8,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: Colors.orange.shade600,
+                                              Builder(
+                                                builder: (_) {
+                                                  final desglose =
+                                                      MoraCuotaCalculator.calcularDesglose(
+                                                        a,
+                                                      );
+                                                  if (desglose.isEmpty)
+                                                    return const SizedBox.shrink();
+                                                  final resumen = desglose
+                                                      .map(
+                                                        (d) =>
+                                                            'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) ${d.diasMora}d',
+                                                      )
+                                                      .join(' · ');
+                                                  return Padding(
+                                                    padding: EdgeInsets.only(
+                                                      top: layoutCompact
+                                                          ? 0
+                                                          : 1,
                                                     ),
-                                                  ),
-                                                );
-                                              }),
+                                                    child: Text(
+                                                      resumen,
+                                                      style: TextStyle(
+                                                        fontSize: layoutCompact
+                                                            ? 7
+                                                            : 8,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors
+                                                            .orange
+                                                            .shade600,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
                                             ],
                                           ],
                                         ),
@@ -1988,8 +2208,12 @@ class _DetalleEventoMasivoScreenState
                                                   ? VisualDensity.compact
                                                   : VisualDensity.standard,
                                               constraints: BoxConstraints(
-                                                minWidth: layoutCompact ? 34 : 40,
-                                                minHeight: layoutCompact ? 34 : 40,
+                                                minWidth: layoutCompact
+                                                    ? 34
+                                                    : 40,
+                                                minHeight: layoutCompact
+                                                    ? 34
+                                                    : 40,
                                               ),
                                               padding: EdgeInsets.zero,
                                               icon: Icon(
@@ -2027,8 +2251,12 @@ class _DetalleEventoMasivoScreenState
                                                   ? VisualDensity.compact
                                                   : VisualDensity.standard,
                                               constraints: BoxConstraints(
-                                                minWidth: layoutCompact ? 34 : 40,
-                                                minHeight: layoutCompact ? 34 : 40,
+                                                minWidth: layoutCompact
+                                                    ? 34
+                                                    : 40,
+                                                minHeight: layoutCompact
+                                                    ? 34
+                                                    : 40,
                                               ),
                                               padding: EdgeInsets.zero,
                                               icon: Icon(
@@ -2054,7 +2282,8 @@ class _DetalleEventoMasivoScreenState
                                             size: layoutCompact ? 18 : 20,
                                           ),
                                           tooltip: 'Registrar pago',
-                                          onPressed: () => _mostrarModalPagoAlumno(a),
+                                          onPressed: () =>
+                                              _mostrarModalPagoAlumno(a),
                                         ),
                                   esBajaTemporal
                                       ? Opacity(
@@ -2065,12 +2294,17 @@ class _DetalleEventoMasivoScreenState
                                                   ? VisualDensity.compact
                                                   : VisualDensity.standard,
                                               constraints: BoxConstraints(
-                                                minWidth: layoutCompact ? 34 : 40,
-                                                minHeight: layoutCompact ? 34 : 40,
+                                                minWidth: layoutCompact
+                                                    ? 34
+                                                    : 40,
+                                                minHeight: layoutCompact
+                                                    ? 34
+                                                    : 40,
                                               ),
                                               padding: EdgeInsets.zero,
                                               icon: Icon(
-                                                Icons.account_balance_wallet_outlined,
+                                                Icons
+                                                    .account_balance_wallet_outlined,
                                                 size: layoutCompact ? 18 : 20,
                                                 color: const Color(0xFFD4AF37),
                                               ),
@@ -2089,7 +2323,8 @@ class _DetalleEventoMasivoScreenState
                                           ),
                                           padding: EdgeInsets.zero,
                                           icon: Icon(
-                                            Icons.account_balance_wallet_outlined,
+                                            Icons
+                                                .account_balance_wallet_outlined,
                                             size: layoutCompact ? 18 : 20,
                                             color: const Color(0xFFD4AF37),
                                           ),
@@ -2106,8 +2341,12 @@ class _DetalleEventoMasivoScreenState
                                                   ? VisualDensity.compact
                                                   : VisualDensity.standard,
                                               constraints: BoxConstraints(
-                                                minWidth: layoutCompact ? 34 : 40,
-                                                minHeight: layoutCompact ? 34 : 40,
+                                                minWidth: layoutCompact
+                                                    ? 34
+                                                    : 40,
+                                                minHeight: layoutCompact
+                                                    ? 34
+                                                    : 40,
                                               ),
                                               padding: EdgeInsets.zero,
                                               icon: Icon(
@@ -2133,9 +2372,14 @@ class _DetalleEventoMasivoScreenState
                                             size: layoutCompact ? 18 : 20,
                                           ),
                                           tooltip: 'Generar Recibo',
-                                          onPressed: () => _imprimirReciboAlumno(a),
+                                          onPressed: () =>
+                                              _imprimirReciboAlumno(a),
                                         ),
-                                  _buildNotaOperativaButton(a, notaOp, layoutCompact),
+                                  _buildNotaOperativaButton(
+                                    a,
+                                    notaOp,
+                                    layoutCompact,
+                                  ),
                                   if (modoJefe) ...[
                                     esBajaTemporal
                                         ? IconButton(
@@ -2144,16 +2388,20 @@ class _DetalleEventoMasivoScreenState
                                                 : VisualDensity.standard,
                                             constraints: BoxConstraints(
                                               minWidth: layoutCompact ? 34 : 40,
-                                              minHeight: layoutCompact ? 34 : 40,
+                                              minHeight: layoutCompact
+                                                  ? 34
+                                                  : 40,
                                             ),
                                             padding: EdgeInsets.zero,
                                             icon: Icon(
                                               Icons.play_circle_outline_rounded,
-                                              color: Colors.greenAccent.shade700,
+                                              color:
+                                                  Colors.greenAccent.shade700,
                                               size: layoutCompact ? 18 : 20,
                                             ),
                                             tooltip: 'Reincorporar alumno',
-                                            onPressed: () => _toggleBajaTemporal(a),
+                                            onPressed: () =>
+                                                _toggleBajaTemporal(a),
                                           )
                                         : IconButton(
                                             visualDensity: layoutCompact
@@ -2161,16 +2409,21 @@ class _DetalleEventoMasivoScreenState
                                                 : VisualDensity.standard,
                                             constraints: BoxConstraints(
                                               minWidth: layoutCompact ? 34 : 40,
-                                              minHeight: layoutCompact ? 34 : 40,
+                                              minHeight: layoutCompact
+                                                  ? 34
+                                                  : 40,
                                             ),
                                             padding: EdgeInsets.zero,
                                             icon: Icon(
-                                              Icons.pause_circle_outline_rounded,
+                                              Icons
+                                                  .pause_circle_outline_rounded,
                                               color: Colors.orangeAccent,
                                               size: layoutCompact ? 18 : 20,
                                             ),
-                                            tooltip: 'Baja temporal (suspender)',
-                                            onPressed: () => _toggleBajaTemporal(a),
+                                            tooltip:
+                                                'Baja temporal (suspender)',
+                                            onPressed: () =>
+                                                _toggleBajaTemporal(a),
                                           ),
                                     IconButton(
                                       visualDensity: layoutCompact
@@ -2187,7 +2440,8 @@ class _DetalleEventoMasivoScreenState
                                         size: layoutCompact ? 18 : 20,
                                       ),
                                       tooltip: 'Eliminar definitivamente',
-                                      onPressed: () => _eliminarAlumnoPermanente(a),
+                                      onPressed: () =>
+                                          _eliminarAlumnoPermanente(a),
                                     ),
                                   ],
                                 ],
@@ -2207,7 +2461,11 @@ class _DetalleEventoMasivoScreenState
     );
   }
 
-  Widget _buildNotaOperativaButton(ContratoAlumno a, NotaOperativaContrato? notaOp, bool layoutCompact) {
+  Widget _buildNotaOperativaButton(
+    ContratoAlumno a,
+    NotaOperativaContrato? notaOp,
+    bool layoutCompact,
+  ) {
     final bool tieneNota = notaOp != null && notaOp.tieneTexto;
     final bool resuelto = tieneNota && notaOp.resuelto;
 
@@ -2238,28 +2496,21 @@ class _DetalleEventoMasivoScreenState
         color: bgColor,
         shape: BoxShape.circle,
         border: tieneNota
-            ? Border.all(
-                color: iconColor.withValues(alpha: 0.3),
-                width: 1.5,
-              )
+            ? Border.all(color: iconColor.withValues(alpha: 0.3), width: 1.5)
             : null,
       ),
       child: IconButton(
         padding: EdgeInsets.zero,
         tooltip: tieneNota
             ? (resuelto
-                ? 'Nota resuelta: ${notaOp.texto}'
-                : 'Nota pendiente: ${notaOp.texto}')
+                  ? 'Nota resuelta: ${notaOp.texto}'
+                  : 'Nota pendiente: ${notaOp.texto}')
             : 'Agregar nota operativa',
         icon: Stack(
           clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
-            Icon(
-              iconData,
-              size: layoutCompact ? 16 : 18,
-              color: iconColor,
-            ),
+            Icon(iconData, size: layoutCompact ? 16 : 18, color: iconColor),
             if (tieneNota && !resuelto)
               Positioned(
                 right: -2,
@@ -2293,17 +2544,23 @@ class _DetalleEventoMasivoScreenState
   Future<void> _toggleBajaTemporal(ContratoAlumno alumno) async {
     if (!mounted) return;
     final bool esBaja = alumno.nombreAlumno.startsWith('[BAJA]');
-    final String nombreLimpio = alumno.nombreAlumno.replaceFirst('[BAJA]', '').trim();
+    final String nombreLimpio = alumno.nombreAlumno
+        .replaceFirst('[BAJA]', '')
+        .trim();
     final String msg = esBaja
         ? '¿Desea reincorporar a $nombreLimpio como alumno activo? '
-            'Podrá cobrarle cuando quiera; la mora seguirá congelada al día '
-            'de la baja hasta que liquide.'
+              'Podrá cobrarle cuando quiera; la mora seguirá congelada al día '
+              'de la baja hasta que liquide.'
         : '¿Desea dar de baja temporal a $nombreLimpio? Se mantendrá en la '
-            'lista pero no contará para los saldos. Su saldo y mora quedarán '
-            'congelados como hoy hasta que cobre.';
-    final String titulo = esBaja ? 'Reincorporar Alumno' : 'Confirmar Baja Temporal';
+              'lista pero no contará para los saldos. Su saldo y mora quedarán '
+              'congelados como hoy hasta que cobre.';
+    final String titulo = esBaja
+        ? 'Reincorporar Alumno'
+        : 'Confirmar Baja Temporal';
     final String btnText = esBaja ? 'REINCORPORAR' : 'DAR DE BAJA';
-    final Color btnColor = esBaja ? Colors.teal.shade700 : Colors.orange.shade800;
+    final Color btnColor = esBaja
+        ? Colors.teal.shade700
+        : Colors.orange.shade800;
 
     final confirmar = await showDialog<bool>(
       context: context,
@@ -2311,10 +2568,7 @@ class _DetalleEventoMasivoScreenState
         backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: btnColor,
-            width: 2,
-          ),
+          side: BorderSide(color: btnColor, width: 2),
         ),
         title: Row(
           children: [
@@ -2334,10 +2588,7 @@ class _DetalleEventoMasivoScreenState
             ),
           ],
         ),
-        content: Text(
-          msg,
-          style: const TextStyle(color: Colors.white70),
-        ),
+        content: Text(msg, style: const TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -2416,10 +2667,7 @@ class _DetalleEventoMasivoScreenState
         backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(
-            color: Colors.redAccent,
-            width: 2,
-          ),
+          side: const BorderSide(color: Colors.redAccent, width: 2),
         ),
         title: const Row(
           children: [
@@ -2476,7 +2724,9 @@ class _DetalleEventoMasivoScreenState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Alumno eliminado definitivamente de la base de datos'),
+              content: Text(
+                'Alumno eliminado definitivamente de la base de datos',
+              ),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -2572,6 +2822,7 @@ class _DetalleEventoMasivoScreenState
   }
 
   Future<void> _sortearMesas() async {
+    final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
       final repo = ref.read(contratosRepositoryProvider);
@@ -2598,8 +2849,7 @@ class _DetalleEventoMasivoScreenState
       }
 
       final demanda = MesasExtraUtils.calcularDemandaSorteo(_alumnos);
-      final titulo =
-          widget.evento.cliente?.nombreCompleto ?? 'Evento masivo';
+      final titulo = widget.evento.cliente?.nombreCompleto ?? 'Evento masivo';
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -2641,10 +2891,17 @@ class _DetalleEventoMasivoScreenState
       }
 
       for (final entry in asignaciones.entries) {
-        final asignacion =
-            MesasExtraUtils.formatearAsignacionMesas(entry.value);
+        final asignacion = MesasExtraUtils.formatearAsignacionMesas(
+          entry.value,
+        );
         await repo.actualizarContrato(entry.key, {'numero_mesa': asignacion});
       }
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
 
       if (mounted) {
         final sepTxt = config.separaciones.isEmpty
@@ -2701,6 +2958,7 @@ class _DetalleEventoMasivoScreenState
 
     if (confirmar != true) return;
 
+    final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
       final repo = ref.read(contratosRepositoryProvider);
@@ -2729,6 +2987,12 @@ class _DetalleEventoMasivoScreenState
         await repo.actualizarContrato(alumno.id, {'numero_mesa': null});
         actualizados++;
       }
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2768,8 +3032,9 @@ class _DetalleEventoMasivoScreenState
     final repo = ref.read(contratosRepositoryProvider);
     final tituloEvento =
         widget.evento.cliente?.nombreCompleto.trim().isNotEmpty == true
-            ? widget.evento.cliente!.nombreCompleto.trim()
-            : 'Evento masivo';
+        ? widget.evento.cliente!.nombreCompleto.trim()
+        : 'Evento masivo';
+    final autoSyncCheckpoint = DateTime.now().toUtc();
     final guardado = await showDialog<bool>(
       context: context,
       builder: (ctx) => ContratosFirmadosBulkDialog(
@@ -2779,6 +3044,12 @@ class _DetalleEventoMasivoScreenState
       ),
     );
     if (mounted && guardado == true) {
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
       await _fetchDatos(cargaSilenciosa: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2809,7 +3080,10 @@ class _DetalleEventoMasivoScreenState
                     'Se guardará de inmediato.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: firmado
@@ -2827,8 +3101,17 @@ class _DetalleEventoMasivoScreenState
     if (ok != true || !mounted) return;
 
     final map = {for (final id in ids) id: firmado};
+    final autoSyncCheckpoint = DateTime.now().toUtc();
     try {
-      await ref.read(contratosRepositoryProvider).actualizarContratoFirmadoBulk(map);
+      await ref
+          .read(contratosRepositoryProvider)
+          .actualizarContratoFirmadoBulk(map);
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
       if (!mounted) return;
       setState(() {
         for (final id in ids) {
@@ -2843,7 +3126,9 @@ class _DetalleEventoMasivoScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              firmado ? 'Contratos marcados como firmados.' : 'Se quitó la marca de contrato firmado.',
+              firmado
+                  ? 'Contratos marcados como firmados.'
+                  : 'Se quitó la marca de contrato firmado.',
             ),
           ),
         );
@@ -2899,8 +3184,15 @@ class _DetalleEventoMasivoScreenState
     if (confirmar != true || !mounted) return;
 
     final repo = ref.read(contratosRepositoryProvider);
+    final autoSyncCheckpoint = DateTime.now().toUtc();
     try {
       await repo.actualizarContrato(alumno.id, {'contrato_firmado': nuevo});
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
       if (!mounted) return;
       final idx = _alumnos.indexWhere((x) => x.id == alumno.id);
       if (idx != -1) {
@@ -2940,13 +3232,26 @@ class _DetalleEventoMasivoScreenState
   }
 
   Future<void> _mostrarModalPagoAlumno(ContratoAlumno alumno) async {
+    final appRole = ref.read(appRoleProvider);
+    if (appRole.esCaja && !appRole.tieneSesionCaja) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Abrí caja antes de cobrar.'),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      }
+      return;
+    }
     final cRepo = ref.read(contratosRepositoryProvider);
     var alumnoFresco = await cRepo.getContratoById(alumno.id) ?? alumno;
     // Reconciliar mesas antes de abrir el modal para que el JSON por mesa
     // esté al día (corrige contratos con pagos legacy sin número de mesa).
     if (alumnoFresco.mesaExtraPrecio > 0.01) {
       await cRepo.reconciliarMesasEstadoContrato(alumnoFresco.id);
-      alumnoFresco = await cRepo.getContratoById(alumnoFresco.id) ?? alumnoFresco;
+      alumnoFresco =
+          await cRepo.getContratoById(alumnoFresco.id) ?? alumnoFresco;
     }
     alumno = alumnoFresco;
     if (alumno.saldoDeudor <= 0) {
@@ -2964,7 +3269,9 @@ class _DetalleEventoMasivoScreenState
     final prefsMedio = await SharedPreferences.getInstance();
     final moraYaCobradaHist = await cRepo.sumMoraCobradaHistorial(alumno.id);
     final pagosAlumno = await cRepo.getHistorialPagosAlumno(alumno.id);
-    final historicoGrossPorClave = grossHistoricoPorConceptoKeyExtended(pagosAlumno);
+    final historicoGrossPorClave = grossHistoricoPorConceptoKeyExtended(
+      pagosAlumno,
+    );
     final moraResumen = MoraCuotaCalculator.calcular(alumno);
 
     String modoMedioPago =
@@ -2984,10 +3291,13 @@ class _DetalleEventoMasivoScreenState
 
     final List<MesaExtraItem> mesasEstadoList =
         MesasExtraUtils.estadoDesdeContrato(alumno);
-    final List<MesaExtraItem> mesasActivasCobro =
-        MesasExtraUtils.mesasActivas(mesasEstadoList);
-    final int cantMesas =
-        MesasExtraUtils.cantidadMesasContrato(alumno, mesasEstadoList);
+    final List<MesaExtraItem> mesasActivasCobro = MesasExtraUtils.mesasActivas(
+      mesasEstadoList,
+    );
+    final int cantMesas = MesasExtraUtils.cantidadMesasContrato(
+      alumno,
+      mesasEstadoList,
+    );
     final double precioUnitMesa = alumno.precioUnitarioMesaExtra;
     String mesaCobroKey(int n) => MesasExtraUtils.claveCobro(n);
 
@@ -3011,10 +3321,12 @@ class _DetalleEventoMasivoScreenState
         : totalBase;
 
     final double deudaBaseTotal =
-        (totalBase - (alumno.montoTotalPactado - alumno.saldoDeudor - (alumno.mesaExtraPagado ?? 0) - (alumno.sillasExtraPagado ?? 0))).clamp(
-          0.0,
-          double.infinity,
-        );
+        (totalBase -
+                (alumno.montoTotalPactado -
+                    alumno.saldoDeudor -
+                    (alumno.mesaExtraPagado ?? 0) -
+                    (alumno.sillasExtraPagado ?? 0)))
+            .clamp(0.0, double.infinity);
 
     final montoPagarCtrl = TextEditingController();
     final porcentajeDescuentoCtrl = TextEditingController();
@@ -3044,16 +3356,20 @@ class _DetalleEventoMasivoScreenState
       moraDesgloseBruto,
       moraCobradaAjustada,
     );
-    final moraTotalDesglose =
-        moraDesglose.fold<double>(0, (s, d) => s + d.interesBruto);
-    final double remanenteMora =
-        alumno.moraPendienteTracked.clamp(0.0, double.infinity);
+    final moraTotalDesglose = moraDesglose.fold<double>(
+      0,
+      (s, d) => s + d.interesBruto,
+    );
+    final double remanenteMora = alumno.moraPendienteTracked.clamp(
+      0.0,
+      double.infinity,
+    );
     Set<int> moraCuotasSeleccionadas = {};
     final double moraPendienteEfectivo =
         MoraCuotaCalculator.moraPendienteOperativa(
-      contrato: alumno,
-      moraCobradaHistorial: moraYaCobradaHist,
-    );
+          contrato: alumno,
+          moraCobradaHistorial: moraYaCobradaHist,
+        );
     final cronogramaModal = CronogramaCuotasUtils.lineasInformativas(
       alumno,
       moraPendientePesos: moraPendienteEfectivo,
@@ -3076,13 +3392,18 @@ class _DetalleEventoMasivoScreenState
     bool esLineaCargoCanal(Map<String, dynamic> c) =>
         c['lineKind'] == 'cargo_canal_ref';
 
-    Map<String, dynamic> lineaPreviewInteresMora(double monto, [List<MoraCuotaDetalle>? cuotasSel]) {
+    Map<String, dynamic> lineaPreviewInteresMora(
+      double monto, [
+      List<MoraCuotaDetalle>? cuotasSel,
+    ]) {
       final g = double.parse(
         monto.clamp(0.0, double.infinity).toStringAsFixed(2),
       );
       final detalles = cuotasSel ?? <MoraCuotaDetalle>[];
-      final sumDetalles =
-          detalles.fold<double>(0, (s, d) => s + d.interesBruto);
+      final sumDetalles = detalles.fold<double>(
+        0,
+        (s, d) => s + d.interesBruto,
+      );
       final bool incluyeRemanente =
           remanenteMora > 0.01 && g > sumDetalles + 0.01;
       String concepto;
@@ -3092,7 +3413,9 @@ class _DetalleEventoMasivoScreenState
         if (incluyeRemanente) concepto += ' + Remanente';
       } else if (detalles.length > 1) {
         final nums = detalles.map((d) => d.numeroCuota).join(', ');
-        final meses = detalles.map((d) => d.mesLabel.split(' ').first).join(', ');
+        final meses = detalles
+            .map((d) => d.mesLabel.split(' ').first)
+            .join(', ');
         concepto = 'Interés mora cuotas $nums ($meses)';
         if (incluyeRemanente) concepto += ' + Remanente';
       } else if (incluyeRemanente) {
@@ -3106,12 +3429,16 @@ class _DetalleEventoMasivoScreenState
         'gross': g,
         'cuotas': 0,
         'lineKind': kLineKindInteresMora,
-        'moraDesglose': detalles.map((d) => <String, dynamic>{
-          'numeroCuota': d.numeroCuota,
-          'mesLabel': d.mesLabel,
-          'monto': d.interesBruto,
-          'diasMora': d.diasMora,
-        }).toList(),
+        'moraDesglose': detalles
+            .map(
+              (d) => <String, dynamic>{
+                'numeroCuota': d.numeroCuota,
+                'mesLabel': d.mesLabel,
+                'monto': d.interesBruto,
+                'diasMora': d.diasMora,
+              },
+            )
+            .toList(),
       };
     }
 
@@ -3139,7 +3466,9 @@ class _DetalleEventoMasivoScreenState
         return StatefulBuilder(
           builder: (context, setModalState) {
             List<MoraCuotaDetalle> moraCuotasSeleccionadasList() {
-              return moraDesglose.where((d) => moraCuotasSeleccionadas.contains(d.numeroCuota)).toList();
+              return moraDesglose
+                  .where((d) => moraCuotasSeleccionadas.contains(d.numeroCuota))
+                  .toList();
             }
 
             double moraMontoDesdeSeleccion() {
@@ -3173,7 +3502,8 @@ class _DetalleEventoMasivoScreenState
             double montoMoraLineaIngresado() {
               double v = CurrencyInputFormatter.parse(moraMontoCobroCtrl.text);
               if (v < 0) v = 0;
-              if (moraPendienteEfectivo > 0.01 && v > moraPendienteEfectivo + 0.01) {
+              if (moraPendienteEfectivo > 0.01 &&
+                  v > moraPendienteEfectivo + 0.01) {
                 v = moraPendienteEfectivo;
               }
               return double.parse(v.toStringAsFixed(2));
@@ -3289,17 +3619,16 @@ class _DetalleEventoMasivoScreenState
               if (e > sumL + 0.01) {
                 e = sumL;
               }
-              final liquidoTr =
-                  (sumL - e).clamp(0.0, double.infinity);
+              final liquidoTr = (sumL - e).clamp(0.0, double.infinity);
               final cargo = informarPctTransferExterno
                   ? cargoSobreLiquidoTransferencia(liquidoTr)
                   : 0.0;
-              transferMixCtrl.text =
-                  double.parse((liquidoTr + cargo).toStringAsFixed(2))
-                      .toFormattedNumber();
-              montoPagarCtrl.text =
-                  double.parse((sumL + cargo).toStringAsFixed(2))
-                      .toFormattedNumber();
+              transferMixCtrl.text = double.parse(
+                (liquidoTr + cargo).toStringAsFixed(2),
+              ).toFormattedNumber();
+              montoPagarCtrl.text = double.parse(
+                (sumL + cargo).toStringAsFixed(2),
+              ).toFormattedNumber();
             }
 
             /// Inserta línea de cargo en preview y actualiza MONTO DE ENTREGA (y mixto).
@@ -3326,8 +3655,7 @@ class _DetalleEventoMasivoScreenState
                 if (e > sumL + 0.01) {
                   e = sumL;
                 }
-                liquidoTrParaCargo =
-                    (sumL - e).clamp(0.0, double.infinity);
+                liquidoTrParaCargo = (sumL - e).clamp(0.0, double.infinity);
               } else if (modoMedioPago != 'Transferencia') {
                 montoPagarCtrl.text = sumL.toFormattedNumber();
                 return;
@@ -3341,8 +3669,9 @@ class _DetalleEventoMasivoScreenState
                 previewConceptos.add(lineaPreviewCargoCanal(cargo));
               }
 
-              final totalMostrar =
-                  double.parse((sumL + cargo).toStringAsFixed(2));
+              final totalMostrar = double.parse(
+                (sumL + cargo).toStringAsFixed(2),
+              );
               montoPagarCtrl.text = totalMostrar.toFormattedNumber();
 
               if (modoMedioPago == 'Mixto') {
@@ -3358,15 +3687,14 @@ class _DetalleEventoMasivoScreenState
                 transferMixCtrl.text,
               ).clamp(0.0, double.infinity);
               final L = liquidoTransferenciaDesdeTotalMixto(T);
-              final newE =
-                  (sumL - L).clamp(0.0, double.infinity);
+              final newE = (sumL - L).clamp(0.0, double.infinity);
               efectivoMixCtrl.text = newE.toFormattedNumber();
               final cargoSync = cargoSobreLiquidoTransferencia(L);
-              final totalEsperadoCanal =
-                  double.parse((L + cargoSync).toStringAsFixed(2));
+              final totalEsperadoCanal = double.parse(
+                (L + cargoSync).toStringAsFixed(2),
+              );
               if ((totalEsperadoCanal - T).abs() > 0.03) {
-                transferMixCtrl.text =
-                    totalEsperadoCanal.toFormattedNumber();
+                transferMixCtrl.text = totalEsperadoCanal.toFormattedNumber();
               }
               finalizarPreviewConCargoCanal();
             }
@@ -3599,7 +3927,12 @@ class _DetalleEventoMasivoScreenState
                     moraPendienteEfectivo > 0.01) {
                   final mm = montoMoraLineaIngresado();
                   if (mm > 0.01) {
-                    previewConceptos.add(lineaPreviewInteresMora(mm, moraCuotasSeleccionadasList()));
+                    previewConceptos.add(
+                      lineaPreviewInteresMora(
+                        mm,
+                        moraCuotasSeleccionadasList(),
+                      ),
+                    );
                   }
                 }
               }
@@ -3669,7 +4002,9 @@ class _DetalleEventoMasivoScreenState
                   cuotaPura,
                 );
               }
-              if (mesasActivasCobro.isEmpty && pagarMesa && deudaMesaTotal > 0.01) {
+              if (mesasActivasCobro.isEmpty &&
+                  pagarMesa &&
+                  deudaMesaTotal > 0.01) {
                 procesarConcepto(
                   'Mesa',
                   MesasExtraUtils.labelCobro(1, cantMesas),
@@ -3701,7 +4036,9 @@ class _DetalleEventoMasivoScreenState
               if (puedeCobrarMora() && moraPendienteEfectivo > 0.01) {
                 final mm = montoMoraLineaIngresado();
                 if (mm > 0.01) {
-                  previewConceptos.add(lineaPreviewInteresMora(mm, moraCuotasSeleccionadasList()));
+                  previewConceptos.add(
+                    lineaPreviewInteresMora(mm, moraCuotasSeleccionadasList()),
+                  );
                   totalAcumuladoNeto += mm;
                 }
               }
@@ -3833,8 +4170,7 @@ class _DetalleEventoMasivoScreenState
                   montoEfectivoDetalle: efDet,
                   montoTransferenciaDetalle: trDet,
                   montoTransferenciaCanal: trCanal,
-                  informarCargoTransferenciaExterno:
-                      informarPctTransferExterno,
+                  informarCargoTransferenciaExterno: informarPctTransferExterno,
                   porcentajeCargoTransferenciaExterno:
                       informarPctTransferExterno &&
                           transferCargoModo == 'pct' &&
@@ -4030,7 +4366,8 @@ class _DetalleEventoMasivoScreenState
                                     color: Colors.orange.shade900,
                                   ),
                                 ),
-                                if (moraTotalDesglose > 0.01 || remanenteMora > 0.01)
+                                if (moraTotalDesglose > 0.01 ||
+                                    remanenteMora > 0.01)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
                                     child: Text(
@@ -4060,7 +4397,8 @@ class _DetalleEventoMasivoScreenState
                                   )
                                 else if (moraDesglose.isEmpty &&
                                     remanenteMora > 0.01 &&
-                                    moraResumen.fechaVencimientoProximaCuota != null &&
+                                    moraResumen.fechaVencimientoProximaCuota !=
+                                        null &&
                                     moraResumen.proximaCuotaNumero != null)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
@@ -4095,17 +4433,24 @@ class _DetalleEventoMasivoScreenState
                                     ),
                                     const SizedBox(height: 6),
                                     ...moraDesglose.map((d) {
-                                      final sel = moraCuotasSeleccionadas.contains(d.numeroCuota);
+                                      final sel = moraCuotasSeleccionadas
+                                          .contains(d.numeroCuota);
                                       return Padding(
-                                        padding: const EdgeInsets.only(bottom: 2),
+                                        padding: const EdgeInsets.only(
+                                          bottom: 2,
+                                        ),
                                         child: CheckboxListTile(
                                           dense: true,
                                           contentPadding: EdgeInsets.zero,
-                                          controlAffinity: ListTileControlAffinity.leading,
+                                          controlAffinity:
+                                              ListTileControlAffinity.leading,
                                           value: sel,
                                           onChanged: (v) {
                                             setModalState(() {
-                                              aplicarSeleccionMoraCuota(d.numeroCuota, v);
+                                              aplicarSeleccionMoraCuota(
+                                                d.numeroCuota,
+                                                v,
+                                              );
                                               recalcularDesdeChecks();
                                             });
                                           },
@@ -4117,7 +4462,8 @@ class _DetalleEventoMasivoScreenState
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.w700,
-                                                    color: Colors.orange.shade900,
+                                                    color:
+                                                        Colors.orange.shade900,
                                                   ),
                                                 ),
                                               ),
@@ -4126,7 +4472,9 @@ class _DetalleEventoMasivoScreenState
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w900,
-                                                  color: sel ? Colors.orange.shade900 : Colors.grey,
+                                                  color: sel
+                                                      ? Colors.orange.shade900
+                                                      : Colors.grey,
                                                 ),
                                               ),
                                             ],
@@ -4136,11 +4484,13 @@ class _DetalleEventoMasivoScreenState
                                     }),
                                   ],
                                   if (remanenteMora > 0.01) ...[
-                                    if (moraDesglose.isNotEmpty) const SizedBox(height: 4),
+                                    if (moraDesglose.isNotEmpty)
+                                      const SizedBox(height: 4),
                                     CheckboxListTile(
                                       dense: true,
                                       contentPadding: EdgeInsets.zero,
-                                      controlAffinity: ListTileControlAffinity.leading,
+                                      controlAffinity:
+                                          ListTileControlAffinity.leading,
                                       value: incluirMoraRemanenteFicha,
                                       onChanged: (v) {
                                         setModalState(() {
@@ -4171,8 +4521,13 @@ class _DetalleEventoMasivoScreenState
                                     const SizedBox(height: 4),
                                     TextField(
                                       controller: moraMontoCobroCtrl,
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      inputFormatters: [CurrencyInputFormatter()],
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
+                                      inputFormatters: [
+                                        CurrencyInputFormatter(),
+                                      ],
                                       decoration: InputDecoration(
                                         labelText: 'Monto mora a cobrar ahora',
                                         helperText:
@@ -4183,9 +4538,13 @@ class _DetalleEventoMasivoScreenState
                                           size: 20,
                                         ),
                                         filled: true,
-                                        fillColor: Colors.orange.withValues(alpha: 0.05),
+                                        fillColor: Colors.orange.withValues(
+                                          alpha: 0.05,
+                                        ),
                                         border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           borderSide: BorderSide.none,
                                         ),
                                       ),
@@ -4251,7 +4610,8 @@ class _DetalleEventoMasivoScreenState
                                 _buildConceptoTile(
                                   titulo: 'MESA EXTRA',
                                   deuda: deudaMesaTotal,
-                                  isDark: Theme.of(context).brightness ==
+                                  isDark:
+                                      Theme.of(context).brightness ==
                                       Brightness.dark,
                                   selected: pagarMesa,
                                   montoManual: montosManuales['Mesa'],
@@ -4263,7 +4623,8 @@ class _DetalleEventoMasivoScreenState
                                       mesaLabel: 'Mesa Extra',
                                       mesaKeyStr: 'Mesa',
                                       deuda: deudaMesaTotal,
-                                      cuotaPura: alumno.mesaExtraPrecio /
+                                      cuotaPura:
+                                          alumno.mesaExtraPrecio /
                                           (mCuotas > 0 ? mCuotas : 1),
                                       totalCuotasPlan: mCuotas,
                                       grossHistorico:
@@ -4287,7 +4648,8 @@ class _DetalleEventoMasivoScreenState
                             ? [
                                 _buildMesasExtraGrupoCompacto(
                                   context: context,
-                                  isDark: Theme.of(context).brightness ==
+                                  isDark:
+                                      Theme.of(context).brightness ==
                                       Brightness.dark,
                                   mesas: mesasActivasCobro,
                                   cantMesas: cantMesas,
@@ -4298,8 +4660,7 @@ class _DetalleEventoMasivoScreenState
                                     () => mesasGrupoExpandido =
                                         !mesasGrupoExpandido,
                                   ),
-                                  onElegirMesas: () =>
-                                      _mostrarDialogoElegirMesasExtra(
+                                  onElegirMesas: () => _mostrarDialogoElegirMesasExtra(
                                     context: context,
                                     mesas: mesasActivasCobro,
                                     cantMesas: cantMesas,
@@ -4307,77 +4668,80 @@ class _DetalleEventoMasivoScreenState
                                     setModalState: setModalState,
                                     onMesaChanged: (mesa, v) =>
                                         _onMesaExtraCobroChanged(
-                                      context: context,
-                                      v: v,
-                                      mesa: mesa,
-                                      mesaLabel: MesasExtraUtils.labelCobro(
-                                        mesa.n,
-                                        cantMesas,
-                                      ),
-                                      mesaKeyStr: mesaCobroKey(mesa.n),
-                                      deuda: mesa.deuda,
-                                      cuotaPura: mesa.cuotaPura(mCuotas),
-                                      totalCuotasPlan: mCuotas,
-                                      grossHistorico:
-                                          historicoGrossPorClave[mesaCobroKey(
+                                          context: context,
+                                          v: v,
+                                          mesa: mesa,
+                                          mesaLabel: MesasExtraUtils.labelCobro(
+                                            mesa.n,
+                                            cantMesas,
+                                          ),
+                                          mesaKeyStr: mesaCobroKey(mesa.n),
+                                          deuda: mesa.deuda,
+                                          cuotaPura: mesa.cuotaPura(mCuotas),
+                                          totalCuotasPlan: mCuotas,
+                                          grossHistorico:
+                                              historicoGrossPorClave[mesaCobroKey(
                                                 mesa.n,
                                               )] ??
                                               historicoGrossPorClave['Mesa'] ??
                                               0.0,
-                                      setModalState: setModalState,
-                                      montosManuales: montosManuales,
-                                      modosPagoPorClave: modosPagoPorClave,
-                                      onPagarMesaChanged: (val) =>
-                                          pagarMesa = val,
-                                      recalcular: recalcularDesdeChecks,
-                                      preguntarMontoParcial:
-                                          preguntarMontoParcial,
-                                      mostrarOpcionesPago:
-                                          _mostrarOpcionesPago,
-                                    ),
+                                          setModalState: setModalState,
+                                          montosManuales: montosManuales,
+                                          modosPagoPorClave: modosPagoPorClave,
+                                          onPagarMesaChanged: (val) =>
+                                              pagarMesa = val,
+                                          recalcular: recalcularDesdeChecks,
+                                          preguntarMontoParcial:
+                                              preguntarMontoParcial,
+                                          mostrarOpcionesPago:
+                                              _mostrarOpcionesPago,
+                                        ),
                                   ),
                                   onMesaChanged: (mesa, v) =>
                                       _onMesaExtraCobroChanged(
-                                    context: context,
-                                    v: v,
-                                    mesa: mesa,
-                                    mesaLabel: MesasExtraUtils.labelCobro(
-                                      mesa.n,
-                                      cantMesas,
-                                    ),
-                                    mesaKeyStr: mesaCobroKey(mesa.n),
-                                    deuda: mesa.deuda,
-                                    cuotaPura: mesa.cuotaPura(mCuotas),
-                                    totalCuotasPlan: mCuotas,
-                                    grossHistorico:
-                                        historicoGrossPorClave[mesaCobroKey(
+                                        context: context,
+                                        v: v,
+                                        mesa: mesa,
+                                        mesaLabel: MesasExtraUtils.labelCobro(
+                                          mesa.n,
+                                          cantMesas,
+                                        ),
+                                        mesaKeyStr: mesaCobroKey(mesa.n),
+                                        deuda: mesa.deuda,
+                                        cuotaPura: mesa.cuotaPura(mCuotas),
+                                        totalCuotasPlan: mCuotas,
+                                        grossHistorico:
+                                            historicoGrossPorClave[mesaCobroKey(
                                               mesa.n,
                                             )] ??
                                             historicoGrossPorClave['Mesa'] ??
                                             0.0,
-                                    setModalState: setModalState,
-                                    montosManuales: montosManuales,
-                                    modosPagoPorClave: modosPagoPorClave,
-                                    onPagarMesaChanged: (val) =>
-                                        pagarMesa = val,
-                                    recalcular: recalcularDesdeChecks,
-                                    preguntarMontoParcial:
-                                        preguntarMontoParcial,
-                                    mostrarOpcionesPago: _mostrarOpcionesPago,
-                                  ),
+                                        setModalState: setModalState,
+                                        montosManuales: montosManuales,
+                                        modosPagoPorClave: modosPagoPorClave,
+                                        onPagarMesaChanged: (val) =>
+                                            pagarMesa = val,
+                                        recalcular: recalcularDesdeChecks,
+                                        preguntarMontoParcial:
+                                            preguntarMontoParcial,
+                                        mostrarOpcionesPago:
+                                            _mostrarOpcionesPago,
+                                      ),
                                 ),
                               ]
                             : mesasActivasCobro.map((mesa) {
                                 final key = mesaCobroKey(mesa.n);
-                                final label =
-                                    MesasExtraUtils.tituloCobro(mesa.n, cantMesas);
+                                final label = MesasExtraUtils.tituloCobro(
+                                  mesa.n,
+                                  cantMesas,
+                                );
                                 return _buildConceptoTile(
                                   titulo: label,
                                   deuda: mesa.deuda,
-                                  isDark: Theme.of(context).brightness ==
+                                  isDark:
+                                      Theme.of(context).brightness ==
                                       Brightness.dark,
-                                  selected:
-                                      montosManuales.containsKey(key),
+                                  selected: montosManuales.containsKey(key),
                                   montoManual: montosManuales[key],
                                   onChanged: (v) async {
                                     await _onMesaExtraCobroChanged(
@@ -4394,8 +4758,8 @@ class _DetalleEventoMasivoScreenState
                                       totalCuotasPlan: mCuotas,
                                       grossHistorico:
                                           historicoGrossPorClave[key] ??
-                                              historicoGrossPorClave['Mesa'] ??
-                                              0.0,
+                                          historicoGrossPorClave['Mesa'] ??
+                                          0.0,
                                       setModalState: setModalState,
                                       montosManuales: montosManuales,
                                       modosPagoPorClave: modosPagoPorClave,
@@ -4419,7 +4783,8 @@ class _DetalleEventoMasivoScreenState
                           montoManual: montosManuales['Sillas'],
                           onChanged: (v) async {
                             if (v == true) {
-                              final pureSilla = alumno.sillasExtraPrecioTotal /
+                              final pureSilla =
+                                  alumno.sillasExtraPrecioTotal /
                                   (sCuotas > 0 ? sCuotas : 1);
                               final choice = await _mostrarOpcionesPago(
                                 context,
@@ -4594,8 +4959,7 @@ class _DetalleEventoMasivoScreenState
                               if (liq <= 0.01) {
                                 return const SizedBox.shrink();
                               }
-                              final cargo =
-                                  cargoSobreLiquidoTransferencia(liq);
+                              final cargo = cargoSobreLiquidoTransferencia(liq);
                               if (cargo <= 0.01) {
                                 return const SizedBox.shrink();
                               }
@@ -4659,21 +5023,20 @@ class _DetalleEventoMasivoScreenState
                               previewConceptos.removeWhere(esLineaCargoCanal);
                               final sumL = previewConceptos.fold<double>(
                                 0,
-                                (s, c) =>
-                                    s + (c['monto'] as num).toDouble(),
+                                (s, c) => s + (c['monto'] as num).toDouble(),
                               );
                               if (sumL > 0.01) {
                                 final mitad = sumL / 2;
-                                efectivoMixCtrl.text =
-                                    mitad.toFormattedNumber();
+                                efectivoMixCtrl.text = mitad
+                                    .toFormattedNumber();
                               } else {
                                 final t = CurrencyInputFormatter.parse(
                                   montoPagarCtrl.text,
                                 );
                                 if (t > 0.01) {
                                   final mitad = t / 2;
-                                  efectivoMixCtrl.text =
-                                      mitad.toFormattedNumber();
+                                  efectivoMixCtrl.text = mitad
+                                      .toFormattedNumber();
                                 } else {
                                   efectivoMixCtrl.clear();
                                   transferMixCtrl.clear();
@@ -5095,8 +5458,8 @@ class _DetalleEventoMasivoScreenState
                                           );
                                       final montosMesasActuales =
                                           MesasExtraUtils.montosManualesMesasDesde(
-                                        montosManuales,
-                                      );
+                                            montosManuales,
+                                          );
                                       final result =
                                           await _mostrarDialogoDistribucionManual(
                                             context: context,
@@ -5105,21 +5468,20 @@ class _DetalleEventoMasivoScreenState
                                             deudaMesa: deudaMesaTotal,
                                             deudaSillas: deudaSillasTotal,
                                             currentBase: montosManuales['Base'],
-                                            currentMesa: montosManuales['Mesa'] ??
+                                            currentMesa:
+                                                montosManuales['Mesa'] ??
                                                 (montosMesasActuales.isEmpty
                                                     ? null
-                                                    : MesasExtraUtils
-                                                        .sumaBrutaMesasSeleccionadasCobro(
+                                                    : MesasExtraUtils.sumaBrutaMesasSeleccionadasCobro(
                                                         montosManuales,
                                                       )),
                                             currentSillas:
                                                 montosManuales['Sillas'],
                                             mesasParaReparto:
                                                 cantMesas > 1 &&
-                                                        mesasActivasCobro
-                                                            .isNotEmpty
-                                                    ? mesasActivasCobro
-                                                    : null,
+                                                    mesasActivasCobro.isNotEmpty
+                                                ? mesasActivasCobro
+                                                : null,
                                             cantMesas: cantMesas,
                                             montosMesasActuales:
                                                 montosMesasActuales,
@@ -5166,8 +5528,8 @@ class _DetalleEventoMasivoScreenState
                                 previewConceptos: previewConceptos,
                                 usarCompactoMesas:
                                     MesasExtraUtils.usarUiCompactaMesasCobro(
-                                  mesasActivasCobro.length,
-                                ),
+                                      mesasActivasCobro.length,
+                                    ),
                                 desgloseMesasExpandido: desgloseMesasExpandido,
                                 onToggleDesgloseMesas: () => setModalState(
                                   () => desgloseMesasExpandido =
@@ -5241,8 +5603,7 @@ class _DetalleEventoMasivoScreenState
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed:
-                      confirmandoCobro ? null : emitirResumenAbonarPdf,
+                  onPressed: confirmandoCobro ? null : emitirResumenAbonarPdf,
                 ),
                 ElevatedButton.icon(
                   icon: confirmandoCobro
@@ -5269,603 +5630,687 @@ class _DetalleEventoMasivoScreenState
                   onPressed: confirmandoCobro
                       ? null
                       : () async {
-                    final montoIngresado = CurrencyInputFormatter.parse(
-                      montoPagarCtrl.text,
-                    );
-                    if (montoIngresado <= 0) return;
-                    final double sumLiquidoCobro = previewConceptos
-                        .where((c) => !esLineaCargoCanal(c))
-                        .fold<double>(
-                          0,
-                          (s, c) => s + (c['monto'] as num).toDouble(),
-                        );
-                    final double interesIncluido = previewConceptos
-                        .where(esLineaInteresMora)
-                        .fold(
-                          0.0,
-                          (s, c) => s + (c['monto'] as num).toDouble(),
-                        );
-                    final double topePermitido =
-                        alumno.saldoDeudor + interesIncluido;
-                    if (sumLiquidoCobro > topePermitido + 0.01) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'ERROR: El monto excede lo permitido (${topePermitido.toCurrency()} = saldo ${alumno.saldoDeudor.toCurrency()}'
-                            '${interesIncluido > 0.01 ? ' + interés ${interesIncluido.toCurrency()}' : ''}).',
-                          ),
-                          backgroundColor: Colors.redAccent,
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (previewConceptos.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Seleccioná al menos un concepto de pago.',
-                          ),
-                          backgroundColor: Colors.orangeAccent,
-                        ),
-                      );
-                      return;
-                    }
-
-                    double parteEfectivo = montoIngresado;
-                    double parteTransferencia = 0;
-                    double transferCanalMixtoPdf = 0;
-                    if (modoMedioPago == 'Mixto') {
-                      parteEfectivo = CurrencyInputFormatter.parse(
-                        efectivoMixCtrl.text,
-                      );
-                      transferCanalMixtoPdf = CurrencyInputFormatter.parse(
-                        transferMixCtrl.text,
-                      ).clamp(0.0, double.infinity);
-                      parteTransferencia = liquidoTransferenciaDesdeTotalMixto(
-                        transferCanalMixtoPdf,
-                      );
-                      if ((parteEfectivo + parteTransferencia - sumLiquidoCobro)
-                              .abs() >
-                          0.03) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'La parte liquidada — efectivo (${parteEfectivo.toCurrency()}) '
-                              '+ transferencia líquida (${parteTransferencia.toCurrency()}) — debe '
-                              'coincidir con el desglose (${sumLiquidoCobro.toCurrency()}). '
-                              'Monto total (con canal): ${montoIngresado.toCurrency()}; '
-                              'transferencia canal: ${transferCanalMixtoPdf.toCurrency()}.',
-                            ),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                        return;
-                      }
-                    } else if (modoMedioPago == 'Transferencia') {
-                      parteEfectivo = 0;
-                      parteTransferencia = sumLiquidoCobro;
-                    }
-
-                    // 1. CALCULOS MATEMÁTICOS EXACTOS Y BLINDADOS
-                    int nuevasBase = 0;
-                    int nuevasMesa = 0;
-                    int nuevasSillas = 0;
-                    double totalDeducidoBruto = 0.0;
-
-                    double grossMesaPagado = 0.0;
-                    double grossSillasPagado = 0.0;
-
-                    for (var conc in previewConceptos) {
-                      if (esLineaCargoCanal(conc)) continue;
-                      if (esLineaInteresMora(conc)) continue;
-                      final String cTexto = conc['concepto'] as String;
-                      final int cCuotas =
-                          ((conc['cuotas'] as num?)?.toInt() ?? 0).clamp(0, 99);
-                      final double cGross = (conc['gross'] as num).toDouble();
-                      if (cTexto.toUpperCase().contains('BASE'))
-                        nuevasBase += cCuotas;
-                      if (cTexto.toUpperCase().contains('MESA')) {
-                        nuevasMesa += cCuotas;
-                        grossMesaPagado += cGross;
-                      }
-                      if (cTexto.toUpperCase().contains('SILLA')) {
-                        nuevasSillas += cCuotas;
-                        grossSillasPagado += cGross;
-                      }
-
-                      totalDeducidoBruto += cGross;
-                    }
-
-                    // Saldo desde historial gross (no desde saldo_deudor incremental):
-                    // evita arrastrar fantasmas cuando hubo adelantos/parciales previos.
-                    final grossHistoricoPlan =
-                        (historicoGrossPorClave['Base'] ?? 0.0) +
-                        (historicoGrossPorClave['Mesa'] ?? 0.0) +
-                        (historicoGrossPorClave['Sillas'] ?? 0.0);
-                    double saldoRestanteCalculado = alumno.montoTotalPactado -
-                        grossHistoricoPlan -
-                        totalDeducidoBruto;
-                    double saldoRestante = double.parse(
-                      saldoRestanteCalculado.toStringAsFixed(2),
-                    ).clamp(0.0, double.infinity);
-
-                    int currentBasePagadas = (cPagadas + nuevasBase).clamp(
-                      0,
-                      tCuotas,
-                    );
-                    int currentMesaPagadas = (mPagadas + nuevasMesa).clamp(
-                      0,
-                      mCuotas > 0 ? mCuotas : 1,
-                    );
-                    int currentSillasPagadas = (sPagadas + nuevasSillas).clamp(
-                      0,
-                      sCuotas > 0 ? sCuotas : 1,
-                    );
-
-                    if (saldoRestante <= 0.01) {
-                      currentBasePagadas = tCuotas;
-                      currentMesaPagadas =
-                          (alumno.mesaExtraPrecio > 0 && mCuotas > 0)
-                          ? mCuotas
-                          : 0;
-                      currentSillasPagadas =
-                          (alumno.sillasExtraPrecioTotal > 0 && sCuotas > 0)
-                          ? sCuotas
-                          : 0;
-                    }
-
-                    final conceptosFinales = conceptosFinalesDesdePreviewMasivo(
-                      previewConceptos: previewConceptos,
-                      esLineaCargoCanal: esLineaCargoCanal,
-                      esLineaInteresMora: esLineaInteresMora,
-                      cPagadas: cPagadas,
-                      tCuotas: tCuotas,
-                      mPagadas: mPagadas,
-                      mCuotas: mCuotas,
-                      sPagadas: sPagadas,
-                      sCuotas: sCuotas,
-                      cantMesas: cantMesas,
-                    );
-
-                    final mesasPatchOptimista = grossMesaPagado > 0.01 &&
-                            mesasEstadoList.isNotEmpty
-                        ? MesasExtraUtils.aplicarCobroPreviewAEstado(
-                            estado: mesasEstadoList,
-                            lineasPreview: previewConceptos,
-                            cuotasPlan: mCuotas,
-                          )
-                        : mesasEstadoList;
-
-                    final alumnoFresco = alumno.copyWith(
-                      saldoDeudor: saldoRestante,
-                      cuotasPagadas: currentBasePagadas,
-                      mesaExtraCuotasPagadas: currentMesaPagadas,
-                      sillasExtraCuotasPagadas: currentSillasPagadas,
-                      mesaExtraPagado:
-                          (alumno.mesaExtraPagado) + grossMesaPagado,
-                      sillasExtraPagado:
-                          (alumno.sillasExtraPagado) + grossSillasPagado,
-                      mesasExtraEstadoRaw:
-                          grossMesaPagado > 0.01 && mesasPatchOptimista.isNotEmpty
-                              ? mesasPatchOptimista
-                                  .map((e) => e.toJson())
-                                  .toList()
-                              : alumno.mesasExtraEstadoRaw,
-                    );
-
-                    final moraEsteCobro = previewConceptos
-                        .where(esLineaInteresMora)
-                        .fold<double>(
-                          0,
-                          (s, c) => s + (c['monto'] as num).toDouble(),
-                        );
-
-                    final cuotasLiquidadasEnCobro =
-                        (currentBasePagadas - cPagadas).clamp(0, tCuotas);
-                    // Recalcular desglose al confirmar (estado pre-cobro real).
-                    final moraDesgloseBrutoConfirm =
-                        MoraCuotaCalculator.calcularDesglose(alumno);
-                    final moraDesgloseNetoPreCobro =
-                        MoraCuotaCalculator.desglosePendiente(
-                      moraDesgloseBrutoConfirm,
-                      MoraCuotaCalculator.moraCobradaParaFifo(
-                        moraCobradaHistorial: moraYaCobradaHist,
-                        moraCobradaOffset: alumno.moraCobradaOffset,
-                      ),
-                    );
-                    final moraDesgloseNetoTotal = moraDesgloseNetoPreCobro
-                        .fold<double>(0, (s, d) => s + d.interesBruto);
-
-                    final postTrackedOffset =
-                        MoraCuotaCalculator.postCobroTrackedOffset(
-                      moraPendienteTrackedActual: remanenteMora,
-                      moraCobradaOffsetActual: alumno.moraCobradaOffset,
-                      moraEsteCobro: moraEsteCobro,
-                      cuotasBaseLiquidadasEnCobro: cuotasLiquidadasEnCobro,
-                      cuotasBasePagadasPostCobro: currentBasePagadas,
-                      moraDesglosePreCobro: moraDesgloseBrutoConfirm,
-                      moraDesgloseNetoPreCobro: moraDesgloseNetoPreCobro,
-                      moraDesgloseNetoTotal: moraDesgloseNetoTotal,
-                    );
-
-                    final moraHistPostCobro = moraYaCobradaHist + moraEsteCobro;
-                    final contratoSimPost = alumnoFresco.copyWith(
-                      moraPendienteTracked: postTrackedOffset.tracked,
-                      moraCobradaOffset: postTrackedOffset.offset,
-                      moraFechaReferencia: alumno.moraFechaReferencia,
-                    );
-                    final moraRestantePost =
-                        MoraCuotaCalculator.moraPendienteOperativa(
-                      contrato: contratoSimPost,
-                      moraCobradaHistorial: moraHistPostCobro,
-                    );
-                    final limpiarMoraRef =
-                        MoraCuotaCalculator.debeDescongelarMoraReferencia(
-                      contrato: alumno,
-                      moraPendienteOperativaPost: moraRestantePost,
-                      saldoDeudorPost: saldoRestante,
-                    );
-
-                    // Exención: si el cobro pagó toda la mora que estaba
-                    // pendiente PRE-cobro, eximir hasta fin de mes.
-                    // Con liquidación de cuota → reinicia; solo mora/abono → permanente.
-                    final double moraPendientePreCobro =
-                        moraDesgloseNetoTotal + remanenteMora;
-                    final DateTime? nuevaExencion;
-                    final bool nuevaExencionReinicia;
-                    if (moraEsteCobro > 0.01 &&
-                        moraEsteCobro >= moraPendientePreCobro - 0.01 &&
-                        saldoRestante > 0.01) {
-                      nuevaExencion =
-                          MoraCuotaCalculator.calcularFechaExencion(
-                        DateTime.now(),
-                      );
-                      nuevaExencionReinicia = cuotasLiquidadasEnCobro > 0;
-                    } else {
-                      nuevaExencion = alumno.moraExentaHasta;
-                      nuevaExencionReinicia = alumno.moraExencionReinicia;
-                    }
-
-                    final alumnoPatchLocal = alumnoFresco.copyWith(
-                      moraPendienteTracked: postTrackedOffset.tracked,
-                      moraCobradaOffset: postTrackedOffset.offset,
-                      moraFechaReferencia:
-                          limpiarMoraRef ? null : alumno.moraFechaReferencia,
-                      moraExentaHasta: nuevaExencion,
-                      moraExencionReinicia: nuevaExencionReinicia,
-                    );
-
-                    // Capturar valores del modal antes de cerrarlo (evita usar
-                    // controllers tras dispose en el microtask de persistencia).
-                    final descStrPersist = porcentajeDescuentoCtrl.text;
-                    final prefsPctStr = pctTransferInfoCtrl.text.trim();
-                    final prefsCargoMontoStr =
-                        transferCargoMontoCtrl.text.trim();
-                    final previewSnapshot = previewConceptos
-                        .map((c) => Map<String, dynamic>.from(c))
-                        .toList();
-                    final mesasEstadoPatchCaptura =
-                        grossMesaPagado > 0.01 && mesasPatchOptimista.isNotEmpty
-                            ? List<MesaExtraItem>.from(mesasPatchOptimista)
-                            : <MesaExtraItem>[];
-                    final trackedNuevoPersist = postTrackedOffset.tracked;
-                    final offsetNuevoPersist = postTrackedOffset.offset;
-                    final limpiarMoraRefPersist = limpiarMoraRef;
-                    final exencionPersist = nuevaExencion;
-                    final exencionReiniciaPersist = nuevaExencionReinicia;
-                    final double pctCargoInforme =
-                        double.tryParse(
-                          prefsPctStr.replaceAll(',', '.'),
-                        ) ??
-                        0;
-                    final double montoCargoInformeParsed =
-                        CurrencyInputFormatter.parse(prefsCargoMontoStr);
-
-                    setModalState(() => confirmandoCobro = true);
-
-                    try {
-                      final repo = ref.read(contratosRepositoryProvider);
-                      final descStr = descStrPersist;
-                      final tIng = parteEfectivo + parteTransferencia;
-                      final sumNetas = previewSnapshot
-                          .where((c) => !esLineaCargoCanal(c))
-                          .fold<double>(
-                            0,
-                            (s, c) => s + (c['monto'] as num).toDouble(),
+                          final montoIngresado = CurrencyInputFormatter.parse(
+                            montoPagarCtrl.text,
                           );
-                      final loteHistAcum = Map<String, double>.from(
-                        historicoGrossPorClave,
-                      );
-
-                      Future<void> registrarLineaUna(
-                        Map<String, dynamic> conc,
-                      ) async {
-                        final cTexto = conc['concepto'] as String;
-                        final conceptoPersistido =
-                            MesasExtraUtils.conceptoPagoPersistido(
-                          previewLinea: conc,
-                          conceptoOriginal: cTexto,
-                          cantidadMesas: cantMesas,
-                        );
-                        final monto = (conc['monto'] as num).toDouble();
-                        final gross =
-                            (conc['gross'] as num?)?.toDouble() ?? monto;
-                        final cCuotas =
-                            ((conc['cuotas'] as num?)?.toInt() ?? 0).clamp(
-                              0,
-                              99,
+                          if (montoIngresado <= 0) return;
+                          final double sumLiquidoCobro = previewConceptos
+                              .where((c) => !esLineaCargoCanal(c))
+                              .fold<double>(
+                                0,
+                                (s, c) => s + (c['monto'] as num).toDouble(),
+                              );
+                          final double interesIncluido = previewConceptos
+                              .where(esLineaInteresMora)
+                              .fold(
+                                0.0,
+                                (s, c) => s + (c['monto'] as num).toDouble(),
+                              );
+                          final double topePermitido =
+                              alumno.saldoDeudor + interesIncluido;
+                          if (sumLiquidoCobro > topePermitido + 0.01) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'ERROR: El monto excede lo permitido (${topePermitido.toCurrency()} = saldo ${alumno.saldoDeudor.toCurrency()}'
+                                  '${interesIncluido > 0.01 ? ' + interés ${interesIncluido.toCurrency()}' : ''}).',
+                                ),
+                                backgroundColor: Colors.redAccent,
+                              ),
                             );
-                        final lineKind = conc['lineKind'] as String?;
-
-                        if (lineKind == 'cargo_canal_ref') {
-                          if (monto > 0.004) {
-                            await repo.registrarPago(
-                              contratoId: alumno.id,
-                              monto: monto,
-                              concepto: cTexto,
-                              montoADescontarDeSaldo: 0,
-                              descuentoPorcentaje: 0,
-                              cuotasLiquidadas: 0,
-                              medioPago: 'Transferencia',
-                              lineKind: lineKind,
-                            );
+                            return;
                           }
-                          return;
-                        }
 
-                        // Mixto se registra agregado más abajo (no por línea).
-                        if (modoMedioPago == 'Mixto') return;
+                          if (previewConceptos.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Seleccioná al menos un concepto de pago.',
+                                ),
+                                backgroundColor: Colors.orangeAccent,
+                              ),
+                            );
+                            return;
+                          }
 
-                        if (tIng < 0.01 || sumNetas < 0.01) return;
+                          double parteEfectivo = montoIngresado;
+                          double parteTransferencia = 0;
+                          double transferCanalMixtoPdf = 0;
+                          if (modoMedioPago == 'Mixto') {
+                            parteEfectivo = CurrencyInputFormatter.parse(
+                              efectivoMixCtrl.text,
+                            );
+                            transferCanalMixtoPdf =
+                                CurrencyInputFormatter.parse(
+                                  transferMixCtrl.text,
+                                ).clamp(0.0, double.infinity);
+                            parteTransferencia =
+                                liquidoTransferenciaDesdeTotalMixto(
+                                  transferCanalMixtoPdf,
+                                );
+                            if ((parteEfectivo +
+                                        parteTransferencia -
+                                        sumLiquidoCobro)
+                                    .abs() >
+                                0.03) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'La parte liquidada — efectivo (${parteEfectivo.toCurrency()}) '
+                                    '+ transferencia líquida (${parteTransferencia.toCurrency()}) — debe '
+                                    'coincidir con el desglose (${sumLiquidoCobro.toCurrency()}). '
+                                    'Monto total (con canal): ${montoIngresado.toCurrency()}; '
+                                    'transferencia canal: ${transferCanalMixtoPdf.toCurrency()}.',
+                                  ),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                              return;
+                            }
+                          } else if (modoMedioPago == 'Transferencia') {
+                            parteEfectivo = 0;
+                            parteTransferencia = sumLiquidoCobro;
+                          }
 
-                        final mE = modoMedioPago == 'Efectivo' ? monto : 0.0;
-                        final mT =
-                            modoMedioPago == 'Transferencia' ? monto : 0.0;
-                        final gE = modoMedioPago == 'Efectivo' ? gross : 0.0;
-                        final gT =
-                            modoMedioPago == 'Transferencia' ? gross : 0.0;
+                          // 1. CALCULOS MATEMÁTICOS EXACTOS Y BLINDADOS
+                          int nuevasBase = 0;
+                          int nuevasMesa = 0;
+                          int nuevasSillas = 0;
+                          double totalDeducidoBruto = 0.0;
 
-                        Future<void> uno(
-                          double m,
-                          double mg,
-                          String med,
-                          int cq, {
-                          String? conceptoRegistro,
-                          String? lineKindOverride,
-                        }) async {
-                          if (m <= 0.004) return;
-                          await repo.registrarPago(
-                            contratoId: alumno.id,
-                            monto: m,
-                            concepto: conceptoRegistro ?? conceptoPersistido,
-                            montoADescontarDeSaldo: mg,
-                            descuentoPorcentaje:
-                                double.tryParse(descStr) ?? 0,
-                            cuotasLiquidadas: cq,
-                            medioPago: med,
-                            lineKind: lineKindOverride ?? lineKind,
-                            moraPendienteAntesDeLote:
-                                (lineKindOverride ?? lineKind) ==
-                                        kLineKindInteresMora
-                                    ? moraPendienteEfectivo
-                                    : null,
+                          double grossMesaPagado = 0.0;
+                          double grossSillasPagado = 0.0;
+
+                          for (var conc in previewConceptos) {
+                            if (esLineaCargoCanal(conc)) continue;
+                            if (esLineaInteresMora(conc)) continue;
+                            final String cTexto = conc['concepto'] as String;
+                            final int cCuotas =
+                                ((conc['cuotas'] as num?)?.toInt() ?? 0).clamp(
+                                  0,
+                                  99,
+                                );
+                            final double cGross = (conc['gross'] as num)
+                                .toDouble();
+                            if (cTexto.toUpperCase().contains('BASE'))
+                              nuevasBase += cCuotas;
+                            if (cTexto.toUpperCase().contains('MESA')) {
+                              nuevasMesa += cCuotas;
+                              grossMesaPagado += cGross;
+                            }
+                            if (cTexto.toUpperCase().contains('SILLA')) {
+                              nuevasSillas += cCuotas;
+                              grossSillasPagado += cGross;
+                            }
+
+                            totalDeducidoBruto += cGross;
+                          }
+
+                          // Saldo desde historial gross (no desde saldo_deudor incremental):
+                          // evita arrastrar fantasmas cuando hubo adelantos/parciales previos.
+                          final grossHistoricoPlan =
+                              (historicoGrossPorClave['Base'] ?? 0.0) +
+                              (historicoGrossPorClave['Mesa'] ?? 0.0) +
+                              (historicoGrossPorClave['Sillas'] ?? 0.0);
+                          double saldoRestanteCalculado =
+                              alumno.montoTotalPactado -
+                              grossHistoricoPlan -
+                              totalDeducidoBruto;
+                          double saldoRestante = double.parse(
+                            saldoRestanteCalculado.toStringAsFixed(2),
+                          ).clamp(0.0, double.infinity);
+
+                          int currentBasePagadas = (cPagadas + nuevasBase)
+                              .clamp(0, tCuotas);
+                          int currentMesaPagadas = (mPagadas + nuevasMesa)
+                              .clamp(0, mCuotas > 0 ? mCuotas : 1);
+                          int currentSillasPagadas = (sPagadas + nuevasSillas)
+                              .clamp(0, sCuotas > 0 ? sCuotas : 1);
+
+                          if (saldoRestante <= 0.01) {
+                            currentBasePagadas = tCuotas;
+                            currentMesaPagadas =
+                                (alumno.mesaExtraPrecio > 0 && mCuotas > 0)
+                                ? mCuotas
+                                : 0;
+                            currentSillasPagadas =
+                                (alumno.sillasExtraPrecioTotal > 0 &&
+                                    sCuotas > 0)
+                                ? sCuotas
+                                : 0;
+                          }
+
+                          final conceptosFinales =
+                              conceptosFinalesDesdePreviewMasivo(
+                                previewConceptos: previewConceptos,
+                                esLineaCargoCanal: esLineaCargoCanal,
+                                esLineaInteresMora: esLineaInteresMora,
+                                cPagadas: cPagadas,
+                                tCuotas: tCuotas,
+                                mPagadas: mPagadas,
+                                mCuotas: mCuotas,
+                                sPagadas: sPagadas,
+                                sCuotas: sCuotas,
+                                cantMesas: cantMesas,
+                              );
+
+                          final mesasPatchOptimista =
+                              grossMesaPagado > 0.01 &&
+                                  mesasEstadoList.isNotEmpty
+                              ? MesasExtraUtils.aplicarCobroPreviewAEstado(
+                                  estado: mesasEstadoList,
+                                  lineasPreview: previewConceptos,
+                                  cuotasPlan: mCuotas,
+                                )
+                              : mesasEstadoList;
+
+                          final alumnoFresco = alumno.copyWith(
+                            saldoDeudor: saldoRestante,
+                            cuotasPagadas: currentBasePagadas,
+                            mesaExtraCuotasPagadas: currentMesaPagadas,
+                            sillasExtraCuotasPagadas: currentSillasPagadas,
+                            mesaExtraPagado:
+                                (alumno.mesaExtraPagado) + grossMesaPagado,
+                            sillasExtraPagado:
+                                (alumno.sillasExtraPagado) + grossSillasPagado,
+                            mesasExtraEstadoRaw:
+                                grossMesaPagado > 0.01 &&
+                                    mesasPatchOptimista.isNotEmpty
+                                ? mesasPatchOptimista
+                                      .map((e) => e.toJson())
+                                      .toList()
+                                : alumno.mesasExtraEstadoRaw,
                           );
-                        }
 
-                        final esPlanLinea = lineKind != kLineKindCargoCanal &&
-                            lineKind != kLineKindInteresMora &&
-                            !esLineaCargoCanal(conc) &&
-                            !esLineaInteresMora(conc);
+                          final moraEsteCobro = previewConceptos
+                              .where(esLineaInteresMora)
+                              .fold<double>(
+                                0,
+                                (s, c) => s + (c['monto'] as num).toDouble(),
+                              );
 
-                        if (mE <= 0.004 && mT > 0.004) {
-                          await uno(mT, gT, 'Transferencia', cCuotas);
-                        } else if (mT <= 0.004 && mE > 0.004) {
-                          await uno(mE, gE, 'Efectivo', cCuotas);
-                        }
+                          final cuotasLiquidadasEnCobro =
+                              (currentBasePagadas - cPagadas).clamp(0, tCuotas);
+                          // Recalcular desglose al confirmar (estado pre-cobro real).
+                          final moraDesgloseBrutoConfirm =
+                              MoraCuotaCalculator.calcularDesglose(alumno);
+                          final moraDesgloseNetoPreCobro =
+                              MoraCuotaCalculator.desglosePendiente(
+                                moraDesgloseBrutoConfirm,
+                                MoraCuotaCalculator.moraCobradaParaFifo(
+                                  moraCobradaHistorial: moraYaCobradaHist,
+                                  moraCobradaOffset: alumno.moraCobradaOffset,
+                                ),
+                              );
+                          final moraDesgloseNetoTotal = moraDesgloseNetoPreCobro
+                              .fold<double>(0, (s, d) => s + d.interesBruto);
 
-                        if (esPlanLinea) {
-                          ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
-                            loteHistAcum,
-                            conc,
-                            gross,
+                          final postTrackedOffset =
+                              MoraCuotaCalculator.postCobroTrackedOffset(
+                                moraPendienteTrackedActual: remanenteMora,
+                                moraCobradaOffsetActual:
+                                    alumno.moraCobradaOffset,
+                                moraEsteCobro: moraEsteCobro,
+                                cuotasBaseLiquidadasEnCobro:
+                                    cuotasLiquidadasEnCobro,
+                                cuotasBasePagadasPostCobro: currentBasePagadas,
+                                moraDesglosePreCobro: moraDesgloseBrutoConfirm,
+                                moraDesgloseNetoPreCobro:
+                                    moraDesgloseNetoPreCobro,
+                                moraDesgloseNetoTotal: moraDesgloseNetoTotal,
+                              );
+
+                          final moraHistPostCobro =
+                              moraYaCobradaHist + moraEsteCobro;
+                          final contratoSimPost = alumnoFresco.copyWith(
+                            moraPendienteTracked: postTrackedOffset.tracked,
+                            moraCobradaOffset: postTrackedOffset.offset,
+                            moraFechaReferencia: alumno.moraFechaReferencia,
                           );
-                        }
-                      }
+                          final moraRestantePost =
+                              MoraCuotaCalculator.moraPendienteOperativa(
+                                contrato: contratoSimPost,
+                                moraCobradaHistorial: moraHistPostCobro,
+                              );
+                          final limpiarMoraRef =
+                              MoraCuotaCalculator.debeDescongelarMoraReferencia(
+                                contrato: alumno,
+                                moraPendienteOperativaPost: moraRestantePost,
+                                saldoDeudorPost: saldoRestante,
+                              );
 
-                      if (modoMedioPago == 'Mixto') {
-                        // Cargo canal primero (siempre transferencia).
-                        for (final conc in previewSnapshot) {
-                          if (!esLineaCargoCanal(conc)) continue;
-                          final monto = (conc['monto'] as num).toDouble();
-                          if (monto <= 0.004) continue;
-                          await repo.registrarPago(
-                            contratoId: alumno.id,
-                            monto: monto,
-                            concepto: conc['concepto'] as String,
-                            montoADescontarDeSaldo: 0,
-                            descuentoPorcentaje: 0,
-                            cuotasLiquidadas: 0,
-                            medioPago: 'Transferencia',
-                            lineKind: kLineKindCargoCanal,
+                          // Exención: si el cobro pagó toda la mora que estaba
+                          // pendiente PRE-cobro, eximir hasta fin de mes.
+                          // Con liquidación de cuota → reinicia; solo mora/abono → permanente.
+                          final double moraPendientePreCobro =
+                              moraDesgloseNetoTotal + remanenteMora;
+                          final DateTime? nuevaExencion;
+                          final bool nuevaExencionReinicia;
+                          if (moraEsteCobro > 0.01 &&
+                              moraEsteCobro >= moraPendientePreCobro - 0.01 &&
+                              saldoRestante > 0.01) {
+                            nuevaExencion =
+                                MoraCuotaCalculator.calcularFechaExencion(
+                                  DateTime.now(),
+                                );
+                            nuevaExencionReinicia = cuotasLiquidadasEnCobro > 0;
+                          } else {
+                            nuevaExencion = alumno.moraExentaHasta;
+                            nuevaExencionReinicia = alumno.moraExencionReinicia;
+                          }
+
+                          final alumnoPatchLocal = alumnoFresco.copyWith(
+                            moraPendienteTracked: postTrackedOffset.tracked,
+                            moraCobradaOffset: postTrackedOffset.offset,
+                            moraFechaReferencia: limpiarMoraRef
+                                ? null
+                                : alumno.moraFechaReferencia,
+                            moraExentaHasta: nuevaExencion,
+                            moraExencionReinicia: nuevaExencionReinicia,
                           );
-                        }
 
-                        final partes =
-                            ConceptoPagoDisplay.armarRegistroMixtoAgregado(
-                          contrato: alumno,
-                          previewLineas: previewSnapshot,
-                          parteEfectivo: parteEfectivo,
-                          parteTransferencia: parteTransferencia,
-                          historicoGrossPorClave: loteHistAcum,
-                          esLineaCargoCanal: esLineaCargoCanal,
-                          esLineaInteresMora: esLineaInteresMora,
-                        );
-                        for (final part in partes) {
-                          if (part.net <= 0.004) continue;
-                          await repo.registrarPago(
-                            contratoId: alumno.id,
-                            monto: part.net,
-                            concepto: part.concepto,
-                            montoADescontarDeSaldo: part.gross,
-                            descuentoPorcentaje:
-                                double.tryParse(descStr) ?? 0,
-                            cuotasLiquidadas: part.cuotasLiquidadas,
-                            medioPago: part.medio,
-                            lineKind: part.lineKind,
-                            moraPendienteAntesDeLote:
-                                part.lineKind == kLineKindInteresMora
-                                    ? moraPendienteEfectivo
-                                    : null,
-                          );
-                        }
-                      } else {
-                        for (final conc in previewSnapshot) {
-                          await registrarLineaUna(conc);
-                        }
-                      }
+                          // Capturar valores del modal antes de cerrarlo (evita usar
+                          // controllers tras dispose en el microtask de persistencia).
+                          final descStrPersist = porcentajeDescuentoCtrl.text;
+                          final prefsPctStr = pctTransferInfoCtrl.text.trim();
+                          final prefsCargoMontoStr = transferCargoMontoCtrl.text
+                              .trim();
+                          final previewSnapshot = previewConceptos
+                              .map((c) => Map<String, dynamic>.from(c))
+                              .toList();
+                          final mesasEstadoPatchCaptura =
+                              grossMesaPagado > 0.01 &&
+                                  mesasPatchOptimista.isNotEmpty
+                              ? List<MesaExtraItem>.from(mesasPatchOptimista)
+                              : <MesaExtraItem>[];
+                          final trackedNuevoPersist = postTrackedOffset.tracked;
+                          final offsetNuevoPersist = postTrackedOffset.offset;
+                          final limpiarMoraRefPersist = limpiarMoraRef;
+                          final exencionPersist = nuevaExencion;
+                          final exencionReiniciaPersist = nuevaExencionReinicia;
+                          final sesionCajaIdCobro = ref
+                              .read(appRoleProvider)
+                              .sesionActiva
+                              ?.id;
+                          final double pctCargoInforme =
+                              double.tryParse(
+                                prefsPctStr.replaceAll(',', '.'),
+                              ) ??
+                              0;
+                          final double montoCargoInformeParsed =
+                              CurrencyInputFormatter.parse(prefsCargoMontoStr);
 
-                      await repo.reconciliarMesasEstadoContrato(alumno.id);
+                          setModalState(() => confirmandoCobro = true);
+                          final autoSyncCheckpoint = DateTime.now().toUtc();
 
-                      if (mesasEstadoPatchCaptura.isNotEmpty) {
-                        await repo.actualizarContrato(alumno.id, {
-                          'mesas_extra_estado': mesasEstadoPatchCaptura
-                              .map((e) => e.toJson())
-                              .toList(),
-                          'mesa_extra_pagado': double.parse(
-                            MesasExtraUtils.totalPagado(
-                              mesasEstadoPatchCaptura,
-                            ).toStringAsFixed(2),
-                          ),
-                          'mesa_extra_cuotas_pagadas':
-                              MesasExtraUtils.maxCuotasPagadas(
-                            mesasEstadoPatchCaptura,
-                          ),
-                        });
-                      }
+                          try {
+                            final repo = ref.read(contratosRepositoryProvider);
+                            final pulled = await ref
+                                .read(cajaAutoSyncServiceProvider)
+                                .refreshBeforePayment();
+                            if (!pulled && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Sin conexión con la nube: el cobro se guardará '
+                                    'localmente, pero no se puede descartar un cobro '
+                                    'simultáneo hasta reconectar.',
+                                  ),
+                                  backgroundColor: Colors.orange,
+                                ),
+                              );
+                            }
+                            if (pulled) {
+                              final remoto = await repo.getContratoById(
+                                alumno.id,
+                              );
+                              final base = alumnoFresco;
+                              final cambioRemoto =
+                                  remoto != null &&
+                                  ((remoto.saldoDeudor - base.saldoDeudor)
+                                              .abs() >
+                                          0.01 ||
+                                      remoto.cuotasPagadas !=
+                                          base.cuotasPagadas ||
+                                      (remoto.mesaExtraPagado -
+                                                  base.mesaExtraPagado)
+                                              .abs() >
+                                          0.01 ||
+                                      (remoto.sillasExtraPagado -
+                                                  base.sillasExtraPagado)
+                                              .abs() >
+                                          0.01);
+                              if (cambioRemoto) {
+                                throw StateError(
+                                  'Este alumno recibió cambios desde otra caja. '
+                                  'Cerrá el cobro, revisá el saldo actualizado y '
+                                  'volvé a intentarlo.',
+                                );
+                              }
+                            }
+                            final descStr = descStrPersist;
+                            final tIng = parteEfectivo + parteTransferencia;
+                            final sumNetas = previewSnapshot
+                                .where((c) => !esLineaCargoCanal(c))
+                                .fold<double>(
+                                  0,
+                                  (s, c) => s + (c['monto'] as num).toDouble(),
+                                );
+                            final loteHistAcum = Map<String, double>.from(
+                              historicoGrossPorClave,
+                            );
 
-                      await repo.actualizarContrato(alumno.id, {
-                        'mora_pendiente_tracked': double.parse(
-                          trackedNuevoPersist.toStringAsFixed(2),
-                        ),
-                        'mora_cobrada_offset': offsetNuevoPersist,
-                        if (limpiarMoraRefPersist)
-                          'mora_fecha_referencia': null,
-                        if (exencionPersist != null)
-                          'mora_exenta_hasta':
-                              '${exencionPersist.year.toString().padLeft(4, '0')}-'
-                              '${exencionPersist.month.toString().padLeft(2, '0')}-'
-                              '${exencionPersist.day.toString().padLeft(2, '0')}',
-                        'mora_exencion_reinicia':
-                            exencionReiniciaPersist ? 1 : 0,
-                      });
+                            Future<void> registrarLineaUna(
+                              Map<String, dynamic> conc,
+                            ) async {
+                              final cTexto = conc['concepto'] as String;
+                              final conceptoPersistido =
+                                  MesasExtraUtils.conceptoPagoPersistido(
+                                    previewLinea: conc,
+                                    conceptoOriginal: cTexto,
+                                    cantidadMesas: cantMesas,
+                                  );
+                              final monto = (conc['monto'] as num).toDouble();
+                              final gross =
+                                  (conc['gross'] as num?)?.toDouble() ?? monto;
+                              final cCuotas =
+                                  ((conc['cuotas'] as num?)?.toInt() ?? 0)
+                                      .clamp(0, 99);
+                              final lineKind = conc['lineKind'] as String?;
 
-                      await repo.recalcularProgresoContrato(alumno.id);
+                              if (lineKind == 'cargo_canal_ref') {
+                                if (monto > 0.004) {
+                                  await repo.registrarPago(
+                                    contratoId: alumno.id,
+                                    monto: monto,
+                                    concepto: cTexto,
+                                    montoADescontarDeSaldo: 0,
+                                    descuentoPorcentaje: 0,
+                                    cuotasLiquidadas: 0,
+                                    medioPago: 'Transferencia',
+                                    lineKind: lineKind,
+                                    sesionCajaId: sesionCajaIdCobro,
+                                  );
+                                }
+                                return;
+                              }
 
-                      final fresco = await repo.getContratoById(alumno.id);
+                              // Mixto se registra agregado más abajo (no por línea).
+                              if (modoMedioPago == 'Mixto') return;
 
-                      await prefsMedio.setString(
-                        'medio_pago_cobro_masivo',
-                        modoMedioPago,
-                      );
-                      await prefsMedio.setString(
-                        'cobro_masivo_pct_transfer_info',
-                        prefsPctStr,
-                      );
-                      await prefsMedio.setString(
-                        'cobro_masivo_transfer_cargo_modo',
-                        transferCargoModo,
-                      );
-                      await prefsMedio.setString(
-                        'cobro_masivo_transfer_cargo_monto',
-                        prefsCargoMontoStr,
-                      );
-                      await prefsMedio.setBool(
-                        'cobro_masivo_informar_pct_transfer',
-                        informarPctTransferExterno,
-                      );
+                              if (tIng < 0.01 || sumNetas < 0.01) return;
 
-                      final double pctDescuentoConfirm =
-                          double.tryParse(
-                            descStrPersist.replaceAll(',', '.').trim(),
-                          ) ??
-                          0;
+                              final mE = modoMedioPago == 'Efectivo'
+                                  ? monto
+                                  : 0.0;
+                              final mT = modoMedioPago == 'Transferencia'
+                                  ? monto
+                                  : 0.0;
+                              final gE = modoMedioPago == 'Efectivo'
+                                  ? gross
+                                  : 0.0;
+                              final gT = modoMedioPago == 'Transferencia'
+                                  ? gross
+                                  : 0.0;
 
-                      if (context.mounted) {
-                        Navigator.pop(context, true);
-                      }
+                              Future<void> uno(
+                                double m,
+                                double mg,
+                                String med,
+                                int cq, {
+                                String? conceptoRegistro,
+                                String? lineKindOverride,
+                              }) async {
+                                if (m <= 0.004) return;
+                                await repo.registrarPago(
+                                  contratoId: alumno.id,
+                                  monto: m,
+                                  concepto:
+                                      conceptoRegistro ?? conceptoPersistido,
+                                  montoADescontarDeSaldo: mg,
+                                  descuentoPorcentaje:
+                                      double.tryParse(descStr) ?? 0,
+                                  cuotasLiquidadas: cq,
+                                  medioPago: med,
+                                  lineKind: lineKindOverride ?? lineKind,
+                                  moraPendienteAntesDeLote:
+                                      (lineKindOverride ?? lineKind) ==
+                                          kLineKindInteresMora
+                                      ? moraPendienteEfectivo
+                                      : null,
+                                  sesionCajaId: sesionCajaIdCobro,
+                                );
+                              }
 
-                      if (!mounted) return;
+                              final esPlanLinea =
+                                  lineKind != kLineKindCargoCanal &&
+                                  lineKind != kLineKindInteresMora &&
+                                  !esLineaCargoCanal(conc) &&
+                                  !esLineaInteresMora(conc);
 
-                      final paraUi = fresco ?? alumnoPatchLocal;
-                      _patchAlumnoLocal(
-                        alumno.id,
-                        paraUi,
-                        moraCobradaExtra: moraEsteCobro,
-                      );
+                              if (mE <= 0.004 && mT > 0.004) {
+                                await uno(mT, gT, 'Transferencia', cCuotas);
+                              } else if (mT <= 0.004 && mE > 0.004) {
+                                await uno(mE, gE, 'Efectivo', cCuotas);
+                              }
 
-                      // PDF solo tras lote OK; mismos conceptos que se persistieron.
-                      _imprimirReciboAlumno(
-                        fresco ?? alumnoFresco,
-                        montoPagado: montoIngresado,
-                        saldoPendiente:
-                            fresco?.saldoDeudor ?? saldoRestante,
-                        conceptosPagados: conceptosFinales,
-                        fechaManual: DateTime.now(),
-                        porcentajeDescuentoLiquidacion: pctDescuentoConfirm,
-                        medioPago: modoMedioPago == 'Mixto'
-                            ? 'Mixto'
-                            : modoMedioPago,
-                        montoEfectivoDetalle: modoMedioPago == 'Mixto'
-                            ? parteEfectivo
-                            : null,
-                        montoTransferenciaDetalle: modoMedioPago == 'Mixto'
-                            ? transferCanalMixtoPdf
-                            : null,
-                        informarCargoTransferenciaExterno:
-                            informarPctTransferExterno,
-                        porcentajeCargoTransferenciaExterno:
-                            informarPctTransferExterno &&
-                                transferCargoModo == 'pct' &&
-                                pctCargoInforme > 0.01
-                            ? pctCargoInforme
-                            : null,
-                        montoCargoTransferenciaInformado:
-                            informarPctTransferExterno &&
-                                transferCargoModo == 'pesos' &&
-                                montoCargoInformeParsed > 0.01
-                            ? montoCargoInformeParsed
-                            : null,
-                        skipDbRefresh: true,
-                      );
+                              if (esPlanLinea) {
+                                ConceptoPagoDisplay.acumularGrossLoteEnHistorial(
+                                  loteHistAcum,
+                                  conc,
+                                  gross,
+                                );
+                              }
+                            }
 
-                      ref
-                          .read(contratosMutationTickProvider.notifier)
-                          .bump();
-                    } catch (e) {
-                      debugPrint('Error al registrar cobro masivo: $e');
-                      if (context.mounted) {
-                        setModalState(() => confirmandoCobro = false);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'No se pudo guardar el cobro. Reintentá. ($e)',
-                            ),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                      } else if (mounted) {
-                        ScaffoldMessenger.of(this.context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'No se pudo guardar el cobro. Reintentá. ($e)',
-                            ),
-                            backgroundColor: Colors.redAccent,
-                          ),
-                        );
-                      }
-                    }
-                  },
+                            if (modoMedioPago == 'Mixto') {
+                              // Cargo canal primero (siempre transferencia).
+                              for (final conc in previewSnapshot) {
+                                if (!esLineaCargoCanal(conc)) continue;
+                                final monto = (conc['monto'] as num).toDouble();
+                                if (monto <= 0.004) continue;
+                                await repo.registrarPago(
+                                  contratoId: alumno.id,
+                                  monto: monto,
+                                  concepto: conc['concepto'] as String,
+                                  montoADescontarDeSaldo: 0,
+                                  descuentoPorcentaje: 0,
+                                  cuotasLiquidadas: 0,
+                                  medioPago: 'Transferencia',
+                                  lineKind: kLineKindCargoCanal,
+                                  sesionCajaId: sesionCajaIdCobro,
+                                );
+                              }
+
+                              final partes =
+                                  ConceptoPagoDisplay.armarRegistroMixtoAgregado(
+                                    contrato: alumno,
+                                    previewLineas: previewSnapshot,
+                                    parteEfectivo: parteEfectivo,
+                                    parteTransferencia: parteTransferencia,
+                                    historicoGrossPorClave: loteHistAcum,
+                                    esLineaCargoCanal: esLineaCargoCanal,
+                                    esLineaInteresMora: esLineaInteresMora,
+                                  );
+                              for (final part in partes) {
+                                if (part.net <= 0.004) continue;
+                                await repo.registrarPago(
+                                  contratoId: alumno.id,
+                                  monto: part.net,
+                                  concepto: part.concepto,
+                                  montoADescontarDeSaldo: part.gross,
+                                  descuentoPorcentaje:
+                                      double.tryParse(descStr) ?? 0,
+                                  cuotasLiquidadas: part.cuotasLiquidadas,
+                                  medioPago: part.medio,
+                                  lineKind: part.lineKind,
+                                  moraPendienteAntesDeLote:
+                                      part.lineKind == kLineKindInteresMora
+                                      ? moraPendienteEfectivo
+                                      : null,
+                                  sesionCajaId: sesionCajaIdCobro,
+                                );
+                              }
+                            } else {
+                              for (final conc in previewSnapshot) {
+                                await registrarLineaUna(conc);
+                              }
+                            }
+
+                            await repo.reconciliarMesasEstadoContrato(
+                              alumno.id,
+                            );
+
+                            if (mesasEstadoPatchCaptura.isNotEmpty) {
+                              await repo.actualizarContrato(alumno.id, {
+                                'mesas_extra_estado': mesasEstadoPatchCaptura
+                                    .map((e) => e.toJson())
+                                    .toList(),
+                                'mesa_extra_pagado': double.parse(
+                                  MesasExtraUtils.totalPagado(
+                                    mesasEstadoPatchCaptura,
+                                  ).toStringAsFixed(2),
+                                ),
+                                'mesa_extra_cuotas_pagadas':
+                                    MesasExtraUtils.maxCuotasPagadas(
+                                      mesasEstadoPatchCaptura,
+                                    ),
+                              });
+                            }
+
+                            await repo.actualizarContrato(alumno.id, {
+                              'mora_pendiente_tracked': double.parse(
+                                trackedNuevoPersist.toStringAsFixed(2),
+                              ),
+                              'mora_cobrada_offset': offsetNuevoPersist,
+                              if (limpiarMoraRefPersist)
+                                'mora_fecha_referencia': null,
+                              if (exencionPersist != null)
+                                'mora_exenta_hasta':
+                                    '${exencionPersist.year.toString().padLeft(4, '0')}-'
+                                    '${exencionPersist.month.toString().padLeft(2, '0')}-'
+                                    '${exencionPersist.day.toString().padLeft(2, '0')}',
+                              'mora_exencion_reinicia': exencionReiniciaPersist
+                                  ? 1
+                                  : 0,
+                            });
+
+                            await repo.recalcularProgresoContrato(alumno.id);
+                            await ref
+                                .read(cajaAutoSyncServiceProvider)
+                                .afterMassiveMutation(
+                                  startedAt: autoSyncCheckpoint,
+                                  isPayment: true,
+                                );
+
+                            final fresco = await repo.getContratoById(
+                              alumno.id,
+                            );
+
+                            await prefsMedio.setString(
+                              'medio_pago_cobro_masivo',
+                              modoMedioPago,
+                            );
+                            await prefsMedio.setString(
+                              'cobro_masivo_pct_transfer_info',
+                              prefsPctStr,
+                            );
+                            await prefsMedio.setString(
+                              'cobro_masivo_transfer_cargo_modo',
+                              transferCargoModo,
+                            );
+                            await prefsMedio.setString(
+                              'cobro_masivo_transfer_cargo_monto',
+                              prefsCargoMontoStr,
+                            );
+                            await prefsMedio.setBool(
+                              'cobro_masivo_informar_pct_transfer',
+                              informarPctTransferExterno,
+                            );
+
+                            final double pctDescuentoConfirm =
+                                double.tryParse(
+                                  descStrPersist.replaceAll(',', '.').trim(),
+                                ) ??
+                                0;
+
+                            if (context.mounted) {
+                              Navigator.pop(context, true);
+                            }
+
+                            if (!mounted) return;
+
+                            final paraUi = fresco ?? alumnoPatchLocal;
+                            _patchAlumnoLocal(
+                              alumno.id,
+                              paraUi,
+                              moraCobradaExtra: moraEsteCobro,
+                            );
+
+                            // PDF solo tras lote OK; mismos conceptos que se persistieron.
+                            _imprimirReciboAlumno(
+                              fresco ?? alumnoFresco,
+                              montoPagado: montoIngresado,
+                              saldoPendiente:
+                                  fresco?.saldoDeudor ?? saldoRestante,
+                              conceptosPagados: conceptosFinales,
+                              fechaManual: DateTime.now(),
+                              porcentajeDescuentoLiquidacion:
+                                  pctDescuentoConfirm,
+                              medioPago: modoMedioPago == 'Mixto'
+                                  ? 'Mixto'
+                                  : modoMedioPago,
+                              montoEfectivoDetalle: modoMedioPago == 'Mixto'
+                                  ? parteEfectivo
+                                  : null,
+                              montoTransferenciaDetalle:
+                                  modoMedioPago == 'Mixto'
+                                  ? transferCanalMixtoPdf
+                                  : null,
+                              informarCargoTransferenciaExterno:
+                                  informarPctTransferExterno,
+                              porcentajeCargoTransferenciaExterno:
+                                  informarPctTransferExterno &&
+                                      transferCargoModo == 'pct' &&
+                                      pctCargoInforme > 0.01
+                                  ? pctCargoInforme
+                                  : null,
+                              montoCargoTransferenciaInformado:
+                                  informarPctTransferExterno &&
+                                      transferCargoModo == 'pesos' &&
+                                      montoCargoInformeParsed > 0.01
+                                  ? montoCargoInformeParsed
+                                  : null,
+                              skipDbRefresh: true,
+                            );
+
+                            ref
+                                .read(contratosMutationTickProvider.notifier)
+                                .bump();
+                          } catch (e) {
+                            debugPrint('Error al registrar cobro masivo: $e');
+                            if (context.mounted) {
+                              setModalState(() => confirmandoCobro = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'No se pudo guardar el cobro. Reintentá. ($e)',
+                                  ),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'No se pudo guardar el cobro. Reintentá. ($e)',
+                                  ),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                            }
+                          }
+                        },
                   label: Text(
                     confirmandoCobro ? 'GUARDANDO...' : 'CONFIRMAR PAGO',
                     style: const TextStyle(fontWeight: FontWeight.w900),
@@ -5900,7 +6345,9 @@ class _DetalleEventoMasivoScreenState
       builder: (context) => FutureBuilder<List<Map<String, dynamic>>>(
         future: repo.getHistorialPagosAlumno(alumno.id),
         builder: (context, snapshot) {
-          final pagos = (snapshot.data ?? []).where((p) => ((p['anulado'] as num?)?.toInt() ?? 0) == 0).toList();
+          final pagos = (snapshot.data ?? [])
+              .where((p) => ((p['anulado'] as num?)?.toInt() ?? 0) == 0)
+              .toList();
           final bool cargando =
               snapshot.connectionState == ConnectionState.waiting;
           final listaFinal = pagos.isEmpty
@@ -6028,308 +6475,352 @@ class _DetalleEventoMasivoScreenState
                                   ),
                                 )
                               : ListView.builder(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 8,
-                                    ),
-                                    itemCount: listaFinal.length,
-                                    itemBuilder: (context, index) {
-                                      final p = listaFinal[index];
-                                      final fecha = DateTime.parse(
-                                        p['fecha_pago'],
-                                      );
-                                      final monto = double.parse(
-                                        (p['monto'] as num)
-                                            .toDouble()
-                                            .toStringAsFixed(2),
-                                      );
-                                      final concepto =
-                                          p['concepto_detallado'] as String;
-                                      final bool esLineaMora =
-                                          ConceptoPagoDisplay.esMora(p);
-                                      final bool esLineaCargo =
-                                          ConceptoPagoDisplay.esCargoCanal(p);
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  itemCount: listaFinal.length,
+                                  itemBuilder: (context, index) {
+                                    final p = listaFinal[index];
+                                    final fecha = DateTime.parse(
+                                      p['fecha_pago'],
+                                    );
+                                    final monto = double.parse(
+                                      (p['monto'] as num)
+                                          .toDouble()
+                                          .toStringAsFixed(2),
+                                    );
+                                    final concepto =
+                                        p['concepto_detallado'] as String;
+                                    final bool esLineaMora =
+                                        ConceptoPagoDisplay.esMora(p);
+                                    final bool esLineaCargo =
+                                        ConceptoPagoDisplay.esCargoCanal(p);
 
-                                      return Container(
-                                        margin: EdgeInsets.only(
-                                          bottom: s(12),
-                                        ),
-                                        padding: EdgeInsets.all(s(10)),
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? Colors.white.withValues(
-                                                  alpha: 0.03,
+                                    return Container(
+                                      margin: EdgeInsets.only(bottom: s(12)),
+                                      padding: EdgeInsets.all(s(10)),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.03,
+                                              )
+                                            : Colors.black.withValues(
+                                                alpha: 0.02,
+                                              ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: esLineaMora
+                                              ? Colors.orange.withValues(
+                                                  alpha: 0.45,
                                                 )
-                                              : Colors.black.withValues(
-                                                  alpha: 0.02,
-                                                ),
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          border: Border.all(
-                                            color: esLineaMora
-                                                ? Colors.orange.withValues(alpha: 0.45)
-                                                : esLineaCargo
-                                                    ? Colors.blue.withValues(alpha: 0.35)
-                                                    : isDark
-                                                        ? Colors.white10
-                                                        : Colors.black12,
-                                          ),
+                                              : esLineaCargo
+                                              ? Colors.blue.withValues(
+                                                  alpha: 0.35,
+                                                )
+                                              : isDark
+                                              ? Colors.white10
+                                              : Colors.black12,
                                         ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              padding: EdgeInsets.all(s(7)),
-                                              decoration: BoxDecoration(
-                                                color: (esLineaMora
-                                                        ? Colors.orange
-                                                        : Colors.green)
-                                                    .withValues(alpha: 0.1),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                esLineaMora
-                                                    ? Icons.schedule_rounded
-                                                    : Icons.check_rounded,
-                                                color: esLineaMora
-                                                    ? Colors.orange.shade800
-                                                    : Colors.green,
-                                                size: s(14),
-                                              ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: EdgeInsets.all(s(7)),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  (esLineaMora
+                                                          ? Colors.orange
+                                                          : Colors.green)
+                                                      .withValues(alpha: 0.1),
+                                              shape: BoxShape.circle,
                                             ),
-                                            SizedBox(width: s(12)),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    children: [
-                                                      Flexible(
-                                                        child: Text(
-                                                          concepto,
-                                                          style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            fontSize: s(12),
-                                                          ),
-                                                          maxLines: 2,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                      if (esLineaMora) ...[
-                                                        const SizedBox(width: 8),
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                            horizontal: 6,
-                                                            vertical: 2,
-                                                          ),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.orange
-                                                                .withValues(
-                                                              alpha: 0.15,
-                                                            ),
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                              6,
-                                                            ),
-                                                          ),
-                                                          child: Text(
-                                                            'MORA',
-                                                            style: TextStyle(
-                                                              fontSize: 9,
-                                                              color: Colors
-                                                                  .orange.shade900,
-                                                              fontWeight:
-                                                                  FontWeight.bold,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                      if (p['label_descuento'] !=
-                                                          null) ...[
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 6,
-                                                                vertical: 2,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.orange
-                                                                .withValues(
-                                                                  alpha: 0.15,
-                                                                ),
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  6,
-                                                                ),
-                                                          ),
-                                                          child: Text(
-                                                            p['label_descuento'],
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontSize: 9,
-                                                                  color: Colors
-                                                                      .orange,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                      if (p['es_liquidacion_mesa'] ==
-                                                          true) ...[
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 6,
-                                                                vertical: 2,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.green
-                                                                .withValues(
-                                                                  alpha: 0.15,
-                                                                ),
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  6,
-                                                                ),
-                                                          ),
-                                                          child: const Text(
-                                                            'Liquidada',
-                                                            style: TextStyle(
-                                                              fontSize: 9,
-                                                              color:
-                                                                  Colors.green,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ],
-                                                  ),
-                                                  Text(
-                                                    ArTime.formatFechaHora(fecha),
-                                                    style: TextStyle(
-                                                      fontSize: s(10),
-                                                      color: Colors.grey,
-                                                    ),
-                                                  ),
-                                                  if (p['subtitulo_medio'] !=
-                                                          null &&
-                                                      (p['subtitulo_medio']
-                                                              as String)
-                                                          .isNotEmpty)
-                                                    Text(
-                                                      p['subtitulo_medio']
-                                                          as String,
-                                                      style: TextStyle(
-                                                        fontSize: s(9),
-                                                        color: Colors
-                                                            .grey.shade600,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
+                                            child: Icon(
+                                              esLineaMora
+                                                  ? Icons.schedule_rounded
+                                                  : Icons.check_rounded,
+                                              color: esLineaMora
+                                                  ? Colors.orange.shade800
+                                                  : Colors.green,
+                                              size: s(14),
                                             ),
-                                            Column(
+                                          ),
+                                          SizedBox(width: s(12)),
+                                          Expanded(
+                                            child: Column(
                                               crossAxisAlignment:
-                                                  CrossAxisAlignment.end,
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Text(
-                                                  monto.toCurrency(),
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: s(12),
-                                                    color: Colors.green,
-                                                  ),
-                                                ),
-                                                InkWell(
-                                                  onTap: () {
-                                                    final fechaOrig =
-                                                        DateTime.tryParse(
-                                                          p['fecha_pago'] ?? '',
-                                                        ) ??
-                                                        DateTime.now();
-                                                    double sumPagosPlanHistorico = 0;
-                                                    for (final rec in listaFinal) {
-                                                      final isMora = rec['line_kind'] == 'interes_mora' ||
-                                                                     (rec['concepto']?.toString().toLowerCase().contains('interés') ?? false) ||
-                                                                     (rec['concepto_detallado']?.toString().toLowerCase().contains('interés') ?? false);
-                                                      final conc = rec['concepto']?.toString();
-                                                      final concDet = rec['concepto_detallado']?.toString();
-                                                      final isCargo = rec['line_kind'] == kLineKindCargoCanal ||
-                                                                      esPagoCargoCanalPorConcepto(conc) ||
-                                                                      esPagoCargoCanalPorConcepto(concDet);
-                                                      final recDate = DateTime.tryParse(rec['fecha_pago'] ?? '') ?? DateTime.now();
-                                                      if (!isMora && !isCargo && recDate.compareTo(fechaOrig) <= 0) {
-                                                        sumPagosPlanHistorico += (rec['monto'] as num).toDouble();
-                                                      }
-                                                    }
-                                                    final double historicoSaldo = (alumno.montoTotalPactado - sumPagosPlanHistorico).clamp(0.0, double.infinity);
-                                                    
-                                                    _imprimirReciboAlumno(
-                                                      alumno,
-                                                      montoPagado: monto,
-                                                      saldoPendiente: historicoSaldo,
-                                                      conceptosPagados: <Map<String, dynamic>>[
-                                                        {
-                                                          'concepto': concepto,
-                                                          'monto': monto,
-                                                        },
-                                                      ],
-                                                      fechaManual: fechaOrig,
-                                                      medioPago: p['medio_pago'] as String?,
-                                                    );
-                                                  },
-                                                  child: const Padding(
-                                                    padding: EdgeInsets.only(
-                                                      top: 4,
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Icon(
-                                                          Icons.print_rounded,
-                                                          size: 10,
-                                                          color:
-                                                              Colors.blueAccent,
+                                                Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        concepto,
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: s(12),
                                                         ),
-                                                        SizedBox(width: 4),
-                                                        Text(
-                                                          'REIMPRIMIR',
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    if (esLineaMora) ...[
+                                                      const SizedBox(width: 8),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.orange
+                                                              .withValues(
+                                                                alpha: 0.15,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                6,
+                                                              ),
+                                                        ),
+                                                        child: Text(
+                                                          'MORA',
                                                           style: TextStyle(
                                                             fontSize: 9,
                                                             color: Colors
-                                                                .blueAccent,
+                                                                .orange
+                                                                .shade900,
                                                             fontWeight:
                                                                 FontWeight.bold,
                                                           ),
                                                         ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
+                                                    if (p['label_descuento'] !=
+                                                        null) ...[
+                                                      const SizedBox(width: 8),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.orange
+                                                              .withValues(
+                                                                alpha: 0.15,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                6,
+                                                              ),
+                                                        ),
+                                                        child: Text(
+                                                          p['label_descuento'],
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize: 9,
+                                                                color: Colors
+                                                                    .orange,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                    if (p['es_liquidacion_mesa'] ==
+                                                        true) ...[
+                                                      const SizedBox(width: 8),
+                                                      Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.green
+                                                              .withValues(
+                                                                alpha: 0.15,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                6,
+                                                              ),
+                                                        ),
+                                                        child: const Text(
+                                                          'Liquidada',
+                                                          style: TextStyle(
+                                                            fontSize: 9,
+                                                            color: Colors.green,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                                Text(
+                                                  ArTime.formatFechaHora(fecha),
+                                                  style: TextStyle(
+                                                    fontSize: s(10),
+                                                    color: Colors.grey,
                                                   ),
                                                 ),
+                                                if (p['subtitulo_medio'] !=
+                                                        null &&
+                                                    (p['subtitulo_medio']
+                                                            as String)
+                                                        .isNotEmpty)
+                                                  Text(
+                                                    p['subtitulo_medio']
+                                                        as String,
+                                                    style: TextStyle(
+                                                      fontSize: s(9),
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
                                               ],
                                             ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                          ),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                monto.toCurrency(),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: s(12),
+                                                  color: Colors.green,
+                                                ),
+                                              ),
+                                              InkWell(
+                                                onTap: () {
+                                                  final fechaOrig =
+                                                      DateTime.tryParse(
+                                                        p['fecha_pago'] ?? '',
+                                                      ) ??
+                                                      DateTime.now();
+                                                  double sumPagosPlanHistorico =
+                                                      0;
+                                                  for (final rec
+                                                      in listaFinal) {
+                                                    final isMora =
+                                                        rec['line_kind'] ==
+                                                            'interes_mora' ||
+                                                        (rec['concepto']
+                                                                ?.toString()
+                                                                .toLowerCase()
+                                                                .contains(
+                                                                  'interés',
+                                                                ) ??
+                                                            false) ||
+                                                        (rec['concepto_detallado']
+                                                                ?.toString()
+                                                                .toLowerCase()
+                                                                .contains(
+                                                                  'interés',
+                                                                ) ??
+                                                            false);
+                                                    final conc = rec['concepto']
+                                                        ?.toString();
+                                                    final concDet =
+                                                        rec['concepto_detallado']
+                                                            ?.toString();
+                                                    final isCargo =
+                                                        rec['line_kind'] ==
+                                                            kLineKindCargoCanal ||
+                                                        esPagoCargoCanalPorConcepto(
+                                                          conc,
+                                                        ) ||
+                                                        esPagoCargoCanalPorConcepto(
+                                                          concDet,
+                                                        );
+                                                    final recDate =
+                                                        DateTime.tryParse(
+                                                          rec['fecha_pago'] ??
+                                                              '',
+                                                        ) ??
+                                                        DateTime.now();
+                                                    if (!isMora &&
+                                                        !isCargo &&
+                                                        recDate.compareTo(
+                                                              fechaOrig,
+                                                            ) <=
+                                                            0) {
+                                                      sumPagosPlanHistorico +=
+                                                          (rec['monto'] as num)
+                                                              .toDouble();
+                                                    }
+                                                  }
+                                                  final double historicoSaldo =
+                                                      (alumno.montoTotalPactado -
+                                                              sumPagosPlanHistorico)
+                                                          .clamp(
+                                                            0.0,
+                                                            double.infinity,
+                                                          );
+
+                                                  _imprimirReciboAlumno(
+                                                    alumno,
+                                                    montoPagado: monto,
+                                                    saldoPendiente:
+                                                        historicoSaldo,
+                                                    conceptosPagados:
+                                                        <Map<String, dynamic>>[
+                                                          {
+                                                            'concepto':
+                                                                concepto,
+                                                            'monto': monto,
+                                                          },
+                                                        ],
+                                                    fechaManual: fechaOrig,
+                                                    medioPago:
+                                                        p['medio_pago']
+                                                            as String?,
+                                                  );
+                                                },
+                                                child: const Padding(
+                                                  padding: EdgeInsets.only(
+                                                    top: 4,
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.print_rounded,
+                                                        size: 10,
+                                                        color:
+                                                            Colors.blueAccent,
+                                                      ),
+                                                      SizedBox(width: 4),
+                                                      Text(
+                                                        'REIMPRIMIR',
+                                                        style: TextStyle(
+                                                          fontSize: 9,
+                                                          color:
+                                                              Colors.blueAccent,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
                         ),
                         const Divider(height: 32),
                         Container(
@@ -6428,7 +6919,8 @@ class _DetalleEventoMasivoScreenState
             final String mp = (p['medio_pago'] as String?)?.trim() ?? '';
             if (mp.toLowerCase() == 'efectivo') {
               totalEfectivo += m;
-            } else if (mp.toLowerCase().contains('transfer') || mp.toLowerCase() == 'transferencia') {
+            } else if (mp.toLowerCase().contains('transfer') ||
+                mp.toLowerCase() == 'transferencia') {
               totalTransferencia += m;
             }
             final d = (p['descuento_porcentaje'] as num?)?.toDouble() ?? 0;
@@ -6445,8 +6937,10 @@ class _DetalleEventoMasivoScreenState
             medioPago = 'Transferencia';
           }
 
-          conceptosPagados =
-              ConceptoPagoDisplay.conceptosPdfDesdePagosLote(alumno, lote);
+          conceptosPagados = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+            alumno,
+            lote,
+          );
 
           valPago = conceptosPagados.fold<double>(
             0,
@@ -6513,8 +7007,7 @@ class _DetalleEventoMasivoScreenState
 
     MesasExtraUtils.limpiarClavesMesasEnMontosManuales(montosManuales);
 
-    final bool repartoPorMesa =
-        cantMesas > 1 && mesasActivasCobro.length > 1;
+    final bool repartoPorMesa = cantMesas > 1 && mesasActivasCobro.length > 1;
 
     if (repartoPorMesa) {
       for (final mesa in mesasActivasCobro) {
@@ -6607,7 +7100,8 @@ class _DetalleEventoMasivoScreenState
           }
 
           double getSum() {
-            var s = CurrencyInputFormatter.parse(baseCtrl.text) +
+            var s =
+                CurrencyInputFormatter.parse(baseCtrl.text) +
                 CurrencyInputFormatter.parse(sillasCtrl.text);
             if (repartoPorMesa) {
               s += sumMesasIndividuales();
@@ -6635,8 +7129,7 @@ class _DetalleEventoMasivoScreenState
                   continue;
                 }
                 final assign = rem >= mesa.deuda ? mesa.deuda : rem;
-                ctrl.text =
-                    assign > 0.01 ? assign.toFormattedNumber() : '';
+                ctrl.text = assign > 0.01 ? assign.toFormattedNumber() : '';
                 rem = double.parse((rem - assign).toStringAsFixed(2));
               }
             } else {
@@ -6659,8 +7152,7 @@ class _DetalleEventoMasivoScreenState
             };
             if (repartoPorMesa) {
               for (final entry in mesaCtrlsPorClave.entries) {
-                out[entry.key] =
-                    CurrencyInputFormatter.parse(entry.value.text);
+                out[entry.key] = CurrencyInputFormatter.parse(entry.value.text);
               }
               out['Mesa'] = 0;
             } else {
@@ -6737,8 +7229,7 @@ class _DetalleEventoMasivoScreenState
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: _buildManualField(
-                            label:
-                                '$label (Máx: ${mesa.deuda.toCurrency()})',
+                            label: '$label (Máx: ${mesa.deuda.toCurrency()})',
                             ctrl: mesaCtrlsPorClave[key]!,
                             onCh: (_) => setInternalState(() {}),
                           ),
@@ -6746,15 +7237,13 @@ class _DetalleEventoMasivoScreenState
                       }),
                     ] else
                       _buildManualField(
-                        label:
-                            'MESA EXTRA (Máx: ${deudaMesa.toCurrency()})',
+                        label: 'MESA EXTRA (Máx: ${deudaMesa.toCurrency()})',
                         ctrl: mesaCtrl,
                         onCh: (_) => setInternalState(() {}),
                       ),
                     const SizedBox(height: 12),
                     _buildManualField(
-                      label:
-                          'SILLAS EXTRAS (Máx: ${deudaSillas.toCurrency()})',
+                      label: 'SILLAS EXTRAS (Máx: ${deudaSillas.toCurrency()})',
                       ctrl: sillasCtrl,
                       onCh: (_) => setInternalState(() {}),
                     ),
@@ -6826,7 +7315,7 @@ class _DetalleEventoMasivoScreenState
   }
 
   Future<({String tipo, double? monto, Set<int>? cuotasSeleccionadas})?>
-      _mostrarOpcionesPago(
+  _mostrarOpcionesPago(
     BuildContext context,
     String titulo,
     double deuda, {
@@ -6852,7 +7341,9 @@ class _DetalleEventoMasivoScreenState
         ? '${primeraIncompleta.faltante.toCurrency()} (cuota ${primeraIncompleta.numero}/$totalCuotas)'
         : '';
 
-    return showDialog<({String tipo, double? monto, Set<int>? cuotasSeleccionadas})>(
+    return showDialog<
+      ({String tipo, double? monto, Set<int>? cuotasSeleccionadas})
+    >(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Column(
@@ -6881,7 +7372,11 @@ class _DetalleEventoMasivoScreenState
               label: 'LIQUIDAR EL TOTAL',
               sub: deuda.toCurrency(),
               color: Colors.green,
-              onTap: () => Navigator.pop(ctx, (tipo: 'TOTAL', monto: null, cuotasSeleccionadas: null)),
+              onTap: () => Navigator.pop(ctx, (
+                tipo: 'TOTAL',
+                monto: null,
+                cuotasSeleccionadas: null,
+              )),
             ),
             if (haySeleccionables) ...[
               const SizedBox(height: 8),
@@ -6900,14 +7395,11 @@ class _DetalleEventoMasivoScreenState
                     deudaMaxima: deuda,
                   );
                   if (ctx.mounted && sel != null) {
-                    Navigator.pop(
-                      ctx,
-                      (
-                        tipo: 'CUOTAS',
-                        monto: sel.monto,
-                        cuotasSeleccionadas: sel.cuotasSeleccionadas,
-                      ),
-                    );
+                    Navigator.pop(ctx, (
+                      tipo: 'CUOTAS',
+                      monto: sel.monto,
+                      cuotasSeleccionadas: sel.cuotasSeleccionadas,
+                    ));
                   }
                 },
               ),
@@ -6918,10 +7410,11 @@ class _DetalleEventoMasivoScreenState
               label: 'ENTREGA PARCIAL',
               sub: 'Monto a elección',
               color: Colors.white60,
-              onTap: () => Navigator.pop(
-                ctx,
-                (tipo: 'PARTE', monto: null, cuotasSeleccionadas: null),
-              ),
+              onTap: () => Navigator.pop(ctx, (
+                tipo: 'PARTE',
+                monto: null,
+                cuotasSeleccionadas: null,
+              )),
             ),
           ],
         ),
@@ -6943,14 +7436,11 @@ class _DetalleEventoMasivoScreenState
     required String mapKey,
     required String tituloParcial,
     required double deuda,
-    required ({
-      String tipo,
-      double? monto,
-      Set<int>? cuotasSeleccionadas,
-    })? resultado,
+    required ({String tipo, double? monto, Set<int>? cuotasSeleccionadas})?
+    resultado,
     required void Function(bool selected) onSelected,
     required Future<double?> Function(String titulo, double maximo)
-        preguntarMontoParcial,
+    preguntarMontoParcial,
     required VoidCallback recalcular,
   }) async {
     if (resultado == null) return;
@@ -7006,21 +7496,19 @@ class _DetalleEventoMasivoScreenState
     required void Function(bool) onPagarMesaChanged,
     required VoidCallback recalcular,
     required Future<double?> Function(String titulo, double maximo)
-        preguntarMontoParcial,
+    preguntarMontoParcial,
     required Future<
-            ({
-              String tipo,
-              double? monto,
-              Set<int>? cuotasSeleccionadas,
-            })?>
-        Function(
+      ({String tipo, double? monto, Set<int>? cuotasSeleccionadas})?
+    >
+    Function(
       BuildContext context,
       String titulo,
       double deuda, {
       required double cuotaPura,
       required int totalCuotas,
       required double grossHistorico,
-    }) mostrarOpcionesPago,
+    })
+    mostrarOpcionesPago,
   }) async {
     if (v == true) {
       final choice = await mostrarOpcionesPago(
@@ -7049,9 +7537,7 @@ class _DetalleEventoMasivoScreenState
         montosManuales.remove(mesaKeyStr);
         modosPagoPorClave.remove(mesaKeyStr);
         onPagarMesaChanged(
-          montosManuales.keys.any(
-            (k) => k == 'Mesa' || k.startsWith('Mesa:'),
-          ),
+          montosManuales.keys.any((k) => k == 'Mesa' || k.startsWith('Mesa:')),
         );
       });
       recalcular();
@@ -7118,10 +7604,7 @@ class _DetalleEventoMasivoScreenState
   }) {
     final sub = c['subtexto'] as String?;
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: 6,
-        left: indentada ? 16 : 0,
-      ),
+      padding: EdgeInsets.only(bottom: 6, left: indentada ? 16 : 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -7131,9 +7614,7 @@ class _DetalleEventoMasivoScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  mostrarBullet
-                      ? '• ${c['concepto']}'
-                      : '${c['concepto']}',
+                  mostrarBullet ? '• ${c['concepto']}' : '${c['concepto']}',
                   style: TextStyle(
                     fontSize: indentada ? 12 : 13,
                     fontWeight: FontWeight.w600,
@@ -7182,9 +7663,7 @@ class _DetalleEventoMasivoScreenState
     final agruparMesas = usarCompactoMesas && lineasMesas.isNotEmpty;
 
     if (!agruparMesas) {
-      return previewConceptos
-          .map((c) => _buildFilaDesglosePreview(c))
-          .toList();
+      return previewConceptos.map((c) => _buildFilaDesglosePreview(c)).toList();
     }
 
     final widgets = <Widget>[];
@@ -7195,8 +7674,7 @@ class _DetalleEventoMasivoScreenState
         if (grupoMesasEmitido) continue;
         grupoMesasEmitido = true;
 
-        final titulo =
-            MesasExtraUtils.tituloGrupoDesgloseMesas(lineasMesas);
+        final titulo = MesasExtraUtils.tituloGrupoDesgloseMesas(lineasMesas);
         final total = MesasExtraUtils.sumaMontosPreview(lineasMesas);
 
         widgets.add(
@@ -7311,9 +7789,7 @@ class _DetalleEventoMasivoScreenState
                       'Deuda: ${mesa.deuda.toCurrency()}',
                       style: TextStyle(
                         fontSize: 10,
-                        color: selected
-                            ? const Color(0xFFD4AF37)
-                            : Colors.grey,
+                        color: selected ? const Color(0xFFD4AF37) : Colors.grey,
                       ),
                     ),
                     if (montoManual != null)
@@ -7347,10 +7823,12 @@ class _DetalleEventoMasivoScreenState
     required Future<void> Function() onElegirMesas,
     required Future<void> Function(MesaExtraItem mesa, bool? v) onMesaChanged,
   }) {
-    final seleccionadas =
-        MesasExtraUtils.contarMesasSeleccionadasCobro(montosManuales);
-    final cobrandoBruto =
-        MesasExtraUtils.sumaBrutaMesasSeleccionadasCobro(montosManuales);
+    final seleccionadas = MesasExtraUtils.contarMesasSeleccionadasCobro(
+      montosManuales,
+    );
+    final cobrandoBruto = MesasExtraUtils.sumaBrutaMesasSeleccionadasCobro(
+      montosManuales,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -7372,9 +7850,7 @@ class _DetalleEventoMasivoScreenState
         children: [
           InkWell(
             onTap: onToggleExpandido,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(12),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 8, 8),
               child: Row(

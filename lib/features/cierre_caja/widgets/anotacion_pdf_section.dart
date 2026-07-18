@@ -12,7 +12,8 @@ class AnotacionPdfSection extends ConsumerStatefulWidget {
   const AnotacionPdfSection({super.key});
 
   @override
-  ConsumerState<AnotacionPdfSection> createState() => _AnotacionPdfSectionState();
+  ConsumerState<AnotacionPdfSection> createState() =>
+      _AnotacionPdfSectionState();
 }
 
 class _AnotacionPdfSectionState extends ConsumerState<AnotacionPdfSection> {
@@ -42,7 +43,9 @@ class _AnotacionPdfSectionState extends ConsumerState<AnotacionPdfSection> {
   Widget build(BuildContext context) {
     final state = ref.watch(cierreCajaProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.45);
+    final muted = (isDark ? Colors.white : Colors.black).withValues(
+      alpha: 0.45,
+    );
     final turnoKey = '${state.dia.millisecondsSinceEpoch}_${state.turno.slug}';
     if (_ultimoTurnoCargado != turnoKey) {
       _ultimoTurnoCargado = turnoKey;
@@ -74,7 +77,11 @@ class _AnotacionPdfSectionState extends ConsumerState<AnotacionPdfSection> {
           const SizedBox(height: 4),
           Text(
             'Opcional. Aparece en el PDF de este turno. Se sincroniza entre equipos.',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: muted),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: muted,
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -85,9 +92,17 @@ class _AnotacionPdfSectionState extends ConsumerState<AnotacionPdfSection> {
             minLines: 2,
             decoration: InputDecoration(
               hintText: 'Ej.: retiro parcial, faltó moneda chica…',
-              hintStyle: TextStyle(fontSize: 12, color: muted.withValues(alpha: 0.7)),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              hintStyle: TextStyle(
+                fontSize: 12,
+                color: muted.withValues(alpha: 0.7),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
           ),
           if (!syncOk)
@@ -95,7 +110,11 @@ class _AnotacionPdfSectionState extends ConsumerState<AnotacionPdfSection> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'Sync de anotaciones desde $kCierreCajaSyncFechaCorte.',
-                style: TextStyle(fontSize: 10, color: Colors.orange.shade700, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.orange.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
         ],

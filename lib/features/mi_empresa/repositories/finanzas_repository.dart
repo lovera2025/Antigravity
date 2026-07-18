@@ -31,9 +31,12 @@ class FinanzasRepository {
   /// Obtiene un historial cronológico de ingresos fusionando datos de SQLite:
   /// - transacciones (Eventos Particulares)
   /// - pagos_contrato_alumno (Eventos Masivos)
-  Future<List<IngresoDetallado>> obtenerIngresosDetallados({DateTime? mes, String? eventoId}) async {
+  Future<List<IngresoDetallado>> obtenerIngresosDetallados({
+    DateTime? mes,
+    String? eventoId,
+  }) async {
     final db = await LocalDatabase.instance;
-    
+
     // 1. Consulta Ingresos Particulares (transacciones + join eventos/clientes)
     String sqlTrans = '''
       SELECT 
@@ -45,7 +48,7 @@ class FinanzasRepository {
       JOIN clientes c ON ev.cliente_id = c.id
       WHERE COALESCE(t.anulado, 0) = 0
     ''';
-    
+
     List<dynamic> paramsTrans = [];
     if (eventoId != null) {
       sqlTrans += ' AND t.evento_id = ?';
@@ -56,6 +59,7 @@ class FinanzasRepository {
     String sqlMasivos = '''
       SELECT 
         p.id, p.monto, p.concepto, p.fecha_pago as created_at, p.medio_pago,
+        p.sesion_caja_id,
         ca.nombre_alumno, ca.evento_id,
         ev.tipo as evento_tipo
       FROM pagos_contrato_alumno p
@@ -89,71 +93,87 @@ class FinanzasRepository {
       db.rawQuery(sqlAlquiler, []),
     ]);
 
-    final List<Map<String, dynamic>> transData = results[0].cast<Map<String, dynamic>>();
-    final List<Map<String, dynamic>> masivoData = results[1].cast<Map<String, dynamic>>();
-    final List<Map<String, dynamic>> alquilerData = results[2].cast<Map<String, dynamic>>();
+    final List<Map<String, dynamic>> transData = results[0]
+        .cast<Map<String, dynamic>>();
+    final List<Map<String, dynamic>> masivoData = results[1]
+        .cast<Map<String, dynamic>>();
+    final List<Map<String, dynamic>> alquilerData = results[2]
+        .cast<Map<String, dynamic>>();
 
     List<IngresoDetallado> todos = [];
 
     // Mapeo Transacciones Particulares
     for (var r in transData) {
       final fechaRaw = r['fecha_pago'];
-      final DateTime fecha = fechaRaw != null ? _parseFechaPagoUtc(fechaRaw) : ArTime.nowUtc();
+      final DateTime fecha = fechaRaw != null
+          ? _parseFechaPagoUtc(fechaRaw)
+          : ArTime.nowUtc();
 
       if (mes != null && !ArTime.mismoMes(fecha, mes)) continue;
 
-      todos.add(IngresoDetallado(
-        id: r['id'].toString(),
-        fuente: 'Particular',
-        fecha: fecha,
-        monto: double.tryParse(r['monto'].toString()) ?? 0,
-        concepto: r['concepto']?.toString() ?? 'Pago Registrado',
-        alumnoOCliente: r['cliente_nombre'] ?? 'Cliente Particular',
-        nombreEvento: r['evento_tipo'] ?? 'Evento Particular',
-        eventoId: r['evento_id']?.toString(),
-        clienteId: r['cliente_id']?.toString(),
-        medioPago: r['medio_pago']?.toString(),
-      ));
+      todos.add(
+        IngresoDetallado(
+          id: r['id'].toString(),
+          fuente: 'Particular',
+          fecha: fecha,
+          monto: double.tryParse(r['monto'].toString()) ?? 0,
+          concepto: r['concepto']?.toString() ?? 'Pago Registrado',
+          alumnoOCliente: r['cliente_nombre'] ?? 'Cliente Particular',
+          nombreEvento: r['evento_tipo'] ?? 'Evento Particular',
+          eventoId: r['evento_id']?.toString(),
+          clienteId: r['cliente_id']?.toString(),
+          medioPago: r['medio_pago']?.toString(),
+        ),
+      );
     }
 
     // Mapeo Pagos Masivos
     for (var r in masivoData) {
       final fechaRaw = r['created_at'];
-      final DateTime fecha = fechaRaw != null ? _parseFechaPagoUtc(fechaRaw) : ArTime.nowUtc();
+      final DateTime fecha = fechaRaw != null
+          ? _parseFechaPagoUtc(fechaRaw)
+          : ArTime.nowUtc();
 
       if (mes != null && !ArTime.mismoMes(fecha, mes)) continue;
 
-      todos.add(IngresoDetallado(
-        id: r['id'].toString(),
-        fuente: 'Masivo',
-        fecha: fecha,
-        monto: double.tryParse(r['monto'].toString()) ?? 0,
-        concepto: r['concepto']?.toString() ?? 'Abono de Cuota / Contrato',
-        alumnoOCliente: r['nombre_alumno'] ?? 'Alumno Desconocido',
-        nombreEvento: r['evento_tipo'] ?? 'Evento Masivo',
-        eventoId: r['evento_id']?.toString(),
-        medioPago: r['medio_pago']?.toString(),
-      ));
+      todos.add(
+        IngresoDetallado(
+          id: r['id'].toString(),
+          fuente: 'Masivo',
+          fecha: fecha,
+          monto: double.tryParse(r['monto'].toString()) ?? 0,
+          concepto: r['concepto']?.toString() ?? 'Abono de Cuota / Contrato',
+          alumnoOCliente: r['nombre_alumno'] ?? 'Alumno Desconocido',
+          nombreEvento: r['evento_tipo'] ?? 'Evento Masivo',
+          eventoId: r['evento_id']?.toString(),
+          medioPago: r['medio_pago']?.toString(),
+          sesionCajaId: r['sesion_caja_id']?.toString(),
+        ),
+      );
     }
 
     for (var r in alquilerData) {
       final fechaRaw = r['fecha_pago'];
-      final DateTime fecha = fechaRaw != null ? _parseFechaPagoUtc(fechaRaw) : ArTime.nowUtc();
+      final DateTime fecha = fechaRaw != null
+          ? _parseFechaPagoUtc(fechaRaw)
+          : ArTime.nowUtc();
 
       if (mes != null && !ArTime.mismoMes(fecha, mes)) continue;
 
-      todos.add(IngresoDetallado(
-        id: r['id'].toString(),
-        fuente: 'Alquiler',
-        fecha: fecha,
-        monto: double.tryParse(r['monto'].toString()) ?? 0,
-        concepto: r['concepto']?.toString() ?? 'Pago alquiler ítems',
-        alumnoOCliente: r['cliente_nombre'] ?? 'Cliente',
-        nombreEvento: 'Alquiler ítems',
-        clienteId: r['cliente_id']?.toString(),
-        prestamoId: r['prestamo_id']?.toString(),
-        medioPago: r['medio_pago']?.toString(),
-      ));
+      todos.add(
+        IngresoDetallado(
+          id: r['id'].toString(),
+          fuente: 'Alquiler',
+          fecha: fecha,
+          monto: double.tryParse(r['monto'].toString()) ?? 0,
+          concepto: r['concepto']?.toString() ?? 'Pago alquiler ítems',
+          alumnoOCliente: r['cliente_nombre'] ?? 'Cliente',
+          nombreEvento: 'Alquiler ítems',
+          clienteId: r['cliente_id']?.toString(),
+          prestamoId: r['prestamo_id']?.toString(),
+          medioPago: r['medio_pago']?.toString(),
+        ),
+      );
     }
 
     todos.sort((a, b) => a.compareTo(b));
@@ -173,7 +193,8 @@ class FinanzasRepository {
   /// Obtiene la proyección financiera (Cloud RPC) con caché corta (2 min).
   Future<Map<String, dynamic>?> obtenerProyeccionFinanciera() async {
     if (_cacheProyeccion != null && _lastCacheTime != null) {
-      if (DateTime.now().difference(_lastCacheTime!) < const Duration(minutes: 2)) {
+      if (DateTime.now().difference(_lastCacheTime!) <
+          const Duration(minutes: 2)) {
         return _cacheProyeccion;
       }
     }
@@ -195,57 +216,59 @@ class FinanzasRepository {
   /// Escucha cambios remotos para disparar refrescos locales.
   RealtimeChannel subscribeToChanges(void Function() onUpdate) {
     final channel = _supabase.channel('public:finanzas_dashboard_changes');
-    
+
     channel
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'transacciones',
-        callback: (_) => onUpdate(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'pagos_contrato_alumno',
-        callback: (_) => onUpdate(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'egresos',
-        callback: (_) => onUpdate(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'pagos_prestamo_alquiler',
-        callback: (_) => onUpdate(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'contratos_alumnos',
-        callback: (_) => onUpdate(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'cierre_caja_guia_movimientos',
-        callback: (_) => onUpdate(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'cierre_caja_anotaciones',
-        callback: (_) => onUpdate(),
-      )
-      .subscribe();
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'transacciones',
+          callback: (_) => onUpdate(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'pagos_contrato_alumno',
+          callback: (_) => onUpdate(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'egresos',
+          callback: (_) => onUpdate(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'pagos_prestamo_alquiler',
+          callback: (_) => onUpdate(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'contratos_alumnos',
+          callback: (_) => onUpdate(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'cierre_caja_guia_movimientos',
+          callback: (_) => onUpdate(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'cierre_caja_anotaciones',
+          callback: (_) => onUpdate(),
+        )
+        .subscribe();
 
     return channel;
   }
 
   /// Busca registros vinculados a un nombre en Clientes y Contratos Alumnos (Purga Inteligente).
-  Future<Map<String, List<Map<String, dynamic>>>> buscarVinculadosPorNombre(String nombre) async {
+  Future<Map<String, List<Map<String, dynamic>>>> buscarVinculadosPorNombre(
+    String nombre,
+  ) async {
     final db = await LocalDatabase.instance;
     final Map<String, List<Map<String, dynamic>>> resultados = {
       'clientes': [],
@@ -263,65 +286,122 @@ class FinanzasRepository {
     };
 
     // 1. Buscar Clientes
-    final clientes = await db.query('clientes', where: 'nombre_completo LIKE ?', whereArgs: ['%$nombre%']);
+    final clientes = await db.query(
+      'clientes',
+      where: 'nombre_completo LIKE ?',
+      whereArgs: ['%$nombre%'],
+    );
     resultados['clientes'] = clientes;
 
     if (clientes.isNotEmpty) {
       final clienteIds = clientes.map((c) => c['id']).toList();
       final placeholders = clienteIds.map((_) => '?').join(',');
-      
+
       // Eventos de estos clientes
-      final eventos = await db.query('eventos', where: "cliente_id IN ($placeholders)", whereArgs: clienteIds);
+      final eventos = await db.query(
+        'eventos',
+        where: "cliente_id IN ($placeholders)",
+        whereArgs: clienteIds,
+      );
       resultados['eventos'] = eventos;
 
       if (eventos.isNotEmpty) {
         final eventoIds = eventos.map((e) => e['id']).toList();
         final evPlaceholders = eventoIds.map((_) => '?').join(',');
 
-        resultados['transacciones'] = await db.query('transacciones', where: "evento_id IN ($evPlaceholders)", whereArgs: eventoIds);
-        resultados['egresos'] = await db.query('egresos', where: "evento_id IN ($evPlaceholders)", whereArgs: eventoIds);
-        
-        final contratos = await db.query('contratos_alumnos', where: "evento_id IN ($evPlaceholders)", whereArgs: eventoIds);
+        resultados['transacciones'] = await db.query(
+          'transacciones',
+          where: "evento_id IN ($evPlaceholders)",
+          whereArgs: eventoIds,
+        );
+        resultados['egresos'] = await db.query(
+          'egresos',
+          where: "evento_id IN ($evPlaceholders)",
+          whereArgs: eventoIds,
+        );
+
+        final contratos = await db.query(
+          'contratos_alumnos',
+          where: "evento_id IN ($evPlaceholders)",
+          whereArgs: eventoIds,
+        );
         resultados['contratos']!.addAll(contratos);
 
-        final invitados = await db.query('invitados', where: "evento_id IN ($evPlaceholders)", whereArgs: eventoIds);
+        final invitados = await db.query(
+          'invitados',
+          where: "evento_id IN ($evPlaceholders)",
+          whereArgs: eventoIds,
+        );
         resultados['invitados']!.addAll(invitados);
 
         if (invitados.isNotEmpty) {
           final invitadoIds = invitados.map((i) => i['id']).toList();
           final invPlaceholders = invitadoIds.map((_) => '?').join(',');
-          resultados['accesos'] = await db.query('accesos', where: "invitado_id IN ($invPlaceholders)", whereArgs: invitadoIds);
+          resultados['accesos'] = await db.query(
+            'accesos',
+            where: "invitado_id IN ($invPlaceholders)",
+            whereArgs: invitadoIds,
+          );
         }
 
         if (contratos.isNotEmpty) {
           final contratoIds = contratos.map((c) => c['id']).toList();
           final cPlaceholders = contratoIds.map((_) => '?').join(',');
-          resultados['pagos']!.addAll(await db.query('pagos_contrato_alumno', where: "contrato_alumno_id IN ($cPlaceholders)", whereArgs: contratoIds));
+          resultados['pagos']!.addAll(
+            await db.query(
+              'pagos_contrato_alumno',
+              where: "contrato_alumno_id IN ($cPlaceholders)",
+              whereArgs: contratoIds,
+            ),
+          );
         }
       }
 
       // Presupuestos del cliente
-      resultados['presupuestos'] = await db.query('presupuestos', where: "cliente_id IN ($placeholders)", whereArgs: clienteIds);
+      resultados['presupuestos'] = await db.query(
+        'presupuestos',
+        where: "cliente_id IN ($placeholders)",
+        whereArgs: clienteIds,
+      );
 
-      final prestamos = await db.query('prestamos_alquiler', where: "cliente_id IN ($placeholders)", whereArgs: clienteIds);
+      final prestamos = await db.query(
+        'prestamos_alquiler',
+        where: "cliente_id IN ($placeholders)",
+        whereArgs: clienteIds,
+      );
       resultados['prestamos_alquiler'] = prestamos;
       if (prestamos.isNotEmpty) {
         final pids = prestamos.map((e) => e['id']).toList();
         final ph = pids.map((_) => '?').join(',');
-        resultados['pagos_alquiler'] =
-            await db.query('pagos_prestamo_alquiler', where: 'prestamo_id IN ($ph)', whereArgs: pids);
+        resultados['pagos_alquiler'] = await db.query(
+          'pagos_prestamo_alquiler',
+          where: 'prestamo_id IN ($ph)',
+          whereArgs: pids,
+        );
       }
     }
 
     // 2. Buscar Solicitudes de Cotización por nombre
-    resultados['solicitudes'] = await db.query('solicitudes_cotizacion', where: 'cliente_nombre LIKE ?', whereArgs: ['%$nombre%']);
+    resultados['solicitudes'] = await db.query(
+      'solicitudes_cotizacion',
+      where: 'cliente_nombre LIKE ?',
+      whereArgs: ['%$nombre%'],
+    );
 
     // 3. Buscar Alumnos directos (por si no es el cliente)
-    final alumnosDirectos = await db.query('contratos_alumnos', where: 'nombre_alumno LIKE ?', whereArgs: ['%$nombre%']);
+    final alumnosDirectos = await db.query(
+      'contratos_alumnos',
+      where: 'nombre_alumno LIKE ?',
+      whereArgs: ['%$nombre%'],
+    );
     for (var a in alumnosDirectos) {
       if (!resultados['contratos']!.any((c) => c['id'] == a['id'])) {
         resultados['contratos']!.add(a);
-        final pagos = await db.query('pagos_contrato_alumno', where: 'contrato_alumno_id = ?', whereArgs: [a['id']]);
+        final pagos = await db.query(
+          'pagos_contrato_alumno',
+          where: 'contrato_alumno_id = ?',
+          whereArgs: [a['id']],
+        );
         resultados['pagos']!.addAll(pagos);
       }
     }
@@ -337,8 +417,12 @@ class FinanzasRepository {
   ) async {
     final db = await LocalDatabase.instance;
 
-    final pagoAlquilerIds = List<String>.from(idsParaBorrar['pagos_alquiler'] ?? []);
-    final prestamoAlquilerIds = List<String>.from(idsParaBorrar['prestamos_alquiler'] ?? []);
+    final pagoAlquilerIds = List<String>.from(
+      idsParaBorrar['pagos_alquiler'] ?? [],
+    );
+    final prestamoAlquilerIds = List<String>.from(
+      idsParaBorrar['prestamos_alquiler'] ?? [],
+    );
 
     final pagosIds = List<String>.from(idsParaBorrar['pagos'] ?? []);
     final contratosBorrados = (idsParaBorrar['contratos'] ?? []).toSet();
@@ -367,7 +451,20 @@ class FinanzasRepository {
     }
 
     // Orden de eliminación para respetar FK: accesos -> invitados -> pagos -> contratos -> transacciones -> egresos -> presupuesto_servicios -> presupuestos -> solicitudes -> eventos_servicios -> eventos -> clientes
-    final orden = ['accesos', 'invitados', 'pagos', 'contratos', 'transacciones', 'egresos', 'presupuesto_servicios', 'presupuestos', 'solicitudes', 'eventos_servicios', 'eventos', 'clientes'];
+    final orden = [
+      'accesos',
+      'invitados',
+      'pagos',
+      'contratos',
+      'transacciones',
+      'egresos',
+      'presupuesto_servicios',
+      'presupuestos',
+      'solicitudes',
+      'eventos_servicios',
+      'eventos',
+      'clientes',
+    ];
     final mapeoTablas = {
       'accesos': 'accesos',
       'invitados': 'invitados',
@@ -394,12 +491,20 @@ class FinanzasRepository {
 
         // Manejo especial para tablas que requieren borrado por FK antes de borrar al padre en la misma purga
         if (key == 'presupuestos') {
-          await db.delete('presupuesto_servicios', where: 'presupuesto_id = ?', whereArgs: [id]);
+          await db.delete(
+            'presupuesto_servicios',
+            where: 'presupuesto_id = ?',
+            whereArgs: [id],
+          );
         }
         if (key == 'eventos') {
-          await db.delete('eventos_servicios', where: 'evento_id = ?', whereArgs: [id]);
+          await db.delete(
+            'eventos_servicios',
+            where: 'evento_id = ?',
+            whereArgs: [id],
+          );
         }
-        
+
         // 2. Encolar eliminación para sincronizar con la nube
         await SyncQueue.enqueue(
           tabla: tabla,
@@ -428,13 +533,21 @@ class FinanzasRepository {
   Future<void> _eliminarPrestamoAlquilerCascade(String prestamoId) async {
     final db = await LocalDatabase.instance;
 
-    final pagos = await db.query('pagos_prestamo_alquiler', where: 'prestamo_id = ?', whereArgs: [prestamoId]);
+    final pagos = await db.query(
+      'pagos_prestamo_alquiler',
+      where: 'prestamo_id = ?',
+      whereArgs: [prestamoId],
+    );
     for (final row in pagos) {
       final pid = row['id'].toString();
       await _eliminarFilaSync('pagos_prestamo_alquiler', pid);
     }
 
-    final lineas = await db.query('prestamo_alquiler_lineas', where: 'prestamo_id = ?', whereArgs: [prestamoId]);
+    final lineas = await db.query(
+      'prestamo_alquiler_lineas',
+      where: 'prestamo_id = ?',
+      whereArgs: [prestamoId],
+    );
     for (final row in lineas) {
       final lid = row['id'].toString();
       await _eliminarFilaSync('prestamo_alquiler_lineas', lid);
@@ -451,13 +564,16 @@ class FinanzasRepository {
 
   /// Búsqueda local de cobros por nombre de alumno/cliente o concepto (mínimo 2 caracteres).
   /// Cada mapa incluye: `tabla`, `id`, `monto`, `medio_pago`, `fecha_pago`, `concepto`, `titulo`, `subtitulo`.
-  Future<List<Map<String, dynamic>>> buscarPagosParaCorregirMedio(String consulta) async {
+  Future<List<Map<String, dynamic>>> buscarPagosParaCorregirMedio(
+    String consulta,
+  ) async {
     final q = consulta.trim();
     if (q.length < 2) return [];
     final like = '%$q%';
     final db = await LocalDatabase.instance;
 
-    final masivo = await db.rawQuery('''
+    final masivo = await db.rawQuery(
+      '''
 SELECT 'pagos_contrato_alumno' AS tabla, p.id AS id,
   p.monto AS monto, p.medio_pago AS medio_pago, p.fecha_pago AS fecha_pago, p.concepto AS concepto,
   ca.nombre_alumno AS titulo, ev.tipo AS subtitulo
@@ -467,9 +583,12 @@ INNER JOIN eventos ev ON ev.id = ca.evento_id
 WHERE (ca.nombre_alumno LIKE ? OR IFNULL(p.concepto,'') LIKE ?)
 AND COALESCE(p.anulado, 0) = 0
 ORDER BY p.fecha_pago DESC LIMIT 80
-''', [like, like]);
+''',
+      [like, like],
+    );
 
-    final particular = await db.rawQuery('''
+    final particular = await db.rawQuery(
+      '''
 SELECT 'transacciones' AS tabla, t.id AS id,
   t.monto AS monto, t.medio_pago AS medio_pago, t.fecha_pago AS fecha_pago, t.concepto AS concepto,
   c.nombre_completo AS titulo, ev.tipo AS subtitulo
@@ -479,9 +598,12 @@ INNER JOIN clientes c ON c.id = ev.cliente_id
 WHERE (c.nombre_completo LIKE ? OR IFNULL(t.concepto,'') LIKE ?)
 AND COALESCE(t.anulado, 0) = 0
 ORDER BY t.fecha_pago DESC LIMIT 80
-''', [like, like]);
+''',
+      [like, like],
+    );
 
-    final alquiler = await db.rawQuery('''
+    final alquiler = await db.rawQuery(
+      '''
 SELECT 'pagos_prestamo_alquiler' AS tabla, pay.id AS id,
   pay.monto AS monto, pay.medio_pago AS medio_pago, pay.fecha_pago AS fecha_pago, pay.concepto AS concepto,
   c.nombre_completo AS titulo, 'Alquiler ítems' AS subtitulo
@@ -491,7 +613,9 @@ INNER JOIN clientes c ON c.id = pr.cliente_id
 WHERE (c.nombre_completo LIKE ? OR IFNULL(pay.concepto,'') LIKE ?)
 AND COALESCE(pay.anulado, 0) = 0
 ORDER BY pay.fecha_pago DESC LIMIT 80
-''', [like, like]);
+''',
+      [like, like],
+    );
 
     final seen = <String>{};
     final merged = <Map<String, dynamic>>[];
@@ -504,8 +628,12 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
       merged.add(Map<String, dynamic>.from(row));
     }
     merged.sort((a, b) {
-      final fa = DateTime.tryParse(a['fecha_pago']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final fb = DateTime.tryParse(b['fecha_pago']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final fa =
+          DateTime.tryParse(a['fecha_pago']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final fb =
+          DateTime.tryParse(b['fecha_pago']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       return fb.compareTo(fa);
     });
     return merged;
@@ -525,14 +653,26 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
       throw ArgumentError('medio_pago debe ser efectivo o transferencia');
     }
     final db = await LocalDatabase.instance;
-    final rows = await db.query(tabla, where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      tabla,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) {
       throw StateError('No existe el registro en la base local');
     }
     if (((rows.first['anulado'] as num?)?.toInt() ?? 0) != 0) {
-      throw StateError('El cobro está anulado; no se puede cambiar el medio de pago.');
+      throw StateError(
+        'El cobro está anulado; no se puede cambiar el medio de pago.',
+      );
     }
-    await db.update(tabla, {'medio_pago': medio}, where: 'id = ?', whereArgs: [id]);
+    await db.update(
+      tabla,
+      {'medio_pago': medio},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     await SyncQueue.enqueue(
       tabla: tabla,
       operacion: SyncOperation.update,
@@ -551,17 +691,27 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
       throw ArgumentError('Tabla no permitida: $tabla');
     }
     final db = await LocalDatabase.instance;
-    final rows = await db.query(tabla, where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      tabla,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) {
       throw StateError('No existe el registro en la base local');
     }
     if (((rows.first['anulado'] as num?)?.toInt() ?? 0) != 0) {
       throw StateError('El cobro está anulado; no se puede cambiar la fecha.');
     }
-    
+
     final isoDate = nuevaFecha.toUtc().toIso8601String();
-    
-    await db.update(tabla, {'fecha_pago': isoDate}, where: 'id = ?', whereArgs: [id]);
+
+    await db.update(
+      tabla,
+      {'fecha_pago': isoDate},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     await SyncQueue.enqueue(
       tabla: tabla,
       operacion: SyncOperation.update,
@@ -585,7 +735,12 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
       throw ArgumentError('Describí el motivo con al menos 8 caracteres.');
     }
     final db = await LocalDatabase.instance;
-    final rows = await db.query(tabla, where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      tabla,
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) {
       throw StateError('No existe el registro en la base local');
     }
