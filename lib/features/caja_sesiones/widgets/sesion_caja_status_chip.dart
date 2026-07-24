@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/ar_time.dart';
-import '../models/modo_jefe_caja.dart';
 import '../models/sesion_caja.dart';
 import '../repositories/sesiones_caja_repository.dart';
 
@@ -45,7 +44,6 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
   }
 
   Color _colorFor(SesionCaja s) {
-    if (s.etiqueta == kEtiquetaModoJefe) return Colors.greenAccent;
     final hb = s.lastHeartbeat ?? s.abiertaAt;
     final age = DateTime.now().toUtc().difference(hb.toUtc());
     if (age > _stale) return Colors.amber;
@@ -53,9 +51,9 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
   }
 
   /// Sin heartbeat por más de [_muerta] la app se cerró sin cerrar la caja:
-  /// se muestra como cerrada. Modo jefe no manda heartbeat, queda exento.
+  /// se muestra como cerrada. Desde v4.6 la sesión de modo jefe también
+  /// late mientras la app está abierta, así que aplica la misma regla.
   bool _viva(SesionCaja s) {
-    if (s.etiqueta == kEtiquetaModoJefe) return true;
     final hb = s.lastHeartbeat ?? s.abiertaAt;
     return DateTime.now().toUtc().difference(hb.toUtc()) <= _muerta;
   }

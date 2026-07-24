@@ -1205,6 +1205,29 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  /// Iniciar/cerrar la caja de modo jefe desde el header del menú.
+  Future<void> _toggleCajaJefe(BuildContext context) async {
+    if (ref.read(appRoleProvider).sesionActiva == null) {
+      try {
+        await ref.read(appRoleProvider.notifier).iniciarCajaJefe();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Caja de jefe iniciada: lista para cobrar.'),
+            backgroundColor: Color(0xFF00B894),
+          ),
+        );
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo iniciar la caja: $e')),
+        );
+      }
+    } else {
+      await showCerrarCajaDialog(context);
+    }
+  }
+
   // ── Drawer ─────────────────────────────────────────────────────────────────
   Widget _buildEliteDrawer(BuildContext context, {required bool modoJefe}) {
     final primaryGold = const Color(0xFFD4AF37);
@@ -1453,7 +1476,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                   subtitle: Text(
-                    'Menú completo activo',
+                    ref.watch(appRoleProvider).sesionActiva == null
+                        ? 'Solo consulta · caja sin iniciar'
+                        : 'Caja iniciada · listo para cobrar',
                     style: TextStyle(
                       fontSize: 11,
                       color: Theme.of(context).brightness == Brightness.dark
@@ -1461,12 +1486,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           : Colors.black45,
                     ),
                   ),
-                  trailing: TextButton(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      await ref.read(appRoleProvider.notifier).logoutApp();
-                    },
-                    child: const Text('Salir'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await _toggleCajaJefe(context);
+                        },
+                        child: Text(
+                          ref.watch(appRoleProvider).sesionActiva == null
+                              ? 'Iniciar caja'
+                              : 'Cerrar caja',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await ref.read(appRoleProvider.notifier).logoutApp();
+                        },
+                        child: const Text('Salir'),
+                      ),
+                    ],
                   ),
                 )
               else

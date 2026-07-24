@@ -16,6 +16,7 @@ import '../../../models/presupuesto.dart';
 import '../../../models/prestamo_alquiler.dart';
 import '../../../models/calculo_rentabilidad.dart';
 import '../../../models/egreso.dart';
+import '../../cierre_caja/models/resumen_sesion_pdf.dart';
 import '../../cierre_caja/models/turno_caja.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
@@ -4281,6 +4282,17 @@ class PdfService {
 
     /// Si es `true`, lista cada ingreso del turno en tabla (PDF más largo).
     bool incluirTablaIngresosDetallada = false,
+
+    /// Datos de la sesión cuando el alcance es una sola sesión: agrega el
+    /// bloque "Cierre de sesión" (cambio inicial, arqueo, diferencia).
+    double? sesionCambioInicial,
+    double? sesionArqueo,
+    String? sesionNotaCierre,
+    DateTime? sesionAbiertaAt,
+    DateTime? sesionCerradaAt,
+
+    /// Desglose por sesión/operario para el PDF consolidado del día.
+    List<ResumenSesionPdf> resumenSesiones = const [],
   }) async {
     final fontRegular = await PdfGoogleFonts.outfitRegular();
     final fontBold = await PdfGoogleFonts.outfitBold();
@@ -4350,6 +4362,33 @@ class PdfService {
                   retirosTransferencia: retirosTransferencia,
                   transferenciaNeta: transferenciaNeta,
                 ),
+                if (sesionCambioInicial != null) ...[
+                  pw.SizedBox(height: 10),
+                  _ticketCajaBloqueCierreSesion(
+                    cambioInicial: sesionCambioInicial,
+                    efectivoNeto: efectivoNeto,
+                    arqueo: sesionArqueo,
+                    notaCierre: sesionNotaCierre,
+                    abiertaAt: sesionAbiertaAt,
+                    cerradaAt: sesionCerradaAt,
+                  ),
+                ],
+                if (resumenSesiones.isNotEmpty) ...[
+                  pw.SizedBox(height: 10),
+                  _ticketCajaSeccionTitulo('POR SESIÓN / OPERARIO'),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Efectivo y transferencia son lo cobrado bruto por cada sesión. '
+                    'Dif. = arqueo declarado − efectivo esperado en el cajón.',
+                    style: pw.TextStyle(
+                      fontSize: 7.5,
+                      fontStyle: pw.FontStyle.italic,
+                      color: _greyText,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  _ticketCajaTablaResumenSesiones(resumenSesiones),
+                ],
                 pw.SizedBox(height: 8),
                 pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -4967,6 +5006,227 @@ class PdfService {
         2: pw.FixedColumnWidth(44),
         3: pw.FixedColumnWidth(46),
         4: pw.FixedColumnWidth(52),
+      },
+      children: filas,
+    );
+  }
+
+  /// Bloque de cierre de una sesión: cambio inicial, efectivo esperado en el
+  /// cajón, arqueo declarado por el operador y diferencia (sobrante/faltante).
+  static pw.Widget _ticketCajaBloqueCierreSesion({
+    required double cambioInicial,
+    required double efectivoNeto,
+    double? arqueo,
+    String? notaCierre,
+    DateTime? abiertaAt,
+    DateTime? cerradaAt,
+  }) {
+    final esperado = cambioInicial + efectivoNeto;
+    final diferencia = arqueo == null ? null : arqueo - esperado;
+
+    pw.Widget linea(
+      String label,
+      String valor, {
+      PdfColor? color,
+      bool bold = false,
+    }) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 2),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              label,
+              style: pw.TextStyle(fontSize: 8, color: _greyText),
+            ),
+            pw.Text(
+              valor,
+              style: pw.TextStyle(
+                fontSize: 8,
+                color: color ?? _darkText,
+                fontWeight: bold ? pw.FontWeight.bold : null,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final rango = [
+      if (abiertaAt != null) 'Apertura ${ArTime.formatHora(abiertaAt)}',
+      cerradaAt != null
+          ? 'cierre ${ArTime.formatHora(cerradaAt)}'
+          : 'sesión aún abierta',
+    ].join(' · ');
+
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: _greyLight, width: 0.5),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _ticketCajaSeccionTitulo('CIERRE DE SESIÓN'),
+          pw.SizedBox(height: 2),
+          pw.Text(
+            rango,
+            style: pw.TextStyle(fontSize: 7.5, color: _greyText),
+          ),
+          pw.SizedBox(height: 5),
+          linea('Cambio inicial', cambioInicial.toCurrency()),
+          linea(
+            'Efectivo esperado en caja (cambio + efectivo neto)',
+            esperado.toCurrency(),
+            bold: true,
+          ),
+          if (arqueo == null)
+            linea(
+              'Arqueo declarado',
+              cerradaAt == null ? 'pendiente (sesión abierta)' : 'sin arqueo',
+            )
+          else ...[
+            linea('Arqueo declarado', arqueo.toCurrency(), bold: true),
+            linea(
+              diferencia! >= 0.01
+                  ? 'Diferencia (sobrante)'
+                  : diferencia <= -0.01
+                  ? 'Diferencia (faltante)'
+                  : 'Diferencia',
+              diferencia.toCurrency(),
+              color: diferencia.abs() < 0.01
+                  ? _greenAccent
+                  : diferencia > 0
+                  ? _greenAccent
+                  : _redAccent,
+              bold: true,
+            ),
+          ],
+          if ((notaCierre ?? '').trim().isNotEmpty) ...[
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Nota de cierre: ${notaCierre!.trim()}',
+              style: pw.TextStyle(
+                fontSize: 7.5,
+                fontStyle: pw.FontStyle.italic,
+                color: _greyText,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Desglose del día por sesión/operario: cuánto cobró cada uno y cómo
+  /// cerró su arqueo.
+  static pw.Widget _ticketCajaTablaResumenSesiones(
+    List<ResumenSesionPdf> rows,
+  ) {
+    pw.Widget cell(
+      String text, {
+      bool header = false,
+      PdfColor? color,
+      pw.TextAlign align = pw.TextAlign.left,
+      bool bold = false,
+    }) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+        child: pw.Text(
+          text,
+          textAlign: align,
+          style: pw.TextStyle(
+            fontSize: 7.5,
+            fontWeight: header || bold ? pw.FontWeight.bold : null,
+            color: color ?? _darkText,
+          ),
+        ),
+      );
+    }
+
+    String difTexto(ResumenSesionPdf r) {
+      final d = r.diferencia;
+      if (d == null) return r.horaCierre == null ? 'abierta' : 's/arqueo';
+      if (d.abs() < 0.01) return 'OK';
+      return d.toCurrency();
+    }
+
+    PdfColor? difColor(ResumenSesionPdf r) {
+      final d = r.diferencia;
+      if (d == null) return _greyText;
+      if (d.abs() < 0.01 || d > 0) return _greenAccent;
+      return _redAccent;
+    }
+
+    final totalEfectivo = rows.fold<double>(0, (s, r) => s + r.efectivo);
+    final totalTransfer = rows.fold<double>(0, (s, r) => s + r.transferencia);
+
+    final filas = <pw.TableRow>[
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _headerBg),
+        children: [
+          cell('Operario', header: true),
+          cell('Turno', header: true),
+          cell('Horario', header: true),
+          cell('Efectivo', header: true, align: pw.TextAlign.right),
+          cell('Transf.', header: true, align: pw.TextAlign.right),
+          cell('Total', header: true, align: pw.TextAlign.right),
+          cell('Arqueo', header: true, align: pw.TextAlign.right),
+          cell('Dif.', header: true, align: pw.TextAlign.right),
+        ],
+      ),
+      ...rows.map(
+        (r) => pw.TableRow(
+          children: [
+            cell(_pdfCierreTrunc(r.operador, 16)),
+            cell(_pdfCierreTrunc(r.etiqueta, 10)),
+            cell(
+              '${r.horaApertura.replaceAll(' hs', '')}–'
+              '${r.horaCierre?.replaceAll(' hs', '') ?? '…'}',
+            ),
+            cell(r.efectivo.toCurrency(), align: pw.TextAlign.right),
+            cell(r.transferencia.toCurrency(), align: pw.TextAlign.right),
+            cell(r.total.toCurrency(), align: pw.TextAlign.right, bold: true),
+            cell(
+              r.arqueo?.toCurrency() ?? '—',
+              align: pw.TextAlign.right,
+            ),
+            cell(difTexto(r), align: pw.TextAlign.right, color: difColor(r)),
+          ],
+        ),
+      ),
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _headerBg),
+        children: [
+          cell('TOTAL DÍA', header: true),
+          cell(''),
+          cell(''),
+          cell(totalEfectivo.toCurrency(), header: true, align: pw.TextAlign.right),
+          cell(totalTransfer.toCurrency(), header: true, align: pw.TextAlign.right),
+          cell(
+            (totalEfectivo + totalTransfer).toCurrency(),
+            header: true,
+            align: pw.TextAlign.right,
+          ),
+          cell(''),
+          cell(''),
+        ],
+      ),
+    ];
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: _greyLight, width: 0.3),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(1.6),
+        1: pw.FixedColumnWidth(40),
+        2: pw.FixedColumnWidth(58),
+        3: pw.FixedColumnWidth(52),
+        4: pw.FixedColumnWidth(52),
+        5: pw.FixedColumnWidth(56),
+        6: pw.FixedColumnWidth(52),
+        7: pw.FixedColumnWidth(46),
       },
       children: filas,
     );

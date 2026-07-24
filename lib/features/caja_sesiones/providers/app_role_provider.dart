@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/ar_time.dart';
 import '../../common/providers/admin_provider.dart';
 import '../models/modo_jefe_caja.dart';
 import '../models/operador_caja.dart';
@@ -70,7 +71,58 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     await ref.read(adminAuthProvider.notifier).enableModoJefe();
     _stopHeartbeat();
     state = const AppRoleState(kind: AppRoleKind.jefe);
+    unawaited(_reanudarSesionJefe());
     return true;
+  }
+
+  /// Si quedó una sesión de modo jefe abierta hoy, la retoma y la deja
+  /// latiendo. Una de otro día la cierra ensureSesionModoJefe al cobrar.
+  Future<void> _reanudarSesionJefe() async {
+    try {
+      final sesRepo = ref.read(sesionesCajaRepositoryProvider);
+      final abierta = await sesRepo.sesionAbiertaDeOperador(
+        kOperadorModoJefeId,
+      );
+      if (abierta == null || !state.esJefe) return;
+      final ar = ArTime.toAr(abierta.abiertaAt);
+      final hoy = ArTime.nowAr();
+      final mismoDia =
+          ar.year == hoy.year && ar.month == hoy.month && ar.day == hoy.day;
+      if (!mismoDia) return;
+      state = state.copyWith(
+        sesionActiva: abierta.copyWith(operadorNombre: kOperadorModoJefeNombre),
+      );
+      _startHeartbeat(abierta.id);
+      unawaited(sesRepo.heartbeat(abierta.id));
+    } catch (_) {}
+  }
+
+  /// Botón "Iniciar caja" del jefe: abre (o retoma) la sesión automática
+  /// del día y arranca el heartbeat. Deja la caja lista para cobrar.
+  Future<SesionCaja> iniciarCajaJefe() async {
+    if (!state.esJefe) throw StateError('Solo disponible en modo jefe');
+    final sesRepo = ref.read(sesionesCajaRepositoryProvider);
+    final sesion = await sesRepo.ensureSesionModoJefe();
+    state = state.copyWith(sesionActiva: sesion);
+    _startHeartbeat(sesion.id);
+    await sesRepo.flushBestEffort();
+    return sesion;
+  }
+
+  /// Cierra la sesión de modo jefe con arqueo opcional. A diferencia del
+  /// cierre de operario, NO desloguea: el jefe sigue en su dashboard.
+  Future<void> cerrarCajaJefe({double? arqueoCierre, String? notaCierre}) async {
+    final sesion = state.sesionActiva;
+    if (!state.esJefe || sesion == null) return;
+    _stopHeartbeat();
+    final sesRepo = ref.read(sesionesCajaRepositoryProvider);
+    await sesRepo.cerrar(
+      sesionId: sesion.id,
+      arqueoCierre: arqueoCierre,
+      notaCierre: notaCierre,
+    );
+    await sesRepo.flushBestEffort();
+    state = state.copyWith(clearSesion: true);
   }
 
   /// PIN de operador → rol caja; reanuda sesión abierta si existe.
@@ -82,6 +134,7 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
       return 'PIN de caja incorrecto o operador inactivo';
     }
 
+    _stopHeartbeat();
     await ref.read(adminAuthProvider.notifier).logout();
 
     final sesRepo = ref.read(sesionesCajaRepositoryProvider);
@@ -147,6 +200,12 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
       final sesion = await ref
           .read(sesionesCajaRepositoryProvider)
           .ensureSesionModoJefe();
+      // Cobró sin apretar "Iniciar caja": la sesión automática también
+      // queda activa y latiendo, para que el chip refleje la realidad.
+      if (state.sesionActiva?.id != sesion.id) {
+        state = state.copyWith(sesionActiva: sesion);
+        _startHeartbeat(sesion.id);
+      }
       return sesion.id;
     }
     return null;
@@ -170,7 +229,7 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
         await repo.heartbeat(sesionId);
         await repo.flushBestEffort();
         final fresh = await repo.getById(sesionId);
-        if (fresh != null && state.esCaja) {
+        if (fresh != null && (state.esCaja || state.esJefe)) {
           state = state.copyWith(sesionActiva: fresh);
         }
       } catch (_) {}

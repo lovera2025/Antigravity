@@ -17,6 +17,7 @@ import '../mi_empresa/models/ingreso_detallado.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 import '../caja_sesiones/models/modo_jefe_caja.dart';
 import '../caja_sesiones/repositories/sesiones_caja_repository.dart';
+import 'models/resumen_sesion_pdf.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
 import 'widgets/anotacion_pdf_section.dart';
@@ -156,8 +157,49 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     }
   }
 
+  /// Desglose del día: una fila por sesión con lo cobrado y su arqueo.
+  List<ResumenSesionPdf> _resumenPorSesion(CierreCajaState state) {
+    return state.sesionesDia.map((s) {
+      double efectivo = 0;
+      double transferencia = 0;
+      for (final i in state.ingresosTurno) {
+        if (i.sesionCajaId != s.id) continue;
+        final mp = i.medioPago?.toLowerCase().trim();
+        if (mp == 'transferencia') {
+          transferencia += i.monto;
+        } else {
+          efectivo += i.monto;
+        }
+      }
+      double egresosEfectivo = 0;
+      for (final e in state.egresosTurno) {
+        if (e.sesionCajaId != s.id) continue;
+        if ((e.medioPago ?? '').toLowerCase().trim() != 'transferencia') {
+          egresosEfectivo += e.monto;
+        }
+      }
+      final esJefe = esOperadorModoJefeId(s.operadorId);
+      return ResumenSesionPdf(
+        operador: esJefe
+            ? kOperadorModoJefeNombre
+            : (s.operadorNombre ?? 'Operario'),
+        etiqueta: esJefe ? 'Día' : (s.etiqueta ?? '—'),
+        horaApertura: ArTime.formatHora(s.abiertaAt),
+        horaCierre: s.cerradaAt == null ? null : ArTime.formatHora(s.cerradaAt!),
+        efectivo: efectivo,
+        transferencia: transferencia,
+        cambioInicial: s.cambioInicial,
+        egresosEfectivo: egresosEfectivo,
+        arqueo: s.arqueoCierre,
+      );
+    }).toList();
+  }
+
   Future<void> _exportarPdf(BuildContext context, CierreCajaState state) async {
     try {
+      final sesion = state.sinSesiones || state.consolidado
+          ? null
+          : state.sesionSeleccionada;
       await PdfService.generarCierreCajaPdfTicket(
         diaCalendarioAr: state.dia,
         turno: state.turno,
@@ -177,6 +219,14 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         guiaCantUsos: state.guiaCantUsos,
         guiaTotalReposiciones: state.guiaTotalReposiciones,
         guiaTotalUsos: state.guiaTotalUsos,
+        sesionCambioInicial: sesion?.cambioInicial,
+        sesionArqueo: sesion?.arqueoCierre,
+        sesionNotaCierre: sesion?.notaCierre,
+        sesionAbiertaAt: sesion?.abiertaAt,
+        sesionCerradaAt: sesion?.cerradaAt,
+        resumenSesiones: state.consolidado && !state.sinSesiones
+            ? _resumenPorSesion(state)
+            : const [],
       );
     } catch (e) {
       if (!context.mounted) return;

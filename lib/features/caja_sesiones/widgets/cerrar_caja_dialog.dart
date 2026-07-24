@@ -59,9 +59,19 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
       final arqueo = arqueoText.isEmpty
           ? null
           : CurrencyInputFormatter.parse(arqueoText);
-      await ref
-          .read(appRoleProvider.notifier)
-          .cerrarSesionCaja(arqueoCierre: arqueo, notaCierre: _notaCtrl.text);
+      final notifier = ref.read(appRoleProvider.notifier);
+      if (ref.read(appRoleProvider).esJefe) {
+        // El jefe cierra su caja pero sigue logueado en su dashboard.
+        await notifier.cerrarCajaJefe(
+          arqueoCierre: arqueo,
+          notaCierre: _notaCtrl.text,
+        );
+      } else {
+        await notifier.cerrarSesionCaja(
+          arqueoCierre: arqueo,
+          notaCierre: _notaCtrl.text,
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -79,7 +89,9 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
 
     return AlertDialog(
       title: Text(
-        'Cerrar caja${role.operador != null ? ' · ${role.operador!.nombre}' : ''}',
+        role.esJefe
+            ? 'Cerrar caja · Modo jefe'
+            : 'Cerrar caja${role.operador != null ? ' · ${role.operador!.nombre}' : ''}',
       ),
       content: SizedBox(
         width: 400,
