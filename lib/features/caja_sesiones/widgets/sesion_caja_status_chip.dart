@@ -21,6 +21,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
   List<SesionCaja> _abiertas = [];
   Timer? _poll;
   static const _stale = Duration(seconds: 90);
+  static const _muerta = Duration(minutes: 5);
 
   Future<void> _refresh() async {
     try {
@@ -51,9 +52,18 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
     return Colors.greenAccent;
   }
 
+  /// Sin heartbeat por más de [_muerta] la app se cerró sin cerrar la caja:
+  /// se muestra como cerrada. Modo jefe no manda heartbeat, queda exento.
+  bool _viva(SesionCaja s) {
+    if (s.etiqueta == kEtiquetaModoJefe) return true;
+    final hb = s.lastHeartbeat ?? s.abiertaAt;
+    return DateTime.now().toUtc().difference(hb.toUtc()) <= _muerta;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_abiertas.isEmpty) {
+    final vivas = _abiertas.where(_viva).toList();
+    if (vivas.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -75,7 +85,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
       );
     }
 
-    final s = _abiertas.first;
+    final s = vivas.first;
     final color = _colorFor(s);
     final label = [
       s.operadorNombre ?? 'Operador',
@@ -84,9 +94,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
     ].join(' · ');
 
     return Tooltip(
-      message: _abiertas.length > 1
-          ? '${_abiertas.length} cajas abiertas'
-          : 'Sesión activa',
+      message: vivas.length > 1 ? '${vivas.length} cajas abiertas' : 'Sesión activa',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -112,10 +120,10 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
                 maxLines: 1,
               ),
             ),
-            if (_abiertas.length > 1) ...[
+            if (vivas.length > 1) ...[
               const SizedBox(width: 6),
               Text(
-                '+${_abiertas.length - 1}',
+                '+${vivas.length - 1}',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
