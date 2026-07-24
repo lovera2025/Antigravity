@@ -3,8 +3,9 @@
 > **Referencia:** `CONTEXTO_v4.5.0` · `release 4.5.0` · `sesiones de caja` · `modo jefe` · `sorteo alejadas`
 > Si en un chat futuro decís *"leé el contexto del 23 de julio"* o *"qué hay en 4.5.0"*, apuntá a este archivo.
 
-**Estado:** **RELEASE** — `4.5.0+24`  
-**Instalador:** `Setup Junior Eventos v4.5.0.exe` (`installer/dist/` vía `.\installer\build_installer.ps1`)  
+**Estado:** **SUPERSEDIDO** por **v4.5.1** — ver `docs/CONTEXTO_v4.5.1_2026-07-23.md`.  
+**Versión histórica:** `4.5.0+24`  
+**Instalador vigente:** `Setup Junior Eventos v4.5.1.exe`  
 **Rama:** `feature/optimizacion-finanzas`
 
 ---

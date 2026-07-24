@@ -6,14 +6,21 @@ import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../models/modo_jefe_caja.dart';
 import '../models/sesion_caja.dart';
+import 'operadores_caja_repository.dart';
 
 class SesionesCajaRepository {
   // ignore: unused_field
   final ConnectivityService _connectivity;
   final SyncEngine _syncEngine;
+  final OperadoresCajaRepository _operadores;
 
-  SesionesCajaRepository(this._connectivity, this._syncEngine);
+  SesionesCajaRepository(
+    this._connectivity,
+    this._syncEngine,
+    this._operadores,
+  );
 
   Future<SesionCaja?> getById(String id) async {
     final db = await LocalDatabase.instance;
@@ -100,7 +107,12 @@ class SesionesCajaRepository {
     String? deviceId,
   }) async {
     final turno = etiqueta.trim();
-    if (turno != 'Mañana' && turno != 'Tarde') {
+    final esJefe = esOperadorModoJefeId(operadorId);
+    if (esJefe) {
+      if (turno != kEtiquetaModoJefe) {
+        throw ArgumentError('La sesión de modo jefe usa la etiqueta "$kEtiquetaModoJefe"');
+      }
+    } else if (turno != 'Mañana' && turno != 'Tarde') {
       throw ArgumentError('El turno debe ser Mañana o Tarde');
     }
     final abierta = await sesionAbiertaDeOperador(operadorId);
@@ -136,6 +148,45 @@ class SesionesCajaRepository {
       payload: sesion.toSyncPayload(),
     );
     return sesion;
+  }
+
+  /// Una sola sesión del día calendario AR para cobros en modo jefe.
+  /// Sin corte Mañana/Tarde: el jefe no hereda turnos de caja.
+  Future<SesionCaja> ensureSesionModoJefe() async {
+    final op = await _operadores.ensureOperadorModoJefe();
+    final hoy = ArTime.nowAr();
+    final y = hoy.year;
+    final m = hoy.month;
+    final d = hoy.day;
+
+    final abierta = await sesionAbiertaDeOperador(op.id);
+    if (abierta != null) {
+      final ar = ArTime.toAr(abierta.abiertaAt);
+      final sameDay = ar.year == y && ar.month == m && ar.day == d;
+      if (sameDay) {
+        return abierta.copyWith(operadorNombre: kOperadorModoJefeNombre);
+      }
+      await cerrar(
+        sesionId: abierta.id,
+        notaCierre: 'Cerrada al iniciar jornada (modo jefe)',
+      );
+    }
+
+    // Reusar cualquier sesión jefe del día (compat con etiquetas Mañana/Tarde previas).
+    final delDia = await sesionesDelDia(DateTime(y, m, d));
+    for (final s in delDia) {
+      if (s.operadorId == op.id) {
+        return s.copyWith(operadorNombre: kOperadorModoJefeNombre);
+      }
+    }
+
+    final creada = await abrir(
+      operadorId: op.id,
+      cambioInicial: 0,
+      etiqueta: kEtiquetaModoJefe,
+      notaApertura: 'Sesión automática · cobro en modo jefe',
+    );
+    return creada.copyWith(operadorNombre: kOperadorModoJefeNombre);
   }
 
   Future<SesionCaja> cerrar({
@@ -283,5 +334,6 @@ final sesionesCajaRepositoryProvider = Provider<SesionesCajaRepository>((ref) {
   return SesionesCajaRepository(
     ref.watch(connectivityServiceProvider),
     ref.watch(syncEngineProvider),
+    ref.watch(operadoresCajaRepositoryProvider),
   );
 });

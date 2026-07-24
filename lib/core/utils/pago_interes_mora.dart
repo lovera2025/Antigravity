@@ -19,6 +19,10 @@ bool esPagoInteresMoraPorConcepto(String? raw) {
   if (folded.contains('interes mora')) return true;
   // Cobro solo del tracked remanente (cuota pagada sin mora en su día).
   if (folded.contains('mora remanente')) return true;
+  if (folded.contains('mora de cuotas ya pagadas')) return true;
+  if (folded.contains('mora cuotas ya pagadas')) return true;
+  if (folded.contains('mora pendiente cuota')) return true;
+  if (folded.contains('mora pendiente de cuotas')) return true;
   return folded.contains('interes') && folded.contains('mora');
 }
 

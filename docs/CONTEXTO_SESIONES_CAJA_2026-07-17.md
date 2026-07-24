@@ -4,7 +4,7 @@
 > Si en un chat futuro decís *"leé el contexto de sesiones de caja"*, *"role gate"* o *"caja vs jefe"*, apuntá a este archivo.
 
 **Estado:** implementado en rama `feature/optimizacion-finanzas` (commit `10e00a5`+).  
-**Versión app:** **4.5.0+24** (release 23-jul-2026; ver `docs/CONTEXTO_v4.5.0_2026-07-23.md`).  
+**Versión app:** **4.5.1+25** (release 23-jul-2026; ver `docs/CONTEXTO_v4.5.1_2026-07-23.md`).  
 **SQL remoto:** `docs/sql_sesiones_caja_supabase.sql` (ejecutar en Supabase si aún no está).
 
 ---
@@ -79,6 +79,6 @@
 
 ## Cómo seguir
 
-1. Leer este archivo + `CONTEXTO_v4.5.0_2026-07-23.md` (release) o `CONTEXTO_v4.3.2_2026-07-16.md` si hace falta sorteo/modo jefe previo.
+1. Leer este archivo + `CONTEXTO_v4.5.1_2026-07-23.md` (release) o `CONTEXTO_v4.5.0` / `CONTEXTO_v4.3.2` si hace falta historial.
 2. Cambios de caja: partir de `appRoleProvider` / `SesionesCajaRepository`.
 3. Schema remoto: solo aditivo vía el SQL doc.

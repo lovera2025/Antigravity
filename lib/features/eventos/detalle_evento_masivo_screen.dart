@@ -25,6 +25,8 @@ import '../../core/utils/pago_interes_mora.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/cronograma_cuotas_utils.dart';
 import 'services/mora_cuota_calculator.dart';
+import 'services/mora_concepto_rotulo.dart';
+import 'services/mora_tracked_origen.dart';
 import 'services/cobro_abono_acumulado.dart';
 import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
@@ -2141,53 +2143,88 @@ class _DetalleEventoMasivoScreenState
                                                 padding: EdgeInsets.only(
                                                   top: layoutCompact ? 1 : 2,
                                                 ),
-                                                child: Text(
-                                                  'Mora pendiente: ${moraPendienteFila.toCurrency()}',
-                                                  style: TextStyle(
-                                                    fontSize: layoutCompact
-                                                        ? 8
-                                                        : 9,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        Colors.orange.shade800,
-                                                  ),
-                                                ),
-                                              ),
-                                              Builder(
-                                                builder: (_) {
-                                                  final desglose =
-                                                      MoraCuotaCalculator.calcularDesglose(
-                                                        a,
+                                                child: Builder(
+                                                  builder: (_) {
+                                                    final tracked =
+                                                        a.moraPendienteTracked
+                                                            .clamp(
+                                                              0.0,
+                                                              double.infinity,
+                                                            );
+                                                    final desglose =
+                                                        MoraCuotaCalculator
+                                                            .calcularDesglose(a);
+                                                    final partes = <String>[];
+                                                    if (tracked > 0.01) {
+                                                      // Heurística grilla (sin historial): el tracked
+                                                      // postCobro queda de las últimas liquidadas.
+                                                      final n =
+                                                          cPagadas.clamp(1, 99);
+                                                      partes.add(
+                                                        'Pend. C$n ${tracked.toCurrency()}',
                                                       );
-                                                  if (desglose.isEmpty)
-                                                    return const SizedBox.shrink();
-                                                  final resumen = desglose
-                                                      .map(
-                                                        (d) =>
-                                                            'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) ${d.diasMora}d',
-                                                      )
-                                                      .join(' · ');
-                                                  return Padding(
-                                                    padding: EdgeInsets.only(
-                                                      top: layoutCompact
-                                                          ? 0
-                                                          : 1,
-                                                    ),
-                                                    child: Text(
-                                                      resumen,
-                                                      style: TextStyle(
-                                                        fontSize: layoutCompact
-                                                            ? 7
-                                                            : 8,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: Colors
-                                                            .orange
-                                                            .shade600,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
+                                                    }
+                                                    if (desglose.isNotEmpty) {
+                                                      partes.add(
+                                                        desglose
+                                                            .map(
+                                                              (d) =>
+                                                                  'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) ${d.diasMora}d',
+                                                            )
+                                                            .join(' · '),
+                                                      );
+                                                    }
+                                                    final titulo =
+                                                        'Mora pendiente: ${moraPendienteFila.toCurrency()}';
+                                                    final detalle =
+                                                        partes.join(' · ');
+                                                    return Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          titulo,
+                                                          style: TextStyle(
+                                                            fontSize:
+                                                                layoutCompact
+                                                                    ? 8
+                                                                    : 9,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: Colors.orange
+                                                                .shade800,
+                                                          ),
+                                                        ),
+                                                        if (detalle.isNotEmpty)
+                                                          Padding(
+                                                            padding:
+                                                                EdgeInsets.only(
+                                                              top:
+                                                                  layoutCompact
+                                                                      ? 0
+                                                                      : 1,
+                                                            ),
+                                                            child: Text(
+                                                              detalle,
+                                                              style: TextStyle(
+                                                                fontSize:
+                                                                    layoutCompact
+                                                                        ? 7
+                                                                        : 8,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color: Colors
+                                                                    .orange
+                                                                    .shade700,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
+                                                    );
+                                                  },
+                                                ),
                                               ),
                                             ],
                                           ],
@@ -3364,6 +3401,14 @@ class _DetalleEventoMasivoScreenState
       0.0,
       double.infinity,
     );
+    final List<MoraPendientePreviaDetalle> origenTracked =
+        remanenteMora > 0.01
+            ? MoraTrackedOrigen.inferir(
+                contratoBase: alumno,
+                pagos: pagosAlumno,
+                trackedMonto: remanenteMora,
+              )
+            : const <MoraPendientePreviaDetalle>[];
     Set<int> moraCuotasSeleccionadas = {};
     final double moraPendienteEfectivo =
         MoraCuotaCalculator.moraPendienteOperativa(
@@ -3404,42 +3449,26 @@ class _DetalleEventoMasivoScreenState
         0,
         (s, d) => s + d.interesBruto,
       );
-      final bool incluyeRemanente =
-          remanenteMora > 0.01 && g > sumDetalles + 0.01;
-      String concepto;
-      if (detalles.length == 1) {
-        final d = detalles.first;
-        concepto = 'Interés mora cuota ${d.numeroCuota} (${d.mesLabel})';
-        if (incluyeRemanente) concepto += ' + Remanente';
-      } else if (detalles.length > 1) {
-        final nums = detalles.map((d) => d.numeroCuota).join(', ');
-        final meses = detalles
-            .map((d) => d.mesLabel.split(' ').first)
-            .join(', ');
-        concepto = 'Interés mora cuotas $nums ($meses)';
-        if (incluyeRemanente) concepto += ' + Remanente';
-      } else if (incluyeRemanente) {
-        concepto = 'Mora remanente';
-      } else {
-        concepto = 'Interés mora (cuota base — este cobro)';
+      // Pendiente de cuotas ya pagadas: checkbox, o excedente sobre el desglose.
+      double montoPendiente = 0;
+      if (incluirMoraRemanenteFicha && remanenteMora > 0.01) {
+        montoPendiente = remanenteMora;
+      } else if (g > sumDetalles + 0.01 && remanenteMora > 0.01) {
+        montoPendiente = double.parse(
+          (g - sumDetalles)
+              .clamp(0.0, remanenteMora)
+              .toStringAsFixed(2),
+        );
       }
-      return {
-        'concepto': concepto,
-        'monto': g,
-        'gross': g,
-        'cuotas': 0,
-        'lineKind': kLineKindInteresMora,
-        'moraDesglose': detalles
-            .map(
-              (d) => <String, dynamic>{
-                'numeroCuota': d.numeroCuota,
-                'mesLabel': d.mesLabel,
-                'monto': d.interesBruto,
-                'diasMora': d.diasMora,
-              },
-            )
-            .toList(),
-      };
+      return MoraConceptoRotulo.construirPreviewMora(
+        montoTotal: g,
+        detallesCalendario: detalles,
+        montoPendientePrevias: montoPendiente,
+        lineKind: kLineKindInteresMora,
+        detallePendiente: montoPendiente > 0.01
+            ? origenTracked
+            : const <MoraPendientePreviaDetalle>[],
+      );
     }
 
     Map<String, dynamic> lineaPreviewCargoCanal(double monto) {
@@ -4375,7 +4404,10 @@ class _DetalleEventoMasivoScreenState
                                         if (moraTotalDesglose > 0.01)
                                           'Cuotas vencidas: ${moraTotalDesglose.toCurrency()}',
                                         if (remanenteMora > 0.01)
-                                          'Saldo en ficha: ${remanenteMora.toCurrency()}',
+                                          MoraConceptoRotulo.resumenPendientePrevias(
+                                            remanenteMora.toCurrency(),
+                                            detalle: origenTracked,
+                                          ),
                                       ].join(' · '),
                                       style: TextStyle(
                                         fontSize: 11,
@@ -4499,9 +4531,10 @@ class _DetalleEventoMasivoScreenState
                                         });
                                       },
                                       title: Text(
-                                        moraDesglose.isEmpty
-                                            ? 'Incluir mora remanente (${remanenteMora.toCurrency()})'
-                                            : 'Saldo en ficha (${remanenteMora.toCurrency()})',
+                                        MoraConceptoRotulo.checkboxPendientePrevias(
+                                          remanenteMora.toCurrency(),
+                                          detalle: origenTracked,
+                                        ),
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
@@ -4509,7 +4542,9 @@ class _DetalleEventoMasivoScreenState
                                         ),
                                       ),
                                       subtitle: Text(
-                                        'Pendiente de cobros anteriores (historial / ficha)',
+                                        origenTracked.length == 1
+                                            ? origenTracked.first.subtextoDetalle
+                                            : MoraConceptoRotulo.checkboxSubtitle,
                                         style: TextStyle(
                                           fontSize: 10,
                                           color: Colors.grey.shade600,
@@ -5928,10 +5963,9 @@ class _DetalleEventoMasivoScreenState
                           final limpiarMoraRefPersist = limpiarMoraRef;
                           final exencionPersist = nuevaExencion;
                           final exencionReiniciaPersist = nuevaExencionReinicia;
-                          final sesionCajaIdCobro = ref
-                              .read(appRoleProvider)
-                              .sesionActiva
-                              ?.id;
+                          final sesionCajaIdCobro = await ref
+                              .read(appRoleProvider.notifier)
+                              .sesionCajaIdParaCobro();
                           final double pctCargoInforme =
                               double.tryParse(
                                 prefsPctStr.replaceAll(',', '.'),
@@ -6940,6 +6974,7 @@ class _DetalleEventoMasivoScreenState
           conceptosPagados = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
             alumno,
             lote,
+            historialCompleto: await repo.getHistorialPagosAlumno(alumno.id),
           );
 
           valPago = conceptosPagados.fold<double>(
@@ -7663,7 +7698,19 @@ class _DetalleEventoMasivoScreenState
     final agruparMesas = usarCompactoMesas && lineasMesas.isNotEmpty;
 
     if (!agruparMesas) {
-      return previewConceptos.map((c) => _buildFilaDesglosePreview(c)).toList();
+      final widgets = <Widget>[];
+      for (final c in previewConceptos) {
+        if (c['lineKind'] == kLineKindInteresMora &&
+            (c['moraDesglose'] != null ||
+                ((c['moraPendientePrevias'] as num?)?.toDouble() ?? 0) > 0.01)) {
+          for (final fila in MoraConceptoRotulo.filasPreviewDesdeMora(c)) {
+            widgets.add(_buildFilaDesglosePreview(fila));
+          }
+        } else {
+          widgets.add(_buildFilaDesglosePreview(c));
+        }
+      }
+      return widgets;
     }
 
     final widgets = <Widget>[];
@@ -7736,6 +7783,12 @@ class _DetalleEventoMasivoScreenState
             ],
           ),
         );
+      } else if (c['lineKind'] == kLineKindInteresMora &&
+          (c['moraDesglose'] != null ||
+              ((c['moraPendientePrevias'] as num?)?.toDouble() ?? 0) > 0.01)) {
+        for (final fila in MoraConceptoRotulo.filasPreviewDesdeMora(c)) {
+          widgets.add(_buildFilaDesglosePreview(fila));
+        }
       } else {
         widgets.add(_buildFilaDesglosePreview(c));
       }

@@ -1778,7 +1778,29 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
               ),
             if (mora.enMora && f.moraPendiente > 0.01)
               Text(
-                'Mora pendiente: ${f.moraPendiente.toCurrency()}',
+                () {
+                  final tracked = f.contrato.moraPendienteTracked
+                      .clamp(0.0, double.infinity);
+                  final n = f.contrato.cuotasPagadas.clamp(1, 99);
+                  final desg = MoraCuotaCalculator.calcularDesglose(f.contrato);
+                  final bits = <String>[
+                    'Mora pendiente: ${f.moraPendiente.toCurrency()}',
+                  ];
+                  if (tracked > 0.01) {
+                    bits.add('Pend. C$n ${tracked.toCurrency()}');
+                  }
+                  if (desg.isNotEmpty) {
+                    bits.add(
+                      desg
+                          .map(
+                            (d) =>
+                                'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) ${d.diasMora}d',
+                          )
+                          .join(' · '),
+                    );
+                  }
+                  return bits.join(' · ');
+                }(),
                 style: TextStyle(fontSize: 10, color: Colors.orange.shade800),
               ),
           ],

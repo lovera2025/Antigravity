@@ -4,9 +4,9 @@
 > Si en un chat futuro decís *"leé el contexto del 16 de julio"* o *"qué hay en 4.3.2"*, apuntá a este archivo.
 > Sesiones de caja / role gate: ver `docs/CONTEXTO_SESIONES_CAJA_2026-07-17.md`.
 
-**Estado:** **SUPERSEDIDO** por **v4.5.0** (23-jul-2026) — ver `docs/CONTEXTO_v4.5.0_2026-07-23.md`.  
-**Versión histórica:** **4.3.2+23** (WIP consolidado en 4.5.0+24).  
-**Instalador vigente:** `Setup Junior Eventos v4.5.0.exe`.
+**Estado:** **SUPERSEDIDO** por **v4.5.1** (23-jul-2026) — ver `docs/CONTEXTO_v4.5.1_2026-07-23.md`.  
+**Versión histórica:** **4.3.2+23** (WIP consolidado en 4.5.0+24 → 4.5.1+25).  
+**Instalador vigente:** `Setup Junior Eventos v4.5.1.exe`.
 
 ---
 
@@ -69,7 +69,7 @@ Referencias previas: `docs/CONTEXTO_SESIONES_CAJA_2026-07-17.md`, `docs/CONTEXTO
 
 ## Cómo seguir en el próximo chat
 
-1. Preferir `CONTEXTO_v4.5.0_2026-07-23.md` + `CONTEXTO_SESIONES_CAJA_2026-07-17` si tocás caja/roles; + `CONTEXTO_v4.3.1` si hace falta mora/perdón.
+1. Preferir `CONTEXTO_v4.5.1_2026-07-23.md` + `CONTEXTO_SESIONES_CAJA_2026-07-17` si tocás caja/roles; + `CONTEXTO_v4.3.1` si hace falta mora/perdón.
 2. Este archivo queda como bitácora del WIP 4.3.2.
 3. Cambios de sorteo: partir de `AlumnoMesasSeparadas` / `asignarMesasSorteo(separaciones: ...)`.
 4. Cambios de caja: partir de `appRoleProvider` / `SesionesCajaRepository`.

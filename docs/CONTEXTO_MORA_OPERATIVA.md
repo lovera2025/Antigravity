@@ -3,10 +3,26 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Viernes 10 de julio de 2026 (v4.3.1 — perdón solo ficha)**  
+**Última actualización:** **Jueves 23 de julio de 2026 (rótulos Opción B — cuota N + subtexto)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
-**Tests:** `test/mora_pendiente_display_test.dart` (46+ tests)  
-**Release notes del día:** `docs/CONTEXTO_v4.3.1_2026-07-10.md`
+**Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart`  
+**Release notes del día:** `docs/CONTEXTO_v4.3.1_2026-07-10.md` · helpers `mora_concepto_rotulo.dart` · `mora_tracked_origen.dart`
+
+---
+
+## Vocabulario UI (23-jul-2026 · Opción B)
+
+| Antes (deprecado en UI) | Ahora |
+|-------------------------|--------|
+| Saldo en ficha / Mora remanente | **Mora pendiente cuota N** (o `cuotas N y M`) |
+| + Remanente / + mora cuotas ya pagadas | **+ mora pendiente cuota N** |
+| Interés mora cuota N (Mes) | **Interés mora cuota N (vto Mes AAAA)** |
+| (subtexto pendiente) | **Al pagar el DD/MM se cobró $X de $Y** |
+
+PDF: líneas separadas calendario vs pendiente **por cuota** (sin prorratear el total sobre el desglose).
+Origen del tracked: `MoraTrackedOrigen.inferir` desde historial.
+Rótulos: `MoraConceptoRotulo` · tests `test/mora_concepto_rotulo_test.dart`.
+Reconciliar conceptos viejos: `dart run tool/reconciliar_rotulos_mora.dart --dry-run`
 
 ---
 
@@ -32,8 +48,8 @@ moraPendienteOperativa = sum(desgloseNeto) + tracked
 
 | Concepto | Origen | Cuándo aparece |
 |----------|--------|----------------|
-| **Mora por cuota vencida** (Abr, May, …) | `calcularDesglose` + FIFO offset-adjusted | Cuotas base **vencidas e impagas**; crece día a día (1% cuota × días). |
-| **"Remanente mora parcial"** | `moraPendienteTracked` | Solo informativo si **tracked > 0**; ya incluido en el total (sin checkbox). |
+| **Mora por cuota vencida** (vto Abr, May, …) | `calcularDesglose` + FIFO offset-adjusted | Cuotas base **vencidas e impagas**; crece día a día (1% cuota × días). |
+| **Mora de cuotas ya pagadas** | `moraPendienteTracked` | Checkbox si `tracked > 0`; incluido en el total operativo. |
 
 ### Helpers clave (`lib/features/eventos/services/mora_cuota_calculator.dart`)
 

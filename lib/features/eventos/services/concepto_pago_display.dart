@@ -1,7 +1,11 @@
+import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
 import 'cobro_abono_acumulado.dart';
 import 'mesas_extra_utils.dart';
+import 'mora_concepto_rotulo.dart';
+import 'mora_cuota_calculator.dart';
+import 'mora_tracked_origen.dart';
 
 /// Resultado de rotular un pago del plan (base / mesa / sillas).
 class RotuloPlanPago {
@@ -811,37 +815,234 @@ class ConceptoPagoDisplay {
   }
 
   /// Líneas PDF desde un lote de pagos ya registrados (reimprimir recibo).
+  ///
+  /// Si [historialCompleto] está disponible:
+  /// - se usa para rotular cuotas con el gross previo (ej. `Cuota Base (3/9)`);
+  /// - los conceptos de mora mixtos se re-parten (Opción B).
   static List<Map<String, dynamic>> conceptosPdfDesdePagosLote(
     ContratoAlumno contrato,
-    List<Map<String, dynamic>> lote,
-  ) {
-    final enriquecidos = enriquecerPagosHistorial(contrato, lote);
-    return enriquecidos.map((p) {
+    List<Map<String, dynamic>> lote, {
+    List<Map<String, dynamic>>? historialCompleto,
+  }) {
+    final idsLote = lote
+        .map((p) => p['id']?.toString())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    // Con historial completo: enriquecer todo (gross correcto) y quedarse
+    // solo con las filas del lote del recibo.
+    final List<Map<String, dynamic>> enriquecidos;
+    if (historialCompleto != null &&
+        historialCompleto.isNotEmpty &&
+        idsLote.isNotEmpty) {
+      final todos = enriquecerPagosHistorial(contrato, historialCompleto);
+      enriquecidos =
+          todos.where((p) => idsLote.contains(p['id']?.toString())).toList();
+    } else {
+      enriquecidos = enriquecerPagosHistorial(contrato, lote);
+    }
+
+    final out = <Map<String, dynamic>>[];
+    for (final p in enriquecidos) {
+      if (esMora(p)) {
+        final repartido = _repartirMoraMixtoSiAplica(
+          contrato: contrato,
+          pago: p,
+          historialCompleto: historialCompleto,
+        );
+        if (repartido != null && repartido.isNotEmpty) {
+          out.addAll(repartido);
+          continue;
+        }
+      }
+
       final net = (p['monto'] as num?)?.toDouble() ?? 0.0;
       final gross = grossPago(p);
-      final out = <String, dynamic>{
+      final line = <String, dynamic>{
         'concepto': p['concepto_detallado'] as String? ??
             p['concepto'] as String? ??
             'Pago',
         'monto': net,
       };
       if (esMora(p)) {
-        out['esMora'] = true;
+        line['esMora'] = true;
       } else if (esCargoCanal(p)) {
-        out['esCargoCanal'] = true;
+        line['esCargoCanal'] = true;
       } else {
-        out['gross'] = gross;
-        out['esPlanLiquidacion'] = true;
+        line['gross'] = gross;
+        line['esPlanLiquidacion'] = true;
       }
       final subConcepto = p['subtexto_concepto'] as String?;
       final subMedio = p['subtitulo_medio'] as String?;
       if (subConcepto != null && subConcepto.isNotEmpty) {
-        out['subtexto'] = subConcepto;
+        line['subtexto'] = subConcepto;
       } else if (subMedio != null && subMedio.isNotEmpty) {
-        out['subtexto'] = subMedio.replaceFirst('· ', '');
+        line['subtexto'] = subMedio.replaceFirst('· ', '');
       }
-      return out;
-    }).toList();
+      out.add(line);
+    }
+    return out;
+  }
+
+  static bool _esConceptoMoraMixtoOPendiente(String concepto) {
+    final cl = foldDiacriticosLatin(concepto.toLowerCase());
+    if (cl.contains('+ mora pendiente')) return true;
+    if (cl.contains('+ mora cuotas ya pagadas')) return true;
+    if (cl.contains('+ remanente')) return true;
+    if (cl.contains('mora pendiente cuota')) return true;
+    if (cl.contains('mora de cuotas ya pagadas')) return true;
+    if (cl.contains('mora pendiente de cuotas')) return true;
+    return false;
+  }
+
+  /// Extrae N de "Interés mora cuota N …" tolerando tildes (Interés → interes).
+  static int? _numeroCuotaCalendarioDesdeConcepto(String concepto) {
+    final folded = foldDiacriticosLatin(concepto.toLowerCase());
+    final m = RegExp(r'interes\s*mora\s*cuota\s*(\d+)').firstMatch(folded);
+    if (m == null) return null;
+    return int.tryParse(m.group(1)!);
+  }
+
+  static String? _mesLabelDesdeConceptoMora(String concepto) {
+    final m = RegExp(
+      r'\(\s*(?:vto\s*)?([^)]+)\)',
+      caseSensitive: false,
+    ).firstMatch(concepto);
+    if (m == null) return null;
+    return m.group(1)!.trim();
+  }
+
+  static List<Map<String, dynamic>>? _repartirMoraMixtoSiAplica({
+    required ContratoAlumno contrato,
+    required Map<String, dynamic> pago,
+    List<Map<String, dynamic>>? historialCompleto,
+  }) {
+    final concepto = (pago['concepto_detallado'] as String?) ??
+        (pago['concepto'] as String?) ??
+        '';
+    if (!_esConceptoMoraMixtoOPendiente(concepto)) return null;
+
+    final monto = double.parse(
+      ((pago['monto'] as num?)?.toDouble() ?? 0).toStringAsFixed(2),
+    );
+    if (monto <= 0.01) return null;
+
+    final fechaRaw = pago['fecha_pago']?.toString();
+    final fecha = fechaRaw != null ? DateTime.tryParse(fechaRaw) : null;
+    final fechaAr = fecha != null ? ArTime.toAr(fecha) : null;
+    final pagoId = pago['id']?.toString();
+
+    final hist = historialCompleto ?? const <Map<String, dynamic>>[];
+    // No usar exención actual del contrato al rearmar un cobro pasado.
+    final contratoHist = contrato.copyWith(
+      moraExentaHasta: null,
+      moraFechaReferencia: null,
+    );
+    // Inferir tracked ANTES del lote del día (si incluimos la cuota base
+    // del mismo cobro, postCobro resetea orígenes y pierde la cuota 2).
+    final DateTime? antesDeLote = fechaAr == null
+        ? null
+        : DateTime.utc(fechaAr.year, fechaAr.month, fechaAr.day, 3);
+
+    final nCal = _numeroCuotaCalendarioDesdeConcepto(concepto);
+
+    List<Map<String, dynamic>> desg = const [];
+    var montoCal = 0.0;
+    if (nCal != null && nCal > 0 && fechaAr != null) {
+      final pre = contratoHist.copyWith(
+        cuotasPagadas: nCal - 1,
+        saldoDeudor: contrato.saldoDeudor > 0.01
+            ? contrato.saldoDeudor
+            : contrato.montoTotalPactado,
+      );
+      final bruto = MoraCuotaCalculator.calcularDesglose(pre, fechaAr);
+      final d = bruto.where((x) => x.numeroCuota == nCal).toList();
+      if (d.isNotEmpty) {
+        montoCal = d.first.interesBruto;
+        desg = [
+          {
+            'numeroCuota': d.first.numeroCuota,
+            'mesLabel': d.first.mesLabel,
+            'monto': d.first.interesBruto,
+            'diasMora': d.first.diasMora,
+          },
+        ];
+      } else {
+        // Fallback: hay N en el texto pero el desglose no respondió (exención/fecha).
+        final mes = _mesLabelDesdeConceptoMora(concepto) ?? '';
+        // Inferir pendiente primero; calendario = resto.
+        final detPrev = hist.isEmpty
+            ? const <MoraPendientePreviaDetalle>[]
+            : MoraTrackedOrigen.inferir(
+                contratoBase: contratoHist,
+                pagos: hist,
+                trackedMonto: monto,
+                antesDe: antesDeLote,
+                excluirPagoId: pagoId,
+              );
+        final sumPrev = detPrev.fold<double>(0, (s, e) => s + e.montoAtribuido);
+        // Si el origen cubre menos que el total, el resto es calendario.
+        final calEst = double.parse(
+          (monto - sumPrev).clamp(0.0, double.infinity).toStringAsFixed(2),
+        );
+        if (calEst > 0.01) {
+          montoCal = calEst;
+          desg = [
+            {
+              'numeroCuota': nCal,
+              'mesLabel': mes.isNotEmpty ? mes : 'cuota $nCal',
+              'monto': calEst,
+            },
+          ];
+        }
+      }
+    }
+
+    final pendiente = double.parse(
+      (monto - montoCal).clamp(0.0, double.infinity).toStringAsFixed(2),
+    );
+
+    List<MoraPendientePreviaDetalle> detalle = const [];
+    if (pendiente > 0.01 && hist.isNotEmpty) {
+      detalle = MoraTrackedOrigen.inferir(
+        contratoBase: contratoHist,
+        pagos: hist,
+        trackedMonto: pendiente,
+        antesDe: antesDeLote,
+        excluirPagoId: pagoId,
+      );
+    }
+
+    // Solo pendiente (sin parte calendario en el texto).
+    if (desg.isEmpty && pendiente > 0.01) {
+      detalle = hist.isEmpty
+          ? detalle
+          : MoraTrackedOrigen.inferir(
+              contratoBase: contratoHist,
+              pagos: hist,
+              trackedMonto: monto,
+              antesDe: antesDeLote,
+              excluirPagoId: pagoId,
+            );
+      return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+        montoTotal: monto,
+        moraDesglose: const [],
+        moraPendientePrevias: monto,
+        detallePendiente: detalle,
+        conceptoFallback: concepto,
+      );
+    }
+
+    if (desg.isEmpty && pendiente <= 0.01) return null;
+
+    return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+      montoTotal: monto,
+      moraDesglose: desg,
+      moraPendientePrevias: pendiente,
+      detallePendiente: detalle,
+      conceptoFallback: concepto,
+    );
   }
 }
 

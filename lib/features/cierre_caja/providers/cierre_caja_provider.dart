@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
 import '../../common/providers/admin_provider.dart';
+import '../../caja_sesiones/models/modo_jefe_caja.dart';
 import '../../caja_sesiones/models/sesion_caja.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../caja_sesiones/repositories/sesiones_caja_repository.dart';
@@ -21,6 +22,9 @@ class CierreCajaState {
   final List<SesionCaja> sesionesDia;
   final String? sesionSeleccionadaId;
   final bool consolidado;
+
+  /// Vista contraste: movimientos del día **sin** `sesion_caja_id` (build viejo).
+  final bool sinSesiones;
 
   /// Hora AR (0..23) en la que termina la mañana y arranca la tarde.
   final int corteHorarioAr;
@@ -60,6 +64,7 @@ class CierreCajaState {
     this.sesionesDia = const [],
     this.sesionSeleccionadaId,
     this.consolidado = false,
+    this.sinSesiones = false,
     required this.corteHorarioAr,
     this.ingresosTurno = const [],
     this.egresosTurno = const [],
@@ -91,6 +96,7 @@ class CierreCajaState {
     List<SesionCaja>? sesionesDia,
     String? sesionSeleccionadaId,
     bool? consolidado,
+    bool? sinSesiones,
     bool clearSesionSeleccionada = false,
     int? corteHorarioAr,
     List<IngresoDetallado>? ingresosTurno,
@@ -125,6 +131,7 @@ class CierreCajaState {
           ? null
           : (sesionSeleccionadaId ?? this.sesionSeleccionadaId),
       consolidado: consolidado ?? this.consolidado,
+      sinSesiones: sinSesiones ?? this.sinSesiones,
       corteHorarioAr: corteHorarioAr ?? this.corteHorarioAr,
       ingresosTurno: ingresosTurno ?? this.ingresosTurno,
       egresosTurno: egresosTurno ?? this.egresosTurno,
@@ -163,9 +170,13 @@ class CierreCajaState {
   }
 
   String get alcanceLabel {
-    if (consolidado) return 'Día completo · sesiones de operarios';
+    if (sinSesiones) {
+      return 'Sin sesiones · ${turno.labelCorto}';
+    }
+    if (consolidado) return 'Día completo · sesiones';
     final s = sesionSeleccionada;
     if (s == null) return 'Sin sesión';
+    if (esOperadorModoJefeId(s.operadorId)) return kOperadorModoJefeNombre;
     return [
       s.operadorNombre ?? 'Operario',
       if ((s.etiqueta ?? '').isNotEmpty) s.etiqueta!,
@@ -186,6 +197,10 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
   }
 
   static TurnoCaja _turnoDeSesion(SesionCaja sesion) {
+    if (esOperadorModoJefeId(sesion.operadorId) ||
+        sesion.etiqueta == kEtiquetaModoJefe) {
+      return TurnoCaja.dia;
+    }
     return sesion.etiqueta == 'Tarde' ? TurnoCaja.tarde : TurnoCaja.manana;
   }
 
@@ -305,6 +320,8 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       await _refrescar();
       return;
     }
+    // En vista "sin sesiones" el turno filtra por hora; en sesiones se ignora
+    // salvo que estemos en esa vista.
     state = state.copyWith(turno: t);
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
@@ -317,6 +334,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     state = state.copyWith(
       sesionSeleccionadaId: sesionId,
       consolidado: false,
+      sinSesiones: false,
       turno: _turnoDeSesion(sesion),
     );
     await _refrescar();
@@ -326,9 +344,31 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     if (!ref.read(appRoleProvider).esJefe) return;
     state = state.copyWith(
       consolidado: true,
+      sinSesiones: false,
       clearSesionSeleccionada: true,
       turno: TurnoCaja.dia,
     );
+    await _refrescar();
+  }
+
+  /// Contraste build viejo: cobros/egresos del día sin `sesion_caja_id`.
+  Future<void> setSinSesiones({bool activo = true}) async {
+    if (!ref.read(appRoleProvider).esJefe) return;
+    if (activo) {
+      state = state.copyWith(
+        sinSesiones: true,
+        consolidado: false,
+        clearSesionSeleccionada: true,
+        turno: TurnoCaja.dia,
+      );
+    } else {
+      state = state.copyWith(
+        sinSesiones: false,
+        consolidado: true,
+        clearSesionSeleccionada: true,
+        turno: TurnoCaja.dia,
+      );
+    }
     await _refrescar();
   }
 
@@ -339,7 +379,13 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     }
     final siguiente = state.dia.add(const Duration(days: 1));
     final n = DateTime(siguiente.year, siguiente.month, siguiente.day);
-    state = state.copyWith(dia: n, turno: TurnoCaja.dia);
+    state = state.copyWith(
+      dia: n,
+      turno: TurnoCaja.dia,
+      sinSesiones: false,
+      consolidado: true,
+      clearSesionSeleccionada: true,
+    );
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
   }
@@ -352,6 +398,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       turno: sesion == null ? turnoActualAr() : _turnoDeSesion(sesion),
       sesionSeleccionadaId: sesion?.id,
       consolidado: false,
+      sinSesiones: false,
     );
     await _guardarVistaSeleccion(state.dia, state.turno);
     await _refrescar();
@@ -367,7 +414,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
 
   String _sesionEditableId() {
     final id = state.sesionSeleccionadaId;
-    if (state.consolidado || id == null) {
+    if (state.sinSesiones || state.consolidado || id == null) {
       throw StateError('Seleccioná una sesión para registrar movimientos.');
     }
     return id;
@@ -516,34 +563,54 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       var sesiones = await sesionesRepo.sesionesDelDia(diaNorm);
       String? seleccionadaId = state.sesionSeleccionadaId;
       var consolidado = state.consolidado;
+      var sinSesiones = state.sinSesiones;
       if (appRole.esCaja) {
         final activa = appRole.sesionActiva;
         sesiones = activa == null ? const [] : [activa];
         seleccionadaId = activa?.id;
+        consolidado = false;
+        sinSesiones = false;
+      } else if (sinSesiones) {
+        seleccionadaId = null;
         consolidado = false;
       } else if (!consolidado && !sesiones.any((s) => s.id == seleccionadaId)) {
         seleccionadaId = sesiones.firstOrNull?.id;
         consolidado = seleccionadaId == null;
       }
 
-      final ids = consolidado
+      final ids = sinSesiones
+          ? <String>{}
+          : consolidado
           ? sesiones.map((s) => s.id).toSet()
-          : <String>{if (seleccionadaId != null) seleccionadaId};
+          : <String>{?seleccionadaId};
       SesionCaja? seleccionada;
       if (seleccionadaId != null) {
         seleccionada = sesiones
             .where((s) => s.id == seleccionadaId)
             .firstOrNull;
       }
-      final turno = consolidado
+      final turno = sinSesiones
+          ? state.turno
+          : consolidado
           ? TurnoCaja.dia
           : (seleccionada == null ? state.turno : _turnoDeSesion(seleccionada));
 
       final results = await Future.wait([
         finanzasRepo.obtenerIngresosDetallados(),
         egresosRepo.getEgresosConEvento(),
-        cierreRepo.obtenerGuiaCambioSesiones(ids),
-        seleccionadaId == null || consolidado
+        sinSesiones || seleccionadaId == null || consolidado
+            ? Future<GuiaCambioResumen>.value(
+                const GuiaCambioResumen(
+                  saldoActual: 0,
+                  movimientos: [],
+                  cantReposiciones: 0,
+                  cantUsos: 0,
+                  totalReposiciones: 0,
+                  totalUsos: 0,
+                ),
+              )
+            : cierreRepo.obtenerGuiaCambioSesiones(ids),
+        seleccionadaId == null || consolidado || sinSesiones
             ? Future<String?>.value(null)
             : cierreRepo.obtenerAnotacionTexto(seleccionadaId),
       ]);
@@ -554,12 +621,28 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       final guia = results[2] as GuiaCambioResumen;
       final anotacion = results[3] as String?;
 
+      final rangoSinSesion = sinSesiones
+          ? rangoHorarioAr(
+              diaNorm,
+              turno,
+              corteHora: state.corteHorarioAr,
+            )
+          : null;
+
       double efectivoBruto = 0;
       double transferenciaBruta = 0;
       final ingresosTurno = <IngresoDetallado>[];
       for (final i in ingresosFull) {
-        final sid = i.sesionCajaId;
-        if (sid == null || !ids.contains(sid)) continue;
+        if (sinSesiones) {
+          final sid = i.sesionCajaId?.trim();
+          if (sid != null && sid.isNotEmpty) continue;
+          if (rangoSinSesion == null || !rangoSinSesion.contiene(i.fecha)) {
+            continue;
+          }
+        } else {
+          final sid = i.sesionCajaId;
+          if (sid == null || !ids.contains(sid)) continue;
+        }
         final mp = i.medioPago?.toLowerCase().trim();
         ingresosTurno.add(i);
         if (mp == 'transferencia') {
@@ -577,8 +660,19 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       double retirosEfectivo = 0;
       double retirosTransferencia = 0;
       for (final e in egresosFull) {
-        final sid = e.sesionCajaId;
-        if (sid == null || !ids.contains(sid)) continue;
+        if (sinSesiones) {
+          final sid = e.sesionCajaId?.trim();
+          if (sid != null && sid.isNotEmpty) continue;
+          final fe = e.fecha;
+          if (fe == null ||
+              rangoSinSesion == null ||
+              !rangoSinSesion.contiene(fe)) {
+            continue;
+          }
+        } else {
+          final sid = e.sesionCajaId;
+          if (sid == null || !ids.contains(sid)) continue;
+        }
         egresosTurno.add(e);
         final mp = (e.medioPago ?? '').toLowerCase().trim();
         if (mp == 'transferencia') {
@@ -625,6 +719,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         sesionSeleccionadaId: seleccionadaId,
         clearSesionSeleccionada: seleccionadaId == null,
         consolidado: consolidado,
+        sinSesiones: sinSesiones,
         turno: turno,
         ingresosTurno: ingresosTurno,
         egresosTurno: egresosTurno,

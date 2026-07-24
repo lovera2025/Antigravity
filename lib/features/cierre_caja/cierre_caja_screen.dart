@@ -15,6 +15,7 @@ import '../egresos/providers/egresos_provider.dart';
 import '../egresos/repositories/egresos_repository.dart';
 import '../mi_empresa/models/ingreso_detallado.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
+import '../caja_sesiones/models/modo_jefe_caja.dart';
 import '../caja_sesiones/repositories/sesiones_caja_repository.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
@@ -340,12 +341,18 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         puedeCambiarDia: modoJefe,
                       ),
                       const SizedBox(height: 14),
-                      if (modoJefe)
-                        _selectorSesiones(state, isDark)
-                      else
+                      if (modoJefe) ...[
+                        _selectorSesiones(state, isDark),
+                        const SizedBox(height: 10),
+                        _botonSinSesiones(state),
+                        if (state.sinSesiones) ...[
+                          const SizedBox(height: 10),
+                          _selectorTurnoSinSesiones(state),
+                        ],
+                      ] else
                         _sesionOperativaChip(state, isDark, muted),
                       const SizedBox(height: 14),
-                      if (!state.consolidado) ...[
+                      if (!state.consolidado && !state.sinSesiones) ...[
                         const GuiaCambioSection(),
                         const SizedBox(height: 10),
                         const AnotacionPdfSection(),
@@ -365,7 +372,8 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         duration: const Duration(milliseconds: 220),
                         child: KeyedSubtree(
                           key: ValueKey(
-                            '${state.sesionSeleccionadaId ?? 'dia'}_'
+                            '${state.sinSesiones ? 'sin' : (state.sesionSeleccionadaId ?? 'dia')}_'
+                            '${state.turno.slug}_'
                             '${state.dia.toIso8601String()}',
                           ),
                           child: _bucketsRow(context, state, isDark),
@@ -385,7 +393,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       Container(width: 3, height: 14, color: _gold),
                       const SizedBox(width: 8),
                       Text(
-                        state.consolidado
+                        state.sinSesiones
+                            ? 'MOVIMIENTOS SIN SESIÓN'
+                            : state.consolidado
                             ? 'MOVIMIENTOS DEL DÍA'
                             : 'MOVIMIENTOS DE LA SESIÓN',
                         style: GoogleFonts.oswald(
@@ -501,7 +511,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
 
   Widget _selectorSesiones(CierreCajaState state, bool isDark) {
     const allKey = '__all__';
-    final value = state.consolidado
+    final value = state.sinSesiones
+        ? allKey
+        : state.consolidado
         ? allKey
         : (state.sesionSeleccionadaId ??
               (state.sesionesDia.isEmpty
@@ -511,10 +523,16 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       children: [
         Expanded(
           child: DropdownButtonFormField<String>(
+            key: ValueKey(
+              'sesion_${state.sinSesiones}_${state.consolidado}_'
+              '${state.sesionSeleccionadaId ?? allKey}',
+            ),
             initialValue: value,
-            decoration: const InputDecoration(
-              labelText: 'Sesión de caja',
-              prefixIcon: Icon(Icons.badge_outlined),
+            decoration: InputDecoration(
+              labelText: state.sinSesiones
+                  ? 'Sesión de caja (vista sin sesiones)'
+                  : 'Sesión de caja',
+              prefixIcon: const Icon(Icons.badge_outlined),
             ),
             items: [
               const DropdownMenuItem(
@@ -525,15 +543,20 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                 DropdownMenuItem(
                   value: s.id,
                   child: Text(
-                    [
-                      s.operadorNombre ?? 'Operario',
-                      s.etiqueta ?? 'Turno anterior',
-                      ArTime.formatHora(s.abiertaAt),
-                    ].join(' · '),
+                    esOperadorModoJefeId(s.operadorId)
+                        ? [
+                            kOperadorModoJefeNombre,
+                            ArTime.formatHora(s.abiertaAt),
+                          ].join(' · ')
+                        : [
+                            s.operadorNombre ?? 'Operario',
+                            s.etiqueta ?? 'Turno',
+                            ArTime.formatHora(s.abiertaAt),
+                          ].join(' · '),
                   ),
                 ),
             ],
-            onChanged: state.cargando
+            onChanged: state.cargando || state.sinSesiones
                 ? null
                 : (id) {
                     if (id == null) return;
@@ -546,7 +569,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   },
           ),
         ),
-        if (!state.consolidado && state.sesionSeleccionadaId != null) ...[
+        if (!state.consolidado &&
+            !state.sinSesiones &&
+            state.sesionSeleccionadaId != null) ...[
           const SizedBox(width: 8),
           IconButton(
             tooltip: 'Eliminar sesión',
@@ -557,6 +582,57 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             icon: const Icon(Icons.delete_outline),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _botonSinSesiones(CierreCajaState state) {
+    final activo = state.sinSesiones;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FilterChip(
+        selected: activo,
+        avatar: Icon(
+          activo ? Icons.history_toggle_off : Icons.history,
+          size: 18,
+          color: activo ? Colors.black : _gold,
+        ),
+        label: Text(
+          activo ? 'SIN SESIONES (activo)' : 'SIN SESIONES',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+            fontSize: 12,
+            color: activo ? Colors.black : null,
+          ),
+        ),
+        selectedColor: _gold,
+        checkmarkColor: Colors.black,
+        onSelected: state.cargando
+            ? null
+            : (v) => ref
+                  .read(cierreCajaProvider.notifier)
+                  .setSinSesiones(activo: v),
+      ),
+    );
+  }
+
+  Widget _selectorTurnoSinSesiones(CierreCajaState state) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final t in [TurnoCaja.manana, TurnoCaja.tarde, TurnoCaja.dia])
+          ChoiceChip(
+            label: Text(t.labelCorto),
+            selected: state.turno == t,
+            onSelected: state.cargando
+                ? null
+                : (sel) {
+                    if (!sel) return;
+                    ref.read(cierreCajaProvider.notifier).setTurno(t);
+                  },
+          ),
       ],
     );
   }
@@ -825,7 +901,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              state.consolidado
+              state.sinSesiones
+                  ? 'Sin movimientos sin sesión en este turno'
+                  : state.consolidado
                   ? 'Sin movimientos en las sesiones del día'
                   : 'Sin movimientos en esta sesión',
               style: GoogleFonts.oswald(
@@ -837,7 +915,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              state.consolidado
+              state.sinSesiones
+                  ? 'Acá se listan cobros del build viejo (sin sesion_caja_id).'
+                  : state.consolidado
                   ? 'Elegí otro día o verificá las sesiones abiertas.'
                   : 'Los cobros deben estar ligados a la sesión seleccionada.',
               style: TextStyle(fontSize: 12, color: muted),
@@ -986,7 +1066,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         children: [
           Expanded(
             child: FilledButton.icon(
-              onPressed: state.consolidado || state.sesionSeleccionadaId == null
+              onPressed:
+                  state.sinSesiones ||
+                      state.consolidado ||
+                      state.sesionSeleccionadaId == null
                   ? null
                   : () => _abrirRegistrarRetiro(context),
               icon: const Icon(Icons.south_west_rounded, size: 18),
@@ -1010,7 +1093,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   : () => _exportarPdf(context, state),
               icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
               label: Text(
-                state.consolidado ? 'PDF · DÍA' : 'PDF · SESIÓN',
+                state.sinSesiones
+                    ? 'PDF · SIN SESIÓN'
+                    : state.consolidado
+                    ? 'PDF · DÍA'
+                    : 'PDF · SESIÓN',
                 style: const TextStyle(
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1,

@@ -391,7 +391,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
         ),
         content: Text(
           sim.soloTracked
-              ? 'Se limpiará el saldo en ficha (tracked)'
+              ? 'Se limpiará la mora de cuotas ya pagadas'
                   '${sim.incluyeTracked ? ' ${sel.moraPendienteTracked.toCurrency()}' : ''}.\n\n'
                   'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
                   'La mora calendario NO se toca'
@@ -693,7 +693,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
         ),
         content: Text(
           modoFicha
-              ? 'Se limpiará el saldo en ficha (tracked) de $n alumno'
+              ? 'Se limpiará la mora de cuotas ya pagadas de $n alumno'
                   '${n == 1 ? '' : 's'} '
                   '(${_institucionPerdon ?? ''}'
                   '${_cuotasPagadasFiltro != null ? ', cuota $_cuotasPagadasFiltro' : ''}).\n\n'
@@ -1164,7 +1164,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
           const SizedBox(height: 6),
           Text(
             'Marcá las cuotas desde la más vieja. Si tildás una, se incluyen las anteriores. '
-            'El remanente en ficha (tracked) se puede limpiar solo, sin tocar el calendario. '
+            'La mora de cuotas ya pagadas se puede limpiar sola, sin tocar el calendario. '
             'Las cuotas base siguen atrasadas; solo se congela/perdona el interés.',
             style: TextStyle(
               fontSize: 11.5,
@@ -1252,7 +1252,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                     ? null
                     : (v) => setState(() => _incluirTrackedEnPerdon = v ?? true),
                 title: const Text(
-                  'Saldo en ficha (tracked)',
+                  'Mora de cuotas ya pagadas',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 ),
                 subtitle: Text(
@@ -1644,7 +1644,7 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
       children: [
         Text(
           'Filtrá por institución y cuotas pagadas. Podés perdonar todo (calendario + ficha) '
-          'o solo el saldo en ficha (tracked), dejando viva la mora de cuotas vencidas.',
+          'o solo la mora de cuotas ya pagadas, dejando viva la mora de cuotas vencidas.',
           style: TextStyle(
             fontSize: 12.5,
             color: isDark ? Colors.white70 : Colors.grey.shade700,
@@ -1985,18 +1985,18 @@ class _RestaurarMoraDialogState extends ConsumerState<RestaurarMoraDialog>
                                     Text(
                                       _perdonMasivoSoloFicha
                                           ? (puede
-                                              ? 'Ficha ${tracked.toCurrency()} → limpia · '
+                                              ? 'Ya pagadas ${tracked.toCurrency()} → limpia · '
                                                   'queda cal. ${simModo!.moraOperativaPost.toCurrency()}'
                                               : tracked > 0.01
-                                                  ? 'Ficha ${tracked.toCurrency()}'
-                                                  : 'Sin ficha')
+                                                  ? 'Ya pagadas ${tracked.toCurrency()}'
+                                                  : 'Sin mora de cuotas ya pagadas')
                                           : puede
                                               ? 'Mora ${item.moraOperativa.toCurrency()}'
                                                   '${simModo != null ? ' → perdón ≈ ${simModo.montoPerdonado.toCurrency()}${simModo.aplicaExencion ? ' hasta ${ArTime.formatFechaCorta(simModo.exentaHasta)}' : ''}' : ''}'
-                                                  '${tracked > 0.01 ? ' · ficha ${tracked.toCurrency()}' : ''}'
+                                                  '${tracked > 0.01 ? ' · ya pagadas ${tracked.toCurrency()}' : ''}'
                                               : item.moraOperativa > 0.01
                                                   ? 'Mora ${item.moraOperativa.toCurrency()}'
-                                                      '${tracked > 0.01 ? ' · ficha ${tracked.toCurrency()}' : ''}'
+                                                      '${tracked > 0.01 ? ' · ya pagadas ${tracked.toCurrency()}' : ''}'
                                                   : 'Sin mora operable',
                                       style: TextStyle(
                                         fontSize: 10.5,

@@ -6,6 +6,7 @@ import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../models/modo_jefe_caja.dart';
 import '../models/operador_caja.dart';
 
 class OperadoresCajaRepository {
@@ -16,14 +17,57 @@ class OperadoresCajaRepository {
 
   OperadoresCajaRepository(this._connectivity, this._syncEngine);
 
-  Future<List<OperadorCaja>> listar({bool soloActivos = false}) async {
+  Future<List<OperadorCaja>> listar({
+    bool soloActivos = false,
+    bool incluirModoJefe = false,
+  }) async {
     final db = await LocalDatabase.instance;
     final rows = await db.query(
       'operadores_caja',
       where: soloActivos ? 'activo = 1' : null,
       orderBy: 'nombre COLLATE NOCASE ASC',
     );
-    return rows.map(OperadorCaja.fromMap).toList();
+    final ops = rows.map(OperadorCaja.fromMap).toList();
+    if (incluirModoJefe) return ops;
+    return ops.where((o) => !esOperadorModoJefeId(o.id)).toList();
+  }
+
+  /// Operador sintético para atribuir cobros hechos en modo jefe.
+  Future<OperadorCaja> ensureOperadorModoJefe() async {
+    final existing = await getById(kOperadorModoJefeId);
+    if (existing != null) {
+      if (!existing.activo || existing.nombre != kOperadorModoJefeNombre) {
+        return actualizar(
+          existing.copyWith(nombre: kOperadorModoJefeNombre, activo: true),
+        );
+      }
+      return existing;
+    }
+
+    final now = DateTime.parse(ArTime.nowUtcIso());
+    final op = OperadorCaja(
+      id: kOperadorModoJefeId,
+      nombre: kOperadorModoJefeNombre,
+      pin: kOperadorModoJefePin,
+      activo: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final db = await LocalDatabase.instance;
+    try {
+      await db.insert('operadores_caja', op.toMap());
+    } catch (_) {
+      final race = await getById(kOperadorModoJefeId);
+      if (race != null) return race;
+      rethrow;
+    }
+    await SyncQueue.enqueue(
+      tabla: 'operadores_caja',
+      operacion: SyncOperation.insert,
+      registroId: op.id,
+      payload: op.toSyncPayload(),
+    );
+    return op;
   }
 
   Future<OperadorCaja?> getById(String id) async {
@@ -129,6 +173,9 @@ class OperadoresCajaRepository {
   /// Elimina operador: cierra caja abierta si hay; hard delete si no tiene
   /// historial de sesiones; si no, baja lógica (activo = false).
   Future<void> eliminar(String id) async {
+    if (esOperadorModoJefeId(id)) {
+      throw StateError('El operador de modo jefe no se puede eliminar');
+    }
     final op = await getById(id);
     if (op == null) return;
 

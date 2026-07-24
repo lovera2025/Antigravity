@@ -206,4 +206,95 @@ void main() {
       expect(partes.map((p) => p.net).toSet(), {50000.0, 20000.0});
     });
   });
+
+  group('conceptosPdfDesdePagosLote — Alderete/Brisa Opción B', () {
+    test('reimpresión: cuota 3/9 + mora partida con subtexto 300/7200', () {
+      final c = ContratoAlumno(
+        id: 'brisa',
+        eventoId: 'e1',
+        nombreAlumno: 'ALDERETE, BRISA GUADALUPE',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 270000,
+        saldoDeudor: 180000,
+        totalCuotas: 9,
+        cuotasPagadas: 3,
+        createdAt: DateTime.parse('2026-03-30T03:00:00+00:00'),
+        moraExentaHasta: DateTime(2026, 7, 31),
+      );
+
+      final hist = [
+        _pago(
+          id: 'p1',
+          fecha: '2026-05-29T19:41:55.865821+00:00',
+          concepto: 'Cuota Base (1/9)',
+          gross: 30000,
+        ),
+        _pago(
+          id: 'p2',
+          fecha: '2026-05-29T19:41:55.915106+00:00',
+          concepto: 'Interés mora cuota 1 (vto Abr 2026)',
+          gross: 8700,
+          lineKind: 'interes_mora',
+        ),
+        _pago(
+          id: 'p3',
+          fecha: '2026-06-24T21:49:13.583682+00:00',
+          concepto: 'Cuota Base (2/9)',
+          gross: 30000,
+        ),
+        _pago(
+          id: 'p4',
+          fecha: '2026-06-24T21:49:13.622093+00:00',
+          concepto: 'Interés mora (cuota base — este cobro)',
+          gross: 300,
+          lineKind: 'interes_mora',
+        ),
+        _pago(
+          id: 'p5',
+          fecha: '2026-07-23T23:05:28.824901+00:00',
+          concepto: 'Cuota Base (3/9)',
+          gross: 30000,
+          medio: 'Efectivo',
+        ),
+        _pago(
+          id: 'p6',
+          fecha: '2026-07-23T23:05:28.957938+00:00',
+          concepto:
+              'Interés mora cuota 3 (vto Jun 2026) + mora pendiente cuota 2',
+          gross: 13800,
+          medio: 'Efectivo',
+          lineKind: 'interes_mora',
+        ),
+      ];
+
+      final lote = hist.where((p) => p['id'] == 'p5' || p['id'] == 'p6').toList();
+
+      final pdf = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+        c,
+        lote,
+        historialCompleto: hist,
+      );
+
+      final cuota = pdf.where((l) =>
+          (l['concepto'] as String).contains('Cuota Base') &&
+          l['esMora'] != true);
+      expect(cuota.length, 1);
+      expect(cuota.first['concepto'], 'Cuota Base (3/9)');
+
+      final mora = pdf.where((l) => l['esMora'] == true).toList();
+      expect(mora.length, 2);
+      expect(mora[0]['concepto'], 'Interés mora cuota 3 (vto Jun 2026)');
+      expect(mora[0]['monto'], 6900.0);
+      expect(mora[1]['concepto'], 'Mora pendiente cuota 2');
+      expect(mora[1]['monto'], 6900.0);
+      expect(
+        mora[1]['subtexto'],
+        contains('300'),
+      );
+      expect(
+        mora[1]['subtexto'],
+        contains('7.200'),
+      );
+    });
+  });
 }

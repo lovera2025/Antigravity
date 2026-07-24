@@ -1,6 +1,7 @@
 import '../../../models/mesa_extra_item.dart';
 import '../../common/utils/currency_extensions.dart';
 import 'mesas_extra_utils.dart';
+import 'mora_concepto_rotulo.dart';
 
 bool esConceptoPlanLiquidacionPdf(Map<String, dynamic> c) =>
     c['esPlanLiquidacion'] == true;
@@ -235,30 +236,36 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
     if (esLineaInteresMora(conc)) {
       final desg =
           conc['moraDesglose'] as List<Map<String, dynamic>>?;
-      if (desg != null && desg.isNotEmpty) {
-        final totalBrutoDesg = desg.fold<double>(
-          0,
-          (s, d) => s + (d['monto'] as num).toDouble(),
-        );
-        for (final d in desg) {
-          final proportion = totalBrutoDesg > 0.01
-              ? (d['monto'] as num).toDouble() / totalBrutoDesg
-              : 1.0 / desg.length;
-          final montoLinea = double.parse(
-            (cMonto * proportion).toStringAsFixed(2),
-          );
-          final dias = d['diasMora'] as int?;
-          conceptosFinales.add({
-            'concepto':
-                'Interés mora cuota ${d['numeroCuota']} (${d['mesLabel']})',
-            'monto': montoLinea,
-            'esMora': true,
-            if (dias != null && dias > 0) 'subtexto': '$dias días de mora',
-          });
-        }
-        continue;
-      }
-      cRico = 'Interés mora (cuota base — este cobro)';
+      final pendiente = (conc['moraPendientePrevias'] as num?)?.toDouble();
+      final detRaw =
+          (conc['moraPendientePreviasDetalle'] as List?)
+              ?.cast<Map<String, dynamic>>();
+      final detalle = detRaw == null
+          ? const <MoraPendientePreviaDetalle>[]
+          : detRaw.map((m) {
+              DateTime? fp;
+              final fs = m['fechaPagoCuota']?.toString();
+              if (fs != null && fs.isNotEmpty) {
+                fp = DateTime.tryParse(fs);
+              }
+              return MoraPendientePreviaDetalle(
+                numeroCuota: (m['numeroCuota'] as num?)?.toInt() ?? 0,
+                mesLabel: (m['mesLabel'] as String?) ?? '',
+                montoAtribuido: (m['monto'] as num?)?.toDouble() ?? 0,
+                fechaPagoCuota: fp,
+                moraDebida: (m['moraDebida'] as num?)?.toDouble() ?? 0,
+                moraCobrada: (m['moraCobrada'] as num?)?.toDouble() ?? 0,
+              );
+            }).toList();
+      final lineasMora = MoraConceptoRotulo.lineasPdfDesdePreviewMora(
+        montoTotal: cMonto,
+        moraDesglose: desg,
+        moraPendientePrevias: pendiente,
+        detallePendiente: detalle,
+        conceptoFallback: cTexto,
+      );
+      conceptosFinales.addAll(lineasMora);
+      continue;
     } else if (cTexto.toUpperCase().contains('MESA') &&
         !cTexto.toUpperCase().contains('ADELANTO') &&
         !cTexto.toUpperCase().contains('ABONO') &&
