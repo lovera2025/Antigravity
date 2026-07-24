@@ -5998,7 +5998,7 @@ class _DetalleEventoMasivoScreenState
                               final remoto = await repo.getContratoById(
                                 alumno.id,
                               );
-                              final base = alumnoFresco;
+                              final base = alumno;
                               final cambioRemoto =
                                   remoto != null &&
                                   ((remoto.saldoDeudor - base.saldoDeudor)

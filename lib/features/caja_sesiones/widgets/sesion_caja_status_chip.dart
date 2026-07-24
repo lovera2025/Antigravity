@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/ar_time.dart';
+import '../models/modo_jefe_caja.dart';
 import '../models/sesion_caja.dart';
 import '../repositories/sesiones_caja_repository.dart';
 
@@ -43,6 +44,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
   }
 
   Color _colorFor(SesionCaja s) {
+    if (s.etiqueta == kEtiquetaModoJefe) return Colors.greenAccent;
     final hb = s.lastHeartbeat ?? s.abiertaAt;
     final age = DateTime.now().toUtc().difference(hb.toUtc());
     if (age > _stale) return Colors.amber;
