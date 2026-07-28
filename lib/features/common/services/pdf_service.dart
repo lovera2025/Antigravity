@@ -22,6 +22,7 @@ import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
+import '../../eventos/services/mora_tracked_origen.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../../eventos/utils/presupuesto_desde_evento.dart';
 import '../utils/currency_extensions.dart';
@@ -1436,6 +1437,11 @@ class PdfService {
 
     /// Descuento de liquidación del plan (base/mesa/sillas). 0 = sin bloque.
     double porcentajeDescuentoLiquidacion = 0,
+
+    /// Mora que sigue debiendo DESPUÉS de este cobro. Se imprime siempre que
+    /// venga informada (incluso en 0) para que quede constancia. `null` solo en
+    /// reimpresiones históricas, que no pueden afirmar la mora de hoy.
+    double? moraPendienteRestante,
   }) async {
     // Cargar fuente TrueType con soporte Unicode completo (elimina warnings de Helvetica)
     pw.Font? fontRegular;
@@ -1484,11 +1490,16 @@ class PdfService {
       mesasEstadoRecibo,
     );
     final conceptosPagadosDisplay = conceptosPagados != null
-        ? agruparConceptosMesasParaPdf(
-            conceptosPagados
-                .map((c) => Map<String, dynamic>.from(c))
-                .toList(),
-            cantMesasRecibo,
+        ? lineasDisplayParaPdf(
+            agruparConceptosMesasParaPdf(
+              conceptosPagados
+                  .map((c) => Map<String, dynamic>.from(c))
+                  .toList(),
+              cantMesasRecibo,
+            ),
+            regAr:
+                alumno.createdAt != null ? ArTime.toAr(alumno.createdAt!) : null,
+            hoyAr: ArTime.toAr(fechaTransaccion),
           )
         : null;
 
@@ -1767,7 +1778,9 @@ class PdfService {
                       if (conceptosPagadosDisplay != null &&
                           conceptosPagadosDisplay.isNotEmpty) ...[
                         ...conceptosPagadosDisplay.map((c) {
-                          final desc = c['concepto'] as String? ?? 'Pago';
+                          // 'display' = rótulo de mostrador; 'concepto' intacto.
+                          final desc = (c['display'] as String?) ??
+                              (c['concepto'] as String? ?? 'Pago');
                           final montoItem =
                               (c['monto'] as num?)?.toDouble() ?? 0;
                           final grossItem =
@@ -1775,6 +1788,8 @@ class PdfService {
                           final subtexto = c['subtexto'] as String?;
                           final bool plan =
                               c['esPlanLiquidacion'] == true;
+                          // Mora anidada bajo la cuota que la generó.
+                          final bool anidada = c['anidada'] == true;
                           final String? nominalHint = plan &&
                                   grossItem != null &&
                                   grossItem > montoItem + 0.01
@@ -1788,16 +1803,25 @@ class PdfService {
                                     pw.MainAxisAlignment.spaceBetween,
                                 children: [
                                   pw.Expanded(
-                                    child: pw.Text(
-                                      '  • $desc',
-                                      style: pw.TextStyle(fontSize: 10),
+                                    child: pw.Padding(
+                                      padding: pw.EdgeInsets.only(
+                                        left: anidada ? 14 : 0,
+                                      ),
+                                      child: pw.Text(
+                                        anidada ? '  ↳ $desc' : '  • $desc',
+                                        style: pw.TextStyle(
+                                          fontSize: anidada ? 9 : 10,
+                                          color: anidada ? _greyText : null,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   pw.Text(
                                     montoItem.toCurrency(),
                                     style: pw.TextStyle(
-                                      fontSize: 10,
+                                      fontSize: anidada ? 9 : 10,
                                       fontWeight: pw.FontWeight.bold,
+                                      color: anidada ? _greyText : null,
                                     ),
                                   ),
                                 ],
@@ -2318,6 +2342,26 @@ class PdfService {
                                                     : _gold),
                                         ),
                                       ),
+                                      if (moraPendienteRestante != null) ...[
+                                        pw.SizedBox(height: 3),
+                                        pw.Text(
+                                          'Mora (interés por atraso):',
+                                          style: pw.TextStyle(
+                                            fontSize: 6,
+                                            color: _greyText,
+                                          ),
+                                        ),
+                                        pw.Text(
+                                          moraPendienteRestante.toCurrency(),
+                                          style: pw.TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: pw.FontWeight.bold,
+                                            color: moraPendienteRestante > 0.01
+                                                ? _redAccent
+                                                : _greenAccent,
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -2328,6 +2372,46 @@ class PdfService {
                           ],
                         ),
                       ),
+
+                      // Recordatorio: la mora no cobrada tiene que quedar
+                      // escrita en el papel que se lleva la familia.
+                      if (moraPendienteRestante != null &&
+                          moraPendienteRestante > 0.01)
+                        pw.Container(
+                          width: double.infinity,
+                          margin: const pw.EdgeInsets.only(top: 5),
+                          padding: const pw.EdgeInsets.all(6),
+                          decoration: pw.BoxDecoration(
+                            color: _cardBg,
+                            borderRadius: const pw.BorderRadius.all(
+                              pw.Radius.circular(4),
+                            ),
+                            border: pw.Border.all(color: _redAccent, width: 0.8),
+                          ),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                'ATENCIÓN: queda debiendo mora (interés por '
+                                'atraso) por '
+                                '${moraPendienteRestante.toCurrency()}',
+                                style: pw.TextStyle(
+                                  fontSize: 8,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: _redAccent,
+                                ),
+                              ),
+                              pw.Text(
+                                'No se cobró en este pago. Sigue sumando hasta '
+                                'que se abone.',
+                                style: pw.TextStyle(
+                                  fontSize: 7,
+                                  color: _darkText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
                       if (esReimpresion)
                         pw.Padding(
@@ -2414,16 +2498,24 @@ class PdfService {
       alumno,
       mesasEstadoResumen,
     );
-    final conceptosLineasDisplay = compactarCuotasBaseParaResumenPdf(
-      agruparConceptosMesasParaPdf(
-        conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
-        cantMesasResumen,
+    final conceptosLineasDisplay = lineasDisplayParaPdf(
+      compactarCuotasBaseParaResumenPdf(
+        agruparConceptosMesasParaPdf(
+          conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
+          cantMesasResumen,
+        ),
       ),
+      regAr: alumno.createdAt != null ? ArTime.toAr(alumno.createdAt!) : null,
+      hoyAr: ArTime.toAr(now),
     );
 
+    // Mora de cuotas ya pagadas en cobros anteriores: no cuelga de ninguna
+    // línea de este cobro, va en su propio bloque al final del detalle.
     final lineasLiquidacion = conceptosLineasDisplay
-        .where((c) => c['esCargoCanal'] != true)
+        .where((c) => c['esCargoCanal'] != true && c['arrastre'] != true)
         .toList();
+    final lineasArrastreMora =
+        conceptosLineasDisplay.where((c) => c['arrastre'] == true).toList();
     final lineasCargo =
         conceptosLineasDisplay.where((c) => c['esCargoCanal'] == true).toList();
     final double cargoTotal = lineasCargo.fold<double>(
@@ -2501,18 +2593,23 @@ class PdfService {
     }
 
     pw.Widget lineaConcepto(Map<String, dynamic> c) {
-      final desc = c['concepto'] as String? ?? 'Concepto';
+      // 'display' es el rótulo de mostrador; 'concepto' queda intacto porque es
+      // el texto que reconocen los detectores de pago (pago_interes_mora).
+      final desc =
+          (c['display'] as String?) ?? (c['concepto'] as String? ?? 'Concepto');
       final monto = (c['monto'] as num?)?.toDouble() ?? 0;
       final sub = c['subtexto'] as String?;
       final gross = (c['gross'] as num?)?.toDouble();
       final bool plan = c['esPlanLiquidacion'] == true;
+      // Mora anidada: sangrada bajo la cuota que la generó.
+      final bool anidada = c['anidada'] == true;
       final String? subNominal = plan &&
               gross != null &&
               gross > monto + 0.01
           ? 'nom. ${gross.toCurrency()}'
           : null;
       return pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 4),
+        padding: pw.EdgeInsets.only(bottom: 4, left: anidada ? 16 : 0),
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -2521,8 +2618,11 @@ class PdfService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    '· $desc',
-                    style: pw.TextStyle(fontSize: 9, color: _darkText),
+                    anidada ? '↳ $desc' : '· $desc',
+                    style: pw.TextStyle(
+                      fontSize: anidada ? 8 : 9,
+                      color: anidada ? _greyText : _darkText,
+                    ),
                   ),
                   if (sub != null && sub.isNotEmpty)
                     pw.Text(
@@ -2548,9 +2648,9 @@ class PdfService {
             pw.Text(
               monto.toCurrency(),
               style: pw.TextStyle(
-                fontSize: 9,
+                fontSize: anidada ? 8 : 9,
                 fontWeight: pw.FontWeight.bold,
-                color: _darkText,
+                color: anidada ? _greyText : _darkText,
               ),
             ),
           ],
@@ -2622,7 +2722,7 @@ class PdfService {
                           crossAxisAlignment: pw.CrossAxisAlignment.end,
                           children: [
                             pw.Text(
-                              'RESUMEN A ABONAR',
+                              'DETALLE DE PAGO',
                               style: pw.TextStyle(
                                 fontSize: 13,
                                 fontWeight: pw.FontWeight.bold,
@@ -2690,7 +2790,7 @@ class PdfService {
                       ),
                     pw.SizedBox(height: 10),
                     pw.Text(
-                      'Documento previo al cobro - no registra pago.',
+                      'Este papel no es un recibo: todavía no se registró el pago.',
                       style: pw.TextStyle(
                         fontSize: 8,
                         fontStyle: pw.FontStyle.italic,
@@ -2724,7 +2824,7 @@ class PdfService {
                     ],
                     pw.SizedBox(height: 12),
                     pw.Text(
-                      'DETALLE DE ESTA SELECCIÓN',
+                      'LO QUE SE PAGA HOY',
                       style: pw.TextStyle(
                         fontSize: 8,
                         fontWeight: pw.FontWeight.bold,
@@ -2734,6 +2834,20 @@ class PdfService {
                     ),
                     pw.SizedBox(height: 4),
                     ...lineasLiquidacion.map(lineaConcepto),
+                    if (lineasArrastreMora.isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        tituloArrastreMoraPdf.toUpperCase(),
+                        style: pw.TextStyle(
+                          fontSize: 8,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _greyText,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      ...lineasArrastreMora.map(lineaConcepto),
+                    ],
                     if (planSeleccionado > 0.01 && moraSeleccionada > 0.01)
                       pw.Padding(
                         padding: const pw.EdgeInsets.only(top: 2, bottom: 2),
@@ -2781,7 +2895,7 @@ class PdfService {
                     ),
                     if (cargoTotal > 0.01) ...[
                       pw.Text(
-                        'RECARGO TRANSFERENCIA (referencia)',
+                        'COSTO POR TRANSFERENCIA (referencia)',
                         style: pw.TextStyle(
                           fontSize: 8,
                           fontWeight: pw.FontWeight.bold,
@@ -2804,6 +2918,46 @@ class PdfService {
                       ],
                       pw.SizedBox(height: 6),
                     ],
+                    // Aviso de mora no incluida: tiene que verse ANTES del
+                    // total, para que nadie firme el pago creyendo que queda
+                    // en cero.
+                    if (moraDespues > 0.01) ...[
+                      pw.Container(
+                        width: double.infinity,
+                        padding: const pw.EdgeInsets.all(10),
+                        margin: const pw.EdgeInsets.only(bottom: 8),
+                        decoration: pw.BoxDecoration(
+                          color: _cardBg,
+                          borderRadius: const pw.BorderRadius.all(
+                            pw.Radius.circular(6),
+                          ),
+                          border: pw.Border.all(color: _redAccent, width: 1),
+                        ),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              'ATENCIÓN: queda debiendo mora (interés por '
+                              'atraso) por ${moraDespues.toCurrency()}',
+                              style: pw.TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _redAccent,
+                              ),
+                            ),
+                            pw.SizedBox(height: 2),
+                            pw.Text(
+                              'No se cobra en este pago. Sigue sumando hasta '
+                              'que se abone.',
+                              style: pw.TextStyle(
+                                fontSize: 8,
+                                color: _darkText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     pw.Container(
                       width: double.infinity,
                       padding: const pw.EdgeInsets.all(12),
@@ -2821,7 +2975,7 @@ class PdfService {
                                 ? 'TOTAL A TRANSFERIR AHORA'
                                 : 'TOTAL A PAGAR AHORA',
                             style: pw.TextStyle(
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: pw.FontWeight.bold,
                               color: _darkText,
                               letterSpacing: 0.5,
@@ -2830,7 +2984,7 @@ class PdfService {
                           pw.Text(
                             totalAbonar.toCurrency(),
                             style: pw.TextStyle(
-                              fontSize: 16,
+                              fontSize: 20,
                               fontWeight: pw.FontWeight.bold,
                               color: _darkText,
                             ),
@@ -2853,7 +3007,7 @@ class PdfService {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
-                            'SI ABONÁS ESTE TOTAL, QUEDARÍA',
+                            'CÓMO QUEDA LA CUENTA SI PAGÁS ESTE TOTAL',
                             style: pw.TextStyle(
                               fontSize: 8,
                               fontWeight: pw.FontWeight.bold,
@@ -2889,10 +3043,12 @@ class PdfService {
                                 pw.MainAxisAlignment.spaceBetween,
                             children: [
                               pw.Text(
-                                'Mora pendiente',
+                                'Mora (interés por atraso)',
                                 style: pw.TextStyle(
                                   fontSize: 9,
-                                  color: _darkText,
+                                  color: moraDespues > 0.01
+                                      ? _redAccent
+                                      : _darkText,
                                 ),
                               ),
                               pw.Text(
@@ -2900,7 +3056,9 @@ class PdfService {
                                 style: pw.TextStyle(
                                   fontSize: 10,
                                   fontWeight: pw.FontWeight.bold,
-                                  color: _darkText,
+                                  color: moraDespues > 0.01
+                                      ? _redAccent
+                                      : _darkText,
                                 ),
                               ),
                             ],
@@ -2941,7 +3099,7 @@ class PdfService {
 
     final bytes = await pdf.save();
     final safeName = alumno.nombreAlumno.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
-    final fname = 'Resumen_abonar_${safeName.isEmpty ? 'alumno' : safeName.replaceAll(' ', '_')}.pdf';
+    final fname = 'Detalle_de_pago_${safeName.isEmpty ? 'alumno' : safeName.replaceAll(' ', '_')}.pdf';
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, fname);
     } else {
@@ -2953,6 +3111,374 @@ class PdfService {
   }
 
   // ── Planilla por Cursos (Para Eventos Masivos) ─────────────────────────
+  // ── Estado de cuenta del alumno (historial + saldo + mora) ───────────────
+  /// Resumen imprimible de la cuenta: qué se pagó, qué falta y de dónde viene
+  /// la mora. [pagos] son las filas ya enriquecidas del historial.
+  static Future<void> generarEstadoCuentaAlumno({
+    required ContratoAlumno alumno,
+    required Evento evento,
+    required List<Map<String, dynamic>> pagos,
+    required double totalEntregado,
+    required double moraPendiente,
+    List<MoraPendientePreviaDetalle> arrastreMora = const [],
+  }) async {
+    pw.Font? fontRegular;
+    pw.Font? fontBold;
+    try {
+      fontRegular = await PdfGoogleFonts.outfitRegular();
+      fontBold = await PdfGoogleFonts.outfitBold();
+    } catch (_) {}
+
+    final pdf = pw.Document(
+      theme: fontRegular != null && fontBold != null
+          ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
+          : null,
+    );
+
+    pw.ImageProvider? logoImage;
+    try {
+      final logoData = await rootBundle.load('assets/icons/isotipo-ej.png');
+      logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+    } catch (e) {
+      debugPrint('Error al cargar logo: $e');
+    }
+
+    final now = ArTime.nowUtc();
+    final fechaStr = ArTime.formatFechaHora(now);
+    final saldoPlan = alumno.saldoDeudor.clamp(0.0, double.infinity);
+
+    pw.Widget filaResumen(String label, String valor, {PdfColor? color}) =>
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 3),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                label,
+                style: pw.TextStyle(fontSize: 9, color: color ?? _darkText),
+              ),
+              pw.Text(
+                valor,
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: color ?? _darkText,
+                ),
+              ),
+            ],
+          ),
+        );
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(24, 22, 24, 22),
+        build: (context) => [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (logoImage != null)
+                    pw.Container(
+                      height: 30,
+                      margin: const pw.EdgeInsets.only(right: 12),
+                      child: pw.Image(logoImage),
+                    ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Victor Adrián Argüello',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 10,
+                          color: _darkText,
+                        ),
+                      ),
+                      pw.Text(
+                        'Dueño, Junior Eventos',
+                        style: pw.TextStyle(fontSize: 8, color: _greyText),
+                      ),
+                      pw.Text(
+                        'CUIT 23-32837670-9',
+                        style: pw.TextStyle(fontSize: 8, color: _greyText),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'ESTADO DE CUENTA',
+                    style: pw.TextStyle(
+                      fontSize: 13,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _darkText,
+                    ),
+                  ),
+                  pw.Text(
+                    'N° ${alumno.id.substring(0, 8).toUpperCase()}',
+                    style: pw.TextStyle(fontSize: 8, color: _greyText),
+                  ),
+                  pw.Text(
+                    'Al $fechaStr',
+                    style: pw.TextStyle(fontSize: 8, color: _greyText),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          pw.Divider(color: _greyLight, height: 16),
+          pw.Text(
+            alumno.nombreAlumno.toUpperCase(),
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: _darkText,
+            ),
+          ),
+          pw.Text(
+            EventoPresentacion.institucionOEventoParaPdf(
+              evento: evento,
+              institucionAlumno: alumno.institucion,
+            ),
+            style: pw.TextStyle(fontSize: 9, color: _greyText),
+          ),
+          if (alumno.cursoDivision != null &&
+              alumno.cursoDivision!.trim().isNotEmpty)
+            pw.Text(
+              alumno.cursoDivision!,
+              style: pw.TextStyle(fontSize: 9, color: _greyText),
+            ),
+          pw.SizedBox(height: 12),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: _cardBg,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              border: pw.Border.all(color: _greyLight, width: 0.5),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                filaResumen(
+                  'Total del plan',
+                  alumno.montoTotalPactado.toCurrency(),
+                ),
+                filaResumen(
+                  'Abonado (${alumno.cuotasPagadas} de ${alumno.totalCuotas} cuotas)',
+                  totalEntregado.toCurrency(),
+                  color: _greenAccent,
+                ),
+                filaResumen('Saldo del plan', saldoPlan.toCurrency()),
+                filaResumen(
+                  'Mora (interés por atraso)',
+                  moraPendiente.toCurrency(),
+                  color: moraPendiente > 0.01 ? _redAccent : _greenAccent,
+                ),
+              ],
+            ),
+          ),
+          if (arrastreMora.isNotEmpty) ...[
+            pw.SizedBox(height: 12),
+            pw.Text(
+              'DE DÓNDE VIENE LA MORA',
+              style: pw.TextStyle(
+                fontSize: 8,
+                fontWeight: pw.FontWeight.bold,
+                color: _greyText,
+                letterSpacing: 0.8,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            ...arrastreMora.map(
+              (d) => pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 5),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Expanded(
+                          child: pw.Text(
+                            '· Cuota ${d.numeroCuota}'
+                            '${d.mesLabel.isEmpty ? '' : ' (${d.mesLabel})'}',
+                            style: pw.TextStyle(fontSize: 9, color: _darkText),
+                          ),
+                        ),
+                        pw.Text(
+                          d.montoAtribuido.toCurrency(),
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _darkText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(left: 8),
+                      child: pw.Text(
+                        d.subtextoDetalle,
+                        style: pw.TextStyle(
+                          fontSize: 7.5,
+                          fontStyle: pw.FontStyle.italic,
+                          color: _greyText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          pw.SizedBox(height: 14),
+          pw.Text(
+            'PAGOS REGISTRADOS',
+            style: pw.TextStyle(
+              fontSize: 8,
+              fontWeight: pw.FontWeight.bold,
+              color: _greyText,
+              letterSpacing: 0.8,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          if (pagos.isEmpty)
+            pw.Text(
+              'Todavía no hay pagos registrados.',
+              style: pw.TextStyle(
+                fontSize: 9,
+                fontStyle: pw.FontStyle.italic,
+                color: _greyText,
+              ),
+            )
+          else
+            ...pagos.map((p) {
+              final fechaRaw = p['fecha_pago']?.toString();
+              final fecha = fechaRaw != null
+                  ? DateTime.tryParse(fechaRaw)
+                  : null;
+              final fechaTxt = fecha != null
+                  ? ArTime.formatFechaCorta(fecha)
+                  : (fechaRaw ?? '');
+              final concepto =
+                  (p['concepto_detallado'] as String?)?.trim().isNotEmpty ==
+                          true
+                      ? p['concepto_detallado'] as String
+                      : (p['concepto']?.toString() ?? 'Pago');
+              final sub = (p['subtexto_concepto'] as String?)?.trim();
+              final medio = (p['subtitulo_medio'] as String?)?.trim();
+              final monto = (p['monto'] as num?)?.toDouble() ?? 0;
+              return pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 4),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.SizedBox(
+                          width: 58,
+                          child: pw.Text(
+                            fechaTxt,
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              color: _greyText,
+                            ),
+                          ),
+                        ),
+                        pw.Expanded(
+                          child: pw.Text(
+                            concepto,
+                            style: pw.TextStyle(fontSize: 9, color: _darkText),
+                          ),
+                        ),
+                        pw.Text(
+                          monto.toCurrency(),
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _darkText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((sub != null && sub.isNotEmpty) ||
+                        (medio != null && medio.isNotEmpty))
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(left: 58),
+                        child: pw.Text(
+                          [
+                            if (sub != null && sub.isNotEmpty) sub,
+                            if (medio != null && medio.isNotEmpty) medio,
+                          ].join(' · '),
+                          style: pw.TextStyle(
+                            fontSize: 7.5,
+                            fontStyle: pw.FontStyle.italic,
+                            color: _greyText,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
+          pw.Divider(color: _greyLight, height: 14),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'TOTAL ABONADO',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkText,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              pw.Text(
+                totalEntregado.toCurrency(),
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _darkText,
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text(
+            'La mora no forma parte del saldo del plan de cuotas. Documento '
+            'informativo: no reemplaza al recibo de pago.',
+            style: pw.TextStyle(
+              fontSize: 7.5,
+              fontStyle: pw.FontStyle.italic,
+              color: _greyText,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final safeName =
+        alumno.nombreAlumno.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+    final fname =
+        'Estado_de_cuenta_${safeName.isEmpty ? 'alumno' : safeName.replaceAll(' ', '_')}.pdf';
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, fname);
+    } else {
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: fname);
+    }
+  }
+
   static Future<void> generarPlanillaCursos(
     Evento evento,
     List<ContratoAlumno> alumnos,

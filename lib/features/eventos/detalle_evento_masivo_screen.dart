@@ -77,6 +77,11 @@ class _DetalleEventoMasivoScreenState
 
   /// Notas operativas locales por contrato (no sincronizan; no contables).
   Map<String, NotaOperativaContrato> _notasOperativasPorContrato = {};
+
+  /// Arrastre de mora abierto por cuota, reconstruido del historial de pagos.
+  /// El tracked es un solo número en la ficha; esto dice de qué cuotas salió.
+  /// Se calcula una vez por carga (no en cada rebuild de la grilla).
+  Map<String, List<MoraPendientePreviaDetalle>> _arrastreMoraPorContrato = {};
   String _busquedaAlumno = '';
   String? _cursoDivisionFiltro;
   bool _ordenAlfabetico = true;
@@ -247,6 +252,46 @@ class _DetalleEventoMasivoScreenState
       }
       if (isLoading != null) _isLoading = isLoading;
     });
+    _cargarArrastreMora(alumnos);
+  }
+
+  /// Reconstruye el arrastre por cuota de los que tienen mora en ficha.
+  /// Una sola consulta de pagos para todo el evento; el replay corre acá y no
+  /// en el build para no rehacerlo en cada rebuild.
+  Future<void> _cargarArrastreMora(List<ContratoAlumno> alumnos) async {
+    final conTracked =
+        alumnos.where((a) => a.moraPendienteTracked > 0.01).toList();
+    if (conTracked.isEmpty) {
+      if (mounted && _arrastreMoraPorContrato.isNotEmpty) {
+        setState(() => _arrastreMoraPorContrato = {});
+      }
+      return;
+    }
+    try {
+      final repo = ref.read(contratosRepositoryProvider);
+      final pagos = await repo.getPagosForContratoIds(
+        conTracked.map((a) => a.id).toList(),
+      );
+      final pagosPorContrato = <String, List<Map<String, dynamic>>>{};
+      for (final p in pagos) {
+        final id = p['contrato_alumno_id'] as String?;
+        if (id == null) continue;
+        pagosPorContrato.putIfAbsent(id, () => []).add(p);
+      }
+      final out = <String, List<MoraPendientePreviaDetalle>>{};
+      for (final a in conTracked) {
+        final detalle = MoraTrackedOrigen.inferir(
+          contratoBase: a,
+          pagos: pagosPorContrato[a.id] ?? const [],
+          trackedMonto: a.moraPendienteTracked,
+        );
+        if (detalle.isNotEmpty) out[a.id] = detalle;
+      }
+      if (!mounted) return;
+      setState(() => _arrastreMoraPorContrato = out);
+    } catch (e) {
+      debugPrint('⚠️ Error al reconstruir arrastre de mora: $e');
+    }
   }
 
   /// Actualización optimista de un contrato (p. ej. inmediatamente post-cobro).
@@ -2156,13 +2201,28 @@ class _DetalleEventoMasivoScreenState
                                                             .calcularDesglose(a);
                                                     final partes = <String>[];
                                                     if (tracked > 0.01) {
-                                                      // Heurística grilla (sin historial): el tracked
-                                                      // postCobro queda de las últimas liquidadas.
-                                                      final n =
-                                                          cPagadas.clamp(1, 99);
-                                                      partes.add(
-                                                        'Pend. C$n ${tracked.toCurrency()}',
-                                                      );
+                                                      // Arrastre abierto por cuota (del historial).
+                                                      // Sin él, heurística: todo a la última paga.
+                                                      final arrastre =
+                                                          _arrastreMoraPorContrato[
+                                                              a.id];
+                                                      if (arrastre != null &&
+                                                          arrastre.isNotEmpty) {
+                                                        partes.add(
+                                                          MoraConceptoRotulo
+                                                              .desgloseArrastre(
+                                                            arrastre,
+                                                            formatoMonto: (v) =>
+                                                                v.toCurrency(),
+                                                          ),
+                                                        );
+                                                      } else {
+                                                        final n = cPagadas
+                                                            .clamp(1, 99);
+                                                        partes.add(
+                                                          'Pend. C$n ${tracked.toCurrency()}',
+                                                        );
+                                                      }
                                                     }
                                                     if (desglose.isNotEmpty) {
                                                       partes.add(
@@ -3426,10 +3486,37 @@ class _DetalleEventoMasivoScreenState
     bool pagarMesa = false;
     bool pagarSillas = false;
     bool incluirInteresCuota = false;
-    bool incluirMoraRemanenteFicha = false;
     Map<String, double> montosManuales = {};
     Map<String, ModoPagoConcepto> modosPagoPorClave = {};
     List<Map<String, dynamic>> previewConceptos = [];
+
+    // Arrastre de mora: una entrada por cuota ya liquidada, cada una con su
+    // check propio. El operador puede cobrar una y dejar la otra pendiente.
+    // Sin desglose reconstruible cae a una sola entrada genérica (cuota 0).
+    final List<MoraPendientePreviaDetalle> arrastreItems =
+        origenTracked.isNotEmpty
+            ? origenTracked
+            : (remanenteMora > 0.01
+                ? [
+                    MoraPendientePreviaDetalle(
+                      numeroCuota: 0,
+                      mesLabel: '',
+                      montoAtribuido: remanenteMora,
+                    ),
+                  ]
+                : const <MoraPendientePreviaDetalle>[]);
+    final Set<int> arrastreSeleccionado = <int>{};
+
+    List<MoraPendientePreviaDetalle> arrastreSeleccionadoList() => arrastreItems
+        .where((d) => arrastreSeleccionado.contains(d.numeroCuota))
+        .toList();
+
+    double remanenteMoraSeleccionado() => double.parse(
+          arrastreSeleccionadoList()
+              .fold<double>(0, (s, d) => s + d.montoAtribuido)
+              .clamp(0.0, remanenteMora)
+              .toStringAsFixed(2),
+        );
 
     bool esLineaInteresMora(Map<String, dynamic> c) =>
         c['lineKind'] == kLineKindInteresMora;
@@ -3449,24 +3536,32 @@ class _DetalleEventoMasivoScreenState
         0,
         (s, d) => s + d.interesBruto,
       );
-      // Pendiente de cuotas ya pagadas: checkbox, o excedente sobre el desglose.
-      double montoPendiente = 0;
-      if (incluirMoraRemanenteFicha && remanenteMora > 0.01) {
-        montoPendiente = remanenteMora;
-      } else if (g > sumDetalles + 0.01 && remanenteMora > 0.01) {
+      // Pendiente de cuotas ya pagadas: lo tildado, o excedente sobre el desglose.
+      final seleccionArrastre = arrastreSeleccionadoList();
+      double montoPendiente = remanenteMoraSeleccionado();
+      var detalleArrastre = seleccionArrastre;
+      if (montoPendiente <= 0.01 &&
+          g > sumDetalles + 0.01 &&
+          remanenteMora > 0.01) {
         montoPendiente = double.parse(
           (g - sumDetalles)
               .clamp(0.0, remanenteMora)
               .toStringAsFixed(2),
         );
+        // Excedente escrito a mano: se atribuye FIFO al arrastre completo.
+        detalleArrastre = arrastreItems;
       }
+      // La entrada genérica (cuota 0) es solo para el check: no puede llegar al
+      // rótulo, o el recibo diría "Mora pendiente cuota 0".
+      final detalleConCuota =
+          detalleArrastre.where((d) => d.numeroCuota > 0).toList();
       return MoraConceptoRotulo.construirPreviewMora(
         montoTotal: g,
         detallesCalendario: detalles,
         montoPendientePrevias: montoPendiente,
         lineKind: kLineKindInteresMora,
         detallePendiente: montoPendiente > 0.01
-            ? origenTracked
+            ? detalleConCuota
             : const <MoraPendientePreviaDetalle>[],
       );
     }
@@ -3506,9 +3601,7 @@ class _DetalleEventoMasivoScreenState
               if (sel.isNotEmpty) {
                 total += sel.fold<double>(0, (s, d) => s + d.interesBruto);
               }
-              if (incluirMoraRemanenteFicha && remanenteMora > 0.01) {
-                total += remanenteMora;
-              }
+              total += remanenteMoraSeleccionado();
               return double.parse(total.toStringAsFixed(2));
             }
 
@@ -3523,8 +3616,12 @@ class _DetalleEventoMasivoScreenState
               }
             }
 
-            void aplicarIncluirMoraRemanenteFicha(bool? v) {
-              incluirMoraRemanenteFicha = v ?? false;
+            void aplicarSeleccionArrastre(int numeroCuota, bool? v) {
+              if (v == true) {
+                arrastreSeleccionado.add(numeroCuota);
+              } else {
+                arrastreSeleccionado.remove(numeroCuota);
+              }
               recalcMoraMontoDesdeSeleccion();
             }
 
@@ -3543,7 +3640,7 @@ class _DetalleEventoMasivoScreenState
             void sincronizarIncluirInteresCuota() {
               if (!puedeCobrarMora()) {
                 incluirInteresCuota = false;
-                incluirMoraRemanenteFicha = false;
+                arrastreSeleccionado.clear();
                 moraCuotasSeleccionadas.clear();
                 moraMontoCobroCtrl.text = '';
                 return;
@@ -3987,7 +4084,7 @@ class _DetalleEventoMasivoScreenState
 
               if (!puedeCobrarMora()) {
                 incluirInteresCuota = false;
-                incluirMoraRemanenteFicha = false;
+                arrastreSeleccionado.clear();
                 moraCuotasSeleccionadas.clear();
                 moraMontoCobroCtrl.text = '';
               } else {
@@ -4150,14 +4247,13 @@ class _DetalleEventoMasivoScreenState
                     0,
                     (s, c) => s + (c['monto'] as num).toDouble(),
                   );
-              final double? moraNoIncluida =
-                  moraPendienteEfectivo - moraIncluida > 0.01
-                  ? double.parse(
-                      (moraPendienteEfectivo - moraIncluida)
-                          .clamp(0.0, double.infinity)
-                          .toStringAsFixed(2),
-                    )
-                  : null;
+              // Siempre informado (aunque dé 0): el PDF tiene que poder decir
+              // "queda debiendo tanto" cuando el operador no tildó la mora.
+              final double moraNoIncluida = double.parse(
+                (moraPendienteEfectivo - moraIncluida)
+                    .clamp(0.0, double.infinity)
+                    .toStringAsFixed(2),
+              );
 
               final double pctCargoInforme =
                   double.tryParse(
@@ -4415,6 +4511,24 @@ class _DetalleEventoMasivoScreenState
                                       ),
                                     ),
                                   ),
+                                // Arrastre abierto por cuota: de dónde sale
+                                // cada peso del remanente en ficha.
+                                if (remanenteMora > 0.01 &&
+                                    origenTracked.length > 1)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      MoraConceptoRotulo.desgloseArrastre(
+                                        origenTracked,
+                                        formatoMonto: (v) => v.toCurrency(),
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: Colors.orange.shade800,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
                                 if (moraDesglose.isNotEmpty &&
                                     moraResumen.diasMora > 0)
                                   Padding(
@@ -4515,42 +4629,60 @@ class _DetalleEventoMasivoScreenState
                                       );
                                     }),
                                   ],
-                                  if (remanenteMora > 0.01) ...[
+                                  // Un check por cuota arrastrada: se puede
+                                  // cobrar una y dejar la otra pendiente.
+                                  if (arrastreItems.isNotEmpty) ...[
                                     if (moraDesglose.isNotEmpty)
                                       const SizedBox(height: 4),
-                                    CheckboxListTile(
-                                      dense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                      controlAffinity:
-                                          ListTileControlAffinity.leading,
-                                      value: incluirMoraRemanenteFicha,
-                                      onChanged: (v) {
-                                        setModalState(() {
-                                          aplicarIncluirMoraRemanenteFicha(v);
-                                          recalcularDesdeChecks();
-                                        });
-                                      },
-                                      title: Text(
-                                        MoraConceptoRotulo.checkboxPendientePrevias(
-                                          remanenteMora.toCurrency(),
-                                          detalle: origenTracked,
+                                    ...arrastreItems.map((d) {
+                                      final generica = d.numeroCuota <= 0;
+                                      final titulo = generica
+                                          ? MoraConceptoRotulo
+                                              .labelPendientePreviasCorto
+                                          : 'Mora pendiente cuota '
+                                              '${d.numeroCuota}'
+                                              '${d.mesLabel.isEmpty ? '' : ' (${d.mesLabel.split(' ').first})'}';
+                                      final dias = d.diasMora > 0
+                                          ? '${d.diasMora} '
+                                              '${d.diasMora == 1 ? 'día' : 'días'} de atraso · '
+                                          : '';
+                                      return CheckboxListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        controlAffinity:
+                                            ListTileControlAffinity.leading,
+                                        value: arrastreSeleccionado
+                                            .contains(d.numeroCuota),
+                                        onChanged: (v) {
+                                          setModalState(() {
+                                            aplicarSeleccionArrastre(
+                                              d.numeroCuota,
+                                              v,
+                                            );
+                                            recalcularDesdeChecks();
+                                          });
+                                        },
+                                        title: Text(
+                                          'Incluir $titulo '
+                                          '(${d.montoAtribuido.toCurrency()})',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.orange.shade900,
+                                          ),
                                         ),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.orange.shade900,
+                                        subtitle: Text(
+                                          generica
+                                              ? MoraConceptoRotulo
+                                                  .checkboxSubtitle
+                                              : '$dias${d.subtextoDetalle}',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade600,
+                                          ),
                                         ),
-                                      ),
-                                      subtitle: Text(
-                                        origenTracked.length == 1
-                                            ? origenTracked.first.subtextoDetalle
-                                            : MoraConceptoRotulo.checkboxSubtitle,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ),
+                                      );
+                                    }),
                                   ],
                                   if (incluirInteresCuota) ...[
                                     const SizedBox(height: 4),
@@ -4629,7 +4761,7 @@ class _DetalleEventoMasivoScreenState
                             setModalState(() {
                               pagarBase = false;
                               incluirInteresCuota = false;
-                              incluirMoraRemanenteFicha = false;
+                              arrastreSeleccionado.clear();
                               moraCuotasSeleccionadas.clear();
                               moraMontoCobroCtrl.text = '';
                               modosPagoPorClave.remove('Base');
@@ -6901,11 +7033,70 @@ class _DetalleEventoMasivoScreenState
                   ),
                 ),
               ),
+              TextButton.icon(
+                onPressed: cargando
+                    ? null
+                    : () => _imprimirEstadoCuentaAlumno(
+                        alumnoUi,
+                        listaFinal,
+                        totalEntregado,
+                      ),
+                icon: const Icon(
+                  Icons.picture_as_pdf_outlined,
+                  size: 18,
+                  color: Color(0xFFD4AF37),
+                ),
+                label: const Text(
+                  'PDF',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFD4AF37),
+                  ),
+                ),
+              ),
             ],
           );
         },
       ),
     );
+  }
+
+  /// Estado de cuenta imprimible: historial + saldo + de dónde viene la mora.
+  Future<void> _imprimirEstadoCuentaAlumno(
+    ContratoAlumno alumno,
+    List<Map<String, dynamic>> pagosEnriquecidos,
+    double totalEntregado,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final repo = ref.read(contratosRepositoryProvider);
+      final moraHist = await repo.sumMoraCobradaHistorial(alumno.id);
+      final moraPendiente = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: alumno,
+        moraCobradaHistorial: moraHist,
+      );
+      final tracked = alumno.moraPendienteTracked.clamp(0.0, double.infinity);
+      final arrastre = tracked > 0.01
+          ? MoraTrackedOrigen.inferir(
+              contratoBase: alumno,
+              pagos: await repo.getHistorialPagosAlumno(alumno.id),
+              trackedMonto: tracked,
+            )
+          : const <MoraPendientePreviaDetalle>[];
+
+      await PdfService.generarEstadoCuentaAlumno(
+        alumno: alumno,
+        evento: widget.evento,
+        pagos: pagosEnriquecidos,
+        totalEntregado: totalEntregado,
+        moraPendiente: moraPendiente,
+        arrastreMora: arrastre,
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo generar el estado de cuenta: $e')),
+      );
+    }
   }
 
   Future<void> _imprimirReciboAlumno(
@@ -6998,6 +7189,20 @@ class _DetalleEventoMasivoScreenState
         }
       }
 
+      // Mora que sigue debiendo tras este cobro, para que quede escrita en el
+      // recibo aunque el operador no la haya tildado. En reimpresiones se
+      // omite: el papel reproduce un cobro pasado, no la deuda de hoy.
+      double? moraRestantePdf;
+      if (fechaManual == null) {
+        final moraHistPdf = await repo.sumMoraCobradaHistorial(
+          alumnoParaPdf.id,
+        );
+        moraRestantePdf = MoraCuotaCalculator.moraPendienteOperativa(
+          contrato: alumnoParaPdf,
+          moraCobradaHistorial: moraHistPdf,
+        );
+      }
+
       await PdfService.generarReciboAlumno(
         alumno: alumnoParaPdf,
         evento: widget.evento,
@@ -7006,6 +7211,7 @@ class _DetalleEventoMasivoScreenState
         conceptoCuotas: valConcepto,
         conceptosPagados: conceptosPagados,
         fechaManual: fechaManual,
+        moraPendienteRestante: moraRestantePdf,
         medioPago: medioPago,
         montoEfectivoDetalle: montoEfectivoDetalle,
         montoTransferenciaDetalle: montoTransferenciaDetalle,

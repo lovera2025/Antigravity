@@ -715,10 +715,11 @@ class MoraCuotaCalculator {
   }) =>
       (moraCobradaHistorial - moraCobradaOffset).clamp(0.0, double.infinity);
 
-  /// Tracked y offset tras confirmar un cobro masivo (reglas v52).
+  /// Tracked y offset tras confirmar un cobro masivo (reglas v52; carry-over v54).
   ///
-  /// - Cuota liquidada **sin** mora → tracked = mora **neta** solo de las cuotas
-  ///   liquidadas en **este** cobro (no arrastra remanente ni mora de cuotas ya pagadas).
+  /// - Cuota liquidada **sin** mora → tracked = remanente previo **+** mora neta
+  ///   de las cuotas liquidadas en **este** cobro. La mora que el operador no
+  ///   cobró no desaparece: queda acumulada en ficha.
   /// - Cuota + mora parcial → tracked = resto neto; offset += mora cobrada.
   /// - Solo mora → FIFO sobre desglose; resto reduce tracked.
   ///   Si liquida el desglose completo, offset += esa parte (exención permanente /
@@ -748,9 +749,20 @@ class MoraCuotaCalculator {
                 d.numeroCuota <= cuotasBasePagadasPostCobro,
           )
           .fold<double>(0, (s, d) => s + d.interesBruto);
-      // No sumar [remanente]: evita doble conteo (Borda: cuota 1 ya pagada + cuota 2).
-      tracked =
-          (moraLiquidadasNeto - moraEsteCobro).clamp(0.0, double.infinity);
+      // [remanente] y [moraLiquidadasNeto] son disjuntos por construcción:
+      // calcularDesglose arranca en n = cuotasPagadas + 1 (solo cuotas impagas)
+      // y el tracked guarda mora de cuotas ya liquidadas en cobros previos, así
+      // que sumarlos no puede duplicar.
+      //
+      // Deja de valer si el tracked es un snapshot legacy sobre un contrato sin
+      // ninguna cuota paga: ese monto solo puede referirse a cuotas todavía
+      // impagas, o sea a las que están en el desglose. Es el único solapamiento
+      // detectable con los datos que recibe esta función — una guarda por monto
+      // (remanente >= moraLiquidadasNeto) no discrimina, porque un carry-over
+      // legítimo de una cuota vieja puede superar la mora de la que se liquida.
+      final remanenteCarry = cuotasPreCobro > 0 ? remanente : 0.0;
+      tracked = (remanenteCarry + moraLiquidadasNeto - moraEsteCobro)
+          .clamp(0.0, double.infinity);
       if (moraEsteCobro > 0.01) {
         offset = moraCobradaOffsetActual + moraEsteCobro;
       }
@@ -938,6 +950,13 @@ class MoraCuotaCalculator {
         ordenados.where((d) => !seleccion.contains(d.numeroCuota)).toList();
 
     // Tracked independiente: el operador decide si limpia ficha.
+    // TODO(mora): el perdón "solo ficha" (aplicaExencion == false && soloTracked)
+    // limpia mora_pendiente_tracked sin escribir exención, así que no deja marca
+    // persistente. MoraTrackedRecovery.reconciliarTodos pisa el tracked sin
+    // condición (a diferencia de la exención, protegida por
+    // resolverExencionPreservandoLocal) y el replay desde historial lo resucita.
+    // Necesita un marcador propio — columna o rótulo de pago — antes de que la
+    // reconciliación retroactiva se corra en producción.
     final limpiaTracked = incluirTracked && trackedActual > 0.01;
     final trackedPost = limpiaTracked ? 0.0 : trackedActual;
 

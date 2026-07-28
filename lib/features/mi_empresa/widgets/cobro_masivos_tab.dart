@@ -14,7 +14,9 @@ import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/cronograma_cuotas_utils.dart';
+import '../../eventos/services/mora_concepto_rotulo.dart';
 import '../../eventos/services/mora_cuota_calculator.dart';
+import '../../eventos/services/mora_tracked_origen.dart';
 import '../providers/finanzas_provider.dart';
 
 /// Fila agregada para el listado Cobro (evento + institución).
@@ -31,6 +33,8 @@ class _CobroFila {
   final List<DateTime> fechasPagoBase;
   /// Cuota base con entrega parcial en curso (derivada del historial de pagos).
   final CuotaPlanDetalle? cuotaParcialActual;
+  /// De qué cuotas salió el `mora_pendiente_tracked` (reconstruido del historial).
+  final List<MoraPendientePreviaDetalle> arrastreMora;
 
   const _CobroFila({
     required this.contrato,
@@ -42,6 +46,7 @@ class _CobroFila {
     this.cuotasVencidasMonto = 0,
     this.fechasPagoBase = const [],
     this.cuotaParcialActual,
+    this.arrastreMora = const [],
   });
 
   bool get entregaParcialEnCurso => cuotaParcialActual != null;
@@ -883,12 +888,23 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
           totalCuotas: tCuotas,
         );
 
+        // Arrastre abierto por cuota: el tracked es un solo número en ficha,
+        // esto reconstruye de qué cuotas salió. Los pagos ya están cargados.
+        final arrastreMora = a.moraPendienteTracked > 0.01
+            ? MoraTrackedOrigen.inferir(
+                contratoBase: a,
+                pagos: list,
+                trackedMonto: a.moraPendienteTracked,
+              )
+            : const <MoraPendientePreviaDetalle>[];
+
         filas.add(_CobroFila(
           contrato: a,
           primeraCuotaBase: primera,
           ultimoPago: ultimo,
           mora: mora,
           moraPendiente: moraPend,
+          arrastreMora: arrastreMora,
           cuotasVencidasCount: cuotasVencidasCount,
           cuotasVencidasMonto: cuotasVencidasMonto,
           fechasPagoBase: fechasBase,
@@ -1787,7 +1803,16 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                     'Mora pendiente: ${f.moraPendiente.toCurrency()}',
                   ];
                   if (tracked > 0.01) {
-                    bits.add('Pend. C$n ${tracked.toCurrency()}');
+                    // Arrastre abierto por cuota; si no se pudo reconstruir,
+                    // heurística vieja (todo a la última cuota paga).
+                    bits.add(
+                      f.arrastreMora.isNotEmpty
+                          ? MoraConceptoRotulo.desgloseArrastre(
+                              f.arrastreMora,
+                              formatoMonto: (v) => v.toCurrency(),
+                            )
+                          : 'Pend. C$n ${tracked.toCurrency()}',
+                    );
                   }
                   if (desg.isNotEmpty) {
                     bits.add(

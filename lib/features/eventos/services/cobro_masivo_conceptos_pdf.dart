@@ -2,6 +2,7 @@ import '../../../models/mesa_extra_item.dart';
 import '../../common/utils/currency_extensions.dart';
 import 'mesas_extra_utils.dart';
 import 'mora_concepto_rotulo.dart';
+import 'mora_cuota_calculator.dart';
 
 bool esConceptoPlanLiquidacionPdf(Map<String, dynamic> c) =>
     c['esPlanLiquidacion'] == true;
@@ -233,6 +234,10 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
         ((conc['cuotas'] as num?)?.toInt() ?? 0).clamp(0, 99);
 
     var cRico = cTexto;
+    // Rango de cuotas base que liquida esta línea: permite anidar su mora
+    // debajo en el PDF. Solo metadato de presentación.
+    int? nBaseDesde;
+    int? nBaseHasta;
     if (esLineaInteresMora(conc)) {
       final desg =
           conc['moraDesglose'] as List<Map<String, dynamic>>?;
@@ -318,12 +323,21 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
       final yaRotulado = RegExp(r'\(\d+/\d+\)').hasMatch(cTexto);
       if (yaRotulado) {
         cRico = cTexto;
+        final m = RegExp(r'\((\d+)/\d+\)').firstMatch(cTexto);
+        if (m != null) {
+          nBaseDesde = int.tryParse(m.group(1)!);
+          nBaseHasta = nBaseDesde;
+        }
       } else if (cCuotasConc == 1) {
         cRico =
             'Cuota Base (${cPagadas + contadorBaseFinal + 1}/$tCuotas)';
+        nBaseDesde = cPagadas + contadorBaseFinal + 1;
+        nBaseHasta = nBaseDesde;
       } else if (cCuotasConc > 1) {
         cRico =
             '$cCuotasConc Cuotas Base (${cPagadas + contadorBaseFinal + 1}-${cPagadas + contadorBaseFinal + cCuotasConc}/$tCuotas)';
+        nBaseDesde = cPagadas + contadorBaseFinal + 1;
+        nBaseHasta = cPagadas + contadorBaseFinal + cCuotasConc;
       } else {
         cRico =
             'Entrega parcial — Cuota Base (${cPagadas + contadorBaseFinal + 1}/$tCuotas)';
@@ -345,6 +359,11 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
         if (conc['subtexto'] != null) 'subtexto': conc['subtexto'],
         'gross': double.parse(gross.toStringAsFixed(2)),
         'esPlanLiquidacion': true,
+        if (nBaseDesde != null) ...{
+          'cuotaBaseDesde': nBaseDesde,
+          'cuotaBaseHasta': nBaseHasta ?? nBaseDesde,
+          'totalCuotasBase': tCuotas,
+        },
       });
     }
   }
@@ -359,9 +378,17 @@ final _reCuotaBaseSimple = RegExp(
 
 /// Compacta cuotas base consecutivas del mismo monto (resumen a abonar).
 /// Ej.: 9× "Cuota Base (n/9)" → "Cuotas base (1–9/9)".
+///
+/// No compacta un tramo que tenga mora anidada: fusionar esas cuotas dejaría
+/// al interés colgando de una línea que ya no lo nombra.
 List<Map<String, dynamic>> compactarCuotasBaseParaResumenPdf(
   List<Map<String, dynamic>> lineas,
 ) {
+  final cuotasConMora = lineas
+      .where((c) => c['esMora'] == true)
+      .map((c) => (c['numeroCuota'] as num?)?.toInt())
+      .whereType<int>()
+      .toSet();
   final out = <Map<String, dynamic>>[];
   var i = 0;
   while (i < lineas.length) {
@@ -379,6 +406,11 @@ List<Map<String, dynamic>> compactarCuotasBaseParaResumenPdf(
 
     final nums = <int>[int.parse(match.group(1)!)];
     final totalCuotas = int.parse(match.group(2)!);
+    if (cuotasConMora.contains(nums.first)) {
+      out.add(c);
+      i++;
+      continue;
+    }
     final unitMonto = (c['monto'] as num?)?.toDouble() ?? 0;
     var sumMonto = unitMonto;
     var sumGross = (c['gross'] as num?)?.toDouble() ?? unitMonto;
@@ -455,6 +487,138 @@ double sumLiquidoConceptosFinales(List<Map<String, dynamic>> conceptos) {
         (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
       );
 }
+
+// ── Capa de presentación del PDF ────────────────────────────────────────────
+// Agrega 'display' (texto para el papel), 'anidada' y 'arrastre'. NUNCA toca
+// 'concepto': ese texto es el que reconocen esPagoInteresMoraPorConcepto,
+// MoraTrackedRecovery._esBaseCuota y recalcularSaldoDesdePagos.
+
+String _dosDigitos(int v) => v.toString().padLeft(2, '0');
+
+String _fechaCorta(DateTime d) =>
+    '${_dosDigitos(d.day)}/${_dosDigitos(d.month)}/${d.year}';
+
+final _reCuotaRango = RegExp(r'\((\d+)[-–](\d+)/(\d+)\)');
+final _reCuotaSimple = RegExp(r'\((\d+)/(\d+)\)');
+
+/// Rótulo familiar para una línea de plan (cuota base, mesa, sillas, cargo).
+String _displayPlan(Map<String, dynamic> c, DateTime? regAr, DateTime? hoyAr) {
+  final texto = (c['concepto'] as String? ?? '').trim();
+
+  if (c['esCargoCanal'] == true) return 'Costo por transferencia';
+
+  final desde = (c['cuotaBaseDesde'] as num?)?.toInt();
+  final hasta = (c['cuotaBaseHasta'] as num?)?.toInt();
+  final total = (c['totalCuotasBase'] as num?)?.toInt();
+  if (desde != null && total != null) {
+    if (hasta != null && hasta > desde) {
+      return 'Cuotas $desde a $hasta de $total';
+    }
+    final base = 'Cuota $desde de $total';
+    if (regAr == null) return base;
+    final venc = MoraCuotaCalculator.vencimientoCuotaDesdeRegAr(regAr, desde);
+    final ref = hoyAr ?? DateTime.now();
+    final vencida = DateTime(ref.year, ref.month, ref.day).isAfter(venc);
+    return '$base — ${vencida ? 'venció' : 'vence'} ${_fechaCorta(venc)}';
+  }
+
+  // "Cuotas base (1–9/9)" (ya compactada) y demás rubros del plan.
+  final rango = _reCuotaRango.firstMatch(texto);
+  if (rango != null && texto.toLowerCase().contains('cuotas base')) {
+    return 'Cuotas ${rango.group(1)} a ${rango.group(2)} de ${rango.group(3)}';
+  }
+
+  final simple = _reCuotaSimple.firstMatch(texto);
+  final upper = texto.toUpperCase();
+  if (simple != null && upper.contains('SILLA')) {
+    return 'Sillas extra — cuota ${simple.group(1)} de ${simple.group(2)}';
+  }
+  if (simple != null && upper.contains('MESA')) {
+    final n = MesasExtraUtils.mesaNumeroDesdeTexto(texto);
+    final etiqueta = n != null ? 'Mesa extra $n' : 'Mesa extra';
+    return '$etiqueta — cuota ${simple.group(1)} de ${simple.group(2)}';
+  }
+  if (simple != null && upper.contains('BASE')) {
+    return 'Cuota ${simple.group(1)} de ${simple.group(2)}';
+  }
+  return texto;
+}
+
+/// Rótulo familiar para una línea de mora.
+String _displayMora(Map<String, dynamic> c) {
+  final previa = (c['cuotaPrevia'] as num?)?.toInt();
+  if (previa != null) {
+    // Arrastre: dice de qué cuota viene y de cuándo, para que se entienda
+    // leyendo el papel sin tener que preguntar.
+    final mes = (c['mesCuotaPrevia'] as String?)?.trim() ?? '';
+    final dias = (c['diasMora'] as num?)?.toInt() ?? 0;
+    final cuando = mes.isEmpty ? '' : ' de $mes';
+    final atraso = dias > 0
+        ? ' — $dias ${dias == 1 ? 'día' : 'días'} de atraso'
+        : '';
+    return 'Mora de la cuota $previa$cuando$atraso, no cobrada en su momento';
+  }
+  final dias = (c['diasMora'] as num?)?.toInt();
+  if (dias != null && dias > 0) {
+    return 'Mora (interés por atraso, $dias ${dias == 1 ? 'día' : 'días'})';
+  }
+  final texto = (c['concepto'] as String? ?? '').trim();
+  if (texto.toLowerCase().contains('mora pendiente') ||
+      texto.toLowerCase().contains('cuotas ya pagadas')) {
+    return 'Mora de cuotas anteriores, no cobrada en su momento';
+  }
+  return 'Mora (interés por atraso)';
+}
+
+/// Reordena las líneas para el PDF: cada mora del calendario queda pegada a la
+/// cuota que la generó (`anidada`), y la mora de cuotas ya pagadas en cobros
+/// anteriores cae al final (`arrastre`), bajo su propio subtítulo.
+///
+/// [regAr] es el Reg del contrato en hora AR: se usa solo para imprimir el
+/// vencimiento de cada cuota (`vencimientoCuotaDesdeRegAr`).
+List<Map<String, dynamic>> lineasDisplayParaPdf(
+  List<Map<String, dynamic>> lineas, {
+  DateTime? regAr,
+  DateTime? hoyAr,
+}) {
+  final moras = lineas.where((c) => c['esMora'] == true).toList();
+  final resto = lineas.where((c) => c['esMora'] != true).toList();
+  final usadas = <int>{};
+
+  final out = <Map<String, dynamic>>[];
+  for (final c in resto) {
+    out.add({...c, 'display': _displayPlan(c, regAr, hoyAr)});
+
+    final desde = (c['cuotaBaseDesde'] as num?)?.toInt();
+    final hasta = (c['cuotaBaseHasta'] as num?)?.toInt() ?? desde;
+    if (desde == null) continue;
+    for (var k = 0; k < moras.length; k++) {
+      if (usadas.contains(k)) continue;
+      final n = (moras[k]['numeroCuota'] as num?)?.toInt();
+      if (n == null || n < desde || n > hasta!) continue;
+      usadas.add(k);
+      out.add({
+        ...moras[k],
+        'display': _displayMora(moras[k]),
+        'anidada': true,
+      });
+    }
+  }
+
+  for (var k = 0; k < moras.length; k++) {
+    if (usadas.contains(k)) continue;
+    out.add({
+      ...moras[k],
+      'display': _displayMora(moras[k]),
+      'arrastre': true,
+    });
+  }
+
+  return out;
+}
+
+/// Subtítulo del bloque de moras que no corresponden a este cobro.
+const String tituloArrastreMoraPdf = 'Intereses de cuotas ya pagadas';
 
 double cargoDesdeConceptosFinales(List<Map<String, dynamic>> conceptos) {
   return conceptos

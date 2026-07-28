@@ -20,6 +20,8 @@ void main() {
       mesLabel: 'May 2026',
       montoAtribuido: 6900,
       fechaPagoCuota: DateTime(2026, 6, 24),
+      vencimiento: DateTime(2026, 5, 31),
+      diasMora: 24,
       moraDebida: 7200,
       moraCobrada: 300,
     );
@@ -94,9 +96,12 @@ void main() {
       expect(pdf[0]['concepto'], 'Interés mora cuota 3 (vto Jun 2026)');
       expect(pdf[1]['monto'], 6900.0);
       expect(pdf[1]['concepto'], 'Mora pendiente cuota 2');
+      // El subtexto explica de dónde viene la mora: cuándo venció la cuota,
+      // cuánto tardó en pagarse y qué quedó sin cobrar.
       expect(
         pdf[1]['subtexto'],
-        'Al pagar el 24/06 se cobró \$300,00 de \$7.200,00',
+        'Venció el 31/05/2026 · se pagó el 24/06/2026, 24 días tarde · '
+        'se cobró \$300,00 de los \$7.200,00 de mora',
       );
       final sum = (pdf[0]['monto'] as num) + (pdf[1]['monto'] as num);
       expect(sum, 13800);
@@ -163,6 +168,103 @@ void main() {
       expect(origen.first.montoAtribuido, 6900);
       expect(origen.first.moraCobrada, 300);
       expect(origen.first.moraDebida, 7200);
+    });
+  });
+
+  group('MoraTrackedOrigen — arrastre de varias cuotas (Bernel)', () {
+    // Historial real: tres "Cuota Base (n/9)" de $30.000 sin una sola línea de
+    // mora. Reg 30-mar-2026 → C1 vence 30/04, C2 31/05, C3 30/06.
+    final contrato = ContratoAlumno(
+      id: 'bernel',
+      eventoId: 'ev',
+      nombreAlumno: 'BERNEL, LUCILA FATIMA',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 270000,
+      totalCuotas: 9,
+      cuotasPagadas: 3,
+      saldoDeudor: 180000,
+      createdAt: DateTime.parse('2026-03-30T03:00:00+00:00'),
+    );
+    final pagos = <Map<String, dynamic>>[
+      {
+        'id': 'p1',
+        'concepto': 'Cuota Base (1/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-04-28T21:28:04.595192+00:00',
+        'anulado': 0,
+      },
+      {
+        'id': 'p2',
+        'concepto': 'Cuota Base (2/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-06-23T20:22:45.683166+00:00',
+        'anulado': 0,
+      },
+      {
+        'id': 'p3',
+        'concepto': 'Cuota Base (3/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-07-27T20:08:41.809065+00:00',
+        'anulado': 0,
+      },
+    ];
+
+    test('el tracked se desglosa en C2 6.900 + C3 8.100, no en una sola cuota', () {
+      final origen = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: pagos,
+        trackedMonto: 15000,
+      );
+
+      expect(origen.length, 2, reason: 'una línea por cuota arrastrada');
+      expect(origen[0].numeroCuota, 2);
+      expect(origen[0].montoAtribuido, closeTo(6900, 0.01));
+      expect(origen[0].diasMora, 23);
+      expect(origen[0].mesLabel, 'May 2026');
+      expect(origen[1].numeroCuota, 3);
+      expect(origen[1].montoAtribuido, closeTo(8100, 0.01));
+      expect(origen[1].diasMora, 27);
+      expect(origen[1].mesLabel, 'Jun 2026');
+
+      final total = origen.fold<double>(0, (s, o) => s + o.montoAtribuido);
+      expect(total, closeTo(15000, 0.01), reason: 'el desglose cubre el tracked');
+    });
+
+    test('etiqueta corta para la grilla', () {
+      final origen = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: pagos,
+        trackedMonto: 15000,
+      );
+      expect(origen[0].etiquetaCorta, 'C2 (May) 23d');
+      expect(origen[1].etiquetaCorta, 'C3 (Jun) 27d');
+    });
+
+    test('cobrar mora remanente descuenta FIFO desde la cuota más vieja', () {
+      // Paga 6.900: cancela la C2 entera y deja viva solo la C3.
+      final conPagoMora = [
+        ...pagos,
+        {
+          'id': 'p4',
+          'concepto': 'Mora pendiente cuota 2 (no cobrada al pagar)',
+          'monto': 6900.0,
+          'monto_gross': 6900.0,
+          'fecha_pago': '2026-07-28T12:00:00.000000+00:00',
+          'anulado': 0,
+          'line_kind': kLineKindInteresMora,
+        },
+      ];
+      final origen = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: conPagoMora,
+        trackedMonto: 8100,
+      );
+      expect(origen.length, 1);
+      expect(origen.first.numeroCuota, 3);
+      expect(origen.first.montoAtribuido, closeTo(8100, 0.01));
     });
   });
 

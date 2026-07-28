@@ -15,6 +15,14 @@ class MoraPendientePreviaDetalle {
   final double moraDebida;
   final double moraCobrada;
 
+  /// Días de atraso que tenía la cuota cuando se liquidó. Es el dato que
+  /// explica el monto ("27 días de junio"), no un recálculo al día de hoy:
+  /// el arrastre queda congelado en el momento del cobro.
+  final int diasMora;
+
+  /// Vencimiento original de la cuota que generó esta mora.
+  final DateTime? vencimiento;
+
   const MoraPendientePreviaDetalle({
     required this.numeroCuota,
     required this.mesLabel,
@@ -22,23 +30,55 @@ class MoraPendientePreviaDetalle {
     this.fechaPagoCuota,
     this.moraDebida = 0,
     this.moraCobrada = 0,
+    this.diasMora = 0,
+    this.vencimiento,
   });
 
-  /// Ej: `Al pagar el 24/06 se cobró $300 de $7.200`
+  /// Ej: `C2 (May) · 23 días` — para la grilla, sin monto.
+  String get etiquetaCorta {
+    final mes = mesLabel.split(' ').first;
+    final base = mes.isEmpty ? 'C$numeroCuota' : 'C$numeroCuota ($mes)';
+    return diasMora > 0 ? '$base ${diasMora}d' : base;
+  }
+
+  /// Explica de dónde sale esta mora, para que se entienda leyendo el recibo:
+  /// cuándo venció la cuota, cuánto tardó en pagarse y qué quedó sin cobrar.
+  ///
+  /// Ej: `Venció el 31/05/2026 · se pagó el 23/06/2026, 23 días tarde · no se
+  /// cobró nada de los $6.900,00 de mora`
   String get subtextoDetalle {
     final debida = moraDebida > 0.01 ? moraDebida : montoAtribuido + moraCobrada;
-    final cobrada = moraCobrada;
+    final partes = <String>[];
+
+    final venc = vencimiento;
+    if (venc != null) partes.add('Venció el ${_fmtFecha(venc)}');
+
     final fecha = fechaPagoCuota;
-    final montoDeb = _fmtPesos(debida);
-    final montoCob = _fmtPesos(cobrada);
     if (fecha != null) {
-      final dd = fecha.day.toString().padLeft(2, '0');
-      final mm = fecha.month.toString().padLeft(2, '0');
-      return 'Al pagar el $dd/$mm se cobró \$$montoCob de \$$montoDeb';
+      final tarde = diasMora > 0
+          ? ', $diasMora ${diasMora == 1 ? 'día' : 'días'} tarde'
+          : '';
+      partes.add('se pagó el ${_fmtFecha(fecha)}$tarde');
+    } else if (diasMora > 0) {
+      partes.add('$diasMora ${diasMora == 1 ? 'día' : 'días'} de atraso');
     }
-    return 'No cobrada al pagar la cuota (se cobró \$$montoCob de \$$montoDeb)';
+
+    if (moraCobrada > 0.01) {
+      partes.add('se cobró \$${_fmtPesos(moraCobrada)} de los '
+          '\$${_fmtPesos(debida)} de mora');
+    } else {
+      partes.add('no se cobró nada de los \$${_fmtPesos(debida)} de mora');
+    }
+
+    final texto = partes.join(' · ');
+    if (texto.isEmpty) return texto;
+    return texto[0].toUpperCase() + texto.substring(1);
   }
 }
+
+String _fmtFecha(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/'
+    '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
 String _fmtPesos(double v) {
   final n = double.parse(v.toStringAsFixed(2));
@@ -60,6 +100,8 @@ String _fmtPesos(double v) {
 class _OrigenAcc {
   final int numeroCuota;
   final String mesLabel;
+  final int diasMora;
+  final DateTime? vencimiento;
   final DateTime? fechaPagoCuota;
   final double moraDebida;
   final double moraCobrada;
@@ -72,6 +114,8 @@ class _OrigenAcc {
     required this.moraDebida,
     required this.moraCobrada,
     required this.remanente,
+    this.diasMora = 0,
+    this.vencimiento,
   });
 }
 
@@ -293,6 +337,8 @@ class MoraTrackedOrigen {
               _OrigenAcc(
                 numeroCuota: d.numeroCuota,
                 mesLabel: d.mesLabel,
+                diasMora: d.diasMora,
+                vencimiento: d.vencimiento,
                 fechaPagoCuota: fechaLote,
                 moraDebida: d.interesBruto,
                 moraCobrada: double.parse(aplicado.toStringAsFixed(2)),
@@ -301,8 +347,40 @@ class MoraTrackedOrigen {
             );
           }
         }
-        // Regla postCobro: tracked se resetea a liquidadas − mora (no arrastra).
-        origenes = nuevos;
+        // Lo que sobre de la mora cobrada baja el arrastre viejo, FIFO.
+        final previos = <_OrigenAcc>[];
+        for (final o in origenes) {
+          if (moraRestante <= 0.01) {
+            previos.add(o);
+            continue;
+          }
+          final toma = math.min(o.remanente, moraRestante);
+          moraRestante = (moraRestante - toma).clamp(0.0, double.infinity);
+          final nuevoRem = double.parse(
+            (o.remanente - toma).clamp(0.0, double.infinity).toStringAsFixed(2),
+          );
+          if (nuevoRem > 0.01) {
+            previos.add(
+              _OrigenAcc(
+                numeroCuota: o.numeroCuota,
+                mesLabel: o.mesLabel,
+                vencimiento: o.vencimiento,
+                diasMora: o.diasMora,
+                fechaPagoCuota: o.fechaPagoCuota,
+                moraDebida: o.moraDebida,
+                moraCobrada: double.parse(
+                  (o.moraCobrada + toma).toStringAsFixed(2),
+                ),
+                remanente: nuevoRem,
+              ),
+            );
+          }
+        }
+        // Espejo de postCobroTrackedOffset: el arrastre se acumula. Los previos
+        // son de cuotas liquidadas en cobros anteriores y los nuevos de las que
+        // se liquidan ahora — disjuntos por construcción. Con cuotasPre == 0 no
+        // puede haber arrastre legítimo (misma guarda que el tracked).
+        origenes = [if (cuotasPre > 0) ...previos, ...nuevos];
       } else if (moraEsteCobro > 0.01) {
         // Solo mora: reduce tracked / orígenes FIFO.
         var rest = moraEsteCobro;
@@ -322,6 +400,7 @@ class MoraTrackedOrigen {
               _OrigenAcc(
                 numeroCuota: o.numeroCuota,
                 mesLabel: o.mesLabel,
+                vencimiento: o.vencimiento,
                 fechaPagoCuota: o.fechaPagoCuota,
                 moraDebida: o.moraDebida,
                 moraCobrada: double.parse(
@@ -356,10 +435,12 @@ class MoraTrackedOrigen {
         MoraPendientePreviaDetalle(
           numeroCuota: o.numeroCuota,
           mesLabel: o.mesLabel,
+          vencimiento: o.vencimiento,
           montoAtribuido: parte,
           fechaPagoCuota: o.fechaPagoCuota,
           moraDebida: o.moraDebida,
           moraCobrada: o.moraCobrada,
+          diasMora: o.diasMora,
         ),
       );
     }

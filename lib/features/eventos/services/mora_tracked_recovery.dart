@@ -14,6 +14,22 @@ import 'mora_cuota_calculator.dart';
 class MoraTrackedRecovery {
   MoraTrackedRecovery._();
 
+  /// Universo de contratos que recorre la reconciliación.
+  static Future<List<Map<String, Object?>>> _contratosParaReconciliar(
+    DatabaseExecutor db,
+    bool soloEventosMasivosActivos,
+  ) =>
+      soloEventosMasivosActivos
+          ? db.rawQuery('''
+            SELECT c.*
+            FROM contratos_alumnos c
+            INNER JOIN eventos e ON e.id = c.evento_id
+            WHERE e.modalidad = 'masivo'
+              AND e.estado IN ('Confirmado', 'Planificacion')
+              AND c.nombre_alumno NOT LIKE '[BAJA]%'
+          ''')
+          : db.query('contratos_alumnos');
+
   static bool _esMora(Map<String, dynamic> p) {
     final lk = (p['line_kind'] as String?)?.trim();
     final c = p['concepto']?.toString() ?? '';
@@ -307,16 +323,8 @@ class MoraTrackedRecovery {
     required DatabaseExecutor db,
     bool soloEventosMasivosActivos = false,
   }) async {
-    final contratos = soloEventosMasivosActivos
-        ? await db.rawQuery('''
-            SELECT c.*
-            FROM contratos_alumnos c
-            INNER JOIN eventos e ON e.id = c.evento_id
-            WHERE e.modalidad = 'masivo'
-              AND e.estado IN ('Confirmado', 'Planificacion')
-              AND c.nombre_alumno NOT LIKE '[BAJA]%'
-          ''')
-        : await db.query('contratos_alumnos');
+    final contratos =
+        await _contratosParaReconciliar(db, soloEventosMasivosActivos);
 
     var reparados = 0;
     for (final row in contratos) {
@@ -461,16 +469,8 @@ class MoraTrackedRecovery {
     bool encolarSync = false,
     bool soloEventosMasivosActivos = false,
   }) async {
-    final contratos = soloEventosMasivosActivos
-        ? await db.rawQuery('''
-            SELECT c.*
-            FROM contratos_alumnos c
-            INNER JOIN eventos e ON e.id = c.evento_id
-            WHERE e.modalidad = 'masivo'
-              AND e.estado IN ('Confirmado', 'Planificacion')
-              AND c.nombre_alumno NOT LIKE '[BAJA]%'
-          ''')
-        : await db.query('contratos_alumnos');
+    final contratos =
+        await _contratosParaReconciliar(db, soloEventosMasivosActivos);
     var actualizados = 0;
     final nowUtc = DateTime.now().toUtc().toIso8601String();
 

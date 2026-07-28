@@ -3,9 +3,9 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Jueves 23 de julio de 2026 (rótulos Opción B — cuota N + subtexto)**  
+**Última actualización:** **Lunes 27 de julio de 2026 (v54 — carry-over de mora + PDFs legibles)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
-**Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart`  
+**Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart` · `test/cobro_pdf_display_test.dart`  
 **Release notes del día:** `docs/CONTEXTO_v4.3.1_2026-07-10.md` · helpers `mora_concepto_rotulo.dart` · `mora_tracked_origen.dart`
 
 ---
@@ -40,7 +40,9 @@ desgloseNeto         = desglosePendiente(calcularDesglose(contrato), moraCobrada
 moraPendienteOperativa = sum(desgloseNeto) + tracked
 ```
 
-**Tracked** solo contiene remanente de pagos **parciales** de mora. Si se pagó una cuota sin cobrar mora, esa mora queda **perdonada** (no se carry-overea a tracked).
+**Tracked** (v54) es el **carry-over acumulado**: mora de cuotas liquidadas sin cobrar el interés + remanentes de pagos parciales. Si se paga una cuota sin cobrar mora, esa mora **NO desaparece**: se suma al tracked existente. Queda congelada (no crece día a día).
+
+> ⚠️ Hasta v53 el tracked se **pisaba** en cada cobro con la mora de la última cuota liquidada — el remanente anterior se perdía (caso Bernel: C2 $6.900 borrados al cobrar C3). Corregido el 27-jul-2026 en `postCobroTrackedOffset`.
 
 **Offset** (`moraCobradaOffset`) absorbe los pagos de mora de cuotas que ya salieron del desglose calendario. Se actualiza al confirmar cada cobro.
 
@@ -64,28 +66,32 @@ moraPendienteOperativa = sum(desgloseNeto) + tracked
 
 ---
 
-## Lógica al confirmar cobro (modal)
+## Lógica al confirmar cobro (v54 — `postCobroTrackedOffset`)
 
 ```
-moraEsteCobro = suma de líneas interés mora en previewConceptos
+Rama cuota base liquidada (cuotasBaseLiquidadasEnCobro > 0):
+  remanenteCarry     = cuotasPreCobro > 0 ? tracked_actual : 0   // guarda anti-legacy
+  moraLiquidadasNeto = mora neta de las cuotas liquidadas en ESTE cobro
+  tracked_post       = max(0, remanenteCarry + moraLiquidadasNeto − moraEsteCobro)
+  offset            += moraEsteCobro (si > 0)
 
-SI moraEsteCobro > 0:
-  moraDesgloseQueSale = sum(desglose cuotas que están siendo liquidadas)
-  moraNoRecuperable   = moraDesgloseQueSale + remanenteMora
-  trackedNuevo        = max(0, moraNoRecuperable - moraEsteCobro)  // remanente parcial real
-SINO:
-  trackedNuevo = moraDesgloseQueSale + remanenteMora  // mora pendiente en ficha (v51)
-
-offsetNuevo = moraYaCobradaHist + moraEsteCobro  // absorbe todo lo pagado hasta ahora
+Rama solo mora: FIFO sobre desglose / tracked, sin cambios respecto de v52.
 ```
+
+La guarda `cuotasPreCobro > 0`: con cero cuotas pagas no puede existir
+carry-over legítimo — un tracked ahí solo puede ser un snapshot legacy que ya
+refiere a cuotas del desglose, y sumarlo duplicaría. En el caso normal los
+conjuntos son disjuntos (el desglose arranca en `cuotasPagadas + 1`; el tracked
+es de cuotas ya liquidadas), así que acumular **no** puede duplicar.
 
 ### Escenarios verificados
 
 | Escenario | tracked | offset | Resultado |
 |-----------|---------|--------|-----------|
-| Pagar cuota sin mora | moraDesgloseQueSale + remanente | sin cambio | Mora queda en ficha (tracked); no toca saldo plan |
+| Pagar cuota sin mora | remanente + mora de la cuota | sin cambio | El carry-over se ACUMULA (Bernel: 6.900 → 15.000) |
 | Pagar cuota + mora parcial ($5k de $8.7k) | $3,700 | hist + $5k | Remanente legítimo |
 | Pagar cuota + mora completa | 0 | hist + mora | Todo pagado |
+| Pagar solo una cuota del arrastre | resto del arrastre | hist + lo cobrado | Check por cuota en el modal (v54) |
 | Pagar solo mora sin cuota base | 0 | hist + mora | FIFO reduce desglose |
 
 ---
@@ -164,8 +170,8 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 
 ## Operación día a día
 
-1. **Cobro normal:** Grilla y modal coinciden. Tracked solo aparece si hubo pago parcial de mora previo.
-2. **Cobro sin mora:** La mora de la cuota pagada queda perdonada. No infla tracked.
+1. **Cobro normal:** Grilla y modal coinciden. El tracked muestra el arrastre acumulado, abierto por cuota.
+2. **Cobro sin mora:** La mora de la cuota pagada queda **en ficha** (se acumula al tracked). Para perdonarla de verdad, usar el perdón admin.
 3. **Restaurar mora (admin):** Preferir ajustar Reg sin tracked; si se setea tracked manual, el sistema lo trata como remanente parcial.
 4. **Perdonar mora (admin, individual):** Exención hasta fin de mes (o corte de prefijo) con `reinicia=false`. **No mueve Reg.** El alumno sigue atrasado en cuotas. Recovery post-sync **no degrada** esa exención.
 5. **Migración v49:** Automática al actualizar app. Limpia tracked inflado y calibra offset.
@@ -187,6 +193,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 | Fecha | Qué |
 |-------|-----|
+| 27-jul-2026 (**v54**) | **Fix carry-over**: `postCobroTrackedOffset` acumula el remanente en vez de pisarlo (guarda estructural `cuotasPreCobro > 0`). `MoraTrackedOrigen` también acumula orígenes (desglose por cuota con vencimiento/días/cobrado). Modal: un check por cuota arrastrada. Grillas: arrastre abierto por cuota. PDFs: "DETALLE DE PAGO" / "LO QUE SE PAGA HOY", mora anidada bajo su cuota (capa `display`, sin tocar `concepto` persistido), franja "ATENCIÓN: queda debiendo mora" en resumen y recibo, nuevo `generarEstadoCuentaAlumno` (botón PDF en Estado de Cuenta). Dry-run read-only `scripts/dry_run_mora_tracked.dart` (47 contratos, $195.630). La reconciliación retroactiva corre sola en el post-pull del sync (decisión 27-jul). Pendiente: perdón solo-ficha sin marcador persistente → el replay lo resucita (TODO en `simularPerdonMora`); reaplicar perdones a mano tras la primera reconciliación. Correr el primer sync en UNA sola PC con la caja cerrada. |
 | 10-jul-2026 (**v4.3.1**) | Perdón solo ficha (tracked independiente, sin exención); filtro masivo Solo ficha. Ver `CONTEXTO_v4.3.1_2026-07-10.md`. |
 | 9-jul-2026 (**v4.3.0**) | Perdón admin por exención (sin Reg); multi-cuotas prefijo; recovery no degrada exención local; release + smoke 9 masivos. Ver `CONTEXTO_v4.3.0_2026-07-09.md`. |
 | 29-jun-2026 (v50) | Migración conservadora por historial; `postCobroTrackedOffset`; offset solo con cuota+mora; UI checkbox maestro restaurado; recovery tracked legítimo. |

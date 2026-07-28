@@ -281,16 +281,71 @@ void main() {
       ),
     ];
 
-    test('cuota sin mora con remanente previo → tracked = mora neta de la cuota', () {
-      final desgloseNetoCuota1 = [
+    test('cuota sin mora con remanente previo → tracked acumula el carry-over', () {
+      // Forma Bernel: el remanente es de una cuota YA pagada (la 2, $6.900) y
+      // ahora se liquida la cuota 3 ($8.100) sin cobrar mora. Conjuntos
+      // disjuntos → 15.000. Pisar el tracked daría 8.100 (el bug v53).
+      final desgloseNetoCuota3 = [
         MoraCuotaDetalle(
-          numeroCuota: 1,
-          vencimiento: DateTime(2026, 3, 31),
-          diasMora: 90,
-          interesBruto: 3700,
-          mesLabel: 'Mar 2026',
+          numeroCuota: 3,
+          vencimiento: DateTime(2026, 6, 30),
+          diasMora: 27,
+          interesBruto: 8100,
+          mesLabel: 'Jun 2026',
         ),
       ];
+      final r = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: 6900,
+        moraCobradaOffsetActual: 0,
+        moraEsteCobro: 0,
+        cuotasBaseLiquidadasEnCobro: 1,
+        cuotasBasePagadasPostCobro: 3,
+        moraDesglosePreCobro: desgloseNetoCuota3,
+        moraDesgloseNetoPreCobro: desgloseNetoCuota3,
+        moraDesgloseNetoTotal: 8100,
+      );
+      expect(r.tracked, closeTo(15000, 0.01));
+      expect(r.offset, closeTo(0, 0.01));
+    });
+
+    test('cobrar solo una cuota del arrastre deja la otra pendiente', () {
+      // Bernel con 15.000 en ficha (C2 6.900 + C3 8.100). El operador tilda
+      // solo la C2 y paga 6.900: tiene que quedar la C3 viva.
+      final r = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: 15000,
+        moraCobradaOffsetActual: 0,
+        moraEsteCobro: 6900,
+        cuotasBaseLiquidadasEnCobro: 0,
+        cuotasBasePagadasPostCobro: 3,
+        moraDesglosePreCobro: const [],
+        moraDesgloseNetoPreCobro: const [],
+        moraDesgloseNetoTotal: 0,
+      );
+      expect(r.tracked, closeTo(8100, 0.01));
+      expect(r.offset, closeTo(6900, 0.01));
+    });
+
+    test('cuota base + una sola cuota del arrastre → resto sigue en ficha', () {
+      // Mismo caso pero liquidando además la cuota 4, que aún no venció
+      // (desglose calendario en cero).
+      final r = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: 15000,
+        moraCobradaOffsetActual: 0,
+        moraEsteCobro: 6900,
+        cuotasBaseLiquidadasEnCobro: 1,
+        cuotasBasePagadasPostCobro: 4,
+        moraDesglosePreCobro: const [],
+        moraDesgloseNetoPreCobro: const [],
+        moraDesgloseNetoTotal: 0,
+      );
+      expect(r.tracked, closeTo(8100, 0.01));
+      expect(r.offset, closeTo(6900, 0.01));
+    });
+
+    test('snapshot legacy sin cuotas previas → no duplica el desglose', () {
+      // cuotasPreCobro == 0: no puede existir carry-over legítimo (no se liquidó
+      // ninguna cuota antes), así que ese tracked solo puede referirse a cuotas
+      // todavía impagas — las mismas del desglose. No se suma.
       final r = MoraCuotaCalculator.postCobroTrackedOffset(
         moraPendienteTrackedActual: 3700,
         moraCobradaOffsetActual: 5000,
@@ -298,10 +353,10 @@ void main() {
         cuotasBaseLiquidadasEnCobro: 1,
         cuotasBasePagadasPostCobro: 1,
         moraDesglosePreCobro: desgloseCuota1,
-        moraDesgloseNetoPreCobro: desgloseNetoCuota1,
-        moraDesgloseNetoTotal: 3700,
+        moraDesgloseNetoPreCobro: desgloseCuota1,
+        moraDesgloseNetoTotal: 8700,
       );
-      expect(r.tracked, closeTo(3700, 0.01));
+      expect(r.tracked, closeTo(8700, 0.01));
       expect(r.offset, closeTo(5000, 0.01));
     });
 
@@ -403,102 +458,89 @@ void main() {
       expect(r.offset, closeTo(8700, 0.01));
     });
 
-    test('Borda: cuota 2 sin mora no arrastra mora de cuota 1 pagada', () {
-      // Inscripción 25-mar-2026; cuota 1 cobrada 20-may con mora parcial $300;
-      // cuota 2 cobrada 30-jun sin mora → tracked ≈ mora neta cuota 2 solamente.
-      final contratoBase = ContratoAlumno(
-        id: 'borda',
-        eventoId: 'evt',
-        nombreAlumno: 'BORDA, LUDMILA AILEN',
-        cantidadAcompanantes: 0,
-        montoTotalPactado: 270000,
-        saldoDeudor: 240000,
-        cuotasPagadas: 0,
-        totalCuotas: 9,
-        createdAt: DateTime.utc(2026, 3, 25, 10, 20, 40),
-      );
-      final pagos = <Map<String, dynamic>>[
-        {
-          'fecha_pago': '2026-05-20T21:15:11.215229+00:00',
-          'concepto': 'Cuota Base (1/9)',
-          'monto': 30000.0,
-          'monto_gross': 30000.0,
-          'anulado': 0,
-        },
-        {
-          'fecha_pago': '2026-05-20T21:15:11.533734+00:00',
-          'concepto': 'Interés mora (cuota base — este cobro)',
-          'monto': 300.0,
-          'monto_gross': 300.0,
-          'line_kind': 'interes_mora',
-          'anulado': 0,
-        },
-        {
-          'fecha_pago': '2026-06-30T22:46:35.070075+00:00',
-          'concepto': 'Cuota Base (2/9)',
-          'monto': 30000.0,
-          'monto_gross': 30000.0,
-          'anulado': 0,
-        },
-      ];
+    // Historial REAL de BORDA (contrato 4fa099cb…, verificado en Supabase).
+    // Reg 30-mar-2026 (el fixture viejo usaba 25-mar, que no existe en la base).
+    // Cuota base $30.000 → $300/día. C1 vence 30-abr, C2 31-may, C3 30-jun.
+    List<Map<String, dynamic>> pagosBordaReales() => [
+          {
+            'fecha_pago': '2026-05-20T21:15:11.215229+00:00',
+            'concepto': 'Cuota Base (1/9)',
+            'monto': 30000.0,
+            'monto_gross': 30000.0,
+            'anulado': 0,
+          },
+          {
+            'fecha_pago': '2026-05-20T21:15:11.533734+00:00',
+            'concepto': 'Interés mora (cuota base — este cobro)',
+            'monto': 300.0,
+            'monto_gross': 300.0,
+            'line_kind': 'interes_mora',
+            'anulado': 0,
+          },
+          {
+            'fecha_pago': '2026-05-20T21:15:11.647885+00:00',
+            'concepto': 'Cargo canal / operador (ref. MP u otro)',
+            'monto': 2000.0,
+            'monto_gross': 0.0,
+            'line_kind': 'cargo_canal_ref',
+            'anulado': 0,
+          },
+          {
+            'fecha_pago': '2026-06-30T22:46:35.070075+00:00',
+            'concepto': 'Cuota Base (2/9)',
+            'monto': 30000.0,
+            'monto_gross': 30000.0,
+            'anulado': 0,
+          },
+          {
+            'fecha_pago': '2026-07-01T14:16:00.394883+00:00',
+            'concepto': 'Mora pendiente cuota 2 (no cobrada al pagar)',
+            'monto': 9000.0,
+            'monto_gross': 9000.0,
+            'line_kind': 'interes_mora',
+            'anulado': 0,
+          },
+        ];
+
+    ContratoAlumno contratoBordaReal({required double saldoDeudor}) =>
+        ContratoAlumno(
+          id: 'borda',
+          eventoId: 'evt',
+          nombreAlumno: 'BORDA, LUDMILA AILEN',
+          cantidadAcompanantes: 0,
+          montoTotalPactado: 270000,
+          saldoDeudor: saldoDeudor,
+          cuotasPagadas: 0,
+          totalCuotas: 9,
+          createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        );
+
+    test('Borda: cuota 2 sin mora arrastra el remanente de la cuota 1', () {
+      // Al 20-may la cuota 1 llevaba 20 días vencida ($6.000 devengados) y solo
+      // se cobraron $300 → quedan $5.700 de carry-over. Al 30-jun se liquida la
+      // cuota 2 ($9.000 de mora) sin cobrar interés → 5.700 + 9.000 = 14.700.
+      // Conjuntos disjuntos (cuota 1 vs cuota 2): no hay doble conteo. La
+      // expectativa vieja (8.700) codificaba la pérdida del remanente.
       final resultado = MoraTrackedRecovery.recomputarDesdeHistorial(
-        contratoBase: contratoBase,
-        pagos: pagos,
+        contratoBase: contratoBordaReal(saldoDeudor: 240000),
+        pagos: pagosBordaReales().take(4).toList(),
       );
-      // 30 días × $300/día = $9000 (cuota 2 al 30-jun); tolerancia ±$300.
-      expect(resultado.tracked, closeTo(8700, 300));
+      expect(resultado.tracked, closeTo(14700, 0.01));
       expect(resultado.offset, closeTo(300, 0.01));
     });
 
-    test('Borda: mora remanente cierra tracked; cuota 3 mora nueva al día', () {
-      final contratoBase = ContratoAlumno(
-        id: 'borda',
-        eventoId: 'evt',
-        nombreAlumno: 'BORDA, LUDMILA AILEN',
-        cantidadAcompanantes: 0,
-        montoTotalPactado: 270000,
-        saldoDeudor: 210000,
-        cuotasPagadas: 0,
-        totalCuotas: 9,
-        createdAt: DateTime.utc(2026, 3, 25, 10, 20, 40),
-      );
-      final pagos = <Map<String, dynamic>>[
-        {
-          'fecha_pago': '2026-05-20T21:15:11.215229+00:00',
-          'concepto': 'Cuota Base (1/9)',
-          'monto': 30000.0,
-          'monto_gross': 30000.0,
-          'anulado': 0,
-        },
-        {
-          'fecha_pago': '2026-05-20T21:15:11.533734+00:00',
-          'concepto': 'Interés mora (cuota base — este cobro)',
-          'monto': 300.0,
-          'monto_gross': 300.0,
-          'line_kind': 'interes_mora',
-          'anulado': 0,
-        },
-        {
-          'fecha_pago': '2026-06-30T22:46:35.070075+00:00',
-          'concepto': 'Cuota Base (2/9)',
-          'monto': 30000.0,
-          'monto_gross': 30000.0,
-          'anulado': 0,
-        },
-        {
-          'fecha_pago': '2026-07-01T14:16:00.394883+00:00',
-          'concepto': 'Mora remanente',
-          'monto': 9000.0,
-          'monto_gross': 9000.0,
-          'line_kind': 'interes_mora',
-          'anulado': 0,
-        },
-      ];
+    test('Borda: el pago de mora remanente descuenta, no borra el carry-over', () {
+      // El 1-jul se cobraron $9.000 de "mora pendiente cuota 2" — lo que la UI
+      // mostraba entonces con el tracked pisado. Devengado real 15.000, cobrado
+      // 9.300 → quedan 5.700 de la cuota 1. Ese remanente no viene del bug del
+      // carry-over sino de que el cobro del 20-may se hizo con otro criterio de
+      // mora; el replay le aplica la regla de hoy.
+      final contratoBase = contratoBordaReal(saldoDeudor: 210000);
       final resultado = MoraTrackedRecovery.recomputarDesdeHistorial(
         contratoBase: contratoBase,
-        pagos: pagos,
+        pagos: pagosBordaReales(),
       );
-      expect(resultado.tracked, closeTo(0, 0.01));
+      expect(resultado.tracked, closeTo(5700, 0.01));
       expect(resultado.offset, closeTo(9300, 0.01));
 
       final contratoJul2 = contratoBase.copyWith(
@@ -511,8 +553,71 @@ void main() {
         moraCobradaHistorial: 9300,
         ahoraAr: DateTime(2026, 7, 2),
       );
-      // Cuota 3 vence 30-jun; al 2-jul ≈ 2 días × $300/día.
-      expect(operativa, closeTo(600, 50));
+      // Carry-over 5.700 + cuota 3 (vence 30-jun; al 2-jul, 2 días × $300).
+      expect(operativa, closeTo(6300, 50));
+    });
+
+    test('Bernel: tres cuotas sin mora acumulan 0 → 6.900 → 15.000', () {
+      // Historial REAL (contrato 9a41293d…, verificado en Supabase): tres
+      // "Cuota Base (n/9)" de $30.000, ninguna línea de mora en toda su historia.
+      // Reg 30-mar-2026 → C1 vence 30-abr, C2 31-may, C3 30-jun.
+      final pagos = <Map<String, dynamic>>[
+        {
+          'fecha_pago': '2026-04-28T21:28:04.595192+00:00',
+          'concepto': 'Cuota Base (1/9)',
+          'monto': 30000.0,
+          'monto_gross': 30000.0,
+          'anulado': 0,
+        },
+        {
+          'fecha_pago': '2026-06-23T20:22:45.683166+00:00',
+          'concepto': 'Cuota Base (2/9)',
+          'monto': 30000.0,
+          'monto_gross': 30000.0,
+          'anulado': 0,
+        },
+        {
+          'fecha_pago': '2026-07-27T20:08:41.809065+00:00',
+          'concepto': 'Cuota Base (3/9)',
+          'monto': 30000.0,
+          'monto_gross': 30000.0,
+          'anulado': 0,
+        },
+      ];
+      final contratoBase = ContratoAlumno(
+        id: 'bernel',
+        eventoId: 'evt',
+        nombreAlumno: 'BERNEL, LUCILA FATIMA',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 270000,
+        saldoDeudor: 180000,
+        cuotasPagadas: 0,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+      );
+
+      // Cobro 1 (28-abr): la cuota 1 vence el 30-abr → pagó antes, sin mora.
+      final tras1 = MoraTrackedRecovery.recomputarDesdeHistorial(
+        contratoBase: contratoBase,
+        pagos: pagos.take(1).toList(),
+      );
+      expect(tras1.tracked, closeTo(0, 0.01));
+
+      // Cobro 2 (23-jun): cuota 2 vencida el 31-may → 23 días × $300.
+      final tras2 = MoraTrackedRecovery.recomputarDesdeHistorial(
+        contratoBase: contratoBase,
+        pagos: pagos.take(2).toList(),
+      );
+      expect(tras2.tracked, closeTo(6900, 0.01));
+
+      // Cobro 3 (27-jul): cuota 3 vencida el 30-jun → 27 días × $300 = 8.100.
+      // Con el bug el tracked quedaba en 8.100 (es lo que hay hoy en la nube).
+      final tras3 = MoraTrackedRecovery.recomputarDesdeHistorial(
+        contratoBase: contratoBase,
+        pagos: pagos,
+      );
+      expect(tras3.tracked, closeTo(15000, 0.01));
+      expect(tras3.offset, closeTo(0, 0.01));
     });
   });
 

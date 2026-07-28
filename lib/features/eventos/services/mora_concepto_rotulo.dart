@@ -63,6 +63,26 @@ class MoraConceptoRotulo {
     return 'Incluir $titulo ($montoFmt)';
   }
 
+  /// Desglose del arrastre, una entrada por cuota, con sus días y su monto.
+  ///
+  /// Ej.: `C2 (May) 23 días $6.900 · C3 (Jun) 27 días $8.100`. El arrastre queda
+  /// congelado al momento del cobro, así que los días son los que tenía la
+  /// cuota cuando se liquidó, no los de hoy.
+  static String desgloseArrastre(
+    List<MoraPendientePreviaDetalle> detalle, {
+    required String Function(double) formatoMonto,
+  }) {
+    if (detalle.isEmpty) return '';
+    return detalle.map((d) {
+      final mes = d.mesLabel.split(' ').first;
+      final cuota = mes.isEmpty ? 'C${d.numeroCuota}' : 'C${d.numeroCuota} ($mes)';
+      final dias = d.diasMora > 0
+          ? ' ${d.diasMora} ${d.diasMora == 1 ? 'día' : 'días'}'
+          : '';
+      return '$cuota$dias ${formatoMonto(d.montoAtribuido)}';
+    }).join(' · ');
+  }
+
   static String calendarioCuota({
     required int numeroCuota,
     required String mesLabel,
@@ -283,6 +303,10 @@ class MoraConceptoRotulo {
           'concepto': calendarioCuota(numeroCuota: n, mesLabel: mes),
           'monto': monto,
           'esMora': true,
+          // Para anidar la mora bajo su cuota en el PDF (no altera [concepto],
+          // que es la clave que reconocen los detectores de pago_interes_mora).
+          if (n > 0) 'numeroCuota': n,
+          if (dias != null && dias > 0) 'diasMora': dias,
           if (dias != null && dias > 0) 'subtexto': subtextoCalendario(dias),
         });
       }
@@ -300,6 +324,11 @@ class MoraConceptoRotulo {
             'concepto': 'Mora pendiente cuota ${d.numeroCuota}',
             'monto': m,
             'esMora': true,
+            // Cuota ya pagada en un cobro anterior: no se anida bajo ninguna
+            // línea de este cobro, va al bloque de arrastre.
+            'cuotaPrevia': d.numeroCuota,
+            if (d.mesLabel.isNotEmpty) 'mesCuotaPrevia': d.mesLabel,
+            if (d.diasMora > 0) 'diasMora': d.diasMora,
             'subtexto': d.subtextoDetalle,
           });
         }
