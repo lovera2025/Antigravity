@@ -6095,6 +6095,41 @@ class _DetalleEventoMasivoScreenState
                           final limpiarMoraRefPersist = limpiarMoraRef;
                           final exencionPersist = nuevaExencion;
                           final exencionReiniciaPersist = nuevaExencionReinicia;
+
+                          // Jefe con caja cerrada: avisar antes de abrir sesión automática.
+                          final appRoleCobro = ref.read(appRoleProvider);
+                          if (appRoleCobro.esJefe &&
+                              appRoleCobro.sesionActiva == null) {
+                            if (!context.mounted) return;
+                            final abrirCaja = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Abrir caja'),
+                                content: const Text(
+                                  'La caja de modo jefe está cerrada. '
+                                  'Para atribuir este cobro se abrirá la caja. '
+                                  '¿Continuar?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, false),
+                                    child: const Text('Cancelar'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, true),
+                                    child: const Text('Abrir caja y cobrar'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (abrirCaja != true) return;
+                            await ref
+                                .read(appRoleProvider.notifier)
+                                .iniciarCajaJefe();
+                          }
+
                           final sesionCajaIdCobro = await ref
                               .read(appRoleProvider.notifier)
                               .sesionCajaIdParaCobro();

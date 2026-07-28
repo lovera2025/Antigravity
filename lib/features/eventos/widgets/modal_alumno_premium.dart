@@ -11,7 +11,6 @@ import '../repositories/contratos_repository.dart';
 import '../services/mesas_extra_utils.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
-import '../../common/providers/admin_provider.dart';
 import '../../caja_sesiones/services/caja_auto_sync_service.dart';
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
@@ -170,14 +169,6 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     return CurrencyInputFormatter.parse(_montoCtrl.text);
   }
 
-  /// Base del contrato al editar sin modo jefe (no se toma del controller).
-  double _montoBaseContratoOriginal() {
-    final al = widget.alumno!;
-    return al.montoTotalPactado -
-        al.mesaExtraPrecio -
-        al.sillasExtraPrecioTotal;
-  }
-
   double get _montoMesa {
     final unit = CurrencyInputFormatter.parse(_mesaPrecioCtrl.text);
     return unit * _mesasExtraCant;
@@ -204,14 +195,8 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final modoJefe = ref.read(adminAuthProvider).esModoJefe;
-    final bool baseBloqueada = isEdit && !modoJefe;
-    final double montoBaseEfectivo = baseBloqueada
-        ? _montoBaseContratoOriginal()
-        : _montoBase;
-    final int planCuotasEfectivo = baseBloqueada
-        ? widget.alumno!.totalCuotas
-        : (int.tryParse(_cuotasCtrl.text) ?? 9);
+    final double montoBaseEfectivo = _montoBase;
+    final int planCuotasEfectivo = int.tryParse(_cuotasCtrl.text) ?? 9;
     final double totalGeneralEfectivo =
         montoBaseEfectivo + _montoMesa + _montoSillas;
 
@@ -391,8 +376,6 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const gold = Color(0xFFD4AF37);
-    final bool modoJefe = ref.watch(adminAuthProvider).esModoJefe;
-    final bool baseBloqueada = isEdit && !modoJefe;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -644,18 +627,11 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 flex: 2,
                                 child: TextFormField(
                                   controller: _montoCtrl,
-                                  readOnly: baseBloqueada,
-                                  enableInteractiveSelection: !baseBloqueada,
                                   keyboardType: TextInputType.number,
                                   inputFormatters: [CurrencyInputFormatter()],
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
-                                    color: baseBloqueada
-                                        ? (isDark
-                                              ? Colors.white54
-                                              : Colors.black54)
-                                        : null,
                                   ),
                                   decoration: _premiumInputDecoration(
                                     'Valor del Contrato Base *',
@@ -668,16 +644,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _cuotasCtrl,
-                                  readOnly: baseBloqueada,
-                                  enableInteractiveSelection: !baseBloqueada,
                                   keyboardType: TextInputType.number,
-                                  style: TextStyle(
-                                    color: baseBloqueada
-                                        ? (isDark
-                                              ? Colors.white54
-                                              : Colors.black54)
-                                        : null,
-                                  ),
                                   decoration: _premiumInputDecoration(
                                     'Cuotas Base',
                                     isDark,
@@ -687,17 +654,6 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               ),
                             ],
                           ),
-                          if (baseBloqueada) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              'Activá modo jefe para modificar el contrato base',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white54 : Colors.black54,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),
