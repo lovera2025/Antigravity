@@ -36,12 +36,21 @@ class OperadoresCajaRepository {
   Future<OperadorCaja> ensureOperadorModoJefe() async {
     final existing = await getById(kOperadorModoJefeId);
     if (existing != null) {
+      var op = existing;
       if (!existing.activo || existing.nombre != kOperadorModoJefeNombre) {
-        return actualizar(
+        op = await actualizar(
           existing.copyWith(nombre: kOperadorModoJefeNombre, activo: true),
         );
       }
-      return existing;
+      // Upsert remoto: el encolado original pudo perderse (id legacy inválido
+      // en 4.5.1). La cola deduplica, así que re-encolar es barato e idempotente.
+      await SyncQueue.enqueue(
+        tabla: 'operadores_caja',
+        operacion: SyncOperation.insert,
+        registroId: op.id,
+        payload: op.toSyncPayload(),
+      );
+      return op;
     }
 
     final now = DateTime.parse(ArTime.nowUtcIso());

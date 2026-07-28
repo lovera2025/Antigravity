@@ -164,6 +164,14 @@ class SesionesCajaRepository {
       final ar = ArTime.toAr(abierta.abiertaAt);
       final sameDay = ar.year == y && ar.month == m && ar.day == d;
       if (sameDay) {
+        // Upsert remoto: si el encolado original quedó dead-letter (id legacy
+        // de 4.5.1), esto lo repone. Deduplicado e idempotente.
+        await SyncQueue.enqueue(
+          tabla: 'sesiones_caja',
+          operacion: SyncOperation.insert,
+          registroId: abierta.id,
+          payload: abierta.toSyncPayload(),
+        );
         return abierta.copyWith(operadorNombre: kOperadorModoJefeNombre);
       }
       await cerrar(
@@ -172,14 +180,9 @@ class SesionesCajaRepository {
       );
     }
 
-    // Reusar cualquier sesión jefe del día (compat con etiquetas Mañana/Tarde previas).
-    final delDia = await sesionesDelDia(DateTime(y, m, d));
-    for (final s in delDia) {
-      if (s.operadorId == op.id) {
-        return s.copyWith(operadorNombre: kOperadorModoJefeNombre);
-      }
-    }
-
+    // Si la sesión jefe del día ya se cerró (arqueo hecho), NO se reutiliza:
+    // un cobro posterior abre una sesión nueva para no alterar un cierre ya
+    // registrado. El índice único solo limita sesiones ABIERTAS por operador.
     final creada = await abrir(
       operadorId: op.id,
       cambioInicial: 0,

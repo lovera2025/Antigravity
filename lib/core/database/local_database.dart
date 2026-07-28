@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 65;
+  static const int _version = 66;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -2593,6 +2593,50 @@ class LocalDatabase {
         debugPrint('✅ Migración v65 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v65: $e');
+      }
+    }
+
+    if (oldVersion < 66) {
+      debugPrint('  🔧 v66: id UUID válido para operador Modo jefe');
+      try {
+        // Constantes de lib/features/caja_sesiones/models/modo_jefe_caja.dart.
+        // El id legacy (38 chars, no-hex) era rechazado por la cola de sync y
+        // por la validación UUID del sync engine: operador y sesión Modo jefe
+        // nunca llegaban a Supabase.
+        const legacy = '00000000-0000-4000-8000-cafemodojefe01';
+        const nuevo = '00000000-0000-4000-8000-0000cafe0001';
+
+        await db.execute('''
+          INSERT OR IGNORE INTO operadores_caja
+            (id, nombre, pin, activo, created_at, updated_at)
+          SELECT '$nuevo', nombre, pin, activo, created_at, updated_at
+          FROM operadores_caja WHERE id = '$legacy'
+        ''');
+        await db.rawUpdate(
+          'UPDATE sesiones_caja SET operador_id = ? WHERE operador_id = ?',
+          [nuevo, legacy],
+        );
+        await db.delete(
+          'operadores_caja',
+          where: 'id = ?',
+          whereArgs: [legacy],
+        );
+
+        // Cola de sync: reescribe payloads que referencian el id legacy y
+        // revive entradas trabadas por FK (sesiones Modo jefe que fallaban).
+        await db.rawUpdate(
+          'UPDATE _sync_queue SET payload = REPLACE(payload, ?, ?), '
+          'intentos = 0, ultimo_error = NULL WHERE payload LIKE ?',
+          [legacy, nuevo, '%$legacy%'],
+        );
+        await db.delete(
+          '_sync_queue',
+          where: "tabla = 'operadores_caja' AND registro_id = ?",
+          whereArgs: [legacy],
+        );
+        debugPrint('✅ Migración v66 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v66: $e');
       }
     }
   }
