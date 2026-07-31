@@ -7,6 +7,150 @@ import 'package:arguello_events/core/utils/pago_interes_mora.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 
 void main() {
+  group('origenMoraPendienteLinea', () {
+    String plata(double v) => '\$${v.toStringAsFixed(0)}';
+
+    MoraCuotaDetalle det(int n, String mes, int dias, double interes) =>
+        MoraCuotaDetalle(
+          numeroCuota: n,
+          vencimiento: DateTime(2026, 6, 30),
+          diasMora: dias,
+          interesBruto: interes,
+          mesLabel: mes,
+        );
+
+    test('nombra las cuotas con mes, días y monto', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: [det(2, 'May 2026', 45, 3200), det(3, 'Jun 2026', 15, 1100)],
+        formatoMonto: plata,
+      );
+      expect(
+        linea,
+        'Viene de: cuota 2 (May, 45 d) \$3200 · cuota 3 (Jun, 15 d) \$1100.',
+      );
+    });
+
+    test('corta en maxCuotas para que entre en la hoja', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: [
+          det(2, 'May 2026', 45, 3200),
+          det(3, 'Jun 2026', 15, 1100),
+          det(4, 'Jul 2026', 10, 800),
+          det(5, 'Ago 2026', 5, 400),
+          det(6, 'Sep 2026', 2, 200),
+        ],
+        formatoMonto: plata,
+        maxCuotas: 3,
+      );
+      expect(linea, contains('y 2 cuotas más'));
+      expect(linea, isNot(contains('cuota 5')));
+    });
+
+    test('suma el remanente de cuotas ya pagadas', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: [det(3, 'Jun 2026', 15, 1100)],
+        tracked: 2400,
+        formatoMonto: plata,
+      );
+      expect(linea, contains('de cuotas ya pagadas \$2400'));
+    });
+
+    test('solo tracked sin origen reconstruido: se lee bien', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: const [],
+        tracked: 2400,
+        formatoMonto: plata,
+      );
+      expect(linea, 'Viene de: interés de cuotas ya pagadas \$2400.');
+    });
+
+    test('tracked con origen reconstruido nombra las cuotas', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: const [],
+        tracked: 15000,
+        trackedDetalle: [
+          MoraPendientePreviaDetalle(
+            numeroCuota: 2,
+            mesLabel: 'May 2026',
+            montoAtribuido: 6900,
+            diasMora: 24,
+          ),
+          MoraPendientePreviaDetalle(
+            numeroCuota: 3,
+            mesLabel: 'Jun 2026',
+            montoAtribuido: 8100,
+            diasMora: 27,
+          ),
+        ],
+        formatoMonto: plata,
+      );
+      expect(
+        linea,
+        'Viene de: cuota 2 (May, 24 d) \$6900 · cuota 3 (Jun, 27 d) \$8100.',
+      );
+    });
+
+    test('ordena por número de cuota, no por origen', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: [det(2, 'May 2026', 61, 21350), det(3, 'Jun 2026', 31, 10850)],
+        tracked: 1400,
+        trackedDetalle: [
+          MoraPendientePreviaDetalle(
+            numeroCuota: 1,
+            mesLabel: 'Abr 2026',
+            montoAtribuido: 1400,
+            diasMora: 4,
+          ),
+        ],
+        formatoMonto: plata,
+      );
+      expect(
+        linea,
+        'Viene de: cuota 1 (Abr, 4 d) \$1400 · cuota 2 (May, 61 d) \$21350 · '
+        'cuota 3 (Jun, 31 d) \$10850.',
+      );
+    });
+
+    test('desglose + tracked comparten el corte de maxCuotas', () {
+      final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+        desglose: [det(4, 'Jul 2026', 10, 800), det(5, 'Ago 2026', 5, 400)],
+        tracked: 15000,
+        trackedDetalle: [
+          MoraPendientePreviaDetalle(
+            numeroCuota: 2,
+            mesLabel: 'May 2026',
+            montoAtribuido: 6900,
+            diasMora: 24,
+          ),
+          MoraPendientePreviaDetalle(
+            numeroCuota: 3,
+            mesLabel: 'Jun 2026',
+            montoAtribuido: 8100,
+            diasMora: 27,
+          ),
+        ],
+        formatoMonto: plata,
+        maxCuotas: 3,
+      );
+      // Ordenadas 2, 3, 4, 5 → entran las tres más viejas y la 5 queda afuera.
+      expect(linea, contains('cuota 2'));
+      expect(linea, contains('cuota 3'));
+      expect(linea, contains('cuota 4'));
+      expect(linea, isNot(contains('cuota 5')));
+      expect(linea, contains('y 1 cuota más'));
+    });
+
+    test('vacía si no hay nada que informar', () {
+      expect(
+        MoraConceptoRotulo.origenMoraPendienteLinea(
+          desglose: const [],
+          formatoMonto: plata,
+        ),
+        '',
+      );
+    });
+  });
+
   group('MoraConceptoRotulo', () {
     final c3 = MoraCuotaDetalle(
       numeroCuota: 3,
@@ -47,7 +191,10 @@ void main() {
       );
       expect(pdf.length, 1);
       expect(pdf.first['monto'], 6900.0);
-      expect(pdf.first['subtexto'], '23 días de atraso');
+      // Los días viajan como dato; el rótulo del PDF los imprime una sola vez
+      // ("Mora — 23 días fuera de término"), sin subtexto que los repita.
+      expect(pdf.first['diasMora'], 23);
+      expect(pdf.first['subtexto'], isNull);
     });
 
     test('solo pendiente previas sin detalle', () {
@@ -64,7 +211,8 @@ void main() {
       );
       expect(pdf.length, 1);
       expect(pdf.first['concepto'], MoraConceptoRotulo.conceptoPendientePreviasGenerico);
-      expect(pdf.first['subtexto'], 'No cobrada en cobros anteriores');
+      // El rótulo ya dice "no cobrada en su momento": sin subtexto duplicado.
+      expect(pdf.first['subtexto'], isNull);
     });
 
     test('mixto Alderete Opción B: 6900+6900 cuota 2', () {
@@ -231,6 +379,27 @@ void main() {
 
       final total = origen.fold<double>(0, (s, o) => s + o.montoAtribuido);
       expect(total, closeTo(15000, 0.01), reason: 'el desglose cubre el tracked');
+    });
+
+    test('una exención de hoy no borra el origen del pasado', () {
+      // La exención es una decisión de ahora ("no le cobres mora hasta fin de
+      // mes"). Aplicada al replay del historial dejaba el desglose de junio en
+      // cero y el tracked sin cuota que explicarlo: el recibo terminaba
+      // diciendo "de cuotas ya pagadas" en vez de nombrarlas.
+      final conExencion = contrato.copyWith(
+        moraExentaHasta: DateTime(2026, 7, 31),
+      );
+      final origen = MoraTrackedOrigen.inferir(
+        contratoBase: conExencion,
+        pagos: pagos,
+        trackedMonto: 15000,
+      );
+
+      expect(origen.length, 2);
+      expect(origen[0].numeroCuota, 2);
+      expect(origen[1].numeroCuota, 3);
+      final total = origen.fold<double>(0, (s, o) => s + o.montoAtribuido);
+      expect(total, closeTo(15000, 0.01));
     });
 
     test('etiqueta corta para la grilla', () {

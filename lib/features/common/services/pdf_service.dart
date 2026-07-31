@@ -21,6 +21,7 @@ import '../../cierre_caja/models/turno_caja.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
+import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/mora_tracked_origen.dart';
 import '../../eventos/utils/evento_presentacion.dart';
@@ -110,7 +111,8 @@ class PdfService {
     final fechaVencimiento = ArTime.formatFechaCorta(p.fechaVencimiento);
     final motivoHeader = EventoPresentacion.encabezadoDesdePresupuesto(p);
     final subtituloHeader = EventoPresentacion.subtituloDesdePresupuesto(p);
-    final fraseIntroPdf = llmTxt?.fraseIntroUsable() ??
+    final fraseIntroPdf =
+        llmTxt?.fraseIntroUsable() ??
         EventoPresentacion.fraseIntroPresupuesto(p);
     final segundoParrafoPdf =
         llmTxt?.parrafoPresentacionUsable() ??
@@ -227,8 +229,10 @@ class PdfService {
     );
 
     final bytes = await pdf.save();
-    final safeCliente =
-        (p.cliente?.nombreCompleto ?? 'Cliente').replaceAll(' ', '_');
+    final safeCliente = (p.cliente?.nombreCompleto ?? 'Cliente').replaceAll(
+      ' ',
+      '_',
+    );
     final fileName = '${nombreArchivoPrefix}_$safeCliente.pdf';
 
     if (!kIsWeb && Platform.isWindows) {
@@ -244,7 +248,10 @@ class PdfService {
     required List<EventosServicios> servicios,
     BuildContext? context,
   }) async {
-    final p = presupuestoVirtualDesdeEvento(evento: evento, servicios: servicios);
+    final p = presupuestoVirtualDesdeEvento(
+      evento: evento,
+      servicios: servicios,
+    );
     await generarPresupuestoElite(
       p,
       context: context,
@@ -906,10 +913,7 @@ class PdfService {
           ),
         ),
         pw.SizedBox(height: 6),
-        pw.Container(
-          height: 0.5,
-          color: _greyLight,
-        ),
+        pw.Container(height: 0.5, color: _greyLight),
       ],
     );
   }
@@ -1442,6 +1446,15 @@ class PdfService {
     /// venga informada (incluso en 0) para que quede constancia. `null` solo en
     /// reimpresiones históricas, que no pueden afirmar la mora de hoy.
     double? moraPendienteRestante,
+
+    /// Línea compacta de "de dónde viene" esa mora, para el aviso rojo. Vacía
+    /// si no se pudo determinar (reimpresiones históricas).
+    String? moraPendienteOrigen,
+
+    /// `null` lo infiere desde [fechaManual]. El cobro original también manda
+    /// fecha (la del momento del cobro), así que sin este flag todo recibo
+    /// original salía rotulado como reimpresión.
+    bool? esReimpresion,
   }) async {
     // Cargar fuente TrueType con soporte Unicode completo (elimina warnings de Helvetica)
     pw.Font? fontRegular;
@@ -1475,7 +1488,7 @@ class PdfService {
     final operacionGestionadaStr = ArTime.operacionGestionada(fechaTransaccion);
 
     // Calcular VALOR dinámicamente...
-    final bool esReimpresion = fechaManual != null;
+    final bool esReimpresionPdf = esReimpresion ?? (fechaManual != null);
     final valPago = (conceptosPagados != null && conceptosPagados.isNotEmpty)
         ? conceptosPagados.fold<double>(
             0,
@@ -1497,11 +1510,56 @@ class PdfService {
                   .toList(),
               cantMesasRecibo,
             ),
-            regAr:
-                alumno.createdAt != null ? ArTime.toAr(alumno.createdAt!) : null,
+            regAr: alumno.createdAt != null
+                ? ArTime.toAr(alumno.createdAt!)
+                : null,
             hoyAr: ArTime.toAr(fechaTransaccion),
           )
         : null;
+
+    // La mora de cuotas ya pagadas en cobros anteriores no cuelga de ninguna
+    // línea de este cobro: va en su propio sub-bloque al final del detalle.
+    final conceptosCobroDisplay = conceptosPagadosDisplay
+        ?.where((c) => c['arrastre'] != true)
+        .toList();
+    final conceptosArrastreDisplay = conceptosPagadosDisplay
+        ?.where((c) => c['arrastre'] == true)
+        .toList();
+    // Solo se puede afirmar "de cuotas ya pagadas" si todas vienen de una cuota
+    // liquidada antes. Cobrando únicamente mora, el interés cae acá sin que la
+    // cuota esté paga: ahí el título tiene que ser neutro.
+    final String tituloArrastreRecibo =
+        (conceptosArrastreDisplay?.every((c) => c['cuotaPrevia'] != null) ??
+            false)
+        ? tituloArrastreMoraPdf.toUpperCase()
+        : 'INTERESES POR PAGAR FUERA DE TÉRMINO';
+
+    // Desglose del recibo por rubro. Se toman los netos (no el gross) para que
+    // las partes sumen exactamente el total impreso aunque haya descuento.
+    final double moraCobradaRecibo = conceptosPagadosDisplay != null
+        ? moraSeleccionadaPdf(conceptosPagadosDisplay)
+        : 0.0;
+    final double cargoCobradoRecibo = conceptosPagadosDisplay != null
+        ? cargoDesdeConceptosFinales(conceptosPagadosDisplay)
+        : 0.0;
+    final double planCobradoRecibo =
+        valPago - moraCobradaRecibo - cargoCobradoRecibo;
+    final partesDesgloseRecibo = <String>[
+      if (planCobradoRecibo > 0.01)
+        'Cuotas del plan ${planCobradoRecibo.toCurrency()}',
+      if (moraCobradaRecibo > 0.01) 'Mora ${moraCobradaRecibo.toCurrency()}',
+      if (cargoCobradoRecibo > 0.01)
+        'Costo por transferencia ${cargoCobradoRecibo.toCurrency()}',
+    ];
+
+    // Cuotas nombradas en el bloque de mora saldada.
+    final cuotasMoraCobrada = conceptosPagadosDisplay != null
+        ? cuotasConMoraCobradaPdf(conceptosPagadosDisplay)
+        : const <int>[];
+    final fraseMoraCobrada = fraseCuotasEs(cuotasMoraCobrada);
+    final String detalleMoraCobrada = fraseMoraCobrada.isEmpty
+        ? 'detallada arriba'
+        : 'de ${cuotasMoraCobrada.length == 1 ? 'la' : 'las'} $fraseMoraCobrada';
 
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
@@ -1516,8 +1574,7 @@ class PdfService {
         reciboMixto ||
         (medioPago?.trim().toLowerCase().contains('transfer') ?? false);
     final double? cargoInformado = montoCargoTransferenciaInformado;
-    final bool usarMontoFijo =
-        cargoInformado != null && cargoInformado > 0.01;
+    final bool usarMontoFijo = cargoInformado != null && cargoInformado > 0.01;
     final bool usarPct = pctCargo > 0.01;
     final bool mostrarCargoRef =
         informarCargoTransferenciaExterno &&
@@ -1558,25 +1615,146 @@ class PdfService {
           'Medios: Efectivo ${efDet.toCurrency()} · Transferencia ${trDet.toCurrency()}';
     }
 
+    // Un ítem del detalle: misma pinta para las líneas del cobro y las de
+    // arrastre de mora.
+    pw.Widget lineaConceptoRecibo(Map<String, dynamic> c) {
+      // 'display' = rótulo de mostrador; 'concepto' queda intacto.
+      final desc =
+          (c['display'] as String?) ?? (c['concepto'] as String? ?? 'Pago');
+      final montoItem = (c['monto'] as num?)?.toDouble() ?? 0;
+      final grossItem = (c['gross'] as num?)?.toDouble();
+      final subtexto = c['subtexto'] as String?;
+      final bool plan = c['esPlanLiquidacion'] == true;
+      // Mora anidada bajo la cuota que la generó.
+      final bool anidada = c['anidada'] == true;
+      final String? nominalHint =
+          plan && grossItem != null && grossItem > montoItem + 0.01
+          ? 'nom. ${grossItem.toCurrency()}'
+          : null;
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Expanded(
+                child: pw.Padding(
+                  padding: pw.EdgeInsets.only(left: anidada ? 14 : 0),
+                  child: pw.Text(
+                    anidada ? '  ↳ $desc' : '  • $desc',
+                    style: pw.TextStyle(
+                      fontSize: anidada ? 9 : 10,
+                      color: anidada ? _greyText : null,
+                    ),
+                  ),
+                ),
+              ),
+              pw.Text(
+                montoItem.toCurrency(),
+                style: pw.TextStyle(
+                  fontSize: anidada ? 9 : 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: anidada ? _greyText : null,
+                ),
+              ),
+            ],
+          ),
+          if (subtexto != null && subtexto.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(left: 12),
+              child: pw.Text(
+                subtexto,
+                style: pw.TextStyle(
+                  fontSize: 8,
+                  fontStyle: pw.FontStyle.italic,
+                  color: _greyText,
+                ),
+              ),
+            ),
+          if (nominalHint != null)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(left: 12),
+              child: pw.Text(
+                nominalHint,
+                style: pw.TextStyle(
+                  fontSize: 8,
+                  fontStyle: pw.FontStyle.italic,
+                  color: _greyText,
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
+    // Recuadro de aviso (mora saldada en verde, mora pendiente en rojo).
+    pw.Widget avisoRecibo({
+      required PdfColor color,
+      required String titulo,
+      required List<String> lineas,
+    }) {
+      return pw.Container(
+        width: double.infinity,
+        margin: const pw.EdgeInsets.only(top: 4),
+        padding: const pw.EdgeInsets.all(5),
+        decoration: pw.BoxDecoration(
+          color: _cardBg,
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+          border: pw.Border.all(color: color, width: 0.8),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              titulo,
+              style: pw.TextStyle(
+                fontSize: 8,
+                fontWeight: pw.FontWeight.bold,
+                color: color,
+              ),
+            ),
+            ...lineas.map(
+              (t) => pw.Text(
+                t,
+                style: pw.TextStyle(fontSize: 7, color: _darkText),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Hoja del ancho de una A4 pero de alto variable: el motor la recorta a lo
+    // que ocupa el contenido. Con piso de media A4 los recibos comunes salen
+    // siempre del mismo tamaño (entran dos por hoja, se corta al medio) y los
+    // cargados crecen solos, así nunca se corta nada al pie.
+    final formatoRecibo = PdfPageFormat(
+      PdfPageFormat.a4.width,
+      double.infinity,
+    );
+    final altoMinimoRecibo = PdfPageFormat.a4.height / 2;
+
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: formatoRecibo,
         margin: const pw.EdgeInsets.all(0),
         build: (context) {
           final medioReciboStr = medioPago?.trim() ?? '';
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              pw.Container(
-                decoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: _greyLight, width: 0.5),
+          return pw.ConstrainedBox(
+            constraints: pw.BoxConstraints(minHeight: altoMinimoRecibo),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Container(
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border(
+                      bottom: pw.BorderSide(color: _greyLight, width: 0.5),
+                    ),
                   ),
-                ),
-                padding: const pw.EdgeInsets.fromLTRB(22, 8, 22, 16),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
+                  padding: const pw.EdgeInsets.fromLTRB(22, 8, 22, 16),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
                       // Header del Recibo
                       pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1651,56 +1829,13 @@ class PdfService {
                       ),
                       pw.SizedBox(height: 4),
 
-                      // Cuerpo
-                      pw.Row(
-                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                        children: [
-                          pw.Text(
-                            'Fecha: $fechaStr',
-                            style: pw.TextStyle(fontSize: 10),
-                          ),
-                          pw.Container(
-                            padding: const pw.EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: const pw.BoxDecoration(
-                              color: _greyLight,
-                            ),
-                            child: pw.Text(
-                              'VALOR: ${valPago.toCurrency()}',
-                              style: pw.TextStyle(
-                                fontWeight: pw.FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
+                      // Cuerpo. El importe no va acá arriba: un recibo se lee
+                      // "recibí de X la suma de Y", y el total va al pie.
+                      pw.Text(
+                        'Fecha: $fechaStr',
+                        style: pw.TextStyle(fontSize: 10),
                       ),
                       pw.SizedBox(height: 2),
-                      if (lineaMixMedios != null) ...[
-                        pw.Text(
-                          lineaMixMedios,
-                          style: pw.TextStyle(fontSize: 9, color: _greyText),
-                        ),
-                        pw.SizedBox(height: 2),
-                      ] else if (medioReciboStr.isNotEmpty)
-                        pw.Text(
-                          'Medio de pago: $medioReciboStr',
-                          style: pw.TextStyle(fontSize: 9, color: _greyText),
-                        ),
-                      if (!reciboMixto && medioReciboStr.isNotEmpty)
-                        pw.SizedBox(height: 2),
-                      if (mostrarCargoRef)
-                        pw.Text(
-                          textoCargoReferenciaPdf,
-                          style: pw.TextStyle(
-                            fontSize: 8,
-                            fontStyle: pw.FontStyle.italic,
-                            color: _greyText,
-                          ),
-                        ),
-                      if (mostrarCargoRef) pw.SizedBox(height: 2),
                       // Sello temporal estricto (AR GMT-3): día + hora + minuto.
                       pw.Text(
                         operacionGestionadaStr,
@@ -1775,99 +1910,11 @@ class PdfService {
                       pw.SizedBox(height: 2),
 
                       // Desglose itemizado de conceptos pagados
-                      if (conceptosPagadosDisplay != null &&
-                          conceptosPagadosDisplay.isNotEmpty) ...[
-                        ...conceptosPagadosDisplay.map((c) {
-                          // 'display' = rótulo de mostrador; 'concepto' intacto.
-                          final desc = (c['display'] as String?) ??
-                              (c['concepto'] as String? ?? 'Pago');
-                          final montoItem =
-                              (c['monto'] as num?)?.toDouble() ?? 0;
-                          final grossItem =
-                              (c['gross'] as num?)?.toDouble();
-                          final subtexto = c['subtexto'] as String?;
-                          final bool plan =
-                              c['esPlanLiquidacion'] == true;
-                          // Mora anidada bajo la cuota que la generó.
-                          final bool anidada = c['anidada'] == true;
-                          final String? nominalHint = plan &&
-                                  grossItem != null &&
-                                  grossItem > montoItem + 0.01
-                              ? 'nom. ${grossItem.toCurrency()}'
-                              : null;
-                          return pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                            children: [
-                              pw.Row(
-                                mainAxisAlignment:
-                                    pw.MainAxisAlignment.spaceBetween,
-                                children: [
-                                  pw.Expanded(
-                                    child: pw.Padding(
-                                      padding: pw.EdgeInsets.only(
-                                        left: anidada ? 14 : 0,
-                                      ),
-                                      child: pw.Text(
-                                        anidada ? '  ↳ $desc' : '  • $desc',
-                                        style: pw.TextStyle(
-                                          fontSize: anidada ? 9 : 10,
-                                          color: anidada ? _greyText : null,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  pw.Text(
-                                    montoItem.toCurrency(),
-                                    style: pw.TextStyle(
-                                      fontSize: anidada ? 9 : 10,
-                                      fontWeight: pw.FontWeight.bold,
-                                      color: anidada ? _greyText : null,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (subtexto != null && subtexto.isNotEmpty)
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.only(left: 12),
-                                  child: pw.Text(
-                                    subtexto,
-                                    style: pw.TextStyle(
-                                      fontSize: 8,
-                                      fontStyle: pw.FontStyle.italic,
-                                      color: _greyText,
-                                    ),
-                                  ),
-                                ),
-                              if (nominalHint != null)
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.only(left: 12),
-                                  child: pw.Text(
-                                    nominalHint,
-                                    style: pw.TextStyle(
-                                      fontSize: 8,
-                                      fontStyle: pw.FontStyle.italic,
-                                      color: _greyText,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        }),
-                        ..._bloqueDescuentoLiquidacionPdf(
-                          porcentajeDescuento: porcentajeDescuentoLiquidacion,
-                          conceptos: conceptosPagadosDisplay,
-                          fontSize: 9,
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          EventoPresentacion.institucionOEventoParaPdf(
-                            evento: evento,
-                            institucionAlumno: alumno.institucion,
-                          ),
-                          style: pw.TextStyle(fontSize: 8, color: _greyText),
-                        ),
-                        pw.SizedBox(height: 3),
-                      ] else ...[
+                      if (conceptosCobroDisplay != null &&
+                          conceptosCobroDisplay.isNotEmpty)
+                        ...conceptosCobroDisplay.map(lineaConceptoRecibo),
+                      if (conceptosPagadosDisplay == null ||
+                          conceptosPagadosDisplay.isEmpty)
                         // Fallback legacy o Estado de Cuenta inicial
                         pw.Row(
                           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1885,20 +1932,170 @@ class PdfService {
                             ),
                           ],
                         ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          EventoPresentacion.institucionOEventoParaPdf(
-                            evento: evento,
-                            institucionAlumno: alumno.institucion,
-                          ),
-                          style: pw.TextStyle(fontSize: 8, color: _greyText),
-                        ),
+
+                      // Mora de cuotas ya pagadas en cobros anteriores: no
+                      // cuelga de ninguna línea de este cobro.
+                      if (conceptosArrastreDisplay != null &&
+                          conceptosArrastreDisplay.isNotEmpty) ...[
                         pw.SizedBox(height: 3),
+                        pw.Text(
+                          tituloArrastreRecibo,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _greyText,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        ...conceptosArrastreDisplay.map(lineaConceptoRecibo),
                       ],
+
+                      // Mora que se saldó en este pago.
+                      if (moraCobradaRecibo > 0.01)
+                        avisoRecibo(
+                          color: _greenAccent,
+                          titulo:
+                              moraPendienteRestante != null &&
+                                  moraPendienteRestante <= 0.01
+                              ? 'MORA SALDADA EN ESTE PAGO — '
+                                    '${moraCobradaRecibo.toCurrency()}'
+                              : 'MORA COBRADA EN ESTE PAGO — '
+                                    '${moraCobradaRecibo.toCurrency()}',
+                          lineas: [
+                            // El título ya dice que se cobró y cuánto: acá va
+                            // solo de qué cuota sale.
+                            'Corresponde a la mora $detalleMoraCobrada.',
+                            if (moraPendienteRestante != null &&
+                                moraPendienteRestante > 0.01)
+                              'Todavía queda mora pendiente: ver el aviso de '
+                                  'abajo.',
+                          ],
+                        ),
+
+                      // La mora que queda debiendo tiene que quedar escrita en
+                      // el papel, se haya tildado para cobrar o no.
+                      if (moraPendienteRestante != null &&
+                          moraPendienteRestante > 0.01)
+                        avisoRecibo(
+                          color: _redAccent,
+                          titulo: moraCobradaRecibo > 0.01
+                              ? 'ATENCIÓN: TODAVÍA QUEDA MORA SIN PAGAR — '
+                                    '${moraPendienteRestante.toCurrency()}'
+                              : 'ATENCIÓN: QUEDA MORA SIN PAGAR — '
+                                    '${moraPendienteRestante.toCurrency()}',
+                          lineas: [
+                            // Qué es la mora se explica una sola vez, al pie
+                            // de la tabla del plan: acá solo qué pasó con ella.
+                            if (moraCobradaRecibo > 0.01)
+                              'Se cobró solo una parte en este recibo.'
+                            else
+                              'En este pago no se cobró.',
+                            if (moraPendienteOrigen != null &&
+                                moraPendienteOrigen.isNotEmpty)
+                              moraPendienteOrigen,
+                            'Sigue sumando todos los días hasta que se abone.',
+                          ],
+                        ),
+
+                      ..._bloqueDescuentoLiquidacionPdf(
+                        porcentajeDescuento: porcentajeDescuentoLiquidacion,
+                        conceptos: conceptosPagadosDisplay,
+                        fontSize: 9,
+                      ),
+
+                      // Franja de cierre: el importe se dice una sola vez, acá
+                      // abajo, junto al medio de pago.
+                      pw.Container(
+                        width: double.infinity,
+                        margin: const pw.EdgeInsets.only(top: 5, bottom: 3),
+                        padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: pw.BoxDecoration(
+                          color: _cardBg,
+                          borderRadius: const pw.BorderRadius.all(
+                            pw.Radius.circular(4),
+                          ),
+                          border: pw.Border.all(color: _greyLight, width: 0.5),
+                        ),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Row(
+                              mainAxisAlignment:
+                                  pw.MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Text(
+                                  'TOTAL DE ESTE RECIBO',
+                                  style: pw.TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold,
+                                    color: _greyText,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                                pw.Text(
+                                  valPago.toCurrency(),
+                                  style: pw.TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: pw.FontWeight.bold,
+                                    color: _darkText,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (partesDesgloseRecibo.length > 1)
+                              pw.Text(
+                                partesDesgloseRecibo.join(' · '),
+                                style: pw.TextStyle(
+                                  fontSize: 8,
+                                  color: _greyText,
+                                ),
+                              ),
+                            if (lineaMixMedios != null)
+                              pw.Text(
+                                lineaMixMedios,
+                                style: pw.TextStyle(
+                                  fontSize: 8,
+                                  color: _greyText,
+                                ),
+                              )
+                            else if (medioReciboStr.isNotEmpty)
+                              pw.Text(
+                                'Medio de pago: $medioReciboStr',
+                                style: pw.TextStyle(
+                                  fontSize: 8,
+                                  color: _greyText,
+                                ),
+                              ),
+                            if (mostrarCargoRef)
+                              pw.Text(
+                                textoCargoReferenciaPdf,
+                                style: pw.TextStyle(
+                                  fontSize: 7,
+                                  fontStyle: pw.FontStyle.italic,
+                                  color: _greyText,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+
+                      pw.Text(
+                        EventoPresentacion.institucionOEventoParaPdf(
+                          evento: evento,
+                          institucionAlumno: alumno.institucion,
+                        ),
+                        style: pw.TextStyle(fontSize: 8, color: _greyText),
+                      ),
+                      pw.SizedBox(height: 3),
 
                       // ─── RESUMEN DE CUENTA ───
                       pw.Text(
-                        'RESUMEN DE CUENTA:',
+                        'CÓMO QUEDA LA CUENTA DESPUÉS DE ESTE PAGO',
                         style: pw.TextStyle(
                           fontSize: 8,
                           fontWeight: pw.FontWeight.bold,
@@ -1918,502 +2115,377 @@ class PdfService {
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                           children: [
-                            pw.Padding(
-                              padding: const pw.EdgeInsets.fromLTRB(
-                                8,
-                                8,
-                                8,
-                                4,
+                            pw.Table(
+                              columnWidths: {
+                                0: const pw.FixedColumnWidth(160),
+                                1: const pw.FixedColumnWidth(70),
+                                2: const pw.FixedColumnWidth(120),
+                              },
+                              border: pw.TableBorder(
+                                verticalInside: pw.BorderSide(
+                                  color: _greyLight,
+                                  width: 0.5,
+                                ),
                               ),
-                              child: pw.Column(
-                                crossAxisAlignment:
-                                    pw.CrossAxisAlignment.start,
-                                children: [
-                                  pw.Text(
-                                    'ESTE RECIBO',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      fontWeight: pw.FontWeight.bold,
-                                      color: _greyText,
-                                      letterSpacing: 0.8,
-                                    ),
+                              children: [
+                                // Header row
+                                pw.TableRow(
+                                  decoration: const pw.BoxDecoration(
+                                    color: _greyLight,
                                   ),
-                                  pw.SizedBox(height: 3),
-                                  if (reciboMixto) ...[
-                                    pw.Text(
-                                      '· Efectivo: ${efDet.toCurrency()}',
-                                      style: pw.TextStyle(
-                                        fontSize: 7,
-                                        color: _darkText,
+                                  children: [
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.fromLTRB(
+                                        8,
+                                        4,
+                                        8,
+                                        4,
                                       ),
-                                    ),
-                                    pw.Text(
-                                      '· Transferencia: '
-                                      '${trDet.toCurrency()}',
-                                      style: pw.TextStyle(
-                                        fontSize: 7,
-                                        color: _darkText,
-                                      ),
-                                    ),
-                                  ] else if (medioReciboStr.isNotEmpty)
-                                    pw.Text(
-                                      '· Medio: $medioReciboStr',
-                                      style: pw.TextStyle(
-                                        fontSize: 7,
-                                        color: _darkText,
-                                      ),
-                                    ),
-                                  if (conceptosPagadosDisplay != null &&
-                                      conceptosPagadosDisplay.isNotEmpty) ...[
-                                    ...conceptosPagadosDisplay.map((c) {
-                                      final desc =
-                                          c['concepto'] as String? ?? 'Pago';
-                                      final montoItem =
-                                          (c['monto'] as num?)?.toDouble() ??
-                                          0;
-                                      final subtexto =
-                                          c['subtexto'] as String?;
-                                      return pw.Padding(
-                                        padding: const pw.EdgeInsets.only(
-                                          top: 2,
+                                      child: pw.Text(
+                                        'QUÉ INCLUYE EL CONTRATO',
+                                        style: pw.TextStyle(
+                                          fontSize: 6,
+                                          color: _greyText,
+                                          letterSpacing: 0.6,
                                         ),
-                                        child: pw.Column(
-                                          crossAxisAlignment:
-                                              pw.CrossAxisAlignment.start,
-                                          children: [
-                                            pw.Row(
-                                              mainAxisAlignment:
-                                                  pw.MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                pw.Expanded(
-                                                  child: pw.Text(
-                                                    '· $desc',
+                                      ),
+                                    ),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.fromLTRB(
+                                        8,
+                                        4,
+                                        8,
+                                        4,
+                                      ),
+                                      child: pw.Text(
+                                        'CUOTAS DEL PLAN',
+                                        style: pw.TextStyle(
+                                          fontSize: 6,
+                                          color: _greyText,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.fromLTRB(
+                                        8,
+                                        4,
+                                        8,
+                                        4,
+                                      ),
+                                      child: pw.Text(
+                                        'CÓMO QUEDA LA CUENTA',
+                                        style: pw.TextStyle(
+                                          fontSize: 6,
+                                          color: _greyText,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Data row
+                                pw.TableRow(
+                                  children: [
+                                    // Columna 1: Desglose contrato
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.fromLTRB(
+                                        8,
+                                        6,
+                                        8,
+                                        6,
+                                      ),
+                                      child: pw.Column(
+                                        crossAxisAlignment:
+                                            pw.CrossAxisAlignment.start,
+                                        children: [
+                                          pw.Builder(
+                                            builder: (ctx) {
+                                              final double montoBase =
+                                                  alumno.montoTotalPactado -
+                                                  alumno.mesaExtraPrecio -
+                                                  alumno.sillasExtraPrecioTotal;
+
+                                              // Cálculos de saldo restante por concepto
+                                              final double saldoMesaRestante =
+                                                  (alumno.mesaExtraPrecio -
+                                                          alumno
+                                                              .mesaExtraPagado)
+                                                      .clamp(
+                                                        0.0,
+                                                        double.infinity,
+                                                      );
+                                              final double saldoSillasRestante =
+                                                  (alumno.sillasExtraPrecioTotal -
+                                                          alumno
+                                                              .sillasExtraPagado)
+                                                      .clamp(
+                                                        0.0,
+                                                        double.infinity,
+                                                      );
+                                              final double saldoBaseRestante =
+                                                  (valSaldo -
+                                                          saldoMesaRestante -
+                                                          saldoSillasRestante)
+                                                      .clamp(
+                                                        0.0,
+                                                        double.infinity,
+                                                      );
+
+                                              return pw.Column(
+                                                crossAxisAlignment:
+                                                    pw.CrossAxisAlignment.start,
+                                                children: [
+                                                  pw.Text(
+                                                    '· Base: ${montoBase.toCurrency()}  (Resta: ${(saldoBaseRestante > 0.01 ? saldoBaseRestante : 0.0).toCurrency()})',
                                                     style: pw.TextStyle(
                                                       fontSize: 7,
+                                                      fontWeight:
+                                                          pw.FontWeight.bold,
                                                       color: _darkText,
                                                     ),
                                                   ),
-                                                ),
-                                                pw.Text(
-                                                  montoItem.toCurrency(),
-                                                  style: pw.TextStyle(
-                                                    fontSize: 7,
-                                                    fontWeight:
-                                                        pw.FontWeight.bold,
-                                                    color: _darkText,
-                                                  ),
-                                                ),
-                                              ],
+                                                  if (alumno.mesaExtraPrecio >
+                                                      0.01)
+                                                    ...() {
+                                                      final mesas =
+                                                          MesasExtraUtils.estadoDesdeContrato(
+                                                            alumno,
+                                                          );
+                                                      final lineasMesas =
+                                                          lineasDetalleMesasContratoPdf(
+                                                            mesas: mesas,
+                                                            cuotasPlan: alumno
+                                                                .mesaExtraCuotas,
+                                                          );
+                                                      return lineasMesas
+                                                          .map(
+                                                            (
+                                                              linea,
+                                                            ) => pw.Padding(
+                                                              padding:
+                                                                  const pw.EdgeInsets.only(
+                                                                    top: 1,
+                                                                  ),
+                                                              child: pw.Text(
+                                                                linea.texto,
+                                                                style: pw.TextStyle(
+                                                                  fontSize: 7,
+                                                                  color:
+                                                                      linea
+                                                                          .liquidada
+                                                                      ? PdfColors
+                                                                            .green800
+                                                                      : _greyText,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          )
+                                                          .toList();
+                                                    }(),
+                                                  if (alumno
+                                                          .sillasExtraPrecioTotal >
+                                                      0.01)
+                                                    pw.Padding(
+                                                      padding:
+                                                          const pw.EdgeInsets.only(
+                                                            top: 1,
+                                                          ),
+                                                      child: pw.Text(
+                                                        '· Sillas Extras (${alumno.sillasExtraCantidad} sillas): ${alumno.sillasExtraPrecioTotal.toCurrency()}  (Resta: ${(saldoSillasRestante > 0.01 ? saldoSillasRestante : 0.0).toCurrency()} | Cuota ${alumno.sillasExtraCuotasPagadas}/${alumno.sillasExtraCuotas})',
+                                                        style: pw.TextStyle(
+                                                          fontSize: 7,
+                                                          color: _greyText,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              );
+                                            },
+                                          ),
+                                          pw.Padding(
+                                            padding: const pw.EdgeInsets.only(
+                                              top: 3,
                                             ),
-                                            if (subtexto != null &&
-                                                subtexto.isNotEmpty)
-                                              pw.Text(
-                                                subtexto,
-                                                style: pw.TextStyle(
-                                                  fontSize: 6,
-                                                  fontStyle:
-                                                      pw.FontStyle.italic,
-                                                  color: _greyText,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
-                                  ] else
-                                    pw.Padding(
-                                      padding: const pw.EdgeInsets.only(
-                                        top: 2,
-                                      ),
-                                      child: pw.Row(
-                                        mainAxisAlignment:
-                                            pw.MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          pw.Expanded(
                                             child: pw.Text(
-                                              '· ${conceptoCuotas ?? 'Cuota ${alumno.cuotasPagadas} de ${alumno.totalCuotas}'}',
+                                              'TOTAL DEL CONTRATO: ${alumno.montoTotalPactado.toCurrency()}',
                                               style: pw.TextStyle(
                                                 fontSize: 7,
+                                                fontWeight: pw.FontWeight.bold,
                                                 color: _darkText,
                                               ),
-                                            ),
-                                          ),
-                                          pw.Text(
-                                            valPago.toCurrency(),
-                                            style: pw.TextStyle(
-                                              fontSize: 7,
-                                              fontWeight: pw.FontWeight.bold,
-                                              color: _darkText,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  if (mostrarCargoRef)
+                                    // Columna 2: Cuotas
                                     pw.Padding(
-                                      padding: const pw.EdgeInsets.only(
-                                        top: 4,
+                                      padding: const pw.EdgeInsets.fromLTRB(
+                                        8,
+                                        6,
+                                        8,
+                                        6,
                                       ),
-                                      child: pw.Text(
-                                        textoCargoReferenciaPdf,
-                                        style: pw.TextStyle(
-                                          fontSize: 6,
-                                          fontStyle: pw.FontStyle.italic,
-                                          color: _greyText,
-                                        ),
+                                      child: pw.Column(
+                                        crossAxisAlignment:
+                                            pw.CrossAxisAlignment.center,
+                                        children: [
+                                          pw.Text(
+                                            '${alumno.cuotasPagadas}/${alumno.totalCuotas}',
+                                            style: pw.TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: pw.FontWeight.bold,
+                                              color:
+                                                  alumno.cuotasPagadas >=
+                                                      alumno.totalCuotas
+                                                  ? _greenAccent
+                                                  : _gold,
+                                            ),
+                                          ),
+                                          pw.Text(
+                                            'pagadas',
+                                            style: pw.TextStyle(
+                                              fontSize: 6,
+                                              color: _greyText,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                ],
-                              ),
-                            ),
-                            pw.Container(
-                              margin: const pw.EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              height: 0.5,
-                              color: _greyLight,
-                            ),
-                            pw.Table(
-                          columnWidths: {
-                            0: const pw.FixedColumnWidth(160),
-                            1: const pw.FixedColumnWidth(70),
-                            2: const pw.FixedColumnWidth(120),
-                          },
-                          border: pw.TableBorder(
-                            verticalInside: pw.BorderSide(
-                              color: _greyLight,
-                              width: 0.5,
-                            ),
-                          ),
-                          children: [
-                            // Header row
-                            pw.TableRow(
-                              decoration: const pw.BoxDecoration(
-                                color: _greyLight,
-                              ),
-                              children: [
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    4,
-                                    8,
-                                    4,
-                                  ),
-                                  child: pw.Text(
-                                    'DETALLE DEL CONTRATO',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      color: _greyText,
-                                      letterSpacing: 0.6,
-                                    ),
-                                  ),
-                                ),
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    4,
-                                    8,
-                                    4,
-                                  ),
-                                  child: pw.Text(
-                                    'CUOTAS BASE',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      color: _greyText,
-                                      letterSpacing: 0.6,
-                                    ),
-                                  ),
-                                ),
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    4,
-                                    8,
-                                    4,
-                                  ),
-                                  child: pw.Text(
-                                    'BALANCE FINANCIERO',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      color: _greyText,
-                                      letterSpacing: 0.6,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            // Data row
-                            pw.TableRow(
-                              children: [
-                                // Columna 1: Desglose contrato
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    6,
-                                    8,
-                                    6,
-                                  ),
-                                  child: pw.Column(
-                                    crossAxisAlignment:
-                                        pw.CrossAxisAlignment.start,
-                                    children: [
-                                      pw.Builder(
-                                        builder: (ctx) {
-                                          final double montoBase =
-                                              alumno.montoTotalPactado -
-                                              alumno.mesaExtraPrecio -
-                                              alumno.sillasExtraPrecioTotal;
-
-                                          // Cálculos de saldo restante por concepto
-                                          final double saldoMesaRestante =
-                                              (alumno.mesaExtraPrecio -
-                                              alumno.mesaExtraPagado).clamp(0.0, double.infinity);
-                                          final double saldoSillasRestante =
-                                              (alumno.sillasExtraPrecioTotal -
-                                              alumno.sillasExtraPagado).clamp(0.0, double.infinity);
-                                          final double saldoBaseRestante =
-                                              (valSaldo - saldoMesaRestante - saldoSillasRestante).clamp(0.0, double.infinity);
-
-                                          return pw.Column(
-                                            crossAxisAlignment:
-                                                pw.CrossAxisAlignment.start,
-                                            children: [
-                                              pw.Text(
-                                                '· Base: ${montoBase.toCurrency()}  (Resta: ${(saldoBaseRestante > 0.01 ? saldoBaseRestante : 0.0).toCurrency()})',
-                                                style: pw.TextStyle(
-                                                  fontSize: 7,
-                                                  fontWeight:
-                                                      pw.FontWeight.bold,
-                                                  color: _darkText,
-                                                ),
+                                    // Columna 3: Balance
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.fromLTRB(
+                                        8,
+                                        6,
+                                        8,
+                                        6,
+                                      ),
+                                      child: pw.Column(
+                                        crossAxisAlignment:
+                                            pw.CrossAxisAlignment.start,
+                                        children: [
+                                          pw.Text(
+                                            'Abonado del plan (acumulado)',
+                                            style: pw.TextStyle(
+                                              fontSize: 6,
+                                              color: _greyText,
+                                            ),
+                                          ),
+                                          pw.Text(
+                                            (alumno.montoTotalPactado -
+                                                    valSaldo)
+                                                .toCurrency(),
+                                            style: pw.TextStyle(
+                                              fontSize: 8,
+                                              fontWeight: pw.FontWeight.bold,
+                                              color: _greenAccent,
+                                            ),
+                                          ),
+                                          pw.Text(
+                                            'todo el contrato, no solo hoy',
+                                            style: pw.TextStyle(
+                                              fontSize: 5.5,
+                                              fontStyle: pw.FontStyle.italic,
+                                              color: _greyText,
+                                            ),
+                                          ),
+                                          pw.SizedBox(height: 3),
+                                          pw.Text(
+                                            'Falta del plan',
+                                            style: pw.TextStyle(
+                                              fontSize: 6,
+                                              color: _greyText,
+                                            ),
+                                          ),
+                                          pw.Text(
+                                            valSaldo.toCurrency(),
+                                            style: pw.TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: pw.FontWeight.bold,
+                                              color: valSaldo < 0.01
+                                                  ? _greenAccent
+                                                  : (now.isAfter(
+                                                          evento.fechaEvento,
+                                                        )
+                                                        ? _redAccent
+                                                        : _gold),
+                                            ),
+                                          ),
+                                          pw.Text(
+                                            'solo cuotas, sin mora',
+                                            style: pw.TextStyle(
+                                              fontSize: 5.5,
+                                              fontStyle: pw.FontStyle.italic,
+                                              color: _greyText,
+                                            ),
+                                          ),
+                                          if (moraPendienteRestante !=
+                                              null) ...[
+                                            pw.SizedBox(height: 3),
+                                            pw.Text(
+                                              'Mora pendiente',
+                                              style: pw.TextStyle(
+                                                fontSize: 6,
+                                                color: _greyText,
                                               ),
-                                              if (alumno.mesaExtraPrecio > 0.01)
-                                                ...() {
-                                                  final mesas =
-                                                      MesasExtraUtils
-                                                          .estadoDesdeContrato(
-                                                    alumno,
-                                                  );
-                                                  final lineasMesas =
-                                                      lineasDetalleMesasContratoPdf(
-                                                    mesas: mesas,
-                                                    cuotasPlan:
-                                                        alumno.mesaExtraCuotas,
-                                                  );
-                                                  return lineasMesas
-                                                      .map(
-                                                        (linea) => pw.Padding(
-                                                          padding:
-                                                              const pw.EdgeInsets
-                                                                  .only(
-                                                            top: 1,
-                                                          ),
-                                                          child: pw.Text(
-                                                            linea.texto,
-                                                            style: pw.TextStyle(
-                                                              fontSize: 7,
-                                                              color: linea
-                                                                      .liquidada
-                                                                  ? PdfColors
-                                                                      .green800
-                                                                  : _greyText,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      )
-                                                      .toList();
-                                                }(),
-                                              if (alumno
-                                                      .sillasExtraPrecioTotal >
-                                                  0.01)
-                                                pw.Padding(
-                                                  padding:
-                                                      const pw.EdgeInsets.only(
-                                                        top: 1,
-                                                      ),
-                                                  child: pw.Text(
-                                                    '· Sillas Extras (${alumno.sillasExtraCantidad} sillas): ${alumno.sillasExtraPrecioTotal.toCurrency()}  (Resta: ${(saldoSillasRestante > 0.01 ? saldoSillasRestante : 0.0).toCurrency()} | Cuota ${alumno.sillasExtraCuotasPagadas}/${alumno.sillasExtraCuotas})',
-                                                    style: pw.TextStyle(
-                                                      fontSize: 7,
-                                                      color: _greyText,
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                      pw.Padding(
-                                        padding: const pw.EdgeInsets.only(
-                                          top: 3,
-                                        ),
-                                        child: pw.Text(
-                                          'TOTAL: ${alumno.montoTotalPactado.toCurrency()}',
-                                          style: pw.TextStyle(
-                                            fontSize: 7,
-                                            fontWeight: pw.FontWeight.bold,
-                                            color: _darkText,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Columna 2: Cuotas
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    6,
-                                    8,
-                                    6,
-                                  ),
-                                  child: pw.Column(
-                                    crossAxisAlignment:
-                                        pw.CrossAxisAlignment.center,
-                                    children: [
-                                      pw.Text(
-                                        '${alumno.cuotasPagadas}/${alumno.totalCuotas}',
-                                        style: pw.TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: pw.FontWeight.bold,
-                                          color:
-                                              alumno.cuotasPagadas >=
-                                                  alumno.totalCuotas
-                                              ? _greenAccent
-                                              : _gold,
-                                        ),
-                                      ),
-                                      pw.Text(
-                                        'pagadas',
-                                        style: pw.TextStyle(
-                                          fontSize: 6,
-                                          color: _greyText,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Columna 3: Balance
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    6,
-                                    8,
-                                    6,
-                                  ),
-                                  child: pw.Column(
-                                    crossAxisAlignment:
-                                        pw.CrossAxisAlignment.start,
-                                    children: [
-                                      pw.Text(
-                                        'Abonado:',
-                                        style: pw.TextStyle(
-                                          fontSize: 6,
-                                          color: _greyText,
-                                        ),
-                                      ),
-                                      pw.Text(
-                                        (alumno.montoTotalPactado - valSaldo)
-                                            .toCurrency(),
-                                        style: pw.TextStyle(
-                                          fontSize: 8,
-                                          fontWeight: pw.FontWeight.bold,
-                                          color: _greenAccent,
-                                        ),
-                                      ),
-                                      pw.SizedBox(height: 3),
-                                      pw.Text(
-                                        'Saldo pendiente:',
-                                        style: pw.TextStyle(
-                                          fontSize: 6,
-                                          color: _greyText,
-                                        ),
-                                      ),
-                                      pw.Text(
-                                        valSaldo.toCurrency(),
-                                        style: pw.TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: pw.FontWeight.bold,
-                                          color: valSaldo < 0.01
-                                              ? _greenAccent
-                                              : (now.isAfter(evento.fechaEvento)
+                                            ),
+                                            pw.Text(
+                                              moraPendienteRestante
+                                                  .toCurrency(),
+                                              style: pw.TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: pw.FontWeight.bold,
+                                                color:
+                                                    moraPendienteRestante > 0.01
                                                     ? _redAccent
-                                                    : _gold),
-                                        ),
+                                                    : _greenAccent,
+                                              ),
+                                            ),
+                                            pw.Text(
+                                              // Columna angosta (120pt): el
+                                              // rótulo largo lo lleva el pie
+                                              // de la tabla.
+                                              moraPendienteRestante > 0.01
+                                                  ? 'por pagar fuera de término'
+                                                  : 'al día',
+                                              style: pw.TextStyle(
+                                                fontSize: 5.5,
+                                                fontStyle: pw.FontStyle.italic,
+                                                color: _greyText,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
-                                      if (moraPendienteRestante != null) ...[
-                                        pw.SizedBox(height: 3),
-                                        pw.Text(
-                                          'Mora (interés por atraso):',
-                                          style: pw.TextStyle(
-                                            fontSize: 6,
-                                            color: _greyText,
-                                          ),
-                                        ),
-                                        pw.Text(
-                                          moraPendienteRestante.toCurrency(),
-                                          style: pw.TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: pw.FontWeight.bold,
-                                            color: moraPendienteRestante > 0.01
-                                                ? _redAccent
-                                                : _greenAccent,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                            // Qué significa cada número de la tabla, dicho en
+                            // castellano y una sola vez.
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.fromLTRB(8, 4, 8, 6),
+                              child: pw.Text(
+                                '"Abonado del plan (acumulado)" es todo lo que '
+                                'ya se cubrió del contrato desde el inicio, no '
+                                'lo de este recibo. "Falta del plan" es lo que '
+                                'resta de las cuotas. La mora es el interés por '
+                                'pagar fuera de término: se cobra aparte y no '
+                                'baja el saldo del plan.',
+                                style: pw.TextStyle(
+                                  fontSize: 7,
+                                  fontStyle: pw.FontStyle.italic,
+                                  color: _greyText,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
 
-                      // Recordatorio: la mora no cobrada tiene que quedar
-                      // escrita en el papel que se lleva la familia.
-                      if (moraPendienteRestante != null &&
-                          moraPendienteRestante > 0.01)
-                        pw.Container(
-                          width: double.infinity,
-                          margin: const pw.EdgeInsets.only(top: 5),
-                          padding: const pw.EdgeInsets.all(6),
-                          decoration: pw.BoxDecoration(
-                            color: _cardBg,
-                            borderRadius: const pw.BorderRadius.all(
-                              pw.Radius.circular(4),
-                            ),
-                            border: pw.Border.all(color: _redAccent, width: 0.8),
-                          ),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(
-                                'ATENCIÓN: queda debiendo mora (interés por '
-                                'atraso) por '
-                                '${moraPendienteRestante.toCurrency()}',
-                                style: pw.TextStyle(
-                                  fontSize: 8,
-                                  fontWeight: pw.FontWeight.bold,
-                                  color: _redAccent,
-                                ),
-                              ),
-                              pw.Text(
-                                'No se cobró en este pago. Sigue sumando hasta '
-                                'que se abone.',
-                                style: pw.TextStyle(
-                                  fontSize: 7,
-                                  color: _darkText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      if (esReimpresion)
+                      if (esReimpresionPdf)
                         pw.Padding(
                           padding: const pw.EdgeInsets.only(top: 5),
                           child: pw.Text(
@@ -2428,9 +2500,10 @@ class PdfService {
 
                       // Firmas removidas por solicitud
                     ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -2514,19 +2587,21 @@ class PdfService {
     final lineasLiquidacion = conceptosLineasDisplay
         .where((c) => c['esCargoCanal'] != true && c['arrastre'] != true)
         .toList();
-    final lineasArrastreMora =
-        conceptosLineasDisplay.where((c) => c['arrastre'] == true).toList();
-    final lineasCargo =
-        conceptosLineasDisplay.where((c) => c['esCargoCanal'] == true).toList();
+    final lineasArrastreMora = conceptosLineasDisplay
+        .where((c) => c['arrastre'] == true)
+        .toList();
+    final lineasCargo = conceptosLineasDisplay
+        .where((c) => c['esCargoCanal'] == true)
+        .toList();
     final double cargoTotal = lineasCargo.fold<double>(
       0,
       (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
     );
 
-    final double planSeleccionado =
-        grossPlanSeleccionadoPdf(conceptosLineasDisplay);
-    final double moraSeleccionada =
-        moraSeleccionadaPdf(conceptosLineasDisplay);
+    final double planSeleccionado = grossPlanSeleccionadoPdf(
+      conceptosLineasDisplay,
+    );
+    final double moraSeleccionada = moraSeleccionadaPdf(conceptosLineasDisplay);
     final double saldoPlanDespues = double.parse(
       (saldoActualPlan - planSeleccionado)
           .clamp(0.0, double.infinity)
@@ -2550,14 +2625,15 @@ class PdfService {
     final double pctCargo = porcentajeCargoTransferenciaExterno ?? 0;
     double baseCargoMonto = subtotalLiquidacion;
     if (esMixto) {
-      baseCargoMonto =
-          (subtotalLiquidacion - efDet!).clamp(0.0, double.infinity);
+      baseCargoMonto = (subtotalLiquidacion - efDet!).clamp(
+        0.0,
+        double.infinity,
+      );
     } else if (esTransferencia) {
       baseCargoMonto = subtotalLiquidacion;
     }
     final double? cargoInformado = montoCargoTransferenciaInformado;
-    final bool usarMontoFijo =
-        cargoInformado != null && cargoInformado > 0.01;
+    final bool usarMontoFijo = cargoInformado != null && cargoInformado > 0.01;
     final bool usarPct = pctCargo > 0.01;
     final bool mostrarLeyendaCargo =
         informarCargoTransferenciaExterno &&
@@ -2603,9 +2679,7 @@ class PdfService {
       final bool plan = c['esPlanLiquidacion'] == true;
       // Mora anidada: sangrada bajo la cuota que la generó.
       final bool anidada = c['anidada'] == true;
-      final String? subNominal = plan &&
-              gross != null &&
-              gross > monto + 0.01
+      final String? subNominal = plan && gross != null && gross > monto + 0.01
           ? 'nom. ${gross.toCurrency()}'
           : null;
       return pw.Padding(
@@ -2938,7 +3012,8 @@ class PdfService {
                           children: [
                             pw.Text(
                               'ATENCIÓN: queda debiendo mora (interés por '
-                              'atraso) por ${moraDespues.toCurrency()}',
+                              'pagar fuera de término) por '
+                              '${moraDespues.toCurrency()}',
                               style: pw.TextStyle(
                                 fontSize: 9.5,
                                 fontWeight: pw.FontWeight.bold,
@@ -3043,7 +3118,8 @@ class PdfService {
                                 pw.MainAxisAlignment.spaceBetween,
                             children: [
                               pw.Text(
-                                'Mora (interés por atraso)',
+                                // El recuadro rojo de arriba ya la definió.
+                                'Mora',
                                 style: pw.TextStyle(
                                   fontSize: 9,
                                   color: moraDespues > 0.01
@@ -3098,15 +3174,15 @@ class PdfService {
     );
 
     final bytes = await pdf.save();
-    final safeName = alumno.nombreAlumno.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
-    final fname = 'Detalle_de_pago_${safeName.isEmpty ? 'alumno' : safeName.replaceAll(' ', '_')}.pdf';
+    final safeName = alumno.nombreAlumno
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .trim();
+    final fname =
+        'Detalle_de_pago_${safeName.isEmpty ? 'alumno' : safeName.replaceAll(' ', '_')}.pdf';
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, fname);
     } else {
-      await Printing.layoutPdf(
-        onLayout: (_) async => bytes,
-        name: fname,
-      );
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: fname);
     }
   }
 
@@ -3118,8 +3194,13 @@ class PdfService {
     required ContratoAlumno alumno,
     required Evento evento,
     required List<Map<String, dynamic>> pagos,
-    required double totalEntregado,
+
+    /// Solo cuotas del plan: es lo único que baja el saldo. La mora y el costo
+    /// por transferencia van aparte para que el total no confunda.
+    required double totalPlanAbonado,
+    required double totalMoraCobrada,
     required double moraPendiente,
+    double totalCargoCanal = 0,
     List<MoraPendientePreviaDetalle> arrastreMora = const [],
   }) async {
     pw.Font? fontRegular;
@@ -3146,6 +3227,14 @@ class PdfService {
     final now = ArTime.nowUtc();
     final fechaStr = ArTime.formatFechaHora(now);
     final saldoPlan = alumno.saldoDeudor.clamp(0.0, double.infinity);
+    // Valor nominal del plan ya cubierto. Cierra contra el saldo; puede diferir
+    // de lo entregado cuando hubo descuento de liquidación.
+    final cuotasCubiertas = (alumno.montoTotalPactado - saldoPlan).clamp(
+      0.0,
+      double.infinity,
+    );
+    final bool hayDescuentoEstado =
+        (cuotasCubiertas - totalPlanAbonado).abs() > 1;
 
     pw.Widget filaResumen(String label, String valor, {PdfColor? color}) =>
         pw.Padding(
@@ -3272,13 +3361,28 @@ class PdfService {
                   alumno.montoTotalPactado.toCurrency(),
                 ),
                 filaResumen(
-                  'Abonado (${alumno.cuotasPagadas} de ${alumno.totalCuotas} cuotas)',
-                  totalEntregado.toCurrency(),
+                  'Cuotas cubiertas (${alumno.cuotasPagadas} de ${alumno.totalCuotas})',
+                  cuotasCubiertas.toCurrency(),
                   color: _greenAccent,
                 ),
+                // Con descuento, lo entregado es menor al valor nominal que se
+                // dio por cubierto: se muestran los dos para que la cuenta
+                // cierre contra el saldo.
+                if (hayDescuentoEstado) ...[
+                  filaResumen(
+                    '   descuento aplicado',
+                    '− ${(cuotasCubiertas - totalPlanAbonado).toCurrency()}',
+                    color: _greyText,
+                  ),
+                  filaResumen(
+                    'Entregado por cuotas',
+                    totalPlanAbonado.toCurrency(),
+                    color: _greenAccent,
+                  ),
+                ],
                 filaResumen('Saldo del plan', saldoPlan.toCurrency()),
                 filaResumen(
-                  'Mora (interés por atraso)',
+                  'Mora pendiente (interés por pagar fuera de término)',
                   moraPendiente.toCurrency(),
                   color: moraPendiente > 0.01 ? _redAccent : _greenAccent,
                 ),
@@ -3370,12 +3474,22 @@ class PdfService {
                   : (fechaRaw ?? '');
               final concepto =
                   (p['concepto_detallado'] as String?)?.trim().isNotEmpty ==
-                          true
-                      ? p['concepto_detallado'] as String
-                      : (p['concepto']?.toString() ?? 'Pago');
+                      true
+                  ? p['concepto_detallado'] as String
+                  : (p['concepto']?.toString() ?? 'Pago');
               final sub = (p['subtexto_concepto'] as String?)?.trim();
               final medio = (p['subtitulo_medio'] as String?)?.trim();
               final monto = (p['monto'] as num?)?.toDouble() ?? 0;
+              // Las filas que no son del plan quedan marcadas: son las que no
+              // entran en el total abonado de abajo.
+              final bool esMoraFila = ConceptoPagoDisplay.esMora(p);
+              final bool esCargoFila = ConceptoPagoDisplay.esCargoCanal(p);
+              final String prefijo = esMoraFila
+                  ? 'MORA · '
+                  : (esCargoFila ? 'COSTO · ' : '');
+              final PdfColor colorFila = esMoraFila
+                  ? _redAccent
+                  : (esCargoFila ? _greyText : _darkText);
               return pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 4),
                 child: pw.Column(
@@ -3396,8 +3510,8 @@ class PdfService {
                         ),
                         pw.Expanded(
                           child: pw.Text(
-                            concepto,
-                            style: pw.TextStyle(fontSize: 9, color: _darkText),
+                            '$prefijo$concepto',
+                            style: pw.TextStyle(fontSize: 9, color: colorFila),
                           ),
                         ),
                         pw.Text(
@@ -3405,7 +3519,7 @@ class PdfService {
                           style: pw.TextStyle(
                             fontSize: 9,
                             fontWeight: pw.FontWeight.bold,
-                            color: _darkText,
+                            color: colorFila,
                           ),
                         ),
                       ],
@@ -3431,11 +3545,23 @@ class PdfService {
               );
             }),
           pw.Divider(color: _greyLight, height: 14),
+          // La mora cobrada va acá arriba, separada: no integra el total.
+          filaResumen(
+            'Mora cobrada',
+            totalMoraCobrada.toCurrency(),
+            color: totalMoraCobrada > 0.01 ? _redAccent : _greyText,
+          ),
+          if (totalCargoCanal > 0.01)
+            filaResumen(
+              'Costo por transferencia',
+              totalCargoCanal.toCurrency(),
+              color: _greyText,
+            ),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                'TOTAL ABONADO',
+                'TOTAL ABONADO EN CUOTAS DEL PLAN',
                 style: pw.TextStyle(
                   fontSize: 10,
                   fontWeight: pw.FontWeight.bold,
@@ -3444,7 +3570,7 @@ class PdfService {
                 ),
               ),
               pw.Text(
-                totalEntregado.toCurrency(),
+                totalPlanAbonado.toCurrency(),
                 style: pw.TextStyle(
                   fontSize: 14,
                   fontWeight: pw.FontWeight.bold,
@@ -3455,8 +3581,11 @@ class PdfService {
           ),
           pw.SizedBox(height: 10),
           pw.Text(
-            'La mora no forma parte del saldo del plan de cuotas. Documento '
-            'informativo: no reemplaza al recibo de pago.',
+            'El "TOTAL ABONADO EN CUOTAS DEL PLAN" cuenta solo lo que se pagó '
+            'de las cuotas: es lo único que baja el saldo del plan. La mora y '
+            'el costo por transferencia se cobran '
+            'aparte y se listan por separado. Documento informativo: no '
+            'reemplaza al recibo de pago.',
             style: pw.TextStyle(
               fontSize: 7.5,
               fontStyle: pw.FontStyle.italic,
@@ -3468,8 +3597,9 @@ class PdfService {
     );
 
     final bytes = await pdf.save();
-    final safeName =
-        alumno.nombreAlumno.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+    final safeName = alumno.nombreAlumno
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .trim();
     final fname =
         'Estado_de_cuenta_${safeName.isEmpty ? 'alumno' : safeName.replaceAll(' ', '_')}.pdf';
     if (!kIsWeb && Platform.isWindows) {
@@ -3662,7 +3792,9 @@ class PdfService {
     }
 
     final fechaTxt = ArTime.formatFechaHora(generadoEn);
-    final tituloSafe = eventoTitulo.trim().isEmpty ? 'Evento' : eventoTitulo.trim();
+    final tituloSafe = eventoTitulo.trim().isEmpty
+        ? 'Evento'
+        : eventoTitulo.trim();
     final nPend = pendientes.length;
     final nFirm = firmados.length;
 
@@ -3688,12 +3820,20 @@ class PdfService {
             ),
             pw.Text(
               'Incluye el estado visualizado en pantalla (cambios aún no guardados con «Guardar»).',
-              style: pw.TextStyle(fontSize: 8.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                color: _greyText,
+                fontStyle: pw.FontStyle.italic,
+              ),
             ),
             pw.SizedBox(height: 6),
             pw.Text(
               'Listado en dos bloques: primero quienes no firmaron, después quienes sí firmaron el contrato.',
-              style: pw.TextStyle(fontSize: 9, color: _darkText, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(
+                fontSize: 9,
+                color: _darkText,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
             pw.Divider(color: _gold),
             pw.SizedBox(height: 6),
@@ -3710,13 +3850,16 @@ class PdfService {
               padding: const pw.EdgeInsets.only(top: 12, bottom: 8),
               child: pw.Container(
                 width: double.infinity,
-                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: pw.BoxDecoration(
                   color: color == _redAccent
                       ? PdfColor.fromInt(0xFFFFF0F0)
                       : color == _greenAccent
-                          ? PdfColor.fromInt(0xFFF0FFF5)
-                          : PdfColor.fromInt(0xFFF5F5F5),
+                      ? PdfColor.fromInt(0xFFF0FFF5)
+                      : PdfColor.fromInt(0xFFF5F5F5),
                   border: pw.Border(
                     left: pw.BorderSide(color: color, width: 4),
                   ),
@@ -3757,22 +3900,26 @@ class PdfService {
                   0: const pw.FlexColumnWidth(1.4),
                   1: const pw.FlexColumnWidth(2.2),
                 },
-                data: <List<String>>[
-                  headers,
-                  ...filasAlumnos(pendientes),
-                ],
+                data: <List<String>>[headers, ...filasAlumnos(pendientes)],
               ),
             );
           } else {
             children.add(
-              bloqueTitulo('ESTOS NO FIRMARON EL CONTRATO — 0 persona(s)', _greyText),
+              bloqueTitulo(
+                'ESTOS NO FIRMARON EL CONTRATO — 0 persona(s)',
+                _greyText,
+              ),
             );
             children.add(
               pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 6),
                 child: pw.Text(
                   '(Nadie pendiente de firma en este listado.)',
-                  style: pw.TextStyle(fontSize: 9.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+                  style: pw.TextStyle(
+                    fontSize: 9.5,
+                    color: _greyText,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
                 ),
               ),
             );
@@ -3800,22 +3947,26 @@ class PdfService {
                   0: const pw.FlexColumnWidth(1.4),
                   1: const pw.FlexColumnWidth(2.2),
                 },
-                data: <List<String>>[
-                  headers,
-                  ...filasAlumnos(firmados),
-                ],
+                data: <List<String>>[headers, ...filasAlumnos(firmados)],
               ),
             );
           } else {
             children.add(
-              bloqueTitulo('ESTOS SÍ FIRMARON EL CONTRATO — 0 persona(s)', _greyText),
+              bloqueTitulo(
+                'ESTOS SÍ FIRMARON EL CONTRATO — 0 persona(s)',
+                _greyText,
+              ),
             );
             children.add(
               pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 6),
                 child: pw.Text(
                   '(Nadie figura con contrato firmado en este listado.)',
-                  style: pw.TextStyle(fontSize: 9.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+                  style: pw.TextStyle(
+                    fontSize: 9.5,
+                    color: _greyText,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
                 ),
               ),
             );
@@ -3835,10 +3986,7 @@ class PdfService {
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, fname);
     } else {
-      await Printing.layoutPdf(
-        onLayout: (_) async => bytes,
-        name: fname,
-      );
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: fname);
     }
   }
 
@@ -3857,12 +4005,17 @@ class PdfService {
     );
 
     final fechaTxt = ArTime.formatFechaHora(generadoEn);
-    final tituloSafe = eventoTitulo.trim().isEmpty ? 'Evento' : eventoTitulo.trim();
-    final filtroSafe = filtroTitulo.trim().isEmpty ? 'Listado' : filtroTitulo.trim();
+    final tituloSafe = eventoTitulo.trim().isEmpty
+        ? 'Evento'
+        : eventoTitulo.trim();
+    final filtroSafe = filtroTitulo.trim().isEmpty
+        ? 'Listado'
+        : filtroTitulo.trim();
     final n = filas.length;
 
-    final tituloColor =
-        filtroSafe.toLowerCase().startsWith('no pagaron') ? _redAccent : _greenAccent;
+    final tituloColor = filtroSafe.toLowerCase().startsWith('no pagaron')
+        ? _redAccent
+        : _greenAccent;
 
     pdf.addPage(
       pw.MultiPage(
@@ -3887,12 +4040,17 @@ class PdfService {
             pw.SizedBox(height: 6),
             pw.Container(
               width: double.infinity,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const pw.EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
               decoration: pw.BoxDecoration(
                 color: tituloColor == _redAccent
                     ? PdfColor.fromInt(0xFFFFF0F0)
                     : PdfColor.fromInt(0xFFF0FFF5),
-                border: pw.Border(left: pw.BorderSide(color: tituloColor, width: 4)),
+                border: pw.Border(
+                  left: pw.BorderSide(color: tituloColor, width: 4),
+                ),
               ),
               child: pw.Text(
                 '$filtroSafe — $n alumno(s)',
@@ -3906,7 +4064,11 @@ class PdfService {
             pw.SizedBox(height: 4),
             pw.Text(
               'Solo cuotas base del plan (sin mora ni mesas). Coincide con el filtro activo en pantalla.',
-              style: pw.TextStyle(fontSize: 8.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                color: _greyText,
+                fontStyle: pw.FontStyle.italic,
+              ),
             ),
             pw.Divider(color: _gold),
             pw.SizedBox(height: 6),
@@ -3917,7 +4079,11 @@ class PdfService {
             return [
               pw.Text(
                 'No hay alumnos en este listado.',
-                style: pw.TextStyle(fontSize: 10, color: _greyText, fontStyle: pw.FontStyle.italic),
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  color: _greyText,
+                  fontStyle: pw.FontStyle.italic,
+                ),
               ),
             ];
           }
@@ -3980,10 +4146,7 @@ class PdfService {
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, fname);
     } else {
-      await Printing.layoutPdf(
-        onLayout: (_) async => bytes,
-        name: fname,
-      );
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: fname);
     }
   }
 
@@ -4005,7 +4168,9 @@ class PdfService {
     );
 
     final fechaTxt = ArTime.formatFechaHora(generadoEn);
-    final tituloSafe = eventoTitulo.trim().isEmpty ? 'Evento' : eventoTitulo.trim();
+    final tituloSafe = eventoTitulo.trim().isEmpty
+        ? 'Evento'
+        : eventoTitulo.trim();
     final nPag = pagaron.length;
     final nNo = noPagaron.length;
     final total = nPag + nNo;
@@ -4026,8 +4191,8 @@ class PdfService {
             color: color == _redAccent
                 ? PdfColor.fromInt(0xFFFFF0F0)
                 : color == _greenAccent
-                    ? PdfColor.fromInt(0xFFF0FFF5)
-                    : PdfColor.fromInt(0xFFF5F5F5),
+                ? PdfColor.fromInt(0xFFF0FFF5)
+                : PdfColor.fromInt(0xFFF5F5F5),
             border: pw.Border(left: pw.BorderSide(color: color, width: 4)),
           ),
           child: pw.Text(
@@ -4048,7 +4213,11 @@ class PdfService {
           padding: const pw.EdgeInsets.only(bottom: 6),
           child: pw.Text(
             '(Nadie en este bloque.)',
-            style: pw.TextStyle(fontSize: 9.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+            style: pw.TextStyle(
+              fontSize: 9.5,
+              color: _greyText,
+              fontStyle: pw.FontStyle.italic,
+            ),
           ),
         );
       }
@@ -4129,20 +4298,36 @@ class PdfService {
             pw.SizedBox(height: 6),
             pw.Text(
               '· Pagaron: $nPag ($firmPag firmaron · ${nPag - firmPag} sin firmar)',
-              style: pw.TextStyle(fontSize: 9.5, color: _greenAccent, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(
+                fontSize: 9.5,
+                color: _greenAccent,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
             pw.Text(
               '· No pagaron: $nNo ($firmNo firmaron · ${nNo - firmNo} sin firmar)',
-              style: pw.TextStyle(fontSize: 9.5, color: _redAccent, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(
+                fontSize: 9.5,
+                color: _redAccent,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
             pw.Text(
               '· Total en listado: $total',
-              style: pw.TextStyle(fontSize: 9.5, color: _darkText, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(
+                fontSize: 9.5,
+                color: _darkText,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
             pw.SizedBox(height: 4),
             pw.Text(
               'Solo cuotas base del plan (sin mora ni mesas). Columna CONTRATO: firmado o sin firmar.',
-              style: pw.TextStyle(fontSize: 8.5, color: _greyText, fontStyle: pw.FontStyle.italic),
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                color: _greyText,
+                fontStyle: pw.FontStyle.italic,
+              ),
             ),
             pw.Divider(color: _gold),
             pw.SizedBox(height: 6),
@@ -4166,10 +4351,7 @@ class PdfService {
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, fname);
     } else {
-      await Printing.layoutPdf(
-        onLayout: (_) async => bytes,
-        name: fname,
-      );
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: fname);
     }
   }
 
@@ -5002,7 +5184,11 @@ class PdfService {
                     ),
                     child: pw.Text(
                       anotacionTurno!.trim(),
-                      style: pw.TextStyle(fontSize: 8.5, color: _darkText, lineSpacing: 1.35),
+                      style: pw.TextStyle(
+                        fontSize: 8.5,
+                        color: _darkText,
+                        lineSpacing: 1.35,
+                      ),
                     ),
                   ),
                 ],
@@ -5561,10 +5747,7 @@ class PdfService {
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text(
-              label,
-              style: pw.TextStyle(fontSize: 8, color: _greyText),
-            ),
+            pw.Text(label, style: pw.TextStyle(fontSize: 8, color: _greyText)),
             pw.Text(
               valor,
               style: pw.TextStyle(
@@ -5597,10 +5780,7 @@ class PdfService {
         children: [
           _ticketCajaSeccionTitulo('CIERRE DE SESIÓN'),
           pw.SizedBox(height: 2),
-          pw.Text(
-            rango,
-            style: pw.TextStyle(fontSize: 7.5, color: _greyText),
-          ),
+          pw.Text(rango, style: pw.TextStyle(fontSize: 7.5, color: _greyText)),
           pw.SizedBox(height: 5),
           linea('Cambio inicial', cambioInicial.toCurrency()),
           linea(
@@ -5715,10 +5895,7 @@ class PdfService {
             cell(r.efectivo.toCurrency(), align: pw.TextAlign.right),
             cell(r.transferencia.toCurrency(), align: pw.TextAlign.right),
             cell(r.total.toCurrency(), align: pw.TextAlign.right, bold: true),
-            cell(
-              r.arqueo?.toCurrency() ?? '—',
-              align: pw.TextAlign.right,
-            ),
+            cell(r.arqueo?.toCurrency() ?? '—', align: pw.TextAlign.right),
             cell(difTexto(r), align: pw.TextAlign.right, color: difColor(r)),
           ],
         ),
@@ -5729,8 +5906,16 @@ class PdfService {
           cell('TOTAL DÍA', header: true),
           cell(''),
           cell(''),
-          cell(totalEfectivo.toCurrency(), header: true, align: pw.TextAlign.right),
-          cell(totalTransfer.toCurrency(), header: true, align: pw.TextAlign.right),
+          cell(
+            totalEfectivo.toCurrency(),
+            header: true,
+            align: pw.TextAlign.right,
+          ),
+          cell(
+            totalTransfer.toCurrency(),
+            header: true,
+            align: pw.TextAlign.right,
+          ),
           cell(
             (totalEfectivo + totalTransfer).toCurrency(),
             header: true,
@@ -6280,7 +6465,10 @@ class PdfService {
     return dir.path;
   }
 
-  static Future<String> _guardarPdfEnDefault(Uint8List bytes, String filename) async {
+  static Future<String> _guardarPdfEnDefault(
+    Uint8List bytes,
+    String filename,
+  ) async {
     final dir = await _carpetaPdfDefault();
     final file = File('$dir${Platform.pathSeparator}$filename');
     await file.writeAsBytes(bytes);
@@ -6380,7 +6568,10 @@ class PdfService {
                   leading: const Icon(Icons.visibility_outlined, color: gold),
                   title: const Text(
                     'VER PDF',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   subtitle: Text(
                     'Abre el documento en el visor',
@@ -6392,7 +6583,10 @@ class PdfService {
                   leading: const Icon(Icons.save_alt_outlined, color: gold),
                   title: const Text(
                     'GUARDAR COMO...',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   subtitle: Text(
                     'Elegir carpeta y nombre del archivo',
@@ -6404,7 +6598,10 @@ class PdfService {
                   leading: const Icon(Icons.folder_open_outlined, color: gold),
                   title: const Text(
                     'ABRIR CARPETA',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   subtitle: Text(
                     carpetaHint,
@@ -6429,7 +6626,9 @@ class PdfService {
       case _PdfMenuAccion.guardarComo:
         await _guardarPdfComo(context, bytes, filename);
       case _PdfMenuAccion.abrirCarpeta:
-        final path = _ultimaRutaPdfGuardado ?? await _guardarPdfEnDefault(bytes, filename);
+        final path =
+            _ultimaRutaPdfGuardado ??
+            await _guardarPdfEnDefault(bytes, filename);
         await _abrirCarpetaPdf(path);
     }
   }
@@ -6708,7 +6907,8 @@ class PdfService {
                 EventoPresentacion.subtituloEvento(evento),
                 style: pw.TextStyle(fontSize: 9, color: _greyText),
               ),
-              if (EventoPresentacion.nombreFestejadoEfectivoEvento(evento) != null) ...[
+              if (EventoPresentacion.nombreFestejadoEfectivoEvento(evento) !=
+                  null) ...[
                 pw.SizedBox(height: 6),
                 pw.Text(
                   EventoPresentacion.fraseIntroEvento(evento),

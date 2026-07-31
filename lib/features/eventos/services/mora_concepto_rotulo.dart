@@ -83,14 +83,98 @@ class MoraConceptoRotulo {
     }).join(' · ');
   }
 
+  /// Una sola línea que dice de dónde viene la mora que queda debiendo, para
+  /// el aviso del recibo. Se corta en [maxCuotas] a propósito: el recibo entra
+  /// en una hoja y el detalle completo vive en el estado de cuenta.
+  ///
+  /// [desglose] son las cuotas vencidas impagas; [tracked] el remanente de
+  /// cuotas ya liquidadas sin cobrar el interés. Vacío si no hay nada que decir.
+  ///
+  /// [trackedDetalle] es de qué cuotas salió [tracked], reconstruido con
+  /// [MoraTrackedOrigen]. Sin eso la línea solo puede decir "de cuotas ya
+  /// pagadas", que es justo lo que la familia pregunta cuando lee el recibo.
+  static String origenMoraPendienteLinea({
+    required List<MoraCuotaDetalle> desglose,
+    required String Function(double) formatoMonto,
+    double tracked = 0,
+    List<MoraPendientePreviaDetalle> trackedDetalle = const [],
+    int maxCuotas = 3,
+  }) {
+    // Las cuotas vencidas y las ya pagadas se nombran igual: la familia no
+    // tiene por qué distinguir dos formatos en el mismo renglón.
+    String parte(int numeroCuota, String mesLabel, int diasMora, double monto) {
+      final mes = mesLabel.split(' ').first;
+      final entre = [
+        if (mes.isNotEmpty) mes,
+        if (diasMora > 0) '$diasMora d',
+      ].join(', ');
+      final cuando = entre.isEmpty ? '' : ' ($entre)';
+      return 'cuota $numeroCuota$cuando ${formatoMonto(monto)}';
+    }
+
+    final items = <({int cuota, String texto})>[];
+    String? sinDetalle;
+
+    for (final d in desglose) {
+      items.add((
+        cuota: d.numeroCuota,
+        texto: parte(d.numeroCuota, d.mesLabel, d.diasMora, d.interesBruto),
+      ));
+    }
+
+    if (tracked > 0.01) {
+      final previas =
+          trackedDetalle.where((d) => d.montoAtribuido > 0.01).toList();
+      if (previas.isEmpty) {
+        // No se pudo reconstruir el origen (historial incompleto): al menos
+        // que se lea bien y se entienda que es de cuotas ya pagadas.
+        sinDetalle = 'interés de cuotas ya pagadas ${formatoMonto(tracked)}';
+      } else {
+        for (final d in previas) {
+          items.add((
+            cuota: d.numeroCuota,
+            texto: parte(
+              d.numeroCuota,
+              d.mesLabel,
+              d.diasMora,
+              d.montoAtribuido,
+            ),
+          ));
+        }
+      }
+    }
+
+    // De la más vieja a la más nueva, sin importar si la cuota ya se pagó:
+    // mezcladas por origen salía "cuota 2 · cuota 3 · cuota 1".
+    items.sort((a, b) => a.cuota.compareTo(b.cuota));
+
+    final partes = <String>[];
+    var omitidas = 0;
+    for (final i in items) {
+      if (partes.length >= maxCuotas) {
+        omitidas++;
+        continue;
+      }
+      partes.add(i.texto);
+    }
+
+    if (sinDetalle != null) partes.add(sinDetalle);
+    if (omitidas > 0) {
+      partes.add('y $omitidas ${omitidas == 1 ? 'cuota' : 'cuotas'} más');
+    }
+
+    if (partes.isEmpty) return '';
+    return 'Viene de: ${partes.join(' · ')}.';
+  }
+
   static String calendarioCuota({
     required int numeroCuota,
     required String mesLabel,
   }) =>
       'Interés mora cuota $numeroCuota (vto $mesLabel)';
 
-  static String? subtextoCalendario(int diasMora) =>
-      diasMora > 0 ? '$diasMora días de atraso' : null;
+  // Sin subtexto de días: el rótulo de la línea ya los dice ("Mora — 27 días
+  // fuera de término") y una segunda línea con el mismo número gasta papel.
 
   static String _tituloPendiente(List<int> nums) {
     final uniq = nums.toSet().toList()..sort();
@@ -307,7 +391,6 @@ class MoraConceptoRotulo {
           // que es la clave que reconocen los detectores de pago_interes_mora).
           if (n > 0) 'numeroCuota': n,
           if (dias != null && dias > 0) 'diasMora': dias,
-          if (dias != null && dias > 0) 'subtexto': subtextoCalendario(dias),
         });
       }
     }
@@ -341,16 +424,16 @@ class MoraConceptoRotulo {
               'concepto': conceptoPendientePreviasGenerico,
               'monto': delta,
               'esMora': true,
-              'subtexto': 'No cobrada en cobros anteriores',
             });
           }
         }
       } else {
+        // El rótulo de la línea ya dice "no cobrada en su momento": el
+        // subtexto repetía la misma frase en otra línea.
         out.add({
           'concepto': conceptoPendientePreviasGenerico,
           'monto': pendiente,
           'esMora': true,
-          'subtexto': 'No cobrada en cobros anteriores',
         });
       }
     }

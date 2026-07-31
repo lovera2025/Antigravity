@@ -67,6 +67,37 @@ void main() {
     });
   });
 
+  group('cuotasConMoraCobradaPdf', () {
+    test('toma numeroCuota y cuotaPrevia, deduplica y ordena', () {
+      final conceptos = [
+        {'concepto': 'Cuota Base (5/9)', 'monto': 35000.0},
+        {'concepto': 'Interés mora cuota 3', 'monto': 900.0, 'esMora': true,
+          'numeroCuota': 3},
+        {'concepto': 'Mora pendiente cuota 2', 'monto': 500.0, 'esMora': true,
+          'cuotaPrevia': 2},
+        {'concepto': 'Interés mora cuota 3', 'monto': 100.0, 'esMora': true,
+          'numeroCuota': 3},
+      ];
+      expect(cuotasConMoraCobradaPdf(conceptos), [2, 3]);
+    });
+
+    test('vacía si las líneas de mora no traen metadata', () {
+      final conceptos = [
+        {'concepto': 'Interés mora', 'monto': 900.0, 'esMora': true},
+      ];
+      expect(cuotasConMoraCobradaPdf(conceptos), isEmpty);
+    });
+  });
+
+  group('fraseCuotasEs', () {
+    test('arma la frase según la cantidad de cuotas', () {
+      expect(fraseCuotasEs([]), '');
+      expect(fraseCuotasEs([3]), 'cuota 3');
+      expect(fraseCuotasEs([2, 3]), 'cuotas 2 y 3');
+      expect(fraseCuotasEs([2, 3, 5]), 'cuotas 2, 3 y 5');
+    });
+  });
+
   group('agruparConceptosMesasParaPdf', () {
     test('no agrupa con menos de 3 mesas en contrato', () {
       final conceptos = [

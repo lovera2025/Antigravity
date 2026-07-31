@@ -806,6 +806,24 @@ class MoraCuotaCalculator {
     required double moraCobradaHistorial,
     double? moraCobradaPeriodo,
     DateTime? ahoraAr,
+  }) =>
+      moraPendienteOperativaDetallada(
+        contrato: contrato,
+        moraCobradaHistorial: moraCobradaHistorial,
+        ahoraAr: ahoraAr,
+      ).total;
+
+  /// Igual que [moraPendienteOperativa], pero además expone de dónde sale ese
+  /// total: [desglose] es el detalle por cuota vencida impaga y [tracked] el
+  /// remanente de cuotas ya liquidadas, que no tiene desglose calendario.
+  ///
+  /// Sirve para poder escribir en el recibo de qué cuotas viene la mora que
+  /// queda debiendo, sin recalcular el FIFO por afuera.
+  static ({double total, List<MoraCuotaDetalle> desglose, double tracked})
+      moraPendienteOperativaDetallada({
+    required ContratoAlumno contrato,
+    required double moraCobradaHistorial,
+    DateTime? ahoraAr,
   }) {
     final desgloseBruto = calcularDesglose(contrato, ahoraAr);
     final moraCobradaAjustada = moraCobradaParaFifo(
@@ -818,10 +836,14 @@ class MoraCuotaCalculator {
 
     final tracked = contrato.moraPendienteTracked.clamp(0.0, double.infinity);
 
-    return double.parse(
-      (moraTotalDesglose + tracked)
-          .clamp(0.0, double.infinity)
-          .toStringAsFixed(2),
+    return (
+      total: double.parse(
+        (moraTotalDesglose + tracked)
+            .clamp(0.0, double.infinity)
+            .toStringAsFixed(2),
+      ),
+      desglose: desgloseNeto,
+      tracked: double.parse(tracked.toStringAsFixed(2)),
     );
   }
 

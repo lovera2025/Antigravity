@@ -478,6 +478,27 @@ double moraSeleccionadaPdf(Iterable<Map<String, dynamic>> conceptos) {
       );
 }
 
+/// Cuotas cuyo interés se cobra en este recibo, ordenadas y sin repetir.
+/// Vacía si las líneas de mora no traen metadata (recibos viejos).
+List<int> cuotasConMoraCobradaPdf(Iterable<Map<String, dynamic>> conceptos) {
+  final ns = <int>{};
+  for (final c in conceptos) {
+    if (c['esMora'] != true) continue;
+    final n = (c['numeroCuota'] as num?)?.toInt() ??
+        (c['cuotaPrevia'] as num?)?.toInt();
+    if (n != null && n > 0) ns.add(n);
+  }
+  return ns.toList()..sort();
+}
+
+/// "cuota 3" · "cuotas 2 y 3" · "cuotas 2, 3 y 5". Vacío si no hay cuotas.
+String fraseCuotasEs(List<int> ns) {
+  if (ns.isEmpty) return '';
+  if (ns.length == 1) return 'cuota ${ns.first}';
+  final previas = ns.sublist(0, ns.length - 1).join(', ');
+  return 'cuotas $previas y ${ns.last}';
+}
+
 /// Suma líneas de liquidación (excluye cargo canal).
 double sumLiquidoConceptosFinales(List<Map<String, dynamic>> conceptos) {
   return conceptos
@@ -545,29 +566,38 @@ String _displayPlan(Map<String, dynamic> c, DateTime? regAr, DateTime? hoyAr) {
 }
 
 /// Rótulo familiar para una línea de mora.
+///
+/// El rótulo identifica la línea; el detalle (vencimiento, días, montos) lo
+/// dice el subtexto. Cuando la línea trae subtexto, el rótulo no repite nada
+/// de eso: en el papel salían los mismos días y el mismo mes dos veces.
 String _displayMora(Map<String, dynamic> c) {
+  final conSubtexto = ((c['subtexto'] as String?) ?? '').trim().isNotEmpty;
+
   final previa = (c['cuotaPrevia'] as num?)?.toInt();
   if (previa != null) {
     // Arrastre: dice de qué cuota viene y de cuándo, para que se entienda
     // leyendo el papel sin tener que preguntar.
+    if (conSubtexto) return 'Mora de la cuota $previa';
     final mes = (c['mesCuotaPrevia'] as String?)?.trim() ?? '';
     final dias = (c['diasMora'] as num?)?.toInt() ?? 0;
     final cuando = mes.isEmpty ? '' : ' de $mes';
     final atraso = dias > 0
-        ? ' — $dias ${dias == 1 ? 'día' : 'días'} de atraso'
+        ? ' — $dias ${dias == 1 ? 'día' : 'días'} fuera de término'
         : '';
     return 'Mora de la cuota $previa$cuando$atraso, no cobrada en su momento';
   }
   final dias = (c['diasMora'] as num?)?.toInt();
   if (dias != null && dias > 0) {
-    return 'Mora (interés por atraso, $dias ${dias == 1 ? 'día' : 'días'})';
+    // Va anidada bajo su cuota y se repite por línea: rótulo corto. Qué es la
+    // mora lo explica el pie del recibo, una sola vez.
+    return 'Mora — $dias ${dias == 1 ? 'día' : 'días'} fuera de término';
   }
   final texto = (c['concepto'] as String? ?? '').trim();
   if (texto.toLowerCase().contains('mora pendiente') ||
       texto.toLowerCase().contains('cuotas ya pagadas')) {
     return 'Mora de cuotas anteriores, no cobrada en su momento';
   }
-  return 'Mora (interés por atraso)';
+  return 'Mora por pagar fuera de término';
 }
 
 /// Reordena las líneas para el PDF: cada mora del calendario queda pegada a la

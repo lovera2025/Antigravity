@@ -6034,10 +6034,19 @@ class _DetalleEventoMasivoScreenState
                             moraCobradaOffset: postTrackedOffset.offset,
                             moraFechaReferencia: alumno.moraFechaReferencia,
                           );
-                          final moraRestantePost =
-                              MoraCuotaCalculator.moraPendienteOperativa(
+                          final moraDetallePost = MoraCuotaCalculator
+                              .moraPendienteOperativaDetallada(
                                 contrato: contratoSimPost,
                                 moraCobradaHistorial: moraHistPostCobro,
+                              );
+                          final moraRestantePost = moraDetallePost.total;
+                          // De qué cuotas viene lo que queda debiendo, para
+                          // que el recibo lo diga y no haya discusión después.
+                          final moraOrigenPost =
+                              MoraConceptoRotulo.origenMoraPendienteLinea(
+                                desglose: moraDetallePost.desglose,
+                                tracked: moraDetallePost.tracked,
+                                formatoMonto: (v) => v.toCurrency(),
                               );
                           final limpiarMoraRef =
                               MoraCuotaCalculator.debeDescongelarMoraReferencia(
@@ -6456,6 +6465,11 @@ class _DetalleEventoMasivoScreenState
                                   fresco?.saldoDeudor ?? saldoRestante,
                               conceptosPagados: conceptosFinales,
                               fechaManual: DateTime.now(),
+                              // Es el cobro original, no una reimpresión: el
+                              // recibo tiene que afirmar la mora de hoy.
+                              esReimpresion: false,
+                              moraPendientePost: moraRestantePost,
+                              moraPendienteOrigenPost: moraOrigenPost,
                               porcentajeDescuentoLiquidacion:
                                   pctDescuentoConfirm,
                               medioPago: modoMedioPago == 'Mixto'
@@ -6554,10 +6568,21 @@ class _DetalleEventoMasivoScreenState
           final listaFinal = pagos.isEmpty
               ? <Map<String, dynamic>>[]
               : ConceptoPagoDisplay.enriquecerPagosHistorial(alumnoUi, pagos);
-          final double totalEntregado = listaFinal.fold<double>(
-            0,
-            (sum, p) => sum + (p['monto'] as num).toDouble(),
-          );
+          // La mora y el costo por transferencia no bajan el saldo del plan:
+          // se cuentan aparte para no inflar el "abonado en cuotas".
+          double totalPlanAbonado = 0;
+          double totalMoraCobrada = 0;
+          double totalCargoCanal = 0;
+          for (final p in listaFinal) {
+            final m = (p['monto'] as num).toDouble();
+            if (ConceptoPagoDisplay.esMora(p)) {
+              totalMoraCobrada += m;
+            } else if (ConceptoPagoDisplay.esCargoCanal(p)) {
+              totalCargoCanal += m;
+            } else {
+              totalPlanAbonado += m;
+            }
+          }
 
           final screen = MediaQuery.sizeOf(context);
           final fs = (screen.width / 1440).clamp(0.82, 1.0);
@@ -7032,24 +7057,76 @@ class _DetalleEventoMasivoScreenState
                             ).withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
                             children: [
-                              Text(
-                                'TOTAL ENTREGADO:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: s(11),
-                                  color: Colors.grey,
+                              if (totalMoraCobrada > 0.01)
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Mora cobrada (fuera de término):',
+                                      style: TextStyle(
+                                        fontSize: s(10),
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    Text(
+                                      totalMoraCobrada.toCurrency(),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: s(11),
+                                        color: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              Text(
-                                totalEntregado.toCurrency(),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: s(15),
-                                  color: const Color(0xFFD4AF37),
+                              if (totalCargoCanal > 0.01)
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Costo por transferencia:',
+                                      style: TextStyle(
+                                        fontSize: s(10),
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                    Text(
+                                      totalCargoCanal.toCurrency(),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: s(11),
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              if (totalMoraCobrada > 0.01 ||
+                                  totalCargoCanal > 0.01)
+                                SizedBox(height: s(6)),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'ABONADO EN CUOTAS:',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: s(11),
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  Text(
+                                    totalPlanAbonado.toCurrency(),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: s(15),
+                                      color: const Color(0xFFD4AF37),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -7074,7 +7151,9 @@ class _DetalleEventoMasivoScreenState
                     : () => _imprimirEstadoCuentaAlumno(
                         alumnoUi,
                         listaFinal,
-                        totalEntregado,
+                        totalPlanAbonado: totalPlanAbonado,
+                        totalMoraCobrada: totalMoraCobrada,
+                        totalCargoCanal: totalCargoCanal,
                       ),
                 icon: const Icon(
                   Icons.picture_as_pdf_outlined,
@@ -7099,9 +7178,11 @@ class _DetalleEventoMasivoScreenState
   /// Estado de cuenta imprimible: historial + saldo + de dónde viene la mora.
   Future<void> _imprimirEstadoCuentaAlumno(
     ContratoAlumno alumno,
-    List<Map<String, dynamic>> pagosEnriquecidos,
-    double totalEntregado,
-  ) async {
+    List<Map<String, dynamic>> pagosEnriquecidos, {
+    required double totalPlanAbonado,
+    required double totalMoraCobrada,
+    required double totalCargoCanal,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final repo = ref.read(contratosRepositoryProvider);
@@ -7123,7 +7204,9 @@ class _DetalleEventoMasivoScreenState
         alumno: alumno,
         evento: widget.evento,
         pagos: pagosEnriquecidos,
-        totalEntregado: totalEntregado,
+        totalPlanAbonado: totalPlanAbonado,
+        totalMoraCobrada: totalMoraCobrada,
+        totalCargoCanal: totalCargoCanal,
         moraPendiente: moraPendiente,
         arrastreMora: arrastre,
       );
@@ -7149,6 +7232,16 @@ class _DetalleEventoMasivoScreenState
     double? montoCargoTransferenciaInformado,
     double porcentajeDescuentoLiquidacion = 0,
     bool skipDbRefresh = false,
+
+    /// Mora que sigue debiendo tras este cobro, ya calculada por el modal.
+    double? moraPendientePost,
+
+    /// Línea de "de dónde viene" esa mora, ya armada por el modal.
+    String? moraPendienteOrigenPost,
+
+    /// `null` la infiere de [fechaManual]. El cobro original también manda
+    /// fecha, así que sin este flag se lo confundía con una reimpresión.
+    bool? esReimpresion,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
@@ -7207,6 +7300,23 @@ class _DetalleEventoMasivoScreenState
             0,
             (sum, c) => sum + ((c['monto'] as num?)?.toDouble() ?? 0.0),
           );
+
+          // El recibo reproduce un cobro que ya pasó: tiene que llevar la fecha
+          // de ese cobro, no la de hoy. Y si no es de hoy, va rotulado como
+          // reimpresión, porque tampoco puede afirmar la mora de hoy.
+          final fechaLoteStr = lote.first['fecha_pago']?.toString();
+          final fechaLote = fechaLoteStr == null
+              ? null
+              : DateTime.tryParse(fechaLoteStr);
+          if (fechaLote != null) {
+            final loteAr = ArTime.toAr(fechaLote);
+            final hoyAr = ArTime.nowAr();
+            final mismoDia = loteAr.year == hoyAr.year &&
+                loteAr.month == hoyAr.month &&
+                loteAr.day == hoyAr.day;
+            fechaManual ??= fechaLote;
+            esReimpresion ??= !mismoDia;
+          }
         } else {
           valPago = 0;
         }
@@ -7227,15 +7337,48 @@ class _DetalleEventoMasivoScreenState
       // Mora que sigue debiendo tras este cobro, para que quede escrita en el
       // recibo aunque el operador no la haya tildado. En reimpresiones se
       // omite: el papel reproduce un cobro pasado, no la deuda de hoy.
-      double? moraRestantePdf;
-      if (fechaManual == null) {
-        final moraHistPdf = await repo.sumMoraCobradaHistorial(
-          alumnoParaPdf.id,
-        );
-        moraRestantePdf = MoraCuotaCalculator.moraPendienteOperativa(
-          contrato: alumnoParaPdf,
-          moraCobradaHistorial: moraHistPdf,
-        );
+      final bool reimpresion = esReimpresion ?? (fechaManual != null);
+      double? moraRestantePdf = moraPendientePost;
+      String? moraOrigenPdf = moraPendienteOrigenPost;
+      if (!reimpresion) {
+        // Sin monto del modal hay que calcularlo sí o sí: un recibo que se come
+        // el aviso de mora es peor que un recibo que no sale. Con monto ya
+        // resuelto, todo esto es cosmético y no puede tumbar la impresión.
+        final bool montoExigido = moraRestantePdf == null;
+        try {
+          final moraHistPdf = await repo.sumMoraCobradaHistorial(
+            alumnoParaPdf.id,
+          );
+          final detalle = MoraCuotaCalculator.moraPendienteOperativaDetallada(
+            contrato: alumnoParaPdf,
+            moraCobradaHistorial: moraHistPdf,
+          );
+          moraRestantePdf ??= detalle.total;
+          // El "viene de" tiene que nombrar las cuotas. El tracked es un solo
+          // número en la ficha: de qué cuotas salió se reconstruye del
+          // historial, y recién acá el cobro ya está guardado (el modal todavía
+          // no lo tenía). Si el recálculo no coincide con el monto que trae el
+          // modal, se deja la línea del modal: manda el número que se imprime.
+          if ((detalle.total - moraRestantePdf).abs() < 0.02) {
+            final trackedDetalle = detalle.tracked > 0.01
+                ? MoraTrackedOrigen.inferir(
+                    contratoBase: alumnoParaPdf,
+                    pagos: await repo.getHistorialPagosAlumno(alumnoParaPdf.id),
+                    trackedMonto: detalle.tracked,
+                  )
+                : const <MoraPendientePreviaDetalle>[];
+            final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
+              desglose: detalle.desglose,
+              tracked: detalle.tracked,
+              trackedDetalle: trackedDetalle,
+              formatoMonto: (v) => v.toCurrency(),
+            );
+            if (linea.isNotEmpty) moraOrigenPdf = linea;
+          }
+        } catch (e) {
+          if (montoExigido) rethrow;
+          debugPrint('⚠️ No se pudo reconstruir el origen de la mora: $e');
+        }
       }
 
       await PdfService.generarReciboAlumno(
@@ -7247,6 +7390,8 @@ class _DetalleEventoMasivoScreenState
         conceptosPagados: conceptosPagados,
         fechaManual: fechaManual,
         moraPendienteRestante: moraRestantePdf,
+        moraPendienteOrigen: moraOrigenPdf,
+        esReimpresion: reimpresion,
         medioPago: medioPago,
         montoEfectivoDetalle: montoEfectivoDetalle,
         montoTransferenciaDetalle: montoTransferenciaDetalle,

@@ -62,7 +62,7 @@ void main() {
       expect(display.length, 2);
       expect(display[0]['display'], 'Cuota 3 de 9 — venció 30/06/2026');
       expect(display[0]['anidada'], isNot(true));
-      expect(display[1]['display'], 'Mora (interés por atraso, 27 días)');
+      expect(display[1]['display'], 'Mora — 27 días fuera de término');
       expect(display[1]['anidada'], isTrue);
       expect(display[1]['arrastre'], isNot(true));
     });
