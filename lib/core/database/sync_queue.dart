@@ -176,18 +176,56 @@ class SyncQueue {
     return rows.map(SyncQueueEntry.fromMap).toList();
   }
 
-  /// Cantidad de operaciones pendientes (excluye errores permanentes).
+  /// Cantidad de operaciones que TODAVÍA NO subieron a la nube.
+  ///
+  /// Cuenta todo lo que está en la cola, sin excepciones. Antes descontaba los
+  /// que tenían error permanente o 10 intentos fallidos: justo esos. El
+  /// indicador marcaba "0 pendientes / todo sincronizado" mientras un cobro
+  /// estaba trabado, y nadie se enteraba hasta que la familia aparecía con el
+  /// recibo en la mano. Si algo no subió, tiene que verse.
   static Future<int> get pendingCount async {
     final db = await LocalDatabase.instance;
-    // Un registro es "pendiente" solo si no tiene un error permanente 
-    // y no ha fallado demasiadas veces (dead letters).
-    // Alineado a 10 intentos como límite de reintento del motor.
     final result = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM _sync_queue "
-      "WHERE (ultimo_error IS NULL OR ultimo_error NOT LIKE 'ERROR_PERMANENTE%') "
-      "AND intentos < 10"
+      'SELECT COUNT(*) as count FROM _sync_queue',
     );
     return (result.first['count'] as int?) ?? 0;
+  }
+
+  /// Pendientes que vale la pena intentar YA (menos de 10 intentos fallidos).
+  ///
+  /// Es lo que mira el disparador automático. [pendingCount] cuenta todo
+  /// porque es el número honesto para el usuario, pero si se usara para
+  /// disparar, una PC con un registro imposible de subir llamaría a la nube
+  /// cada 10 segundos para siempre y el indicador viviría parpadeando. Los
+  /// trabados se reintentan aparte, espaciados, desde el motor.
+  static Future<int> get readyCount async {
+    final db = await LocalDatabase.instance;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM _sync_queue WHERE intentos < 10',
+    );
+    return (result.first['count'] as int?) ?? 0;
+  }
+
+  /// Cuántos de los pendientes están trabados (fallaron 10 veces o más).
+  /// Se reintentan igual, pero conviene poder mirarlos.
+  static Future<int> get stuckCount async {
+    final db = await LocalDatabase.instance;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM _sync_queue WHERE intentos >= 10',
+    );
+    return (result.first['count'] as int?) ?? 0;
+  }
+
+  /// Detalle de los trabados, para diagnosticar sin abrir la base a mano.
+  static Future<List<SyncQueueEntry>> getStuck() async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      '_sync_queue',
+      where: 'intentos >= ?',
+      whereArgs: [10],
+      orderBy: 'created_at ASC',
+    );
+    return rows.map(SyncQueueEntry.fromMap).toList();
   }
 
   /// Elimina una entrada completada exitosamente.
@@ -223,29 +261,12 @@ class SyncQueue {
     await db.delete('_sync_queue');
   }
 
-  /// Limpia entradas con demasiados intentos fallidos (dead letter).
-  static Future<int> purgeDeadLetters({int maxIntentos = 10}) async {
-    final db = await LocalDatabase.instance;
-    return db.delete(
-      '_sync_queue',
-      where: 'intentos >= ?',
-      whereArgs: [maxIntentos],
-    );
-  }
-
-  /// PURGA DE ESTABILIZACIÓN: Elimina registros marcados con ERROR_PERMANENTE 
-  /// o que han excedido el límite de reintentos (10).
-  static Future<int> purgePermanentErrors() async {
-    final db = await LocalDatabase.instance;
-    final count = await db.delete(
-      '_sync_queue',
-      where: "ultimo_error LIKE 'ERROR_PERMANENTE%' OR intentos >= 10",
-    );
-    if (count > 0) {
-      debugPrint('🧹 Sync: Purgados $count registros agotados o corruptos');
-    }
-    return count;
-  }
+  // NO agregar acá ninguna función que borre de la cola por cantidad de
+  // intentos o por "error permanente". Existieron dos (purgeDeadLetters y
+  // purgePermanentErrors) y se sacaron a propósito: borrar un registro que
+  // nunca subió es perder un cobro. Los trabados se reintentan espaciados
+  // desde el motor y se cuentan en stuckCount. Si alguno hay que descartarlo,
+  // que sea una decisión explícita de una persona mirando getStuck().
 
   /// Limpia de la cola de sincronización cualquier entrada de tablas secundarias
   /// que dependan del registro principal (padre) que se está eliminando.

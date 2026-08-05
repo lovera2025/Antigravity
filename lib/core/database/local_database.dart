@@ -2398,6 +2398,10 @@ class LocalDatabase {
               syncPayload['institucion'] = nombre;
               contratosInst++;
             }
+            // Sin exclusiones a propósito: los 9 masivos arrancan con la cuota 1
+            // venciendo el 30/04, o sea Reg en marzo. BUENA VISTA y PUERTO VIEJO
+            // entran igual que el resto — el Reg no es la fecha en que se cargó
+            // al alumno, es el mes anterior al de su primera cuota.
             if (!regActual.startsWith('2026-03-30')) {
               updates['created_at'] = regIso;
               syncPayload['created_at'] = regIso;

@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 import 'dart:convert';
 
@@ -26,6 +27,7 @@ import 'features/asesor/asesor_home_screen.dart';
 import 'features/common/providers/user_role_provider.dart';
 import 'features/common/widgets/operational_sync_coordinator.dart';
 import 'services/supabase_service.dart';
+import 'core/database/backup_service.dart';
 import 'core/database/local_database.dart';
 
 // URL base donde está deployada la app web (usada para generar QR de check-in)
@@ -136,6 +138,15 @@ void main(List<String> args) async {
         // Inicializar DB
         await LocalDatabase.instance;
         debugPrint('✅ SQLite local inicializado correctamente');
+        // Copia semanal. No se espera (que no demore el arranque) y arranca
+        // con retraso: al abrir, el sync está escribiendo y VACUUM no corre
+        // dentro de una transacción ajena.
+        unawaited(
+          Future<void>.delayed(
+            const Duration(seconds: 45),
+            BackupService.ejecutarSiCorresponde,
+          ),
+        );
       } catch (e) {
         debugPrint(
           '⚠️ Error al inicializar SQLite: $e (continuando sin cache local)',

@@ -406,6 +406,25 @@ class SyncEngine {
     }
   }
 
+  /// Cada cuánto se reintenta lo trabado. No se abandona nunca —un pago que no
+  /// subió no se puede dar por perdido— pero tampoco se martilla la nube.
+  static const Duration _esperaEntreReintentosTrabados = Duration(minutes: 5);
+  DateTime? _ultimoReintentoTrabados;
+
+  bool get _tocaReintentarTrabados {
+    final ultimo = _ultimoReintentoTrabados;
+    return ultimo == null ||
+        DateTime.now().difference(ultimo) >= _esperaEntreReintentosTrabados;
+  }
+
+  /// `true` si hay algo que subir ahora: pendientes frescos, o trabados a los
+  /// que ya les toca el reintento. Lo consulta el coordinador automático para
+  /// no despertar la sincronización cada 10 segundos al pedo.
+  Future<bool> get hayTrabajoDeSubida async {
+    if (await SyncQueue.readyCount > 0) return true;
+    return _tocaReintentarTrabados && await SyncQueue.stuckCount > 0;
+  }
+
   /// Envía los cambios locales pendientes a la nube.
   /// Devuelve true si al menos una operación se completó con éxito.
   Future<bool> _flushQueue({
@@ -482,11 +501,17 @@ class SyncEngine {
     final pendingIdsInQueue = pending.map((e) => e.registroId).toSet();
 
     for (final entry in sortedPending) {
+      // Un registro que falló mucho NO se abandona: se reintenta espaciado.
+      // Antes se salteaba para siempre y, como el contador de pendientes
+      // tampoco lo mostraba, el cobro moría en el disco de esa PC sin que
+      // nadie se enterara (caso OSORIO 07/07, caso VALENTINA 18/04).
       if (entry.intentos >= 10) {
+        if (!_tocaReintentarTrabados) continue;
+        _ultimoReintentoTrabados = DateTime.now();
         debugPrint(
-          '  ! Registro agotado: ${entry.tabla}/${entry.registroId} (falló 10 veces)',
+          '  ↻ Reintentando trabado: ${entry.tabla}/${entry.registroId} '
+          '(${entry.intentos} intentos, último error: ${entry.ultimoError})',
         );
-        continue;
       }
 
       // BLOQUEO REFERENCIAL: Si el padre de este registro está en la MISMA cola pendiente,
@@ -582,12 +607,17 @@ class SyncEngine {
           continue;
         }
 
+        // Sacar algo de la cola sin haberlo subido es perder el dato. Sólo se
+        // saca cuando el error prueba que YA está en la nube (unique/duplicate).
+        // Todo lo demás queda en cuarentena, contado y visible, reintentando.
         if (isNonRetryable) {
+          debugPrint(
+            '  = ${entry.tabla}/${entry.registroId} ya existía en la nube: '
+            'se saca de la cola',
+          );
           await SyncQueue.markCompleted(entry.id!);
         } else {
-          final isPermanent = entry.intentos >= 9;
-          final errorMsg = isPermanent ? 'ERROR_PERMANENTE: $e' : e.toString();
-          await SyncQueue.markFailed(entry.id!, errorMsg);
+          await SyncQueue.markFailed(entry.id!, e.toString());
         }
       }
     }
@@ -1538,14 +1568,15 @@ class SyncEngine {
     }
   }
 
+  /// `true` sólo si el error prueba que el registro YA ESTÁ en la nube. Es la
+  /// única razón válida para sacarlo de la cola sin haberlo subido en esta
+  /// vuelta. Antes esto también incluía 'not found' y errores de UUID: como el
+  /// match es por substring del texto, cualquier error que contuviera esas
+  /// palabras hacía desaparecer el registro para siempre. Un payload
+  /// malformado no se descarta más: queda en cuarentena para poder verlo.
   bool _isNonRetryableError(dynamic e) {
     final msg = e.toString().toLowerCase();
-    return msg.contains('unique') ||
-        msg.contains('duplicate') ||
-        msg.contains('not found') ||
-        msg.contains('22p02') ||
-        msg.contains('uuid_invalido') ||
-        msg.contains('invalid input syntax for type uuid');
+    return msg.contains('unique') || msg.contains('duplicate');
   }
 
   Future<void> refreshPendingCount() async {
