@@ -191,6 +191,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         cambioInicial: s.cambioInicial,
         egresosEfectivo: egresosEfectivo,
         arqueo: s.arqueoCierre,
+        cierreAutomatico: s.cierreAutomatico,
       );
     }).toList();
   }
@@ -592,17 +593,53 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
               for (final s in state.sesionesDia)
                 DropdownMenuItem(
                   value: s.id,
-                  child: Text(
-                    esOperadorModoJefeId(s.operadorId)
-                        ? [
-                            kOperadorModoJefeNombre,
-                            ArTime.formatHora(s.abiertaAt),
-                          ].join(' · ')
-                        : [
-                            s.operadorNombre ?? 'Operario',
-                            s.etiqueta ?? 'Turno',
-                            ArTime.formatHora(s.abiertaAt),
-                          ].join(' · '),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          esOperadorModoJefeId(s.operadorId)
+                              ? [
+                                  kOperadorModoJefeNombre,
+                                  ArTime.formatHora(s.abiertaAt),
+                                ].join(' · ')
+                              : [
+                                  s.operadorNombre ?? 'Operario',
+                                  s.etiqueta ?? 'Turno',
+                                  ArTime.formatHora(s.abiertaAt),
+                                ].join(' · '),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // El turno que nadie cerró tiene que distinguirse del que
+                      // se cerró y arqueó: es el dato por el que el jefe entra
+                      // acá. No se pierde ningún cobro, pero se ve.
+                      if (s.cierreAutomatico) ...[
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: s.notaCierre ?? 'Cerrada por el sistema',
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 15,
+                                color: Colors.orangeAccent,
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'cerrada automáticamente · sin arqueo',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.orangeAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
             ],

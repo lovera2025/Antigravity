@@ -20,6 +20,7 @@ import '../../cierre_caja/models/resumen_sesion_pdf.dart';
 import '../../cierre_caja/models/turno_caja.dart';
 import '../../mi_empresa/models/ingreso_detallado.dart';
 import '../../rentabilidad/services/calculador_rentabilidad_service.dart';
+import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
@@ -27,6 +28,7 @@ import '../../eventos/services/mora_tracked_origen.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../../eventos/utils/presupuesto_desde_evento.dart';
 import '../utils/currency_extensions.dart';
+import 'ajuste_pdf.dart';
 import 'presupuesto_pdf_sections.dart';
 import 'presupuesto_redaccion_llm_service.dart';
 
@@ -67,6 +69,99 @@ class CobroPeriodoPdfFila {
 class PdfService {
   /// Tablas más pequeñas evitan que un solo [pw.Table] dispare [TooManyPagesException] en [pw.MultiPage].
   static const int _kCierreCajaFilasPorBloque = 28;
+
+  /// Caja objetivo de los papeles que se entregan por cobro: media hoja A4,
+  /// para poder cortar dos por página.
+  static double get _mediaA4 => PdfPageFormat.a4.height / 2;
+
+  // ── Ajuste medido: "que entre" en vez de "que crezca" ─────────────────────
+
+  /// Cuánto ocupa realmente [contenido], en puntos.
+  ///
+  /// Se arma una página con alto libre: el motor la recorta al alto exacto del
+  /// contenido, así que la altura resultante **es** la medida. Es un cálculo en
+  /// memoria (sin archivos ni impresión), del orden de milisegundos.
+  static Future<double> _medirAlto({
+    required pw.ThemeData? theme,
+    required pw.Widget contenido,
+  }) async {
+    final doc = pw.Document(theme: theme);
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat(PdfPageFormat.a4.width, double.infinity),
+        margin: const pw.EdgeInsets.all(0),
+        build: (_) => contenido,
+      ),
+    );
+    await doc.save();
+    return doc.document.pdfPageList.pages.first.pageFormat.height;
+  }
+
+  /// Primer nivel de la escalera con el que el papel entra en [objetivo].
+  ///
+  /// Prueba de menos a más invasivo y **corta apenas entra**: si con juntar el
+  /// aire alcanza, no abrevia; si con abreviar alcanza, no achica la letra. Un
+  /// cobro común no pasa del nivel 0 y sale idéntico al de siempre.
+  ///
+  /// [construir] tiene que devolver un widget **nuevo** en cada llamada: los
+  /// widgets del paquete guardan estado de layout y no se pueden reutilizar.
+  static Future<AjustePdf> _ajustarParaEntrar({
+    required double objetivo,
+    required pw.ThemeData? theme,
+    required pw.Widget Function(AjustePdf) construir,
+  }) async {
+    for (final a in AjustePdf.escalera) {
+      try {
+        final alto = await _medirAlto(theme: theme, contenido: construir(a));
+        if (alto <= objetivo + 0.5) return a;
+      } catch (_) {
+        // Si la medición falla por lo que sea, no se rompe el papel: se sigue
+        // con el nivel siguiente y en el peor caso sale sin compactar.
+        return a;
+      }
+    }
+    // Ni el nivel más compacto entra. Se usa igual: la hoja crecerá un poco,
+    // que es preferible a imprimir el papel sin el total.
+    return AjustePdf.escalera.last;
+  }
+
+  /// Primer nivel con el que un documento paginado entra en [maxPaginas].
+  ///
+  /// Para el ticket de cierre de caja, que es `MultiPage`: ahí "que entre" no
+  /// significa media hoja sino no desparramarse en páginas de más.
+  static Future<AjustePdf> _ajustarParaPaginas({
+    required int maxPaginas,
+    required pw.ThemeData? theme,
+    required List<pw.Widget> Function(AjustePdf) construir,
+  }) async {
+    var mejor = AjustePdf.intacto;
+    var mejorPaginas = 1 << 30;
+    for (final a in AjustePdf.escalera) {
+      try {
+        final doc = pw.Document(theme: theme);
+        doc.addPage(
+          pw.MultiPage(
+            maxPages: 10000,
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(0),
+            build: (_) => construir(a),
+          ),
+        );
+        await doc.save();
+        final paginas = doc.document.pdfPageList.pages.length;
+        if (paginas <= maxPaginas) return a;
+        // No entra, pero si mejoró respecto del nivel anterior vale la pena
+        // seguir. Si dejó de mejorar, compactar más solo empeora la lectura.
+        if (paginas < mejorPaginas) {
+          mejor = a;
+          mejorPaginas = paginas;
+        }
+      } catch (_) {
+        return mejor;
+      }
+    }
+    return mejor;
+  }
 
   static String? _ultimaRutaPdfGuardado;
 
@@ -1314,7 +1409,11 @@ class PdfService {
                   ),
                   pw.SizedBox(height: 6),
                   pw.Text(
-                    motivoAnulacion.trim(),
+                    // Único campo de largo libre del documento. Este PDF usa
+                    // pw.Page con A4 fijo y un pw.Spacer que empuja el pie, así
+                    // que no puede crecer: un motivo larguísimo tiraría el pie
+                    // fuera de la hoja sin ningún aviso.
+                    _truncar(motivoAnulacion.trim(), 400),
                     style: const pw.TextStyle(fontSize: 10),
                   ),
                 ],
@@ -1464,11 +1563,12 @@ class PdfService {
       fontBold = await PdfGoogleFonts.outfitBold();
     } catch (_) {}
 
-    final pdf = pw.Document(
-      theme: fontRegular != null && fontBold != null
-          ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
-          : null,
-    );
+    // El tema se guarda aparte: la medición tiene que usar exactamente las
+    // mismas fuentes, o el alto medido no sería el alto real.
+    final temaRecibo = fontRegular != null && fontBold != null
+        ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
+        : null;
+    final pdf = pw.Document(theme: temaRecibo);
 
     pw.ImageProvider? logoImage;
     try {
@@ -1497,6 +1597,28 @@ class PdfService {
         : montoPagado;
     final valSaldo = saldoPendiente;
 
+    // Contador del bloque "cómo queda la cuenta". En un cobro del día sale del
+    // contrato, que es exacto. En una reimpresión no puede salir de ahí: el
+    // contrato ya avanzó y el papel terminaba diciendo las cuotas de hoy al
+    // lado del abonado de aquel día (reimprimir la cuota 1 mostraba "5/9
+    // pagadas" junto a $30.000). Se deriva del mismo saldo histórico que se
+    // imprime al lado, así el recuadro cierra consigo mismo.
+    final int cuotasPagadasRecibo = () {
+      if (!esReimpresionPdf || alumno.totalCuotas <= 0) {
+        return alumno.cuotasPagadas;
+      }
+      final cuotaPura = alumno.montoTotalPactado / alumno.totalCuotas;
+      if (cuotaPura <= 0.01) return alumno.cuotasPagadas;
+      final abonado = (alumno.montoTotalPactado - valSaldo).clamp(
+        0.0,
+        double.infinity,
+      );
+      return cuotasCompletasDesdeGrossAcumulado(
+        abonado,
+        cuotaPura,
+      ).clamp(0, alumno.totalCuotas);
+    }();
+
     final mesasEstadoRecibo = MesasExtraUtils.estadoDesdeContrato(alumno);
     final cantMesasRecibo = MesasExtraUtils.cantidadMesasContrato(
       alumno,
@@ -1504,11 +1626,16 @@ class PdfService {
     );
     final conceptosPagadosDisplay = conceptosPagados != null
         ? lineasDisplayParaPdf(
-            agruparConceptosMesasParaPdf(
-              conceptosPagados
-                  .map((c) => Map<String, dynamic>.from(c))
-                  .toList(),
-              cantMesasRecibo,
+            // El recibo no compactaba cuotas base, cosa que el resumen sí hace
+            // desde siempre: un cobro de 9 cuotas estiraba el papel mucho más
+            // de lo necesario.
+            compactarCuotasBaseParaPdf(
+              agruparConceptosMesasParaPdf(
+                conceptosPagados
+                    .map((c) => Map<String, dynamic>.from(c))
+                    .toList(),
+                cantMesasRecibo,
+              ),
             ),
             regAr: alumno.createdAt != null
                 ? ArTime.toAr(alumno.createdAt!)
@@ -1516,6 +1643,10 @@ class PdfService {
             hoyAr: ArTime.toAr(fechaTransaccion),
           )
         : null;
+
+    // Nivel de compactación del recibo. Lo decide la medición de más abajo; el
+    // closure del contenido lee esta variable.
+    var dRecibo = AjustePdf.intacto;
 
     // La mora de cuotas ya pagadas en cobros anteriores no cuelga de ninguna
     // línea de este cobro: va en su propio sub-bloque al final del detalle.
@@ -1641,9 +1772,11 @@ class PdfService {
                 child: pw.Padding(
                   padding: pw.EdgeInsets.only(left: anidada ? 14 : 0),
                   child: pw.Text(
-                    anidada ? '  ↳ $desc' : '  • $desc',
+                    anidada
+                        ? '  ↳ ${dRecibo.abreviar ? abreviarDisplayPdf(desc) : desc}'
+                        : '  • ${dRecibo.abreviar ? abreviarDisplayPdf(desc) : desc}',
                     style: pw.TextStyle(
-                      fontSize: anidada ? 9 : 10,
+                      fontSize: dRecibo.fs(anidada ? 9 : 10),
                       color: anidada ? _greyText : null,
                     ),
                   ),
@@ -1652,32 +1785,32 @@ class PdfService {
               pw.Text(
                 montoItem.toCurrency(),
                 style: pw.TextStyle(
-                  fontSize: anidada ? 9 : 10,
+                  fontSize: dRecibo.fs(anidada ? 9 : 10),
                   fontWeight: pw.FontWeight.bold,
                   color: anidada ? _greyText : null,
                 ),
               ),
             ],
           ),
-          if (subtexto != null && subtexto.isNotEmpty)
+          if (dRecibo.subtextos && subtexto != null && subtexto.isNotEmpty)
             pw.Padding(
               padding: const pw.EdgeInsets.only(left: 12),
               child: pw.Text(
                 subtexto,
                 style: pw.TextStyle(
-                  fontSize: 8,
+                  fontSize: dRecibo.fs(8, piso: 6.5),
                   fontStyle: pw.FontStyle.italic,
                   color: _greyText,
                 ),
               ),
             ),
-          if (nominalHint != null)
+          if (dRecibo.subtextos && nominalHint != null)
             pw.Padding(
               padding: const pw.EdgeInsets.only(left: 12),
               child: pw.Text(
                 nominalHint,
                 style: pw.TextStyle(
-                  fontSize: 8,
+                  fontSize: dRecibo.fs(8, piso: 6.5),
                   fontStyle: pw.FontStyle.italic,
                   color: _greyText,
                 ),
@@ -1724,24 +1857,18 @@ class PdfService {
       );
     }
 
-    // Hoja del ancho de una A4 pero de alto variable: el motor la recorta a lo
-    // que ocupa el contenido. Con piso de media A4 los recibos comunes salen
-    // siempre del mismo tamaño (entran dos por hoja, se corta al medio) y los
-    // cargados crecen solos, así nunca se corta nada al pie.
+    // Objetivo: media hoja A4, para cortar dos por página. Se mide y se
+    // compacta hasta que entre; el alto libre con piso de media hoja es la red
+    // de seguridad para que nada se pueda recortar aunque ningún nivel alcance.
     final formatoRecibo = PdfPageFormat(
       PdfPageFormat.a4.width,
       double.infinity,
     );
-    final altoMinimoRecibo = PdfPageFormat.a4.height / 2;
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: formatoRecibo,
-        margin: const pw.EdgeInsets.all(0),
-        build: (context) {
+    pw.Widget cuerpoRecibo() {
           final medioReciboStr = medioPago?.trim() ?? '';
           return pw.ConstrainedBox(
-            constraints: pw.BoxConstraints(minHeight: altoMinimoRecibo),
+            constraints: pw.BoxConstraints(minHeight: _mediaA4),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.stretch,
               children: [
@@ -2332,12 +2459,12 @@ class PdfService {
                                             pw.CrossAxisAlignment.center,
                                         children: [
                                           pw.Text(
-                                            '${alumno.cuotasPagadas}/${alumno.totalCuotas}',
+                                            '$cuotasPagadasRecibo/${alumno.totalCuotas}',
                                             style: pw.TextStyle(
                                               fontSize: 13,
                                               fontWeight: pw.FontWeight.bold,
                                               color:
-                                                  alumno.cuotasPagadas >=
+                                                  cuotasPagadasRecibo >=
                                                       alumno.totalCuotas
                                                   ? _greenAccent
                                                   : _gold,
@@ -2505,7 +2632,22 @@ class PdfService {
               ],
             ),
           );
-        },
+    }
+
+    dRecibo = await _ajustarParaEntrar(
+      objetivo: _mediaA4,
+      theme: temaRecibo,
+      construir: (a) {
+        dRecibo = a;
+        return cuerpoRecibo();
+      },
+    );
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: formatoRecibo,
+        margin: const pw.EdgeInsets.all(0),
+        build: (context) => cuerpoRecibo(),
       ),
     );
 
@@ -2548,11 +2690,12 @@ class PdfService {
       fontBold = await PdfGoogleFonts.outfitBold();
     } catch (_) {}
 
-    final pdf = pw.Document(
-      theme: fontRegular != null && fontBold != null
-          ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
-          : null,
-    );
+    // El tema se guarda aparte: la medición tiene que usar exactamente las
+    // mismas fuentes, o el alto medido no sería el alto real.
+    final temaResumen = fontRegular != null && fontBold != null
+        ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
+        : null;
+    final pdf = pw.Document(theme: temaResumen);
 
     pw.ImageProvider? logoImage;
     try {
@@ -2572,7 +2715,7 @@ class PdfService {
       mesasEstadoResumen,
     );
     final conceptosLineasDisplay = lineasDisplayParaPdf(
-      compactarCuotasBaseParaResumenPdf(
+      compactarCuotasBaseParaPdf(
         agruparConceptosMesasParaPdf(
           conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
           cantMesasResumen,
@@ -2597,6 +2740,12 @@ class PdfService {
       0,
       (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
     );
+
+    // Nivel de compactación del papel. Arranca intacto y lo decide la medición
+    // de más abajo: se prueban escalones y se usa el primero con el que entra
+    // en media hoja. El closure del contenido lee esta variable, así que
+    // cambiarla acá cambia lo que se arma.
+    var d = AjustePdf.intacto;
 
     final double planSeleccionado = grossPlanSeleccionadoPdf(
       conceptosLineasDisplay,
@@ -2682,8 +2831,12 @@ class PdfService {
       final String? subNominal = plan && gross != null && gross > monto + 0.01
           ? 'nom. ${gross.toCurrency()}'
           : null;
+      final descFinal = d.abreviar ? abreviarDisplayPdf(desc) : desc;
       return pw.Padding(
-        padding: pw.EdgeInsets.only(bottom: 4, left: anidada ? 16 : 0),
+        padding: pw.EdgeInsets.only(
+          bottom: d.sp(4),
+          left: anidada ? d.sp(16) : 0,
+        ),
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -2692,26 +2845,28 @@ class PdfService {
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    anidada ? '↳ $desc' : '· $desc',
+                    anidada ? '↳ $descFinal' : '· $descFinal',
                     style: pw.TextStyle(
-                      fontSize: anidada ? 8 : 9,
+                      fontSize: d.fs(anidada ? 8 : 9),
                       color: anidada ? _greyText : _darkText,
                     ),
                   ),
-                  if (sub != null && sub.isNotEmpty)
+                  // Los subtextos son datos auxiliares: son lo primero que se
+                  // saca cuando el papel no entra, antes que achicar la letra.
+                  if (d.subtextos && sub != null && sub.isNotEmpty)
                     pw.Text(
                       sub,
                       style: pw.TextStyle(
-                        fontSize: 7,
+                        fontSize: d.fs(7, piso: 6.5),
                         fontStyle: pw.FontStyle.italic,
                         color: _greyText,
                       ),
                     ),
-                  if (subNominal != null)
+                  if (d.subtextos && subNominal != null)
                     pw.Text(
                       subNominal,
                       style: pw.TextStyle(
-                        fontSize: 7,
+                        fontSize: d.fs(7, piso: 6.5),
                         fontStyle: pw.FontStyle.italic,
                         color: _greyText,
                       ),
@@ -2722,7 +2877,7 @@ class PdfService {
             pw.Text(
               monto.toCurrency(),
               style: pw.TextStyle(
-                fontSize: anidada ? 8 : 9,
+                fontSize: d.fs(anidada ? 8 : 9),
                 fontWeight: pw.FontWeight.bold,
                 color: anidada ? _greyText : _darkText,
               ),
@@ -2732,16 +2887,28 @@ class PdfService {
       );
     }
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(0),
-        build: (context) {
-          return pw.Column(
+    // Objetivo: media hoja A4, para cortar dos por página. Antes esto era una
+    // `pw.Page` de A4 fijo y lo que no entraba en los 842 pt se caía del
+    // MediaBox **sin error ni aviso**: como el total va al final del layout, lo
+    // primero que desaparecía era "TOTAL A PAGAR AHORA" y "CÓMO QUEDA LA
+    // CUENTA", o sea que el papel salía con el detalle y sin el total.
+    //
+    // Ahora se mide y se compacta hasta que entre (ver [_ajustarParaEntrar]).
+    // El alto libre con piso de media hoja es la red de seguridad: garantiza
+    // que nada se pueda recortar aunque ningún nivel alcance.
+    final formatoResumen = PdfPageFormat(
+      PdfPageFormat.a4.width,
+      double.infinity,
+    );
+
+    pw.Widget cuerpoResumen() {
+          return pw.ConstrainedBox(
+            constraints: pw.BoxConstraints(minHeight: _mediaA4),
+            child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
               pw.Container(
-                padding: const pw.EdgeInsets.fromLTRB(22, 16, 22, 14),
+                padding: pw.EdgeInsets.fromLTRB(22, d.sp(16), 22, d.sp(14)),
                 decoration: pw.BoxDecoration(
                   border: pw.Border(
                     bottom: pw.BorderSide(color: _greyLight, width: 0.5),
@@ -2831,7 +2998,7 @@ class PdfService {
                 ),
               ),
               pw.Padding(
-                padding: const pw.EdgeInsets.fromLTRB(22, 12, 22, 16),
+                padding: pw.EdgeInsets.fromLTRB(22, d.sp(12), 22, d.sp(16)),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -2998,8 +3165,8 @@ class PdfService {
                     if (moraDespues > 0.01) ...[
                       pw.Container(
                         width: double.infinity,
-                        padding: const pw.EdgeInsets.all(10),
-                        margin: const pw.EdgeInsets.only(bottom: 8),
+                        padding: pw.EdgeInsets.all(d.sp(10)),
+                        margin: pw.EdgeInsets.only(bottom: d.sp(8)),
                         decoration: pw.BoxDecoration(
                           color: _cardBg,
                           borderRadius: const pw.BorderRadius.all(
@@ -3015,7 +3182,7 @@ class PdfService {
                               'pagar fuera de término) por '
                               '${moraDespues.toCurrency()}',
                               style: pw.TextStyle(
-                                fontSize: 9.5,
+                                fontSize: d.fs(9.5),
                                 fontWeight: pw.FontWeight.bold,
                                 color: _redAccent,
                               ),
@@ -3025,7 +3192,7 @@ class PdfService {
                               'No se cobra en este pago. Sigue sumando hasta '
                               'que se abone.',
                               style: pw.TextStyle(
-                                fontSize: 8,
+                                fontSize: d.fs(8, piso: 7),
                                 color: _darkText,
                               ),
                             ),
@@ -3168,8 +3335,27 @@ class PdfService {
                 ),
               ),
             ],
+          ),
           );
-        },
+    }
+
+    // Se prueba de menos a más invasivo y se corta apenas entra: si con juntar
+    // el aire alcanza, no se abrevia; si con abreviar alcanza, no se achica la
+    // letra. Un cobro común no pasa del nivel 0 y sale igual que siempre.
+    d = await _ajustarParaEntrar(
+      objetivo: _mediaA4,
+      theme: temaResumen,
+      construir: (a) {
+        d = a;
+        return cuerpoResumen();
+      },
+    );
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: formatoResumen,
+        margin: const pw.EdgeInsets.all(0),
+        build: (context) => cuerpoResumen(),
       ),
     );
 
@@ -5005,9 +5191,13 @@ class PdfService {
     final fontRegular = await PdfGoogleFonts.outfitRegular();
     final fontBold = await PdfGoogleFonts.outfitBold();
 
-    final pdf = pw.Document(
-      theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
-    );
+    final temaTicket = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+    final pdf = pw.Document(theme: temaTicket);
+
+    // Nivel de compactación del ticket. Acá "que entre" significa no
+    // desparramarse en páginas de más: se mide la cantidad de páginas y se usa
+    // el primer nivel que entra en una sola. El closure lee esta variable.
+    var dTicket = AjustePdf.intacto;
 
     pw.ImageProvider? logoImage;
     try {
@@ -5022,16 +5212,14 @@ class PdfService {
     final fechaEmision = ArTime.formatFechaHora(ArTime.nowUtc());
     final diaCorto = ArTime.formatFechaCorta(diaCalendarioAr);
 
-    pdf.addPage(
-      pw.MultiPage(
-        maxPages: 10000,
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(0),
-        build: (context) => [
+    List<pw.Widget> cuerpoTicket() => [
           pw.Container(
             width: PdfPageFormat.a4.width,
             constraints: pw.BoxConstraints(minHeight: 9.5 * PdfPageFormat.cm),
-            padding: const pw.EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+            padding: pw.EdgeInsets.symmetric(
+              horizontal: 22,
+              vertical: dTicket.sp(8),
+            ),
             decoration: pw.BoxDecoration(
               border: pw.Border(
                 bottom: pw.BorderSide(color: _greyLight, width: 0.5),
@@ -5095,7 +5283,7 @@ class PdfService {
                     ),
                   ),
                   pw.SizedBox(height: 4),
-                  _ticketCajaTablaResumenSesiones(resumenSesiones),
+                  _ticketCajaTablaResumenSesiones(resumenSesiones, ajuste: dTicket),
                 ],
                 pw.SizedBox(height: 8),
                 pw.Row(
@@ -5117,7 +5305,7 @@ class PdfService {
                               ),
                             )
                           else if (incluirTablaIngresosDetallada)
-                            _ticketCajaTablaIngresos(ingresosTurno)
+                            _ticketCajaTablaIngresos(ingresosTurno, ajuste: dTicket)
                           else
                             _ticketCajaIngresosResumenCompacto(
                               cantidad: ingresosTurno.length,
@@ -5149,7 +5337,7 @@ class PdfService {
                                   retirosEfectivo + retirosTransferencia,
                             ),
                             pw.SizedBox(height: 4),
-                            _ticketCajaTablaRetiros(retirosTurno),
+                            _ticketCajaTablaRetiros(retirosTurno, ajuste: dTicket),
                           ],
                         ],
                       ),
@@ -5169,7 +5357,7 @@ class PdfService {
                     ),
                   ),
                   pw.SizedBox(height: 4),
-                  _ticketCajaTablaOtrosEgresos(otrosEgresosTurno),
+                  _ticketCajaTablaOtrosEgresos(otrosEgresosTurno, ajuste: dTicket),
                 ],
                 if ((anotacionTurno ?? '').trim().isNotEmpty) ...[
                   pw.SizedBox(height: 12),
@@ -5219,7 +5407,27 @@ class PdfService {
               ],
             ),
           ),
-        ],
+        ];
+
+    // El cierre de un día con muchas sesiones se desparramaba en varias hojas.
+    // Se compacta hasta que entre en una, y si ni así entra se queda con el
+    // nivel que menos páginas usó: seguir apretando solo empeoraría la lectura
+    // sin ahorrar papel.
+    dTicket = await _ajustarParaPaginas(
+      maxPaginas: 1,
+      theme: temaTicket,
+      construir: (a) {
+        dTicket = a;
+        return cuerpoTicket();
+      },
+    );
+
+    pdf.addPage(
+      pw.MultiPage(
+        maxPages: 10000,
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(0),
+        build: (context) => cuerpoTicket(),
       ),
     );
 
@@ -5536,7 +5744,10 @@ class PdfService {
     );
   }
 
-  static pw.Widget _ticketCajaTablaIngresos(List<IngresoDetallado> rows) {
+  static pw.Widget _ticketCajaTablaIngresos(
+    List<IngresoDetallado> rows, {
+    AjustePdf ajuste = AjustePdf.intacto,
+  }) {
     pw.Widget cell(
       String text, {
       bool header = false,
@@ -5544,12 +5755,15 @@ class PdfService {
       pw.TextAlign align = pw.TextAlign.left,
     }) {
       return pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+        padding: pw.EdgeInsets.symmetric(
+          horizontal: 3,
+          vertical: ajuste.sp(3),
+        ),
         child: pw.Text(
           text,
           textAlign: align,
           style: pw.TextStyle(
-            fontSize: header ? 7.5 : 7.5,
+            fontSize: ajuste.fs(7.5, piso: 6.5),
             fontWeight: header ? pw.FontWeight.bold : null,
             color: color ?? _darkText,
           ),
@@ -5592,7 +5806,10 @@ class PdfService {
     );
   }
 
-  static pw.Widget _ticketCajaTablaRetiros(List<Egreso> rows) {
+  static pw.Widget _ticketCajaTablaRetiros(
+    List<Egreso> rows, {
+    AjustePdf ajuste = AjustePdf.intacto,
+  }) {
     pw.Widget cell(
       String text, {
       bool header = false,
@@ -5600,12 +5817,15 @@ class PdfService {
       pw.TextAlign align = pw.TextAlign.left,
     }) {
       return pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+        padding: pw.EdgeInsets.symmetric(
+          horizontal: 3,
+          vertical: ajuste.sp(3),
+        ),
         child: pw.Text(
           text,
           textAlign: align,
           style: pw.TextStyle(
-            fontSize: 7.5,
+            fontSize: ajuste.fs(7.5, piso: 6.5),
             fontWeight: header ? pw.FontWeight.bold : null,
             color: color ?? _darkText,
           ),
@@ -5655,7 +5875,10 @@ class PdfService {
   }
 
   /// Egresos del turno que no son «Retiro de caja» (p. ej. personal). Misma fila en SQLite/Finanzas.
-  static pw.Widget _ticketCajaTablaOtrosEgresos(List<Egreso> rows) {
+  static pw.Widget _ticketCajaTablaOtrosEgresos(
+    List<Egreso> rows, {
+    AjustePdf ajuste = AjustePdf.intacto,
+  }) {
     const catColor = PdfColor(0.45, 0.35, 0.15);
     const montoColor = PdfColor(0.79, 0.44, 0.12);
 
@@ -5666,12 +5889,15 @@ class PdfService {
       pw.TextAlign align = pw.TextAlign.left,
     }) {
       return pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+        padding: pw.EdgeInsets.symmetric(
+          horizontal: 3,
+          vertical: ajuste.sp(3),
+        ),
         child: pw.Text(
           text,
           textAlign: align,
           style: pw.TextStyle(
-            fontSize: 7.5,
+            fontSize: ajuste.fs(7.5, piso: 6.5),
             fontWeight: header ? pw.FontWeight.bold : null,
             color: color ?? _darkText,
           ),
@@ -5829,8 +6055,9 @@ class PdfService {
   /// Desglose del día por sesión/operario: cuánto cobró cada uno y cómo
   /// cerró su arqueo.
   static pw.Widget _ticketCajaTablaResumenSesiones(
-    List<ResumenSesionPdf> rows,
-  ) {
+    List<ResumenSesionPdf> rows, {
+    AjustePdf ajuste = AjustePdf.intacto,
+  }) {
     pw.Widget cell(
       String text, {
       bool header = false,
@@ -5839,12 +6066,15 @@ class PdfService {
       bool bold = false,
     }) {
       return pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+        padding: pw.EdgeInsets.symmetric(
+          horizontal: 3,
+          vertical: ajuste.sp(3),
+        ),
         child: pw.Text(
           text,
           textAlign: align,
           style: pw.TextStyle(
-            fontSize: 7.5,
+            fontSize: ajuste.fs(7.5, piso: 6.5),
             fontWeight: header || bold ? pw.FontWeight.bold : null,
             color: color ?? _darkText,
           ),
@@ -5854,7 +6084,12 @@ class PdfService {
 
     String difTexto(ResumenSesionPdf r) {
       final d = r.diferencia;
-      if (d == null) return r.horaCierre == null ? 'abierta' : 's/arqueo';
+      if (d == null) {
+        if (r.horaCierre == null) return 'abierta';
+        // Distingue al que se fue sin cerrar del que cerró y no declaró arqueo:
+        // es el dato por el que el jefe mira esta tabla.
+        return r.cierreAutomatico ? 'auto s/arq' : 's/arqueo';
+      }
       if (d.abs() < 0.01) return 'OK';
       return d.toCurrency();
     }
@@ -5966,6 +6201,10 @@ class PdfService {
       ],
     );
   }
+
+  /// Corta un texto libre para que no desborde una hoja de alto fijo.
+  static String _truncar(String s, int max) =>
+      s.length <= max ? s : '${s.substring(0, max)}…';
 
   static String _pdfCierreTrunc(String? s, int max) {
     final t = s?.trim();

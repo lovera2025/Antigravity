@@ -53,6 +53,30 @@ class ArTime {
   /// Instante actual expresado en reloj AR.
   static DateTime nowAr() => toAr(nowUtc());
 
+  /// Inverso de [toAr]: instante UTC de un reloj de pared argentino.
+  ///
+  /// [ar] se interpreta por sus componentes (no por su flag `isUtc`), igual que
+  /// lo que devuelve [toAr] o un `DateTime(y, m, d, ...)` armado a mano.
+  static DateTime arToUtc(DateTime ar) => DateTime.utc(
+    ar.year,
+    ar.month,
+    ar.day,
+    ar.hour,
+    ar.minute,
+    ar.second,
+    ar.millisecond,
+  ).subtract(offset);
+
+  /// 23:59:59 AR del día calendario en que cae [dt], expresado en UTC.
+  ///
+  /// Sella los cierres automáticos de caja en el día al que pertenecen, en vez
+  /// de en el momento en que se detectan: una sesión de ayer detectada hoy al
+  /// mediodía queda cerrada ayer a las 23:59, no hoy.
+  static DateTime finDeDiaArUtc(DateTime dt) {
+    final ar = toAr(dt);
+    return arToUtc(DateTime(ar.year, ar.month, ar.day, 23, 59, 59));
+  }
+
   // ── Formatos legibles (Argentina) ────────────────────────────────────────
 
   /// "DD/MM/YYYY"

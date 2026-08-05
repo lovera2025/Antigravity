@@ -3,6 +3,32 @@ import 'mora_tracked_origen.dart';
 
 export 'mora_tracked_origen.dart' show MoraPendientePreviaDetalle;
 
+/// Una cuota dentro del reparto de un pago de mora: lo que se debe por ella
+/// ([pleno]) y lo que este cobro le [asignado].
+class _ItemMora {
+  final int numeroCuota;
+  final String mesLabel;
+  final int diasMora;
+  final double pleno;
+
+  /// `MoraCuotaDetalle` o `MoraPendientePreviaDetalle` de origen, para poder
+  /// reconstruir la entrada con el importe recortado sin perder sus datos.
+  final Object? origen;
+
+  double asignado = 0;
+
+  _ItemMora({
+    required this.numeroCuota,
+    required this.mesLabel,
+    required this.diasMora,
+    required this.pleno,
+    this.origen,
+  });
+
+  /// La cuota queda cubierta a medias: hay que decirlo en el papel.
+  bool get parcial => asignado < pleno - 0.01;
+}
+
 /// Copy y construcción de conceptos/PDF de mora (calendario vs pendiente previas).
 ///
 /// Opción B: la mora de cuotas ya liquidadas nombra número(s) de cuota.
@@ -240,6 +266,142 @@ class MoraConceptoRotulo {
     return conceptoPendientePrevias(detalle: detallePendiente);
   }
 
+  static double _r2(double v) => double.parse(v.toStringAsFixed(2));
+
+  /// Sufijo de la cuota que este cobro cubre solo en parte.
+  static const sufijoParcial = ' (parcial)';
+
+  /// Reparto de un pago **parcial** de mora entre las cuotas involucradas.
+  ///
+  /// El monto que entrega la familia puede ser menor que la mora seleccionada
+  /// (mora $45.000, entrega $15.000). Sin este reparto, cada línea se emite por
+  /// su importe completo y el papel termina sumando más de lo que se cobró.
+  ///
+  /// Orden espejado de `MoraCuotaCalculator.postCobroTrackedOffset`, para que el
+  /// papel no contradiga el saldo que queda en la ficha:
+  ///  - si el pago entra entero en el arrastre, va todo al arrastre;
+  ///  - si no, primero las cuotas vencidas del calendario (de la más vieja a la
+  ///    más nueva) y el resto al arrastre.
+  ///
+  /// **No hace nada** si lo cobrado alcanza para todo: un cobro de mora completa
+  /// y las reimpresiones históricas salen exactamente igual que antes.
+  static ({
+    List<MoraCuotaDetalle> calendario,
+    double pendientePrevias,
+    List<MoraPendientePreviaDetalle> detallePendiente,
+  })
+  repartirMoraParcial({
+    required double montoTotal,
+    required List<MoraCuotaDetalle> calendario,
+    required double pendientePrevias,
+    required List<MoraPendientePreviaDetalle> detallePendiente,
+  }) {
+    final total = _r2(montoTotal.clamp(0.0, double.infinity));
+    final pend = _r2(pendientePrevias.clamp(0.0, double.infinity));
+    final sumCal = _r2(
+      calendario.fold<double>(0, (s, d) => s + d.interesBruto),
+    );
+
+    if (_r2(sumCal + pend) <= total + 0.01) {
+      return (
+        calendario: calendario,
+        pendientePrevias: pend,
+        detallePendiente: detallePendiente,
+      );
+    }
+
+    final calItems = [
+      for (final d in calendario)
+        _ItemMora(
+          numeroCuota: d.numeroCuota,
+          mesLabel: d.mesLabel,
+          diasMora: d.diasMora,
+          pleno: _r2(d.interesBruto),
+          origen: d,
+        ),
+    ]..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
+    final arrItems = [
+      for (final d in detallePendiente)
+        _ItemMora(
+          numeroCuota: d.numeroCuota,
+          mesLabel: d.mesLabel,
+          diasMora: d.diasMora,
+          pleno: _r2(d.montoAtribuido),
+          origen: d,
+        ),
+    ]..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
+
+    final double pendAsignado;
+    if (pend > 0.01 && total <= pend + 0.01) {
+      pendAsignado = total;
+      _asignarFifo(arrItems, total);
+    } else {
+      final usadoCal = _asignarFifo(calItems, total);
+      pendAsignado = _r2((total - usadoCal).clamp(0.0, pend));
+      _asignarFifo(arrItems, pendAsignado);
+    }
+
+    return (
+      calendario: [
+        for (final it in calItems)
+          if (it.asignado > 0.01)
+            _conInteres(it.origen as MoraCuotaDetalle, it.asignado),
+      ],
+      pendientePrevias: pendAsignado,
+      detallePendiente: [
+        for (final it in arrItems)
+          if (it.asignado > 0.01)
+            _conAtribuido(
+              it.origen as MoraPendientePreviaDetalle,
+              it.asignado,
+            ),
+      ],
+    );
+  }
+
+  /// Consume [disponible] saldando cada ítem entero hasta agotarlo; el último
+  /// queda parcial y los siguientes en cero. Devuelve lo efectivamente usado.
+  /// La lista tiene que venir ordenada FIFO.
+  static double _asignarFifo(List<_ItemMora> items, double disponible) {
+    var resto = disponible;
+    var usado = 0.0;
+    for (final it in items) {
+      if (resto <= 0.01) break;
+      final a = _r2(it.pleno <= resto ? it.pleno : resto);
+      if (a <= 0.01) continue;
+      it.asignado = a;
+      resto = _r2(resto - a);
+      usado = _r2(usado + a);
+    }
+    return usado;
+  }
+
+  /// Copia con otro importe. `moraDebida`, `diasMora`, `vencimiento` y
+  /// `fechaPagoCuota` se conservan: son los que explican **cuánto se debía**, y
+  /// si se recortaran el recibo diría que solo se debía lo parcial.
+  static MoraPendientePreviaDetalle _conAtribuido(
+    MoraPendientePreviaDetalle d,
+    double monto,
+  ) => MoraPendientePreviaDetalle(
+    numeroCuota: d.numeroCuota,
+    mesLabel: d.mesLabel,
+    montoAtribuido: monto,
+    fechaPagoCuota: d.fechaPagoCuota,
+    moraDebida: d.moraDebida > 0.01 ? d.moraDebida : d.montoAtribuido,
+    moraCobrada: d.moraCobrada,
+    diasMora: d.diasMora,
+    vencimiento: d.vencimiento,
+  );
+
+  static MoraCuotaDetalle _conInteres(MoraCuotaDetalle d, double monto) =>
+      MoraCuotaDetalle(
+        numeroCuota: d.numeroCuota,
+        vencimiento: d.vencimiento,
+        diasMora: d.diasMora,
+        interesBruto: monto,
+        mesLabel: d.mesLabel,
+      );
+
   /// Preview de una línea de mora para el modal (una fila en `previewConceptos`).
   static Map<String, dynamic> construirPreviewMora({
     required double montoTotal,
@@ -251,11 +413,20 @@ class MoraConceptoRotulo {
     final g = double.parse(
       montoTotal.clamp(0.0, double.infinity).toStringAsFixed(2),
     );
-    final pendiente = double.parse(
-      montoPendientePrevias.clamp(0.0, double.infinity).toStringAsFixed(2),
+    // El rótulo tiene que nombrar solo las cuotas que este cobro cubre. Sin
+    // esto, un parcial sobre las cuotas 3 y 5 se guardaba como "Interés mora
+    // cuotas 3, 5" aunque solo se hubiera cubierto la 3.
+    final repartido = repartirMoraParcial(
+      montoTotal: g,
+      calendario: detallesCalendario,
+      pendientePrevias: montoPendientePrevias,
+      detallePendiente: detallePendiente,
     );
-    final dets = List<MoraCuotaDetalle>.from(detallesCalendario);
-    final detPrev = List<MoraPendientePreviaDetalle>.from(detallePendiente);
+    final pendiente = repartido.pendientePrevias;
+    final dets = List<MoraCuotaDetalle>.from(repartido.calendario);
+    final detPrev = List<MoraPendientePreviaDetalle>.from(
+      repartido.detallePendiente,
+    );
     final concepto = conceptoPersistido(
       detallesCalendario: dets,
       montoPendientePrevias: pendiente,
@@ -269,12 +440,16 @@ class MoraConceptoRotulo {
       'cuotas': 0,
       'lineKind': lineKind,
       'moraPendientePrevias': pendiente,
+      // `montoPleno` es lo que se debe por esa cuota; `monto` lo que este cobro
+      // le asigna. Guardar los dos es lo que después permite emitir la línea por
+      // el importe parcial y marcarla como tal.
       'moraDesglose': dets
           .map(
             (d) => <String, dynamic>{
               'numeroCuota': d.numeroCuota,
               'mesLabel': d.mesLabel,
               'monto': d.interesBruto,
+              'montoPleno': _plenoCalendario(detallesCalendario, d),
               'diasMora': d.diasMora,
             },
           )
@@ -285,6 +460,7 @@ class MoraConceptoRotulo {
               'numeroCuota': d.numeroCuota,
               'mesLabel': d.mesLabel,
               'monto': d.montoAtribuido,
+              'montoPleno': _plenoArrastre(detallePendiente, d),
               'moraDebida': d.moraDebida,
               'moraCobrada': d.moraCobrada,
               'fechaPagoCuota': d.fechaPagoCuota?.toIso8601String(),
@@ -293,6 +469,26 @@ class MoraConceptoRotulo {
           )
           .toList(),
     };
+  }
+
+  static double _plenoCalendario(
+    List<MoraCuotaDetalle> originales,
+    MoraCuotaDetalle reducida,
+  ) {
+    for (final o in originales) {
+      if (o.numeroCuota == reducida.numeroCuota) return o.interesBruto;
+    }
+    return reducida.interesBruto;
+  }
+
+  static double _plenoArrastre(
+    List<MoraPendientePreviaDetalle> originales,
+    MoraPendientePreviaDetalle reducida,
+  ) {
+    for (final o in originales) {
+      if (o.numeroCuota == reducida.numeroCuota) return o.montoAtribuido;
+    }
+    return reducida.montoAtribuido;
   }
 
   /// Expande preview de mora a filas UI (calendario + pendiente), como el PDF.
@@ -339,7 +535,10 @@ class MoraConceptoRotulo {
       return MoraPendientePreviaDetalle(
         numeroCuota: (m['numeroCuota'] as num?)?.toInt() ?? 0,
         mesLabel: (m['mesLabel'] as String?) ?? '',
-        montoAtribuido: (m['monto'] as num?)?.toDouble() ?? 0,
+        // Lo pleno, no lo ya recortado: el reparto se rehace en la emisión y
+        // necesita saber cuánto se debe para marcar la cuota como parcial.
+        montoAtribuido:
+            ((m['montoPleno'] ?? m['monto']) as num?)?.toDouble() ?? 0,
         fechaPagoCuota: fp,
         moraDebida: (m['moraDebida'] as num?)?.toDouble() ?? 0,
         moraCobrada: (m['moraCobrada'] as num?)?.toDouble() ?? 0,
@@ -373,66 +572,88 @@ class MoraConceptoRotulo {
     }
 
     final out = <Map<String, dynamic>>[];
+    final dets = detallePendiente ?? const <MoraPendientePreviaDetalle>[];
 
-    if (desg.isNotEmpty) {
-      for (final d in desg) {
-        final n = (d['numeroCuota'] as num?)?.toInt() ?? 0;
-        final mes = (d['mesLabel'] as String?)?.trim() ?? '';
-        final monto = double.parse(
-          ((d['monto'] as num?)?.toDouble() ?? 0).toStringAsFixed(2),
-        );
-        if (monto <= 0.01) continue;
-        final dias = d['diasMora'] as int?;
-        out.add({
-          'concepto': calendarioCuota(numeroCuota: n, mesLabel: mes),
-          'monto': monto,
-          'esMora': true,
-          // Para anidar la mora bajo su cuota en el PDF (no altera [concepto],
-          // que es la clave que reconocen los detectores de pago_interes_mora).
-          if (n > 0) 'numeroCuota': n,
-          if (dias != null && dias > 0) 'diasMora': dias,
-        });
-      }
+    // Reparto del pago parcial. `montoPleno` (si viene) es lo que se debe por
+    // esa cuota; si no viene, el propio `monto` hace de pleno — así el camino
+    // histórico, que arma el desglose desde el pago ya guardado, también queda
+    // acotado a lo que realmente se cobró.
+    final calItems = [
+      for (final d in desg)
+        _ItemMora(
+          numeroCuota: (d['numeroCuota'] as num?)?.toInt() ?? 0,
+          mesLabel: (d['mesLabel'] as String?)?.trim() ?? '',
+          diasMora: (d['diasMora'] as num?)?.toInt() ?? 0,
+          pleno: _r2(
+            ((d['montoPleno'] ?? d['monto']) as num?)?.toDouble() ?? 0,
+          ),
+        ),
+    ]..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
+    final arrItems = [
+      for (final d in dets)
+        _ItemMora(
+          numeroCuota: d.numeroCuota,
+          mesLabel: d.mesLabel,
+          diasMora: d.diasMora,
+          pleno: _r2(d.montoAtribuido),
+          origen: d,
+        ),
+    ]..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
+
+    // Mismo orden que el libro mayor: si el pago entra entero en el arrastre va
+    // todo ahí; si no, primero el calendario y el resto al arrastre.
+    final double pendAsignado;
+    if (pendiente > 0.01 && total <= pendiente + 0.01) {
+      pendAsignado = _r2(total.clamp(0.0, pendiente));
+      _asignarFifo(arrItems, pendAsignado);
+    } else {
+      final usadoCal = _asignarFifo(calItems, total);
+      pendAsignado = _r2((total - usadoCal).clamp(0.0, pendiente));
+      _asignarFifo(arrItems, pendAsignado);
     }
 
-    final dets = detallePendiente ?? const <MoraPendientePreviaDetalle>[];
-    if (pendiente > 0.01) {
-      if (dets.isNotEmpty) {
-        var sumDet = 0.0;
-        for (final d in dets) {
-          final m = double.parse(d.montoAtribuido.toStringAsFixed(2));
-          if (m <= 0.01) continue;
-          sumDet += m;
-          out.add({
-            'concepto': 'Mora pendiente cuota ${d.numeroCuota}',
-            'monto': m,
-            'esMora': true,
-            // Cuota ya pagada en un cobro anterior: no se anida bajo ninguna
-            // línea de este cobro, va al bloque de arrastre.
-            'cuotaPrevia': d.numeroCuota,
-            if (d.mesLabel.isNotEmpty) 'mesCuotaPrevia': d.mesLabel,
-            if (d.diasMora > 0) 'diasMora': d.diasMora,
-            'subtexto': d.subtextoDetalle,
-          });
-        }
-        // Ajuste si la suma de detalle ≠ pendiente (centavos / atribución).
-        final delta = double.parse((pendiente - sumDet).toStringAsFixed(2));
-        if (delta.abs() > 0.01 && out.isNotEmpty) {
-          // Si falta monto sin detalle, línea genérica residual.
-          if (delta > 0.01) {
-            out.add({
-              'concepto': conceptoPendientePreviasGenerico,
-              'monto': delta,
-              'esMora': true,
-            });
-          }
-        }
-      } else {
-        // El rótulo de la línea ya dice "no cobrada en su momento": el
-        // subtexto repetía la misma frase en otra línea.
+    for (final it in calItems) {
+      if (it.asignado <= 0.01) continue;
+      out.add({
+        'concepto':
+            calendarioCuota(numeroCuota: it.numeroCuota, mesLabel: it.mesLabel) +
+            (it.parcial ? sufijoParcial : ''),
+        'monto': it.asignado,
+        'esMora': true,
+        // Para anidar la mora bajo su cuota en el PDF (no altera [concepto],
+        // que es la clave que reconocen los detectores de pago_interes_mora).
+        if (it.numeroCuota > 0) 'numeroCuota': it.numeroCuota,
+        if (it.diasMora > 0) 'diasMora': it.diasMora,
+      });
+    }
+
+    if (pendAsignado > 0.01) {
+      var sumDet = 0.0;
+      for (final it in arrItems) {
+        if (it.asignado <= 0.01) continue;
+        final d = it.origen as MoraPendientePreviaDetalle;
+        sumDet = _r2(sumDet + it.asignado);
+        out.add({
+          'concepto':
+              'Mora pendiente cuota ${it.numeroCuota}'
+              '${it.parcial ? sufijoParcial : ''}',
+          'monto': it.asignado,
+          'esMora': true,
+          // Cuota ya pagada en un cobro anterior: no se anida bajo ninguna
+          // línea de este cobro, va al bloque de arrastre.
+          'cuotaPrevia': it.numeroCuota,
+          if (it.mesLabel.isNotEmpty) 'mesCuotaPrevia': it.mesLabel,
+          if (it.diasMora > 0) 'diasMora': it.diasMora,
+          'subtexto': d.subtextoDetalle,
+        });
+      }
+      // Lo que quedó sin detalle que lo explique: línea genérica residual. El
+      // rótulo ya dice "no cobrada en su momento", así que no lleva subtexto.
+      final resto = _r2(pendAsignado - sumDet);
+      if (resto > 0.01) {
         out.add({
           'concepto': conceptoPendientePreviasGenerico,
-          'monto': pendiente,
+          'monto': resto,
           'esMora': true,
         });
       }

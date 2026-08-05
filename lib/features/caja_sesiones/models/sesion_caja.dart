@@ -1,3 +1,41 @@
+/// Período con que `AppRoleNotifier._startHeartbeat` publica el latido de una
+/// sesión activa. Los umbrales de abajo se derivan de acá: no son números
+/// elegidos a dedo.
+const Duration kLatidoSesionPeriodo = Duration(seconds: 60);
+
+/// Una caja realmente en uso nunca puede tener un latido más viejo que el
+/// período más un margen. Por debajo de esto se puede **afirmar** que otra
+/// máquina la está usando ahora mismo.
+const Duration kLatidoSesionVivo = Duration(seconds: 90);
+
+/// Por encima de esto la sesión quedó abierta y nadie la está tocando (PC
+/// apagada, o cerrada sin red). Entre ambos umbrales **no se sabe**, y el
+/// programa no debe afirmar nada.
+const Duration kLatidoSesionMuerto = Duration(minutes: 5);
+
+// ── Notas de cierre generadas por el sistema ────────────────────────────────
+// Se declaran como constantes para poder distinguir un cierre automático de uno
+// hecho por una persona sin agregar columnas a la base.
+
+const String kNotaCierreCambioDiaJefe = 'Cierre automático por cambio de día';
+const String kNotaCierreCambioDiaCaja =
+    'Cierre automático por cambio de día · sin arqueo';
+const String kNotaCierreTomadaOtraPc =
+    'Cerrada al tomar la caja en otra PC · sin arqueo';
+const String kNotaCierreDuplicada = 'Duplicada por apertura sin conexión';
+
+/// Incluye las notas de versiones anteriores para que las sesiones ya cerradas
+/// también queden bien clasificadas en el cierre de caja.
+const Set<String> kNotasCierreAutomatico = {
+  kNotaCierreCambioDiaJefe,
+  kNotaCierreCambioDiaCaja,
+  kNotaCierreTomadaOtraPc,
+  kNotaCierreDuplicada,
+  'Cerrada al iniciar jornada (modo jefe)',
+  'Cerrada al eliminar operador',
+  'Cerrada: operador inactivo o eliminado',
+};
+
 class SesionCaja {
   final String id;
   final String operadorId;
@@ -34,6 +72,34 @@ class SesionCaja {
   });
 
   bool get estaAbierta => cerradaAt == null;
+
+  /// Antigüedad del último latido.
+  ///
+  /// Una antigüedad negativa significa que el reloj del otro equipo está
+  /// adelantado; se trata como cero porque con relojes desfasados no se puede
+  /// afirmar nada, y equivocarse hacia "recién vista" solo cuesta un clic.
+  Duration antiguedadLatido({DateTime? ahora}) {
+    final hb = (lastHeartbeat ?? abiertaAt).toUtc();
+    final d = (ahora ?? DateTime.now().toUtc()).difference(hb);
+    return d.isNegative ? Duration.zero : d;
+  }
+
+  /// Alguien la está usando **ahora**. Es lo único que el latido permite
+  /// afirmar; fuera de esta ventana solo se puede informar.
+  bool enUsoAhora({DateTime? ahora}) =>
+      estaAbierta && antiguedadLatido(ahora: ahora) < kLatidoSesionVivo;
+
+  /// Quedó abierta y hace rato que no da señales.
+  bool sinSenales({DateTime? ahora}) =>
+      estaAbierta && antiguedadLatido(ahora: ahora) > kLatidoSesionMuerto;
+
+  /// Nadie contó la plata al cerrar.
+  bool get sinArqueo => !estaAbierta && arqueoCierre == null;
+
+  /// La cerró el sistema, no una persona.
+  bool get cierreAutomatico =>
+      !estaAbierta &&
+      kNotasCierreAutomatico.contains((notaCierre ?? '').trim());
 
   factory SesionCaja.fromMap(Map<String, dynamic> m) {
     return SesionCaja(

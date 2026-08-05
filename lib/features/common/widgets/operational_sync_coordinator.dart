@@ -38,6 +38,7 @@ class _OperationalSyncCoordinatorState
   bool _appResumed = true;
   bool _windowFocused = true;
   bool _running = false;
+  DateTime? _ultimoAutocierre;
 
   bool get _desktop =>
       !kIsWeb &&
@@ -88,7 +89,28 @@ class _OperationalSyncCoordinatorState
     unawaited(_tick());
   }
 
+  /// Cierre de cajas que quedaron abiertas de días anteriores.
+  ///
+  /// Va por fuera de [_tick] a propósito: no depende del rol elegido ni de que
+  /// la ventana esté en foco. Con la app cerrada no corre nada, así que ésta es
+  /// la primera oportunidad de detectar el cambio de día — y cubre la PC que se
+  /// suspendió y despierta al otro día antes de que corra un latido.
+  ///
+  /// Throttle de un minuto: se dispara en cada foco de ventana y no tiene
+  /// sentido repetir la consulta a cada alt-tab.
+  Future<void> _autocierreCajas() async {
+    if (!mounted) return;
+    final ahora = DateTime.now();
+    final ultimo = _ultimoAutocierre;
+    if (ultimo != null && ahora.difference(ultimo) < const Duration(minutes: 1)) {
+      return;
+    }
+    _ultimoAutocierre = ahora;
+    await ref.read(appRoleProvider.notifier).autocerrarSesionesVencidas();
+  }
+
   Future<void> _tick() async {
+    unawaited(_autocierreCajas());
     if (!mounted || !_foreground || _running) return;
     final role = ref.read(appRoleProvider);
     if (!role.esJefe && !role.esCaja) return;
@@ -96,7 +118,23 @@ class _OperationalSyncCoordinatorState
     _running = true;
     try {
       final engine = ref.read(syncEngineProvider);
-      if (role.esCaja && engine.pendingCount > 0) {
+      // El jefe también sube solo mientras haya una caja abierta: es la misma
+      // regla que ya usa CajaAutoSyncService.afterMassiveMutation para subir
+      // el cobro recién registrado. Sin esto, si esa subida fallaba nadie la
+      // reintentaba y el cobro quedaba parado hasta que alguien apretara
+      // "Subir pendientes" o cerrara la caja. Con la caja cerrada el jefe
+      // sigue subiendo a mano, como siempre.
+      final puedeSubirSolo =
+          role.esCaja ||
+          (role.esJefe &&
+              role.sesionActiva != null &&
+              role.sesionActiva!.estaAbierta);
+
+      // Se pregunta por trabajo real, no por el contador de pendientes: ese
+      // cuenta también los trabados, y con un registro imposible de subir esto
+      // despertaría la sincronización cada 10 segundos y el indicador viviría
+      // parpadeando. Los trabados entran igual, cada 5 minutos.
+      if (puedeSubirSolo && await engine.hayTrabajoDeSubida) {
         await engine.flushPending();
       }
       final changed = await engine.pullOperationalUpdates();

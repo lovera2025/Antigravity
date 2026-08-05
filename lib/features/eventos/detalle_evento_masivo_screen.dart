@@ -6105,6 +6105,17 @@ class _DetalleEventoMasivoScreenState
                           final exencionPersist = nuevaExencion;
                           final exencionReiniciaPersist = nuevaExencionReinicia;
 
+                          // Bloqueo ANTES de la primera espera. Todo lo de
+                          // arriba es sincrónico, así que hasta acá un segundo
+                          // clic no puede entrar; de acá en adelante sí. Antes
+                          // el bloqueo se activaba recién después del diálogo
+                          // de abrir caja y de dos await más, y en esa ventana
+                          // el botón seguía vivo: un doble clic arrancaba un
+                          // cobro paralelo y la familia terminaba pagando dos
+                          // veces (MONTIEL, 03/08 23:23, cobro completo
+                          // duplicado medio segundo después).
+                          setModalState(() => confirmandoCobro = true);
+
                           // Jefe con caja cerrada: avisar antes de abrir sesión automática.
                           final appRoleCobro = ref.read(appRoleProvider);
                           if (appRoleCobro.esJefe &&
@@ -6133,15 +6144,39 @@ class _DetalleEventoMasivoScreenState
                                 ],
                               ),
                             );
-                            if (abrirCaja != true) return;
+                            if (abrirCaja != true) {
+                              // Canceló: hay que devolver el botón o el modal
+                              // queda con "GUARDANDO..." para siempre.
+                              setModalState(() => confirmandoCobro = false);
+                              return;
+                            }
                             await ref
                                 .read(appRoleProvider.notifier)
                                 .iniciarCajaJefe();
                           }
 
-                          final sesionCajaIdCobro = await ref
-                              .read(appRoleProvider.notifier)
-                              .sesionCajaIdParaCobro();
+                          // Sin caja a la que atribuir el cobro se frena acá.
+                          // Guardarlo huérfano sería peor: no aparecería en el
+                          // cierre de nadie y recién se notaría en el arqueo,
+                          // cuando ya no se sabe de quién era.
+                          final String sesionCajaIdCobro;
+                          try {
+                            sesionCajaIdCobro = await ref
+                                .read(appRoleProvider.notifier)
+                                .sesionCajaIdParaCobro();
+                          } on SinCajaAbiertaException catch (e) {
+                            setModalState(() => confirmandoCobro = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(e.mensaje),
+                                  backgroundColor: Colors.redAccent,
+                                  duration: const Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                            return;
+                          }
                           final double pctCargoInforme =
                               double.tryParse(
                                 prefsPctStr.replaceAll(',', '.'),
@@ -6150,7 +6185,7 @@ class _DetalleEventoMasivoScreenState
                           final double montoCargoInformeParsed =
                               CurrencyInputFormatter.parse(prefsCargoMontoStr);
 
-                          setModalState(() => confirmandoCobro = true);
+                          // (el bloqueo ya se activó antes de la primera espera)
                           final autoSyncCheckpoint = DateTime.now().toUtc();
 
                           try {

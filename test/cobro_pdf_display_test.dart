@@ -119,13 +119,13 @@ void main() {
     });
   });
 
-  group('compactarCuotasBaseParaResumenPdf', () {
+  group('compactarCuotasBaseParaPdf', () {
     test('compacta cuotas consecutivas sin mora', () {
       final finales = _finales(
         [_previewBase(), _previewBase(), _previewBase()],
         cPagadas: 0,
       );
-      final out = compactarCuotasBaseParaResumenPdf(finales);
+      final out = compactarCuotasBaseParaPdf(finales);
       expect(out.length, 1);
       expect(out.single['concepto'], 'Cuotas base (1–3/9)');
     });
@@ -141,7 +141,7 @@ void main() {
         ],
         cPagadas: 0,
       );
-      final out = compactarCuotasBaseParaResumenPdf(finales);
+      final out = compactarCuotasBaseParaPdf(finales);
       final bases = out.where((c) => c['esPlanLiquidacion'] == true).toList();
       expect(bases.length, 2);
       expect(bases.first['concepto'], 'Cuota Base (1/9)');

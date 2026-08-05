@@ -38,7 +38,15 @@ class SesionesCajaRepository {
     return SesionCaja.fromMap(rows.first);
   }
 
-  Future<SesionCaja?> sesionAbiertaDeOperador(String operadorId) async {
+  /// Todas las sesiones abiertas de un operador, de la más vieja a la más nueva.
+  ///
+  /// Normalmente hay una sola (índice único parcial). Puede haber más si dos
+  /// dispositivos abrieron **sin verse** (sin red): el índice es local a cada
+  /// SQLite, así que ninguno lo impide. El orden es determinístico —
+  /// `abierta_at ASC, id ASC` — para que todos los dispositivos elijan la misma
+  /// apenas sincronizan, en vez de quedar apuntando a filas distintas para
+  /// siempre.
+  Future<List<SesionCaja>> sesionesAbiertasDeOperador(String operadorId) async {
     final db = await LocalDatabase.instance;
     final rows = await db.rawQuery(
       '''
@@ -46,13 +54,16 @@ class SesionesCajaRepository {
       FROM sesiones_caja s
       LEFT JOIN operadores_caja o ON o.id = s.operador_id
       WHERE s.operador_id = ? AND s.cerrada_at IS NULL
-      ORDER BY s.abierta_at DESC
-      LIMIT 1
+      ORDER BY s.abierta_at ASC, s.id ASC
     ''',
       [operadorId],
     );
-    if (rows.isEmpty) return null;
-    return SesionCaja.fromMap(rows.first);
+    return rows.map(SesionCaja.fromMap).toList();
+  }
+
+  Future<SesionCaja?> sesionAbiertaDeOperador(String operadorId) async {
+    final abiertas = await sesionesAbiertasDeOperador(operadorId);
+    return abiertas.isEmpty ? null : abiertas.first;
   }
 
   Future<List<SesionCaja>> sesionesAbiertas() async {
@@ -154,30 +165,28 @@ class SesionesCajaRepository {
   /// Sin corte Mañana/Tarde: el jefe no hereda turnos de caja.
   Future<SesionCaja> ensureSesionModoJefe() async {
     final op = await _operadores.ensureOperadorModoJefe();
-    final hoy = ArTime.nowAr();
-    final y = hoy.year;
-    final m = hoy.month;
-    final d = hoy.day;
+
+    // Regla de corte única, compartida con el autocierre del provider: una
+    // sesión de ayer se cierra sellada a las 23:59 de ayer, no con la hora del
+    // cobro de hoy.
+    await cerrarSesionesVencidasDeOperador(
+      op.id,
+      notaCierre: kNotaCierreCambioDiaJefe,
+    );
+    // Si dos dispositivos abrieron sin verse, converger en una sola.
+    await consolidarSesionesDuplicadas(op.id);
 
     final abierta = await sesionAbiertaDeOperador(op.id);
     if (abierta != null) {
-      final ar = ArTime.toAr(abierta.abiertaAt);
-      final sameDay = ar.year == y && ar.month == m && ar.day == d;
-      if (sameDay) {
-        // Upsert remoto: si el encolado original quedó dead-letter (id legacy
-        // de 4.5.1), esto lo repone. Deduplicado e idempotente.
-        await SyncQueue.enqueue(
-          tabla: 'sesiones_caja',
-          operacion: SyncOperation.insert,
-          registroId: abierta.id,
-          payload: abierta.toSyncPayload(),
-        );
-        return abierta.copyWith(operadorNombre: kOperadorModoJefeNombre);
-      }
-      await cerrar(
-        sesionId: abierta.id,
-        notaCierre: 'Cerrada al iniciar jornada (modo jefe)',
+      // Upsert remoto: si el encolado original quedó dead-letter (id legacy
+      // de 4.5.1), esto lo repone. Deduplicado e idempotente.
+      await SyncQueue.enqueue(
+        tabla: 'sesiones_caja',
+        operacion: SyncOperation.insert,
+        registroId: abierta.id,
+        payload: abierta.toSyncPayload(),
       );
+      return abierta.copyWith(operadorNombre: kOperadorModoJefeNombre);
     }
 
     // Si la sesión jefe del día ya se cerró (arqueo hecho), NO se reutiliza:
@@ -192,10 +201,19 @@ class SesionesCajaRepository {
     return creada.copyWith(operadorNombre: kOperadorModoJefeNombre);
   }
 
+  /// Cierra una sesión. [cerradaAtOverride] sella `cerrada_at` en un instante
+  /// distinto al actual — lo usan los cierres automáticos para quedar
+  /// registrados a las 23:59 del día al que pertenecen, no en el momento en que
+  /// se detectaron.
+  ///
+  /// `updated_at` y `last_heartbeat` siguen siendo el instante real: el motor de
+  /// sync usa `updated_at` como watermark, y sellarlo en el pasado dejaría el
+  /// UPDATE sin subir nunca.
   Future<SesionCaja> cerrar({
     required String sesionId,
     double? arqueoCierre,
     String? notaCierre,
+    DateTime? cerradaAtOverride,
   }) async {
     final actual = await getById(sesionId);
     if (actual == null) throw StateError('Sesión no encontrada');
@@ -203,7 +221,7 @@ class SesionesCajaRepository {
 
     final now = DateTime.parse(ArTime.nowUtcIso());
     final cerrada = actual.copyWith(
-      cerradaAt: now,
+      cerradaAt: cerradaAtOverride?.toUtc() ?? now,
       arqueoCierre: arqueoCierre,
       notaCierre: notaCierre?.trim().isEmpty == true
           ? null
@@ -238,6 +256,72 @@ class SesionesCajaRepository {
       sesionId: abierta.id,
       notaCierre: notaCierre ?? 'Cerrada al eliminar operador',
     );
+  }
+
+  /// Cierra las sesiones abiertas de [operadorId] que pertenecen a un día AR
+  /// anterior al de hoy, **sellando cada una a las 23:59:59 de su propio día**.
+  ///
+  /// El sello es lo que hace que no importe cuándo se detecte: con la app
+  /// cerrada no corre nada, así que el cierre ocurre recién al volver a abrir —
+  /// pero queda registrado en el día que corresponde, se abra al otro día o tres
+  /// días después.
+  ///
+  /// Idempotente y barato (consulta indexada): se puede llamar en cada tick del
+  /// latido y en cada arranque sin costo. Devuelve las sesiones que cerró.
+  Future<List<SesionCaja>> cerrarSesionesVencidasDeOperador(
+    String operadorId, {
+    required String notaCierre,
+  }) async {
+    final abiertas = await sesionesAbiertasDeOperador(operadorId);
+    if (abiertas.isEmpty) return const [];
+    final ahora = ArTime.nowUtc();
+    final cerradas = <SesionCaja>[];
+    for (final s in abiertas) {
+      if (ArTime.mismoDia(s.abiertaAt, ahora)) continue;
+      cerradas.add(
+        await cerrar(
+          sesionId: s.id,
+          notaCierre: notaCierre,
+          cerradaAtOverride: ArTime.finDeDiaArUtc(s.abiertaAt),
+        ),
+      );
+    }
+    return cerradas;
+  }
+
+  /// Autocierre de la caja de modo jefe al cambiar el día.
+  ///
+  /// No depende del rol logueado ni crea el operador: se puede llamar desde
+  /// cualquier dispositivo, así que la PC del operario que abre a la mañana ya
+  /// cierra la caja que el jefe dejó abierta anoche, para todos.
+  Future<List<SesionCaja>> cerrarSesionJefeVencida() =>
+      cerrarSesionesVencidasDeOperador(
+        kOperadorModoJefeId,
+        notaCierre: kNotaCierreCambioDiaJefe,
+      );
+
+  /// Cierra las sesiones abiertas sobrantes de un operador (solo puede haber
+  /// una). Aparecen cuando dos dispositivos abrieron **sin verse** por falta de
+  /// red: el índice único es local a cada SQLite y el remoto rechaza la segunda
+  /// en silencio.
+  ///
+  /// Conserva la más vieja — la misma que elige [sesionAbiertaDeOperador] en
+  /// todos los dispositivos — y cierra solo las que **no dan señales**: una que
+  /// sigue latiendo la está usando alguien ahora mismo, y sacársela de abajo
+  /// sería peor que el duplicado.
+  Future<List<SesionCaja>> consolidarSesionesDuplicadas(
+    String operadorId,
+  ) async {
+    final abiertas = await sesionesAbiertasDeOperador(operadorId);
+    if (abiertas.length < 2) return const [];
+    final cerradas = <SesionCaja>[];
+    for (final s in abiertas.skip(1)) {
+      if (!s.sinSenales()) continue;
+      cerradas.add(
+        await cerrar(sesionId: s.id, notaCierre: kNotaCierreDuplicada),
+      );
+    }
+    return cerradas;
   }
 
   /// Cierra cajas abiertas de operadores inactivos o eliminados (sesiones huérfanas).
@@ -330,6 +414,32 @@ class SesionesCajaRepository {
     try {
       await _syncEngine.flushPending(createdSince: createdSince);
     } catch (_) {}
+  }
+
+  /// Sube pendientes e informa si [sesionId] **realmente** llegó al servidor:
+  /// después del intento, ¿quedó algo suyo en la cola?
+  ///
+  /// `flushPending` nunca lanza — sin conexión sale por lo silencioso —, así que
+  /// preguntarle a la cola es la única forma honesta de saberlo. Lo necesita el
+  /// cierre de caja: un cierre que no subió reaparece horas después en otra PC
+  /// como "caja abierta", y si nadie avisó en el momento eso se vive como un bug
+  /// del programa en vez de como lo que es, una PC que estaba sin internet.
+  Future<bool> flushConfirmandoSesion(String sesionId) async {
+    await flushBestEffort();
+    try {
+      final db = await LocalDatabase.instance;
+      final rows = await db.rawQuery(
+        '''
+        SELECT 1 FROM _sync_queue
+        WHERE tabla = 'sesiones_caja' AND registro_id = ?
+        LIMIT 1
+      ''',
+        [sesionId],
+      );
+      return rows.isEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 }
 

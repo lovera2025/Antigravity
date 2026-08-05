@@ -60,19 +60,37 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
           ? null
           : CurrencyInputFormatter.parse(arqueoText);
       final notifier = ref.read(appRoleProvider.notifier);
+      final bool sincronizado;
       if (ref.read(appRoleProvider).esJefe) {
         // El jefe cierra su caja pero sigue logueado en su dashboard.
-        await notifier.cerrarCajaJefe(
+        sincronizado = await notifier.cerrarCajaJefe(
           arqueoCierre: arqueo,
           notaCierre: _notaCtrl.text,
         );
       } else {
-        await notifier.cerrarSesionCaja(
+        sincronizado = await notifier.cerrarSesionCaja(
           arqueoCierre: arqueo,
           notaCierre: _notaCtrl.text,
         );
       }
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      // Si el cierre quedó solo en esta PC hay que decirlo AHORA. Callarlo hace
+      // que el problema reaparezca después en otra PC ("figura abierta")
+      // desconectado de su causa, que es lo que se vive como un bug.
+      if (!sincronizado) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Caja cerrada. No se pudo avisar al servidor (sin conexión): '
+              'se sincroniza sola cuando vuelva internet. Hasta entonces, en '
+              'otra PC puede figurar abierta.',
+            ),
+            backgroundColor: Colors.orangeAccent,
+            duration: Duration(seconds: 8),
+          ),
+        );
+      }
+      Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         setState(() {

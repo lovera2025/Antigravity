@@ -19,8 +19,6 @@ class SesionCajaStatusChip extends ConsumerStatefulWidget {
 class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
   List<SesionCaja> _abiertas = [];
   Timer? _poll;
-  static const _stale = Duration(seconds: 90);
-  static const _muerta = Duration(minutes: 5);
 
   Future<void> _refresh() async {
     try {
@@ -43,20 +41,13 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
     super.dispose();
   }
 
-  Color _colorFor(SesionCaja s) {
-    final hb = s.lastHeartbeat ?? s.abiertaAt;
-    final age = DateTime.now().toUtc().difference(hb.toUtc());
-    if (age > _stale) return Colors.amber;
-    return Colors.greenAccent;
-  }
+  Color _colorFor(SesionCaja s) =>
+      s.enUsoAhora() ? Colors.greenAccent : Colors.amber;
 
-  /// Sin heartbeat por más de [_muerta] la app se cerró sin cerrar la caja:
-  /// se muestra como cerrada. Desde v4.6 la sesión de modo jefe también
+  /// Sin latido por más de [kLatidoSesionMuerto] la app se cerró sin cerrar la
+  /// caja: se muestra como cerrada. Desde v4.6 la sesión de modo jefe también
   /// late mientras la app está abierta, así que aplica la misma regla.
-  bool _viva(SesionCaja s) {
-    final hb = s.lastHeartbeat ?? s.abiertaAt;
-    return DateTime.now().toUtc().difference(hb.toUtc()) <= _muerta;
-  }
+  bool _viva(SesionCaja s) => !s.sinSenales();
 
   @override
   Widget build(BuildContext context) {

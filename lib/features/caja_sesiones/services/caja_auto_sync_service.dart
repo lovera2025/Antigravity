@@ -11,7 +11,7 @@ class CajaAutoSyncService {
 
   const CajaAutoSyncService(this._role, this._sesiones, this._syncEngine);
 
-  Future<bool> refreshBeforePayment() async {
+  Future<bool> _pullConReintentos() async {
     for (var intento = 0; intento < 3; intento++) {
       final ok = await _syncEngine.pullOperationalUpdates();
       if (ok) return true;
@@ -24,6 +24,13 @@ class CajaAutoSyncService {
     }
     return false;
   }
+
+  Future<bool> refreshBeforePayment() => _pullConReintentos();
+
+  /// Antes de abrir caja: sin datos frescos no hay forma de saber si el mismo
+  /// operador la tiene abierta en otra PC. Devuelve `false` si no se pudo
+  /// verificar — en ese caso **no se bloquea**, solo se informa.
+  Future<bool> refreshBeforeOpen() => _pullConReintentos();
 
   /// Sube únicamente entradas de cola tocadas desde [startedAt].
   ///

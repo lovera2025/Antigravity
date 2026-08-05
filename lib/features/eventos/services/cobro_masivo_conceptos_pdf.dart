@@ -376,12 +376,15 @@ final _reCuotaBaseSimple = RegExp(
   caseSensitive: false,
 );
 
-/// Compacta cuotas base consecutivas del mismo monto (resumen a abonar).
-/// Ej.: 9× "Cuota Base (n/9)" → "Cuotas base (1–9/9)".
+/// Compacta cuotas base consecutivas del mismo monto, para que el papel entre
+/// en la hoja. Ej.: 9× "Cuota Base (n/9)" → "Cuotas base (1–9/9)".
 ///
-/// No compacta un tramo que tenga mora anidada: fusionar esas cuotas dejaría
-/// al interés colgando de una línea que ya no lo nombra.
-List<Map<String, dynamic>> compactarCuotasBaseParaResumenPdf(
+/// La usan tanto el resumen a abonar como el recibo.
+///
+/// El autodesactivado es **por tramo**: un tramo con mora anidada no se fusiona
+/// (dejaría al interés colgando de una línea que ya no lo nombra), pero los
+/// tramos sin mora del mismo cobro sí se compactan.
+List<Map<String, dynamic>> compactarCuotasBaseParaPdf(
   List<Map<String, dynamic>> lineas,
 ) {
   final cuotasConMora = lineas
@@ -645,6 +648,74 @@ List<Map<String, dynamic>> lineasDisplayParaPdf(
   }
 
   return out;
+}
+
+/// Versión corta de un rótulo de línea, para cuando el papel no entra.
+///
+/// Dice lo mismo en menos lugar; no inventa ni omite datos:
+///   `Cuota 3 de 9 — venció 31/05/2026` → `Cuota 3/9 · vto 31/05`
+///   `Cuotas 1 a 9 de 9`                → `Cuotas 1–9/9`
+///   `Mesa extra 2 — cuota 3 de 9`      → `Mesa 2 · cuota 3/9`
+///   `Mora — 23 días fuera de término`  → `Mora · 23 d`
+///   `Mora de la cuota 2 de May — …`    → `Mora cuota 2 (May)`
+///
+/// Solo transforma lo que reconoce: cualquier rótulo con otra forma se
+/// devuelve intacto, así una etiqueta nueva nunca sale mutilada.
+String abreviarDisplayPdf(String display) {
+  var t = display.trim();
+  if (t.isEmpty) return t;
+
+  // Mora de arrastre: "Mora de la cuota 2 de May — 23 días …, no cobrada …".
+  final arrastre = RegExp(
+    r'^Mora de la cuota (\d+)(?: de ([^\s—,]+))?',
+    caseSensitive: false,
+  ).firstMatch(t);
+  if (arrastre != null) {
+    final mes = arrastre.group(2);
+    return mes == null
+        ? 'Mora cuota ${arrastre.group(1)}'
+        : 'Mora cuota ${arrastre.group(1)} ($mes)';
+  }
+
+  // Mora anidada: "Mora — 23 días fuera de término".
+  final moraDias = RegExp(
+    r'^Mora\s*[—-]\s*(\d+) d',
+    caseSensitive: false,
+  ).firstMatch(t);
+  if (moraDias != null) return 'Mora · ${moraDias.group(1)} d';
+
+  // Rango ya compactado: "Cuotas 1 a 9 de 9".
+  t = t.replaceAllMapped(
+    RegExp(r'^Cuotas (\d+) a (\d+) de (\d+)', caseSensitive: false),
+    (m) => 'Cuotas ${m[1]}–${m[2]}/${m[3]}',
+  );
+
+  // "Cuota 3 de 9" al principio conserva la mayúscula; el resto ("Mesa extra 2
+  // — cuota 3 de 9") va en minúscula. El orden importa: la regla genérica es
+  // insensible a mayúsculas y si corriera primero se comería la inicial.
+  t = t.replaceAllMapped(
+    RegExp(r'^Cuota (\d+) de (\d+)'),
+    (m) => 'Cuota ${m[1]}/${m[2]}',
+  );
+  t = t.replaceAllMapped(
+    RegExp(r'\bcuota (\d+) de (\d+)', caseSensitive: false),
+    (m) => 'cuota ${m[1]}/${m[2]}',
+  );
+
+  // "Mesa extra 2 — cuota 3/9" → "Mesa 2 · cuota 3/9"; ídem sillas.
+  t = t.replaceAll(RegExp(r'\bMesa extra\b', caseSensitive: false), 'Mesa');
+  t = t.replaceAll(RegExp(r'\bSillas extra\b', caseSensitive: false), 'Sillas');
+
+  // Vencimiento: "— venció 31/05/2026" → "· vto 31/05".
+  t = t.replaceAllMapped(
+    RegExp(r'\s*[—-]\s*(?:venci[oó]|vence) (\d{2})/(\d{2})/\d{4}'),
+    (m) => ' · vto ${m[1]}/${m[2]}',
+  );
+
+  // Separadores largos que ya no hacen falta.
+  t = t.replaceAll(RegExp(r'\s*[—]\s*'), ' · ');
+
+  return t.trim();
 }
 
 /// Subtítulo del bloque de moras que no corresponden a este cobro.

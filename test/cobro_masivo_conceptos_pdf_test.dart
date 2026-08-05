@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/features/eventos/services/cobro_masivo_conceptos_pdf.dart';
 
 void main() {
-  group('compactarCuotasBaseParaResumenPdf', () {
+  group('compactarCuotasBaseParaPdf', () {
     test('agrupa 9 cuotas base iguales en una línea', () {
       final conceptos = [
         for (var i = 1; i <= 9; i++)
@@ -18,7 +18,7 @@ void main() {
           'esMora': true,
         },
       ];
-      final out = compactarCuotasBaseParaResumenPdf(conceptos);
+      final out = compactarCuotasBaseParaPdf(conceptos);
       expect(out.length, 2);
       expect(out[0]['concepto'], 'Cuotas base (1–9/9)');
       expect(out[0]['monto'], closeTo(315000, 0.01));
@@ -41,7 +41,7 @@ void main() {
           'esPlanLiquidacion': true,
         },
       ];
-      final out = compactarCuotasBaseParaResumenPdf(conceptos);
+      final out = compactarCuotasBaseParaPdf(conceptos);
       expect(out.length, 2);
       expect(out[0]['concepto'], 'Cuota Base (1/9)');
     });
