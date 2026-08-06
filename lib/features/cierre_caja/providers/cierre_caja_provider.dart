@@ -15,6 +15,7 @@ import '../../mi_empresa/repositories/finanzas_repository.dart';
 import '../models/guia_cambio_movimiento.dart';
 import '../models/turno_caja.dart';
 import '../repositories/cierre_caja_repository.dart';
+import '../services/datos_cierre_sesion.dart';
 
 class CierreCajaState {
   final DateTime dia;
@@ -196,14 +197,6 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     return DateTime(ar.year, ar.month, ar.day);
   }
 
-  static TurnoCaja _turnoDeSesion(SesionCaja sesion) {
-    if (esOperadorModoJefeId(sesion.operadorId) ||
-        sesion.etiqueta == kEtiquetaModoJefe) {
-      return TurnoCaja.dia;
-    }
-    return sesion.etiqueta == 'Tarde' ? TurnoCaja.tarde : TurnoCaja.manana;
-  }
-
   static String _fechaAString(DateTime dia) =>
       '${dia.year.toString().padLeft(4, '0')}-'
       '${dia.month.toString().padLeft(2, '0')}-'
@@ -288,7 +281,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       dia: _diaArHoy(),
       turno: appRole.sesionActiva == null
           ? TurnoCaja.dia
-          : _turnoDeSesion(appRole.sesionActiva!),
+          : turnoDeSesion(appRole.sesionActiva!),
       sesionSeleccionadaId: appRole.sesionActiva?.id,
       consolidado: appRole.esJefe,
       corteHorarioAr: 14,
@@ -335,7 +328,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       sesionSeleccionadaId: sesionId,
       consolidado: false,
       sinSesiones: false,
-      turno: _turnoDeSesion(sesion),
+      turno: turnoDeSesion(sesion),
     );
     await _refrescar();
   }
@@ -395,7 +388,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     final sesion = ref.read(appRoleProvider).sesionActiva;
     state = state.copyWith(
       dia: _diaArHoy(),
-      turno: sesion == null ? turnoActualAr() : _turnoDeSesion(sesion),
+      turno: sesion == null ? turnoActualAr() : turnoDeSesion(sesion),
       sesionSeleccionadaId: sesion?.id,
       consolidado: false,
       sinSesiones: false,
@@ -593,11 +586,19 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
           ? state.turno
           : consolidado
           ? TurnoCaja.dia
-          : (seleccionada == null ? state.turno : _turnoDeSesion(seleccionada));
+          : (seleccionada == null ? state.turno : turnoDeSesion(seleccionada));
+
+      final rangoSinSesion = sinSesiones
+          ? rangoHorarioAr(diaNorm, turno, corteHora: state.corteHorarioAr)
+          : null;
 
       final results = await Future.wait([
-        finanzasRepo.obtenerIngresosDetallados(),
-        egresosRepo.getEgresosConEvento(),
+        cargarDatosCierreSesion(
+          sesionIds: ids,
+          rangoSinSesion: rangoSinSesion,
+          finanzasRepo: finanzasRepo,
+          egresosRepo: egresosRepo,
+        ),
         sinSesiones || seleccionadaId == null || consolidado
             ? Future<GuiaCambioResumen>.value(
                 const GuiaCambioResumen(
@@ -615,104 +616,23 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
             : cierreRepo.obtenerAnotacionTexto(seleccionadaId),
       ]);
 
-      final ingresosFull = results[0] as List<IngresoDetallado>;
-      final egresosRaw = results[1] as List<dynamic>;
-      final egresosFull = egresosRaw.map((e) => Egreso.fromJson(e)).toList();
-      final guia = results[2] as GuiaCambioResumen;
-      final anotacion = results[3] as String?;
+      final datos = results[0] as DatosCierreSesion;
+      final guia = results[1] as GuiaCambioResumen;
+      final anotacion = results[2] as String?;
 
-      final rangoSinSesion = sinSesiones
-          ? rangoHorarioAr(
-              diaNorm,
-              turno,
-              corteHora: state.corteHorarioAr,
-            )
-          : null;
-
-      double efectivoBruto = 0;
-      double transferenciaBruta = 0;
-      final ingresosTurno = <IngresoDetallado>[];
-      for (final i in ingresosFull) {
-        if (sinSesiones) {
-          final sid = i.sesionCajaId?.trim();
-          if (sid != null && sid.isNotEmpty) continue;
-          if (rangoSinSesion == null || !rangoSinSesion.contiene(i.fecha)) {
-            continue;
-          }
-        } else {
-          final sid = i.sesionCajaId;
-          if (sid == null || !ids.contains(sid)) continue;
-        }
-        final mp = i.medioPago?.toLowerCase().trim();
-        ingresosTurno.add(i);
-        if (mp == 'transferencia') {
-          transferenciaBruta += i.monto;
-        } else {
-          efectivoBruto += i.monto;
-        }
-      }
-      ingresosTurno.sort((a, b) => b.fecha.compareTo(a.fecha));
-
-      final egresosTurno = <Egreso>[];
-      final retirosTurno = <Egreso>[];
-      double egresosEfectivo = 0;
-      double egresosTransferencia = 0;
-      double retirosEfectivo = 0;
-      double retirosTransferencia = 0;
-      for (final e in egresosFull) {
-        if (sinSesiones) {
-          final sid = e.sesionCajaId?.trim();
-          if (sid != null && sid.isNotEmpty) continue;
-          final fe = e.fecha;
-          if (fe == null ||
-              rangoSinSesion == null ||
-              !rangoSinSesion.contiene(fe)) {
-            continue;
-          }
-        } else {
-          final sid = e.sesionCajaId;
-          if (sid == null || !ids.contains(sid)) continue;
-        }
-        egresosTurno.add(e);
-        final mp = (e.medioPago ?? '').toLowerCase().trim();
-        if (mp == 'transferencia') {
-          egresosTransferencia += e.monto;
-        } else {
-          egresosEfectivo += e.monto;
-        }
-        if ((e.categoria ?? '').trim() == kCategoriaRetiroCaja) {
-          retirosTurno.add(e);
-          if (mp == 'transferencia') {
-            retirosTransferencia += e.monto;
-          } else {
-            retirosEfectivo += e.monto;
-          }
-        }
-      }
-      egresosTurno.sort((a, b) {
-        final fa = a.fecha;
-        final fb = b.fecha;
-        if (fa == null && fb == null) return 0;
-        if (fa == null) return 1;
-        if (fb == null) return -1;
-        return fb.compareTo(fa);
-      });
-      retirosTurno.sort((a, b) {
-        final fa = a.fecha;
-        final fb = b.fecha;
-        if (fa == null && fb == null) return 0;
-        if (fa == null) return 1;
-        if (fb == null) return -1;
-        return fb.compareTo(fa);
-      });
-
-      final otrosEgresosTurno = egresosTurno
-          .where((e) => (e.categoria ?? '').trim() != kCategoriaRetiroCaja)
-          .toList();
-
-      final efectivoNeto = efectivoBruto - egresosEfectivo;
-      final transferenciaNeta = transferenciaBruta - egresosTransferencia;
-      final totalNeto = efectivoNeto + transferenciaNeta;
+      final ingresosTurno = datos.ingresos;
+      final egresosTurno = datos.egresos;
+      final retirosTurno = datos.retiros;
+      final otrosEgresosTurno = datos.otrosEgresos;
+      final efectivoBruto = datos.efectivoBruto;
+      final transferenciaBruta = datos.transferenciaBruta;
+      final egresosEfectivo = datos.egresosEfectivo;
+      final egresosTransferencia = datos.egresosTransferencia;
+      final retirosEfectivo = datos.retirosEfectivo;
+      final retirosTransferencia = datos.retirosTransferencia;
+      final efectivoNeto = datos.efectivoNeto;
+      final transferenciaNeta = datos.transferenciaNeta;
+      final totalNeto = datos.totalNeto;
 
       state = state.copyWith(
         sesionesDia: sesiones,

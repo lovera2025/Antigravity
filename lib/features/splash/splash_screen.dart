@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../main.dart';
+import '../common/services/pdf_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,7 +11,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
   // Controladores de Animación
   late AnimationController _bgController;
   late AnimationController _emblemController;
@@ -30,27 +32,46 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     super.initState();
 
     // 1. Configuración de Controladores
-    _bgController = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000));
-    _emblemController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
-    _textController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
-    _shimmerController = AnimationController(vsync: this, duration: const Duration(milliseconds: 3000))..repeat();
+    _bgController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
+    _emblemController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _textController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    )..repeat();
 
     // 2. Definición de Tweens
-    _bgOpacity = Tween<double>(begin: 0.0, end: 0.15).animate(
-      CurvedAnimation(parent: _bgController, curve: Curves.easeInOut),
-    );
+    _bgOpacity = Tween<double>(
+      begin: 0.0,
+      end: 0.15,
+    ).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOut));
 
     _emblemScale = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _emblemController, curve: Curves.elasticOut),
     );
 
-    _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeIn),
-    );
+    _textOpacity = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _textController, curve: Curves.easeIn));
 
     _shimmerPosition = Tween<double>(begin: -1.0, end: 2.0).animate(
       CurvedAnimation(parent: _shimmerController, curve: Curves.linear),
     );
+
+    // Las fuentes de los PDF se resuelven durante el splash, en paralelo con la
+    // animación: la espera de red se paga acá, donde no se nota, en vez de en el
+    // cierre de caja con la plata en la mano. No se espera el resultado.
+    PdfService.precalentarFuentes();
 
     // 3. Orquestación de la Animación (Nacimiento de Marca)
     _startSequence();
@@ -69,19 +90,26 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     if (mounted) _textController.forward();
 
     // 4. Temporizador de Navegación
-    _navigationTimer = Timer(const Duration(seconds: 5), () => _navigateToNext());
+    _navigationTimer = Timer(
+      const Duration(seconds: 5),
+      () => _navigateToNext(),
+    );
   }
 
   Future<void> _navigateToNext() async {
     if (!mounted) return;
-    
+
     // Si ya navegamos manualmente a otra ruta (por ejemplo por URL en Web), abortar
     final currentRoute = ModalRoute.of(context)?.settings.name;
-    if (currentRoute != null && currentRoute != '/' && currentRoute != '/splash') return;
+    if (currentRoute != null &&
+        currentRoute != '/' &&
+        currentRoute != '/splash')
+      return;
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const AuthWrapper(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const AuthWrapper(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -171,17 +199,18 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           width: 280,
                           height: 280,
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.celebration_rounded,
-                            size: 140,
-                            color: primaryGold,
-                          ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.celebration_rounded,
+                                size: 140,
+                                color: primaryGold,
+                              ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 40),
 
                 // Texto Junior Eventos (Serif Playfair Display)
@@ -226,10 +255,7 @@ class PremiumBackgroundPainterWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _PremiumLinesPainter(),
-    );
+    return CustomPaint(size: Size.infinite, painter: _PremiumLinesPainter());
   }
 }
 
@@ -242,7 +268,7 @@ class _PremiumLinesPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     const spacing = 40.0;
-    
+
     // Dibujamos un patrón de malla inclinada 45 grados (look geométrico luxury)
     for (double i = -size.height; i < size.width; i += spacing) {
       canvas.drawLine(
@@ -251,7 +277,7 @@ class _PremiumLinesPainter extends CustomPainter {
         paint,
       );
     }
-    
+
     for (double i = 0; i < size.width + size.height; i += spacing) {
       canvas.drawLine(
         Offset(i, 0),

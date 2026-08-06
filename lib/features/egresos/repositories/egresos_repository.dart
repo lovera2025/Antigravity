@@ -30,18 +30,44 @@ class EgresosRepository {
       ORDER BY e.fecha DESC
     ''');
 
-    // Transformar al formato esperado por la UI (evitando romper el resto del código)
-    // Supabase devuelve el objeto join anidado, lo emulamos aquí.
-    return maps.map((row) {
-      return {
-        ...row,
-        'eventos': {
-          'id': row['evento_id'],
-          'tipo': row['evento_tipo'],
-          'clientes': {'nombre_completo': row['cliente_nombre']},
-        },
-      };
-    }).toList();
+    return maps.map(_conEventoAnidado).toList();
+  }
+
+  /// Egresos de una o varias sesiones de caja, filtrando **en el SQL**.
+  ///
+  /// [getEgresosConEvento] trae todos los egresos de la historia; para el cierre
+  /// de una sesión eso es leer todo para usar dos filas.
+  Future<List<Map<String, dynamic>>> getEgresosDeSesiones(
+    Set<String> sesionIds,
+  ) async {
+    if (sesionIds.isEmpty) return [];
+    final db = await LocalDatabase.instance;
+    final ph = List.filled(sesionIds.length, '?').join(',');
+    final maps = await db.rawQuery('''
+      SELECT
+        e.*,
+        ev.tipo as evento_tipo,
+        c.nombre_completo as cliente_nombre
+      FROM egresos e
+      LEFT JOIN eventos ev ON e.evento_id = ev.id
+      LEFT JOIN clientes c ON ev.cliente_id = c.id
+      WHERE e.sesion_caja_id IN ($ph)
+      ORDER BY e.fecha DESC
+    ''', sesionIds.toList());
+    return maps.map(_conEventoAnidado).toList();
+  }
+
+  /// Formato que espera la UI: Supabase devuelve el join anidado y acá se emula,
+  /// para no romper el resto del código.
+  Map<String, dynamic> _conEventoAnidado(Map<String, dynamic> row) {
+    return {
+      ...row,
+      'eventos': {
+        'id': row['evento_id'],
+        'tipo': row['evento_tipo'],
+        'clientes': {'nombre_completo': row['cliente_nombre']},
+      },
+    };
   }
 
   /// Registra un nuevo gasto vinculado a un evento (Offline-first).

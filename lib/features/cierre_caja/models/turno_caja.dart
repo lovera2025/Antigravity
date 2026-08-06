@@ -1,4 +1,6 @@
 import '../../../core/utils/ar_time.dart';
+import '../../caja_sesiones/models/modo_jefe_caja.dart';
+import '../../caja_sesiones/models/sesion_caja.dart';
 
 /// Categoría usada en la tabla `egresos` para etiquetar retiros de caja.
 /// Se centraliza acá para que `cierre_caja_provider` y `finanzas_provider`
@@ -111,4 +113,18 @@ RangoHorarioAr rangoHorarioAr(
 TurnoCaja turnoActualAr({int corteHora = 14}) {
   final ar = ArTime.nowAr();
   return ar.hour < corteHora ? TurnoCaja.manana : TurnoCaja.tarde;
+}
+
+/// Turno que le corresponde a una sesión, por su etiqueta.
+///
+/// El modo jefe no tiene turno: su caja abarca el día entero.
+///
+/// Vive acá y no en el provider porque los papeles del cierre lo necesitan
+/// después de que la sesión se cerró, cuando ya no hay estado de pantalla.
+TurnoCaja turnoDeSesion(SesionCaja sesion) {
+  if (esOperadorModoJefeId(sesion.operadorId) ||
+      sesion.etiqueta == kEtiquetaModoJefe) {
+    return TurnoCaja.dia;
+  }
+  return sesion.etiqueta == 'Tarde' ? TurnoCaja.tarde : TurnoCaja.manana;
 }

@@ -64,6 +64,21 @@ class SinCajaAbiertaException implements Exception {
   String toString() => mensaje;
 }
 
+/// Resultado de cerrar una caja.
+///
+/// Devuelve la sesión ya cerrada —con su `cerradaAt` y su arqueo— porque el papel
+/// del cierre se emite después, cuando el operario ya está deslogueado y el
+/// estado de rol está vacío.
+class CierreCajaResultado {
+  /// `null` solo si no había caja abierta que cerrar.
+  final SesionCaja? cerrada;
+
+  /// `false` si el cierre quedó únicamente en esta PC (sin conexión).
+  final bool sincronizado;
+
+  const CierreCajaResultado({this.cerrada, required this.sincronizado});
+}
+
 class AppRoleState {
   final AppRoleKind kind;
   final OperadorCaja? operador;
@@ -136,9 +151,7 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
   Future<void> autocerrarSesionesVencidas() async {
     try {
       final sesRepo = ref.read(sesionesCajaRepositoryProvider);
-      final cerradas = <SesionCaja>[
-        ...await sesRepo.cerrarSesionJefeVencida(),
-      ];
+      final cerradas = <SesionCaja>[...await sesRepo.cerrarSesionJefeVencida()];
       final op = state.operador;
       if (op != null && !esOperadorModoJefeId(op.id)) {
         cerradas.addAll(
@@ -193,21 +206,24 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
 
   /// Cierra la sesión de modo jefe con arqueo opcional. A diferencia del
   /// cierre de operario, NO desloguea: el jefe sigue en su dashboard.
-  ///
-  /// Devuelve `false` si el cierre quedó solo en esta PC (ver [cerrarSesionCaja]).
-  Future<bool> cerrarCajaJefe({double? arqueoCierre, String? notaCierre}) async {
+  Future<CierreCajaResultado> cerrarCajaJefe({
+    double? arqueoCierre,
+    String? notaCierre,
+  }) async {
     final sesion = state.sesionActiva;
-    if (!state.esJefe || sesion == null) return true;
+    if (!state.esJefe || sesion == null) {
+      return const CierreCajaResultado(sincronizado: true);
+    }
     _stopHeartbeat();
     final sesRepo = ref.read(sesionesCajaRepositoryProvider);
-    await sesRepo.cerrar(
+    final cerrada = await sesRepo.cerrar(
       sesionId: sesion.id,
       arqueoCierre: arqueoCierre,
       notaCierre: notaCierre,
     );
     final sincronizado = await sesRepo.flushConfirmandoSesion(sesion.id);
     state = state.copyWith(clearSesion: true);
-    return sincronizado;
+    return CierreCajaResultado(cerrada: cerrada, sincronizado: sincronizado);
   }
 
   /// PIN de operador → rol caja; reanuda sesión abierta si existe.
@@ -339,19 +355,26 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
 
   /// Cierra la caja del operario y lo desloguea.
   ///
-  /// Devuelve `false` si el cierre quedó **solo en esta PC** (sin conexión). El
-  /// diálogo lo avisa en el momento: si nadie avisa, ese cierre reaparece horas
-  /// después en otra PC como "caja abierta", desconectado de su causa, y eso se
-  /// vive como un bug del programa.
-  Future<bool> cerrarSesionCaja({
+  /// [CierreCajaResultado.sincronizado] es `false` si el cierre quedó **solo en
+  /// esta PC** (sin conexión). El diálogo lo avisa en el momento: si nadie avisa,
+  /// ese cierre reaparece horas después en otra PC como "caja abierta",
+  /// desconectado de su causa, y eso se vive como un bug del programa.
+  ///
+  /// Devuelve también la sesión ya cerrada, con su `cerradaAt` y su arqueo, para
+  /// que el papel del cierre pueda emitirse **después** del logout sin depender
+  /// de un estado que a esa altura ya está vacío. La generación del PDF queda
+  /// afuera a propósito: entregar un PDF puede abrir un diálogo del sistema que
+  /// no termina hasta que alguien lo cierre, y esperarlo acá dejaría la caja
+  /// cerrada con el operario todavía logueado.
+  Future<CierreCajaResultado> cerrarSesionCaja({
     double? arqueoCierre,
     String? notaCierre,
   }) async {
     final sesion = state.sesionActiva;
-    if (sesion == null) return true;
+    if (sesion == null) return const CierreCajaResultado(sincronizado: true);
     _stopHeartbeat();
     final sesRepo = ref.read(sesionesCajaRepositoryProvider);
-    await sesRepo.cerrar(
+    final cerrada = await sesRepo.cerrar(
       sesionId: sesion.id,
       arqueoCierre: arqueoCierre,
       notaCierre: notaCierre,
@@ -359,7 +382,7 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     final sincronizado = await sesRepo.flushConfirmandoSesion(sesion.id);
     await ref.read(adminAuthProvider.notifier).logout();
     state = const AppRoleState();
-    return sincronizado;
+    return CierreCajaResultado(cerrada: cerrada, sincronizado: sincronizado);
   }
 
   /// ID de sesión a persistir en un cobro: sesión de caja activa, o sesión

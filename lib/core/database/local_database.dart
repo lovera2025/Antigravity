@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 66;
+  static const int _version = 67;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -597,6 +597,10 @@ class LocalDatabase {
     );
     await db.execute(
       'CREATE INDEX idx_pagos_contrato ON pagos_contrato_alumno(contrato_alumno_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_pagos_contrato_sesion_caja '
+      'ON pagos_contrato_alumno(sesion_caja_id)',
     );
     await db.execute(
       'CREATE INDEX idx_invitados_evento ON invitados(evento_id)',
@@ -2641,6 +2645,19 @@ class LocalDatabase {
         debugPrint('✅ Migración v66 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v66: $e');
+      }
+    }
+
+    if (oldVersion < 67) {
+      debugPrint('  🔧 v67: índice de pagos por sesión de caja');
+      try {
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_pagos_contrato_sesion_caja '
+          'ON pagos_contrato_alumno(sesion_caja_id)',
+        );
+        debugPrint('✅ Migración v67 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v67: $e');
       }
     }
   }

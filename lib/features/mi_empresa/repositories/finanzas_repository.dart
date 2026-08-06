@@ -57,9 +57,9 @@ class FinanzasRepository {
 
     // 2. Consulta Ingresos Masivos (pagos_contrato_alumno + join contratos/eventos)
     String sqlMasivos = '''
-      SELECT 
+      SELECT
         p.id, p.monto, p.concepto, p.fecha_pago as created_at, p.medio_pago,
-        p.sesion_caja_id,
+        p.sesion_caja_id, p.contrato_alumno_id, p.line_kind,
         ca.nombre_alumno, ca.evento_id,
         ev.tipo as evento_tipo
       FROM pagos_contrato_alumno p
@@ -148,6 +148,8 @@ class FinanzasRepository {
           eventoId: r['evento_id']?.toString(),
           medioPago: r['medio_pago']?.toString(),
           sesionCajaId: r['sesion_caja_id']?.toString(),
+          contratoAlumnoId: r['contrato_alumno_id']?.toString(),
+          lineKind: r['line_kind']?.toString(),
         ),
       );
     }
@@ -178,6 +180,58 @@ class FinanzasRepository {
 
     todos.sort((a, b) => a.compareTo(b));
     return todos;
+  }
+
+  /// Ingresos de una o varias sesiones de caja, filtrando **en el SQL**.
+  ///
+  /// [obtenerIngresosDetallados] trae toda la historia de la base y deja que el
+  /// consumidor descarte lo que no le sirve. Para el cierre de una sesión eso es
+  /// leer decenas de miles de filas para mostrar diez, y el costo crece con los
+  /// años del negocio en vez de con el tamaño de la sesión.
+  ///
+  /// Solo consulta `pagos_contrato_alumno`: `transacciones` y
+  /// `pagos_prestamo_alquiler` no tienen columna `sesion_caja_id`, así que no
+  /// pueden pertenecer a una sesión de caja.
+  Future<List<IngresoDetallado>> obtenerIngresosDeSesiones(
+    Set<String> sesionIds,
+  ) async {
+    if (sesionIds.isEmpty) return [];
+    final db = await LocalDatabase.instance;
+    final ph = List.filled(sesionIds.length, '?').join(',');
+    final rows = await db.rawQuery('''
+      SELECT
+        p.id, p.monto, p.concepto, p.fecha_pago as created_at, p.medio_pago,
+        p.sesion_caja_id, p.contrato_alumno_id, p.line_kind,
+        ca.nombre_alumno, ca.evento_id,
+        ev.tipo as evento_tipo
+      FROM pagos_contrato_alumno p
+      JOIN contratos_alumnos ca ON p.contrato_alumno_id = ca.id
+      JOIN eventos ev ON ca.evento_id = ev.id
+      WHERE COALESCE(p.anulado, 0) = 0
+        AND p.sesion_caja_id IN ($ph)
+    ''', sesionIds.toList());
+
+    final out = rows.map((r) {
+      final fechaRaw = r['created_at'];
+      return IngresoDetallado(
+        id: r['id'].toString(),
+        fuente: 'Masivo',
+        fecha: fechaRaw != null
+            ? _parseFechaPagoUtc(fechaRaw)
+            : ArTime.nowUtc(),
+        monto: double.tryParse(r['monto'].toString()) ?? 0,
+        concepto: r['concepto']?.toString() ?? 'Abono de Cuota / Contrato',
+        alumnoOCliente: r['nombre_alumno']?.toString() ?? 'Alumno Desconocido',
+        nombreEvento: r['evento_tipo']?.toString() ?? 'Evento Masivo',
+        eventoId: r['evento_id']?.toString(),
+        medioPago: r['medio_pago']?.toString(),
+        sesionCajaId: r['sesion_caja_id']?.toString(),
+        contratoAlumnoId: r['contrato_alumno_id']?.toString(),
+        lineKind: r['line_kind']?.toString(),
+      );
+    }).toList();
+    out.sort((a, b) => a.compareTo(b));
+    return out;
   }
 
   /// Caché de RPC compartida por todas las instancias (proyección cloud).

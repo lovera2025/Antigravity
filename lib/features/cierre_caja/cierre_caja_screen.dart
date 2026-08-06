@@ -13,13 +13,16 @@ import '../common/widgets/operational_sync_coordinator.dart';
 import '../common/providers/admin_provider.dart';
 import '../egresos/providers/egresos_provider.dart';
 import '../egresos/repositories/egresos_repository.dart';
-import '../mi_empresa/models/ingreso_detallado.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
+import '../mi_empresa/repositories/finanzas_repository.dart';
 import '../caja_sesiones/models/modo_jefe_caja.dart';
 import '../caja_sesiones/repositories/sesiones_caja_repository.dart';
+import 'models/medio_pago_caja.dart';
 import 'models/resumen_sesion_pdf.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
+import 'services/cobro_agrupado.dart';
+import 'services/datos_cierre_sesion.dart';
 import 'widgets/anotacion_pdf_section.dart';
 import 'widgets/guia_cambio_section.dart';
 import 'widgets/registrar_retiro_dialog.dart';
@@ -36,6 +39,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   static const _efectivoColor = Color(0xFF00B894);
   static const _transferColor = Color(0xFF6C63FF);
   static const _redAccent = Color(0xFFE74C3C);
+
+  /// Cobros mixtos. Tiene que distinguirse de un vistazo de los otros cuatro
+  /// colores de la lista (efectivo, transferencia, retiros, otros egresos) y del
+  /// dorado de los encabezados.
+  static const _mixtoColor = Color(0xFF00A8CC);
   bool _forzoHoyOperativo = false;
 
   @override
@@ -164,8 +172,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       double transferencia = 0;
       for (final i in state.ingresosTurno) {
         if (i.sesionCajaId != s.id) continue;
-        final mp = i.medioPago?.toLowerCase().trim();
-        if (mp == 'transferencia') {
+        if (esTransferenciaCaja(i.medioPago)) {
           transferencia += i.monto;
         } else {
           efectivo += i.monto;
@@ -174,7 +181,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       double egresosEfectivo = 0;
       for (final e in state.egresosTurno) {
         if (e.sesionCajaId != s.id) continue;
-        if ((e.medioPago ?? '').toLowerCase().trim() != 'transferencia') {
+        if (!esTransferenciaCaja(e.medioPago)) {
           egresosEfectivo += e.monto;
         }
       }
@@ -185,7 +192,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             : (s.operadorNombre ?? 'Operario'),
         etiqueta: esJefe ? 'Día' : (s.etiqueta ?? '—'),
         horaApertura: ArTime.formatHora(s.abiertaAt),
-        horaCierre: s.cerradaAt == null ? null : ArTime.formatHora(s.cerradaAt!),
+        horaCierre: s.cerradaAt == null
+            ? null
+            : ArTime.formatHora(s.cerradaAt!),
         efectivo: efectivo,
         transferencia: transferencia,
         cambioInicial: s.cambioInicial,
@@ -237,6 +246,41 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     }
   }
 
+  /// Hoja de cierre de la sesión elegida: una A4 con el arqueo arriba y el
+  /// detalle por alumno abajo. Es el mismo papel que sale solo al cerrar caja,
+  /// así que el jefe puede reimprimirlo si al operario no le salió.
+  Future<void> _exportarHojaCierre(
+    BuildContext context,
+    CierreCajaState state,
+  ) async {
+    final sesion = state.sesionSeleccionada;
+    if (sesion == null) return;
+    try {
+      // Se recarga en vez de armarlo desde el estado: es una consulta acotada a
+      // la sesión y garantiza que el papel diga lo mismo que diría el cierre.
+      final datos = await cargarDatosCierreSesion(
+        sesionIds: {sesion.id},
+        finanzasRepo: ref.read(finanzasRepositoryProvider),
+        egresosRepo: ref.read(egresosRepositoryProvider),
+      );
+      await PdfService.generarHojaCierreSesionPdf(
+        sesion: sesion,
+        datos: datos,
+        turno: turnoDeSesion(sesion),
+        emitidoPor: state.alcanceLabel,
+        anotacion: state.anotacionTurno.trim().isEmpty
+            ? null
+            : state.anotacionTurno.trim(),
+        guiaCambioSaldo: state.fondoCambioGuia,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('No se pudo generar la hoja: $e')));
+    }
+  }
+
   Future<void> _nuevaJornadaVisual(BuildContext context) async {
     await ref.read(cierreCajaProvider.notifier).avanzarANuevaJornadaVisual();
     if (!context.mounted) return;
@@ -255,17 +299,17 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     String bucket,
   ) {
     final isEfectivo = bucket == 'efectivo';
-    final ingresos = state.ingresosTurno.where((i) {
-      final mp = i.medioPago?.toLowerCase().trim();
-      if (isEfectivo) return mp != 'transferencia';
-      return mp == 'transferencia';
-    }).toList();
+    // Se agrupa sobre TODOS los ingresos y después se proyecta la parte de este
+    // medio: así un cobro mixto muestra acá solo lo que entró por este medio y la
+    // suma de las filas sigue dando el bruto de la tarjeta.
+    final ingresos = cobrosDeMedio(
+      state.ingresosTurno,
+      transferencia: !isEfectivo,
+    );
     // Todos los egresos del turno para ese medio (retiros + otros).
-    final egresos = state.egresosTurno.where((e) {
-      final mp = (e.medioPago ?? '').toLowerCase().trim();
-      if (isEfectivo) return mp != 'transferencia';
-      return mp == 'transferencia';
-    }).toList();
+    final egresos = state.egresosTurno
+        .where((e) => esTransferenciaCaja(e.medioPago) != isEfectivo)
+        .toList();
     final accent = isEfectivo ? _efectivoColor : _transferColor;
     final icon = isEfectivo
         ? Icons.payments_outlined
@@ -303,6 +347,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = isDark ? Colors.white60 : Colors.black54;
     final modoJefe = ref.watch(adminAuthProvider).esModoJefe;
+    // Una sola vez: la usan el contador y la lista, y agrupar dos veces por build
+    // sería trabajo repetido en cada scroll.
+    final movimientos = _movimientosUnificados(state);
 
     ref.listen(adminAuthProvider, (prev, next) {
       if (prev == null) return;
@@ -458,7 +505,9 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       ),
                       const Spacer(),
                       Text(
-                        '${state.ingresosTurno.length + state.egresosTurno.length} ítem(s)',
+                        // Filas mostradas, no líneas de pago: un cobro de plan +
+                        // mora es un ítem, aunque en la base sean 4 registros.
+                        '${movimientos.length} ítem(s)',
                         style: TextStyle(
                           fontSize: 11,
                           color: muted,
@@ -476,7 +525,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                 )
               else
                 SliverList.list(
-                  children: _movimientosUnificados(state)
+                  children: movimientos
                       .map((m) => _movimientoTile(context, m, isDark, muted))
                       .toList(),
                 ),
@@ -791,14 +840,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
 
   Widget _bucketsRow(BuildContext context, CierreCajaState state, bool isDark) {
     final cantEgEfectivo = state.egresosTurno
-        .where(
-          (e) => (e.medioPago ?? '').toLowerCase().trim() != 'transferencia',
-        )
+        .where((e) => !esTransferenciaCaja(e.medioPago))
         .length;
     final cantEgTransf = state.egresosTurno
-        .where(
-          (e) => (e.medioPago ?? '').toLowerCase().trim() == 'transferencia',
-        )
+        .where((e) => esTransferenciaCaja(e.medioPago))
         .length;
     return IntrinsicHeight(
       child: Row(
@@ -1016,10 +1061,14 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   }
 
   /// Lista unificada y ordenada por hora descendente para la sección "Movimientos".
+  ///
+  /// Los ingresos van **agrupados por cobro**: un pago de plan + mora escribe 4-5
+  /// filas con el mismo alumno y la misma hora, y acá se muestran como una sola.
+  /// Los egresos no se agrupan: cada retiro y cada gasto es un movimiento propio.
   List<_Movimiento> _movimientosUnificados(CierreCajaState state) {
     final lista = <_Movimiento>[];
-    for (final i in state.ingresosTurno) {
-      lista.add(_Movimiento.ingreso(i));
+    for (final c in agruparIngresosPorCobro(state.ingresosTurno)) {
+      lista.add(_Movimiento.ingreso(c));
     }
     for (final r in state.retirosTurno) {
       lista.add(_Movimiento.retiroCaja(r));
@@ -1041,12 +1090,17 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     final IconData icon;
     switch (m.kind) {
       case _MovKind.ingreso:
-        accent = (m.medioPago ?? '').toLowerCase().trim() == 'transferencia'
-            ? _transferColor
-            : _efectivoColor;
-        icon = (m.medioPago ?? '').toLowerCase().trim() == 'transferencia'
-            ? Icons.swap_horiz_rounded
-            : Icons.payments_outlined;
+        // El mixto va primero: su medioPago es 'MIXTO' y caería en efectivo.
+        if (m.esMixto) {
+          accent = _mixtoColor;
+          icon = Icons.call_split_rounded;
+        } else if (esTransferenciaCaja(m.medioPago)) {
+          accent = _transferColor;
+          icon = Icons.swap_horiz_rounded;
+        } else {
+          accent = _efectivoColor;
+          icon = Icons.payments_outlined;
+        }
       case _MovKind.retiroCaja:
         accent = _redAccent;
         icon = Icons.south_west_rounded;
@@ -1103,6 +1157,24 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // Tercera línea solo en los mixtos. El subtítulo de arriba es
+                  // de una sola línea con ellipsis: meter el desglose ahí lo
+                  // cortaría justo cuando más importa.
+                  if (m.esMixto)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${m.montoEfectivo!.toCurrency()} efectivo  +  '
+                        '${m.montoTransferencia!.toCurrency()} transferencia',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1131,6 +1203,93 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   if (e != null) _eliminarRetiroCajaPorEgreso(context, e);
                 },
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Menú de papeles. Dos entradas en vez de un tercer botón: la barra tiene
+  /// lugar para dos y agregar uno más dejaría los rótulos ilegibles en pantallas
+  /// angostas.
+  Widget _botonPdf(BuildContext context, CierreCajaState state) {
+    final sinMovimientos =
+        state.ingresosTurno.isEmpty && state.egresosTurno.isEmpty;
+    // La hoja de cierre necesita una apertura y un cierre concretos: el alcance
+    // consolidado del día no los tiene.
+    final puedeHoja =
+        !state.sinSesiones &&
+        !state.consolidado &&
+        state.sesionSeleccionadaId != null;
+    final puedeTicket = !sinMovimientos;
+    final puedeAbrirMenu = puedeHoja || puedeTicket;
+
+    final rotuloTicket = state.sinSesiones
+        ? 'PDF · SIN SESIÓN'
+        : state.consolidado
+        ? 'PDF · DÍA'
+        : 'PDF · SESIÓN';
+
+    return PopupMenuButton<String>(
+      enabled: puedeAbrirMenu,
+      tooltip: 'Papeles',
+      position: PopupMenuPosition.over,
+      onSelected: (v) {
+        if (v == 'hoja') {
+          _exportarHojaCierre(context, state);
+        } else {
+          _exportarPdf(context, state);
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          value: 'hoja',
+          enabled: puedeHoja,
+          child: const ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.description_outlined, size: 20),
+            title: Text('Hoja de cierre'),
+            subtitle: Text('1 hoja A4 completa'),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'ticket',
+          enabled: puedeTicket,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.receipt_long_outlined, size: 20),
+            title: const Text('Ticket detallado'),
+            subtitle: Text(rotuloTicket),
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: puedeAbrirMenu ? _gold : _gold.withValues(alpha: 0.3),
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.picture_as_pdf_rounded,
+              size: 18,
+              color: puedeAbrirMenu ? _gold : _gold.withValues(alpha: 0.4),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'PAPELES',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+                color: puedeAbrirMenu ? _gold : _gold.withValues(alpha: 0.4),
+              ),
+            ),
           ],
         ),
       ),
@@ -1172,31 +1331,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed:
-                  state.ingresosTurno.isEmpty && state.egresosTurno.isEmpty
-                  ? null
-                  : () => _exportarPdf(context, state),
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
-              label: Text(
-                state.sinSesiones
-                    ? 'PDF · SIN SESIÓN'
-                    : state.consolidado
-                    ? 'PDF · DÍA'
-                    : 'PDF · SESIÓN',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _gold,
-                side: const BorderSide(color: _gold),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
+          Expanded(child: _botonPdf(context, state)),
         ],
       ),
     );
@@ -1216,6 +1351,14 @@ class _Movimiento {
   /// Solo [retiroCaja]: permite anular el egreso desde la lista (PIN admin).
   final Egreso? retiroParaEliminar;
 
+  /// Solo ingresos **mixtos**: cuánto entró por cada medio. Se muestran en una
+  /// tercera línea. `null` en los cobros de un solo medio, que siguen de dos
+  /// líneas y compactos.
+  final double? montoEfectivo;
+  final double? montoTransferencia;
+
+  bool get esMixto => montoEfectivo != null && montoTransferencia != null;
+
   const _Movimiento({
     required this.fecha,
     required this.monto,
@@ -1224,15 +1367,23 @@ class _Movimiento {
     this.subtitulo,
     this.medioPago,
     this.retiroParaEliminar,
+    this.montoEfectivo,
+    this.montoTransferencia,
   });
 
-  factory _Movimiento.ingreso(IngresoDetallado i) => _Movimiento(
-    fecha: i.fecha,
-    monto: i.monto,
-    titulo: i.concepto,
-    subtitulo: i.alumnoOCliente,
-    medioPago: i.medioPago,
+  /// Un cobro completo: el alumno es el título y los conceptos el subtítulo.
+  ///
+  /// Al revés de como estaba (concepto arriba, alumno abajo), porque ahora la fila
+  /// representa a una persona que pagó una vez, no a una línea del plan.
+  factory _Movimiento.ingreso(CobroAgrupado c) => _Movimiento(
+    fecha: c.fecha,
+    monto: c.monto,
+    titulo: c.alumno,
+    subtitulo: c.resumenConceptos,
+    medioPago: c.medioUnico ?? 'MIXTO',
     kind: _MovKind.ingreso,
+    montoEfectivo: c.esMixto ? c.montoEfectivo : null,
+    montoTransferencia: c.esMixto ? c.montoTransferencia : null,
   );
 
   factory _Movimiento.retiroCaja(Egreso e) => _Movimiento(
@@ -1260,7 +1411,9 @@ class _DetalleBucketSheet extends StatelessWidget {
   final Color accent;
   final IconData icon;
   final String titulo;
-  final List<IngresoDetallado> ingresos;
+
+  /// Cobros ya proyectados a este medio: cada uno trae solo su parte.
+  final List<CobroAgrupado> ingresos;
 
   /// Todos los egresos del bucket (retiros formales + otros). Solo los de
   /// categoría [kCategoriaRetiroCaja] muestran el botón de eliminar.
@@ -1282,7 +1435,7 @@ class _DetalleBucketSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = isDark ? Colors.white60 : Colors.black54;
-    final totalIng = ingresos.fold<double>(0, (s, i) => s + i.monto);
+    final totalIng = ingresos.fold<double>(0, (s, c) => s + c.monto);
     final totalEg = egresos.fold<double>(0, (s, e) => s + e.monto);
     final neto = totalIng - totalEg;
 
@@ -1385,7 +1538,10 @@ class _DetalleBucketSheet extends StatelessWidget {
     color: color,
   );
 
-  Widget _filaIngreso(IngresoDetallado i, Color muted, bool isDark) {
+  Widget _filaIngreso(CobroAgrupado c, Color muted, bool isDark) {
+    // El "(mixto)" no es adorno: acá el monto es solo la parte de este medio, y
+    // sin el aviso no se entiende por qué no coincide con el recibo del alumno.
+    final nombre = c.parteDeMixto ? '${c.alumno} (mixto)' : c.alumno;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -1395,7 +1551,7 @@ class _DetalleBucketSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  i.concepto,
+                  nombre,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -1404,7 +1560,7 @@ class _DetalleBucketSheet extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '${ArTime.formatHora(i.fecha)} · ${i.alumnoOCliente}',
+                  '${ArTime.formatHora(c.fecha)} · ${c.resumenConceptos}',
                   style: TextStyle(fontSize: 11, color: muted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1414,7 +1570,7 @@ class _DetalleBucketSheet extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            i.monto.toCurrency(),
+            c.monto.toCurrency(),
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w900,

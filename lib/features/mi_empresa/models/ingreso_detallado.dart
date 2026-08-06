@@ -15,6 +15,21 @@ class IngresoDetallado {
   final String? medioPago;
   final String? sesionCajaId;
 
+  /// Solo `fuente == 'Masivo'`: contrato del alumno que pagó.
+  ///
+  /// Es la clave exacta para agrupar las líneas de un mismo cobro. Sin esto habría
+  /// que agrupar por [alumnoOCliente], y dos alumnos homónimos del mismo colegio
+  /// —normal en cohortes escolares, donde el nombre es texto libre— terminarían
+  /// fusionados en una fila, poniendo la plata de una familia en la de otra.
+  final String? contratoAlumnoId;
+
+  /// Solo `fuente == 'Masivo'`: `interes_mora` / `cargo_canal_ref` cuando la fila
+  /// lo tiene. Clasifica mora y recargo sin adivinar por el texto del concepto.
+  ///
+  /// `null` en filas previas a la columna: ahí se cae a las heurísticas de
+  /// `pago_interes_mora.dart`.
+  final String? lineKind;
+
   IngresoDetallado({
     required this.id,
     required this.fuente,
@@ -28,6 +43,8 @@ class IngresoDetallado {
     this.prestamoId,
     this.medioPago,
     this.sesionCajaId,
+    this.contratoAlumnoId,
+    this.lineKind,
   });
 
   // Utilidad para ordenar
