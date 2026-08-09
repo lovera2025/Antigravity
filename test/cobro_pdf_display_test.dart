@@ -1,4 +1,5 @@
 import 'package:arguello_events/features/eventos/services/cobro_masivo_conceptos_pdf.dart';
+import 'package:arguello_events/features/eventos/services/mora_concepto_rotulo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Preview de una cuota base tal como lo arma el modal de cobro masivo.
@@ -65,6 +66,26 @@ void main() {
       expect(display[1]['display'], 'Mora — 27 días fuera de término');
       expect(display[1]['anidada'], isTrue);
       expect(display[1]['arrastre'], isNot(true));
+    });
+
+    test('cobro de sola mora: la línea nombra su cuota, no queda huérfana', () {
+      // Recibo Nº 0661293D (BERNEL, 07/08/2026): se cobró únicamente mora, así
+      // que no hay renglón de cuota del que colgarla. Sin nombrar la cuota, la
+      // línea salía "Mora · 7 d" y no había forma de saber a cuál correspondía
+      // — justo cuando el aviso de abajo hablaba de "cuota 4 (Jul, 7 d)".
+      final finales = _finales([
+        _previewMora(n: 4, monto: 2100, dias: 7, mesLabel: 'Jul 2026'),
+      ], cPagadas: 3);
+      final display = lineasDisplayParaPdf(finales, regAr: regAr, hoyAr: hoyAr);
+
+      expect(display.single['display'], 'Mora de la cuota 4 — 7 días fuera de término');
+      expect(display.single['anidada'], isNot(true));
+      expect(display.single['arrastre'], isTrue);
+      // Y abreviada, cuando el papel no entra, sigue diciendo la cuota.
+      expect(
+        abreviarDisplayPdf(display.single['display'] as String),
+        'Mora cuota 4',
+      );
     });
 
     test('cuota que todavía no venció dice "vence", no "venció"', () {
@@ -180,6 +201,56 @@ void main() {
         (s, c) => s + ((c['monto'] as num?)?.toDouble() ?? 0),
       );
       expect(total, closeTo(38100, 0.01));
+    });
+  });
+
+  group('el arrastre parcial llega igual por los dos caminos', () {
+    // C2 $6.900 y C3 $8.100 en ficha; la familia entrega $10.000: cubre la C2
+    // entera y $3.100 de la C3. Esa C3 es la que tiene que quedar marcada.
+    final detallePendiente = [
+      const MoraPendientePreviaDetalle(
+        numeroCuota: 2,
+        mesLabel: 'May 2026',
+        montoAtribuido: 6900,
+        diasMora: 23,
+      ),
+      const MoraPendientePreviaDetalle(
+        numeroCuota: 3,
+        mesLabel: 'Jun 2026',
+        montoAtribuido: 8100,
+        diasMora: 27,
+      ),
+    ];
+
+    Map<String, dynamic> previewParcial() =>
+        MoraConceptoRotulo.construirPreviewMora(
+          montoTotal: 10000,
+          detallesCalendario: const [],
+          montoPendientePrevias: 15000,
+          lineKind: 'interes_mora',
+          detallePendiente: detallePendiente,
+        );
+
+    List<String> conceptosDe(List<Map<String, dynamic>> lineas) =>
+        lineas.map((l) => l['concepto'] as String).toList();
+
+    test('vía conceptosFinalesDesdePreviewMasivo (cobro real)', () {
+      final finales = _finales([previewParcial()]);
+
+      expect(conceptosDe(finales), [
+        'Mora pendiente cuota 2',
+        'Mora pendiente cuota 3${MoraConceptoRotulo.sufijoParcial}',
+      ]);
+      expect(
+        finales.fold<double>(0, (s, l) => s + (l['monto'] as num).toDouble()),
+        closeTo(10000, 0.01),
+      );
+    });
+
+    test('vía filasPreviewDesdeMora (grilla del modal) — mismo resultado', () {
+      final filas = MoraConceptoRotulo.filasPreviewDesdeMora(previewParcial());
+
+      expect(conceptosDe(filas), conceptosDe(_finales([previewParcial()])));
     });
   });
 }

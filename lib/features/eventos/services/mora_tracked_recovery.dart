@@ -177,8 +177,6 @@ class MoraTrackedRecovery {
       final moraDesgloseNetoTotal =
           moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
 
-      final trackedPreCobro = tracked;
-
       final post = MoraCuotaCalculator.postCobroTrackedOffset(
         moraPendienteTrackedActual: tracked,
         moraCobradaOffsetActual: offset,
@@ -188,25 +186,19 @@ class MoraTrackedRecovery {
         moraDesglosePreCobro: moraDesgloseBruto,
         moraDesgloseNetoPreCobro: moraDesgloseNeto,
         moraDesgloseNetoTotal: moraDesgloseNetoTotal,
+        saldoDeudorPost: contratoBase.saldoDeudor,
+        fechaCobroAr: fechaLote,
+        exencionActual: ultimaExencion,
+        reiniciaActual: ultimaReinicia,
       );
 
       tracked = post.tracked;
       offset = post.offset;
+      ultimaExencion = post.exentaHasta;
+      ultimaReinicia = post.reinicia;
       moraHistAcum += moraEsteCobro;
       cuotasPagadas = (cuotasPagadas + cuotasLiquidadas)
           .clamp(0, contratoBase.totalCuotas > 0 ? contratoBase.totalCuotas : 9);
-
-      if (moraEsteCobro > 0.01 && fechaLote != null) {
-        final moraPendientePreCobro = moraDesgloseNetoTotal +
-            trackedPreCobro.clamp(0.0, double.infinity);
-        if (moraEsteCobro >= moraPendientePreCobro - 0.01 &&
-            contratoBase.saldoDeudor > 0.01) {
-          ultimaExencion =
-              MoraCuotaCalculator.calcularFechaExencion(fechaLote);
-          // Cuota base liquidada → reinicia; solo mora/abono → permanente.
-          ultimaReinicia = cuotasLiquidadas > 0;
-        }
-      }
     }
 
     return (
@@ -427,8 +419,6 @@ class MoraTrackedRecovery {
       final moraDesgloseNetoTotal =
           moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
 
-      final trackedPreCobro = tracked;
-
       final post = MoraCuotaCalculator.postCobroTrackedOffset(
         moraPendienteTrackedActual: tracked,
         moraCobradaOffsetActual: offset,
@@ -438,24 +428,19 @@ class MoraTrackedRecovery {
         moraDesglosePreCobro: moraDesgloseBruto,
         moraDesgloseNetoPreCobro: moraDesgloseNeto,
         moraDesgloseNetoTotal: moraDesgloseNetoTotal,
+        saldoDeudorPost: contratoBase.saldoDeudor,
+        fechaCobroAr: fechaLote,
+        exencionActual: ultimaExencion,
+        reiniciaActual: ultimaReinicia,
       );
 
       tracked = post.tracked;
       offset = post.offset;
+      ultimaExencion = post.exentaHasta;
+      ultimaReinicia = post.reinicia;
       moraHistAcum += moraEsteCobro;
       cuotasPagadas = (cuotasPagadas + cuotasLiquidadas)
           .clamp(0, contratoBase.totalCuotas > 0 ? contratoBase.totalCuotas : 9);
-
-      // Evaluar si este cobro saldó toda la mora pre-cobro
-      if (moraEsteCobro > 0.01 && fechaLote != null) {
-        final moraPendientePreCobro = moraDesgloseNetoTotal +
-            trackedPreCobro.clamp(0.0, double.infinity);
-        if (moraEsteCobro >= moraPendientePreCobro - 0.01 &&
-            contratoBase.saldoDeudor > 0.01) {
-          ultimaExencion = MoraCuotaCalculator.calcularFechaExencion(fechaLote);
-          ultimaReinicia = cuotasLiquidadas > 0;
-        }
-      }
     }
     if (ultimaExencion == null) return null;
     return (hasta: ultimaExencion, reinicia: ultimaReinicia);

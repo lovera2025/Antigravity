@@ -303,6 +303,10 @@ void main() {
         moraDesglosePreCobro: desgloseNetoCuota3,
         moraDesgloseNetoPreCobro: desgloseNetoCuota3,
         moraDesgloseNetoTotal: 8100,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(15000, 0.01));
       expect(r.offset, closeTo(0, 0.01));
@@ -320,6 +324,10 @@ void main() {
         moraDesglosePreCobro: const [],
         moraDesgloseNetoPreCobro: const [],
         moraDesgloseNetoTotal: 0,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(8100, 0.01));
       expect(r.offset, closeTo(6900, 0.01));
@@ -337,6 +345,10 @@ void main() {
         moraDesglosePreCobro: const [],
         moraDesgloseNetoPreCobro: const [],
         moraDesgloseNetoTotal: 0,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(8100, 0.01));
       expect(r.offset, closeTo(6900, 0.01));
@@ -355,6 +367,10 @@ void main() {
         moraDesglosePreCobro: desgloseCuota1,
         moraDesgloseNetoPreCobro: desgloseCuota1,
         moraDesgloseNetoTotal: 8700,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(8700, 0.01));
       expect(r.offset, closeTo(5000, 0.01));
@@ -370,6 +386,10 @@ void main() {
         moraDesglosePreCobro: desgloseCuota1,
         moraDesgloseNetoPreCobro: desgloseCuota1,
         moraDesgloseNetoTotal: 8700,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(8700, 0.01));
       expect(r.offset, closeTo(0, 0.01));
@@ -385,6 +405,10 @@ void main() {
         moraDesglosePreCobro: desgloseCuota1,
         moraDesgloseNetoPreCobro: desgloseCuota1,
         moraDesgloseNetoTotal: 8700,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       final c = ContratoAlumno(
         id: 'arro',
@@ -423,6 +447,10 @@ void main() {
         moraDesglosePreCobro: desgloseCuota1,
         moraDesgloseNetoPreCobro: desgloseCuota1,
         moraDesgloseNetoTotal: 8700,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(3700, 0.01));
       expect(r.offset, closeTo(5000, 0.01));
@@ -438,6 +466,10 @@ void main() {
         moraDesglosePreCobro: desgloseCuota1,
         moraDesgloseNetoPreCobro: desgloseCuota1,
         moraDesgloseNetoTotal: 8700,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(0, 0.01));
       expect(r.offset, closeTo(0, 0.01));
@@ -453,9 +485,18 @@ void main() {
         moraDesglosePreCobro: desgloseCuota1,
         moraDesgloseNetoPreCobro: desgloseCuota1,
         moraDesgloseNetoTotal: 8700,
+        saldoDeudorPost: 180000,
+        fechaCobroAr: DateTime(2026, 8, 7),
+        exencionActual: null,
+        reiniciaActual: false,
       );
       expect(r.tracked, closeTo(0, 0.01));
       expect(r.offset, closeTo(8700, 0.01));
+      // El offset sube junto con el historial, así que por sí solo no borra la
+      // cuota del calendario: quien la borra es la exención. Tiene que salir de
+      // la misma llamada o el estado post-cobro queda a medias.
+      expect(r.exentaHasta, DateTime(2026, 8, 31));
+      expect(r.reinicia, isFalse);
     });
 
     // Historial REAL de BORDA (contrato 4fa099cb…, verificado en Supabase).

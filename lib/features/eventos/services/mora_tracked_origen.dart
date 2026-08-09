@@ -310,8 +310,6 @@ class MoraTrackedOrigen {
       final moraDesgloseNetoTotal =
           moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
 
-      final trackedPreCobro = tracked;
-
       final post = MoraCuotaCalculator.postCobroTrackedOffset(
         moraPendienteTrackedActual: tracked,
         moraCobradaOffsetActual: offset,
@@ -321,6 +319,10 @@ class MoraTrackedOrigen {
         moraDesglosePreCobro: moraDesgloseBruto,
         moraDesgloseNetoPreCobro: moraDesgloseNeto,
         moraDesgloseNetoTotal: moraDesgloseNetoTotal,
+        saldoDeudorPost: contratoBase.saldoDeudor,
+        fechaCobroAr: fechaLote,
+        exencionActual: ultimaExencion,
+        reiniciaActual: ultimaReinicia,
       );
 
       if (cuotasLiquidadas > 0) {
@@ -426,20 +428,11 @@ class MoraTrackedOrigen {
 
       tracked = post.tracked;
       offset = post.offset;
+      ultimaExencion = post.exentaHasta;
+      ultimaReinicia = post.reinicia;
       moraHistAcum += moraEsteCobro;
       cuotasPagadas = (cuotasPagadas + cuotasLiquidadas)
           .clamp(0, contratoBase.totalCuotas > 0 ? contratoBase.totalCuotas : 9);
-
-      // Misma regla que la reconciliación: saldar toda la mora deja exención.
-      if (moraEsteCobro > 0.01 && fechaLote != null) {
-        final moraPendientePreCobro =
-            moraDesgloseNetoTotal + trackedPreCobro.clamp(0.0, double.infinity);
-        if (moraEsteCobro >= moraPendientePreCobro - 0.01 &&
-            contratoBase.saldoDeudor > 0.01) {
-          ultimaExencion = MoraCuotaCalculator.calcularFechaExencion(fechaLote);
-          ultimaReinicia = cuotasLiquidadas > 0;
-        }
-      }
     }
 
     // Atribuir [monto] FIFO sobre orígenes vivos.

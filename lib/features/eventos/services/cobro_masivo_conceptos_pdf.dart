@@ -256,7 +256,15 @@ List<Map<String, dynamic>> conceptosFinalesDesdePreviewMasivo({
               return MoraPendientePreviaDetalle(
                 numeroCuota: (m['numeroCuota'] as num?)?.toInt() ?? 0,
                 mesLabel: (m['mesLabel'] as String?) ?? '',
-                montoAtribuido: (m['monto'] as num?)?.toDouble() ?? 0,
+                // Lo pleno, no lo ya recortado: `lineasPdfDesdePreviewMora`
+                // rehace el reparto y compara asignado contra pleno para saber
+                // si la cuota quedó a medias. Pasándole el recorte como pleno,
+                // toda cuota parcial se leía como saldada. Mismo criterio que
+                // `MoraConceptoRotulo._detalleDesdeMaps`, que lee este mismo
+                // mapa: si los dos caminos no coinciden, el papel depende de
+                // por cuál se entró.
+                montoAtribuido:
+                    ((m['montoPleno'] ?? m['monto']) as num?)?.toDouble() ?? 0,
                 fechaPagoCuota: fp,
                 moraDebida: (m['moraDebida'] as num?)?.toDouble() ?? 0,
                 moraCobrada: (m['moraCobrada'] as num?)?.toDouble() ?? 0,
@@ -573,7 +581,12 @@ String _displayPlan(Map<String, dynamic> c, DateTime? regAr, DateTime? hoyAr) {
 /// El rótulo identifica la línea; el detalle (vencimiento, días, montos) lo
 /// dice el subtexto. Cuando la línea trae subtexto, el rótulo no repite nada
 /// de eso: en el papel salían los mismos días y el mismo mes dos veces.
-String _displayMora(Map<String, dynamic> c) {
+///
+/// [anidada] es si la línea va colgada de la cuota que la generó. Solo ahí el
+/// rótulo puede callarse el número de cuota: lo dice el renglón de arriba. Un
+/// cobro de sola mora no tiene ese renglón, y la línea salía como "Mora · 7 d",
+/// huérfana, sin forma de saber a qué cuota correspondía (recibo Nº 0661293D).
+String _displayMora(Map<String, dynamic> c, {required bool anidada}) {
   final conSubtexto = ((c['subtexto'] as String?) ?? '').trim().isNotEmpty;
 
   final previa = (c['cuotaPrevia'] as num?)?.toInt();
@@ -591,9 +604,13 @@ String _displayMora(Map<String, dynamic> c) {
   }
   final dias = (c['diasMora'] as num?)?.toInt();
   if (dias != null && dias > 0) {
-    // Va anidada bajo su cuota y se repite por línea: rótulo corto. Qué es la
-    // mora lo explica el pie del recibo, una sola vez.
-    return 'Mora — $dias ${dias == 1 ? 'día' : 'días'} fuera de término';
+    final atraso = '$dias ${dias == 1 ? 'día' : 'días'} fuera de término';
+    // Anidada: va debajo de su cuota y se repite por línea, así que rótulo
+    // corto. Qué es la mora lo explica el pie del recibo, una sola vez.
+    if (anidada) return 'Mora — $atraso';
+    final n = (c['numeroCuota'] as num?)?.toInt();
+    if (n != null && n > 0) return 'Mora de la cuota $n — $atraso';
+    return 'Mora — $atraso';
   }
   final texto = (c['concepto'] as String? ?? '').trim();
   if (texto.toLowerCase().contains('mora pendiente') ||
@@ -632,7 +649,7 @@ List<Map<String, dynamic>> lineasDisplayParaPdf(
       usadas.add(k);
       out.add({
         ...moras[k],
-        'display': _displayMora(moras[k]),
+        'display': _displayMora(moras[k], anidada: true),
         'anidada': true,
       });
     }
@@ -642,7 +659,7 @@ List<Map<String, dynamic>> lineasDisplayParaPdf(
     if (usadas.contains(k)) continue;
     out.add({
       ...moras[k],
-      'display': _displayMora(moras[k]),
+      'display': _displayMora(moras[k], anidada: false),
       'arrastre': true,
     });
   }

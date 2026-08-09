@@ -24,6 +24,7 @@ import '../../core/utils/ar_time.dart';
 import '../../core/utils/pago_interes_mora.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/cronograma_cuotas_utils.dart';
+import 'services/cobro_mora_resolver.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/mora_concepto_rotulo.dart';
 import 'services/mora_tracked_origen.dart';
@@ -5998,92 +5999,30 @@ class _DetalleEventoMasivoScreenState
 
                           final cuotasLiquidadasEnCobro =
                               (currentBasePagadas - cPagadas).clamp(0, tCuotas);
-                          // Recalcular desglose al confirmar (estado pre-cobro real).
-                          final moraDesgloseBrutoConfirm =
-                              MoraCuotaCalculator.calcularDesglose(alumno);
-                          final moraDesgloseNetoPreCobro =
-                              MoraCuotaCalculator.desglosePendiente(
-                                moraDesgloseBrutoConfirm,
-                                MoraCuotaCalculator.moraCobradaParaFifo(
-                                  moraCobradaHistorial: moraYaCobradaHist,
-                                  moraCobradaOffset: alumno.moraCobradaOffset,
-                                ),
-                              );
-                          final moraDesgloseNetoTotal = moraDesgloseNetoPreCobro
-                              .fold<double>(0, (s, d) => s + d.interesBruto);
 
-                          final postTrackedOffset =
-                              MoraCuotaCalculator.postCobroTrackedOffset(
-                                moraPendienteTrackedActual: remanenteMora,
-                                moraCobradaOffsetActual:
-                                    alumno.moraCobradaOffset,
-                                moraEsteCobro: moraEsteCobro,
-                                cuotasBaseLiquidadasEnCobro:
-                                    cuotasLiquidadasEnCobro,
-                                cuotasBasePagadasPostCobro: currentBasePagadas,
-                                moraDesglosePreCobro: moraDesgloseBrutoConfirm,
-                                moraDesgloseNetoPreCobro:
-                                    moraDesgloseNetoPreCobro,
-                                moraDesgloseNetoTotal: moraDesgloseNetoTotal,
-                              );
-
-                          final moraHistPostCobro =
-                              moraYaCobradaHist + moraEsteCobro;
-                          final contratoSimPost = alumnoFresco.copyWith(
-                            moraPendienteTracked: postTrackedOffset.tracked,
-                            moraCobradaOffset: postTrackedOffset.offset,
-                            moraFechaReferencia: alumno.moraFechaReferencia,
+                          // Ficha, recibo y UI salen todos de acá: una sola
+                          // pasada, un solo estado. Está afuera del modal para
+                          // que lo cubra un test — ver cobro_mora_resolver.dart.
+                          final moraResuelta = resolverMoraDeCobro(
+                            contratoPre: alumno,
+                            contratoPost: alumnoFresco,
+                            moraCobradaHistorial: moraYaCobradaHist,
+                            moraEsteCobro: moraEsteCobro,
+                            cuotasBaseLiquidadasEnCobro: cuotasLiquidadasEnCobro,
+                            cuotasBasePagadasPostCobro: currentBasePagadas,
+                            saldoDeudorPost: saldoRestante,
+                            fechaCobroAr: ArTime.nowAr(),
+                            formatoMonto: (v) => v.toCurrency(),
                           );
-                          final moraDetallePost = MoraCuotaCalculator
-                              .moraPendienteOperativaDetallada(
-                                contrato: contratoSimPost,
-                                moraCobradaHistorial: moraHistPostCobro,
-                              );
-                          final moraRestantePost = moraDetallePost.total;
-                          // De qué cuotas viene lo que queda debiendo, para
-                          // que el recibo lo diga y no haya discusión después.
+
+                          final postTrackedOffset = moraResuelta.estado;
+                          final moraRestantePost =
+                              moraResuelta.moraPendientePost;
                           final moraOrigenPost =
-                              MoraConceptoRotulo.origenMoraPendienteLinea(
-                                desglose: moraDetallePost.desglose,
-                                tracked: moraDetallePost.tracked,
-                                formatoMonto: (v) => v.toCurrency(),
-                              );
+                              moraResuelta.moraPendienteOrigen;
                           final limpiarMoraRef =
-                              MoraCuotaCalculator.debeDescongelarMoraReferencia(
-                                contrato: alumno,
-                                moraPendienteOperativaPost: moraRestantePost,
-                                saldoDeudorPost: saldoRestante,
-                              );
-
-                          // Exención: si el cobro pagó toda la mora que estaba
-                          // pendiente PRE-cobro, eximir hasta fin de mes.
-                          // Con liquidación de cuota → reinicia; solo mora/abono → permanente.
-                          final double moraPendientePreCobro =
-                              moraDesgloseNetoTotal + remanenteMora;
-                          final DateTime? nuevaExencion;
-                          final bool nuevaExencionReinicia;
-                          if (moraEsteCobro > 0.01 &&
-                              moraEsteCobro >= moraPendientePreCobro - 0.01 &&
-                              saldoRestante > 0.01) {
-                            nuevaExencion =
-                                MoraCuotaCalculator.calcularFechaExencion(
-                                  DateTime.now(),
-                                );
-                            nuevaExencionReinicia = cuotasLiquidadasEnCobro > 0;
-                          } else {
-                            nuevaExencion = alumno.moraExentaHasta;
-                            nuevaExencionReinicia = alumno.moraExencionReinicia;
-                          }
-
-                          final alumnoPatchLocal = alumnoFresco.copyWith(
-                            moraPendienteTracked: postTrackedOffset.tracked,
-                            moraCobradaOffset: postTrackedOffset.offset,
-                            moraFechaReferencia: limpiarMoraRef
-                                ? null
-                                : alumno.moraFechaReferencia,
-                            moraExentaHasta: nuevaExencion,
-                            moraExencionReinicia: nuevaExencionReinicia,
-                          );
+                              moraResuelta.limpiarMoraReferencia;
+                          final alumnoPatchLocal = moraResuelta.contratoPatch;
 
                           // Capturar valores del modal antes de cerrarlo (evita usar
                           // controllers tras dispose en el microtask de persistencia).
@@ -6102,8 +6041,10 @@ class _DetalleEventoMasivoScreenState
                           final trackedNuevoPersist = postTrackedOffset.tracked;
                           final offsetNuevoPersist = postTrackedOffset.offset;
                           final limpiarMoraRefPersist = limpiarMoraRef;
-                          final exencionPersist = nuevaExencion;
-                          final exencionReiniciaPersist = nuevaExencionReinicia;
+                          final exencionIsoPersist =
+                              postTrackedOffset.exentaHastaIso;
+                          final exencionReiniciaPersist =
+                              postTrackedOffset.reinicia;
 
                           // Bloqueo ANTES de la primera espera. Todo lo de
                           // arriba es sincrónico, así que hasta acá un segundo
@@ -6430,11 +6371,8 @@ class _DetalleEventoMasivoScreenState
                               'mora_cobrada_offset': offsetNuevoPersist,
                               if (limpiarMoraRefPersist)
                                 'mora_fecha_referencia': null,
-                              if (exencionPersist != null)
-                                'mora_exenta_hasta':
-                                    '${exencionPersist.year.toString().padLeft(4, '0')}-'
-                                    '${exencionPersist.month.toString().padLeft(2, '0')}-'
-                                    '${exencionPersist.day.toString().padLeft(2, '0')}',
+                              if (exencionIsoPersist != null)
+                                'mora_exenta_hasta': exencionIsoPersist,
                               'mora_exencion_reinicia': exencionReiniciaPersist
                                   ? 1
                                   : 0,

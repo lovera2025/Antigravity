@@ -715,7 +715,7 @@ class MoraCuotaCalculator {
   }) =>
       (moraCobradaHistorial - moraCobradaOffset).clamp(0.0, double.infinity);
 
-  /// Tracked y offset tras confirmar un cobro masivo (reglas v52; carry-over v54).
+  /// Estado de mora tras confirmar un cobro masivo (reglas v52; carry-over v54).
   ///
   /// - Cuota liquidada **sin** mora → tracked = remanente previo **+** mora neta
   ///   de las cuotas liquidadas en **este** cobro. La mora que el operador no
@@ -725,7 +725,16 @@ class MoraCuotaCalculator {
   ///   Si liquida el desglose completo, offset += esa parte (exención permanente /
   ///   evita que FIFO futuro absorba cuotas nuevas). Si liquida tracked,
   ///   offset += mora aplicada a tracked.
-  static ({double tracked, double offset}) postCobroTrackedOffset({
+  ///
+  /// Devuelve los **cuatro** campos que definen la mora post-cobro, no dos.
+  /// Cuando el cobro salda toda la mora pendiente, quien la borra del calendario
+  /// no es el offset —que sube junto con el historial y deja el crédito FIFO
+  /// igual que antes— sino la exención. Calcular tracked/offset por un lado y la
+  /// exención por otro dejaba una ventana en la que el estado post-cobro estaba
+  /// a medias: el recibo del 07/08/2026 (BERNEL) se emitió ahí y reclamó como
+  /// impaga la misma mora de julio que estaba cobrando en su primera línea.
+  /// Van juntos y se aplican juntos con [EstadoMoraPostCobro.aplicarA].
+  static EstadoMoraPostCobro postCobroTrackedOffset({
     required double moraPendienteTrackedActual,
     required double moraCobradaOffsetActual,
     required double moraEsteCobro,
@@ -734,6 +743,16 @@ class MoraCuotaCalculator {
     required List<MoraCuotaDetalle> moraDesglosePreCobro,
     required List<MoraCuotaDetalle> moraDesgloseNetoPreCobro,
     required double moraDesgloseNetoTotal,
+
+    /// Saldo del plan que queda **después** del cobro. Sin saldo no se exime:
+    /// el contrato ya está cerrado y no hay calendario que proteger.
+    required double saldoDeudorPost,
+
+    /// Día AR del cobro. `null` (lote histórico sin fecha legible) → no se
+    /// puede fechar la exención, así que se conserva la vigente.
+    required DateTime? fechaCobroAr,
+    required DateTime? exencionActual,
+    required bool reiniciaActual,
   }) {
     final remanente = moraPendienteTrackedActual.clamp(0.0, double.infinity);
     var tracked = remanente;
@@ -790,9 +809,27 @@ class MoraCuotaCalculator {
       }
     }
 
-    return (
+    // Exención: el cobro saldó toda la mora que estaba pendiente PRE-cobro.
+    // Se mide contra el estado previo (desglose neto + tracked previo), nunca
+    // contra el post: los valores de arriba ya consumieron esa deuda.
+    var exentaHasta = exencionActual;
+    var reinicia = reiniciaActual;
+    if (moraEsteCobro > 0.01 &&
+        fechaCobroAr != null &&
+        saldoDeudorPost > 0.01) {
+      final moraPendientePreCobro = moraDesgloseNetoTotal + remanente;
+      if (moraEsteCobro >= moraPendientePreCobro - 0.01) {
+        exentaHasta = calcularFechaExencion(fechaCobroAr);
+        // Liquidó cuota base → reinicia; solo mora/abono → permanente.
+        reinicia = cuotasBaseLiquidadasEnCobro > 0;
+      }
+    }
+
+    return EstadoMoraPostCobro(
       tracked: double.parse(tracked.toStringAsFixed(2)),
       offset: double.parse(offset.toStringAsFixed(2)),
+      exentaHasta: exentaHasta,
+      reinicia: reinicia,
     );
   }
 
@@ -1067,6 +1104,62 @@ class MoraCuotaCalculator {
     }
     return map;
   }
+}
+
+/// Mora de un contrato **después** de un cobro: los cuatro campos juntos.
+///
+/// Existe para que no se pueda simular el post-cobro a medias. Los cuatro se
+/// deciden con los mismos datos pre-cobro y se aplican de una sola vez con
+/// [aplicarA]; quien arma el recibo y quien persiste la ficha leen el mismo
+/// objeto, así el papel nunca puede contradecir a la base.
+class EstadoMoraPostCobro {
+  /// Mora de cuotas ya liquidadas que sigue en ficha (no crece por día).
+  final double tracked;
+
+  /// Baseline que el FIFO del desglose descuenta del historial de mora cobrada.
+  final double offset;
+
+  /// Hasta cuándo el calendario no genera mora. `null` = sin exención.
+  final DateTime? exentaHasta;
+
+  /// `true`: al vencer la exención las cuotas viejas vuelven a generar mora.
+  /// `false`: quedan saldadas para siempre (fue un cobro de sola mora).
+  final bool reinicia;
+
+  const EstadoMoraPostCobro({
+    required this.tracked,
+    required this.offset,
+    required this.exentaHasta,
+    required this.reinicia,
+  });
+
+  /// Contrato con este estado ya aplicado, listo para calcular la mora que
+  /// queda o para persistir.
+  ///
+  /// [limpiarMoraReferencia] descongela la fecha de referencia (la mora dejó de
+  /// estar suspendida). Ojo con el orden: esa decisión se toma leyendo la mora
+  /// que queda, así que primero se arma el contrato sin limpiar, se mide, y
+  /// recién entonces se vuelve a aplicar con el flag.
+  ContratoAlumno aplicarA(
+    ContratoAlumno contrato, {
+    required DateTime? moraFechaReferencia,
+    bool limpiarMoraReferencia = false,
+  }) {
+    return contrato.copyWith(
+      moraPendienteTracked: tracked,
+      moraCobradaOffset: offset,
+      moraExentaHasta: exentaHasta,
+      moraExencionReinicia: reinicia,
+      moraFechaReferencia: limpiarMoraReferencia ? null : moraFechaReferencia,
+    );
+  }
+
+  /// Fecha de exención en el formato `YYYY-MM-DD` de la columna, o `null`.
+  String? get exentaHastaIso => exentaHasta == null
+      ? null
+      : '${exentaHasta!.year.toString().padLeft(4, '0')}-'
+            '${exentaHasta!.month.toString().padLeft(2, '0')}-'
+            '${exentaHasta!.day.toString().padLeft(2, '0')}';
 }
 
 /// Vista previa de perdón admin (exención y/o limpieza de tracked).
