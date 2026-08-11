@@ -57,10 +57,77 @@ class MoraConceptoRotulo {
     List<MoraPendientePreviaDetalle> detalle = const [],
   }) {
     if (detalle.isEmpty) {
-      return '$conceptoPendientePreviasGenerico (no cobrada al pagar)';
+      return '$conceptoPendientePreviasGenerico$sufijoNoCobradaAlPagar';
     }
     final titulo = _tituloPendiente(detalle.map((d) => d.numeroCuota).toList());
-    return '$titulo (no cobrada al pagar)';
+    return '$titulo$sufijoNoCobradaAlPagar';
+  }
+
+  /// Sufijo del concepto persistido de un arrastre. Nombra el **origen** ("no se
+  /// cobró cuando se pagó esa cuota"), no el estado de este movimiento.
+  static const sufijoNoCobradaAlPagar = ' (no cobrada al pagar)';
+
+  /// Cómo se lee en la ficha una fila de mora ya cobrada.
+  ///
+  /// El concepto persistido es una clave (`esPagoInteresMoraPorConcepto`,
+  /// `MoraTrackedRecovery`, `recalcularSaldoDesdePagos`) escrita en idioma de
+  /// origen: "Mora pendiente cuota 3 (no cobrada al pagar)" quiere decir que esa
+  /// mora quedó sin cobrar **cuando se pagó la cuota 3**. En el estado de cuenta
+  /// esa misma frase queda arriba de $3.150 que sí entraron, y se lee como que el
+  /// cobro no se hizo (recibo Nº 11408158, VIZGARRA 08/07/2026). Acá se traduce:
+  /// el título dice de qué cuota es y el subtexto dice que se cobró en este pago.
+  ///
+  /// Los conceptos que ya se entienden —`Interés mora cuota 3 (vto Jun 2026)`—
+  /// vuelven intactos y sin subtexto.
+  static ({String titulo, String? subtexto}) rotuloFichaMora(String concepto) {
+    final t = concepto.trim();
+    if (!t.contains(sufijoNoCobradaAlPagar)) {
+      return (titulo: t, subtexto: null);
+    }
+    final sinSufijo = t.replaceAll(sufijoNoCobradaAlPagar, '').trim();
+
+    final nums = numerosCuotaPendienteDesdeConcepto(sinSufijo);
+    if (nums.isEmpty) {
+      return (
+        titulo: 'Mora de cuotas ya pagadas',
+        subtexto: 'Quedaba de cobros anteriores · se cobró en este pago',
+      );
+    }
+    if (nums.length == 1) {
+      return (
+        titulo: 'Mora de la cuota ${nums.first}',
+        subtexto:
+            'Quedaba de cuando se pagó la cuota ${nums.first} · se cobró en este pago',
+      );
+    }
+    final head = nums.sublist(0, nums.length - 1).join(', ');
+    return (
+      titulo: 'Mora de las cuotas $head y ${nums.last}',
+      subtexto: 'Quedaba de cuando se pagaron esas cuotas · se cobró en este pago',
+    );
+  }
+
+  /// Números de "Mora pendiente cuota 3" / "Mora pendiente cuotas 2 y 3".
+  /// Vacío en el genérico "Mora pendiente de cuotas ya pagadas".
+  ///
+  /// El concepto persistido ya sabe de qué cuota es el arrastre. Cuando la
+  /// reconstrucción desde el historial no llega (`MoraTrackedOrigen.inferir`
+  /// vuelve vacía), esto evita que el papel diga "de cuotas ya pagadas" mientras
+  /// la ficha, leyendo el mismo texto, dice "cuota 3".
+  static List<int> numerosCuotaPendienteDesdeConcepto(String concepto) {
+    final titulo = concepto.replaceAll(sufijoNoCobradaAlPagar, '').trim();
+    final m = RegExp(
+      r'mora pendiente cuotas?\s+([\d,\sy]+)$',
+      caseSensitive: false,
+    ).firstMatch(titulo);
+    if (m == null) return const [];
+    final nums = RegExp(r'\d+')
+        .allMatches(m.group(1)!)
+        .map((x) => int.parse(x.group(0)!))
+        .toSet()
+        .toList()
+      ..sort();
+    return nums;
   }
 
   static String? subtextoPendientePrevias({

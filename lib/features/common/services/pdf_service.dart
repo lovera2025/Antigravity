@@ -1697,9 +1697,14 @@ class PdfService {
             // de lo necesario.
             compactarCuotasBaseParaPdf(
               agruparConceptosMesasParaPdf(
-                conceptosPagados
-                    .map((c) => Map<String, dynamic>.from(c))
-                    .toList(),
+                // Antes de agrupar y compactar, no después: los dos deciden por
+                // `esMora`, así que una línea de mora sin bandera se agrupaba
+                // como si fuera del plan.
+                normalizarBanderasLineasPdf(
+                  conceptosPagados
+                      .map((c) => Map<String, dynamic>.from(c))
+                      .toList(),
+                ),
                 cantMesasRecibo,
               ),
             ),
@@ -2750,7 +2755,9 @@ class PdfService {
     final conceptosLineasDisplay = lineasDisplayParaPdf(
       compactarCuotasBaseParaPdf(
         agruparConceptosMesasParaPdf(
-          conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
+          normalizarBanderasLineasPdf(
+            conceptosLineas.map((c) => Map<String, dynamic>.from(c)).toList(),
+          ),
           cantMesasResumen,
         ),
       ),
@@ -3686,12 +3693,20 @@ class PdfService {
               final fechaTxt = fecha != null
                   ? ArTime.formatFechaCorta(fecha)
                   : (fechaRaw ?? '');
+              // `concepto_ficha` es el rótulo legible de las filas de mora; el
+              // resto sigue con el detallado de siempre.
               final concepto =
-                  (p['concepto_detallado'] as String?)?.trim().isNotEmpty ==
+                  (p['concepto_ficha'] as String?)?.trim().isNotEmpty == true
+                  ? p['concepto_ficha'] as String
+                  : ((p['concepto_detallado'] as String?)?.trim().isNotEmpty ==
+                          true
+                      ? p['concepto_detallado'] as String
+                      : (p['concepto']?.toString() ?? 'Pago'));
+              final sub = ((p['subtexto_ficha'] as String?)?.trim().isNotEmpty ==
                       true
-                  ? p['concepto_detallado'] as String
-                  : (p['concepto']?.toString() ?? 'Pago');
-              final sub = (p['subtexto_concepto'] as String?)?.trim();
+                  ? p['subtexto_ficha'] as String
+                  : p['subtexto_concepto'] as String?)
+                  ?.trim();
               final medio = (p['subtitulo_medio'] as String?)?.trim();
               final monto = (p['monto'] as num?)?.toDouble() ?? 0;
               // Las filas que no son del plan quedan marcadas: son las que no

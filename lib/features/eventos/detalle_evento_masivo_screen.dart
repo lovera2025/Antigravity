@@ -6690,6 +6690,19 @@ class _DetalleEventoMasivoScreenState
                                     );
                                     final concepto =
                                         p['concepto_detallado'] as String;
+                                    // Lo que se muestra: para mora, el rótulo de
+                                    // ficha. `concepto` (crudo) sigue siendo el
+                                    // que viaja al reimprimir.
+                                    final conceptoFicha =
+                                        (p['concepto_ficha'] as String?)
+                                                ?.trim()
+                                                .isNotEmpty ==
+                                            true
+                                        ? p['concepto_ficha'] as String
+                                        : concepto;
+                                    final subtextoFicha =
+                                        (p['subtexto_ficha'] as String?)
+                                            ?.trim();
                                     final bool esLineaMora =
                                         ConceptoPagoDisplay.esMora(p);
                                     final bool esLineaCargo =
@@ -6734,9 +6747,13 @@ class _DetalleEventoMasivoScreenState
                                               shape: BoxShape.circle,
                                             ),
                                             child: Icon(
-                                              esLineaMora
-                                                  ? Icons.schedule_rounded
-                                                  : Icons.check_rounded,
+                                              // Tilde también en mora: este
+                                              // historial es de plata cobrada, y
+                                              // el reloj la hacía leer como
+                                              // pendiente. Lo que la distingue es
+                                              // el naranja (círculo, borde y chip
+                                              // MORA), no el ícono.
+                                              Icons.check_rounded,
                                               color: esLineaMora
                                                   ? Colors.orange.shade800
                                                   : Colors.green,
@@ -6753,7 +6770,7 @@ class _DetalleEventoMasivoScreenState
                                                   children: [
                                                     Flexible(
                                                       child: Text(
-                                                        concepto,
+                                                        conceptoFicha,
                                                         style: TextStyle(
                                                           fontWeight:
                                                               FontWeight.bold,
@@ -6860,6 +6877,24 @@ class _DetalleEventoMasivoScreenState
                                                     ],
                                                   ],
                                                 ),
+                                                if (subtextoFicha != null &&
+                                                    subtextoFicha.isNotEmpty)
+                                                  Padding(
+                                                    padding: EdgeInsets.only(
+                                                      top: s(2),
+                                                      bottom: s(1),
+                                                    ),
+                                                    child: Text(
+                                                      subtextoFicha,
+                                                      style: TextStyle(
+                                                        fontSize: s(9),
+                                                        color: isDark
+                                                            ? Colors.white60
+                                                            : Colors
+                                                                  .black54,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 Text(
                                                   ArTime.formatFechaHora(fecha),
                                                   style: TextStyle(
@@ -6976,9 +7011,18 @@ class _DetalleEventoMasivoScreenState
                                                             'concepto':
                                                                 concepto,
                                                             'monto': monto,
+                                                            // Sin estas banderas
+                                                            // la mora salía
+                                                            // contada como plata
+                                                            // del plan.
+                                                            'esMora':
+                                                                esLineaMora,
+                                                            'esCargoCanal':
+                                                                esLineaCargo,
                                                           },
                                                         ],
                                                     fechaManual: fechaOrig,
+                                                    esReimpresion: true,
                                                     medioPago:
                                                         p['medio_pago']
                                                             as String?,

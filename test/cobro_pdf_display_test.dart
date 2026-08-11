@@ -253,4 +253,75 @@ void main() {
       expect(conceptosDe(filas), conceptosDe(_finales([previewParcial()])));
     });
   });
+
+  // Finanzas al reimprimir y el REIMPRIMIR por fila del estado de cuenta armaban
+  // los mapas a mano, sin `esMora`. Con la bandera ausente la mora se colaba en
+  // "Cuotas del plan": el recibo Nº 11408158 (VIZGARRA 08/07/2026) mostró
+  // $38.150 de plan cuando el plan eran $35.000 y la mora $3.150.
+  group('normalizarBanderasLineasPdf — mapas armados a mano', () {
+    List<Map<String, dynamic>> peladas() => [
+          {'concepto': 'Cuota Base (4/9)', 'monto': 35000.0},
+          {
+            'concepto': 'Mora pendiente cuota 3 (no cobrada al pagar)',
+            'monto': 3150.0,
+          },
+        ];
+
+    test('la mora sin bandera se reconoce por el concepto', () {
+      final norm = normalizarBanderasLineasPdf(peladas());
+
+      expect(norm[0]['esMora'], isNot(true));
+      expect(norm[1]['esMora'], isTrue);
+      expect(moraSeleccionadaPdf(norm), closeTo(3150, 0.01));
+    });
+
+    test('la mora no queda sumada dentro del plan', () {
+      final display = lineasDisplayParaPdf(peladas());
+      final total = display.fold<double>(
+        0,
+        (s, l) => s + (l['monto'] as num).toDouble(),
+      );
+      final mora = moraSeleccionadaPdf(display);
+
+      expect(mora, closeTo(3150, 0.01));
+      expect(total - mora, closeTo(35000, 0.01));
+    });
+
+    test('la mora de cuotas ya pagadas cae en el bloque de arrastre', () {
+      final display = lineasDisplayParaPdf(peladas());
+      final arrastre = display.where((l) => l['arrastre'] == true).toList();
+
+      expect(arrastre.length, 1);
+      expect(
+        arrastre.first['display'],
+        'Mora de cuotas anteriores, no cobrada en su momento',
+      );
+    });
+
+    test('también reconoce el rótulo genérico del modal', () {
+      final norm = normalizarBanderasLineasPdf([
+        {
+          'concepto': 'Interés mora (cuota base — este cobro)',
+          'monto': 3150.0,
+        },
+        {'concepto': 'Cargo oper. transferencia (MP u otro)', 'monto': 500.0},
+      ]);
+
+      expect(norm[0]['esMora'], isTrue);
+      expect(norm[1]['esCargoCanal'], isTrue);
+      expect(norm[1]['esMora'], isNot(true));
+    });
+
+    test('una bandera explícita en false se respeta', () {
+      final norm = normalizarBanderasLineasPdf([
+        {
+          'concepto': 'Mora pendiente cuota 3 (no cobrada al pagar)',
+          'monto': 3150.0,
+          'esMora': false,
+        },
+      ]);
+
+      expect(norm.first['esMora'], isFalse);
+    });
+  });
 }

@@ -24,6 +24,23 @@ Origen del tracked: `MoraTrackedOrigen.inferir` desde historial.
 Rótulos: `MoraConceptoRotulo` · tests `test/mora_concepto_rotulo_test.dart`.
 Reconciliar conceptos viejos: `dart run tool/reconciliar_rotulos_mora.dart --dry-run`
 
+### Persistido vs display (10-ago-2026)
+
+El `concepto` de `pagos_contrato_alumno` es **clave**, no copy: lo leen
+`esPagoInteresMoraPorConcepto`, `MoraTrackedRecovery` y `recalcularSaldoDesdePagos`.
+Está escrito en idioma de **origen**: `Mora pendiente cuota 3 (no cobrada al pagar)`
+quiere decir "esta mora quedó sin cobrar cuando se pagó la cuota 3".
+
+Nada de eso se muestra crudo. Cada superficie tiene su capa:
+
+| Superficie | Rótulo | Quién lo arma |
+|---|---|---|
+| Recibo / resumen | `display` | `lineasDisplayParaPdf` (`cobro_masivo_conceptos_pdf.dart`) |
+| Estado de cuenta (diálogo y PDF) | `concepto_ficha` + `subtexto_ficha` | `MoraConceptoRotulo.rotuloFichaMora` vía `enriquecerPagosHistorial` |
+
+`normalizarBanderasLineasPdf` deriva `esMora` / `esCargoCanal` del texto cuando la línea
+no las trae: sin esas banderas la mora se sumaba dentro de "Cuotas del plan".
+
 ---
 
 ## Resumen operativo (cómo funciona AHORA — v49+)
@@ -112,6 +129,22 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 ---
 
 ## Incidentes previos
+
+### 0. VIZGARRA — la mora cobrada que la ficha llamaba "no cobrada" (10-ago-2026)
+
+- **Síntoma:** recibo Nº 11408158 (08/07/2026): `Interés mora (cuota base — este cobro)
+  $3.150`. El Estado de cuenta, del mismo movimiento, `Mora pendiente cuota 3 (no cobrada
+  al pagar) $3.150`. Dos rótulos que se contradicen sobre plata que sí entró.
+- **Causa:** la regla de cómo se llama una línea de mora estaba copiada en tres lados.
+  `3d2c8c8` (v4.7.1) arregló el de *eventos*; quedaban el reimprimir de Finanzas
+  (`finanzas_provider.dart`, que reescribía **todo** concepto con "mora" o "interés" a esa
+  constante) y el `REIMPRIMIR` por fila del estado de cuenta. Los dos armaban los mapas a
+  mano, sin `esMora`, así que la mora se contaba como plata del plan.
+- **Fix:** Finanzas y la fila reimprimen por `conceptosPdfDesdePagosLote`;
+  `normalizarBanderasLineasPdf` deriva las banderas del texto; la ficha muestra
+  `rotuloFichaMora` en vez del concepto crudo. Ventana del lote de Finanzas: 2 s → 10 s,
+  igual que `getUltimosPagosLote`.
+- **Arnés:** `flutter test tool/recibo_muestra_vizgarra_test.dart`.
 
 ### 1. Barrientos — grilla inflaba mora (28-jun-2026)
 

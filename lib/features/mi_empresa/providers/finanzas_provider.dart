@@ -10,6 +10,7 @@ import '../../../models/evento.dart';
 import '../../../models/transaccion.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../common/services/pdf_service.dart';
+import '../../eventos/services/concepto_pago_display.dart';
 import 'package:flutter/material.dart';
 import '../../../main.dart';
 import '../../../core/database/local_database.dart';
@@ -783,13 +784,17 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
         final String fechaBase = (resP['fecha_pago'] ?? resP['created_at']) as String;
         final DateTime dtBase = DateTime.parse(fechaBase);
 
-        // Buscar otros "conceptos" pagados en la misma operación (mismo alumno, misma fecha +- 2 seg)
+        // Buscar otros "conceptos" pagados en la misma operación (mismo alumno,
+        // misma fecha ± 10 s). El umbral es el mismo con el que
+        // `getUltimosPagosLote` (contratos_repository.dart:664) define "un
+        // cobro": con 2 s, un cobro cuyas filas tardan un poco más en escribirse
+        // salía partido en dos recibos que no cerraban con la ficha.
         final todosPagosRows = await db.query(
           'pagos_contrato_alumno',
           where: 'contrato_alumno_id = ?',
           whereArgs: [contrato.id],
         );
-        
+
         final listOtrosRaw = <Map<String, dynamic>>[];
         for (final row in todosPagosRows) {
           final String? fp = row['fecha_pago'] as String?;
@@ -799,7 +804,7 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           try {
             final pDt = DateTime.parse(pFechaStr);
             final diff = pDt.difference(dtBase).inSeconds.abs();
-            if (diff <= 2) {
+            if (diff <= 10) {
               listOtrosRaw.add(row);
             }
           } catch (_) {
@@ -834,39 +839,19 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           medioPago = 'Transferencia';
         }
 
-        // Group by normalized concept and sum amounts to merge split payments
-        final Map<String, double> agrupados = {};
-        for (final p in listOtrosRaw) {
-          final String raw = (p['concepto'] as String?) ?? 'Pago';
-          final String upper = raw.toUpperCase().trim();
-          String mapped = raw;
-          
-          // Prioritize mapping for interest/mora so it doesn't match legacy 'BASE' rules
-          if (upper.contains('MORA') || upper.contains('INTERE')) {
-            mapped = 'Interés mora (cuota base — este cobro)';
-          } else if (upper.contains('(') && upper.contains(')')) {
-            // Keep detailed rich concept names as-is
-            mapped = raw;
-          } else if (upper == 'BASE' || upper == 'CUOTA BASE' || upper.contains('CUOTA BASE')) {
-            mapped = 'Cuota Base';
-          } else if (upper == 'MESA' || upper == 'MESA EXTRA' || upper.contains('MESA')) {
-            mapped = contrato.mesaExtraCuotas <= 1
-                ? 'Mesa Extra - Entrega'
-                : 'Mesa Extra (Abono)';
-          } else if (upper == 'SILLA' || upper == 'SILLAS EXTRAS' || upper.contains('SILLA')) {
-            mapped = 'Sillas Extras - Entrega';
-          }
-          
-          agrupados[mapped] = (agrupados[mapped] ?? 0.0) +
-              ((p['monto'] as num?)?.toDouble() ?? 0.0);
-        }
-
-        final listOtros = agrupados.entries.map<Map<String, dynamic>>((e) {
-          return <String, dynamic>{
-            'concepto': e.key,
-            'monto': double.parse(e.value.toStringAsFixed(2)),
-          };
-        }).toList();
+        // Mismo motor que usa la ficha y el "imprimir recibo" de la grilla. Este
+        // camino tenía su propia tabla de rótulos, que reescribía TODO concepto
+        // con "mora" o "interés" a la constante "Interés mora (cuota base — este
+        // cobro)": el recibo Nº 11408158 (VIZGARRA, 08/07/2026) llamó así a un
+        // arrastre de la cuota 3, mientras el estado de cuenta del mismo
+        // movimiento lo llamaba "Mora pendiente cuota 3". Y como armaba los mapas
+        // a mano, sin `esMora`, los $3.150 de mora se sumaban dentro de "Cuotas
+        // del plan".
+        final listOtros = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+          contrato,
+          listOtrosRaw,
+          historialCompleto: todosPagosRows,
+        );
 
         final double valPago = listOtros.fold<double>(
           0.0,
@@ -1003,6 +988,8 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           saldoPendiente: contratoCronologico.saldoDeudor,
           conceptosPagados: listOtros.isNotEmpty ? listOtros : null,
           fechaManual: dtBase,
+          // Reproduce un cobro que ya pasó: no puede afirmar la mora de hoy.
+          esReimpresion: true,
           medioPago: medioPago,
           montoEfectivoDetalle: montoEfectivoDetalle,
           montoTransferenciaDetalle: montoTransferenciaDetalle,

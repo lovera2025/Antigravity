@@ -1,3 +1,4 @@
+import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/mesa_extra_item.dart';
 import '../../common/utils/currency_extensions.dart';
 import 'mesas_extra_utils.dart';
@@ -6,6 +7,38 @@ import 'mora_cuota_calculator.dart';
 
 bool esConceptoPlanLiquidacionPdf(Map<String, dynamic> c) =>
     c['esPlanLiquidacion'] == true;
+
+/// Completa `esMora` / `esCargoCanal` en líneas que no las traen, leyéndolas del
+/// texto del concepto.
+///
+/// Todo el papel se apoya en esas banderas: sin ellas [moraSeleccionadaPdf] da 0
+/// y la mora termina sumada dentro de "Cuotas del plan", que es exactamente lo
+/// que los papeles no hacen. El camino esperado sigue siendo que quien arma las
+/// líneas mande la bandera; esto es para que un callable que arme el mapa a mano
+/// —Finanzas al reimprimir, el REIMPRIMIR por fila del estado de cuenta— no pueda
+/// volver a mezclarlas.
+///
+/// Solo rellena la clave **ausente**: un `esMora: false` explícito se respeta.
+List<Map<String, dynamic>> normalizarBanderasLineasPdf(
+  List<Map<String, dynamic>> lineas,
+) {
+  return lineas.map((c) {
+    if (c.containsKey('esMora') && c.containsKey('esCargoCanal')) return c;
+    final out = Map<String, dynamic>.from(c);
+    final texto = out['concepto'] as String?;
+    if (!out.containsKey('esCargoCanal') && esPagoCargoCanalPorConcepto(texto)) {
+      out['esCargoCanal'] = true;
+    }
+    // El cargo por canal manda: su texto no dispara la heurística de mora, pero
+    // si alguna vez lo hiciera, una línea no puede ser las dos cosas.
+    if (!out.containsKey('esMora') &&
+        out['esCargoCanal'] != true &&
+        esPagoInteresMoraPorConcepto(texto)) {
+      out['esMora'] = true;
+    }
+    return out;
+  }).toList();
+}
 
 /// Línea de concepto del recibo/resumen que corresponde a mesa(s) extra.
 bool esLineaMesaConceptoPdf(Map<String, dynamic> c) {
@@ -627,10 +660,11 @@ String _displayMora(Map<String, dynamic> c, {required bool anidada}) {
 /// [regAr] es el Reg del contrato en hora AR: se usa solo para imprimir el
 /// vencimiento de cada cuota (`vencimientoCuotaDesdeRegAr`).
 List<Map<String, dynamic>> lineasDisplayParaPdf(
-  List<Map<String, dynamic>> lineas, {
+  List<Map<String, dynamic>> lineasCrudas, {
   DateTime? regAr,
   DateTime? hoyAr,
 }) {
+  final lineas = normalizarBanderasLineasPdf(lineasCrudas);
   final moras = lineas.where((c) => c['esMora'] == true).toList();
   final resto = lineas.where((c) => c['esMora'] != true).toList();
   final usadas = <int>{};

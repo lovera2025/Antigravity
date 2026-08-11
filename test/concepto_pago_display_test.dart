@@ -297,4 +297,122 @@ void main() {
       );
     });
   });
+
+  // VIZGARRA, recibo Nº 11408158: el 08/07 se cobró la cuota 4 ($35.000) más
+  // $3.150 de arrastre de la cuota 3. El estado de cuenta rotulaba esa plata
+  // cobrada como "Mora pendiente cuota 3 (no cobrada al pagar)".
+  group('Estado de cuenta — la mora cobrada no dice "no cobrada"', () {
+    List<Map<String, dynamic>> historialVizgarra() => [
+          _pago(
+            id: 'p1',
+            fecha: '2026-05-11T21:32:00.000Z',
+            concepto: 'Cuota Base',
+            gross: 70000,
+            medio: 'Efectivo',
+          ),
+          _pago(
+            id: 'p2',
+            fecha: '2026-05-11T21:32:01.000Z',
+            concepto: 'Interés mora cuota 1 (vto Abr 2026)',
+            gross: 3850,
+            medio: 'Efectivo',
+            lineKind: 'interes_mora',
+          ),
+          _pago(
+            id: 'p3',
+            fecha: '2026-06-09T12:08:00.000Z',
+            concepto: 'Cuota Base',
+            gross: 35000,
+            medio: 'Efectivo',
+          ),
+          _pago(
+            id: 'p4',
+            fecha: '2026-07-08T13:14:00.000Z',
+            concepto: 'Cuota Base',
+            gross: 35000,
+            medio: 'Efectivo',
+          ),
+          _pago(
+            id: 'p5',
+            fecha: '2026-07-08T13:14:01.000Z',
+            concepto: 'Mora pendiente cuota 3 (no cobrada al pagar)',
+            gross: 3150,
+            medio: 'Efectivo',
+            lineKind: 'interes_mora',
+          ),
+        ];
+
+    Map<String, dynamic> filaMoraDel0807() {
+      final filas = ConceptoPagoDisplay.enriquecerPagosHistorial(
+        _contratoAvilaLike(),
+        historialVizgarra(),
+      );
+      return filas.firstWhere((f) => f['id'] == 'p5');
+    }
+
+    test('el rótulo de ficha nombra la cuota y dice que se cobró acá', () {
+      final fila = filaMoraDel0807();
+
+      expect(fila['concepto_ficha'], 'Mora de la cuota 3');
+      expect(fila['subtexto_ficha'], contains('se cobró en este pago'));
+      expect(fila['concepto_ficha'], isNot(contains('no cobrada al pagar')));
+    });
+
+    test('el concepto persistido y el detallado siguen crudos', () {
+      final fila = filaMoraDel0807();
+
+      // Son claves: las leen esPagoInteresMoraPorConcepto, el motor de
+      // reimpresión y recalcularSaldoDesdePagos.
+      expect(fila['concepto'], 'Mora pendiente cuota 3 (no cobrada al pagar)');
+      expect(
+        fila['concepto_detallado'],
+        'Mora pendiente cuota 3 (no cobrada al pagar)',
+      );
+    });
+
+    test('las filas del plan no llevan rótulo de ficha', () {
+      final filas = ConceptoPagoDisplay.enriquecerPagosHistorial(
+        _contratoAvilaLike(),
+        historialVizgarra(),
+      );
+      final base = filas.firstWhere((f) => f['id'] == 'p4');
+
+      expect(base['concepto_detallado'], 'Cuota Base (4/9)');
+      expect(base['concepto_ficha'], isNull);
+      expect(base['subtexto_ficha'], isNull);
+    });
+
+    test('la mora del calendario ya se entendía: rótulo intacto', () {
+      final filas = ConceptoPagoDisplay.enriquecerPagosHistorial(
+        _contratoAvilaLike(),
+        historialVizgarra(),
+      );
+      final fila = filas.firstWhere((f) => f['id'] == 'p2');
+
+      expect(fila['concepto_ficha'], 'Interés mora cuota 1 (vto Abr 2026)');
+      expect(fila['subtexto_ficha'], isNull);
+    });
+
+    test('el recibo del 08/07 nombra la misma cuota 3 que la ficha', () {
+      final hist = historialVizgarra();
+      final lote = hist.where((p) => p['id'] == 'p4' || p['id'] == 'p5').toList();
+
+      final pdf = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+        _contratoAvilaLike(),
+        lote,
+        historialCompleto: hist,
+      );
+
+      final mora = pdf.where((l) => l['esMora'] == true).toList();
+      expect(mora.length, 1);
+      expect(mora.first['concepto'], contains('cuota 3'));
+      expect(mora.first['monto'], closeTo(3150, 0.01));
+      // Y la cuota base no se lleva puesta la mora.
+      final plan = pdf.where((l) => l['esMora'] != true).toList();
+      expect(
+        plan.fold<double>(0, (s, l) => s + (l['monto'] as num).toDouble()),
+        closeTo(35000, 0.01),
+      );
+    });
+  });
 }

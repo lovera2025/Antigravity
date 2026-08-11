@@ -291,6 +291,16 @@ class ConceptoPagoDisplay {
       if (subtextoConcepto != null) {
         pCpy['subtexto_concepto'] = subtextoConcepto;
       }
+      // Rótulo para la ficha (diálogo + PDF de Estado de cuenta). Va en claves
+      // aparte a propósito: `concepto_detallado` lo leen el motor de reimpresión
+      // (`_repartirMoraMixtoSiAplica`) y `_displayMora`, que parsean la gramática
+      // persistida. Si el texto de display entrara ahí, el recibo dejaría de
+      // reconocer la línea.
+      if (esMora(p)) {
+        final ficha = MoraConceptoRotulo.rotuloFichaMora(conceptoDisplay);
+        pCpy['concepto_ficha'] = ficha.titulo;
+        if (ficha.subtexto != null) pCpy['subtexto_ficha'] = ficha.subtexto;
+      }
       pCpy['subtitulo_medio'] = subtituloMedio(p);
       if ((p['descuento_porcentaje'] as num? ?? 0) > 0.01) {
         pCpy['label_descuento'] =
@@ -913,6 +923,37 @@ class ConceptoPagoDisplay {
     return m.group(1)!.trim();
   }
 
+  /// Último recurso para saber de qué cuota es un arrastre: el propio concepto
+  /// persistido, que lo dice ("Mora pendiente cuota 3").
+  ///
+  /// `MoraTrackedOrigen.inferir` reconstruye el origen replayando el historial y
+  /// a veces no llega (contrato sin Reg, historial incompleto). Ahí el recibo
+  /// caía en el genérico "Mora pendiente de cuotas ya pagadas" mientras la ficha,
+  /// leyendo el mismo texto, nombraba la cuota 3: dos papeles, un solo cobro.
+  ///
+  /// Solo actúa si el concepto nombra **una** cuota: ahí todo el monto es de esa
+  /// cuota y no se inventa nada. Con varias, repartir sería fabricar un desglose
+  /// que nadie calculó, así que se deja el rótulo genérico.
+  static List<MoraPendientePreviaDetalle> _detalleDesdeElConcepto(
+    String concepto,
+    double monto,
+    List<MoraPendientePreviaDetalle> inferido,
+  ) {
+    final cubierto = inferido.fold<double>(0, (s, d) => s + d.montoAtribuido);
+    if (cubierto > 0.01) return inferido;
+
+    final nums = MoraConceptoRotulo.numerosCuotaPendienteDesdeConcepto(concepto);
+    if (nums.length != 1) return inferido;
+
+    return [
+      MoraPendientePreviaDetalle(
+        numeroCuota: nums.first,
+        mesLabel: '',
+        montoAtribuido: monto,
+      ),
+    ];
+  }
+
   static List<Map<String, dynamic>>? _repartirMoraMixtoSiAplica({
     required ContratoAlumno contrato,
     required Map<String, dynamic> pago,
@@ -1025,6 +1066,7 @@ class ConceptoPagoDisplay {
               antesDe: antesDeLote,
               excluirPagoId: pagoId,
             );
+      detalle = _detalleDesdeElConcepto(concepto, monto, detalle);
       return MoraConceptoRotulo.lineasPdfDesdePreviewMora(
         montoTotal: monto,
         moraDesglose: const [],

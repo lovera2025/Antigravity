@@ -517,4 +517,82 @@ void main() {
       );
     });
   });
+
+  // El concepto persistido está escrito en idioma de origen: "(no cobrada al
+  // pagar)" habla de cuando se pagó la cuota, no de este movimiento. En la ficha
+  // queda arriba de plata que sí entró y se lee como que el cobro no se hizo
+  // (recibo Nº 11408158, VIZGARRA 08/07/2026).
+  group('rotuloFichaMora', () {
+    test('una cuota: dice de cuál es y que se cobró en este pago', () {
+      final r = MoraConceptoRotulo.rotuloFichaMora(
+        'Mora pendiente cuota 3 (no cobrada al pagar)',
+      );
+      expect(r.titulo, 'Mora de la cuota 3');
+      expect(
+        r.subtexto,
+        'Quedaba de cuando se pagó la cuota 3 · se cobró en este pago',
+      );
+    });
+
+    test('varias cuotas', () {
+      final r = MoraConceptoRotulo.rotuloFichaMora(
+        'Mora pendiente cuotas 2 y 3 (no cobrada al pagar)',
+      );
+      expect(r.titulo, 'Mora de las cuotas 2 y 3');
+      expect(r.subtexto, contains('se cobró en este pago'));
+
+      final tres = MoraConceptoRotulo.rotuloFichaMora(
+        'Mora pendiente cuotas 2, 3 y 5 (no cobrada al pagar)',
+      );
+      expect(tres.titulo, 'Mora de las cuotas 2, 3 y 5');
+    });
+
+    test('genérico sin número de cuota', () {
+      final r = MoraConceptoRotulo.rotuloFichaMora(
+        MoraConceptoRotulo.conceptoPendientePrevias(),
+      );
+      expect(r.titulo, 'Mora de cuotas ya pagadas');
+      expect(
+        r.subtexto,
+        'Quedaba de cobros anteriores · se cobró en este pago',
+      );
+    });
+
+    test('los conceptos que ya se entienden vuelven intactos y sin subtexto', () {
+      for (final c in const [
+        'Interés mora cuota 1 (vto Abr 2026)',
+        'Interés mora (cuota base — este cobro)',
+        'Interés mora cuota 3 (vto Jun 2026) + mora pendiente cuota 2',
+        'Cuota Base (4/9)',
+      ]) {
+        final r = MoraConceptoRotulo.rotuloFichaMora(c);
+        expect(r.titulo, c);
+        expect(r.subtexto, isNull);
+      }
+    });
+
+    test('ningún título de ficha dice "no cobrada al pagar"', () {
+      for (final c in const [
+        'Mora pendiente cuota 3 (no cobrada al pagar)',
+        'Mora pendiente cuotas 2 y 3 (no cobrada al pagar)',
+        'Mora pendiente de cuotas ya pagadas (no cobrada al pagar)',
+      ]) {
+        expect(
+          MoraConceptoRotulo.rotuloFichaMora(c).titulo,
+          isNot(contains('no cobrada al pagar')),
+        );
+      }
+    });
+
+    test('el concepto persistido sigue siendo clave reconocible', () {
+      // El rótulo es de display: la base no se toca y el detector sigue viendo
+      // la línea como mora.
+      const persistido = 'Mora pendiente cuota 3 (no cobrada al pagar)';
+      expect(esPagoInteresMoraPorConcepto(persistido), isTrue);
+      expect(
+        MoraConceptoRotulo.rotuloFichaMora(persistido).titulo,
+        isNot(persistido),
+      );
+    });
+  });
 }
