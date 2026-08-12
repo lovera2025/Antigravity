@@ -5,6 +5,8 @@ import '../../common/utils/currency_extensions.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
+import '../../cierre_caja/models/turno_caja.dart'
+    show kCategoriaRetiroDueno, kCategoriaGastoPersonal;
 
 
 
@@ -26,18 +28,29 @@ class Alerta {
   });
 }
 
+/// De qué tipo de negocio viene una deuda.
+///
+/// Una escuela con planes de cuotas a meses y una recepción que se paga y se
+/// cierra no se parecen en nada, y se estaban listando juntas bajo el rótulo
+/// "instituciones" —que solo era cierto para la mitad—.
+enum ModalidadDeuda { masivo, particular }
+
 class InstitucionDeuda {
   final String id;
   final String nombre;
+  final ModalidadDeuda modalidad;
   final double aVencer;
   final double vencido;
   final double saldoGlobal;
 
   double get total => aVencer + vencido;
 
+  bool get esMasivo => modalidad == ModalidadDeuda.masivo;
+
   InstitucionDeuda({
     required this.id,
     required this.nombre,
+    required this.modalidad,
     required this.aVencer,
     required this.vencido,
     this.saldoGlobal = 0,
@@ -124,10 +137,18 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     final double totalIngresos = (double.tryParse(transRes.first['total']?.toString() ?? '0') ?? 0) +
                                 (double.tryParse(pagosRes.first['total']?.toString() ?? '0') ?? 0);
 
-    // 3. Egresos del Mes
+    // 3. Egresos del Mes — gastos DEL NEGOCIO.
+    // Los retiros al bolsillo del dueño y los gastos personales pagados desde
+    // ahí no son gastos del negocio: el SUM plano los sumaba igual, así que
+    // este número no coincidía con el de Finanzas. Los `[empresa]` sí cuentan,
+    // porque esa plata sí salió de la caja.
     final egresosRes = await db.rawQuery('''
-      SELECT SUM(monto) as total FROM egresos WHERE fecha >= ?
-    ''', [firstDayOfMonth]);
+      SELECT SUM(monto) as total FROM egresos
+      WHERE fecha >= ?
+        AND TRIM(COALESCE(categoria,'')) <> ?
+        AND NOT (TRIM(COALESCE(categoria,'')) = ?
+                 AND COALESCE(proveedor,'') NOT LIKE '[empresa]%')
+    ''', [firstDayOfMonth, kCategoriaRetiroDueno, kCategoriaGastoPersonal]);
     final double totalEgresos = double.tryParse(egresosRes.first['total']?.toString() ?? '0') ?? 0;
 
     // 4 & 5. Saldo por Cobrar y Morosidad
@@ -163,17 +184,25 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       final String clienteId = row['cliente_id'].toString();
       final String clienteNombre = row['cliente_nombre']?.toString() ?? 'Institución';
 
-      if (!mapaDeudas.containsKey(clienteId)) {
-        mapaDeudas[clienteId] = InstitucionDeuda(id: clienteId, nombre: clienteNombre, aVencer: 0, vencido: 0);
+      final claveMasivo = '$clienteId::masivo';
+      if (!mapaDeudas.containsKey(claveMasivo)) {
+        mapaDeudas[claveMasivo] = InstitucionDeuda(
+          id: clienteId,
+          nombre: clienteNombre,
+          modalidad: ModalidadDeuda.masivo,
+          aVencer: 0,
+          vencido: 0,
+        );
       }
 
       // Acumular saldo global por institución
-      mapaDeudas[clienteId] = InstitucionDeuda(
+      mapaDeudas[claveMasivo] = InstitucionDeuda(
         id: clienteId,
         nombre: clienteNombre,
-        aVencer: mapaDeudas[clienteId]!.aVencer,
-        vencido: mapaDeudas[clienteId]!.vencido,
-        saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal + saldoTotal,
+        modalidad: ModalidadDeuda.masivo,
+        aVencer: mapaDeudas[claveMasivo]!.aVencer,
+        vencido: mapaDeudas[claveMasivo]!.vencido,
+        saldoGlobal: mapaDeudas[claveMasivo]!.saldoGlobal + saldoTotal,
       );
 
       nombresEventoMap[eventoId] = clienteNombre;
@@ -229,12 +258,13 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       }
 
       if (moraMonto > 0 || aVencerMonto > 0) {
-        mapaDeudas[clienteId] = InstitucionDeuda(
+        mapaDeudas[claveMasivo] = InstitucionDeuda(
           id: clienteId,
           nombre: clienteNombre,
-          aVencer: mapaDeudas[clienteId]!.aVencer + aVencerMonto,
-          vencido: mapaDeudas[clienteId]!.vencido + moraMonto,
-          saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal,
+          modalidad: ModalidadDeuda.masivo,
+          aVencer: mapaDeudas[claveMasivo]!.aVencer + aVencerMonto,
+          vencido: mapaDeudas[claveMasivo]!.vencido + moraMonto,
+          saldoGlobal: mapaDeudas[claveMasivo]!.saldoGlobal,
         );
       }
     }
@@ -292,29 +322,38 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
         final String clienteId = ev['cliente_id'].toString();
         final String nombreCli = ev['cliente_nombre']?.toString() ?? 'Cliente';
 
-        if (!mapaDeudas.containsKey(clienteId)) {
-          mapaDeudas[clienteId] = InstitucionDeuda(id: clienteId, nombre: nombreCli, aVencer: 0, vencido: 0);
+        final claveParticular = '$clienteId::particular';
+        if (!mapaDeudas.containsKey(claveParticular)) {
+          mapaDeudas[claveParticular] = InstitucionDeuda(
+            id: clienteId,
+            nombre: nombreCli,
+            modalidad: ModalidadDeuda.particular,
+            aVencer: 0,
+            vencido: 0,
+          );
         }
 
         // Acumular saldo global por institución (particulares)
-        mapaDeudas[clienteId] = InstitucionDeuda(
+        mapaDeudas[claveParticular] = InstitucionDeuda(
           id: clienteId,
           nombre: nombreCli,
-          aVencer: mapaDeudas[clienteId]!.aVencer,
-          vencido: mapaDeudas[clienteId]!.vencido,
-          saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal + saldoReal,
+          modalidad: ModalidadDeuda.particular,
+          aVencer: mapaDeudas[claveParticular]!.aVencer,
+          vencido: mapaDeudas[claveParticular]!.vencido,
+          saldoGlobal: mapaDeudas[claveParticular]!.saldoGlobal + saldoReal,
         );
 
         if (fechaEvento != null && fechaEvento.isBefore(now)) {
           // Evento pasado con saldo = Mora Crítica
           morosidadReal += saldoReal;
           totalSaldo += saldoReal;
-          mapaDeudas[clienteId] = InstitucionDeuda(
+          mapaDeudas[claveParticular] = InstitucionDeuda(
             id: clienteId,
             nombre: nombreCli,
-            aVencer: mapaDeudas[clienteId]!.aVencer,
-            vencido: mapaDeudas[clienteId]!.vencido + saldoReal,
-            saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal,
+            modalidad: ModalidadDeuda.particular,
+            aVencer: mapaDeudas[claveParticular]!.aVencer,
+            vencido: mapaDeudas[claveParticular]!.vencido + saldoReal,
+            saldoGlobal: mapaDeudas[claveParticular]!.saldoGlobal,
           );
           alertas.add(Alerta(
             titulo: 'MORA EN EVENTO PARTICULAR',
@@ -326,12 +365,13 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
         } else if (fechaEvento != null && fechaEvento.difference(now).inDays <= 30) {
           // Evento próximo (30 días) = Saldo a vencer
           totalSaldo += saldoReal;
-          mapaDeudas[clienteId] = InstitucionDeuda(
+          mapaDeudas[claveParticular] = InstitucionDeuda(
             id: clienteId,
             nombre: nombreCli,
-            aVencer: mapaDeudas[clienteId]!.aVencer + saldoReal,
-            vencido: mapaDeudas[clienteId]!.vencido,
-            saldoGlobal: mapaDeudas[clienteId]!.saldoGlobal,
+            modalidad: ModalidadDeuda.particular,
+            aVencer: mapaDeudas[claveParticular]!.aVencer + saldoReal,
+            vencido: mapaDeudas[claveParticular]!.vencido,
+            saldoGlobal: mapaDeudas[claveParticular]!.saldoGlobal,
           );
         } else if (recaudado < (presupuestoFinal * 0.30) - 0.01) {
           // Seña pendiente (aunque el evento esté lejos)
@@ -453,6 +493,38 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
             }
           }
         }
+      }
+    } catch (_) {}
+
+    // --- CONTROL DE DATOS: cerrados que siguen debiendo ---
+    // Regla del negocio: nadie recibe pulseras sin haber pagado todo, así que
+    // un evento Finalizado con saldo es imposible. Si aparece, es un pago que
+    // no se registró o un saldo que no se puso en cero. La consulta de deuda
+    // filtra por Confirmado/Planificacion, así que estos quedaban invisibles.
+    // No entran en TOTAL EN LA CALLE: no es deuda cobrable, es dato sucio.
+    try {
+      final cerradosConSaldo = await db.rawQuery('''
+        SELECT COUNT(*) AS n, COALESCE(SUM(ca.saldo_deudor), 0) AS total
+        FROM contratos_alumnos ca
+        JOIN eventos ev ON ev.id = ca.evento_id
+        WHERE ev.estado = 'Finalizado'
+          AND ca.saldo_deudor > 0.01
+          AND ca.nombre_alumno NOT LIKE '[BAJA]%'
+      ''');
+      final n = (cerradosConSaldo.first['n'] as num?)?.toInt() ?? 0;
+      if (n > 0) {
+        final total =
+            (cerradosConSaldo.first['total'] as num?)?.toDouble() ?? 0;
+        alertas.add(Alerta(
+          titulo: 'REVISAR: CERRADOS CON SALDO',
+          mensaje:
+              '$n ${n == 1 ? 'contrato' : 'contratos'} de eventos ya finalizados '
+              'figuran debiendo ${total.toCurrency()}. Si el evento se cerró, '
+              'esa plata tendría que estar cobrada: puede ser un pago sin '
+              'registrar. No se cuenta como deuda en la calle.',
+          icono: Icons.rule_folder_outlined,
+          color: Colors.orangeAccent,
+        ));
       }
     } catch (_) {}
 
