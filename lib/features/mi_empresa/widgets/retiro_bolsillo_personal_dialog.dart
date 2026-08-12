@@ -7,15 +7,20 @@ import '../../common/utils/currency_extensions.dart';
 import '../../egresos/repositories/egresos_repository.dart';
 import '../providers/finanzas_provider.dart';
 
-/// Registro explícito: plata que pasa del negocio al bolsillo personal del dueño ([kCategoriaRetiroDueno]).
+/// Plata que pasa del negocio al bolsillo personal del dueño ([kCategoriaRetiroDueno]).
+///
+/// Hace UNA sola cosa. Tenía arriba un selector "¿Qué tipo de retiro es?" con
+/// la opción "Del negocio", que no era un retiro sino un gasto de la empresa:
+/// dos diálogos disfrazados de uno. Sobraba por partida doble — quien llega
+/// acá ya apretó "APARTAR PARA MÍ" o "TRAER DEL NEGOCIO", así que preguntarle
+/// de nuevo es hacerlo elegir dos veces; y el gasto del negocio tiene su
+/// propio botón en el panel, con categorías reales en vez de una genérica.
 class RetiroBolsilloPersonalDialog extends ConsumerStatefulWidget {
   const RetiroBolsilloPersonalDialog({super.key});
 
   @override
   ConsumerState<RetiroBolsilloPersonalDialog> createState() => _RetiroBolsilloPersonalDialogState();
 }
-
-enum _TipoRetiro { personal, empresa }
 
 class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPersonalDialog> {
   final _formKey = GlobalKey<FormState>();
@@ -24,11 +29,9 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
 
   bool _isSubmitting = false;
   String _medioPago = 'Efectivo';
-  _TipoRetiro _tipoRetiro = _TipoRetiro.personal;
 
   static const _gold = Color(0xFFD4AF37);
   static const _amber = Color(0xFFFFB74D);
-  static const _teal = Color(0xFF26A69A);
 
   /// Umbral por redondeo de moneda / coma en el campo.
   static const _excedeTol = 0.009;
@@ -69,15 +72,14 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
       }
 
       final repo = ref.read(egresosRepositoryProvider);
-      final esPersonal = _tipoRetiro == _TipoRetiro.personal;
       final conceptoBase = _conceptoController.text.trim().isEmpty
-          ? (esPersonal ? 'Retiro bolsillo personal' : 'Gasto del negocio')
+          ? 'Retiro bolsillo personal'
           : _conceptoController.text.trim();
 
       await repo.registrarEgresoSinEvento(
         monto: monto,
         proveedor: conceptoBase,
-        categoria: esPersonal ? kCategoriaRetiroDueno : kCategoriaGastoEmpresa,
+        categoria: kCategoriaRetiroDueno,
         fecha: DateTime.now(),
         medioPago: _medioPago,
       );
@@ -86,9 +88,9 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
       if (!mounted) return;
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(esPersonal ? 'Retiro personal registrado' : 'Gasto de empresa registrado'),
-          backgroundColor: const Color(0xFF00B894),
+        const SnackBar(
+          content: Text('Apartado para vos. Ya está en tu bolsillo.'),
+          backgroundColor: Color(0xFF00B894),
         ),
       );
     } catch (e) {
@@ -130,21 +132,20 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
     final restaria =
         (disponibleEmpresa != null && montoIngresado != null) ? disponibleEmpresa - montoIngresado : null;
 
-    final esPersonal = _tipoRetiro == _TipoRetiro.personal;
-    final accentColor = esPersonal ? _amber : _teal;
+    const accentColor = _amber;
 
     return AlertDialog(
       title: Row(
         children: [
           Icon(
-            esPersonal ? Icons.account_balance_wallet_outlined : Icons.store_rounded,
+            Icons.savings_outlined,
             color: accentColor.withValues(alpha: 0.95),
             size: 26,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              esPersonal ? 'Retiro personal' : 'Gasto del negocio',
+              'Apartar plata para mí',
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 17,
@@ -163,29 +164,6 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('¿QUÉ TIPO DE RETIRO ES?', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: _gold, letterSpacing: 1)),
-                const SizedBox(height: 8),
-                SegmentedButton<_TipoRetiro>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _TipoRetiro.personal,
-                      icon: Icon(Icons.person_rounded, size: 16),
-                      label: Text('Personal (mío)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                    ),
-                    ButtonSegment(
-                      value: _TipoRetiro.empresa,
-                      icon: Icon(Icons.store_rounded, size: 16),
-                      label: Text('Del negocio', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                    ),
-                  ],
-                  selected: {_tipoRetiro},
-                  onSelectionChanged: (v) => setState(() => _tipoRetiro = v.first),
-                  style: ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    side: WidgetStatePropertyAll(BorderSide(color: accentColor.withValues(alpha: 0.5))),
-                  ),
-                ),
-                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
@@ -195,9 +173,10 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
                     border: Border.all(color: accentColor.withValues(alpha: 0.35)),
                   ),
                   child: Text(
-                    esPersonal
-                        ? 'Sacás plata del negocio para vos. Se suma a tu bolsillo personal y podés registrar gastos desde ahí.'
-                        : 'Es un gasto directo del negocio (insumos, servicios, etc.). Se descuenta del saldo de empresa.',
+                    'Sacás plata del negocio para vos. Se suma a tu bolsillo y podés '
+                    'registrar tus gastos contra eso.\n\n'
+                    '¿Buscabas cargar un gasto del negocio? Ese es el botón '
+                    '«REGISTRAR GASTO» del panel SALDO DEL NEGOCIO.',
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.35,
@@ -344,7 +323,7 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
                 )
               : const Icon(Icons.check_rounded, size: 18),
           label: Text(
-            _isSubmitting ? 'GUARDANDO...' : (esPersonal ? 'REGISTRAR RETIRO' : 'REGISTRAR GASTO'),
+            _isSubmitting ? 'GUARDANDO...' : 'APARTAR PARA MÍ',
             style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8),
           ),
         ),
