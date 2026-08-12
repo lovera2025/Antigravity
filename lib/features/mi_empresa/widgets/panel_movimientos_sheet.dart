@@ -284,14 +284,17 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
                 color: isDark ? Colors.white38 : Colors.black45,
               ),
             ),
-            Text(
-              _rango.etiqueta,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: accent.withValues(alpha: 0.9),
+            // Sin recorte no se anuncia nada: al lado de "HISTORIAL", poner
+            // "Todo el historial" era repetir la palabra sin agregar dato.
+            if (!_rango.esTodo)
+              Text(
+                _rango.etiqueta,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: accent.withValues(alpha: 0.9),
+                ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -326,8 +329,11 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
               _rango.esTodo
-                  ? 'Todavía no hay movimientos con este filtro.'
-                  : 'No hubo movimientos en ${_rango.etiqueta.toLowerCase()}.',
+                  // Sin recorte, "en todo el historial" sobra: no hay nada y ya.
+                  ? 'Todavía no hay movimientos.'
+                  : 'No hubo movimientos '
+                      '${_rango.dia != null ? "el" : "en"} '
+                      '${_rango.etiqueta.toLowerCase()}.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,

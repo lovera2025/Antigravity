@@ -1926,7 +1926,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       context,
       ambito: AmbitoPanel.bolsillo,
       titulo: 'MI BOLSILLO',
-      subtitulo: 'Lo que apartaste del negocio para vos, y en qué se fue.',
+      // "Lo que apartaste" ya lo dicen la tarjeta y la raya de abajo, con
+      // números. Acá va para qué sirve: es el límite contra el que gastás.
+      subtitulo: 'Tu límite: los gastos tuyos se descuentan de acá.',
       monto: state.hudRetiroPendienteTotal,
       labelMonto: 'te queda disponible',
       // La raya: de dónde sale el monto grande. No repite "te quedan" — ese es
@@ -2104,9 +2106,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       context,
       ambito: AmbitoPanel.negocio,
       titulo: 'SALDO DEL NEGOCIO',
-      subtitulo:
-          'Cobros menos todo lo que salió. Es contable: comparalo con efectivo + banco + cofre, '
-          'no es un arqueo físico automático.',
+      // Que es contable ya lo dicen la tarjeta y el rótulo del monto. Acá va lo
+      // único que falta y no es obvio: contra qué hay que compararlo.
+      subtitulo: 'Compará este número con lo que hay en caja, banco y cofre.',
       monto: state.hudPlataDelNegocio,
       labelMonto: 'saldo contable',
       egresos: state.egresosHistoricosLista,
