@@ -22,9 +22,20 @@ import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.
 /// offset ni `mora_exenta_hasta` (quedó en 31/05, la de mayo), así que algo de
 /// ese guardado no llegó.
 ///
+/// Y hay una razón de fondo, más grave, por la que el replay no cierra: la
+/// **fecha de alta se movió a mano**. El cronograma se ancla en `created_at`
+/// (la cuota N vence a fin del mes `alta + N`), y en su momento se perdonó mora
+/// corriendo esa fecha, para después normalizar casi todas al 30/03/2026. De
+/// 639 contratos masivos activos, 390 tienen el alta redonda —puesta a mano— y
+/// esos se desvían 2,4 veces más que los 249 con hora real de creación.
+///
+/// Un cobro de mayo se hizo bajo un cronograma que hoy ya no existe, y el
+/// replay lo recalcula con el alta actual. La fecha vieja no quedó registrada.
+///
 /// Antes de "corregir" nada acá o de aplicar `reconciliar_mora_masivos_test`
-/// con APPLY=1: definir cuál es el modelo correcto. Aplicar la reconciliación
-/// tal como está le reclamaría a seis familias mora que ya pagaron.
+/// con APPLY=1: hace falta poder saber qué alta regía en cada cobro. Aplicar la
+/// reconciliación tal como está le reclamaría a seis familias mora que ya
+/// pagaron.
 void main() {
   MoraCuotaDetalle cuota(int n, double interes, {String mes = 'May 2026'}) =>
       MoraCuotaDetalle(

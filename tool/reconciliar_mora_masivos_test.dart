@@ -19,7 +19,32 @@
 // diario). Ninguna de las dos primeras da bien. Ese cobro tampoco actualizó
 // `mora_exenta_hasta`, así que algo del guardado no llegó.
 //
-// Antes de aplicar: definir el modelo y actualizar el replay.
+// ── LO QUE HACE QUE ESTO NO SE PUEDA ARREGLAR SIN MÁS ────────────────────────
+//
+// El replay ancla todo el cronograma en `created_at`: la cuota N vence el
+// último día del mes `alta + N`. Y esa fecha se movió a mano.
+//
+// En su momento se otorgaron perdones corriendo la fecha de alta hacia adelante
+// (alta más tarde = vencimientos más tarde = menos mora), y después se
+// normalizaron casi todas al 30/03/2026. Medido sobre la base al 11/08/2026,
+// de 639 contratos masivos activos:
+//
+//     249 con hora real de creación (11:15:41.213926) →  7 desviados  (2,8%)
+//     390 con alta redonda 03:00:00.000 = puesta a mano → 26 desviados (6,7%)
+//     las 390 editadas caen todas el mismo día: 2026-03-30
+//
+// Los de alta tocada tienen 2,4x más chance de figurar desviados. Un alumno que
+// pagó en mayo lo hizo bajo un cronograma que hoy ya no existe, y el replay
+// recalcula ese cobro con el alta actual: compara contra una historia que nunca
+// pasó. La fecha vieja no quedó guardada en ningún lado.
+//
+// O sea: no alcanza con modelar mejor la mora parcial. Para reconstruir el
+// historial haría falta saber qué alta tenía cada contrato en cada cobro, y ese
+// dato no está. Mientras no se registre el alta vigente al momento de cada pago
+// —o se guarde el desglose de mora aplicado en cada cobro— esta herramienta no
+// puede distinguir un dato corrupto de un perdón viejo.
+//
+// Antes de aplicar: resolver eso. No es un ajuste del replay.
 // Contexto y casos fijados en test/mora_offset_pago_parcial_test.dart
 
 import 'dart:io';
