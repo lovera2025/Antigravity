@@ -245,7 +245,7 @@ TimelineDiaLayout layoutTimelineDia(FinanzasState state, Size size) {
   for (final e in state.egresos) {
     if (e.fecha == null || !ArTime.mismoDia(e.fecha!, hoyRef)) continue;
     final concept =
-        (e.proveedor?.trim().isNotEmpty == true) ? e.proveedor! : (e.categoria ?? 'Egreso');
+        e.proveedorVisible ?? (e.categoria ?? 'Egreso');
     raw.add((ing: false, when: e.fecha!, monto: e.monto, concept: concept));
   }
 

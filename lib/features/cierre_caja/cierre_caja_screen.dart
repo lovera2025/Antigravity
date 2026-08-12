@@ -126,7 +126,7 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('¿Eliminar este retiro?'),
         content: Text(
-          'Se borrará el retiro "${e.proveedor ?? 'Retiro de caja'}" por ${e.monto.toCurrency()} (local y nube). Esta acción no se puede deshacer.',
+          'Se borrará el retiro "${e.proveedorVisible ?? 'Retiro de caja'}" por ${e.monto.toCurrency()} (local y nube). Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -1389,7 +1389,7 @@ class _Movimiento {
   factory _Movimiento.retiroCaja(Egreso e) => _Movimiento(
     fecha: e.fecha ?? ArTime.nowUtc(),
     monto: e.monto,
-    titulo: e.proveedor ?? 'Retiro de caja',
+    titulo: e.proveedorVisible ?? 'Retiro de caja',
     subtitulo: 'Retiro de caja',
     medioPago: e.medioPago,
     kind: _MovKind.retiroCaja,
@@ -1400,7 +1400,7 @@ class _Movimiento {
   factory _Movimiento.otroEgreso(Egreso e) => _Movimiento(
     fecha: e.fecha ?? ArTime.nowUtc(),
     monto: e.monto,
-    titulo: e.proveedor ?? 'Egreso',
+    titulo: e.proveedorVisible ?? 'Egreso',
     subtitulo: (e.categoria ?? '').trim().isEmpty ? 'Egreso' : e.categoria,
     medioPago: e.medioPago,
     kind: _MovKind.otroEgreso,
@@ -1600,7 +1600,8 @@ class _DetalleBucketSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  e.proveedor ?? (esRetiroFormal ? 'Retiro de caja' : 'Egreso'),
+                  e.proveedorVisible ??
+                      (esRetiroFormal ? 'Retiro de caja' : 'Egreso'),
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

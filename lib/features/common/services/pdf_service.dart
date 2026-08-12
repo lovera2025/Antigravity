@@ -6025,7 +6025,7 @@ class PdfService {
         children: [
           pw.Expanded(
             child: pw.Text(
-              '$hora  ${_pdfCierreTrunc(e.proveedor ?? 'Egreso', maxNombre)}',
+              '$hora  ${_pdfCierreTrunc(e.proveedorVisible ?? 'Egreso', maxNombre)}',
               style: pw.TextStyle(
                 fontSize: a.fs(8, piso: p.piso),
                 color: _redAccent,
@@ -6449,7 +6449,7 @@ class PdfService {
         return pw.TableRow(
           children: [
             cell(hora, color: _redAccent),
-            cell(_pdfCierreTrunc(e.proveedor, 22), color: _redAccent),
+            cell(_pdfCierreTrunc(e.proveedorVisible, 22), color: _redAccent),
             cell(_pdfCierreTrunc(e.medioPago, 12), color: _redAccent),
             cell(
               '−${e.monto.toCurrency()}',
@@ -6519,7 +6519,7 @@ class PdfService {
         return pw.TableRow(
           children: [
             cell(hora),
-            cell(_pdfCierreTrunc(e.proveedor, 28)),
+            cell(_pdfCierreTrunc(e.proveedorVisible, 28)),
             cell(_pdfCierreTrunc(e.categoria, 12), color: catColor),
             cell(_pdfCierreTrunc(e.medioPago, 12)),
             cell(
@@ -7019,7 +7019,7 @@ class PdfService {
         return pw.TableRow(
           children: [
             cell(when),
-            cell(_pdfCierreTrunc(e.proveedor, 48)),
+            cell(_pdfCierreTrunc(e.proveedorVisible, 48)),
             cell(_pdfCierreTrunc(e.categoria, 22)),
             cell(_pdfCierreTrunc(e.medioPago, 16)),
             cell(e.monto.toCurrency()),

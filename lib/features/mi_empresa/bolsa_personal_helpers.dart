@@ -1,9 +1,11 @@
 import '../../models/egreso.dart';
 import '../cierre_caja/models/turno_caja.dart';
 
-/// Prefijos en [Egreso.proveedor] para distinguir origen del gasto personal.
-const String kPrefijoGastoPersonalEmpresa = '[empresa]';
-const String kPrefijoGastoPersonalPendiente = '[pendiente]';
+// Los prefijos viven en el modelo (`egreso.dart`) junto a
+// [Egreso.proveedorVisible], que es quien los saca para mostrar. Se re-exportan
+// para no romper los imports que ya los tomaban de acá.
+export '../../models/egreso.dart'
+    show kPrefijoGastoPersonalEmpresa, kPrefijoGastoPersonalPendiente;
 
 bool gastoPersonalEsDesdeEmpresa(Egreso e) {
   final p = (e.proveedor ?? '').trim();
@@ -36,15 +38,13 @@ String empaquetarProveedorGastoPendiente(String concepto) {
 }
 
 /// Texto visible al usuario (sin prefijo técnico).
-String proveedorGastoPersonalVisible(String? proveedor) {
-  var p = (proveedor ?? '').trim();
-  if (p.startsWith(kPrefijoGastoPersonalEmpresa)) {
-    p = p.substring(kPrefijoGastoPersonalEmpresa.length).trim();
-  } else if (p.startsWith(kPrefijoGastoPersonalPendiente)) {
-    p = p.substring(kPrefijoGastoPersonalPendiente.length).trim();
-  }
-  return p.isEmpty ? 'Gasto personal' : p;
-}
+///
+/// Preferir [Egreso.proveedorVisible] cuando se tiene el egreso entero: esta
+/// versión existe para los casos en que solo se cuenta con el string suelto.
+String proveedorGastoPersonalVisible(String? proveedor) =>
+    Egreso(id: '', eventoId: '', monto: 0, proveedor: proveedor)
+        .proveedorVisible ??
+    'Gasto personal';
 
 /// Egresos que restan saldo empresa en el HUD / caja contable.
 bool finanzasEgresoAfectaCajaEmpresa(Egreso e) {

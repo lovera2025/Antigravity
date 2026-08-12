@@ -379,7 +379,7 @@ class _EgresosScreenState extends ConsumerState<EgresosScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  (egreso.proveedor ?? 'GASTO OPERATIVO').toUpperCase(),
+                  (egreso.proveedorVisible ?? 'GASTO OPERATIVO').toUpperCase(),
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 0.2),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

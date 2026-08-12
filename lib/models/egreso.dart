@@ -1,3 +1,9 @@
+/// Prefijos técnicos en [Egreso.proveedor]: marcan de qué bolsa salió un gasto
+/// personal. Viven acá —y no en el helper— para que [Egreso.proveedorVisible]
+/// pueda limpiarlos sin importar nada de `features/`.
+const String kPrefijoGastoPersonalEmpresa = '[empresa]';
+const String kPrefijoGastoPersonalPendiente = '[pendiente]';
+
 class Egreso {
   final String id;
   final String eventoId;
@@ -20,6 +26,26 @@ class Egreso {
     this.medioPago,
     this.sesionCajaId,
   });
+
+  /// Concepto tal como lo tiene que leer una persona, sin el prefijo técnico.
+  ///
+  /// Usar SIEMPRE esto para mostrar o imprimir. [proveedor] guarda el prefijo
+  /// (`[pendiente]` / `[empresa]`), que solo le sirve a la clasificación de
+  /// bolsa: se filtró a 12 pantallas y a 4 celdas del cierre de caja impreso,
+  /// donde `[pendiente] Supermercado` se lee como "falta pagarlo" cuando
+  /// significa exactamente lo contrario — ya se pagó, del bolsillo del dueño.
+  /// Devuelve `null` cuando no queda nada que mostrar, para que cada pantalla
+  /// conserve su propio respaldo ("Egreso" en el cierre de caja, "Gasto
+  /// personal" en el bolsillo) en vez de imponer uno acá.
+  String? get proveedorVisible {
+    var p = (proveedor ?? '').trim();
+    if (p.startsWith(kPrefijoGastoPersonalEmpresa)) {
+      p = p.substring(kPrefijoGastoPersonalEmpresa.length).trim();
+    } else if (p.startsWith(kPrefijoGastoPersonalPendiente)) {
+      p = p.substring(kPrefijoGastoPersonalPendiente.length).trim();
+    }
+    return p.isEmpty ? null : p;
+  }
 
   /// ISO desde SQLite/Supabase → instante UTC canónico (misma política que ingresos).
   /// La presentación en AR usa [ArTime.toAr] en UI/PDF.
