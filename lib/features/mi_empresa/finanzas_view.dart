@@ -1093,7 +1093,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       children: [
         tarjetaSaldo(
           titulo: 'SALDO DEL NEGOCIO',
-          subtitulo: 'Contable: cobros − gastos operativos − gastos personales − retiros pendientes',
+          // La fórmula la desarrolla el panel en "EN QUÉ SE FUE", con los
+          // montos reales. Acá alcanza con la advertencia que no es obvia:
+          // es contable, no es lo que hay en el cajón.
+          subtitulo: 'Contable, no es un arqueo físico. Tocá para ver en qué se fue',
           monto: cap,
           accent: green,
           onTap: () => _abrirDetalleEmpresa(context, state, isDark, gold),
@@ -1121,12 +1124,15 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         SizedBox(height: compact ? 8 : 12),
         tarjetaSaldo(
           titulo: 'MI BOLSILLO',
-          subtitulo: 'Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()} · Gasté ${state.hudGastadoPersonalTotal.toCurrency()}',
+          // El subtítulo decía exactamente lo mismo que los chips, uno debajo
+          // del otro. Los chips se quedan (se leen de un vistazo) y el
+          // subtítulo pasa a explicar qué ES el número grande.
+          subtitulo: 'Lo que apartaste para vos y todavía no gastaste',
           monto: state.hudRetiroPendienteTotal,
           accent: amber,
           onTap: () => _abrirHistorialBolsillo(context, state, isDark, gold),
           chips: [
-            _medioChipMini('Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()}', Colors.orange, isDark),
+            _medioChipMini('Aparté ${state.hudRetirosBolsaPersonalTotal.toCurrency()}', Colors.orange, isDark),
             _medioChipMini('Gasté ${state.hudGastadoPersonalTotal.toCurrency()}', green, isDark),
           ],
         ),
@@ -1923,21 +1929,20 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       subtitulo: 'Lo que apartaste del negocio para vos, y en qué se fue.',
       monto: state.hudRetiroPendienteTotal,
       labelMonto: 'te queda disponible',
-      // La raya, en una línea: cuánto apartaste, cuánto gastaste de eso y qué
-      // te queda. Si algo salió directo del negocio va aparte, nunca sumado a
-      // lo que salió de tu bolsillo.
+      // La raya: de dónde sale el monto grande. No repite "te quedan" — ese es
+      // justamente el número que está arriba en grande. Si algo salió directo
+      // del negocio va aparte, nunca sumado a lo que salió de tu bolsillo.
       notaRaya:
-          'Apartaste ${apartado.toCurrency()} · gastaste ${gastadoPropio.toCurrency()} · '
-          'te quedan ${state.hudRetiroPendienteTotal.toCurrency()}'
+          'Apartaste ${apartado.toCurrency()} y gastaste ${gastadoPropio.toCurrency()}.'
           '${delNegocio > 0.01 ? '\nAparte, ${delNegocio.toCurrency()} de gastos tuyos salieron directo del negocio.' : ''}',
       egresos: state.egresosHistoricosLista,
       isDark: isDark,
       accent: amber,
+      // Solo el desglose por medio: "Aparté" y "Gasté" ya están en la raya, dos
+      // centímetros más arriba.
       chips: [
-        ChipResumen('Aparté', apartado, Colors.orange),
-        ChipResumen('Gasté', state.hudGastadoPersonalTotal, teal),
-        ChipResumen('Gasté EF', state.hudGastosBolsaPersonalEfectivo, teal),
-        ChipResumen('Gasté TR', state.hudGastosBolsaPersonalTransferencia, violet),
+        ChipResumen('Gasté en efectivo', state.hudGastosBolsaPersonalEfectivo, teal),
+        ChipResumen('Gasté por transferencia', state.hudGastosBolsaPersonalTransferencia, violet),
       ],
       acciones: [
         AccionPanel(
@@ -2132,16 +2137,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             builder: (_) => const PagarOperadorDialog(),
           ),
         ),
-        AccionPanel(
-          label: 'APARTAR PARA MÍ',
-          icon: Icons.savings_outlined,
-          color: amber,
-          colorTexto: Colors.black87,
-          abrir: (ctx) => showDialog<bool>(
-            context: ctx,
-            builder: (_) => const RetiroBolsilloPersonalDialog(),
-          ),
-        ),
+        // Apartar plata vive solo en MI BOLSILLO ("TRAER DEL NEGOCIO"): cargar
+        // el bolsillo es algo que se hace desde el bolsillo, y acá quedan las
+        // dos acciones que son del negocio de verdad. Tenerlo en los dos
+        // paneles era el mismo botón dos veces.
       ],
       extras: [
         const SizedBox(height: 18),
@@ -2152,8 +2151,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         TextButton.icon(
           onPressed: () => _abrirDetalleCobrosHistoricos(context, state, isDark, gold),
           icon: Icon(Icons.receipt_long_rounded, size: 18, color: gold),
+          // Sin el monto: ya está en el chip "Total cobrado", ahí arriba.
           label: Text(
-            'Ver total cobrado histórico (${state.hudTotalIngresosHistoricoGlobal.toCurrency()})',
+            'Ver el detalle de los cobros',
             style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: 12),
           ),
         ),
@@ -2222,14 +2222,15 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             // Es TODO lo apartado, no lo que quedó sin gastar: sale del negocio
             // igual lo hayas gastado o no. Decía "Retiros sin gastar" mientras
             // la tarjeta MI BOLSILLO mostraba otro número por lo mismo.
+            //
+            // Sin la nota de cuánto queda sin gastar: eso es estado del
+            // bolsillo y ya lo dice su propio panel.
             _empresaDetalleLinea(
               'Aparté para mí',
               state.hudRetirosBolsaPersonalTotal,
               amber,
               isDark,
               negativo: true,
-              nota:
-                  'De eso, sin gastar todavía: ${state.hudSaldoBolsaPersonalTotal.toCurrency()}',
             ),
         ],
       ),
