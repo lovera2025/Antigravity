@@ -24,6 +24,14 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
   bool _isSubmitting = false;
   String _medioPago = 'Efectivo';
 
+  /// Pasarse del bolsillo tiene que ser una decisión tomada a propósito.
+  ///
+  /// Antes el diálogo ofrecía como "máximo" la suma de tu bolsillo **más** todo
+  /// el saldo del negocio, y al pasarte partía el gasto solo, sin avisar:
+  /// apartabas $500.000, cargabas $800.000 y $300.000 salían de la empresa en
+  /// silencio. La raya que marcaste no servía de nada.
+  bool _confirmaExcedente = false;
+
   static const _gold = Color(0xFFD4AF37);
   static const _teal = Color(0xFF26A69A);
   static const _excedeTol = 0.009;
@@ -147,6 +155,12 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
     final montoIngresado = _parseMontoField();
     final excedeDisponible =
         maxPermitido != null && montoIngresado != null && montoIngresado > maxPermitido + _excedeTol;
+    // Se pasa del bolsillo pero todavía entra en lo que hay en la empresa.
+    final excedeBolsillo = pendiente != null &&
+        montoIngresado != null &&
+        montoIngresado > pendiente + _excedeTol;
+    final excedente = excedeBolsillo ? montoIngresado - pendiente : 0.0;
+    final faltaConfirmar = excedeBolsillo && !excedeDisponible && !_confirmaExcedente;
 
     return AlertDialog(
       title: Row(
@@ -213,13 +227,25 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
                 ),
                 const SizedBox(height: 14),
                 finanzasAsync.when(
-                  data: (_) => _buildResumenPanel(
-                    context,
-                    isDark,
-                    gastadoTotal: gastadoTotal ?? 0,
-                    pendiente: pendiente ?? 0,
-                    maxPermitido: maxPermitido ?? 0,
-                    excedeDisponible: excedeDisponible,
+                  data: (_) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildResumenPanel(
+                        context,
+                        isDark,
+                        gastadoTotal: gastadoTotal ?? 0,
+                        pendiente: pendiente ?? 0,
+                        maxPermitido: maxPermitido ?? 0,
+                        excedeDisponible: excedeDisponible,
+                      ),
+                      if (excedeBolsillo && !excedeDisponible)
+                        _buildAvisoExcedente(
+                          context,
+                          isDark,
+                          excedente: excedente,
+                          pendiente: pendiente,
+                        ),
+                    ],
                   ),
                   loading: () => const Padding(
                     padding: EdgeInsets.only(bottom: 12),
@@ -290,7 +316,12 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
           child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
         ),
         FilledButton.icon(
-          onPressed: (_isSubmitting || maxPermitido == null || excedeDisponible) ? null : _submit,
+          onPressed: (_isSubmitting ||
+                  maxPermitido == null ||
+                  excedeDisponible ||
+                  faltaConfirmar)
+              ? null
+              : _submit,
           style: FilledButton.styleFrom(backgroundColor: _teal, foregroundColor: Colors.white),
           icon: _isSubmitting
               ? const SizedBox(
@@ -302,6 +333,100 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
           label: Text(_isSubmitting ? 'GUARDANDO...' : 'REGISTRAR GASTO', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8)),
         ),
       ],
+    );
+  }
+
+  /// Te pasaste del bolsillo: decilo con todas las letras y ofrecé las dos
+  /// salidas. Sin elegir una, el botón de guardar no habilita.
+  Widget _buildAvisoExcedente(
+    BuildContext context,
+    bool isDark, {
+    required double excedente,
+    required double pendiente,
+  }) {
+    const naranja = Color(0xFFF39C12);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: naranja.withValues(alpha: isDark ? 0.14 : 0.09),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: naranja.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 18, color: naranja),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Te pasás por ${excedente.toCurrency()}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Tu bolsillo cubre ${pendiente.toCurrency()}. El resto sale de la '
+            'plata de la empresa.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Checkbox(
+                value: _confirmaExcedente,
+                onChanged: (v) =>
+                    setState(() => _confirmaExcedente = v ?? false),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                activeColor: naranja,
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(
+                    () => _confirmaExcedente = !_confirmaExcedente,
+                  ),
+                  child: Text(
+                    'Sí, quiero que ${excedente.toCurrency()} salgan del negocio',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              'Si no, bajá el monto a ${pendiente.toCurrency()} y queda todo '
+              'dentro de lo que apartaste.',
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1.3,
+                color: isDark ? Colors.white38 : Colors.black45,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -349,16 +474,20 @@ class _GastoPersonalDialogState extends ConsumerState<GastoPersonalDialog> {
               style: baseStyle.copyWith(fontSize: 11, color: isDark ? Colors.white54 : Colors.black54),
             ),
           ],
-          const SizedBox(height: 8),
-          Text(
-            'Máximo que podés gastar: ${maxPermitido.toCurrency()}',
-            style: baseStyle.copyWith(fontWeight: FontWeight.w800, color: excedeDisponible ? Theme.of(context).colorScheme.error : _teal),
-          ),
           if (maxPermitido > pendiente + _excedeTol) ...[
-            const SizedBox(height: 2),
+            const SizedBox(height: 8),
+            // El tope duro sigue siendo bolsillo + empresa, pero se muestra como
+            // lo que es —un límite absoluto— y no como "lo que podés gastar":
+            // ese rótulo invitaba a usar la plata del negocio sin pensarlo.
             Text(
-              '(bolsillo ${pendiente.toCurrency()} + empresa ${(maxPermitido - pendiente).toCurrency()})',
-              style: baseStyle.copyWith(fontSize: 9, color: isDark ? Colors.white38 : Colors.black38),
+              'Tope absoluto ${maxPermitido.toCurrency()}, contando la empresa',
+              style: baseStyle.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: excedeDisponible
+                    ? Theme.of(context).colorScheme.error
+                    : (isDark ? Colors.white38 : Colors.black38),
+              ),
             ),
           ],
         ],

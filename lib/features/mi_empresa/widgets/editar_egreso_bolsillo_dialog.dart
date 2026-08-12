@@ -33,7 +33,7 @@ class _EditarEgresoBolsilloDialogState extends ConsumerState<EditarEgresoBolsill
   void initState() {
     super.initState();
     _conceptoController = TextEditingController(
-      text: proveedorGastoPersonalVisible(widget.egreso.proveedor),
+      text: widget.egreso.proveedorVisible ?? 'Gasto personal',
     );
 
     final cat = (widget.egreso.categoria ?? '').trim();
@@ -72,7 +72,20 @@ class _EditarEgresoBolsilloDialogState extends ConsumerState<EditarEgresoBolsill
       case _CategoriaEditable.gastoEmpresa:
         return concepto;
       case _CategoriaEditable.gastoPersonal:
-        return empaquetarProveedorGastoEmpresa(concepto);
+        // Conservar de qué bolsa salió. Antes esto forzaba `[empresa]` siempre:
+        // entrabas a corregirle una letra al concepto, tocabas GUARDAR sin
+        // cambiar la categoría, y el gasto pasaba de "salió de tu bolsillo" a
+        // "salió del negocio" — el saldo del negocio bajaba por ese monto y el
+        // bolsillo subía por el mismo. Plata moviéndose por editar un texto.
+        //
+        // Si venía como gasto de empresa, esa plata sí salió del negocio y el
+        // origen se mantiene aunque cambie el rótulo.
+        final veniaDeEmpresa =
+            gastoPersonalEsDesdeEmpresa(widget.egreso) ||
+            (widget.egreso.categoria ?? '').trim() == kCategoriaGastoEmpresa;
+        return veniaDeEmpresa
+            ? empaquetarProveedorGastoEmpresa(concepto)
+            : empaquetarProveedorGastoPendiente(concepto);
     }
   }
 

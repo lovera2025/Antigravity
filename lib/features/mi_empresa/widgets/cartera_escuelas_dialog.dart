@@ -11,7 +11,17 @@ import '../../dashboard/providers/dashboard_provider.dart';
 /// Diálogo interactivo premium estilo Maestro-Detalle para analizar las
 /// deudas y moras pendientes desglosadas por escuela / institución.
 class CarteraEscuelasDialog extends ConsumerStatefulWidget {
-  const CarteraEscuelasDialog({super.key});
+  /// Institución con la que abrir ya posicionado. Sin esto arranca en la
+  /// primera de la lista, que es lo que hacía cuando no se abría desde ningún
+  /// lado.
+  final String? institucionId;
+  final String? institucionNombre;
+
+  const CarteraEscuelasDialog({
+    super.key,
+    this.institucionId,
+    this.institucionNombre,
+  });
 
   @override
   ConsumerState<CarteraEscuelasDialog> createState() => _CarteraEscuelasDialogState();
@@ -53,6 +63,11 @@ class _CarteraEscuelasDialogState extends ConsumerState<CarteraEscuelasDialog> {
   }
 
   void _preseleccionarPrimera() {
+    final pedidoId = widget.institucionId;
+    if (pedidoId != null && pedidoId.isNotEmpty) {
+      _seleccionarEscuela(pedidoId, widget.institucionNombre ?? 'Institución');
+      return;
+    }
     final statsAsync = ref.read(dashboardStatsProvider);
     statsAsync.whenData((stats) {
       if (stats.deudasPorInstitucion.isNotEmpty) {

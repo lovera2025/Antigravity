@@ -17,6 +17,7 @@ import '../common/utils/currency_extensions.dart';
 import '../common/services/pdf_service.dart';
 import 'widgets/pagar_operador_dialog.dart';
 import 'widgets/editar_pago_operador_dialog.dart';
+import 'widgets/cartera_escuelas_dialog.dart';
 import 'models/ingreso_detallado.dart';
 import 'providers/finanzas_provider.dart';
 import '../dashboard/providers/dashboard_provider.dart';
@@ -38,12 +39,13 @@ import '../rentabilidad/repositories/rentabilidad_repository.dart';
 import '../../models/calculo_rentabilidad.dart';
 import '../../models/obligacion_pago.dart';
 import 'providers/obligaciones_provider.dart';
-import 'providers/caja_fuerte_provider.dart';
 import 'widgets/avisos_view.dart';
-import 'widgets/caja_fuerte_dialogs.dart';
 import 'widgets/pagar_aviso_dialog.dart';
 import 'widgets/cobro_masivos_tab.dart';
-import 'widgets/bolsillo_timeline.dart';
+import 'widgets/panel_movimientos_sheet.dart';
+import 'widgets/calendario_filtro_movimientos.dart';
+import 'widgets/retiro_bolsillo_personal_dialog.dart';
+import 'widgets/gasto_personal_dialog.dart';
 import '../cierre_caja/models/turno_caja.dart';
 import '../cierre_caja/providers/cierre_caja_provider.dart';
 import '../cierre_caja/widgets/registrar_retiro_dialog.dart';
@@ -97,20 +99,20 @@ class _MesData {
   const _MesData({required this.mes, required this.ingresos, required this.egresos});
 }
 
+/// Delega en [calcularMesData] del provider en vez de repetir el cálculo.
+///
+/// Eran dos copias con el mismo error —leían las listas ya recortadas al mes
+/// del filtro— y por eso este gráfico mostraba todas las barras en cero salvo
+/// la del mes seleccionado.
 _MesData _calcularMesData(FinanzasState state, DateTime mesInicio) {
-  final mes = DateTime(mesInicio.year, mesInicio.month, 1);
-  final siguiente = DateTime(mes.year, mes.month + 1, 1);
-  final ing = state.ingresos
-      .where((x) => !x.fecha.isBefore(mes) && x.fecha.isBefore(siguiente))
-      .fold(0.0, (s, e) => s + e.monto);
-  final eg = state.egresos
-      .where((x) => x.fecha != null && !x.fecha!.isBefore(mes) && x.fecha!.isBefore(siguiente))
-      .fold(0.0, (s, e) => s + e.monto);
-  return _MesData(mes: mes, ingresos: ing, egresos: eg);
+  final d = calcularMesData(state, mesInicio);
+  return _MesData(mes: d.mes, ingresos: d.ingresos, egresos: d.egresos);
 }
 
 List<_MesData> _ultimosMesesDatos(FinanzasState state, {int cantidad = 6}) {
-  final now = DateTime.now();
+  // Calendario argentino: en las primeras horas del día 1, `DateTime.now()`
+  // local todavía puede estar en el mes anterior.
+  final now = ArTime.nowAr();
   final out = <_MesData>[];
   for (int i = cantidad - 1; i >= 0; i--) {
     final m = DateTime(now.year, now.month - i, 1);
@@ -198,7 +200,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   bool _hudHoyExpanded = false;
 
   /// Caja fuerte colapsable en tab PERSONAL.
-  bool _cajaFuerteExpanded = true;
 
   /// Scroll a secciones de la vista SALUD al tocar pilares del hero.
   final GlobalKey _keySaludRunway = GlobalKey();
@@ -257,7 +258,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   void initState() {
     super.initState();
     _adminAuthNotifier = ref.read(adminAuthProvider.notifier);
-    _tabController = TabController(length: 5, vsync: this);
+    // 4 pestañas: se retiró PERSONAL. Su contenido único —la liquidación por
+    // operador— vive ahora en el panel SALDO DEL NEGOCIO, leyendo el
+    // histórico en vez del mes filtrado, que era lo que la dejaba en blanco.
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabControllerTick);
     final isAdmin = ref.read(adminAuthProvider).isAdmin;
     if (isAdmin) {
@@ -475,7 +479,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         _buildContent(isDark, gold, state),
         const PresupuestosScreen(embedded: true),
         CobroMasivosTab(isDark: isDark, gold: gold),
-        _buildPersonalTab(isDark, gold, state),
         _buildOperadoresTab(isDark, gold),
       ],
     );
@@ -612,15 +615,14 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                       Tab(icon: Icon(Icons.bar_chart_rounded, size: 18), text: 'FINANZAS'),
                       Tab(icon: Icon(Icons.request_quote_outlined, size: 18), text: 'PRESUPUESTOS'),
                       Tab(icon: Icon(Icons.payments_outlined, size: 18), text: 'COBRO'),
-                      Tab(icon: Icon(Icons.engineering_outlined, size: 18), text: 'PERSONAL'),
                       Tab(icon: Icon(Icons.login_rounded, size: 18), text: 'OPERADORES'),
                     ],
                   )
                 : null,
           ),
-          floatingActionButton: showMiEmpresaContent && _tabController.index == 3
-              ? _buildPersonalFAB(isDark, gold)
-              : null,
+          // Sin FAB: colgaba de la pestaña PERSONAL. Pagar operador ahora se
+          // hace desde el panel SALDO DEL NEGOCIO, junto al resto de las
+          // acciones del negocio.
           body: !_miEmpresaGateReady
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
@@ -800,7 +802,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       builder: (ctx) => AlertDialog(
         title: const Text('¿Eliminar este retiro de caja?'),
         content: Text(
-          'Se borrará "${e.proveedor ?? 'Retiro de caja'}" por ${e.monto.toCurrency()} (local y nube). Esta acción no se puede deshacer.',
+          'Se borrará "${e.proveedorVisible ?? 'Retiro de caja'}" por ${e.monto.toCurrency()} (local y nube). Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -1423,17 +1425,29 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
-  Widget _empresaDetalleLinea(String lbl, double monto, Color color, bool isDark, {bool negativo = false}) {
+  Widget _empresaDetalleLinea(String lbl, double monto, Color color, bool isDark, {bool negativo = false, String? nota}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(lbl, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? Colors.white54 : Colors.black54)),
-          Text(
-            '${negativo ? '−' : ''}${monto.toCurrency()}',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(lbl, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? Colors.white54 : Colors.black54)),
+              Text(
+                '${negativo ? '−' : ''}${monto.toCurrency()}',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color),
+              ),
+            ],
           ),
+          if (nota != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              nota,
+              style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38),
+            ),
+          ],
         ],
       ),
     );
@@ -1890,29 +1904,68 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
+  /// Panel MI BOLSILLO. Los movimientos salen del estado —que ya los trae— en
+  /// vez de repetir el `getEgresosConEvento()` con JOIN en cada apertura.
   Future<void> _abrirHistorialBolsillo(BuildContext context, FinanzasState state, bool isDark, Color gold) async {
-    try {
-      final raw = await ref.read(egresosRepositoryProvider).getEgresosConEvento();
-      final egresos = raw.map((e) => Egreso.fromJson(e)).toList();
-      if (!context.mounted) return;
-      await showBolsilloHistorialSheet(
-        context,
-        egresos: egresos,
-        isDark: isDark,
-        gold: gold,
-        gastadoTotal: state.hudGastadoPersonalTotal,
-        retiroPendiente: state.hudRetiroPendienteTotal,
-        retiradoTotal: state.hudRetirosBolsaPersonalTotal,
-        gastadoEfectivo: state.hudGastosBolsaPersonalEfectivo,
-        gastadoTransferencia: state.hudGastosBolsaPersonalTransferencia,
-        onRefresh: () => ref.read(finanzasProvider.notifier).recargar(),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo cargar tu bolsillo: $e')),
-      );
-    }
+    const amber = Color(0xFFFFB74D);
+    const teal = Color(0xFF26A69A);
+    const violet = Color(0xFF6C63FF);
+    void refrescar() => ref.read(finanzasProvider.notifier).recargar();
+
+    final apartado = state.hudRetirosBolsaPersonalTotal;
+    final gastadoPropio = state.hudGastadoPersonalTotal - state.hudGastosPersonalEmpresaTotal;
+    final delNegocio = state.hudGastosPersonalEmpresaTotal;
+
+    await showPanelMovimientosSheet(
+      context,
+      ambito: AmbitoPanel.bolsillo,
+      titulo: 'MI BOLSILLO',
+      subtitulo: 'Lo que apartaste del negocio para vos, y en qué se fue.',
+      monto: state.hudRetiroPendienteTotal,
+      labelMonto: 'te queda disponible',
+      // La raya, en una línea: cuánto apartaste, cuánto gastaste de eso y qué
+      // te queda. Si algo salió directo del negocio va aparte, nunca sumado a
+      // lo que salió de tu bolsillo.
+      notaRaya:
+          'Apartaste ${apartado.toCurrency()} · gastaste ${gastadoPropio.toCurrency()} · '
+          'te quedan ${state.hudRetiroPendienteTotal.toCurrency()}'
+          '${delNegocio > 0.01 ? '\nAparte, ${delNegocio.toCurrency()} de gastos tuyos salieron directo del negocio.' : ''}',
+      egresos: state.egresosHistoricosLista,
+      isDark: isDark,
+      accent: amber,
+      chips: [
+        ChipResumen('Aparté', apartado, Colors.orange),
+        ChipResumen('Gasté', state.hudGastadoPersonalTotal, teal),
+        ChipResumen('Gasté EF', state.hudGastosBolsaPersonalEfectivo, teal),
+        ChipResumen('Gasté TR', state.hudGastosBolsaPersonalTransferencia, violet),
+      ],
+      acciones: [
+        AccionPanel(
+          // Mismo movimiento que "APARTAR PARA MÍ" en el panel del negocio,
+          // pero nombrado desde este lado: acá la plata no sale, entra. Decir
+          // "apartar" mirando el bolsillo suena a separar algo de lo que ya
+          // tenés, que es lo contrario de lo que hace.
+          label: 'TRAER DEL NEGOCIO',
+          icon: Icons.south_west_rounded,
+          color: amber,
+          colorTexto: Colors.black87,
+          abrir: (ctx) => showDialog<bool>(
+            context: ctx,
+            builder: (_) => const RetiroBolsilloPersonalDialog(),
+          ),
+        ),
+        AccionPanel(
+          label: 'REGISTRAR GASTO',
+          icon: Icons.remove_circle_outline_rounded,
+          color: teal,
+          abrir: (ctx) => showDialog<bool>(
+            context: ctx,
+            builder: (_) => const GastoPersonalDialog(),
+          ),
+        ),
+      ],
+      onRefresh: refrescar,
+    );
   }
 
   void _abrirDetalleCobrosHistoricos(BuildContext context, FinanzasState state, bool isDark, Color gold) {
@@ -2032,143 +2085,309 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
+  /// Panel SALDO DEL NEGOCIO: mismo widget que MI BOLSILLO, con sus acciones y
+  /// su historial. Antes era un modal de solo lectura — la tarjeta de $0 tenía
+  /// botones y la de los millones no.
   void _abrirDetalleEmpresa(BuildContext context, FinanzasState state, bool isDark, Color gold) {
     const green = Color(0xFF00B894);
     const red = Color(0xFFE74C3C);
     const amber = Color(0xFFFFB74D);
-    final cap = state.hudPlataDelNegocio;
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.52,
-          maxChildSize: 0.88,
-          minChildSize: 0.38,
-          builder: (_, _) {
-            return Container(
-              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF121218) : Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: green.withValues(alpha: 0.35)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SALDO DEL NEGOCIO', style: GoogleFonts.oswald(fontSize: 18, fontWeight: FontWeight.w900, color: green)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Saldo contable: cobros menos todo lo que salió del negocio '
-                    '(operadores, gastos personales tuyos, retiros pendientes). '
-                    'Comparalo con efectivo + banco + cofre; no es un arqueo físico automático.',
-                    style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white54 : Colors.black54),
-                  ),
-                  const SizedBox(height: 16),
-                  _empresaDetalleLinea('Total cobrado', state.hudTotalIngresosHistoricoGlobal, green, isDark),
-                  _empresaDetalleLinea('Gastos operativos', state.hudGastosOperativosHistoricoGlobal, red, isDark, negativo: true),
-                  if (state.hudGastosPersonalEmpresaTotal > 0.01)
-                    _empresaDetalleLinea(
-                      'Gastos personales (tuyos)',
-                      state.hudGastosPersonalEmpresaTotal,
-                      red,
-                      isDark,
-                      negativo: true,
-                    ),
-                  if (state.hudRetirosBolsaPersonalTotal > 0.01)
-                    _empresaDetalleLinea(
-                      'Retiros sin gastar',
-                      state.hudRetirosBolsaPersonalTotal,
-                      amber,
-                      isDark,
-                      negativo: true,
-                    ),
-                  const Divider(height: 24),
-                  Text(
-                    cap.toCurrency(),
-                    style: GoogleFonts.oswald(fontSize: 32, fontWeight: FontWeight.w900, color: cap >= 0 ? green : red),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Saldo contable del negocio (EF ${state.hudEfectivoNetoHistorico.toCurrency()} · TR ${state.hudTransferenciaNetaHistorica.toCurrency()})',
-                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black45),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _abrirDetalleCobrosHistoricos(context, state, isDark, gold);
-                    },
-                    icon: Icon(Icons.receipt_long_rounded, size: 18, color: gold),
-                    label: Text(
-                      'Ver total cobrado histórico (${state.hudTotalIngresosHistoricoGlobal.toCurrency()})',
-                      style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+    const violet = Color(0xFF6C63FF);
+    void refrescar() => ref.read(finanzasProvider.notifier).recargar();
+
+    showPanelMovimientosSheet(
+      context,
+      ambito: AmbitoPanel.negocio,
+      titulo: 'SALDO DEL NEGOCIO',
+      subtitulo:
+          'Cobros menos todo lo que salió. Es contable: comparalo con efectivo + banco + cofre, '
+          'no es un arqueo físico automático.',
+      monto: state.hudPlataDelNegocio,
+      labelMonto: 'saldo contable',
+      egresos: state.egresosHistoricosLista,
+      isDark: isDark,
+      accent: green,
+      chips: [
+        ChipResumen('Efectivo', state.hudEfectivoNetoHistorico, green),
+        ChipResumen('Transferencia', state.hudTransferenciaNetaHistorica, violet),
+        ChipResumen('Total cobrado', state.hudTotalIngresosHistoricoGlobal, gold),
+        ChipResumen('Salió del negocio', state.hudTotalEgresosHistoricoGlobal, red),
+      ],
+      acciones: [
+        AccionPanel(
+          label: 'REGISTRAR GASTO',
+          icon: Icons.remove_circle_outline_rounded,
+          color: red,
+          abrir: (ctx) => showDialog<bool>(
+            context: ctx,
+            builder: (_) => const RegistrarEgresoGlobalDialog(),
+          ),
+        ),
+        AccionPanel(
+          label: 'PAGAR OPERADOR',
+          icon: Icons.engineering_outlined,
+          color: const Color(0xFF3498DB),
+          abrir: (ctx) => showDialog<bool>(
+            context: ctx,
+            builder: (_) => const PagarOperadorDialog(),
+          ),
+        ),
+        AccionPanel(
+          label: 'APARTAR PARA MÍ',
+          icon: Icons.savings_outlined,
+          color: amber,
+          colorTexto: Colors.black87,
+          abrir: (ctx) => showDialog<bool>(
+            context: ctx,
+            builder: (_) => const RetiroBolsilloPersonalDialog(),
+          ),
+        ),
+      ],
+      extras: [
+        const SizedBox(height: 18),
+        _desgloseSalidas(state, isDark, gold, red, amber),
+        const SizedBox(height: 10),
+        _liquidacionPorOperador(context, state, isDark, gold),
+        const SizedBox(height: 6),
+        TextButton.icon(
+          onPressed: () => _abrirDetalleCobrosHistoricos(context, state, isDark, gold),
+          icon: Icon(Icons.receipt_long_rounded, size: 18, color: gold),
+          label: Text(
+            'Ver total cobrado histórico (${state.hudTotalIngresosHistoricoGlobal.toCurrency()})',
+            style: TextStyle(fontWeight: FontWeight.w800, color: gold, fontSize: 12),
+          ),
+        ),
+      ],
+      onRefresh: refrescar,
     );
   }
 
-  Widget _buildFiltroMeses(bool isDark, Color gold, FinanzasState state) {
-    final ahoraAr = ArTime.nowAr();
-    final meses = List.generate(6, (i) => DateTime(ahoraAr.year, ahoraAr.month - i, 1));
-    const mesesNombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  /// En qué se fue la plata, abierto por categoría.
+  ///
+  /// El total suelto de "gastos operativos" mezcla un pago a proveedor con un
+  /// `Retiro de caja`, que no compra nada: solo mueve plata del cajón del turno
+  /// a la oficina. Verlo separado es lo que permite decidir si eso tiene que
+  /// seguir restando del saldo.
+  Widget _desgloseSalidas(
+    FinanzasState state,
+    bool isDark,
+    Color gold,
+    Color red,
+    Color amber,
+  ) {
+    final porCategoria = state.hudGastosOperativosPorCategoria;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...meses.map((m) {
-            final isSelected = state.mesFiltro?.year == m.year && state.mesFiltro?.month == m.month;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text('${mesesNombres[m.month - 1]} ${m.year}'),
-                selected: isSelected,
-                selectedColor: gold.withValues(alpha: 0.2),
-                backgroundColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
-                showCheckmark: false,
-                labelStyle: TextStyle(
-                  color: isSelected ? gold : (isDark ? Colors.white54 : Colors.black54),
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
-                ),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? gold.withValues(alpha: 0.5) : Colors.transparent)),
-                onSelected: (val) {
-                  if (val) {
-                    ref.read(finanzasProvider.notifier).aplicarFiltro(mes: m, clearFechaExacta: true);
-                  } else {
-                    ref.read(finanzasProvider.notifier).aplicarFiltro(clearMes: true, clearFechaExacta: true);
-                  }
-                },
-              ),
-            );
-          }),
-          if (state.mesFiltro != null || state.eventoIdFiltro != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: IconButton(
-                style: _finanzasIconButtonStyle(),
-                icon: Icon(Icons.filter_alt_off_rounded, size: 20, color: isDark ? Colors.white54 : Colors.black54),
-                tooltip: 'Limpiar Filtros',
-                onPressed: () {
-                  ref.read(finanzasProvider.notifier).aplicarFiltro(
-                        clearMes: true,
-                        clearEvento: true,
-                        clearFechaExacta: true,
-                      );
-                },
-              ),
+          Text(
+            'EN QUÉ SE FUE',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+              color: isDark ? Colors.white38 : Colors.black45,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final e in porCategoria.entries)
+            _empresaDetalleLinea(
+              e.key,
+              e.value,
+              e.key.trim() == kCategoriaRetiroCaja ? amber : red,
+              isDark,
+              negativo: true,
+              nota: e.key.trim() == kCategoriaRetiroCaja
+                  ? 'Salió del cajón del turno, no se gastó. Hoy resta igual.'
+                  : null,
+            ),
+          if (state.hudGastosPersonalEmpresaTotal > 0.01)
+            _empresaDetalleLinea(
+              'Gastos personales tuyos',
+              state.hudGastosPersonalEmpresaTotal,
+              red,
+              isDark,
+              negativo: true,
+              nota: 'Salieron directo del negocio, sin pasar por tu bolsillo.',
+            ),
+          if (state.hudRetirosBolsaPersonalTotal > 0.01)
+            // Es TODO lo apartado, no lo que quedó sin gastar: sale del negocio
+            // igual lo hayas gastado o no. Decía "Retiros sin gastar" mientras
+            // la tarjeta MI BOLSILLO mostraba otro número por lo mismo.
+            _empresaDetalleLinea(
+              'Aparté para mí',
+              state.hudRetirosBolsaPersonalTotal,
+              amber,
+              isDark,
+              negativo: true,
+              nota:
+                  'De eso, sin gastar todavía: ${state.hudSaldoBolsaPersonalTotal.toCurrency()}',
             ),
         ],
+      ),
+    );
+  }
+
+  /// Un solo control de período: dice qué estás viendo y abre el calendario.
+  ///
+  /// Reemplaza la fila de 6 chips de meses, que tenía tres problemas: solo
+  /// llegaba 6 meses atrás (marzo se caía de la lista el mes siguiente), no
+  /// mostraba en qué meses hay movimientos, y la salida a "ver todo" era un
+  /// embudo tachado que aparecía a veces. Ese filtro invisible es el que dejaba
+  /// pantallas en blanco con datos detrás.
+  Widget _buildFiltroMeses(bool isDark, Color gold, FinanzasState state) {
+    final rango = _rangoDesdeEstado(state);
+    final hayFiltro = !rango.esTodo || state.eventoIdFiltro != null;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Flexible(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _abrirSelectorPeriodo(context, state, isDark, gold),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: hayFiltro
+                      ? gold.withValues(alpha: 0.14)
+                      : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03)),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: hayFiltro
+                        ? gold.withValues(alpha: 0.5)
+                        : (isDark ? Colors.white12 : Colors.black12),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_month_rounded, size: 15, color: gold),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        rango.etiqueta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: hayFiltro ? gold : (isDark ? Colors.white70 : Colors.black87),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.expand_more_rounded, size: 16, color: gold.withValues(alpha: 0.7)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (hayFiltro)
+          IconButton(
+            style: _finanzasIconButtonStyle(),
+            icon: Icon(Icons.close_rounded, size: 18, color: isDark ? Colors.white54 : Colors.black54),
+            tooltip: 'Ver todo el historial',
+            onPressed: () => ref.read(finanzasProvider.notifier).aplicarFiltro(
+                  clearMes: true,
+                  clearEvento: true,
+                  clearFechaExacta: true,
+                ),
+          ),
+      ],
+    );
+  }
+
+  /// Traduce el filtro del provider al recorte que entiende el calendario.
+  RangoFiltroMovimientos _rangoDesdeEstado(FinanzasState state) {
+    final mes = state.mesFiltro;
+    if (mes == null) return const RangoFiltroMovimientos.todo();
+    return RangoFiltroMovimientos(
+      mes: DateTime(mes.year, mes.month),
+      dia: state.fechaExactaFiltro,
+    );
+  }
+
+  void _abrirSelectorPeriodo(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold,
+  ) {
+    // Los días que se marcan salen de ingresos Y egresos: el filtro manda
+    // sobre las dos listas, así que un día con un cobro tiene que verse
+    // aunque no haya habido gastos.
+    final fechas = <DateTime>[
+      for (final i in state.ingresosHistoricosLista) i.fecha,
+      for (final e in state.egresosHistoricosLista)
+        if (e.fecha != null) e.fecha!,
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF121218) : const Color(0xFFFCF9F2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: gold.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'QUÉ PERÍODO MIRAR',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
+                color: isDark ? Colors.white38 : Colors.black45,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Tocá un día para ver ese día, el nombre del mes para el mes entero, '
+              'o TODO para el historial completo.',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                color: isDark ? Colors.white54 : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 12),
+            CalendarioFiltroMovimientos(
+              fechas: fechas,
+              valor: _rangoDesdeEstado(state),
+              isDark: isDark,
+              accent: gold,
+              onChanged: (r) {
+                Navigator.of(ctx).pop();
+                final notifier = ref.read(finanzasProvider.notifier);
+                if (r.esTodo) {
+                  notifier.aplicarFiltro(clearMes: true, clearFechaExacta: true);
+                } else if (r.dia != null) {
+                  notifier.aplicarFiltro(mes: r.mes, fechaExactaFiltro: r.dia);
+                } else {
+                  notifier.aplicarFiltro(mes: r.mes, clearFechaExacta: true);
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2337,7 +2556,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       onRefresh: () async {
         await ref.read(finanzasProvider.notifier).recargar();
         await ref.read(obligacionesProvider.notifier).refresh();
-        await ref.read(cajaFuerteProvider.notifier).refresh();
       },
       color: gold,
       child: LayoutBuilder(
@@ -3134,6 +3352,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     final double totalEnLaCalle = deudas.fold(0.0, (s, d) => s + d.saldoGlobal);
     final int conVencido = deudas.where((d) => d.vencido > 0.01).length;
     final int conPorVencer = deudas.where((d) => d.vencido <= 0.01 && d.aVencer > 0.01).length;
+    final int nMasivos = deudas.where((d) => d.esMasivo).length;
+    final int nParticulares = deudas.length - nMasivos;
 
     // Filtrar por búsqueda
     final query = _deudasSearchCtrl.text.trim().toLowerCase();
@@ -3188,7 +3408,14 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
               Row(
                 children: [
                   Text(
-                    '${deudas.length} instituciones',
+                    // "instituciones" solo era cierto para las escuelas: la
+                    // otra mitad son familias de recepciones particulares.
+                    [
+                      if (nMasivos > 0)
+                        '$nMasivos ${nMasivos == 1 ? "escuela" : "escuelas"}',
+                      if (nParticulares > 0)
+                        '$nParticulares ${nParticulares == 1 ? "particular" : "particulares"}',
+                    ].join(' · '),
                     style: TextStyle(
                       fontSize: 10,
                       color: isDark ? Colors.white38 : Colors.black45,
@@ -3221,7 +3448,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        '$conPorVencer por vencer',
+                        // Es UNA cuota, la inmediata: el cálculo corta en la
+                        // primera que vence dentro de 30 días. "Por vencer" a
+                        // secas se leía como todo lo que viene.
+                        '$conPorVencer con próxima cuota',
                         style: const TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
@@ -3280,12 +3510,14 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         ),
         const SizedBox(height: 10),
 
-        // ── Lista de instituciones ──
+        // ── Lista, partida por tipo de negocio ──
+        // Una escuela con cuotas a meses y una recepción que se paga de una no
+        // se leen igual: mezclarlas obligaba a adivinar cuál era cuál.
         if (query.isNotEmpty && filtradas.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'No se encontró ninguna institución con "$query".',
+              'No se encontró ningún cliente con "$query".',
               style: TextStyle(
                 fontSize: 10,
                 fontStyle: FontStyle.italic,
@@ -3293,14 +3525,20 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
               ),
             ),
           )
-        else if (visibles.isNotEmpty)
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: visibles.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (ctx, i) => _buildDeudaCard(visibles[i], isDark, gold),
+        else ...[
+          _bloqueDeuda(
+            'ESCUELAS · eventos masivos',
+            visibles.where((d) => d.esMasivo).toList(),
+            isDark,
+            gold,
           ),
+          _bloqueDeuda(
+            'PARTICULARES · recepciones',
+            visibles.where((d) => !d.esMasivo).toList(),
+            isDark,
+            gold,
+          ),
+        ],
 
         // ── Botón expandir/colapsar ──
         if (query.isEmpty && deudas.length > 3) ...[
@@ -3317,7 +3555,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _deudasExpanded ? 'Ver menos' : 'Ver las ${deudas.length} instituciones',
+                  _deudasExpanded ? 'Ver menos' : 'Ver los ${deudas.length} clientes',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -3329,6 +3567,202 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           ),
         ],
       ],
+    );
+  }
+
+  /// Cuánto se le pagó a cada operador, de mayor a menor.
+  ///
+  /// Responde "¿cuánto le pagué a Juan?", que el historial cronológico no
+  /// contesta: ahí los pagos quedan mezclados con el alquiler y los proveedores.
+  /// Vivía en la pestaña PERSONAL, que leía `state.egresos` —recortado al mes
+  /// del filtro— y por eso decía "SIN PAGOS REGISTRADOS" aunque hubiera
+  /// millones pagados en meses anteriores. Acá lee la lista histórica.
+  Widget _liquidacionPorOperador(
+    BuildContext context,
+    FinanzasState state,
+    bool isDark,
+    Color gold,
+  ) {
+    const azul = Color(0xFF3498DB);
+
+    final porOperador = <String, List<Egreso>>{};
+    for (final e in state.egresosHistoricosLista) {
+      if ((e.categoria ?? '').trim() != 'Personal') continue;
+      porOperador
+          .putIfAbsent(e.proveedorVisible ?? 'Sin nombre', () => [])
+          .add(e);
+    }
+    if (porOperador.isEmpty) return const SizedBox.shrink();
+
+    final ordenados = porOperador.entries.toList()
+      ..sort((a, b) {
+        final ta = a.value.fold<double>(0, (s, e) => s + e.monto);
+        final tb = b.value.fold<double>(0, (s, e) => s + e.monto);
+        return tb.compareTo(ta);
+      });
+    final total = ordenados.fold<double>(
+      0,
+      (s, e) => s + e.value.fold<double>(0, (x, g) => x + g.monto),
+    );
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          title: Text(
+            'LIQUIDACIÓN POR OPERADOR',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+              color: isDark ? Colors.white38 : Colors.black45,
+            ),
+          ),
+          subtitle: Text(
+            '${ordenados.length} ${ordenados.length == 1 ? "operador" : "operadores"} · ${total.toCurrency()}',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: azul),
+          ),
+          children: [
+            for (final op in ordenados)
+              _filaOperador(context, op.key, op.value, isDark, azul),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Un operador con su total. Se despliega para ver cada pago y editarlo.
+  Widget _filaOperador(
+    BuildContext context,
+    String nombre,
+    List<Egreso> pagos,
+    bool isDark,
+    Color azul,
+  ) {
+    final total = pagos.fold<double>(0, (s, e) => s + e.monto);
+    final ordenados = List<Egreso>.from(pagos)
+      ..sort((a, b) {
+        final fa = a.fecha;
+        final fb = b.fecha;
+        if (fa == null && fb == null) return 0;
+        if (fa == null) return 1;
+        if (fb == null) return -1;
+        return fb.compareTo(fa);
+      });
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        dense: true,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                nombre,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+              ),
+            ),
+            Text(
+              total.toCurrency(),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: azul),
+            ),
+          ],
+        ),
+        subtitle: Text(
+          '${pagos.length} ${pagos.length == 1 ? "pago" : "pagos"}',
+          style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45),
+        ),
+        children: [
+          for (final p in ordenados)
+            ListTile(
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              contentPadding: const EdgeInsets.only(left: 12, right: 0),
+              title: Text(
+                p.fecha != null ? ArTime.formatFechaCorta(p.fecha!) : 'Sin fecha',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                p.medioPago ?? '—',
+                style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45),
+              ),
+              trailing: Text(
+                '−${p.monto.toCurrency()}',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFFE74C3C)),
+              ),
+              onTap: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => EditarPagoOperadorDialog(egreso: p),
+                );
+                if (ok == true) {
+                  await ref.read(finanzasProvider.notifier).recargar();
+                }
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Un bloque de la deuda (escuelas o particulares) con su propio subtotal.
+  /// Se omite entero si no hay nadie de ese tipo.
+  Widget _bloqueDeuda(
+    String titulo,
+    List<InstitucionDeuda> items,
+    bool isDark,
+    Color gold,
+  ) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final subtotal = items.fold<double>(0, (s, d) => s + d.saldoGlobal);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                titulo,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                  color: isDark ? Colors.white38 : Colors.black45,
+                ),
+              ),
+              Text(
+                subtotal.toCurrency(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: gold.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...items.map(
+            (d) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _buildDeudaCard(d, isDark, gold),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3350,7 +3784,25 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.05);
 
-    return Container(
+    // Tocar abre la cartera ya posicionada en esta escuela: el panel agrupa por
+    // cliente, así que sin esto se ve el total pero nunca quién adentro debe.
+    //
+    // Solo para masivos: la cartera lista alumno por alumno y una recepción
+    // particular no tiene alumnos, así que abriría vacía.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: esc.esMasivo
+            ? () => showDialog<void>(
+                  context: context,
+                  builder: (_) => CarteraEscuelasDialog(
+                    institucionId: esc.id,
+                    institucionNombre: esc.nombre,
+                  ),
+                )
+            : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: cardBg,
@@ -3384,6 +3836,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   ),
                 ),
               ),
+              if (esc.esMasivo) ...[
+                Icon(Icons.chevron_right_rounded, size: 14, color: gold.withValues(alpha: 0.5)),
+                const SizedBox(width: 2),
+              ],
               // Total real a la derecha del nombre
               Text(
                 esc.saldoGlobal.toCurrency(),
@@ -3424,6 +3880,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             ),
           ],
         ],
+      ),
+        ),
       ),
     );
   }
@@ -4105,7 +4563,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         else
           ...topRows.map((e) {
           final cat = (e.categoria?.trim().isNotEmpty == true) ? e.categoria! : 'Sin categoría';
-          final titulo = (e.proveedor?.trim().isNotEmpty == true) ? e.proveedor! : cat;
+          final titulo = e.proveedorVisible ?? cat;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Container(
@@ -5407,7 +5865,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   bool _egresoCoincideTexto(Egreso eg, String q) {
     if (q.isEmpty) return true;
     final ql = q.toLowerCase();
-    final prov = (eg.proveedor ?? '').toLowerCase();
+    // Sobre el texto visible: se busca por el concepto, no por el prefijo.
+    final prov = (eg.proveedorVisible ?? '').toLowerCase();
     final cat = (eg.categoria ?? '').toLowerCase();
     final mp = (eg.medioPago ?? '').toLowerCase();
     return prov.contains(ql) || cat.contains(ql) || mp.contains(ql);
@@ -5840,7 +6299,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                           final cat = (eg.categoria ?? 'Otro').toUpperCase();
                           return DataRow(
                             cells: [
-                              DataCell(Text(eg.proveedor ?? 'S/R', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11))),
+                              DataCell(Text(eg.proveedorVisible ?? 'S/R', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11))),
                               DataCell(Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
@@ -5863,39 +6322,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 
   // ── FAB Personal ──────────────────────────────────────────────────────────
-  Widget _buildPersonalFAB(bool isDark, Color gold) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blueAccent.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: FloatingActionButton.extended(
-        onPressed: () async {
-          final result = await showDialog<bool>(
-            context: context,
-            builder: (_) => const PagarOperadorDialog(),
-          );
-          if (mounted && result == true) {
-            _fetchOperadores();
-            ref.read(finanzasProvider.notifier).recargar();
-          }
-        },
-        backgroundColor: Colors.blueAccent,
-        label: const Text(
-          'PAGAR OPERADOR',
-          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12),
-        ),
-        icon: const Icon(Icons.engineering_outlined, size: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-    );
-  }
 
   // ── Tab OPERADORES (recepción check-in por evento) ───────────────────────────
   String _labelEventoOp(Map<String, dynamic> ev) {
@@ -6521,640 +6947,13 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   }
 
   /// Referencia semanal cobrada vs cupo «caja fuerte» solo uso declarativo dueño (SQLite local).
-  Widget _buildTuBolsilloMiniCard(BuildContext context, bool isDark, Color gold, FinanzasState state) {
-    const amber = Color(0xFFFFB74D);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _abrirHistorialBolsillo(context, state, isDark, gold),
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [amber.withValues(alpha: 0.85), amber],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(color: amber.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 6)),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                child: const Icon(Icons.savings_outlined, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'MI BOLSILLO',
-                      style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2),
-                    ),
-                    Text(
-                      state.hudRetiroPendienteTotal.toCurrency(),
-                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      'Retiré ${state.hudRetirosBolsaPersonalTotal.toCurrency()} · Gasté ${state.hudGastadoPersonalTotal.toCurrency()}',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white70),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildCajaFuertePersonalSection(bool isDark, Color gold) {
-    const cof = Color(0xFF5D4037);
-    const amberAccent = Color(0xFFFFB74D);
-    final async = ref.watch(cajaFuerteProvider);
+  // Se retiró `_buildCajaFuertePersonalSection`: la UI del cofre físico era
+  // un segundo libro llevado a mano, en su propia tabla y sin relación con
+  // los egresos, sobre la misma plata que ya informa SALDO DEL NEGOCIO.
 
-    return async.when(
-      loading: () => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: const LinearProgressIndicator(minHeight: 4),
-        ),
-      ),
-      error: (e, _) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.red.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text('No se pudo cargar Caja fuerte: $e', style: const TextStyle(fontSize: 12)),
-      ),
-      data: (res) {
-        final saldo = res.saldo;
-        final sinSaldo = saldo <= 1e-6;
-        final umbralBajo = !sinSaldo &&
-            res.ultimaAsignacionMonto > 100 &&
-            saldo <= res.ultimaAsignacionMonto * 0.15;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: amberAccent.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.savings_outlined, color: amberAccent, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CAJA FUERTE',
-                        style: GoogleFonts.oswald(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                          color: isDark ? Colors.white : cof,
-                        ),
-                      ),
-                      Text(
-                        'Cupo personal del dueño (no descontamos caja empresa automáticamente)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          height: 1.25,
-                          color: isDark ? Colors.white54 : Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (sinSaldo)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
-                ),
-                child: const Text(
-                  'Sin saldo en Caja fuerte. Asigná un monto para poder registrar retiros.',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.redAccent),
-                ),
-              )
-            else if (umbralBajo)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
-                ),
-                child: const Text(
-                  'Saldo bajo: te queda poco respecto de tu última asignación.',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.deepOrange),
-                ),
-              ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    cof.withValues(alpha: isDark ? 0.95 : 1),
-                    cof.withValues(alpha: 0.75),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: gold.withValues(alpha: 0.35)),
-                boxShadow: [
-                  BoxShadow(
-                    color: cof.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Saldo disponible',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    saldo.toCurrency(),
-                    style: TextStyle(color: sinSaldo ? Colors.white54 : Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Cobros registrados esta semana (lun–dom)',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 10, fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    res.ingresosRegistradosSemana.toCurrency(),
-                    style: const TextStyle(color: amberAccent, fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Retiros Caja fuerte esta semana: ${res.retirosSemana.toCurrency()}',
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      FilledButton.icon(
-                        onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (_) => const CajaFuerteAsignarDialog(),
-                          );
-                          if (mounted && ok == true) {
-                            await ref.read(cajaFuerteProvider.notifier).refresh();
-                          }
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: gold,
-                          foregroundColor: Colors.black,
-                        ),
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Asignar', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: sinSaldo
-                            ? null
-                            : () async {
-                                final ok = await showDialog<bool>(
-                                  context: context,
-                                  builder: (_) => CajaFuerteRetiroDialog(saldoActual: saldo),
-                                );
-                                if (mounted && ok == true) {
-                                  await ref.read(cajaFuerteProvider.notifier).refresh();
-                                }
-                              },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
-                        ),
-                        icon: const Icon(Icons.remove_rounded, size: 18),
-                        label: const Text('Retiro', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (res.movimientos.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Últimos movimientos',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: isDark ? Colors.white38 : Colors.black45),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06)),
-                ),
-                child: Column(
-                  children: res.movimientos.take(5).map((m) {
-                    final d = m.createdAt.toLocal();
-                    final fechaTxt = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-                    final sign = m.esAsignacion ? '+' : '−';
-                    final col = m.esAsignacion ? const Color(0xFF00B894) : Colors.redAccent;
-                    return ListTile(
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      leading: Icon(
-                        m.esAsignacion ? Icons.arrow_circle_down_rounded : Icons.arrow_circle_up_rounded,
-                        color: col,
-                        size: 20,
-                      ),
-                      title: Text(
-                        '${m.esAsignacion ? 'Asignación' : 'Retiro'} $sign${m.monto.toCurrency()}',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                      ),
-                      subtitle: Text(
-                        fechaTxt + (m.nota != null && m.nota!.isNotEmpty ? ' · ${m.nota}' : ''),
-                        style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black45),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _placeholderSinPagosPersonal(Color blue) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: blue.withValues(alpha: 0.08),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(Icons.engineering_outlined, color: blue, size: 40),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'SIN PAGOS A PERSONAL REGISTRADOS',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1, color: Colors.grey),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Podés cargar pagos a operadores con «Pagar operador» cuando corresponda.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: Colors.grey),
-        ),
-      ],
-    );
-  }
 
   // ── Tab PERSONAL ───────────────────────────────────────────────────────────
-  Widget _buildPersonalTab(bool isDark, Color gold, FinanzasState state) {
-    const blue = Colors.blueAccent;
-    const red = Color(0xFFE74C3C);
-
-    final personal = state.egresos.where((e) => e.categoria == 'Personal').toList();
-
-    // Agrupar por proveedor (operador)
-    final grouped = <String, List<Egreso>>{};
-    for (final eg in personal) {
-      final key = eg.proveedor ?? 'Sin nombre';
-      grouped.putIfAbsent(key, () => []).add(eg);
-    }
-    final operadores = grouped.entries.toList()
-      ..sort((a, b) {
-        final totalA = a.value.fold(0.0, (s, e) => s + e.monto);
-        final totalB = b.value.fold(0.0, (s, e) => s + e.monto);
-        return totalB.compareTo(totalA);
-      });
-
-    final totalPersonal =
-        personal.isEmpty ? 0.0 : personal.fold(0.0, (s, e) => s + e.monto);
-
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTuBolsilloMiniCard(context, isDark, gold, state),
-              const SizedBox(height: 16),
-              Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  initiallyExpanded: _cajaFuerteExpanded,
-                  onExpansionChanged: (v) => setState(() => _cajaFuerteExpanded = v),
-                  title: Text(
-                    'CAJA FUERTE · cofre físico',
-                    style: GoogleFonts.oswald(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 1),
-                  ),
-                  subtitle: const Text(
-                    'Cuánto hay en el cofre según depósitos y retiros',
-                    style: TextStyle(fontSize: 11),
-                  ),
-                  children: [
-                    _buildCajaFuertePersonalSection(isDark, gold),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-              _sectionLabel('PAGOS DEL NEGOCIO A OPERADORES', Icons.engineering_outlined),
-              const SizedBox(height: 12),
-              if (personal.isEmpty)
-                Center(child: _placeholderSinPagosPersonal(blue))
-              else ...[
-              // ── Banner total personal ──────────────────────────────────────
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      blue.withValues(alpha: 0.85),
-                      Colors.blueAccent,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: blue.withValues(alpha: 0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.engineering_outlined, color: Colors.white, size: 22),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'TOTAL PAGADO AL PERSONAL',
-                            style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            totalPersonal.toCurrency(),
-                            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${operadores.length} operadores',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          '${personal.length} pagos',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              _sectionLabel('LIQUIDACIÓN POR OPERADOR', Icons.people_outline),
-              const SizedBox(height: 12),
-
-              // ── Tarjeta por operador ───────────────────────────────────────
-              ...operadores.map((entry) {
-                final nombre = entry.key;
-                final pagos = entry.value;
-                final totalOp = pagos.fold(0.0, (s, e) => s + e.monto);
-                final ultimoPago = pagos.first;
-                final ultimaFecha = ultimoPago.fecha != null
-                    ? '${ultimoPago.fecha!.day.toString().padLeft(2, '0')}/${ultimoPago.fecha!.month.toString().padLeft(2, '0')}/${ultimoPago.fecha!.year}'
-                    : 'Sin fecha';
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.03) : Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
-                      ),
-                    ),
-                    child: Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        leading: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: blue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.person_outline, color: blue, size: 20),
-                        ),
-                        title: Text(
-                          nombre.toUpperCase(),
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-                        ),
-                        subtitle: Text(
-                          '${pagos.length} pago(s) · Último: $ultimaFecha',
-                          style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              totalOp.toCurrency(),
-                              style: const TextStyle(color: blue, fontWeight: FontWeight.w900, fontSize: 14),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.add_circle_outline_rounded, color: blue, size: 20),
-                              tooltip: 'Nuevo pago a $nombre',
-                              onPressed: () async {
-                                final result = await showDialog<bool>(
-                                  context: context,
-                                  builder: (_) => PagarOperadorDialog(
-                                    eventoIdInicial: null,
-                                    tipoEventoInicial: null,
-                                  ),
-                                );
-                                if (mounted && result == true) {
-                                  _fetchOperadores();
-                                  ref.read(finanzasProvider.notifier).recargar();
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        children: [
-                          const Divider(height: 1, indent: 16, endIndent: 16),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Theme(
-                              data: Theme.of(context).copyWith(dividerColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
-                              child: DataTable(
-                                headingRowHeight: 0,
-                                dataRowMinHeight: 36,
-                                dataRowMaxHeight: 44,
-                                dividerThickness: 0.5,
-                                horizontalMargin: 24,
-                                columnSpacing: 16,
-                                columns: const [
-                                  DataColumn(label: SizedBox.shrink()),
-                                  DataColumn(label: SizedBox.shrink(), numeric: true),
-                                  DataColumn(label: SizedBox.shrink()),
-                                ],
-                                rows: pagos.map((pg) {
-                                  final fecha = pg.fecha != null ? '${pg.fecha!.day.toString().padLeft(2, '0')}/${pg.fecha!.month.toString().padLeft(2, '0')}/${pg.fecha!.year}' : 'Sin fecha';
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(Text(fecha, style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: isDark ? Colors.white70 : Colors.black87))),
-                                      DataCell(Text('-${pg.monto.toCurrency()}', style: const TextStyle(color: red, fontWeight: FontWeight.w900, fontFamily: 'monospace', fontSize: 12))),
-                                      DataCell(
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              IconButton(
-                                                icon: Icon(Icons.edit_outlined, size: 14, color: isDark ? Colors.white38 : Colors.black38),
-                                                tooltip: 'Editar pago',
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                onPressed: () async {
-                                                  final result = await showDialog<bool>(
-                                                    context: context,
-                                                    builder: (_) => EditarPagoOperadorDialog(egreso: pg),
-                                                  );
-                                                  if (mounted && result == true) {
-                                                    _fetchOperadores();
-                                                    ref.read(finanzasProvider.notifier).recargar();
-                                                  }
-                                                },
-                                              ),
-                                              IconButton(
-                                                icon: Icon(Icons.delete_outline_rounded, size: 14, color: red.withValues(alpha: 0.85)),
-                                                tooltip: 'Eliminar pago',
-                                                padding: EdgeInsets.zero,
-                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                onPressed: () async {
-                                                  final ok = await showDialog<bool>(
-                                                    context: context,
-                                                    builder: (ctx) => AlertDialog(
-                                                      title: const Text('¿Eliminar este pago?'),
-                                                      content: Text(
-                                                        'Se borrará el pago a ${pg.proveedor ?? '—'} por ${pg.monto.toCurrency()} (local y nube).',
-                                                      ),
-                                                      actions: [
-                                                        TextButton(
-                                                          onPressed: () => Navigator.pop(ctx, false),
-                                                          child: const Text('Cancelar'),
-                                                        ),
-                                                        FilledButton(
-                                                          style: FilledButton.styleFrom(backgroundColor: red, foregroundColor: Colors.white),
-                                                          onPressed: () => Navigator.pop(ctx, true),
-                                                          child: const Text('Eliminar'),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  );
-                                                  if (ok != true || !mounted) return;
-                                                  try {
-                                                    await ref.read(egresosRepositoryProvider).eliminarEgreso(pg.id);
-                                                    ref.read(egresosProvider.notifier).refresh();
-                                                    ref.read(finanzasProvider.notifier).recargar();
-                                                    _fetchOperadores();
-                                                    if (mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(content: Text('Pago eliminado'), backgroundColor: Color(0xFF00B894)),
-                                                      );
-                                                    }
-                                                  } catch (e) {
-                                                    if (mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(content: Text('No se pudo eliminar: $e')),
-                                                      );
-                                                    }
-                                                  }
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   // ── RENTABILIDAD PROMEDIO HUD ──────────────────────────────────────────────
   Widget _buildRentabilidadPromedioHUD(bool isDark) {

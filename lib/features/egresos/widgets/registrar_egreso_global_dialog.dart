@@ -6,6 +6,7 @@ import '../../../models/evento.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../repositories/egresos_repository.dart';
 import '../providers/egresos_provider.dart';
+import '../../mi_empresa/providers/finanzas_provider.dart';
 
 class RegistrarEgresoGlobalDialog extends ConsumerStatefulWidget {
   const RegistrarEgresoGlobalDialog({super.key});
@@ -73,14 +74,7 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() || _eventoSeleccionado == null) {
-      if (_eventoSeleccionado == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Debe seleccionar un evento'), backgroundColor: Colors.orange),
-        );
-      }
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
 
@@ -89,19 +83,36 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
           .replaceAll('.', '')
           .replaceAll(',', '.');
       final monto = double.parse(cleanText);
-      
+
       // Usamos el repositorio centralizado
       final repo = ref.read(egresosRepositoryProvider);
-      await repo.registrarEgreso(
-        eventoId: _eventoSeleccionado!.id,
-        monto: monto,
-        proveedor: _proveedorController.text.trim(),
-        categoria: _categoriaSeleccionada,
-        medioPago: _medioPagoSeleccionado,
-      );
+      final evento = _eventoSeleccionado;
+      if (evento != null) {
+        await repo.registrarEgreso(
+          eventoId: evento.id,
+          monto: monto,
+          proveedor: _proveedorController.text.trim(),
+          categoria: _categoriaSeleccionada,
+          medioPago: _medioPagoSeleccionado,
+        );
+      } else {
+        // Gasto general del negocio (alquiler, impuestos, insumos): no es de
+        // ningún evento. Antes el formulario lo exigía y no había otra forma
+        // de cargarlo.
+        await repo.registrarEgresoSinEvento(
+          monto: monto,
+          proveedor: _proveedorController.text.trim(),
+          categoria: _categoriaSeleccionada,
+          fecha: DateTime.now(),
+          medioPago: _medioPagoSeleccionado,
+        );
+      }
 
       // Notificamos al provider de egresos para que se refresque (aunque el stream lo haría)
       ref.read(egresosProvider.notifier).refresh();
+      // …y a Finanzas, que es donde se ve el saldo del negocio. Sin esto la
+      // tarjeta quedaba con el número viejo hasta que entrara el realtime.
+      await ref.read(finanzasProvider.notifier).recargar();
 
       if (mounted) {
         Navigator.of(context).pop(true);
@@ -139,19 +150,25 @@ class _RegistrarEgresoGlobalDialogState extends ConsumerState<RegistrarEgresoGlo
                 DropdownButtonFormField<Evento>(
                   initialValue: _eventoSeleccionado,
                   decoration: const InputDecoration(
-                    labelText: 'Vincular a Evento',
+                    labelText: 'Vincular a evento (opcional)',
+                    helperText: 'Dejalo vacío si es un gasto general del negocio',
                     prefixIcon: Icon(Icons.event),
                   ),
                   isExpanded: true,
-                  hint: const Text('Seleccionar Evento Activo'),
-                  items: _eventosActivos.map((evt) {
-                    return DropdownMenuItem<Evento>(
-                      value: evt,
-                      child: Text('${evt.cliente?.nombreCompleto ?? "N/N"} - ${evt.tipoParaMostrar} (${evt.fechaEvento.day}/${evt.fechaEvento.month})'),
-                    );
-                  }).toList(),
+                  hint: const Text('Sin evento · gasto del negocio'),
+                  items: [
+                    const DropdownMenuItem<Evento>(
+                      value: null,
+                      child: Text('Sin evento · gasto del negocio'),
+                    ),
+                    ..._eventosActivos.map((evt) {
+                      return DropdownMenuItem<Evento>(
+                        value: evt,
+                        child: Text('${evt.cliente?.nombreCompleto ?? "N/N"} - ${evt.tipoParaMostrar} (${evt.fechaEvento.day}/${evt.fechaEvento.month})'),
+                      );
+                    }),
+                  ],
                   onChanged: (val) => setState(() => _eventoSeleccionado = val),
-                  validator: (v) => v == null ? 'Requerido' : null,
                 ),
               const SizedBox(height: 16),
               TextFormField(

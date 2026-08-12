@@ -73,6 +73,11 @@ class FinanzasState {
   final double hudTotalIngresosHistoricoTransferencia;
   /// Todos los ingresos locales sin filtro mes/evento; drill-down histórico del HUD.
   final List<IngresoDetallado> ingresosHistoricosLista;
+  /// Todos los egresos sin filtro mes/evento. Los paneles de Negocio y Bolsillo
+  /// leen de acá: `_fetchData` ya arma esta lista para los totales del HUD, así
+  /// que exponerla evita repetir el `getEgresosConEvento()` con JOIN cada vez
+  /// que se abre un historial, y deja filtrar por calendario en memoria.
+  final List<Egreso> egresosHistoricosLista;
   /// Suma egresos que afectan saldo empresa ([finanzasEgresoAfectaCajaEmpresa]).
   final double hudTotalEgresosHistoricoGlobal;
   /// Egresos empresa históricos por medio (misma regla que el total).
@@ -139,6 +144,7 @@ class FinanzasState {
     this.hudTotalIngresosHistoricoEfectivo = 0,
     this.hudTotalIngresosHistoricoTransferencia = 0,
     this.ingresosHistoricosLista = const [],
+    this.egresosHistoricosLista = const [],
     this.hudTotalEgresosHistoricoGlobal = 0,
     this.hudTotalEgresosHistoricoEfectivo = 0,
     this.hudTotalEgresosHistoricoTransferencia = 0,
@@ -188,6 +194,7 @@ class FinanzasState {
     double? hudTotalIngresosHistoricoEfectivo,
     double? hudTotalIngresosHistoricoTransferencia,
     List<IngresoDetallado>? ingresosHistoricosLista,
+    List<Egreso>? egresosHistoricosLista,
     double? hudTotalEgresosHistoricoGlobal,
     double? hudTotalEgresosHistoricoEfectivo,
     double? hudTotalEgresosHistoricoTransferencia,
@@ -241,6 +248,7 @@ class FinanzasState {
       hudTotalIngresosHistoricoTransferencia:
           hudTotalIngresosHistoricoTransferencia ?? this.hudTotalIngresosHistoricoTransferencia,
       ingresosHistoricosLista: ingresosHistoricosLista ?? this.ingresosHistoricosLista,
+      egresosHistoricosLista: egresosHistoricosLista ?? this.egresosHistoricosLista,
       hudTotalEgresosHistoricoGlobal: hudTotalEgresosHistoricoGlobal ?? this.hudTotalEgresosHistoricoGlobal,
       hudTotalEgresosHistoricoEfectivo: hudTotalEgresosHistoricoEfectivo ?? this.hudTotalEgresosHistoricoEfectivo,
       hudTotalEgresosHistoricoTransferencia:
@@ -285,11 +293,28 @@ class FinanzasState {
   double get hudGastosOperativosHistoricoGlobal =>
       hudTotalEgresosHistoricoGlobal - hudRetirosBolsaPersonalTotal - hudGastosPersonalEmpresaTotal;
 
-  double get hudGastosOperativosHistoricoEfectivo =>
-      hudTotalEgresosHistoricoEfectivo - hudRetirosBolsaPersonalEfectivo;
-
-  double get hudGastosOperativosHistoricoTransferencia =>
-      hudTotalEgresosHistoricoTransferencia - hudRetirosBolsaPersonalTransferencia;
+  /// En qué se fueron los gastos operativos, por categoría y de mayor a menor.
+  ///
+  /// El total suelto no dice nada: adentro conviven un pago a proveedor, un
+  /// sueldo y un `Retiro de caja`, que no compra nada — solo mueve plata del
+  /// cajón del turno a la oficina. Abrirlo es lo que permite decidir si ese
+  /// último tiene que seguir restando del saldo.
+  Map<String, double> get hudGastosOperativosPorCategoria {
+    final out = <String, double>{};
+    for (final e in egresosHistoricosLista) {
+      if (!finanzasEgresoAfectaCajaEmpresa(e)) continue;
+      if (!finanzasEgresoEsGastoOperativoNegocio(e)) continue;
+      final cat = (e.categoria ?? '').trim();
+      out.update(
+        cat.isEmpty ? 'Sin categoría' : cat,
+        (v) => v + e.monto,
+        ifAbsent: () => e.monto,
+      );
+    }
+    final ordenadas = out.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return {for (final e in ordenadas) e.key: e.value};
+  }
 
   /// Neto del día (cobros − salidas del negocio).
   double get hudNetoDelDia => hudIngresosHoy - hudEgresosHoy;
@@ -474,6 +499,15 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
         hudTotalIngresosHistoricoEfectivo + hudTotalIngresosHistoricoTransferencia;
     final ingresosHistoricosLista = List<IngresoDetallado>.from(ingresosFull)
       ..sort((a, b) => b.fecha.compareTo(a.fecha));
+    final egresosHistoricosLista = List<Egreso>.from(egresosFull)
+      ..sort((a, b) {
+        final fa = a.fecha;
+        final fb = b.fecha;
+        if (fa == null && fb == null) return 0;
+        if (fa == null) return 1;
+        if (fb == null) return -1;
+        return fb.compareTo(fa);
+      });
 
     var hudTotalEgresosHistoricoEfectivo = 0.0;
     var hudTotalEgresosHistoricoTransferencia = 0.0;
@@ -583,6 +617,7 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       hudTotalIngresosHistoricoEfectivo: hudTotalIngresosHistoricoEfectivo,
       hudTotalIngresosHistoricoTransferencia: hudTotalIngresosHistoricoTransferencia,
       ingresosHistoricosLista: ingresosHistoricosLista,
+      egresosHistoricosLista: egresosHistoricosLista,
       hudTotalEgresosHistoricoGlobal: hudTotalEgresosHistoricoGlobal,
       hudTotalEgresosHistoricoEfectivo: hudTotalEgresosHistoricoEfectivo,
       hudTotalEgresosHistoricoTransferencia: hudTotalEgresosHistoricoTransferencia,
@@ -1037,14 +1072,28 @@ class MesData {
   const MesData({required this.mes, required this.ingresos, required this.egresos});
 }
 
+/// Cobros y salidas de un mes cualquiera.
+///
+/// Lee de las listas **históricas**, no de `state.ingresos` / `state.egresos`,
+/// que vienen recortadas al mes elegido en el filtro de arriba. Leyendo de ahí,
+/// pedir "el mes pasado" era buscar julio dentro de una lista que solo tenía
+/// agosto: siempre daba cero. Y como el health score hace
+/// `if (prev.ingresos <= 0) deltaPct = 1.0`, la comparativa de ingresos
+/// mostraba **+100% fijo**, pasara lo que pasara. El gráfico de últimos meses
+/// tenía el mismo problema: todas las barras en cero menos la del mes filtrado.
+///
+/// Los meses se comparan en huso argentino, como en el resto del archivo: un
+/// cobro del 31 a las 23:00 pertenece a ese mes y no al siguiente.
 MesData calcularMesData(FinanzasState state, DateTime mesInicio) {
   final mes = DateTime(mesInicio.year, mesInicio.month, 1);
-  final siguiente = DateTime(mes.year, mes.month + 1, 1);
-  final ing = state.ingresos
-      .where((x) => !x.fecha.isBefore(mes) && x.fecha.isBefore(siguiente))
+  final ing = state.ingresosHistoricosLista
+      .where((x) => ArTime.mismoMes(x.fecha, mes))
       .fold(0.0, (s, e) => s + e.monto);
-  final eg = state.egresos
-      .where((x) => x.fecha != null && !x.fecha!.isBefore(mes) && x.fecha!.isBefore(siguiente))
+  final eg = state.egresosHistoricosLista
+      // Los retiros al bolsillo y los gastos personales pagados desde ahí no
+      // son gastos del negocio: se excluyen igual que en el resto del HUD.
+      .where(finanzasEgresoAfectaCajaEmpresa)
+      .where((x) => x.fecha != null && ArTime.mismoMes(x.fecha!, mes))
       .fold(0.0, (s, e) => s + e.monto);
   return MesData(mes: mes, ingresos: ing, egresos: eg);
 }
