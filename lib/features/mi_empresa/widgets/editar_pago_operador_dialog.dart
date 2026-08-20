@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
+import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
 import '../../../models/evento.dart';
 import '../../common/utils/currency_extensions.dart';
@@ -29,7 +30,14 @@ class _EditarPagoOperadorDialogState
   bool _isSubmitting = false;
   List<Map<String, dynamic>> _eventos = [];
   String? _eventoIdSeleccionado;
-  DateTime? _fecha;
+
+  /// Reloj de pared AR del pago. Se guarda con [ArTime.arToUtc].
+  ///
+  /// Antes esto era el `DateTime` UTC crudo del egreso: el diálogo mostraba
+  /// "18/08" para un pago de las 21:30 del 17, y si tocabas el selector y
+  /// elegías lo que te estaba mostrando, el pago se corría un día. Guardaba
+  /// además `toIso8601String()` de un `DateTime` local, sin marca de zona.
+  late DateTime _fechaAr;
   String _medioPagoSeleccionado = 'Efectivo';
 
   static const _gold = Color(0xFFD4AF37);
@@ -41,7 +49,8 @@ class _EditarPagoOperadorDialogState
     _montoController.text = widget.egreso.monto.toFormattedNumber();
     final rawId = widget.egreso.eventoId;
     _eventoIdSeleccionado = rawId.isEmpty ? 'OPEX' : rawId;
-    _fecha = widget.egreso.fecha ?? DateTime.now();
+    final f = widget.egreso.fecha;
+    _fechaAr = f != null ? ArTime.toAr(f) : ArTime.nowAr();
     final mp = widget.egreso.medioPago;
     if (mp == 'Efectivo' || mp == 'Transferencia') {
       _medioPagoSeleccionado = mp!;
@@ -112,14 +121,26 @@ class _EditarPagoOperadorDialogState
     return '$cliente · $tipo · $fechaStr';
   }
 
+  /// Solo cambia el día: la hora original se conserva. Sin esto, un pago de las
+  /// 21:30 volvía a las 00:00 y cambiaba de día al guardarse.
   Future<void> _elegirFecha() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _fecha ?? DateTime.now(),
+      initialDate: DateTime(_fechaAr.year, _fechaAr.month, _fechaAr.day),
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: DateTime(ArTime.nowAr().year + 1, 12, 31),
     );
-    if (picked != null && mounted) setState(() => _fecha = picked);
+    if (picked == null || !mounted) return;
+    setState(() {
+      _fechaAr = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _fechaAr.hour,
+        _fechaAr.minute,
+        _fechaAr.second,
+      );
+    });
   }
 
   Future<void> _submit() async {
@@ -130,13 +151,6 @@ class _EditarPagoOperadorDialogState
       );
       return;
     }
-    if (_fecha == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleccioná la fecha del pago')),
-      );
-      return;
-    }
-
     setState(() => _isSubmitting = true);
 
     try {
@@ -151,7 +165,8 @@ class _EditarPagoOperadorDialogState
         'monto': monto,
         'proveedor': _operadorController.text.trim(),
         'categoria': 'Personal',
-        'fecha': _fecha!.toIso8601String(),
+        // Misma política que el resto: instante UTC armado desde el reloj AR.
+        'fecha': ArTime.arToUtc(_fechaAr).toIso8601String(),
         'medio_pago': _medioPagoSeleccionado,
       };
 
@@ -366,14 +381,11 @@ class _EditarPagoOperadorDialogState
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                   child: Text(
-                    _fecha != null
-                        ? '${_fecha!.day.toString().padLeft(2, '0')}/${_fecha!.month.toString().padLeft(2, '0')}/${_fecha!.year}'
-                        : 'Elegir fecha',
+                    '${ArTime.formatFechaCorta(ArTime.arToUtc(_fechaAr))} · '
+                    '${ArTime.formatHora(ArTime.arToUtc(_fechaAr))}',
                     style: TextStyle(
                       fontSize: 14,
-                      color: _fecha != null
-                          ? (isDark ? Colors.white : Colors.black87)
-                          : Colors.grey,
+                      color: isDark ? Colors.white : Colors.black87,
                     ),
                   ),
                 ),

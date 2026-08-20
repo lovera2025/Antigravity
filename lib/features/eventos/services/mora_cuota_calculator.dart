@@ -1009,13 +1009,7 @@ class MoraCuotaCalculator {
         ordenados.where((d) => !seleccion.contains(d.numeroCuota)).toList();
 
     // Tracked independiente: el operador decide si limpia ficha.
-    // TODO(mora): el perdón "solo ficha" (aplicaExencion == false && soloTracked)
-    // limpia mora_pendiente_tracked sin escribir exención, así que no deja marca
-    // persistente. MoraTrackedRecovery.reconciliarTodos pisa el tracked sin
-    // condición (a diferencia de la exención, protegida por
-    // resolverExencionPreservandoLocal) y el replay desde historial lo resucita.
-    // Necesita un marcador propio — columna o rótulo de pago — antes de que la
-    // reconciliación retroactiva se corra en producción.
+    // La durabilidad la da `mora_tracked_ajuste` al persistir (no este payload).
     final limpiaTracked = incluirTracked && trackedActual > 0.01;
     final trackedPost = limpiaTracked ? 0.0 : trackedActual;
 

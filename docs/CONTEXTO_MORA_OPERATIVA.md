@@ -3,10 +3,10 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Lunes 27 de julio de 2026 (v54 — carry-over de mora + PDFs legibles)**  
+**Última actualización:** **Domingo 16 de agosto de 2026 (v4.7.8 — perdón durable + botón por alumno)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
 **Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart` · `test/cobro_pdf_display_test.dart`  
-**Release notes del día:** `docs/CONTEXTO_v4.3.1_2026-07-10.md` · helpers `mora_concepto_rotulo.dart` · `mora_tracked_origen.dart`
+**Release notes del día:** `docs/CONTEXTO_v4.7.8_2026-08-16.md` · columna `mora_tracked_ajuste` (SQLite v68)
 
 ---
 
@@ -204,10 +204,10 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 ## Operación día a día
 
 1. **Cobro normal:** Grilla y modal coinciden. El tracked muestra el arrastre acumulado, abierto por cuota.
-2. **Cobro sin mora:** La mora de la cuota pagada queda **en ficha** (se acumula al tracked). Para perdonarla de verdad, usar el perdón admin.
-3. **Restaurar mora (admin):** Preferir ajustar Reg sin tracked; si se setea tracked manual, el sistema lo trata como remanente parcial.
-4. **Perdonar mora (admin, individual):** Exención hasta fin de mes (o corte de prefijo) con `reinicia=false`. **No mueve Reg.** El alumno sigue atrasado en cuotas. Recovery post-sync **no degrada** esa exención.
-5. **Migración v49:** Automática al actualizar app. Limpia tracked inflado y calibra offset.
+2. **Cobro sin mora:** La mora de la cuota pagada queda **en ficha** (se acumula al tracked). Para perdonarla de verdad, usar el perdón admin (Mi Empresa o el botón de la grilla, modo jefe).
+3. **Restaurar mora (admin):** Preferir ajustar Reg sin tracked; si se setea tracked manual, el sistema lo trata como remanente parcial. El monto a mano ahora lleva `mora_tracked_ajuste` y **sobrevive** al sync.
+4. **Perdonar mora (admin):** Exención hasta fin de mes (o corte de prefijo) con `reinicia=false`. **No mueve Reg.** El alumno sigue atrasado en cuotas. Recovery post-sync **no degrada** la exención **ni** la ficha (`mora_tracked_ajuste`). Botón por alumno en la grilla masivo (modo jefe). Ver `CONTEXTO_v4.7.8`.
+5. **Migración v49 / v68:** v49 limpia tracked inflado. v68 agrega `mora_tracked_ajuste` (app 4.7.8). Instalar en todas las PCs que sincronizan.
 
 ---
 
@@ -226,7 +226,8 @@ flutter test test/mora_pendiente_display_test.dart
 
 | Fecha | Qué |
 |-------|-----|
-| 27-jul-2026 (**v54**) | **Fix carry-over**: `postCobroTrackedOffset` acumula el remanente en vez de pisarlo (guarda estructural `cuotasPreCobro > 0`). `MoraTrackedOrigen` también acumula orígenes (desglose por cuota con vencimiento/días/cobrado). Modal: un check por cuota arrastrada. Grillas: arrastre abierto por cuota. PDFs: "DETALLE DE PAGO" / "LO QUE SE PAGA HOY", mora anidada bajo su cuota (capa `display`, sin tocar `concepto` persistido), franja "ATENCIÓN: queda debiendo mora" en resumen y recibo, nuevo `generarEstadoCuentaAlumno` (botón PDF en Estado de Cuenta). Dry-run read-only `scripts/dry_run_mora_tracked.dart` (47 contratos, $195.630). La reconciliación retroactiva corre sola en el post-pull del sync (decisión 27-jul). Pendiente: perdón solo-ficha sin marcador persistente → el replay lo resucita (TODO en `simularPerdonMora`); reaplicar perdones a mano tras la primera reconciliación. Correr el primer sync en UNA sola PC con la caja cerrada. |
+| 16-ago-2026 (**v4.7.8**, v68) | **Perdón durable:** `mora_tracked_ajuste` (SQLite + Supabase). Recovery: `tracked = max(0, historial + ajuste)`. Botón perdonar en cada alumno (modo jefe). No mueve Reg. Ver `CONTEXTO_v4.7.8_2026-08-16.md`. |
+| 27-jul-2026 (**v54**) | **Fix carry-over**: `postCobroTrackedOffset` acumula el remanente en vez de pisarlo (guarda estructural `cuotasPreCobro > 0`). `MoraTrackedOrigen` también acumula orígenes (desglose por cuota con vencimiento/días/cobrado). Modal: un check por cuota arrastrada. Grillas: arrastre abierto por cuota. PDFs: "DETALLE DE PAGO" / "LO QUE SE PAGA HOY", mora anidada bajo su cuota (capa `display`, sin tocar `concepto` persistido), franja "ATENCIÓN: queda debiendo mora" en resumen y recibo, nuevo `generarEstadoCuentaAlumno` (botón PDF en Estado de Cuenta). Dry-run read-only `scripts/dry_run_mora_tracked.dart` (47 contratos, $195.630). La reconciliación retroactiva corre sola en el post-pull del sync (decisión 27-jul). El pendiente de “perdón solo-ficha sin marcador” se cerró en **v4.7.8**. |
 | 10-jul-2026 (**v4.3.1**) | Perdón solo ficha (tracked independiente, sin exención); filtro masivo Solo ficha. Ver `CONTEXTO_v4.3.1_2026-07-10.md`. |
 | 9-jul-2026 (**v4.3.0**) | Perdón admin por exención (sin Reg); multi-cuotas prefijo; recovery no degrada exención local; release + smoke 9 masivos. Ver `CONTEXTO_v4.3.0_2026-07-09.md`. |
 | 29-jun-2026 (v50) | Migración conservadora por historial; `postCobroTrackedOffset`; offset solo con cuota+mora; UI checkbox maestro restaurado; recovery tracked legítimo. |
@@ -237,5 +238,6 @@ flutter test test/mora_pendiente_display_test.dart
 
 ## Documentos relacionados
 
+- **`docs/CONTEXTO_v4.7.8_2026-08-16.md`** — perdón durable (`mora_tracked_ajuste`) + botón por alumno.
 - **`docs/CONTEXTO_SYNC_v4.1.6.md`** — sync offline, mesas, instalador v4.1.6–4.1.7 (24–25-jun-2026).
 - **`docs/CONTEXTO_COBRO_PARCIALES_SALDO.md`** — saldo fantasma con adelantos/parciales, saneamiento `recalcular_contrato`, casos Chamorro/Ayala/Díaz Leiva (30-jun-2026).

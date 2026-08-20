@@ -221,9 +221,6 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         retirosEfectivo: state.egresosEfectivo,
         retirosTransferencia: state.egresosTransferencia,
         emitidoPor: state.alcanceLabel,
-        anotacionTurno: state.anotacionTurno.trim().isEmpty
-            ? null
-            : state.anotacionTurno.trim(),
         guiaCambioSaldo: state.fondoCambioGuia,
         guiaCantReposiciones: state.guiaCantReposiciones,
         guiaCantUsos: state.guiaCantUsos,
@@ -268,9 +265,6 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         datos: datos,
         turno: turnoDeSesion(sesion),
         emitidoPor: state.alcanceLabel,
-        anotacion: state.anotacionTurno.trim().isEmpty
-            ? null
-            : state.anotacionTurno.trim(),
         guiaCambioSaldo: state.fondoCambioGuia,
       );
     } catch (e) {
@@ -452,8 +446,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       const SizedBox(height: 14),
                       if (!state.consolidado && !state.sinSesiones) ...[
                         const GuiaCambioSection(),
-                        const SizedBox(height: 10),
-                        const AnotacionPdfSection(),
+                        if (modoJefe) ...[
+                          const SizedBox(height: 10),
+                          const NotaCierreSesionSection(),
+                        ],
                       ],
                       if (state.error != null) ...[
                         const SizedBox(height: 8),
@@ -660,6 +656,31 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (s.notaCierreHumana != null) ...[
+                        const SizedBox(width: 8),
+                        const Tooltip(
+                          message: 'Esta sesión tiene una nota',
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.sticky_note_2_outlined,
+                                size: 15,
+                                color: Color(0xFFFFB020),
+                              ),
+                              SizedBox(width: 3),
+                              Text(
+                                'nota',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFFFFB020),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       // El turno que nadie cerró tiene que distinguirse del que
                       // se cerró y arqueó: es el dato por el que el jefe entra
                       // acá. No se pierde ningún cobro, pero se ve.

@@ -5,6 +5,7 @@ import '../../../models/evento.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../egresos/repositories/egresos_repository.dart';
 import '../../egresos/providers/egresos_provider.dart';
+import '../../egresos/services/egreso_concepto_sugerencias.dart';
 
 class RegistrarEgresoDialog extends ConsumerStatefulWidget {
   final Evento evento;
@@ -21,18 +22,8 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
   final _montoController = TextEditingController();
   bool _isSubmitting = false;
 
-  /// Misma taxonomía que egreso global (Finanzas / desglose por categoría).
-  final List<String> _categorias = [
-    'Sueldos',
-    'Operadores',
-    'Alquiler local',
-    'Proveedores',
-    'Logística',
-    'Marketing',
-    'Impuestos',
-    'Otro',
-  ];
-  String _categoriaSeleccionada = 'Proveedores';
+  /// Misma taxonomía que el pago unificado (Finanzas / desglose por categoría).
+  String _categoriaSeleccionada = kCategoriaComboDefault;
   String _medioPagoSeleccionado = 'Efectivo';
 
   @override
@@ -59,7 +50,7 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
         eventoId: widget.evento.id,
         monto: monto,
         proveedor: _proveedorController.text.trim(),
-        categoria: _categoriaSeleccionada,
+        categoria: categoriaEgresoParaGuardar(_categoriaSeleccionada),
         medioPago: _medioPagoSeleccionado,
       );
 
@@ -116,7 +107,7 @@ class _RegistrarEgresoDialogState extends ConsumerState<RegistrarEgresoDialog> {
                   labelText: 'Categoría',
                   prefixIcon: Icon(Icons.category),
                 ),
-                items: _categorias.map((String cat) {
+                items: kCategoriasEgresoNegocioCombo.map((String cat) {
                   return DropdownMenuItem<String>(
                     value: cat,
                     child: Text(cat),

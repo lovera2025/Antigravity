@@ -925,6 +925,7 @@ class SyncEngine {
           String? exentaHasta,
           String? fechaReferencia,
           int reinicia,
+          double trackedAjuste,
         })
       >?
       preservedContratoMoraLocal;
@@ -937,6 +938,7 @@ class SyncEngine {
             'mora_exenta_hasta',
             'mora_fecha_referencia',
             'mora_exencion_reinicia',
+            'mora_tracked_ajuste',
           ],
         );
         preservedContratoMoraLocal = {
@@ -951,6 +953,8 @@ class SyncEngine {
                 if (v is num) return v.toInt();
                 return int.tryParse(v.toString()) ?? 1;
               }(),
+              trackedAjuste:
+                  (r['mora_tracked_ajuste'] as num?)?.toDouble() ?? 0,
             ),
         };
       }
@@ -1048,6 +1052,14 @@ class SyncEngine {
             insertRow['mora_fecha_referencia'] = fechaRef;
           }
           insertRow['mora_exencion_reinicia'] = preserved?.reinicia ?? 1;
+          final localAjuste = preserved?.trackedAjuste ?? 0;
+          final cloudAjuste =
+              (insertRow['mora_tracked_ajuste'] as num?)?.toDouble() ?? 0;
+          // Nube en 0 / sin columna no pisa un perdón local.
+          insertRow['mora_tracked_ajuste'] =
+              localAjuste.abs() > 0.01 && cloudAjuste.abs() <= 0.01
+                  ? localAjuste
+                  : (cloudAjuste.abs() > 0.01 ? cloudAjuste : localAjuste);
           batch.insert(
             table,
             insertRow,
@@ -1299,6 +1311,7 @@ class SyncEngine {
         'mora_fecha_referencia',
         'mora_exenta_hasta',
         'mora_exencion_reinicia',
+        'mora_tracked_ajuste',
         'updated_at',
       ],
       'notas_operativas_contrato': [

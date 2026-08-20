@@ -17,6 +17,7 @@ import '../../../models/prestamo_alquiler.dart';
 import '../../../models/calculo_rentabilidad.dart';
 import '../../../models/egreso.dart';
 import '../../caja_sesiones/models/sesion_caja.dart';
+import '../utils/texto_busqueda.dart';
 import '../../cierre_caja/models/medio_pago_caja.dart';
 import '../../cierre_caja/models/resumen_sesion_pdf.dart';
 import '../../cierre_caja/models/turno_caja.dart';
@@ -968,25 +969,11 @@ class PdfService {
     (contieneNombreNorm: 'laser', claveExactaEnMap: 'efectos especiales'),
   ];
 
-  static String _normalizarTextoMatch(String? raw) {
-    if (raw == null) return '';
-    var s = raw.toLowerCase().trim();
-    const pares = <String, String>{
-      'á': 'a',
-      'é': 'e',
-      'í': 'i',
-      'ó': 'o',
-      'ú': 'u',
-      'ü': 'u',
-      'ñ': 'n',
-    };
-    final b = StringBuffer();
-    for (final r in s.runes) {
-      final ch = String.fromCharCode(r);
-      b.write(pares[ch] ?? ch);
-    }
-    return b.toString();
-  }
+  /// Delegado al helper compartido: la misma regla que usan los buscadores.
+  /// Vivía acá adentro, privado, siendo lo único del sistema que sabía ignorar
+  /// tildes.
+  static String _normalizarTextoMatch(String? raw) =>
+      normalizarTextoBusqueda(raw);
 
   static String? _introMapaExacto(String nombreNorm) {
     if (nombreNorm.isEmpty) return null;
@@ -1755,13 +1742,9 @@ class PdfService {
     ];
 
     // Cuotas nombradas en el bloque de mora saldada.
-    final cuotasMoraCobrada = conceptosPagadosDisplay != null
-        ? cuotasConMoraCobradaPdf(conceptosPagadosDisplay)
-        : const <int>[];
-    final fraseMoraCobrada = fraseCuotasEs(cuotasMoraCobrada);
-    final String detalleMoraCobrada = fraseMoraCobrada.isEmpty
+    final String detalleMoraCobrada = conceptosPagadosDisplay == null
         ? 'detallada arriba'
-        : 'de ${cuotasMoraCobrada.length == 1 ? 'la' : 'las'} $fraseMoraCobrada';
+        : detalleMoraCobradaRecibo(conceptosPagadosDisplay);
 
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;

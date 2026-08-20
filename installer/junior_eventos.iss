@@ -3,7 +3,7 @@
 
 #define MyAppName "Junior Eventos"
 #define MyShortcutName "Junior Eventos"
-#define MyAppVersion "4.7.3"
+#define MyAppVersion "4.8.0"
 #define MyAppPublisher "LM"
 #define MyAppExeName "arguello_events.exe"
 #define BuildPath "..\build\windows\x64\runner\Release"

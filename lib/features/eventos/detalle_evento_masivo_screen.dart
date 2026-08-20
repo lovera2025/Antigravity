@@ -38,6 +38,7 @@ import 'widgets/dialogo_seleccion_cuotas_plan.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
+import 'widgets/perdonar_mora_alumno_dialog.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 
 /// Evita dispose de controllers mientras el route del diálogo aún se desmonta.
@@ -2479,6 +2480,23 @@ class _DetalleEventoMasivoScreenState
                                     layoutCompact,
                                   ),
                                   if (modoJefe) ...[
+                                    IconButton(
+                                      visualDensity: layoutCompact
+                                          ? VisualDensity.compact
+                                          : VisualDensity.standard,
+                                      constraints: BoxConstraints(
+                                        minWidth: layoutCompact ? 34 : 40,
+                                        minHeight: layoutCompact ? 34 : 40,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      icon: Icon(
+                                        Icons.cleaning_services_rounded,
+                                        color: Colors.redAccent.shade200,
+                                        size: layoutCompact ? 18 : 20,
+                                      ),
+                                      tooltip: 'Perdonar mora',
+                                      onPressed: () => _mostrarPerdonarMora(a),
+                                    ),
                                     esBajaTemporal
                                         ? IconButton(
                                             visualDensity: layoutCompact
@@ -3327,6 +3345,17 @@ class _DetalleEventoMasivoScreenState
           ModalAlumnoPremium(evento: widget.evento, alumno: alumno),
     );
     if (mounted && result == true) await _refreshAlumnos();
+  }
+
+  Future<void> _mostrarPerdonarMora(ContratoAlumno alumno) async {
+    final fresco =
+        await ref.read(contratosRepositoryProvider).getContratoById(alumno.id) ??
+        alumno;
+    if (!mounted) return;
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => PerdonarMoraAlumnoDialog(contrato: fresco),
+    );
   }
 
   Future<void> _mostrarModalPagoAlumno(ContratoAlumno alumno) async {
@@ -4475,7 +4504,13 @@ class _DetalleEventoMasivoScreenState
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'MORA REMANENTE',
+                                  remanenteMora > 0.01 &&
+                                          moraTotalDesglose <= 0.01
+                                      ? 'MORA NO COBRADA AL PAGAR'
+                                      : moraTotalDesglose > 0.01 &&
+                                            remanenteMora <= 0.01
+                                      ? 'MORA DE CUOTAS VENCIDAS'
+                                      : 'MORA PENDIENTE',
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w900,
@@ -4638,9 +4673,8 @@ class _DetalleEventoMasivoScreenState
                                     ...arrastreItems.map((d) {
                                       final generica = d.numeroCuota <= 0;
                                       final titulo = generica
-                                          ? MoraConceptoRotulo
-                                              .labelPendientePreviasCorto
-                                          : 'Mora pendiente cuota '
+                                          ? 'Mora no cobrada al pagar (cuotas ya pagadas)'
+                                          : 'Mora no cobrada al pagar la cuota '
                                               '${d.numeroCuota}'
                                               '${d.mesLabel.isEmpty ? '' : ' (${d.mesLabel.split(' ').first})'}';
                                       final dias = d.diasMora > 0
@@ -8041,6 +8075,9 @@ class _DetalleEventoMasivoScreenState
     bool mostrarBullet = true,
   }) {
     final sub = c['subtexto'] as String?;
+    final etiqueta = (c['display'] as String?)?.trim().isNotEmpty == true
+        ? c['display'] as String
+        : etiquetaDisplayRecibo(c);
     return Padding(
       padding: EdgeInsets.only(bottom: 6, left: indentada ? 16 : 0),
       child: Row(
@@ -8052,7 +8089,7 @@ class _DetalleEventoMasivoScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  mostrarBullet ? '• ${c['concepto']}' : '${c['concepto']}',
+                  mostrarBullet ? '• $etiqueta' : etiqueta,
                   style: TextStyle(
                     fontSize: indentada ? 12 : 13,
                     fontWeight: FontWeight.w600,
@@ -8110,7 +8147,9 @@ class _DetalleEventoMasivoScreenState
             widgets.add(_buildFilaDesglosePreview(fila));
           }
         } else {
-          widgets.add(_buildFilaDesglosePreview(c));
+          for (final fila in expandirRangosCortosCuotasBase([c])) {
+            widgets.add(_buildFilaDesglosePreview(fila));
+          }
         }
       }
       return widgets;
@@ -8193,7 +8232,9 @@ class _DetalleEventoMasivoScreenState
           widgets.add(_buildFilaDesglosePreview(fila));
         }
       } else {
-        widgets.add(_buildFilaDesglosePreview(c));
+        for (final fila in expandirRangosCortosCuotasBase([c])) {
+          widgets.add(_buildFilaDesglosePreview(fila));
+        }
       }
     }
 

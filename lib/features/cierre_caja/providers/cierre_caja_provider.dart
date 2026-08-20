@@ -53,9 +53,6 @@ class CierreCajaState {
   final double guiaTotalReposiciones;
   final double guiaTotalUsos;
 
-  /// Anotación opcional para PDF del turno activo.
-  final String anotacionTurno;
-
   final bool cargando;
   final Object? error;
 
@@ -86,7 +83,6 @@ class CierreCajaState {
     this.guiaCantUsos = 0,
     this.guiaTotalReposiciones = 0,
     this.guiaTotalUsos = 0,
-    this.anotacionTurno = '',
     this.cargando = false,
     this.error,
   });
@@ -119,7 +115,6 @@ class CierreCajaState {
     int? guiaCantUsos,
     double? guiaTotalReposiciones,
     double? guiaTotalUsos,
-    String? anotacionTurno,
     bool? cargando,
     Object? error,
     bool clearError = false,
@@ -155,7 +150,6 @@ class CierreCajaState {
       guiaTotalReposiciones:
           guiaTotalReposiciones ?? this.guiaTotalReposiciones,
       guiaTotalUsos: guiaTotalUsos ?? this.guiaTotalUsos,
-      anotacionTurno: anotacionTurno ?? this.anotacionTurno,
       cargando: cargando ?? this.cargando,
       error: clearError ? null : (error ?? this.error),
     );
@@ -462,20 +456,6 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     await _refrescar();
   }
 
-  Future<void> setAnotacionTurno(String texto) async {
-    final checkpoint = DateTime.now().toUtc();
-    final repo = ref.read(cierreCajaRepositoryProvider);
-    final dia = DateTime(state.dia.year, state.dia.month, state.dia.day);
-    await repo.guardarAnotacion(
-      dia: dia,
-      turno: state.turno,
-      sesionCajaId: _sesionEditableId(),
-      texto: texto,
-    );
-    await _autoSyncCaja(checkpoint);
-    state = state.copyWith(anotacionTurno: texto.trim());
-  }
-
   Future<void> registrarRetiro({
     required double monto,
     required String medioPago,
@@ -611,14 +591,10 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
                 ),
               )
             : cierreRepo.obtenerGuiaCambioSesiones(ids),
-        seleccionadaId == null || consolidado || sinSesiones
-            ? Future<String?>.value(null)
-            : cierreRepo.obtenerAnotacionTexto(seleccionadaId),
       ]);
 
       final datos = results[0] as DatosCierreSesion;
       final guia = results[1] as GuiaCambioResumen;
-      final anotacion = results[2] as String?;
 
       final ingresosTurno = datos.ingresos;
       final egresosTurno = datos.egresos;
@@ -660,7 +636,6 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         guiaCantUsos: guia.cantUsos,
         guiaTotalReposiciones: guia.totalReposiciones,
         guiaTotalUsos: guia.totalUsos,
-        anotacionTurno: anotacion ?? '',
         cargando: false,
         clearError: true,
       );

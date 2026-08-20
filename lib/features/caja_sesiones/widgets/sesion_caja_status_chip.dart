@@ -41,8 +41,19 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
     super.dispose();
   }
 
-  Color _colorFor(SesionCaja s) =>
-      s.enUsoAhora() ? Colors.greenAccent : Colors.amber;
+  /// Puntito más vivo; el nombre en tinta en tema claro (el flúor se lava).
+  ({Color text, Color dot}) _colorsFor(SesionCaja s, bool isDark) {
+    if (s.enUsoAhora()) {
+      if (isDark) {
+        return (text: Colors.greenAccent, dot: Colors.greenAccent);
+      }
+      return (text: Colors.green.shade800, dot: Colors.green.shade600);
+    }
+    if (isDark) {
+      return (text: Colors.amber, dot: Colors.amber);
+    }
+    return (text: Colors.orange.shade800, dot: Colors.amber.shade700);
+  }
 
   /// Sin latido por más de [kLatidoSesionMuerto] la app se cerró sin cerrar la
   /// caja: se muestra como cerrada. Desde v4.6 la sesión de modo jefe también
@@ -51,6 +62,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final vivas = _abiertas.where(_viva).toList();
     if (vivas.isEmpty) {
       return Container(
@@ -75,7 +87,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
     }
 
     final s = vivas.first;
-    final color = _colorFor(s);
+    final colors = _colorsFor(s, isDark);
     final label = [
       s.operadorNombre ?? 'Operador',
       if (s.etiqueta != null && s.etiqueta!.isNotEmpty) s.etiqueta!,
@@ -87,14 +99,14 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: colors.text.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
+          border: Border.all(color: colors.text.withValues(alpha: 0.5)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.circle, size: 10, color: color),
+            Icon(Icons.circle, size: 10, color: colors.dot),
             const SizedBox(width: 6),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 280),
@@ -103,7 +115,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: color,
+                  color: colors.text,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
@@ -116,7 +128,7 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: color,
+                  color: colors.text,
                 ),
               ),
             ],

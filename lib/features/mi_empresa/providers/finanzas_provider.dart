@@ -16,6 +16,7 @@ import '../../../main.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../bolsa_personal_helpers.dart';
+import '../../egresos/services/egreso_concepto_sugerencias.dart';
 import '../../dashboard/providers/dashboard_provider.dart';
 
 export '../bolsa_personal_helpers.dart' show finanzasEgresoAfectaCajaEmpresa;
@@ -304,9 +305,9 @@ class FinanzasState {
     for (final e in egresosHistoricosLista) {
       if (!finanzasEgresoAfectaCajaEmpresa(e)) continue;
       if (!finanzasEgresoEsGastoOperativoNegocio(e)) continue;
-      final cat = (e.categoria ?? '').trim();
+      final cat = rubroDesgloseEgreso(e.categoria);
       out.update(
-        cat.isEmpty ? 'Sin categoría' : cat,
+        cat,
         (v) => v + e.monto,
         ifAbsent: () => e.monto,
       );

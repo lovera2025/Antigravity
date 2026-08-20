@@ -106,7 +106,7 @@ void main() {
 
       expect(r.moraPendientePost, closeTo(7100, 0.01));
       expect(r.quedaSaldada, isFalse);
-      expect(r.moraPendienteOrigen, startsWith('Viene de:'));
+      expect(r.moraPendienteOrigen, startsWith('Mora'));
       expect(r.moraPendienteOrigen, contains('cuota 4'));
       expect(r.contratoPatch.moraExentaHasta, isNull);
     });

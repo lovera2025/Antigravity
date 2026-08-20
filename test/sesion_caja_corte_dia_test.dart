@@ -155,6 +155,20 @@ void main() {
       expect(cerradaCon(nota: null, arqueo: 50000).cierreAutomatico, isFalse);
     });
 
+    test('notaCierreHumana distingue operario vs sistema vs vacío', () {
+      expect(
+        cerradaCon(nota: r'$100 a favor para la coca').notaCierreHumana,
+        r'$100 a favor para la coca',
+      );
+      expect(cerradaCon(nota: kNotaCierreCambioDiaCaja).notaCierreHumana, isNull);
+      expect(
+        cerradaCon(nota: 'Cerrada al eliminar operador').notaCierreHumana,
+        isNull,
+      );
+      expect(cerradaCon(nota: '   ').notaCierreHumana, isNull);
+      expect(cerradaCon(nota: null).notaCierreHumana, isNull);
+    });
+
     test('sinArqueo marca al que cerró sin contar la plata', () {
       expect(cerradaCon(arqueo: null).sinArqueo, isTrue);
       expect(cerradaCon(arqueo: 50000).sinArqueo, isFalse);

@@ -235,6 +235,22 @@ class MoraTrackedRecovery {
     );
   }
 
+  static double _round2(double v) => double.parse(v.toStringAsFixed(2));
+
+  /// `ajuste` tal que [trackedEfectivo] reproduce [deseado] dado el replay.
+  static double ajusteParaDeseado({
+    required double objetivo,
+    required double deseado,
+  }) =>
+      _round2(deseado - objetivo);
+
+  /// Tracked que debe quedar en ficha tras reconciliar: historial + perdón/poner.
+  static double trackedEfectivo({
+    required double objetivo,
+    required double ajuste,
+  }) =>
+      _round2(math.max(0.0, objetivo + ajuste));
+
   /// Hay liquidación de cuota base en historial (aunque no haya líneas de mora).
   static bool tienePagosCuotaBaseEnHistorial(List<Map<String, dynamic>> pagos) =>
       pagos.any((p) {
@@ -478,6 +494,10 @@ class MoraTrackedRecovery {
       );
       final trackedActual = contrato.moraPendienteTracked;
       final offsetActual = contrato.moraCobradaOffset;
+      final trackedFinal = trackedEfectivo(
+        objetivo: objetivo.tracked,
+        ajuste: contrato.moraTrackedAjuste,
+      );
 
       final resolved = resolverExencionPreservandoLocal(
         localHasta: contrato.moraExentaHasta,
@@ -485,7 +505,7 @@ class MoraTrackedRecovery {
         desdeHistorial: exencion,
       );
 
-      final trackedDiff = (objetivo.tracked - trackedActual).abs() > 0.01;
+      final trackedDiff = (trackedFinal - trackedActual).abs() > 0.01;
       final offsetDiff = (objetivo.offset - offsetActual).abs() > 0.01;
 
       if (!trackedDiff && !offsetDiff && !resolved.escribir) {
@@ -493,11 +513,12 @@ class MoraTrackedRecovery {
       }
 
       final updates = <String, Object?>{
-        'mora_pendiente_tracked': objetivo.tracked,
+        'mora_pendiente_tracked': trackedFinal,
         'mora_cobrada_offset': objetivo.offset,
         'updated_at': nowUtc,
       };
       // Solo escribe exención si el merge la mejora; nunca degrada admin.
+      // No toca mora_tracked_ajuste: el perdón/poner admin tiene que sobrevivir.
       if (resolved.escribir && resolved.hasta != null) {
         updates['mora_exenta_hasta'] = _exentaHastaIso(resolved.hasta!);
         updates['mora_exencion_reinicia'] = resolved.reinicia ? 1 : 0;
@@ -519,7 +540,7 @@ class MoraTrackedRecovery {
           registroId: contrato.id,
           payload: {
             'id': contrato.id,
-            'mora_pendiente_tracked': objetivo.tracked,
+            'mora_pendiente_tracked': trackedFinal,
           },
         );
       }

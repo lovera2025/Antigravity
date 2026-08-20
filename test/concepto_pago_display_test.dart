@@ -415,4 +415,68 @@ void main() {
       );
     });
   });
+
+  group('conceptosPdfDesdePagosLote — orden de cuotas en el recibo', () {
+    test('cuota 4 sale arriba de la 5 aunque el historial esté invertido', () {
+      final c = ContratoAlumno(
+        id: 'c-orden',
+        eventoId: 'e1',
+        nombreAlumno: 'PRUEBA, ORDEN',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 315000,
+        saldoDeudor: 175000,
+        totalCuotas: 9,
+        cuotasPagadas: 5,
+      );
+      final hist = [
+        _pago(
+          id: 'p1',
+          fecha: '2026-04-10T12:00:00.000Z',
+          concepto: 'Cuota Base',
+          gross: 35000,
+        ),
+        _pago(
+          id: 'p2',
+          fecha: '2026-05-10T12:00:00.000Z',
+          concepto: 'Cuota Base',
+          gross: 35000,
+        ),
+        _pago(
+          id: 'p3',
+          fecha: '2026-06-10T12:00:00.000Z',
+          concepto: 'Cuota Base',
+          gross: 35000,
+        ),
+        _pago(
+          id: 'p4',
+          fecha: '2026-07-10T12:00:00.000Z',
+          concepto: 'Cuota Base',
+          gross: 35000,
+        ),
+        _pago(
+          id: 'p5',
+          fecha: '2026-07-10T12:00:01.000Z',
+          concepto: 'Cuota Base',
+          gross: 35000,
+        ),
+      ];
+      final lote = hist.where((p) => p['id'] == 'p4' || p['id'] == 'p5').toList();
+      final pdf = ConceptoPagoDisplay.conceptosPdfDesdePagosLote(
+        c,
+        lote,
+        historialCompleto: hist,
+      );
+      final plan = pdf
+          .where((l) => l['esMora'] != true && l['esCargoCanal'] != true)
+          .map((l) => l['concepto'] as String)
+          .toList();
+      expect(plan, ['Cuota Base (4/9)', 'Cuota Base (5/9)']);
+
+      // El historial de la ficha sigue más reciente primero.
+      final ficha = ConceptoPagoDisplay.enriquecerPagosHistorial(c, hist);
+      final idsFicha = ficha.map((f) => f['id'] as String).toList();
+      expect(idsFicha.first, 'p5');
+      expect(idsFicha.last, 'p1');
+    });
+  });
 }

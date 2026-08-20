@@ -14,8 +14,8 @@ import '../../models/evento.dart';
 import '../common/providers/admin_provider.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/utils/currency_extensions.dart';
+import '../common/utils/texto_busqueda.dart';
 import '../common/services/pdf_service.dart';
-import 'widgets/pagar_operador_dialog.dart';
 import 'widgets/editar_pago_operador_dialog.dart';
 import 'widgets/cartera_escuelas_dialog.dart';
 import 'models/ingreso_detallado.dart';
@@ -31,8 +31,8 @@ import '../eventos/repositories/eventos_repository.dart';
 import '../alquiler/prestamo_alquiler_detalle_screen.dart';
 import '../egresos/repositories/egresos_repository.dart';
 import '../egresos/widgets/registrar_egreso_global_dialog.dart';
+import '../egresos/services/egreso_concepto_sugerencias.dart';
 import '../eventos/eventos_screen.dart';
-import '../egresos/providers/egresos_provider.dart';
 import '../eventos/presupuestos_screen.dart';
 import 'repositories/finanzas_repository.dart';
 import '../rentabilidad/repositories/rentabilidad_repository.dart';
@@ -47,7 +47,6 @@ import 'widgets/calendario_filtro_movimientos.dart';
 import 'widgets/retiro_bolsillo_personal_dialog.dart';
 import 'widgets/gasto_personal_dialog.dart';
 import '../cierre_caja/models/turno_caja.dart';
-import '../cierre_caja/providers/cierre_caja_provider.dart';
 import '../cierre_caja/widgets/registrar_retiro_dialog.dart';
 import 'widgets/finanzas_charts.dart';
 
@@ -620,9 +619,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   )
                 : null,
           ),
-          // Sin FAB: colgaba de la pestaña PERSONAL. Pagar operador ahora se
-          // hace desde el panel SALDO DEL NEGOCIO, junto al resto de las
-          // acciones del negocio.
+          // Sin FAB: colgaba de la pestaña PERSONAL. Registrar pago (gasto u
+          // operador) se hace desde el panel SALDO DEL NEGOCIO.
           body: !_miEmpresaGateReady
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
@@ -789,55 +787,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           SnackBar(content: Text('No se pudo generar el PDF de cierre: $e')),
         );
       }
-    }
-  }
-
-  Future<void> _eliminarRetiroCajaInteligencia(BuildContext context, Egreso e) async {
-    if (e.id.length != 36) return;
-    if ((e.categoria ?? '').trim() != kCategoriaRetiroCaja) return;
-    final okPin = await AdminGate.check(context, ref);
-    if (!okPin || !context.mounted) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('¿Eliminar este retiro de caja?'),
-        content: Text(
-          'Se borrará "${e.proveedorVisible ?? 'Retiro de caja'}" por ${e.monto.toCurrency()} (local y nube). Esta acción no se puede deshacer.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFE74C3C),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
-    try {
-      await ref.read(egresosRepositoryProvider).eliminarEgreso(e.id);
-      await ref.read(egresosProvider.notifier).refresh();
-      await ref.read(finanzasProvider.notifier).recargar();
-      await ref.read(cierreCajaProvider.notifier).refrescarManual();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Retiro eliminado'),
-          backgroundColor: Color(0xFF00B894),
-        ),
-      );
-    } catch (err) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo eliminar: $err')),
-      );
     }
   }
 
@@ -1918,10 +1867,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     const violet = Color(0xFF6C63FF);
     void refrescar() => ref.read(finanzasProvider.notifier).recargar();
 
-    final apartado = state.hudRetirosBolsaPersonalTotal;
-    final gastadoPropio = state.hudGastadoPersonalTotal - state.hudGastosPersonalEmpresaTotal;
-    final delNegocio = state.hudGastosPersonalEmpresaTotal;
-
     await showPanelMovimientosSheet(
       context,
       ambito: AmbitoPanel.bolsillo,
@@ -1929,23 +1874,33 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       // "Lo que apartaste" ya lo dicen la tarjeta y la raya de abajo, con
       // números. Acá va para qué sirve: es el límite contra el que gastás.
       subtitulo: 'Tu límite: los gastos tuyos se descuentan de acá.',
-      monto: state.hudRetiroPendienteTotal,
       labelMonto: 'te queda disponible',
-      // La raya: de dónde sale el monto grande. No repite "te quedan" — ese es
-      // justamente el número que está arriba en grande. Si algo salió directo
-      // del negocio va aparte, nunca sumado a lo que salió de tu bolsillo.
-      notaRaya:
-          'Apartaste ${apartado.toCurrency()} y gastaste ${gastadoPropio.toCurrency()}.'
-          '${delNegocio > 0.01 ? '\nAparte, ${delNegocio.toCurrency()} de gastos tuyos salieron directo del negocio.' : ''}',
-      egresos: state.egresosHistoricosLista,
       isDark: isDark,
       accent: amber,
-      // Solo el desglose por medio: "Aparté" y "Gasté" ya están en la raya, dos
-      // centímetros más arriba.
-      chips: [
-        ChipResumen('Gasté en efectivo', state.hudGastosBolsaPersonalEfectivo, teal),
-        ChipResumen('Gasté por transferencia', state.hudGastosBolsaPersonalTransferencia, violet),
-      ],
+      // Todo lo que se muestra se relee del estado en cada rebuild: editando una
+      // fila cambian la lista y estos números a la vez.
+      datos: (s) {
+        final apartado = s.hudRetirosBolsaPersonalTotal;
+        final gastadoPropio = s.hudGastadoPersonalTotal - s.hudGastosPersonalEmpresaTotal;
+        final delNegocio = s.hudGastosPersonalEmpresaTotal;
+        return PanelDatosMovimientos(
+          monto: s.hudRetiroPendienteTotal,
+          egresos: s.egresosHistoricosLista,
+          // La raya: de dónde sale el monto grande. No repite "te quedan" — ese
+          // es justamente el número que está arriba en grande. Si algo salió
+          // directo del negocio va aparte, nunca sumado a lo que salió de tu
+          // bolsillo.
+          notaRaya:
+              'Apartaste ${apartado.toCurrency()} y gastaste ${gastadoPropio.toCurrency()}.'
+              '${delNegocio > 0.01 ? '\nAparte, ${delNegocio.toCurrency()} de gastos tuyos salieron directo del negocio.' : ''}',
+          // Solo el desglose por medio: "Aparté" y "Gasté" ya están en la raya,
+          // dos centímetros más arriba.
+          chips: [
+            ChipResumen('Gasté en efectivo', s.hudGastosBolsaPersonalEfectivo, teal),
+            ChipResumen('Gasté por transferencia', s.hudGastosBolsaPersonalTransferencia, violet),
+          ],
+        );
+      },
       acciones: [
         AccionPanel(
           // Mismo movimiento que "APARTAR PARA MÍ" en el panel del negocio,
@@ -2109,20 +2064,24 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       // Que es contable ya lo dicen la tarjeta y el rótulo del monto. Acá va lo
       // único que falta y no es obvio: contra qué hay que compararlo.
       subtitulo: 'Compará este número con lo que hay en caja, banco y cofre.',
-      monto: state.hudPlataDelNegocio,
       labelMonto: 'saldo contable',
-      egresos: state.egresosHistoricosLista,
       isDark: isDark,
       accent: green,
-      chips: [
-        ChipResumen('Efectivo', state.hudEfectivoNetoHistorico, green),
-        ChipResumen('Transferencia', state.hudTransferenciaNetaHistorica, violet),
-        ChipResumen('Total cobrado', state.hudTotalIngresosHistoricoGlobal, gold),
-        ChipResumen('Salió del negocio', state.hudTotalEgresosHistoricoGlobal, red),
-      ],
+      datos: (s) => PanelDatosMovimientos(
+        monto: s.hudPlataDelNegocio,
+        egresos: s.egresosHistoricosLista,
+        // Sin chip "Salió del negocio": ese número ya aparecía dos veces más
+        // abajo en la misma pantalla —abierto por rubro en "EN QUÉ SE FUE", y
+        // otra vez como neto al pie del historial—. Tres veces la misma cifra.
+        chips: [
+          ChipResumen('Efectivo', s.hudEfectivoNetoHistorico, green),
+          ChipResumen('Transferencia', s.hudTransferenciaNetaHistorica, violet),
+          ChipResumen('Total cobrado', s.hudTotalIngresosHistoricoGlobal, gold),
+        ],
+      ),
       acciones: [
         AccionPanel(
-          label: 'REGISTRAR GASTO',
+          label: 'REGISTRAR PAGO',
           icon: Icons.remove_circle_outline_rounded,
           color: red,
           abrir: (ctx) => showDialog<bool>(
@@ -2130,28 +2089,17 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             builder: (_) => const RegistrarEgresoGlobalDialog(),
           ),
         ),
-        AccionPanel(
-          label: 'PAGAR OPERADOR',
-          icon: Icons.engineering_outlined,
-          color: const Color(0xFF3498DB),
-          abrir: (ctx) => showDialog<bool>(
-            context: ctx,
-            builder: (_) => const PagarOperadorDialog(),
-          ),
-        ),
-        // Apartar plata vive solo en MI BOLSILLO ("TRAER DEL NEGOCIO"): cargar
-        // el bolsillo es algo que se hace desde el bolsillo, y acá quedan las
-        // dos acciones que son del negocio de verdad. Tenerlo en los dos
-        // paneles era el mismo botón dos veces.
+        // Apartar plata vive solo en MI BOLSILLO ("TRAER DEL NEGOCIO").
+        // Gasto y operador son el mismo egreso: un solo formulario con buscador.
       ],
-      extras: [
+      extras: (s) => [
         const SizedBox(height: 18),
-        _desgloseSalidas(state, isDark, gold, red, amber),
+        _desgloseSalidas(s, isDark, gold, red, amber),
         const SizedBox(height: 10),
-        _liquidacionPorOperador(context, state, isDark, gold),
+        _liquidacionPorOperador(context, s, isDark, gold),
         const SizedBox(height: 6),
         TextButton.icon(
-          onPressed: () => _abrirDetalleCobrosHistoricos(context, state, isDark, gold),
+          onPressed: () => _abrirDetalleCobrosHistoricos(context, s, isDark, gold),
           icon: Icon(Icons.receipt_long_rounded, size: 18, color: gold),
           // Sin el monto: ya está en el chip "Total cobrado", ahí arriba.
           label: Text(
@@ -3577,6 +3525,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   ///
   /// Responde "¿cuánto le pagué a Juan?", que el historial cronológico no
   /// contesta: ahí los pagos quedan mezclados con el alquiler y los proveedores.
+  /// Entran `Personal` (lo que guarda el formulario) y `Operadores` (el combo
+  /// viejo), para no partir el historial de Juan.
   /// Vivía en la pestaña PERSONAL, que leía `state.egresos` —recortado al mes
   /// del filtro— y por eso decía "SIN PAGOS REGISTRADOS" aunque hubiera
   /// millones pagados en meses anteriores. Acá lee la lista histórica.
@@ -3590,7 +3540,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
 
     final porOperador = <String, List<Egreso>>{};
     for (final e in state.egresosHistoricosLista) {
-      if ((e.categoria ?? '').trim() != 'Personal') continue;
+      if (!esCategoriaOperador(e.categoria)) continue;
       porOperador
           .putIfAbsent(e.proveedorVisible ?? 'Sin nombre', () => [])
           .add(e);
@@ -4607,18 +4557,10 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                       ],
                     ),
                   ),
-                  if ((e.categoria ?? '').trim() == kCategoriaRetiroCaja && e.id.length == 36)
-                    IconButton(
-                      tooltip: 'Eliminar retiro de caja',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      icon: Icon(
-                        Icons.delete_outline_rounded,
-                        size: 18,
-                        color: red.withValues(alpha: 0.75),
-                      ),
-                      onPressed: () => _eliminarRetiroCajaInteligencia(context, e),
-                    ),
+                  // Sin tachito acá: borrar un movimiento se hace tocándolo en el
+                  // historial del panel. Este pedía PIN y el del panel no, así
+                  // que la misma acción tenía dos reglas según por dónde entraras
+                  // — y la que pedía PIN era justo la de los retiros de caja.
                   Text(
                     e.monto.toCurrency(),
                     style: GoogleFonts.oswald(
@@ -5856,24 +5798,25 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
-  bool _ingresoCoincideTexto(IngresoDetallado ing, String q) {
-    if (q.isEmpty) return true;
-    final ql = q.toLowerCase();
-    return ing.alumnoOCliente.toLowerCase().contains(ql) ||
-        ing.concepto.toLowerCase().contains(ql) ||
-        ing.nombreEvento.toLowerCase().contains(ql) ||
-        ing.fuente.toLowerCase().contains(ql);
-  }
+  // Los dos usan la regla compartida: minúsculas, sin tildes y todas las
+  // palabras en cualquier orden. Antes cada uno hacía su `contains` pelado sobre
+  // el texto crudo, así que "operador maxi" no encontraba `MAXI OPERADOR` y
+  // "anotacion" no encontraba "Anotación". Qué campos mira cada lista sí sigue
+  // siendo distinto, según lo que esa pantalla ya filtre por otro lado.
+  bool _ingresoCoincideTexto(IngresoDetallado ing, String q) =>
+      coincideTextoBusqueda([
+        ing.alumnoOCliente,
+        ing.concepto,
+        ing.nombreEvento,
+        ing.fuente,
+      ], q);
 
-  bool _egresoCoincideTexto(Egreso eg, String q) {
-    if (q.isEmpty) return true;
-    final ql = q.toLowerCase();
-    // Sobre el texto visible: se busca por el concepto, no por el prefijo.
-    final prov = (eg.proveedorVisible ?? '').toLowerCase();
-    final cat = (eg.categoria ?? '').toLowerCase();
-    final mp = (eg.medioPago ?? '').toLowerCase();
-    return prov.contains(ql) || cat.contains(ql) || mp.contains(ql);
-  }
+  bool _egresoCoincideTexto(Egreso eg, String q) => coincideTextoBusqueda([
+        // Sobre el texto visible: se busca por el concepto, no por el prefijo.
+        eg.proveedorVisible,
+        eg.categoria,
+        eg.medioPago,
+      ], q);
 
   // ── Lista de Ingresos (ÉLITE DataTables) ───────────────────────────────────
   Widget _buildIngresosLista(bool isDark, Color gold, Color green, List<IngresoDetallado> ingresos, {required bool isHalf}) {
@@ -6298,7 +6241,12 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                           DataColumn(label: Text('MONTO')),
                         ],
                         rows: filteredEgresos.map((eg) {
-                          final fechaStr = eg.fecha != null ? '${eg.fecha!.day.toString().padLeft(2, '0')}/${eg.fecha!.month.toString().padLeft(2, '0')}' : '--';
+                          // Una sola conversión UTC → reloj AR, igual que la
+                          // tabla de ingresos. Leyendo `eg.fecha.day` crudo, un
+                          // movimiento de las 21:30 salía fechado al día
+                          // siguiente: `fecha` es UTC.
+                          final fechaAr = eg.fecha != null ? ArTime.toAr(eg.fecha!) : null;
+                          final fechaStr = fechaAr != null ? '${fechaAr.day.toString().padLeft(2, '0')}/${fechaAr.month.toString().padLeft(2, '0')}' : '--';
                           final cat = (eg.categoria ?? 'Otro').toUpperCase();
                           return DataRow(
                             cells: [

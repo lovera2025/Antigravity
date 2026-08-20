@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../main.dart';
@@ -17,6 +18,7 @@ import '../../../core/utils/uuid_utils.dart';
 import '../services/mesas_extra_utils.dart';
 import '../services/cobro_abono_acumulado.dart';
 import '../services/mora_cuota_calculator.dart';
+import '../services/mora_tracked_recovery.dart';
 import '../../../models/mesa_extra_item.dart';
 
 /// Repositorio de Contratos de Alumnos (Eventos Masivos) ÔÇö Offline-First.
@@ -1140,6 +1142,69 @@ class ContratosRepository {
     return out;
   }
 
+  /// Perdón admin (exención ± ficha) con [mora_tracked_ajuste] para que el
+  /// recovery post-sync no resucite el remanente. No toca Reg.
+  Future<void> aplicarPerdonMora({
+    required String contratoId,
+    required MoraPerdonSimulacion sim,
+  }) async {
+    if (sim.montoPerdonado <= 0.01) return;
+    await aplicarTrackedDeseado(
+      contratoId,
+      trackedDeseado: sim.trackedPost,
+      extraUpdates: MoraCuotaCalculator.payloadPerdonMora(sim),
+    );
+  }
+
+  /// Escribe tracked deseado + ajuste = deseado − objetivo_historial.
+  /// [contratoParaObjetivo] si el Reg ya cambió en memoria (replay post-Reg).
+  Future<void> aplicarTrackedDeseado(
+    String contratoId, {
+    required double trackedDeseado,
+    Map<String, dynamic> extraUpdates = const {},
+    ContratoAlumno? contratoParaObjetivo,
+  }) async {
+    final db = await LocalDatabase.instance;
+    final actual = await getContratoById(contratoId);
+    if (actual == null) {
+      throw StateError('Contrato $contratoId no encontrado');
+    }
+    final contrato = contratoParaObjetivo ?? actual;
+    final ajuste = await _ajusteTrackedDeseadoOn(
+      db: db,
+      contrato: contrato,
+      trackedDeseado: trackedDeseado,
+    );
+    final nowUtc = DateTime.now().toUtc().toIso8601String();
+    final updates = <String, dynamic>{
+      ...extraUpdates,
+      'mora_pendiente_tracked': trackedDeseado,
+      'mora_tracked_ajuste': ajuste,
+      'updated_at': nowUtc,
+    };
+    await actualizarContrato(contratoId, updates);
+  }
+
+  Future<double> _ajusteTrackedDeseadoOn({
+    required DatabaseExecutor db,
+    required ContratoAlumno contrato,
+    required double trackedDeseado,
+  }) async {
+    final pagos = await db.query(
+      'pagos_contrato_alumno',
+      where: 'contrato_alumno_id = ?',
+      whereArgs: [contrato.id],
+    );
+    final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+      contrato: contrato,
+      pagos: pagos,
+    );
+    return MoraTrackedRecovery.ajusteParaDeseado(
+      objetivo: objetivo.tracked,
+      deseado: trackedDeseado,
+    );
+  }
+
   /// Aplica perdón de mora en lote (exención; no toca Reg) y encola sync.
   Future<int> perdonarMoraBulk(
     Map<String, MoraPerdonSimulacion> porContratoId,
@@ -1154,7 +1219,23 @@ class ContratosRepository {
       for (final e in porContratoId.entries) {
         final sim = e.value;
         if (sim.montoPerdonado <= 0.01) continue;
-        final payload = MoraCuotaCalculator.payloadPerdonMora(sim);
+        final rows = await txn.query(
+          'contratos_alumnos',
+          where: 'id = ?',
+          whereArgs: [e.key],
+          limit: 1,
+        );
+        if (rows.isEmpty) continue;
+        final contrato = _fromLocalRow(rows.first);
+        final ajuste = await _ajusteTrackedDeseadoOn(
+          db: txn,
+          contrato: contrato,
+          trackedDeseado: sim.trackedPost,
+        );
+        final payload = {
+          ...MoraCuotaCalculator.payloadPerdonMora(sim),
+          'mora_tracked_ajuste': ajuste,
+        };
         final local = {
           ...payload,
           'updated_at': nowUtc,
@@ -1188,13 +1269,31 @@ class ContratosRepository {
 
     final db = await LocalDatabase.instance;
     var count = 0;
+    final nowUtc = DateTime.now().toUtc().toIso8601String();
 
     await db.transaction((txn) async {
       for (final e in moraPorContratoId.entries) {
         if (e.value <= 0.01) continue;
+        final rows = await txn.query(
+          'contratos_alumnos',
+          where: 'id = ?',
+          whereArgs: [e.key],
+          limit: 1,
+        );
+        if (rows.isEmpty) continue;
+        final contrato = _fromLocalRow(rows.first);
+        final ajuste = await _ajusteTrackedDeseadoOn(
+          db: txn,
+          contrato: contrato,
+          trackedDeseado: e.value,
+        );
+        final payload = {
+          'mora_pendiente_tracked': e.value,
+          'mora_tracked_ajuste': ajuste,
+        };
         await txn.update(
           'contratos_alumnos',
-          {'mora_pendiente_tracked': e.value},
+          {...payload, 'updated_at': nowUtc},
           where: 'id = ?',
           whereArgs: [e.key],
         );
@@ -1203,10 +1302,10 @@ class ContratosRepository {
           tabla: 'contratos_alumnos',
           operacion: SyncOperation.update,
           registroId: e.key,
-          payload: {
+          payload: ContratoAlumno.payloadForRemote({
             'id': e.key,
-            'mora_pendiente_tracked': e.value,
-          },
+            ...payload,
+          }),
         );
         count++;
       }

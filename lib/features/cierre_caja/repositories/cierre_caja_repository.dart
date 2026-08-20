@@ -235,6 +235,25 @@ class CierreCajaRepository {
     return rows.first['texto']?.toString();
   }
 
+  /// Sesiones del lote que tienen una nota no vacía (para el chip del jefe).
+  Future<Set<String>> sesionesConAnotacion(Iterable<String> sesionIds) async {
+    final ids = sesionIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    final db = await LocalDatabase.instance;
+    final marks = List.filled(ids.length, '?').join(',');
+    final rows = await db.rawQuery(
+      'SELECT sesion_caja_id FROM cierre_caja_anotaciones '
+      'WHERE sesion_caja_id IN ($marks) '
+      "AND TRIM(COALESCE(texto, '')) <> ''",
+      ids,
+    );
+    return {
+      for (final r in rows)
+        if ((r['sesion_caja_id']?.toString() ?? '').isNotEmpty)
+          r['sesion_caja_id'].toString(),
+    };
+  }
+
   Future<void> guardarAnotacion({
     required DateTime dia,
     required TurnoCaja turno,

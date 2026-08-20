@@ -20,10 +20,40 @@ void main() {
       ];
       final out = compactarCuotasBaseParaPdf(conceptos);
       expect(out.length, 2);
-      expect(out[0]['concepto'], 'Cuotas base (1–9/9)');
+      expect(out[0]['concepto'], 'Cuotas base (1-2-3-4-5-6-7-8-9/9)');
       expect(out[0]['monto'], closeTo(315000, 0.01));
       expect(out[0]['gross'], closeTo(315000, 0.01));
       expect(out[1]['esMora'], isTrue);
+    });
+
+    test('no compacta 2 ni 3 cuotas consecutivas', () {
+      final dos = compactarCuotasBaseParaPdf([
+        for (var i = 4; i <= 5; i++)
+          {
+            'concepto': 'Cuota Base ($i/9)',
+            'monto': 30000.0,
+            'gross': 30000.0,
+            'esPlanLiquidacion': true,
+          },
+      ]);
+      expect(dos.length, 2);
+      expect(dos[0]['concepto'], 'Cuota Base (4/9)');
+      expect(dos[1]['concepto'], 'Cuota Base (5/9)');
+    });
+
+    test('compacta 4 o más enumerando 4-5-6-7', () {
+      final out = compactarCuotasBaseParaPdf([
+        for (var i = 4; i <= 7; i++)
+          {
+            'concepto': 'Cuota Base ($i/9)',
+            'monto': 30000.0,
+            'gross': 30000.0,
+            'esPlanLiquidacion': true,
+          },
+      ]);
+      expect(out.length, 1);
+      expect(out.single['concepto'], 'Cuotas base (4-5-6-7/9)');
+      expect(out.single['monto'], closeTo(120000, 0.01));
     });
 
     test('no agrupa entrega parcial ni montos distintos', () {
@@ -190,6 +220,68 @@ void main() {
       expect(sumDespues, closeTo(sumAntes, 0.01));
       expect(out.length, 1);
       expect(out.first['concepto'], 'Mesas Extra (3 seleccionadas)');
+    });
+  });
+
+  group('expandirRangosCortosCuotasBase', () {
+    test('parte Cuotas Base (4–5/9) en dos líneas', () {
+      final out = expandirRangosCortosCuotasBase([
+        {
+          'concepto': 'Cuotas Base (4–5/9)',
+          'monto': 60000.0,
+          'gross': 60000.0,
+          'esPlanLiquidacion': true,
+        },
+      ]);
+      expect(out.length, 2);
+      expect(out[0]['concepto'], 'Cuota Base (4/9)');
+      expect(out[1]['concepto'], 'Cuota Base (5/9)');
+      expect(out[0]['monto'], closeTo(30000, 0.01));
+      expect(out[1]['monto'], closeTo(30000, 0.01));
+    });
+  });
+
+  group('display mora y detalle cobrada', () {
+    test('interés mora cuota N no cae al genérico', () {
+      final line = <String, dynamic>{
+        'concepto': 'Interés mora cuota 4 (vto Jul 2026)',
+        'monto': 4200.0,
+        'esMora': true,
+      };
+      anexarMetadatosMoraDisplay(line);
+      expect(line['numeroCuota'], 4);
+      final display = lineasDisplayParaPdf([line]);
+      expect(display.single['display'], 'Mora de la cuota 4');
+    });
+
+    test('remanente nombra no cobrada al pagar', () {
+      final line = <String, dynamic>{
+        'concepto': 'Mora pendiente cuota 3 (no cobrada al pagar)',
+        'monto': 3150.0,
+        'esMora': true,
+      };
+      anexarMetadatosMoraDisplay(line);
+      expect(line['cuotaPrevia'], 3);
+      final display = lineasDisplayParaPdf([line]);
+      expect(
+        display.single['display'],
+        'Mora no cobrada al pagar la cuota 3',
+      );
+    });
+
+    test('el recuadro verde distingue vencida vs remanente', () {
+      expect(
+        detalleMoraCobradaRecibo([
+          {'esMora': true, 'numeroCuota': 4, 'monto': 4200.0},
+        ]),
+        'de la cuota 4 (vencida)',
+      );
+      expect(
+        detalleMoraCobradaRecibo([
+          {'esMora': true, 'cuotaPrevia': 3, 'monto': 3150.0},
+        ]),
+        'de la cuota 3 (no cobrada al pagar)',
+      );
     });
   });
 }

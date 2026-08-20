@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 67;
+  static const int _version = 68;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -235,6 +235,7 @@ class LocalDatabase {
         mora_fecha_referencia TEXT,
         mora_exenta_hasta TEXT,
         mora_exencion_reinicia INTEGER DEFAULT 1,
+        mora_tracked_ajuste REAL DEFAULT 0.0,
         baja_temporal_desde TEXT,
         updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
@@ -2658,6 +2659,21 @@ class LocalDatabase {
         debugPrint('✅ Migración v67 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v67: $e');
+      }
+    }
+
+    if (oldVersion < 68) {
+      debugPrint(
+        '  🔧 v68: mora_tracked_ajuste (perdón/poner ficha durable al sync)',
+      );
+      try {
+        await db.execute(
+          'ALTER TABLE contratos_alumnos ADD COLUMN mora_tracked_ajuste '
+          'REAL DEFAULT 0.0',
+        );
+        debugPrint('✅ Migración v68 completada');
+      } catch (e) {
+        debugPrint('  ⚠️ mora_tracked_ajuste ya existía: $e');
       }
     }
   }

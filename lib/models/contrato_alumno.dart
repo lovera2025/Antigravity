@@ -54,6 +54,11 @@ class ContratoAlumno {
   /// saldadas en mora de forma permanente (cobro solo mora / abono + mora).
   final bool moraExencionReinicia;
 
+  /// Delta admin sobre el replay del historial.
+  /// Tracked efectivo = max(0, objetivo_historial + ajuste).
+  /// Negativo = perdón de ficha; positivo = mora puesta a mano.
+  final double moraTrackedAjuste;
+
   /// Instante UTC en que se aplicó la baja temporal (solo SQLite local).
   final DateTime? bajaTemporalDesde;
 
@@ -92,6 +97,7 @@ class ContratoAlumno {
     this.moraFechaReferencia,
     this.moraExentaHasta,
     this.moraExencionReinicia = true,
+    this.moraTrackedAjuste = 0.0,
     this.bajaTemporalDesde,
   });
 
@@ -186,6 +192,9 @@ class ContratoAlumno {
         if (s == 'false' || s == '0') return false;
         return true;
       }(),
+      moraTrackedAjuste: double.parse(
+        (json['mora_tracked_ajuste'] ?? 0.0).toString(),
+      ),
       bajaTemporalDesde: json['baja_temporal_desde'] != null
           ? DateTime.tryParse(json['baja_temporal_desde'] as String)
           : null,
@@ -242,6 +251,7 @@ class ContratoAlumno {
             '${moraExentaHasta!.month.toString().padLeft(2, '0')}-'
             '${moraExentaHasta!.day.toString().padLeft(2, '0')}',
       'mora_exencion_reinicia': moraExencionReinicia ? 1 : 0,
+      'mora_tracked_ajuste': moraTrackedAjuste,
       if (bajaTemporalDesde != null)
         'baja_temporal_desde': bajaTemporalDesde!.toIso8601String(),
     };
@@ -350,6 +360,7 @@ class ContratoAlumno {
     Object? moraFechaReferencia = _copyUnset,
     Object? moraExentaHasta = _copyUnset,
     bool? moraExencionReinicia,
+    double? moraTrackedAjuste,
     Object? bajaTemporalDesde = _copyUnset,
   }) {
     return ContratoAlumno(
@@ -392,6 +403,7 @@ class ContratoAlumno {
           : moraExentaHasta as DateTime?,
       moraExencionReinicia:
           moraExencionReinicia ?? this.moraExencionReinicia,
+      moraTrackedAjuste: moraTrackedAjuste ?? this.moraTrackedAjuste,
       bajaTemporalDesde: bajaTemporalDesde == _copyUnset
           ? this.bajaTemporalDesde
           : bajaTemporalDesde as DateTime?,

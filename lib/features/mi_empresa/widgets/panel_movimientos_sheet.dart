@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
 import '../../cierre_caja/models/turno_caja.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../../common/utils/texto_busqueda.dart';
+import '../../egresos/services/egreso_concepto_sugerencias.dart';
 import '../bolsa_personal_helpers.dart';
+import '../providers/finanzas_provider.dart';
 import 'calendario_filtro_movimientos.dart';
+import 'editar_movimiento_dialog.dart';
+import 'editar_pago_operador_dialog.dart';
 
 /// Cuál de las dos bolsas está mirando el panel.
 ///
@@ -41,6 +47,26 @@ class ChipResumen {
   const ChipResumen(this.label, this.monto, this.color);
 }
 
+/// Lo que el panel muestra en un instante dado.
+///
+/// Se recalcula desde el estado en cada rebuild en vez de pasarse fijo al abrir:
+/// editando el monto de una fila cambian a la vez la lista y el número grande de
+/// arriba, y con valores congelados el título quedaba mostrando el saldo viejo
+/// abajo de una lista ya actualizada.
+class PanelDatosMovimientos {
+  final double monto;
+  final List<Egreso> egresos;
+  final List<ChipResumen> chips;
+  final String? notaRaya;
+
+  const PanelDatosMovimientos({
+    required this.monto,
+    required this.egresos,
+    this.chips = const [],
+    this.notaRaya,
+  });
+}
+
 /// Filtro por tipo de movimiento, además del calendario.
 enum _FiltroTipo { todos, efectivo, transferencia, entradas, salidas }
 
@@ -61,11 +87,39 @@ List<Egreso> movimientosDelAmbito(List<Egreso> todos, AmbitoPanel ambito) {
   }).toList();
 }
 
+/// `true` si [e] coincide con lo que se escribió en el buscador del panel.
+///
+/// Mira concepto, categoría y monto. **No mira el medio de pago**: para eso están
+/// los chips Efectivo/Transfer. justo arriba, y dos puertas para el mismo filtro
+/// hacen que el resultado dependa de cuál usaste.
+///
+/// La regla de comparación —minúsculas, sin tildes, todas las palabras en
+/// cualquier orden— es la compartida: escribir "operador maxi" tiene que
+/// encontrar lo mismo que "maxi operador".
+bool coincideBusquedaMovimiento(Egreso e, String query) {
+  return coincideTextoBusqueda(
+    [
+      // El texto visible, sin el prefijo técnico de bolsa: nadie busca
+      // "[pendiente]".
+      e.proveedorVisible,
+      e.categoria,
+      // El rubro que se ve en el desglose: buscar "operadores" encuentra los
+      // pagos guardados como `Personal`.
+      rubroDesgloseEgreso(e.categoria),
+      e.monto.toFormattedNumber(),
+      e.monto.toStringAsFixed(0),
+    ],
+    query,
+  );
+}
+
 /// `true` si el movimiento entra plata a la bolsa que se está mirando.
 bool _esEntrada(Egreso e, AmbitoPanel ambito) {
   if (ambito != AmbitoPanel.bolsillo) return false;
   return (e.categoria ?? '').trim() == kCategoriaRetiroDueno;
 }
+
+List<Widget> _sinExtras(FinanzasState _) => const [];
 
 /// Abre el panel de una bolsa: monto, acciones e historial con calendario.
 Future<void> showPanelMovimientosSheet(
@@ -73,15 +127,12 @@ Future<void> showPanelMovimientosSheet(
   required AmbitoPanel ambito,
   required String titulo,
   required String subtitulo,
-  required double monto,
   required String labelMonto,
-  required List<Egreso> egresos,
-  required List<ChipResumen> chips,
+  required PanelDatosMovimientos Function(FinanzasState) datos,
   required List<AccionPanel> acciones,
   required bool isDark,
   required Color accent,
-  String? notaRaya,
-  List<Widget> extras = const [],
+  List<Widget> Function(FinanzasState) extras = _sinExtras,
   VoidCallback? onRefresh,
 }) {
   return showModalBottomSheet<void>(
@@ -106,14 +157,11 @@ Future<void> showPanelMovimientosSheet(
               ambito: ambito,
               titulo: titulo,
               subtitulo: subtitulo,
-              monto: monto,
               labelMonto: labelMonto,
-              egresos: egresos,
-              chips: chips,
+              datos: datos,
               acciones: acciones,
               isDark: isDark,
               accent: accent,
-              notaRaya: notaRaya,
               extras: extras,
               onRefresh: onRefresh,
             ),
@@ -124,20 +172,17 @@ Future<void> showPanelMovimientosSheet(
   );
 }
 
-class _PanelMovimientos extends StatefulWidget {
+class _PanelMovimientos extends ConsumerStatefulWidget {
   final ScrollController scrollCtrl;
   final AmbitoPanel ambito;
   final String titulo;
   final String subtitulo;
-  final double monto;
   final String labelMonto;
-  final List<Egreso> egresos;
-  final List<ChipResumen> chips;
+  final PanelDatosMovimientos Function(FinanzasState) datos;
   final List<AccionPanel> acciones;
   final bool isDark;
   final Color accent;
-  final String? notaRaya;
-  final List<Widget> extras;
+  final List<Widget> Function(FinanzasState) extras;
   final VoidCallback? onRefresh;
 
   const _PanelMovimientos({
@@ -145,32 +190,44 @@ class _PanelMovimientos extends StatefulWidget {
     required this.ambito,
     required this.titulo,
     required this.subtitulo,
-    required this.monto,
     required this.labelMonto,
-    required this.egresos,
-    required this.chips,
+    required this.datos,
     required this.acciones,
     required this.isDark,
     required this.accent,
-    required this.notaRaya,
     required this.extras,
     required this.onRefresh,
   });
 
   @override
-  State<_PanelMovimientos> createState() => _PanelMovimientosState();
+  ConsumerState<_PanelMovimientos> createState() => _PanelMovimientosState();
 }
 
-class _PanelMovimientosState extends State<_PanelMovimientos> {
+class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
   RangoFiltroMovimientos _rango = const RangoFiltroMovimientos.todo();
   _FiltroTipo _tipo = _FiltroTipo.todos;
+  final _buscarCtrl = TextEditingController();
 
-  List<Egreso> get _delAmbito =>
-      movimientosDelAmbito(widget.egresos, widget.ambito);
+  @override
+  void dispose() {
+    _buscarCtrl.dispose();
+    super.dispose();
+  }
 
-  List<Egreso> get _visibles {
-    return _delAmbito.where((e) {
-      if (!_rango.contiene(e.fecha)) return false;
+  String get _query => _buscarCtrl.text.trim();
+  bool get _buscando => _query.isNotEmpty;
+
+  List<Egreso> _delAmbito(PanelDatosMovimientos d) =>
+      movimientosDelAmbito(d.egresos, widget.ambito);
+
+  List<Egreso> _visibles(PanelDatosMovimientos d) {
+    return _delAmbito(d).where((e) {
+      // Mientras se busca, el recorte de fechas queda en pausa: si el calendario
+      // estaba en un día y lo buscado es de otro, el movimiento existe y no
+      // aparecía. El rango no se borra, se ignora — al limpiar la búsqueda
+      // vuelve el día que estaba elegido.
+      if (!_buscando && !_rango.contiene(e.fecha)) return false;
+      if (_buscando && !coincideBusquedaMovimiento(e, _query)) return false;
       switch (_tipo) {
         case _FiltroTipo.todos:
           return true;
@@ -190,9 +247,18 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
     final accent = widget.accent;
-    final visibles = _visibles;
-    final totalVisible =
-        visibles.fold<double>(0, (s, e) => s + (_esEntrada(e, widget.ambito) ? -e.monto : e.monto));
+
+    final state = ref.watch(finanzasProvider).value;
+    if (state == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final d = widget.datos(state);
+
+    final visibles = _visibles(d);
+    final totalVisible = visibles.fold<double>(
+      0,
+      (s, e) => s + (_esEntrada(e, widget.ambito) ? -e.monto : e.monto),
+    );
 
     return ListView(
       controller: widget.scrollCtrl,
@@ -229,7 +295,7 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
         ),
         const SizedBox(height: 16),
         Text(
-          widget.monto.toCurrency(),
+          d.monto.toCurrency(),
           style: GoogleFonts.oswald(
             fontSize: 36,
             fontWeight: FontWeight.w900,
@@ -245,7 +311,7 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
             color: isDark ? Colors.white54 : Colors.black54,
           ),
         ),
-        if (widget.notaRaya != null) ...[
+        if (d.notaRaya != null) ...[
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
@@ -256,7 +322,7 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
               border: Border.all(color: accent.withValues(alpha: 0.25)),
             ),
             child: Text(
-              widget.notaRaya!,
+              d.notaRaya!,
               style: TextStyle(
                 fontSize: 11.5,
                 height: 1.4,
@@ -267,10 +333,10 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
           ),
         ],
         const SizedBox(height: 12),
-        _grillaChips(isDark),
+        _grillaChips(d.chips, isDark),
         const SizedBox(height: 14),
         _filaAcciones(),
-        ...widget.extras,
+        ...widget.extras(state),
         const SizedBox(height: 20),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -286,7 +352,16 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
             ),
             // Sin recorte no se anuncia nada: al lado de "HISTORIAL", poner
             // "Todo el historial" era repetir la palabra sin agregar dato.
-            if (!_rango.esTodo)
+            if (_buscando)
+              Text(
+                'Buscando en todo el historial',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: accent.withValues(alpha: 0.9),
+                ),
+              )
+            else if (!_rango.esTodo)
               Text(
                 _rango.etiqueta,
                 style: TextStyle(
@@ -300,7 +375,7 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
         const SizedBox(height: 8),
         CalendarioFiltroMovimientos(
           fechas: [
-            for (final e in _delAmbito)
+            for (final e in _delAmbito(d))
               if (e.fecha != null) e.fecha!,
           ],
           valor: _rango,
@@ -308,6 +383,8 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
           isDark: isDark,
           accent: accent,
         ),
+        const SizedBox(height: 10),
+        _buscador(isDark, accent),
         const SizedBox(height: 10),
         _filtrosTipo(isDark),
         const SizedBox(height: 10),
@@ -328,12 +405,7 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
-              _rango.esTodo
-                  // Sin recorte, "en todo el historial" sobra: no hay nada y ya.
-                  ? 'Todavía no hay movimientos.'
-                  : 'No hubo movimientos '
-                      '${_rango.dia != null ? "el" : "en"} '
-                      '${_rango.etiqueta.toLowerCase()}.',
+              _textoSinResultados(),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 12,
@@ -351,12 +423,85 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
     );
   }
 
-  Widget _grillaChips(bool isDark) {
+  /// El vacío nombra el filtro que está puesto. Un "sin resultados" mudo deja
+  /// pensando que el movimiento no existe, cuando lo que pasa es que hay un
+  /// chip prendido.
+  String _textoSinResultados() {
+    final porTipo = switch (_tipo) {
+      _FiltroTipo.todos => '',
+      _FiltroTipo.efectivo => ' en Efectivo',
+      _FiltroTipo.transferencia => ' en Transferencia',
+      _FiltroTipo.entradas => ' en Aparté',
+      _FiltroTipo.salidas => ' en Gasté',
+    };
+    if (_buscando) {
+      return 'No hay coincidencias con «$_query»$porTipo.';
+    }
+    if (_rango.esTodo) {
+      return porTipo.isEmpty
+          // Sin recorte, "en todo el historial" sobra: no hay nada y ya.
+          ? 'Todavía no hay movimientos.'
+          : 'No hay movimientos$porTipo.';
+    }
+    return 'No hubo movimientos$porTipo '
+        '${_rango.dia != null ? "el" : "en"} ${_rango.etiqueta.toLowerCase()}.';
+  }
+
+  Widget _buscador(bool isDark, Color accent) {
+    return TextField(
+      controller: _buscarCtrl,
+      onChanged: (_) => setState(() {}),
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: isDark ? Colors.white70 : Colors.black87,
+      ),
+      decoration: InputDecoration(
+        hintText: 'Buscar en este historial: concepto, categoría, monto…',
+        hintStyle: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white24 : Colors.black38,
+        ),
+        isDense: true,
+        prefixIcon: Icon(Icons.search_rounded, size: 20, color: accent.withValues(alpha: 0.75)),
+        suffixIcon: _buscando
+            ? IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18),
+                tooltip: 'Limpiar',
+                onPressed: () {
+                  _buscarCtrl.clear();
+                  setState(() {});
+                },
+              )
+            : null,
+        filled: true,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: accent.withValues(alpha: 0.25)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: accent.withValues(alpha: 0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: accent.withValues(alpha: 0.55)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+    );
+  }
+
+  Widget _grillaChips(List<ChipResumen> chips, bool isDark) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final c in widget.chips)
+        for (final c in chips)
           Container(
             constraints: const BoxConstraints(minWidth: 120),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -485,6 +630,26 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
     );
   }
 
+  /// Abre el editor de la fila.
+  ///
+  /// Los pagos a operadores van al suyo: llevan `evento_id` y alimentan la
+  /// liquidación, y el editor genérico lo perdería al guardar.
+  Future<void> _editar(Egreso e) async {
+    if (e.id.length != 36) return;
+    final esOperador = esCategoriaOperador(e.categoria);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => esOperador
+          ? EditarPagoOperadorDialog(egreso: e)
+          : EditarMovimientoDialog(egreso: e, ambito: widget.ambito),
+    );
+    if (ok == true) {
+      widget.onRefresh?.call();
+      // El panel no se cierra: la lista y el monto de arriba salen del estado y
+      // se rearman solos.
+    }
+  }
+
   Widget _fila(Egreso e, bool isDark) {
     const amber = Color(0xFFFFB74D);
     const teal = Color(0xFF26A69A);
@@ -525,108 +690,121 @@ class _PanelMovimientosState extends State<_PanelMovimientos> {
         e.fecha != null ? ArTime.formatFechaCorta(e.fecha!) : 'Sin fecha';
     final hora = e.fecha != null ? ArTime.formatHora(e.fecha!) : '';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _editar(e),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  e.proveedorVisible ?? 'Movimiento',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 3),
-                Row(
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        badge,
-                        style: TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
-                          color: color,
-                        ),
+                    Text(
+                      e.proveedorVisible ?? 'Movimiento',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        '$fecha${hora.isNotEmpty ? ' · $hora' : ''}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isDark ? Colors.white54 : Colors.black54,
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            badge,
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              color: color,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '$fecha${hora.isNotEmpty ? ' · $hora' : ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white54 : Colors.black54,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${entrada ? '+' : '−'}${e.monto.toCurrency()}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                  color: color,
-                ),
               ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: (esTr ? violet : teal).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  esTr ? 'TR' : 'EF',
-                  style: TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                    color: esTr ? violet : teal,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${entrada ? '+' : '−'}${e.monto.toCurrency()}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      color: color,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: (esTr ? violet : teal).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      esTr ? 'TR' : 'EF',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        color: esTr ? violet : teal,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.edit_outlined,
+                size: 14,
+                color: isDark ? Colors.white24 : Colors.black26,
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

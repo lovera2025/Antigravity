@@ -25,16 +25,14 @@ Future<void> emitirPapelesDeCierre({
     finanzasRepo: finanzasRepo,
     egresosRepo: egresosRepo,
   );
-  // La anotación y la guía de cambio se piden acá y no en cargarDatosCierreSesion
-  // porque son datos de presentación del papel, no plata que haya que clasificar.
-  String? anotacion;
+  // La guía de cambio se pide acá y no en cargarDatosCierreSesion
+  // porque es dato de presentación del papel, no plata que haya que clasificar.
   double guiaSaldo = 0;
   try {
-    anotacion = await cierreRepo.obtenerAnotacionTexto(cerrada.id);
     final guia = await cierreRepo.obtenerGuiaCambioSesiones({cerrada.id});
     guiaSaldo = guia.saldoActual;
   } catch (_) {
-    // Son adornos del papel: si fallan, la hoja sale igual con lo que importa.
+    // Adornos del papel: si fallan, la hoja sale igual con lo que importa.
   }
 
   await PdfService.generarHojaCierreSesionPdf(
@@ -42,7 +40,6 @@ Future<void> emitirPapelesDeCierre({
     datos: datos,
     turno: turnoDeSesion(cerrada),
     emitidoPor: emitidoPor,
-    anotacion: (anotacion ?? '').trim().isEmpty ? null : anotacion!.trim(),
     guiaCambioSaldo: guiaSaldo,
   );
 }

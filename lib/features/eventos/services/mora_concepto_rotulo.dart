@@ -130,6 +130,16 @@ class MoraConceptoRotulo {
     return nums;
   }
 
+  /// `Interés mora cuota 3 (vto Jun 2026)` → 3. Null si no nombra una cuota.
+  static int? numeroCuotaCalendarioDesdeConcepto(String concepto) {
+    final m = RegExp(
+      r'int[eé]r[eé]s\s*mora\s*cuota\s*(\d+)',
+      caseSensitive: false,
+    ).firstMatch(concepto);
+    if (m == null) return null;
+    return int.tryParse(m.group(1)!);
+  }
+
   static String? subtextoPendientePrevias({
     List<MoraPendientePreviaDetalle> detalle = const [],
   }) {
@@ -176,16 +186,14 @@ class MoraConceptoRotulo {
     }).join(' · ');
   }
 
-  /// Una sola línea que dice de dónde viene la mora que queda debiendo, para
-  /// el aviso del recibo. Se corta en [maxCuotas] a propósito: el recibo entra
-  /// en una hoja y el detalle completo vive en el estado de cuenta.
+  /// De dónde viene la mora que queda debiendo, para el aviso del recibo.
   ///
-  /// [desglose] son las cuotas vencidas impagas; [tracked] el remanente de
-  /// cuotas ya liquidadas sin cobrar el interés. Vacío si no hay nada que decir.
+  /// Dos bloques, para que la familia distinga:
+  ///  - cuotas vencidas todavía impagas;
+  ///  - remanente: interés que no se cobró cuando se pagó esa cuota.
   ///
-  /// [trackedDetalle] es de qué cuotas salió [tracked], reconstruido con
-  /// [MoraTrackedOrigen]. Sin eso la línea solo puede decir "de cuotas ya
-  /// pagadas", que es justo lo que la familia pregunta cuando lee el recibo.
+  /// [maxCuotas] recorta **cada** bloque (el recibo entra en una hoja; el
+  /// detalle completo vive en el estado de cuenta).
   static String origenMoraPendienteLinea({
     required List<MoraCuotaDetalle> desglose,
     required String Function(double) formatoMonto,
@@ -193,8 +201,6 @@ class MoraConceptoRotulo {
     List<MoraPendientePreviaDetalle> trackedDetalle = const [],
     int maxCuotas = 3,
   }) {
-    // Las cuotas vencidas y las ya pagadas se nombran igual: la familia no
-    // tiene por qué distinguir dos formatos en el mismo renglón.
     String parte(int numeroCuota, String mesLabel, int diasMora, double monto) {
       final mes = mesLabel.split(' ').first;
       final entre = [
@@ -205,26 +211,47 @@ class MoraConceptoRotulo {
       return 'cuota $numeroCuota$cuando ${formatoMonto(monto)}';
     }
 
-    final items = <({int cuota, String texto})>[];
-    String? sinDetalle;
-
-    for (final d in desglose) {
-      items.add((
-        cuota: d.numeroCuota,
-        texto: parte(d.numeroCuota, d.mesLabel, d.diasMora, d.interesBruto),
-      ));
+    String recortar(List<({int cuota, String texto})> items) {
+      final ordenados = [...items]..sort((a, b) => a.cuota.compareTo(b.cuota));
+      final partes = <String>[];
+      var omitidas = 0;
+      for (final i in ordenados) {
+        if (partes.length >= maxCuotas) {
+          omitidas++;
+          continue;
+        }
+        partes.add(i.texto);
+      }
+      if (omitidas > 0) {
+        partes.add('y $omitidas ${omitidas == 1 ? 'cuota' : 'cuotas'} más');
+      }
+      return partes.join(' · ');
     }
 
+    final vencidas = <({int cuota, String texto})>[
+      for (final d in desglose)
+        if (d.interesBruto > 0.01)
+          (
+            cuota: d.numeroCuota,
+            texto: parte(
+              d.numeroCuota,
+              d.mesLabel,
+              d.diasMora,
+              d.interesBruto,
+            ),
+          ),
+    ];
+
+    final remanentes = <({int cuota, String texto})>[];
+    String? remanenteSinDetalle;
     if (tracked > 0.01) {
       final previas =
           trackedDetalle.where((d) => d.montoAtribuido > 0.01).toList();
       if (previas.isEmpty) {
-        // No se pudo reconstruir el origen (historial incompleto): al menos
-        // que se lea bien y se entienda que es de cuotas ya pagadas.
-        sinDetalle = 'interés de cuotas ya pagadas ${formatoMonto(tracked)}';
+        remanenteSinDetalle = 'cuotas ya pagadas ${formatoMonto(tracked)}';
       } else {
         for (final d in previas) {
-          items.add((
+          remanentes.add((
             cuota: d.numeroCuota,
             texto: parte(
               d.numeroCuota,
@@ -237,27 +264,17 @@ class MoraConceptoRotulo {
       }
     }
 
-    // De la más vieja a la más nueva, sin importar si la cuota ya se pagó:
-    // mezcladas por origen salía "cuota 2 · cuota 3 · cuota 1".
-    items.sort((a, b) => a.cuota.compareTo(b.cuota));
-
-    final partes = <String>[];
-    var omitidas = 0;
-    for (final i in items) {
-      if (partes.length >= maxCuotas) {
-        omitidas++;
-        continue;
-      }
-      partes.add(i.texto);
+    final bloques = <String>[];
+    if (vencidas.isNotEmpty) {
+      bloques.add('Mora de cuotas vencidas: ${recortar(vencidas)}');
     }
-
-    if (sinDetalle != null) partes.add(sinDetalle);
-    if (omitidas > 0) {
-      partes.add('y $omitidas ${omitidas == 1 ? 'cuota' : 'cuotas'} más');
+    if (remanentes.isNotEmpty) {
+      bloques.add('Mora no cobrada al pagar: ${recortar(remanentes)}');
+    } else if (remanenteSinDetalle != null) {
+      bloques.add('Mora no cobrada al pagar ($remanenteSinDetalle)');
     }
-
-    if (partes.isEmpty) return '';
-    return 'Viene de: ${partes.join(' · ')}.';
+    if (bloques.isEmpty) return '';
+    return '${bloques.join('. ')}.';
   }
 
   static String calendarioCuota({
@@ -586,6 +603,12 @@ class MoraConceptoRotulo {
             'gross': l['monto'],
             'cuotas': 0,
             'lineKind': conc['lineKind'],
+            'esMora': true,
+            if (l['numeroCuota'] != null) 'numeroCuota': l['numeroCuota'],
+            if (l['cuotaPrevia'] != null) 'cuotaPrevia': l['cuotaPrevia'],
+            if (l['diasMora'] != null) 'diasMora': l['diasMora'],
+            if (l['mesCuotaPrevia'] != null)
+              'mesCuotaPrevia': l['mesCuotaPrevia'],
             if (l['subtexto'] != null) 'subtexto': l['subtexto'],
           },
         )

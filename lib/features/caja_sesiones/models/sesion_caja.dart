@@ -101,6 +101,14 @@ class SesionCaja {
       !estaAbierta &&
       kNotasCierreAutomatico.contains((notaCierre ?? '').trim());
 
+  /// Nota que escribió una persona al cerrar. Vacío o texto de sistema → null.
+  String? get notaCierreHumana {
+    final t = (notaCierre ?? '').trim();
+    if (t.isEmpty) return null;
+    if (kNotasCierreAutomatico.contains(t)) return null;
+    return t;
+  }
+
   factory SesionCaja.fromMap(Map<String, dynamic> m) {
     return SesionCaja(
       id: m['id'] as String,

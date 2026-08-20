@@ -24,6 +24,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../core/services/kiosk_launcher.dart';
 import '../../core/services/user_role_cache.dart';
+import '../../core/services/app_update_checker.dart';
+import 'widgets/app_update_download_dialog.dart';
+import 'widgets/app_update_whats_new_dialog.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
@@ -35,6 +38,67 @@ import 'dart:async';
 import 'dart:ui';
 import '../common/widgets/sync_menu_sheet.dart';
 import '../common/widgets/animated_brand_logo.dart';
+
+Future<void> mostrarDialogoActualizacion(
+  BuildContext context,
+  AppUpdateInfo info,
+) async {
+  final quiereDescargar = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AppUpdateWhatsNewDialog(
+      version: info.latestVersion,
+      notes: info.notes,
+      showLater: true,
+    ),
+  );
+  if (quiereDescargar != true || !context.mounted) return;
+  await AppUpdateChecker.markWhatsNewSeen(info.latestVersion);
+  if (!context.mounted) return;
+  final result = await showDialog<AppUpdateDownloadResult>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AppUpdateDownloadDialog(info: info),
+  );
+  if (!context.mounted) return;
+  if (result == AppUpdateDownloadResult.success) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Se abrió el instalador. Seguí los pasos; puede pedir cerrar Junior Eventos.',
+        ),
+      ),
+    );
+  }
+}
+
+/// Primera apertura de una versión que todavía no se acusó. Sin MÁS TARDE.
+Future<void> mostrarNovedadesSiPrimeraApertura(
+  BuildContext context,
+  AppUpdateChecker checker,
+) async {
+  final current = await checker.currentVersion();
+  final seen = await AppUpdateChecker.whatsNewSeenVersion();
+  if (!context.mounted) return;
+  if (seen == current) return;
+  final info = await checker.consultar();
+  if (!context.mounted) return;
+  if (info != null && info.hayNueva) return;
+  final notes = (info != null && info.latestVersion == current)
+      ? info.notes
+      : 'Junior Eventos $current está lista.';
+  final accepted = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AppUpdateWhatsNewDialog(
+      version: current,
+      notes: notes,
+      alreadyInstalled: true,
+    ),
+  );
+  if (accepted == true) {
+    await AppUpdateChecker.markWhatsNewSeen(current);
+  }
+}
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -103,6 +167,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     } catch (_) {
       /* mantiene fallback */
     }
+    if (mounted) unawaited(_chequearUpdateSilencioso());
+  }
+
+  Future<void> _chequearUpdateSilencioso() async {
+    if (!AppUpdateChecker.habilitado) return;
+    final checker = AppUpdateChecker();
+    final info = await checker.consultarSiCorrespondeHoy();
+    if (!mounted) return;
+    if (info != null) {
+      await mostrarDialogoActualizacion(context, info);
+      return;
+    }
+    await mostrarNovedadesSiPrimeraApertura(context, checker);
   }
 
   /// Muestra p. ej. 4.5.0 →4.5; 4.5.1 → 4.5.1 (marketing en pie del dashboard).
@@ -242,11 +319,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
                 child: Text(
                   'CAJA · ${(appRole.operador?.nombre ?? '').toUpperCase()}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.8,
-                    color: Colors.tealAccent,
+                    color: isDark ? Colors.tealAccent : Colors.teal.shade800,
                   ),
                 ),
               ),
@@ -1588,6 +1665,7 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
   String? _pinError;
   String? _pinSuccess;
   bool _pinLoading = false;
+  bool _buscandoUpdate = false;
 
   @override
   void dispose() {
@@ -1595,6 +1673,35 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
     _pinNuevoCtrl.dispose();
     _pinConfirmCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _buscarActualizacion() async {
+    setState(() => _buscandoUpdate = true);
+    try {
+      final info = await AppUpdateChecker().consultar();
+      if (!mounted) return;
+      if (info == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo consultar GitHub. Probá más tarde.',
+            ),
+          ),
+        );
+        return;
+      }
+      if (!info.hayNueva) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Estás al día (${info.currentVersion}).'),
+          ),
+        );
+        return;
+      }
+      await mostrarDialogoActualizacion(context, info);
+    } finally {
+      if (mounted) setState(() => _buscandoUpdate = false);
+    }
   }
 
   Future<void> _cambiarPin() async {
@@ -1805,6 +1912,27 @@ class _ConfiguracionSheetState extends ConsumerState<_ConfiguracionSheet> {
                       color: isDark ? Colors.white54 : Colors.black45,
                     ),
                   ),
+                  if (AppUpdateChecker.habilitado) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 42,
+                      child: OutlinedButton.icon(
+                        onPressed: _buscandoUpdate ? null : _buscarActualizacion,
+                        icon: _buscandoUpdate
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.system_update_alt_rounded, size: 18),
+                        label: const Text(
+                          'BUSCAR ACTUALIZACIÓN',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Text(
                     'LM · ${DateTime.now().year}',

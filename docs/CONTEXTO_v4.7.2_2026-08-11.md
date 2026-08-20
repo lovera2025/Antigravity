@@ -188,8 +188,8 @@ hoja**.
 
 ## Documentos relacionados
 
-- **`docs/CONTEXTO_MORA_OPERATIVA.md`** — modelo de mora, tracked/offset, vocabulario de
-  rótulos y la tabla persistido vs display.
+- **`docs/CONTEXTO_MORA_OPERATIVA.md`** — modelo tracked/offset/exención (actualizado 16-ago).
 - **`docs/CONTEXTO_v4.6.2_2026-07-31.md`** — capa `display` del PDF, "viene de", recibo
-  reimpreso con la fecha del pago.
+  reimpreso con la fecha del pago. Auditoría de perdón de ficha **resuelta en 4.7.8**.
 - **`docs/CONTEXTO_v4.7.0_2026-08-06.md`** — un cobro una fila, ventana de lote de 10 s.
+- **`docs/CONTEXTO_v4.7.8_2026-08-16.md`** — perdón durable + botón por alumno.

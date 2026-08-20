@@ -101,6 +101,10 @@ void main() {
 
     test('acorta el rango ya compactado', () {
       expect(abreviarDisplayPdf('Cuotas 1 a 9 de 9'), 'Cuotas 1–9/9');
+      expect(
+        abreviarDisplayPdf('Cuotas 4-5-6-7 de 9'),
+        'Cuotas 4-5-6-7/9',
+      );
     });
 
     test('acorta mesas y sillas conservando el número', () {
@@ -118,6 +122,10 @@ void main() {
       expect(abreviarDisplayPdf('Mora — 23 días fuera de término'), 'Mora · 23 d');
       expect(
         abreviarDisplayPdf('Mora de la cuota 2'),
+        'Mora cuota 2',
+      );
+      expect(
+        abreviarDisplayPdf('Mora no cobrada al pagar la cuota 2'),
         'Mora cuota 2',
       );
       expect(

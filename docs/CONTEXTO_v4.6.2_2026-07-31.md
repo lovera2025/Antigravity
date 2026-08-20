@@ -114,46 +114,35 @@ después de tocar cualquier cosa de mora.
 
 ---
 
-## Auditoría de mora en Mi Empresa — PENDIENTE, no arreglado
+## Auditoría de mora en Mi Empresa — RESUELTO en v4.7.8
 
 Se auditó "perdonar mora" y "poner mora por días/monto"
 (`restaurar_mora_dialog.dart`). Hallazgo, con prueba sobre datos de Bernel
 (historial que implica tracked $15.000):
 
-> **Todo lo que escribe `mora_pendiente_tracked` se revierte solo en la próxima
-> sincronización.**
+> **Hasta 4.7.7:** todo lo que escribía `mora_pendiente_tracked` se revertía en
+> la próxima sincronización. **Desde 4.7.8** el replay aplica
+> `mora_tracked_ajuste` y el perdón/poner a mano sobrevive.
 
-Después de cada pull, el sync corre `MoraTrackedRecovery.reconciliarTodos`
-(`sync_engine.dart:763`), que recalcula el tracked desde el historial de pagos y
-lo **pisa sin condición** (`mora_tracked_recovery.dart:511`). La exención está
-protegida por `resolverExencionPreservandoLocal`; el tracked **no**.
+Después de cada pull, el sync corre `MoraTrackedRecovery.reconciliarTodos`,
+que recalcula el tracked desde el historial. La exención ya estaba protegida
+por `resolverExencionPreservandoLocal`. El tracked ahora es
+`max(0, objetivo_historial + mora_tracked_ajuste)`.
 
-| Acción admin | Queda guardado | Lo que escribe la reconciliación |
+| Acción admin | Queda guardado | Post 4.7.8 |
 |---|---|---|
-| Perdonar solo ficha | $0 | **$15.000** ← vuelve |
-| Perdonar cuotas + ficha | $0 + exención | exención se respeta, tracked **vuelve** |
-| Poner mora a mano $40.000 | $40.000 | **$15.000** ← se pisa |
-| Mover fecha de Reg | — | **sobrevive** ✅ |
+| Perdonar solo ficha | $0 + ajuste | **sigue $0** |
+| Perdonar cuotas + ficha | $0 + exención + ajuste | exención y ficha **se mantienen** |
+| Poner mora a mano $40.000 | $40.000 + ajuste | **no se pisa** |
+| Mover fecha de Reg | — | sobrevive (como antes) |
 
-**Mientras no se arregle: el único ajuste durable de mora es mover la fecha de
-Reg.** Cambia los vencimientos y el replay lo respeta.
+Ver `docs/CONTEXTO_v4.7.8_2026-08-16.md`. Instalar 4.7.8 en todas las PCs.
 
-El código ya lo tenía anotado (`mora_cuota_calculator.dart:975`: *"necesita un
-marcador propio antes de que la reconciliación retroactiva se corra en
-producción"*). Lo nuevo es que **ya se está corriendo**, no solo en la migración
-sino en cada pull, y que afecta también a "poner mora a mano", no solo al perdón
-de ficha.
-
-**Arreglo propuesto (postergado por decisión del 31-jul):** columna nueva que
-registre el ajuste admin (perdonado / puesto a mano) para que la reconciliación
-no lo resucite. Implica migración local + campo en el modelo + columna en
-Supabase + mapeo de sync.
-
-**Menor, del mismo audit:** la vista previa de "restaurar mora" muestra solo el
-monto que va a escribir, no la mora operativa resultante. Como el tracked se
-**suma** a la mora de calendario, si el contrato tiene cuotas vencidas la familia
-queda debiendo más que lo tipeado. El panel de perdón sí lo muestra bien
-(`Mora operativa: X → Y`); el de restaurar debería copiar ese patrón.
+**Menor, del mismo audit (sigue abierto):** la vista previa de "restaurar mora"
+muestra solo el monto que va a escribir, no la mora operativa resultante. Como
+el tracked se **suma** a la mora de calendario, si el contrato tiene cuotas
+vencidas la familia queda debiendo más que lo tipeado. El panel de perdón sí
+lo muestra bien (`Mora operativa: X → Y`).
 
 ---
 

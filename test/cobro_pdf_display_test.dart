@@ -115,7 +115,7 @@ void main() {
       expect(arrastre.single['anidada'], isNot(true));
       expect(
         arrastre.single['display'],
-        'Mora de cuotas anteriores, no cobrada en su momento',
+        'Mora no cobrada al pagar (cuotas ya pagadas)',
       );
       // Y va después de la cuota, no intercalada.
       expect(display.last['arrastre'], isTrue);
@@ -141,14 +141,15 @@ void main() {
   });
 
   group('compactarCuotasBaseParaPdf', () {
-    test('compacta cuotas consecutivas sin mora', () {
+    test('no compacta tres cuotas consecutivas sin mora', () {
       final finales = _finales(
         [_previewBase(), _previewBase(), _previewBase()],
         cPagadas: 0,
       );
       final out = compactarCuotasBaseParaPdf(finales);
-      expect(out.length, 1);
-      expect(out.single['concepto'], 'Cuotas base (1–3/9)');
+      expect(out.length, 3);
+      expect(out[0]['concepto'], 'Cuota Base (1/9)');
+      expect(out[2]['concepto'], 'Cuota Base (3/9)');
     });
 
     test('no compacta un tramo con mora anidada', () {
@@ -294,7 +295,7 @@ void main() {
       expect(arrastre.length, 1);
       expect(
         arrastre.first['display'],
-        'Mora de cuotas anteriores, no cobrada en su momento',
+        'Mora no cobrada al pagar la cuota 3',
       );
     });
 

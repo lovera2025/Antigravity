@@ -7,6 +7,7 @@ import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../services/egreso_concepto_sugerencias.dart';
 
 class EgresosRepository {
   final SupabaseClient _supabase;
@@ -31,6 +32,27 @@ class EgresosRepository {
     ''');
 
     return maps.map(_conEventoAnidado).toList();
+  }
+
+  /// Historial crudo para el buscador de Proveedor / Concepto (offline).
+  Future<List<EgresoConceptoFila>> getFilasSugerenciasConcepto() async {
+    final db = await LocalDatabase.instance;
+    final maps = await db.rawQuery('''
+      SELECT e.proveedor, e.categoria, e.monto, e.fecha, ev.tipo as evento_tipo
+      FROM egresos e
+      LEFT JOIN eventos ev ON e.evento_id = ev.id
+      ORDER BY e.fecha DESC
+    ''');
+    return [
+      for (final r in maps)
+        EgresoConceptoFila(
+          proveedor: (r['proveedor'] ?? '').toString().trim(),
+          categoria: (r['categoria'] ?? '').toString().trim(),
+          monto: double.tryParse(r['monto']?.toString() ?? '') ?? 0,
+          fecha: DateTime.tryParse(r['fecha']?.toString() ?? ''),
+          eventoTipo: r['evento_tipo'] as String?,
+        ),
+    ];
   }
 
   /// Egresos de una o varias sesiones de caja, filtrando **en el SQL**.
@@ -152,6 +174,7 @@ class EgresosRepository {
     String? proveedor,
     String? medioPago,
     double? monto,
+    DateTime? fecha,
   }) async {
     if (id.isEmpty || id.length != 36) {
       debugPrint('🚫 actualizarEgreso: id inválido');
@@ -163,6 +186,9 @@ class EgresosRepository {
     if (proveedor != null) updates['proveedor'] = proveedor.trim();
     if (medioPago != null) updates['medio_pago'] = medioPago;
     if (monto != null) updates['monto'] = monto;
+    // Misma política que `registrarEgreso`: instante en UTC. Quien llama arma el
+    // instante desde el reloj AR con `ArTime.arToUtc`, no manda un DateTime local.
+    if (fecha != null) updates['fecha'] = fecha.toUtc().toIso8601String();
     if (updates.isEmpty) return;
     updates['updated_at'] = ArTime.nowUtcIso();
 

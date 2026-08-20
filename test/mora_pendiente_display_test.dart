@@ -1260,6 +1260,154 @@ void main() {
     });
   });
 
+  group('mora_tracked_ajuste (perdón durable)', () {
+    final contratoBernel = ContratoAlumno(
+      id: 'bernel-ajuste',
+      eventoId: 'evt',
+      nombreAlumno: 'BERNEL, LUCILA FATIMA',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 270000,
+      saldoDeudor: 180000,
+      cuotasPagadas: 3,
+      totalCuotas: 9,
+      createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+    );
+    final pagosBernel = <Map<String, dynamic>>[
+      {
+        'fecha_pago': '2026-04-28T21:28:04.595192+00:00',
+        'concepto': 'Cuota Base (1/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'anulado': 0,
+      },
+      {
+        'fecha_pago': '2026-06-23T20:22:45.683166+00:00',
+        'concepto': 'Cuota Base (2/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'anulado': 0,
+      },
+      {
+        'fecha_pago': '2026-07-27T20:08:41.809065+00:00',
+        'concepto': 'Cuota Base (3/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'anulado': 0,
+      },
+    ];
+
+    test('perdonar solo ficha: reconcile no resucita tracked', () {
+      final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: contratoBernel,
+        pagos: pagosBernel,
+      );
+      expect(objetivo.tracked, closeTo(15000, 0.01));
+      final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
+        objetivo: objetivo.tracked,
+        deseado: 0,
+      );
+      expect(
+        MoraTrackedRecovery.trackedEfectivo(
+          objetivo: objetivo.tracked,
+          ajuste: ajuste,
+        ),
+        closeTo(0, 0.01),
+      );
+    });
+
+    test('cuotas + ficha: exención intacta y tracked sigue 0 post-replay', () {
+      final hoy = DateTime(2026, 8, 10);
+      final c = contratoBernel.copyWith(moraPendienteTracked: 15000);
+      final bruto = MoraCuotaCalculator.calcularDesglose(c, hoy);
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: bruto.map((d) => d.numeroCuota).toSet(),
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        incluirTracked: true,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.aplicaExencion, isTrue);
+      expect(sim.trackedPost, 0);
+      expect(
+        MoraCuotaCalculator.payloadPerdonMora(sim).containsKey('created_at'),
+        isFalse,
+      );
+      final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: c,
+        pagos: pagosBernel,
+      );
+      final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
+        objetivo: objetivo.tracked,
+        deseado: sim.trackedPost,
+      );
+      expect(
+        MoraTrackedRecovery.trackedEfectivo(
+          objetivo: objetivo.tracked,
+          ajuste: ajuste,
+        ),
+        closeTo(0, 0.01),
+      );
+    });
+
+    test('perdón de ficha y cobro nuevo: solo aparece remanente nuevo', () {
+      final tras2 = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: contratoBernel,
+        pagos: pagosBernel.take(2).toList(),
+      );
+      expect(tras2.tracked, closeTo(6900, 0.01));
+      final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
+        objetivo: tras2.tracked,
+        deseado: 0,
+      );
+      final tras3 = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: contratoBernel,
+        pagos: pagosBernel,
+      );
+      expect(tras3.tracked, closeTo(15000, 0.01));
+      expect(
+        MoraTrackedRecovery.trackedEfectivo(
+          objetivo: tras3.tracked,
+          ajuste: ajuste,
+        ),
+        closeTo(8100, 0.01),
+      );
+    });
+
+    test('poner tracked a mano: recovery no lo baja al historial', () {
+      final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: contratoBernel,
+        pagos: pagosBernel,
+      );
+      final ajuste = MoraTrackedRecovery.ajusteParaDeseado(
+        objetivo: objetivo.tracked,
+        deseado: 40000,
+      );
+      expect(
+        MoraTrackedRecovery.trackedEfectivo(
+          objetivo: objetivo.tracked,
+          ajuste: ajuste,
+        ),
+        closeTo(40000, 0.01),
+      );
+    });
+
+    test('ajuste 0 y tracked inflado: recovery sí lo corrige', () {
+      final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: contratoBernel,
+        pagos: pagosBernel,
+      );
+      expect(
+        MoraTrackedRecovery.trackedEfectivo(
+          objetivo: objetivo.tracked,
+          ajuste: 0,
+        ),
+        closeTo(objetivo.tracked, 0.01),
+      );
+      expect(objetivo.tracked, closeTo(15000, 0.01));
+    });
+  });
+
   group('Baja temporal — mora congelada (v52)', () {
     final contratoConDeuda = ContratoAlumno(
       id: 'freeze',

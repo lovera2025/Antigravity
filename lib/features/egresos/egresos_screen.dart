@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/utils/ar_time.dart';
 import '../../models/egreso.dart';
 import '../../models/evento.dart';
 import '../common/widgets/admin_gate.dart';
@@ -422,7 +423,9 @@ class _EgresosScreenState extends ConsumerState<EgresosScreen> {
               ),
               if (fecha != null)
                 Text(
-                  '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}',
+                  // `Egreso.fecha` es UTC: leído crudo, un egreso de las 21:30
+                  // se mostraba fechado al día siguiente.
+                  ArTime.formatFechaCorta(fecha),
                   style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38),
                 ),
             ],
@@ -482,7 +485,7 @@ class _EgresosScreenState extends ConsumerState<EgresosScreen> {
           // Ya no necesitamos _fetchEgresos() manual, el stream lo manejará.
         },
         backgroundColor: _expenseRed,
-        label: const Text('REGISTRAR GASTO', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12)),
+        label: const Text('REGISTRAR PAGO', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12)),
         icon: const Icon(Icons.add_circle_outline, size: 20),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
@@ -491,7 +494,8 @@ class _EgresosScreenState extends ConsumerState<EgresosScreen> {
 
   Color _getCategoryColor(String? cat) {
     switch (cat) {
-      case 'Personal': return Colors.blueAccent;
+      case 'Personal':
+      case 'Operadores': return Colors.blueAccent;
       case 'Alquiler': return Colors.purpleAccent;
       case 'Catering': return Colors.greenAccent;
       case 'Bebida': return Colors.cyanAccent;
@@ -502,7 +506,8 @@ class _EgresosScreenState extends ConsumerState<EgresosScreen> {
 
   IconData _getCategoryIcon(String? cat) {
     switch (cat) {
-      case 'Personal': return Icons.engineering_outlined;
+      case 'Personal':
+      case 'Operadores': return Icons.engineering_outlined;
       case 'Alquiler': return Icons.home_work_outlined;
       case 'Catering': return Icons.restaurant_menu_rounded;
       case 'Bebida': return Icons.local_bar_rounded;

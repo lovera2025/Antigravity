@@ -26,7 +26,7 @@ void main() {
       );
       expect(
         linea,
-        'Viene de: cuota 2 (May, 45 d) \$3200 · cuota 3 (Jun, 15 d) \$1100.',
+        'Mora de cuotas vencidas: cuota 2 (May, 45 d) \$3200 · cuota 3 (Jun, 15 d) \$1100.',
       );
     });
 
@@ -52,7 +52,7 @@ void main() {
         tracked: 2400,
         formatoMonto: plata,
       );
-      expect(linea, contains('de cuotas ya pagadas \$2400'));
+      expect(linea, contains('Mora no cobrada al pagar (cuotas ya pagadas \$2400)'));
     });
 
     test('solo tracked sin origen reconstruido: se lee bien', () {
@@ -61,7 +61,7 @@ void main() {
         tracked: 2400,
         formatoMonto: plata,
       );
-      expect(linea, 'Viene de: interés de cuotas ya pagadas \$2400.');
+      expect(linea, 'Mora no cobrada al pagar (cuotas ya pagadas \$2400).');
     });
 
     test('tracked con origen reconstruido nombra las cuotas', () {
@@ -86,11 +86,11 @@ void main() {
       );
       expect(
         linea,
-        'Viene de: cuota 2 (May, 24 d) \$6900 · cuota 3 (Jun, 27 d) \$8100.',
+        'Mora no cobrada al pagar: cuota 2 (May, 24 d) \$6900 · cuota 3 (Jun, 27 d) \$8100.',
       );
     });
 
-    test('ordena por número de cuota, no por origen', () {
+    test('separa vencidas y remanente, cada bloque ordenado', () {
       final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
         desglose: [det(2, 'May 2026', 61, 21350), det(3, 'Jun 2026', 31, 10850)],
         tracked: 1400,
@@ -106,12 +106,13 @@ void main() {
       );
       expect(
         linea,
-        'Viene de: cuota 1 (Abr, 4 d) \$1400 · cuota 2 (May, 61 d) \$21350 · '
-        'cuota 3 (Jun, 31 d) \$10850.',
+        'Mora de cuotas vencidas: cuota 2 (May, 61 d) \$21350 · '
+        'cuota 3 (Jun, 31 d) \$10850. '
+        'Mora no cobrada al pagar: cuota 1 (Abr, 4 d) \$1400.',
       );
     });
 
-    test('desglose + tracked comparten el corte de maxCuotas', () {
+    test('desglose + tracked recortan cada bloque por separado', () {
       final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
         desglose: [det(4, 'Jul 2026', 10, 800), det(5, 'Ago 2026', 5, 400)],
         tracked: 15000,
@@ -132,12 +133,13 @@ void main() {
         formatoMonto: plata,
         maxCuotas: 3,
       );
-      // Ordenadas 2, 3, 4, 5 → entran las tres más viejas y la 5 queda afuera.
+      expect(linea, startsWith('Mora de cuotas vencidas:'));
+      expect(linea, contains('Mora no cobrada al pagar:'));
       expect(linea, contains('cuota 2'));
       expect(linea, contains('cuota 3'));
       expect(linea, contains('cuota 4'));
-      expect(linea, isNot(contains('cuota 5')));
-      expect(linea, contains('y 1 cuota más'));
+      expect(linea, contains('cuota 5'));
+      expect(linea, isNot(contains('y 1 cuota más')));
     });
 
     test('vacía si no hay nada que informar', () {

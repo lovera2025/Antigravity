@@ -2,6 +2,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
 import 'cobro_abono_acumulado.dart';
+import 'cobro_masivo_conceptos_pdf.dart';
 import 'mesas_extra_utils.dart';
 import 'mora_concepto_rotulo.dart';
 import 'mora_cuota_calculator.dart';
@@ -877,6 +878,7 @@ class ConceptoPagoDisplay {
       };
       if (esMora(p)) {
         line['esMora'] = true;
+        anexarMetadatosMoraDisplay(line);
       } else if (esCargoCanal(p)) {
         line['esCargoCanal'] = true;
       } else {
@@ -892,7 +894,60 @@ class ConceptoPagoDisplay {
       }
       out.add(line);
     }
+    _ordenarLineasReciboPorCuota(out);
     return out;
+  }
+
+  static final _reCuotaRangoRecibo = RegExp(r'\((\d+)[-–](\d+)/(\d+)\)');
+  static final _reCuotaSimpleRecibo = RegExp(r'\((\d+)/(\d+)\)');
+  static final _reCuotaEnTextoRecibo = RegExp(
+    r'cuota\s+(\d+)',
+    caseSensitive: false,
+  );
+
+  /// Clave de orden del recibo: plan de la cuota más vieja a la más nueva.
+  /// El arrastre y el cargo van después; el historial de la ficha no usa esto.
+  static int _claveOrdenReciboPdf(Map<String, dynamic> c) {
+    if (c['esCargoCanal'] == true) return 500000;
+    final texto = (c['concepto'] as String? ?? '').trim();
+    final folded = texto.toLowerCase();
+    final esMora = c['esMora'] == true;
+    final nMeta = (c['cuotaBaseDesde'] as num?)?.toInt() ??
+        (c['numeroCuota'] as num?)?.toInt() ??
+        (c['cuotaPrevia'] as num?)?.toInt();
+    final nTexto = () {
+      final rango = _reCuotaRangoRecibo.firstMatch(texto);
+      if (rango != null) return int.tryParse(rango.group(1)!);
+      final simple = _reCuotaSimpleRecibo.firstMatch(texto);
+      if (simple != null) return int.tryParse(simple.group(1)!);
+      return int.tryParse(
+        _reCuotaEnTextoRecibo.firstMatch(folded)?.group(1) ?? '',
+      );
+    }();
+    final n = nMeta ?? nTexto ?? 0;
+    if (esMora) {
+      final arrastre = c['cuotaPrevia'] != null ||
+          folded.contains('mora pendiente') ||
+          folded.contains('cuotas ya pagadas');
+      return (arrastre ? 400000 : 300000) + n;
+    }
+    if (folded.contains('silla')) return 200000 + n;
+    if (folded.contains('mesa')) return 100000 + n;
+    return n;
+  }
+
+  static void _ordenarLineasReciboPorCuota(List<Map<String, dynamic>> lineas) {
+    final indexed = [
+      for (var i = 0; i < lineas.length; i++) (i, lineas[i]),
+    ];
+    indexed.sort((a, b) {
+      final c = _claveOrdenReciboPdf(a.$2).compareTo(_claveOrdenReciboPdf(b.$2));
+      if (c != 0) return c;
+      return a.$1.compareTo(b.$1);
+    });
+    for (var i = 0; i < indexed.length; i++) {
+      lineas[i] = indexed[i].$2;
+    }
   }
 
   static bool _esConceptoMoraMixtoOPendiente(String concepto) {

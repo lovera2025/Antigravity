@@ -52,3 +52,15 @@ app.*.map.json
 /android/app/release
 .vercel
 .env*.local
+
+# Instaladores viejos guardados a mano: 1 GB que GitHub rechaza (tope 100 MB por
+# archivo). Los releases publicados viven en GitHub Releases, no acá.
+releases/
+
+# Restos de rescates de archivos y capturas sueltas
+*.bak
+flutter_*.png
+
+# Scripts de auditoría de un solo uso (tool/_tmp_*): se escriben para mirar un
+# caso puntual y quedan tirados sin compilar.
+tool/_tmp_*
