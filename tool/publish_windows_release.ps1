@@ -11,7 +11,11 @@ param(
     # Novedades de ESTA versión, breves. Sin esto el release sale con el título y
     # una sola línea: es preferible a heredar el changelog de la versión anterior,
     # que es lo que pasaba cuando el texto estaba escrito acá adentro.
-    [string]$Notes = ""
+    [string]$Notes = "",
+    # Preferir esto cuando el texto tenga comillas o varias líneas: pasarlo por
+    # -Notes hace que PowerShell lo parta en varios argumentos y gh termine
+    # buscando un archivo que no existe.
+    [string]$NotesFile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,13 +59,33 @@ if ($existente) {
     Write-Host "El release $tag ya existe. Subo/actualizo el asset..."
     gh release upload $tag $setup --repo lovera2025/Antigravity --clobber
 } else {
-    $cuerpo = "Instalador Windows de Junior Eventos $Version."
-    if ($Notes) { $cuerpo = "$cuerpo`n`n$Notes" }
+    $texto = $Notes
+    if ($NotesFile) {
+        if (-not (Test-Path $NotesFile)) { throw "No encontré el archivo de novedades: $NotesFile" }
+        $texto = Get-Content -Raw -Path $NotesFile -Encoding UTF8
+    }
 
-    gh release create $tag $setup `
-        --repo lovera2025/Antigravity `
-        --title "Junior Eventos $Version" `
-        --notes $cuerpo
+    $cuerpo = "Instalador Windows de Junior Eventos $Version."
+    if ($texto) { $cuerpo = "$cuerpo`r`n`r`n$($texto.Trim())" }
+
+    # Por archivo y no por argumento: el cuerpo tiene comillas y saltos de línea.
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "junior-release-$Version.md"
+    [System.IO.File]::WriteAllText($tmp, $cuerpo, (New-Object System.Text.UTF8Encoding($false)))
+    try {
+        # --target con la rama actual: sin esto el tag se crea sobre la rama por
+        # defecto del repo, y termina apuntando a un commit que no es el que
+        # compiló este instalador.
+        $rama = (git rev-parse --abbrev-ref HEAD).Trim()
+
+        gh release create $tag $setup `
+            --repo lovera2025/Antigravity `
+            --target $rama `
+            --title "Junior Eventos $Version" `
+            --notes-file $tmp
+        if ($LASTEXITCODE -ne 0) { throw "gh release create falló (código $LASTEXITCODE)" }
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "Listo: https://github.com/lovera2025/Antigravity/releases/tag/$tag"
