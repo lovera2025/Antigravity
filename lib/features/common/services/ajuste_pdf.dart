@@ -27,12 +27,22 @@ class AjustePdf {
   /// `Cuota 3 de 9 — venció 31/05/2026`).
   final bool abreviar;
 
+  /// Cuántas cuotas nombra cada recuadro de mora antes de agrupar el resto en
+  /// un renglón `y N cuotas más`.
+  ///
+  /// **Nunca llega a cero.** El detalle de la mora se abrevia por escalones,
+  /// no se da de baja: un papel que reclama plata sin decir de qué cuotas sale
+  /// es exactamente el que motivó este ajuste. Por eso va aparte de
+  /// [subtextos], que sí apaga texto auxiliar.
+  final int maxFilasMora;
+
   const AjustePdf({
     required this.nivel,
     this.texto = 1.0,
     this.aire = 1.0,
     this.subtextos = true,
     this.abreviar = false,
+    this.maxFilasMora = 6,
   });
 
   /// Papel sin compactar. Es el que sale en la gran mayoría de los cobros.
@@ -45,13 +55,40 @@ class AjustePdf {
     // 1 · Solo se junta el aire. La letra queda igual.
     AjustePdf(nivel: 1, aire: 0.7),
     // 2 · Se sacan los subtextos auxiliares.
-    AjustePdf(nivel: 2, aire: 0.55, subtextos: false),
+    AjustePdf(nivel: 2, aire: 0.55, subtextos: false, maxFilasMora: 4),
     // 3 · Rótulos abreviados: dicen lo mismo en menos lugar.
-    AjustePdf(nivel: 3, aire: 0.5, subtextos: false, abreviar: true),
+    AjustePdf(
+      nivel: 3,
+      aire: 0.5,
+      subtextos: false,
+      abreviar: true,
+      maxFilasMora: 3,
+    ),
     // 4 · Recién acá se achica la tipografía, y con piso.
-    AjustePdf(nivel: 4, texto: 0.92, aire: 0.45, subtextos: false, abreviar: true),
-    AjustePdf(nivel: 5, texto: 0.84, aire: 0.4, subtextos: false, abreviar: true),
-    AjustePdf(nivel: 6, texto: 0.76, aire: 0.35, subtextos: false, abreviar: true),
+    AjustePdf(
+      nivel: 4,
+      texto: 0.92,
+      aire: 0.45,
+      subtextos: false,
+      abreviar: true,
+      maxFilasMora: 2,
+    ),
+    AjustePdf(
+      nivel: 5,
+      texto: 0.84,
+      aire: 0.4,
+      subtextos: false,
+      abreviar: true,
+      maxFilasMora: 2,
+    ),
+    AjustePdf(
+      nivel: 6,
+      texto: 0.76,
+      aire: 0.35,
+      subtextos: false,
+      abreviar: true,
+      maxFilasMora: 1,
+    ),
   ];
 
   bool get esIntacto => nivel == 0;

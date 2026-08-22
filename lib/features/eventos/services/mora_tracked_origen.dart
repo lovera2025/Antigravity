@@ -64,10 +64,10 @@ class MoraPendientePreviaDetalle {
     }
 
     if (moraCobrada > 0.01) {
-      partes.add('se cobró \$${_fmtPesos(moraCobrada)} de los '
-          '\$${_fmtPesos(debida)} de mora');
+      partes.add('se cobró \$${fmtPesosMora(moraCobrada)} de los '
+          '\$${fmtPesosMora(debida)} de mora');
     } else {
-      partes.add('no se cobró nada de los \$${_fmtPesos(debida)} de mora');
+      partes.add('no se cobró nada de los \$${fmtPesosMora(debida)} de mora');
     }
 
     final texto = partes.join(' · ');
@@ -80,7 +80,9 @@ String _fmtFecha(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}/'
     '${d.month.toString().padLeft(2, '0')}/${d.year}';
 
-String _fmtPesos(double v) {
+/// `8400.0` → `8.400,00`. Público para que el rótulo de las líneas de mora
+/// (`mora_concepto_rotulo.dart`) escriba los montos igual que este subtexto.
+String fmtPesosMora(double v) {
   final n = double.parse(v.toStringAsFixed(2));
   final neg = n < 0;
   final abs = n.abs();
@@ -117,6 +119,24 @@ class _OrigenAcc {
     this.diasMora = 0,
     this.vencimiento,
   });
+}
+
+/// Qué pregunta responde la atribución de orígenes.
+///
+/// La cola de orígenes va siempre de la cuota más vieja a la más nueva, pero
+/// cuál de las dos puntas se recorta depende de lo que se esté rotulando.
+enum MoraOrigenRecorte {
+  /// *"¿De qué cuotas es esta plata que entró?"* — la mora se cobra de la más
+  /// vieja a la más nueva (v4.9), así que el monto se atribuye desde la cabeza
+  /// y lo que no llega a cubrirse queda afuera por la cola.
+  loQueSeCobra,
+
+  /// *"¿Qué queda debiéndose hoy?"* — lo más viejo ya se saldó o se perdonó.
+  /// La diferencia entre lo que la cola suma y el monto que hay en ficha se
+  /// descuenta desde la **cabeza**, no desde la cola: si no, un perdón baja el
+  /// número pero el rótulo sigue nombrando el mes más viejo, que es justo el
+  /// que se quiso perdonar (caso VAREIRO, 22-ago-2026).
+  loQueQueda,
 }
 
 /// Infierre qué cuotas ya pagadas alimentan el tracked (rótulos Opción B).
@@ -241,12 +261,14 @@ class MoraTrackedOrigen {
   ///
   /// [trackedMonto]: monto a etiquetar (FIFO sobre orígenes vivos).
   /// [antesDe] / [excluirPagoId]: historial previo al cobro que se está rotulando.
+  /// [recorte]: qué punta de la cola se descarta. Ver [MoraOrigenRecorte].
   static List<MoraPendientePreviaDetalle> inferir({
     required ContratoAlumno contratoBase,
     required List<Map<String, dynamic>> pagos,
     required double trackedMonto,
     DateTime? antesDe,
     String? excluirPagoId,
+    MoraOrigenRecorte recorte = MoraOrigenRecorte.loQueSeCobra,
   }) {
     final monto = double.parse(
       trackedMonto.clamp(0.0, double.infinity).toStringAsFixed(2),
@@ -413,6 +435,7 @@ class MoraTrackedOrigen {
                 numeroCuota: o.numeroCuota,
                 mesLabel: o.mesLabel,
                 vencimiento: o.vencimiento,
+                diasMora: o.diasMora,
                 fechaPagoCuota: o.fechaPagoCuota,
                 moraDebida: o.moraDebida,
                 moraCobrada: double.parse(
@@ -433,6 +456,47 @@ class MoraTrackedOrigen {
       moraHistAcum += moraEsteCobro;
       cuotasPagadas = (cuotasPagadas + cuotasLiquidadas)
           .clamp(0, contratoBase.totalCuotas > 0 ? contratoBase.totalCuotas : 9);
+    }
+
+    // "Qué queda debiéndose": lo que la cola suma de más que la ficha es plata
+    // que ya se saldó o se perdonó, y se saldó/perdonó de la más vieja a la más
+    // nueva. Se descuenta desde la cabeza para que el mes viejo se caiga del
+    // rótulo; recortarlo por la cola dejaba nombrado justo el que se perdonó.
+    if (recorte == MoraOrigenRecorte.loQueQueda) {
+      final totalVivo = origenes.fold<double>(0, (s, o) => s + o.remanente);
+      var brecha = double.parse(
+        (totalVivo - monto).clamp(0.0, double.infinity).toStringAsFixed(2),
+      );
+      if (brecha > 0.01) {
+        final quedan = <_OrigenAcc>[];
+        for (final o in origenes) {
+          if (brecha <= 0.01) {
+            quedan.add(o);
+            continue;
+          }
+          final toma = math.min(o.remanente, brecha);
+          brecha = double.parse((brecha - toma).toStringAsFixed(2));
+          final nuevoRem = double.parse(
+            (o.remanente - toma).clamp(0.0, double.infinity).toStringAsFixed(2),
+          );
+          if (nuevoRem <= 0.01) continue;
+          // Solo baja el remanente: [moraDebida] y [moraCobrada] describen qué
+          // pasó cuando se liquidó la cuota. Un perdón no es plata que entró.
+          quedan.add(
+            _OrigenAcc(
+              numeroCuota: o.numeroCuota,
+              mesLabel: o.mesLabel,
+              vencimiento: o.vencimiento,
+              diasMora: o.diasMora,
+              fechaPagoCuota: o.fechaPagoCuota,
+              moraDebida: o.moraDebida,
+              moraCobrada: o.moraCobrada,
+              remanente: nuevoRem,
+            ),
+          );
+        }
+        origenes = quedan;
+      }
     }
 
     // Atribuir [monto] FIFO sobre orígenes vivos.

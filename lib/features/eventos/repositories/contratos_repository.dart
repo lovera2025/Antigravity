@@ -1117,7 +1117,6 @@ class ContratosRepository {
           numerosCuotaSeleccionados: nums,
           moraCobradaHistorial: hist,
           ahoraAr: hoy,
-          incluirTracked: true,
         );
       }
       if (c.moraPendienteTracked > 0.01) {
@@ -1126,7 +1125,6 @@ class ContratosRepository {
           numerosCuotaSeleccionados: const {},
           moraCobradaHistorial: hist,
           ahoraAr: hoy,
-          incluirTracked: true,
         );
       }
 

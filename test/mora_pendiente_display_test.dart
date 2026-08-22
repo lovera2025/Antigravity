@@ -1133,7 +1133,6 @@ void main() {
         numerosCuotaSeleccionados: const {},
         moraCobradaHistorial: 0,
         ahoraAr: hoy,
-        incluirTracked: true,
       );
       expect(sim, isNotNull);
       expect(sim!.soloTracked, isTrue);
@@ -1174,7 +1173,6 @@ void main() {
         numerosCuotaSeleccionados: nums,
         moraCobradaHistorial: 0,
         ahoraAr: hoy,
-        incluirTracked: true,
       );
       expect(sim, isNotNull);
       expect(sim!.incluyeTracked, isTrue);
@@ -1202,7 +1200,7 @@ void main() {
         numerosCuotaSeleccionados: {3},
         moraCobradaHistorial: 0,
         ahoraAr: hoy,
-        incluirTracked: false,
+        trackedPerdonado: 0,
       );
       expect(sim, isNotNull);
       expect(sim!.incluyeTracked, isFalse);
@@ -1210,6 +1208,73 @@ void main() {
       expect(sim.aplicaExencion, isTrue);
       // Solo queda tracked como mora operativa.
       expect(sim.moraOperativaPost, closeTo(8800, 0.01));
+    });
+
+    test('perdón parcial del remanente: se limpia un mes y queda el resto', () {
+      final hoy = DateTime(2026, 7, 10);
+      final c = ContratoAlumno(
+        id: 'tracked-parcial',
+        eventoId: 'evt',
+        nombreAlumno: 'PARCIAL',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 360000,
+        saldoDeudor: 280000,
+        cuotasPagadas: 2,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        moraPendienteTracked: 8800,
+      );
+      // Solo la parte de mayo (\$5.000) del remanente; el calendario no se toca.
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: const {},
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        trackedPerdonado: 5000,
+      );
+      expect(sim, isNotNull);
+      expect(sim!.soloTracked, isTrue);
+      expect(sim.incluyeTracked, isTrue);
+      expect(sim.trackedPerdonado, closeTo(5000, 0.01));
+      expect(sim.trackedPost, closeTo(3800, 0.01),
+          reason: 'el resto del remanente sigue en ficha');
+      expect(sim.montoPerdonado, closeTo(5000, 0.01));
+      expect(
+        sim.moraOperativaPre - sim.moraOperativaPost,
+        closeTo(5000, 0.01),
+        reason: 'la mora operativa baja exactamente lo perdonado',
+      );
+      expect(sim.aplicaExencion, isFalse);
+      // El payload que se persiste lleva el resto, no cero.
+      expect(
+        MoraCuotaCalculator.payloadPerdonMora(sim)['mora_pendiente_tracked'],
+        closeTo(3800, 0.01),
+      );
+    });
+
+    test('no se puede perdonar más remanente del que hay en ficha', () {
+      final hoy = DateTime(2026, 7, 10);
+      final c = ContratoAlumno(
+        id: 'tracked-tope',
+        eventoId: 'evt',
+        nombreAlumno: 'TOPE',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 360000,
+        saldoDeudor: 280000,
+        cuotasPagadas: 2,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3, 0, 0),
+        moraPendienteTracked: 2000,
+      );
+      final sim = MoraCuotaCalculator.simularPerdonMora(
+        contrato: c,
+        numerosCuotaSeleccionados: const {},
+        moraCobradaHistorial: 0,
+        ahoraAr: hoy,
+        trackedPerdonado: 999999,
+      );
+      expect(sim!.trackedPerdonado, closeTo(2000, 0.01));
+      expect(sim.trackedPost, 0.0);
     });
 
     test('modos masivos: completo escribe exención; solo ficha no', () {
@@ -1234,7 +1299,6 @@ void main() {
         numerosCuotaSeleccionados: nums,
         moraCobradaHistorial: 0,
         ahoraAr: hoy,
-        incluirTracked: true,
       );
       expect(completo, isNotNull);
       expect(completo!.montoPerdonado, greaterThan(0.01));
@@ -1249,7 +1313,6 @@ void main() {
         numerosCuotaSeleccionados: const {},
         moraCobradaHistorial: 0,
         ahoraAr: hoy,
-        incluirTracked: true,
       );
       expect(soloFicha, isNotNull);
       expect(soloFicha!.soloTracked, isTrue);
@@ -1324,7 +1387,6 @@ void main() {
         numerosCuotaSeleccionados: bruto.map((d) => d.numeroCuota).toSet(),
         moraCobradaHistorial: 0,
         ahoraAr: hoy,
-        incluirTracked: true,
       );
       expect(sim, isNotNull);
       expect(sim!.aplicaExencion, isTrue);

@@ -786,18 +786,17 @@ class MoraCuotaCalculator {
         offset = moraCobradaOffsetActual + moraEsteCobro;
       }
     } else if (moraEsteCobro > 0.01) {
-      final double moraHaciaDesglose;
-      final double moraHaciaTracked;
-      // Pago de tracked remanente (modal "Mora remanente"): no descontar
-      // desglose calendario de la próxima cuota impaga.
-      if (remanente > 0.01 && moraEsteCobro <= remanente + 0.01) {
-        moraHaciaDesglose = 0;
-        moraHaciaTracked = moraEsteCobro;
-      } else {
-        moraHaciaDesglose =
-            moraEsteCobro.clamp(0.0, moraDesgloseNetoTotal);
-        moraHaciaTracked = moraEsteCobro - moraHaciaDesglose;
-      }
+      // De la más vieja a la más nueva, siempre. El arrastre viene de cuotas ya
+      // liquidadas y `calcularDesglose` arranca en cuotasPagadas + 1, así que el
+      // arrastre es, por construcción, el bucket más viejo: se consume entero
+      // antes de tocar el calendario.
+      //
+      // Antes el orden dependía de si el pago entraba justo en el arrastre: con
+      // arrastre $19.400 y desglose $27.800, cobrar $19.400 lo imputaba todo al
+      // arrastre y cobrar $19.401 lo imputaba todo al calendario. Un peso de
+      // diferencia daba vuelta la imputación, y el recibo no podía explicarla.
+      final moraHaciaTracked = math.min(moraEsteCobro, remanente);
+      final moraHaciaDesglose = moraEsteCobro - moraHaciaTracked;
       tracked = (remanente - moraHaciaTracked).clamp(0.0, double.infinity);
       // Desglose liquidado por completo → offset absorbe esa mora (FIFO limpio).
       if (moraHaciaDesglose > 0.01 &&
@@ -969,16 +968,26 @@ class MoraCuotaCalculator {
 
   /// Resultado de simular un perdón admin de mora (exención, sin tocar Reg).
   ///
-  /// [incluirTracked] es independiente del desglose: se puede limpiar solo la
-  /// ficha (tracked) sin eximir cuotas calendario, o combinar ambos.
-  /// Si no hay cuotas seleccionadas y solo se limpia tracked, **no** se escribe
+  /// [trackedPerdonado] es independiente del desglose: se puede limpiar la ficha
+  /// (entera o de un mes suelto) sin eximir cuotas calendario, o combinar ambos.
+  /// Si no hay cuotas seleccionadas y solo se toca el tracked, **no** se escribe
   /// `mora_exenta_hasta` (la mora calendario viva sigue igual).
+  ///
+  /// El tracked se perdona **por monto** y no por sí/no: el remanente se abre en
+  /// una entrada por cuota de origen y el operador elige hasta dónde perdonar.
+  /// Igual que el calendario, va **por prefijo**: de la más vieja a la más
+  /// nueva. Lo que la ficha persiste es un monto, no un mes, así que un perdón
+  /// salteado no sobrevive a la relectura — el rótulo se rearma desde el
+  /// historial y vuelve a nombrar el mes viejo que se quiso perdonar.
+  /// Ver [seleccionPerdonRemanentePrefijo] y `MoraOrigenRecorte.loQueQueda`.
   static MoraPerdonSimulacion? simularPerdonMora({
     required ContratoAlumno contrato,
     required Set<int> numerosCuotaSeleccionados,
     required double moraCobradaHistorial,
     DateTime? ahoraAr,
-    bool incluirTracked = true,
+
+    /// Cuánto del remanente en ficha se perdona. `null` = todo (compat).
+    double? trackedPerdonado,
   }) {
     final hoy = ahoraAr ?? ArTime.nowAr();
     final fifo = moraCobradaParaFifo(
@@ -989,9 +998,14 @@ class MoraCuotaCalculator {
     final neto = desglosePendiente(bruto, fifo);
     final trackedActual =
         contrato.moraPendienteTracked.clamp(0.0, double.infinity);
-    if (neto.isEmpty && (!incluirTracked || trackedActual <= 0.01)) {
-      return null;
-    }
+    // `null` = perdonar toda la ficha, que es como se comportaba antes de que
+    // el remanente se pudiera abrir por mes.
+    final trackedAPerdonar = double.parse(
+      (trackedPerdonado ?? trackedActual)
+          .clamp(0.0, trackedActual)
+          .toStringAsFixed(2),
+    );
+    if (neto.isEmpty && trackedAPerdonar <= 0.01) return null;
 
     final ordenados = List<MoraCuotaDetalle>.from(neto)
       ..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
@@ -999,19 +1013,22 @@ class MoraCuotaCalculator {
       disponibles: ordenados.map((d) => d.numeroCuota).toSet(),
       pedidas: numerosCuotaSeleccionados,
     );
-    if (seleccion.isEmpty && (!incluirTracked || trackedActual <= 0.01)) {
-      return null;
-    }
+    if (seleccion.isEmpty && trackedAPerdonar <= 0.01) return null;
 
     final perdonadas =
         ordenados.where((d) => seleccion.contains(d.numeroCuota)).toList();
     final restantes =
         ordenados.where((d) => !seleccion.contains(d.numeroCuota)).toList();
 
-    // Tracked independiente: el operador decide si limpia ficha.
-    // La durabilidad la da `mora_tracked_ajuste` al persistir (no este payload).
-    final limpiaTracked = incluirTracked && trackedActual > 0.01;
-    final trackedPost = limpiaTracked ? 0.0 : trackedActual;
+    // Tracked independiente: el operador decide cuánto de la ficha limpia.
+    // La durabilidad la da `mora_tracked_ajuste` al persistir (no este payload),
+    // así que un perdón parcial queda tan blindado como uno total.
+    final limpiaTracked = trackedAPerdonar > 0.01;
+    final trackedPost = double.parse(
+      (trackedActual - trackedAPerdonar)
+          .clamp(0.0, double.infinity)
+          .toStringAsFixed(2),
+    );
 
     // Solo ficha → no tocar exención (calendario vivo intacto).
     final aplicaExencion = perdonadas.isNotEmpty;
@@ -1049,7 +1066,7 @@ class MoraCuotaCalculator {
     );
     final montoPerdonado = double.parse(
       (perdonadas.fold<double>(0, (s, d) => s + d.interesBruto) +
-              (limpiaTracked ? trackedActual : 0))
+              trackedAPerdonar)
           .toStringAsFixed(2),
     );
 
@@ -1062,11 +1079,39 @@ class MoraCuotaCalculator {
       moraOperativaPre: moraPre,
       moraOperativaPost: moraPost,
       montoPerdonado: montoPerdonado,
+      trackedPerdonado: trackedAPerdonar,
       incluyeTracked: limpiaTracked,
       cubreHastaFinDeMes: aplicaExencion && restantes.isEmpty,
       aplicaExencion: aplicaExencion,
       soloTracked: !aplicaExencion && limpiaTracked,
     );
+  }
+
+  /// Prefijo del remanente en ficha tras tildar/destildar una entrada.
+  ///
+  /// [ordenViejoANuevo] es la cola de orígenes tal como la devuelve
+  /// `MoraTrackedOrigen.inferir` — no se ordena por número de cuota, porque la
+  /// entrada sin origen reconstruible lleva el 0 y va **al final**.
+  ///
+  /// El remanente se perdona de la más vieja a la más nueva, igual que se cobra
+  /// (v4.9). No se puede elegir salteado: lo que la ficha persiste es un monto,
+  /// no un mes, así que al releer la única lectura que se sostiene es "lo que
+  /// se perdonó fue lo más viejo".
+  static Set<int> seleccionPerdonRemanentePrefijo({
+    required List<int> ordenViejoANuevo,
+    required Set<int> seleccionActual,
+    required int tocado,
+    required bool marcar,
+  }) {
+    final i = ordenViejoANuevo.indexOf(tocado);
+    final out = Set<int>.from(seleccionActual);
+    if (i < 0) return out;
+    if (marcar) {
+      out.addAll(ordenViejoANuevo.take(i + 1));
+    } else {
+      out.removeAll(ordenViejoANuevo.skip(i));
+    }
+    return out;
   }
 
   /// Si se marca una cuota, incluye todas las anteriores del desglose neto
@@ -1166,6 +1211,13 @@ class MoraPerdonSimulacion {
   final double moraOperativaPre;
   final double moraOperativaPost;
   final double montoPerdonado;
+
+  /// Cuánto del remanente en ficha se perdona. Puede ser una parte: el
+  /// remanente se abre por cuota de origen y se corta por prefijo, de la más
+  /// vieja a la más nueva.
+  final double trackedPerdonado;
+
+  /// Se toca la ficha (aunque sea en parte).
   final bool incluyeTracked;
   /// True si se perdonó todo el desglose vivo → exención hasta fin de mes.
   final bool cubreHastaFinDeMes;
@@ -1183,6 +1235,7 @@ class MoraPerdonSimulacion {
     required this.moraOperativaPre,
     required this.moraOperativaPost,
     required this.montoPerdonado,
+    this.trackedPerdonado = 0,
     required this.incluyeTracked,
     required this.cubreHastaFinDeMes,
     this.aplicaExencion = true,

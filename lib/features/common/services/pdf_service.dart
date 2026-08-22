@@ -29,7 +29,9 @@ import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
-import '../../eventos/services/mora_tracked_origen.dart';
+import '../../eventos/services/mora_concepto_rotulo.dart';
+// `MoraPendientePreviaDetalle` llega reexportado por mora_concepto_rotulo.
+import '../../eventos/services/mora_cuota_calculator.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../../eventos/utils/presupuesto_desde_evento.dart';
 import '../utils/currency_extensions.dart';
@@ -82,9 +84,49 @@ class CobroPeriodoPdfFila {
   });
 }
 
+/// Una fila de la planilla de mora. Los dos tipos de mora van separados: la de
+/// cuotas vencidas impagas y la que quedó sin cobrar al pagar una cuota.
+class MoraPdfFila {
+  final String nombre;
+  final String curso;
+  final String telefono;
+
+  /// `4/9`.
+  final String cuotas;
+
+  final double moraVencida;
+
+  /// `C1 (Abr) 113d $30.400 · C2 (May) 45d $18.000`. Vacío si no hay.
+  final String detalleVencida;
+
+  final double moraNoCobrada;
+  final String detalleNoCobrada;
+
+  /// Lo que resta del plan. Va aparte de la mora y nunca sumado con ella.
+  final double saldoPlan;
+
+  const MoraPdfFila({
+    required this.nombre,
+    required this.curso,
+    required this.telefono,
+    required this.cuotas,
+    required this.moraVencida,
+    required this.moraNoCobrada,
+    required this.saldoPlan,
+    this.detalleVencida = '',
+    this.detalleNoCobrada = '',
+  });
+
+  double get moraTotal =>
+      double.parse((moraVencida + moraNoCobrada).toStringAsFixed(2));
+}
+
 class PdfService {
   /// Tablas más pequeñas evitan que un solo [pw.Table] dispare [TooManyPagesException] en [pw.MultiPage].
   static const int _kCierreCajaFilasPorBloque = 28;
+
+  /// Mismo motivo, para los listados largos (planilla de mora).
+  static const int _kFilasPorBloqueListado = 28;
 
   /// Caja objetivo de los papeles que se entregan por cobro: media hoja A4,
   /// para poder cortar dos por página.
@@ -131,24 +173,29 @@ class PdfService {
   ///
   /// [construir] tiene que devolver un widget **nuevo** en cada llamada: los
   /// widgets del paquete guardan estado de layout y no se pueden reutilizar.
-  static Future<AjustePdf> _ajustarParaEntrar({
+  /// Devuelve también el alto medido: es el único número que dice si el papel
+  /// entró de verdad o si la hoja va a crecer, y sin él no hay forma de
+  /// probarlo en un test (ver `test/recibo_alto_test.dart`).
+  static Future<({AjustePdf ajuste, double alto})> _ajustarParaEntrar({
     required double objetivo,
     required pw.ThemeData? theme,
     required pw.Widget Function(AjustePdf) construir,
   }) async {
+    var ultimoAlto = double.infinity;
     for (final a in AjustePdf.escalera) {
       try {
         final alto = await _medirAlto(theme: theme, contenido: construir(a));
-        if (alto <= objetivo + 0.5) return a;
+        ultimoAlto = alto;
+        if (alto <= objetivo + 0.5) return (ajuste: a, alto: alto);
       } catch (_) {
         // Si la medición falla por lo que sea, no se rompe el papel: se sigue
         // con el nivel siguiente y en el peor caso sale sin compactar.
-        return a;
+        return (ajuste: a, alto: ultimoAlto);
       }
     }
     // Ni el nivel más compacto entra. Se usa igual: la hoja crecerá un poco,
     // que es preferible a imprimir el papel sin el total.
-    return AjustePdf.escalera.last;
+    return (ajuste: AjustePdf.escalera.last, alto: ultimoAlto);
   }
 
   /// Primer nivel con el que un documento paginado entra en [maxPaginas].
@@ -197,24 +244,55 @@ class PdfService {
   static String? _ultimaRutaPdfGuardado;
 
   static bool _fuentesPrecalentadas = false;
+  static pw.Font? _outfitRegular;
+  static pw.Font? _outfitBold;
+
+  /// Las dos Outfit del papel, desde los assets de la app.
+  ///
+  /// `PdfGoogleFonts` resuelve por la convención del paquete `google_fonts`
+  /// (`google_fonts/Outfit-Regular.ttf`), que no es donde viven acá
+  /// (`assets/google_fonts/`), así que terminaba bajándolas de internet y
+  /// cayendo a Helvetica cuando no había red. Helvetica no se ve distinta
+  /// nomás: **mide** distinto, y todo el "que entre en media hoja" está medido
+  /// con Outfit. Un recibo que sale con otra tipografía sale con otro alto.
+  ///
+  /// Se leen una sola vez y quedan en memoria.
+  static Future<(pw.Font, pw.Font)?> _fuentesOutfit() async {
+    final cacheR = _outfitRegular;
+    final cacheB = _outfitBold;
+    if (cacheR != null && cacheB != null) return (cacheR, cacheB);
+    try {
+      final regular = pw.Font.ttf(
+        await rootBundle.load('assets/google_fonts/Outfit-Regular.ttf'),
+      );
+      final bold = pw.Font.ttf(
+        await rootBundle.load('assets/google_fonts/Outfit-Bold.ttf'),
+      );
+      _outfitRegular = regular;
+      _outfitBold = bold;
+      return (regular, bold);
+    } catch (e) {
+      debugPrint('⚠️ No se pudieron leer las Outfit de assets: $e');
+    }
+    // Red de atrás: si el asset faltara, se intenta la descarga.
+    try {
+      final regular = await PdfGoogleFonts.outfitRegular();
+      final bold = await PdfGoogleFonts.outfitBold();
+      _outfitRegular = regular;
+      _outfitBold = bold;
+      return (regular, bold);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Deja las fuentes de los PDF resueltas en memoria, apenas arranca la app.
-  ///
-  /// `PdfGoogleFonts` busca primero los archivos incluidos en
-  /// `assets/google_fonts/`. Así los dos pesos que usa la hoja de cierre no
-  /// dependen de internet. Este precalentado deja además las fuentes resueltas en
-  /// memoria antes del primer papel.
   ///
   /// No lanza nunca: un problema de assets no debe impedir que arranque la app.
   static Future<void> precalentarFuentes() async {
     if (_fuentesPrecalentadas) return;
     _fuentesPrecalentadas = true;
-    try {
-      await PdfGoogleFonts.outfitRegular();
-      await PdfGoogleFonts.outfitBold();
-    } catch (_) {
-      // Sin red no hay nada que hacer acá; el fallback vive en cada generador.
-    }
+    await _fuentesOutfit();
   }
 
   // ── Presupuesto de Élite con IA de Redacción ─────────────────────────────
@@ -1570,7 +1648,11 @@ class PdfService {
     ];
   }
 
-  static Future<void> generarReciboAlumno({
+  /// Devuelve el nivel de compactación y el alto medido del papel: es lo que
+  /// permite probar en un test que el recibo entra en media hoja **y** que
+  /// entró sin tener que sacrificar el detalle de la mora. Los llamadores de la
+  /// app lo ignoran.
+  static Future<({AjustePdf ajuste, double alto})> generarReciboAlumno({
     required ContratoAlumno alumno,
     required Evento evento,
     required double montoPagado,
@@ -1599,27 +1681,40 @@ class PdfService {
     /// reimpresiones históricas, que no pueden afirmar la mora de hoy.
     double? moraPendienteRestante,
 
-    /// Línea compacta de "de dónde viene" esa mora, para el aviso rojo. Vacía
-    /// si no se pudo determinar (reimpresiones históricas).
+    /// Línea compacta de "de dónde viene" esa mora, para el aviso rojo.
+    ///
+    /// Es el **camino de atrás**: se imprime como prosa solo cuando no vienen
+    /// [moraPendienteDesglose] ni [moraPendienteArrastre], que dan lo mismo en
+    /// renglones y con los importes alineados. Vacía si no se pudo determinar
+    /// (reimpresiones históricas).
     String? moraPendienteOrigen,
+
+    /// Cuotas vencidas todavía impagas que componen [moraPendienteRestante].
+    /// Con esto el aviso rojo lista una cuota por renglón en vez de aplastar
+    /// todo en una línea corrida.
+    List<MoraCuotaDetalle> moraPendienteDesglose = const [],
+
+    /// Mora que quedó sin cobrar cuando la cuota se liquidó, atribuida a la
+    /// cuota que la generó. Es la otra mitad de [moraPendienteRestante].
+    List<MoraPendientePreviaDetalle> moraPendienteArrastre = const [],
+
+    /// Cuándo se midió [moraPendienteRestante], cuando **no** es el día del
+    /// recibo. En una reimpresión el número es el de hoy, no el de aquel día:
+    /// se imprime fechado en vez de omitirse. Omitir era peor — el papel
+    /// mostraba lo que entró y nada de lo que seguía debiéndose.
+    DateTime? moraRestanteMedidaEl,
 
     /// `null` lo infiere desde [fechaManual]. El cobro original también manda
     /// fecha (la del momento del cobro), así que sin este flag todo recibo
     /// original salía rotulado como reimpresión.
     bool? esReimpresion,
   }) async {
-    // Cargar fuente TrueType con soporte Unicode completo (elimina warnings de Helvetica)
-    pw.Font? fontRegular;
-    pw.Font? fontBold;
-    try {
-      fontRegular = await PdfGoogleFonts.outfitRegular();
-      fontBold = await PdfGoogleFonts.outfitBold();
-    } catch (_) {}
-
-    // El tema se guarda aparte: la medición tiene que usar exactamente las
-    // mismas fuentes, o el alto medido no sería el alto real.
-    final temaRecibo = fontRegular != null && fontBold != null
-        ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
+    // Fuente TrueType con soporte Unicode completo (elimina warnings de
+    // Helvetica). El tema se guarda aparte: la medición tiene que usar
+    // exactamente las mismas fuentes, o el alto medido no sería el alto real.
+    final fuentes = await _fuentesOutfit();
+    final temaRecibo = fuentes != null
+        ? pw.ThemeData.withFont(base: fuentes.$1, bold: fuentes.$2)
         : null;
     final pdf = pw.Document(theme: temaRecibo);
 
@@ -1638,7 +1733,6 @@ class PdfService {
     final fechaTransaccion = fechaManual ?? now;
     final fechaStr = ArTime.formatFechaHora(fechaTransaccion);
     final fechaEmision = ArTime.formatFechaHora(now);
-    final operacionGestionadaStr = ArTime.operacionGestionada(fechaTransaccion);
 
     // Calcular VALOR dinámicamente...
     final bool esReimpresionPdf = esReimpresion ?? (fechaManual != null);
@@ -1706,22 +1800,77 @@ class PdfService {
     // closure del contenido lee esta variable.
     var dRecibo = AjustePdf.intacto;
 
-    // La mora de cuotas ya pagadas en cobros anteriores no cuelga de ninguna
-    // línea de este cobro: va en su propio sub-bloque al final del detalle.
+    // `Concepto:` queda con lo que se pagó del plan. **Toda** la mora —la de la
+    // cuota que se está pagando y la que quedó de cuotas ya liquidadas— se
+    // itemiza dentro del recuadro verde, que es el único lugar del papel donde
+    // se explica de dónde sale ese número. Antes vivía en tres lados: colgada
+    // de cada cuota, en un bloque suelto con su propio título, y sumada en el
+    // recuadro; el mismo importe salía tres veces.
     final conceptosCobroDisplay = conceptosPagadosDisplay
-        ?.where((c) => c['arrastre'] != true)
+        ?.where((c) => c['esMora'] != true)
         .toList();
-    final conceptosArrastreDisplay = conceptosPagadosDisplay
-        ?.where((c) => c['arrastre'] == true)
-        .toList();
-    // Solo se puede afirmar "de cuotas ya pagadas" si todas vienen de una cuota
-    // liquidada antes. Cobrando únicamente mora, el interés cae acá sin que la
-    // cuota esté paga: ahí el título tiene que ser neutro.
-    final String tituloArrastreRecibo =
-        (conceptosArrastreDisplay?.every((c) => c['cuotaPrevia'] != null) ??
-            false)
-        ? tituloArrastreMoraPdf.toUpperCase()
-        : 'INTERESES POR PAGAR FUERA DE TÉRMINO';
+
+    /// De qué cuotas salen los pesos de mora que entraron en este cobro.
+    final filasMoraCobrada = conceptosPagadosDisplay != null
+        ? filasMoraCobradaPdf(conceptosPagadosDisplay)
+        : const <FilaMoraPdf>[];
+
+    /// De qué cuotas sale la mora que queda debiendo. Dos orígenes: cuotas
+    /// vencidas todavía impagas, y mora que no se cobró cuando la cuota se
+    /// liquidó. Se ordena por número de cuota para que el papel se lea de la
+    /// más vieja a la más nueva, sin importar de cuál de los dos venga.
+    final filasMoraPendiente =
+        <({int cuota, FilaMoraPdf fila})>[
+          for (final d in moraPendienteDesglose)
+            if (d.interesBruto > 0.01)
+              (
+                cuota: d.numeroCuota,
+                fila: FilaMoraPdf(
+                  rotulo: MoraConceptoRotulo.rotuloCuotaMora(
+                    numeroCuota: d.numeroCuota,
+                    mesLabel: d.mesLabel,
+                    diasMora: d.diasMora,
+                  ),
+                  monto: d.interesBruto,
+                ),
+              ),
+          for (final d in moraPendienteArrastre)
+            if (d.montoAtribuido > 0.01)
+              (
+                cuota: d.numeroCuota,
+                fila: FilaMoraPdf(
+                  rotulo: MoraConceptoRotulo.rotuloCuotaMora(
+                    numeroCuota: d.numeroCuota,
+                    mesLabel: d.mesLabel,
+                    diasMora: d.diasMora,
+                  ),
+                  monto: d.montoAtribuido,
+                ),
+              ),
+        ]..sort((a, b) => a.cuota.compareTo(b.cuota));
+
+    /// Las filas del aviso rojo tienen que sumar el número del título, igual
+    /// que las del verde. Lo que la atribución no llegó a explicar va en un
+    /// renglón bolsa: el papel puede no saber de qué cuota sale un peso, pero
+    /// no puede dejar de nombrarlo.
+    final filasPendienteRecibo = () {
+      final filas = [for (final f in filasMoraPendiente) f.fila];
+      final restante = moraPendienteRestante;
+      if (filas.isEmpty || restante == null || restante <= 0.01) {
+        return const <FilaMoraPdf>[];
+      }
+      final sum = filas.fold<double>(0, (s, f) => s + f.monto);
+      final falta = double.parse((restante - sum).toStringAsFixed(2));
+      // Se pasa del total: la atribución no coincide con el número que se
+      // imprime. Un desglose que contradice su propio título es peor que no
+      // tenerlo, así que se cae a la línea en prosa.
+      if (falta < -0.01) return const <FilaMoraPdf>[];
+      if (falta <= 0.01) return filas;
+      return [
+        ...filas,
+        FilaMoraPdf(rotulo: rotuloMoraOtrasCuotasPdf, monto: falta),
+      ];
+    }();
 
     // Desglose del recibo por rubro. Se toman los netos (no el gross) para que
     // las partes sumen exactamente el total impreso aunque haya descuento.
@@ -1741,10 +1890,48 @@ class PdfService {
         'Costo por transferencia ${cargoCobradoRecibo.toCurrency()}',
     ];
 
-    // Cuotas nombradas en el bloque de mora saldada.
-    final String detalleMoraCobrada = conceptosPagadosDisplay == null
-        ? 'detallada arriba'
-        : detalleMoraCobradaRecibo(conceptosPagadosDisplay);
+    // Estado de la mora en este cobro. El recuadro verde dice qué tipo de
+    // operación fue —entera o parcial— y no de qué cuota salió cada peso: eso
+    // es el detalle de las líneas de arriba, y enumerarlo dos veces era lo que
+    // hacía ilegible el bloque.
+    final bool moraQuedaSaldada =
+        moraCobradaRecibo > 0.01 &&
+        moraPendienteRestante != null &&
+        moraPendienteRestante <= 0.01;
+
+    /// Después de este cobro sigue habiendo mora. En una reimpresión es la de
+    /// hoy, pero alcanza para afirmar que aquel pago no la saldó.
+    final bool moraSigueDebiendo =
+        moraPendienteRestante != null && moraPendienteRestante > 0.01;
+
+    /// Mora que había antes de este cobro: lo que entró más lo que quedó.
+    ///
+    /// Solo vale cuando lo que quedó se midió **en este cobro**. En una
+    /// reimpresión el restante es el de hoy, y sumarlo daría un total que nunca
+    /// existió (acá coincidían, pero la mora sigue corriendo). Ahí el verde no
+    /// puede dar el número: dice que fue parcial y el rojo, fechado, da el resto.
+    final double? moraTotalPreCobro =
+        moraRestanteMedidaEl == null &&
+            moraPendienteRestante != null &&
+            moraPendienteRestante > 0.01
+        ? moraCobradaRecibo + moraPendienteRestante
+        : null;
+
+    /// Alguna cuota quedó cubierta a medias. Es un hecho del movimiento, así que
+    /// tiene que sobrevivir a la reimpresión: por eso mira también el sufijo
+    /// `(parcial)` del concepto guardado, que es lo único que queda escrito
+    /// cuando el papel se rearma desde los pagos de la base.
+    final bool moraCobroFueParcial =
+        conceptosPagadosDisplay?.any((c) {
+          if (c['esMora'] != true) return false;
+          final pleno = (c['montoPleno'] as num?)?.toDouble() ?? 0;
+          final monto = (c['monto'] as num?)?.toDouble() ?? 0;
+          if (pleno > monto + 0.01) return true;
+          return (c['concepto'] as String? ?? '').contains(
+            MoraConceptoRotulo.sufijoParcial,
+          );
+        }) ??
+        false;
 
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
@@ -1800,8 +1987,11 @@ class PdfService {
           'Medios: Efectivo ${efDet.toCurrency()} · Transferencia ${trDet.toCurrency()}';
     }
 
-    // Un ítem del detalle: misma pinta para las líneas del cobro y las de
-    // arrastre de mora.
+    // Un ítem del detalle de `Concepto:`.
+    //
+    // Ya no hay caso `anidada` (la mora colgada de su cuota con `↳`): toda la
+    // mora se itemiza adentro del recuadro verde, así que acá solo llegan
+    // líneas del plan.
     pw.Widget lineaConceptoRecibo(Map<String, dynamic> c) {
       // 'display' = rótulo de mostrador; 'concepto' queda intacto.
       final desc =
@@ -1810,8 +2000,6 @@ class PdfService {
       final grossItem = (c['gross'] as num?)?.toDouble();
       final subtexto = c['subtexto'] as String?;
       final bool plan = c['esPlanLiquidacion'] == true;
-      // Mora anidada bajo la cuota que la generó.
-      final bool anidada = c['anidada'] == true;
       final String? nominalHint =
           plan && grossItem != null && grossItem > montoItem + 0.01
           ? 'nom. ${grossItem.toCurrency()}'
@@ -1823,25 +2011,16 @@ class PdfService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Expanded(
-                child: pw.Padding(
-                  padding: pw.EdgeInsets.only(left: anidada ? 14 : 0),
-                  child: pw.Text(
-                    anidada
-                        ? '  ↳ ${dRecibo.abreviar ? abreviarDisplayPdf(desc) : desc}'
-                        : '  • ${dRecibo.abreviar ? abreviarDisplayPdf(desc) : desc}',
-                    style: pw.TextStyle(
-                      fontSize: dRecibo.fs(anidada ? 9 : 10),
-                      color: anidada ? _greyText : null,
-                    ),
-                  ),
+                child: pw.Text(
+                  '  • ${dRecibo.abreviar ? abreviarDisplayPdf(desc) : desc}',
+                  style: pw.TextStyle(fontSize: dRecibo.fs(10)),
                 ),
               ),
               pw.Text(
                 montoItem.toCurrency(),
                 style: pw.TextStyle(
-                  fontSize: dRecibo.fs(anidada ? 9 : 10),
+                  fontSize: dRecibo.fs(10),
                   fontWeight: pw.FontWeight.bold,
-                  color: anidada ? _greyText : null,
                 ),
               ),
             ],
@@ -1875,37 +2054,87 @@ class PdfService {
     }
 
     // Recuadro de aviso (mora saldada en verde, mora pendiente en rojo).
+    /// Recuadro de aviso (verde: lo que entró; rojo: lo que falta).
+    ///
+    /// Escala con [dRecibo] como el resto del papel. Antes tenía medidas fijas y
+    /// era lo único que la escalera no podía tocar: un recibo con aviso rojo se
+    /// pasaba de media hoja y ningún nivel de compactación lo bajaba.
+    ///
+    /// El **título** nunca se toca: lleva el monto, y en una reimpresión también
+    /// la fecha a la que está medido.
+    ///
+    /// Las [filas] son de qué cuotas sale ese monto, y **siempre lo suman**. Se
+    /// abrevian por escalones (`maxFilasMora`, con un renglón `y N cuotas más`
+    /// que carga lo recortado) pero no se dan de baja: un papel que reclama
+    /// plata sin decir de qué cuotas sale es lo que motivó todo esto.
+    ///
+    /// Las [lineas] son la explicación en prosa, y sí son lo que se apaga
+    /// cuando el papel aprieta — igual que los subtextos del detalle.
     pw.Widget avisoRecibo({
       required PdfColor color,
       required String titulo,
-      required List<String> lineas,
+      List<FilaMoraPdf> filas = const [],
+      List<String> lineas = const [],
     }) {
+      final d = dRecibo;
+      final visibles = recortarFilasMoraPdf(filas, d.maxFilasMora);
       return pw.Container(
         width: double.infinity,
-        margin: const pw.EdgeInsets.only(top: 4),
-        padding: const pw.EdgeInsets.all(5),
+        margin: pw.EdgeInsets.only(top: d.sp(4)),
+        padding: pw.EdgeInsets.all(d.sp(5)),
         decoration: pw.BoxDecoration(
           color: _cardBg,
           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
           border: pw.Border.all(color: color, width: 0.8),
         ),
         child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             pw.Text(
               titulo,
               style: pw.TextStyle(
-                fontSize: 8,
+                fontSize: d.fs(8, piso: 6.5),
                 fontWeight: pw.FontWeight.bold,
                 color: color,
               ),
             ),
-            ...lineas.map(
-              (t) => pw.Text(
-                t,
-                style: pw.TextStyle(fontSize: 7, color: _darkText),
+            ...visibles.map(
+              (f) => pw.Padding(
+                padding: pw.EdgeInsets.only(top: d.sp(1), left: 6),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Text(
+                        f.rotulo,
+                        style: pw.TextStyle(
+                          fontSize: d.fs(8, piso: 6.5),
+                          color: _darkText,
+                        ),
+                      ),
+                    ),
+                    pw.Text(
+                      f.monto.toCurrency(),
+                      style: pw.TextStyle(
+                        fontSize: d.fs(8, piso: 6.5),
+                        fontWeight: pw.FontWeight.bold,
+                        color: _darkText,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+            if (d.subtextos)
+              ...lineas.map(
+                (t) => pw.Text(
+                  t,
+                  style: pw.TextStyle(
+                    fontSize: d.fs(7, piso: 6),
+                    color: _greyText,
+                  ),
+                ),
+              ),
           ],
         ),
       );
@@ -1932,7 +2161,12 @@ class PdfService {
                   bottom: pw.BorderSide(color: _greyLight, width: 0.5),
                 ),
               ),
-              padding: const pw.EdgeInsets.fromLTRB(22, 8, 22, 16),
+              padding: pw.EdgeInsets.fromLTRB(
+                22,
+                dRecibo.sp(8),
+                22,
+                dRecibo.sp(16),
+              ),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -1946,7 +2180,10 @@ class PdfService {
                         children: [
                           if (logoImage != null)
                             pw.Container(
-                              height: 30,
+                              // Con el alto fijo el logo marcaba el piso de la
+                              // fila y el encabezado no bajaba de ahí por más
+                              // que se achicara la letra.
+                              height: dRecibo.fs(30, piso: 20),
                               margin: const pw.EdgeInsets.only(right: 12),
                               child: pw.Image(logoImage),
                             ),
@@ -1957,28 +2194,28 @@ class PdfService {
                                 'Victor Adrián Argüello',
                                 style: pw.TextStyle(
                                   fontWeight: pw.FontWeight.bold,
-                                  fontSize: 10,
+                                  fontSize: dRecibo.fs(10),
                                   color: _darkText,
                                 ),
                               ),
                               pw.Text(
                                 'Dueño, Junior Eventos',
                                 style: pw.TextStyle(
-                                  fontSize: 8,
+                                  fontSize: dRecibo.fs(8, piso: 6.5),
                                   color: _greyText,
                                 ),
                               ),
                               pw.Text(
                                 'CUIT 23-32837670-9',
                                 style: pw.TextStyle(
-                                  fontSize: 8,
+                                  fontSize: dRecibo.fs(8, piso: 6.5),
                                   color: _greyText,
                                 ),
                               ),
                               pw.Text(
                                 'Responsable Inscripto',
                                 style: pw.TextStyle(
-                                  fontSize: 8,
+                                  fontSize: dRecibo.fs(8, piso: 6.5),
                                   color: _greyText,
                                 ),
                               ),
@@ -1992,76 +2229,74 @@ class PdfService {
                           pw.Text(
                             'RECIBO DE PAGO',
                             style: pw.TextStyle(
-                              fontSize: 13,
+                              fontSize: dRecibo.fs(13, piso: 10),
                               fontWeight: pw.FontWeight.bold,
                               color: _darkText,
                             ),
                           ),
                           pw.Text(
                             'N° ${alumno.id.substring(0, 8).toUpperCase()}',
-                            style: pw.TextStyle(fontSize: 8, color: _greyText),
+                            style: pw.TextStyle(
+                              fontSize: dRecibo.fs(8, piso: 6.5),
+                              color: _greyText,
+                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
-                  pw.SizedBox(height: 4),
+                  pw.SizedBox(height: dRecibo.sp(4)),
 
                   // Cuerpo. El importe no va acá arriba: un recibo se lee
                   // "recibí de X la suma de Y", y el total va al pie.
+                  //
+                  // El sello temporal estricto (AR GMT-3) es esta línea y nada
+                  // más: `ArTime.operacionGestionada` decía el mismo instante
+                  // en palabras justo abajo, y lo único que agregaba era el
+                  // nombre del día.
                   pw.Text(
                     'Fecha: $fechaStr',
-                    style: pw.TextStyle(fontSize: 10),
+                    style: pw.TextStyle(fontSize: dRecibo.fs(10)),
                   ),
-                  pw.SizedBox(height: 2),
-                  // Sello temporal estricto (AR GMT-3): día + hora + minuto.
-                  pw.Text(
-                    operacionGestionadaStr,
-                    style: pw.TextStyle(
-                      fontSize: 8.5,
-                      fontStyle: pw.FontStyle.italic,
-                      color: _greyText,
-                    ),
-                  ),
-                  pw.SizedBox(height: 3),
+                  pw.SizedBox(height: dRecibo.sp(3)),
 
                   pw.RichText(
                     text: pw.TextSpan(
                       children: [
-                        const pw.TextSpan(
+                        pw.TextSpan(
                           text: 'Recibí de: ',
-                          style: pw.TextStyle(fontSize: 10),
+                          style: pw.TextStyle(fontSize: dRecibo.fs(10)),
                         ),
                         pw.TextSpan(
                           text: alumno.nombreAlumno.toUpperCase(),
                           style: pw.TextStyle(
-                            fontSize: 10,
+                            fontSize: dRecibo.fs(10),
                             fontWeight: pw.FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  pw.SizedBox(height: 2),
+                  pw.SizedBox(height: dRecibo.sp(2)),
 
                   pw.RichText(
                     text: pw.TextSpan(
                       children: [
-                        const pw.TextSpan(
+                        pw.TextSpan(
                           text: 'La suma de pesos: ',
-                          style: pw.TextStyle(fontSize: 10),
+                          style: pw.TextStyle(fontSize: dRecibo.fs(10)),
                         ),
                         pw.TextSpan(
                           text: numeroALetras(valPago),
                           style: pw.TextStyle(
-                            fontSize: 9,
+                            fontSize: dRecibo.fs(9),
                             fontStyle: pw.FontStyle.italic,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  pw.SizedBox(height: 3),
+                  pw.SizedBox(height: dRecibo.sp(3)),
 
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -2069,7 +2304,7 @@ class PdfService {
                       pw.Text(
                         'Concepto:',
                         style: pw.TextStyle(
-                          fontSize: 10,
+                          fontSize: dRecibo.fs(10),
                           fontWeight: pw.FontWeight.bold,
                         ),
                       ),
@@ -2078,14 +2313,14 @@ class PdfService {
                         pw.Text(
                           'MESA: ${alumno.numeroMesa}',
                           style: pw.TextStyle(
-                            fontSize: 10,
+                            fontSize: dRecibo.fs(10),
                             fontWeight: pw.FontWeight.bold,
                             color: _greyText,
                           ),
                         ),
                     ],
                   ),
-                  pw.SizedBox(height: 2),
+                  pw.SizedBox(height: dRecibo.sp(2)),
 
                   // Desglose itemizado de conceptos pagados
                   if (conceptosCobroDisplay != null &&
@@ -2111,43 +2346,28 @@ class PdfService {
                       ],
                     ),
 
-                  // Mora de cuotas ya pagadas en cobros anteriores: no
-                  // cuelga de ninguna línea de este cobro.
-                  if (conceptosArrastreDisplay != null &&
-                      conceptosArrastreDisplay.isNotEmpty) ...[
-                    pw.SizedBox(height: 3),
-                    pw.Text(
-                      tituloArrastreRecibo,
-                      style: pw.TextStyle(
-                        fontSize: 8,
-                        fontWeight: pw.FontWeight.bold,
-                        color: _greyText,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    pw.SizedBox(height: 2),
-                    ...conceptosArrastreDisplay.map(lineaConceptoRecibo),
-                  ],
-
-                  // Mora que se saldó en este pago.
+                  // Verde: lo que entró. Rojo: lo que falta. Un recuadro por
+                  // cada cosa, cada uno con sus cuotas adentro.
                   if (moraCobradaRecibo > 0.01)
                     avisoRecibo(
                       color: _greenAccent,
-                      titulo:
-                          moraPendienteRestante != null &&
-                              moraPendienteRestante <= 0.01
+                      titulo: moraQuedaSaldada
                           ? 'MORA SALDADA EN ESTE PAGO — '
                                 '${moraCobradaRecibo.toCurrency()}'
                           : 'MORA COBRADA EN ESTE PAGO — '
                                 '${moraCobradaRecibo.toCurrency()}',
+                      filas: filasMoraCobrada,
                       lineas: [
-                        // El título ya dice que se cobró y cuánto: acá va
-                        // solo de qué cuota sale.
-                        'Corresponde a la mora $detalleMoraCobrada.',
-                        if (moraPendienteRestante != null &&
-                            moraPendienteRestante > 0.01)
-                          'Todavía queda mora pendiente: ver el aviso de '
-                              'abajo.',
+                        if (moraQuedaSaldada)
+                          'Con este pago no queda mora pendiente.'
+                        else if (moraTotalPreCobro != null)
+                          'Pago parcial: la mora era de '
+                              '${moraTotalPreCobro.toCurrency()}.'
+                        else if (moraCobroFueParcial || moraSigueDebiendo)
+                          // Reimpresión: el total de aquel día no se puede
+                          // reconstruir, pero que fue parcial sí se sabe —
+                          // abajo está lo que todavía falta.
+                          'Es un pago parcial de la mora.',
                       ],
                     ),
 
@@ -2157,39 +2377,46 @@ class PdfService {
                       moraPendienteRestante > 0.01)
                     avisoRecibo(
                       color: _redAccent,
-                      titulo: moraCobradaRecibo > 0.01
-                          ? 'ATENCIÓN: TODAVÍA QUEDA MORA SIN PAGAR — '
-                                '${moraPendienteRestante.toCurrency()}'
-                          : 'ATENCIÓN: QUEDA MORA SIN PAGAR — '
-                                '${moraPendienteRestante.toCurrency()}',
+                      titulo:
+                          'FALTA PAGAR DE MORA'
+                          '${moraRestanteMedidaEl != null ? ' AL ${ArTime.formatFechaCorta(moraRestanteMedidaEl)}' : ''}'
+                          ' — ${moraPendienteRestante.toCurrency()}',
+                      filas: filasPendienteRecibo,
                       lineas: [
-                        // Qué es la mora se explica una sola vez, al pie
-                        // de la tabla del plan: acá solo qué pasó con ella.
-                        if (moraCobradaRecibo > 0.01)
-                          'Se cobró solo una parte en este recibo.'
-                        else
-                          'En este pago no se cobró.',
-                        if (moraPendienteOrigen != null &&
+                        // Que se cobró una parte ya lo dijo el recuadro verde,
+                        // acá arriba. Qué es la mora se explica una sola vez,
+                        // al pie de la tabla del plan. Que sigue sumando lo
+                        // dice el "AL <fecha>" del título.
+                        if (moraRestanteMedidaEl != null)
+                          'Es la mora al día de hoy, no la del día de este '
+                              'recibo.',
+                        // Camino de atrás: sin filas que lo expliquen, el
+                        // origen va en prosa. Con filas sería decir lo mismo
+                        // dos veces.
+                        if (filasPendienteRecibo.isEmpty &&
+                            moraPendienteOrigen != null &&
                             moraPendienteOrigen.isNotEmpty)
                           moraPendienteOrigen,
-                        'Sigue sumando todos los días hasta que se abone.',
                       ],
                     ),
 
                   ..._bloqueDescuentoLiquidacionPdf(
                     porcentajeDescuento: porcentajeDescuentoLiquidacion,
                     conceptos: conceptosPagadosDisplay,
-                    fontSize: 9,
+                    fontSize: dRecibo.fs(9),
                   ),
 
                   // Franja de cierre: el importe se dice una sola vez, acá
                   // abajo, junto al medio de pago.
                   pw.Container(
                     width: double.infinity,
-                    margin: const pw.EdgeInsets.only(top: 5, bottom: 3),
-                    padding: const pw.EdgeInsets.symmetric(
+                    margin: pw.EdgeInsets.only(
+                      top: dRecibo.sp(5),
+                      bottom: dRecibo.sp(3),
+                    ),
+                    padding: pw.EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 6,
+                      vertical: dRecibo.sp(6),
                     ),
                     decoration: pw.BoxDecoration(
                       color: _cardBg,
@@ -2208,7 +2435,7 @@ class PdfService {
                             pw.Text(
                               'TOTAL DE ESTE RECIBO',
                               style: pw.TextStyle(
-                                fontSize: 9,
+                                fontSize: dRecibo.fs(9),
                                 fontWeight: pw.FontWeight.bold,
                                 color: _greyText,
                                 letterSpacing: 0.6,
@@ -2217,7 +2444,7 @@ class PdfService {
                             pw.Text(
                               valPago.toCurrency(),
                               style: pw.TextStyle(
-                                fontSize: 14,
+                                fontSize: dRecibo.fs(14, piso: 11),
                                 fontWeight: pw.FontWeight.bold,
                                 color: _darkText,
                               ),
@@ -2227,23 +2454,32 @@ class PdfService {
                         if (partesDesgloseRecibo.length > 1)
                           pw.Text(
                             partesDesgloseRecibo.join(' · '),
-                            style: pw.TextStyle(fontSize: 8, color: _greyText),
+                            style: pw.TextStyle(
+                              fontSize: dRecibo.fs(8, piso: 6.5),
+                              color: _greyText,
+                            ),
                           ),
                         if (lineaMixMedios != null)
                           pw.Text(
                             lineaMixMedios,
-                            style: pw.TextStyle(fontSize: 8, color: _greyText),
+                            style: pw.TextStyle(
+                              fontSize: dRecibo.fs(8, piso: 6.5),
+                              color: _greyText,
+                            ),
                           )
                         else if (medioReciboStr.isNotEmpty)
                           pw.Text(
                             'Medio de pago: $medioReciboStr',
-                            style: pw.TextStyle(fontSize: 8, color: _greyText),
+                            style: pw.TextStyle(
+                              fontSize: dRecibo.fs(8, piso: 6.5),
+                              color: _greyText,
+                            ),
                           ),
                         if (mostrarCargoRef)
                           pw.Text(
                             textoCargoReferenciaPdf,
                             style: pw.TextStyle(
-                              fontSize: 7,
+                              fontSize: dRecibo.fs(7, piso: 6),
                               fontStyle: pw.FontStyle.italic,
                               color: _greyText,
                             ),
@@ -2257,21 +2493,24 @@ class PdfService {
                       evento: evento,
                       institucionAlumno: alumno.institucion,
                     ),
-                    style: pw.TextStyle(fontSize: 8, color: _greyText),
+                    style: pw.TextStyle(
+                      fontSize: dRecibo.fs(8, piso: 6.5),
+                      color: _greyText,
+                    ),
                   ),
-                  pw.SizedBox(height: 3),
+                  pw.SizedBox(height: dRecibo.sp(3)),
 
                   // ─── RESUMEN DE CUENTA ───
                   pw.Text(
                     'CÓMO QUEDA LA CUENTA DESPUÉS DE ESTE PAGO',
                     style: pw.TextStyle(
-                      fontSize: 8,
+                      fontSize: dRecibo.fs(8, piso: 6.5),
                       fontWeight: pw.FontWeight.bold,
                       color: _greyText,
                       letterSpacing: 1.0,
                     ),
                   ),
-                  pw.SizedBox(height: 2),
+                  pw.SizedBox(height: dRecibo.sp(2)),
                   pw.Container(
                     decoration: pw.BoxDecoration(
                       color: _cardBg,
@@ -2283,11 +2522,17 @@ class PdfService {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                       children: [
+                        // Anchos flexibles, no fijos: con 160/70/120 la tabla
+                        // medía 350 pt dentro de una tarjeta de 551 y dejaba
+                        // 200 pt de gris vacío a la derecha, mientras la
+                        // columna del contrato envolvía a tres renglones en
+                        // 144 pt útiles. El mismo dato entra en uno usando el
+                        // lugar que ya estaba ahí.
                         pw.Table(
                           columnWidths: {
-                            0: const pw.FixedColumnWidth(160),
-                            1: const pw.FixedColumnWidth(70),
-                            2: const pw.FixedColumnWidth(120),
+                            0: const pw.FlexColumnWidth(2.9),
+                            1: const pw.FlexColumnWidth(0.9),
+                            2: const pw.FlexColumnWidth(2.0),
                           },
                           border: pw.TableBorder(
                             verticalInside: pw.BorderSide(
@@ -2302,54 +2547,27 @@ class PdfService {
                                 color: _greyLight,
                               ),
                               children: [
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    4,
-                                    8,
-                                    4,
-                                  ),
-                                  child: pw.Text(
-                                    'QUÉ INCLUYE EL CONTRATO',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      color: _greyText,
-                                      letterSpacing: 0.6,
+                                for (final t in const [
+                                  'QUÉ INCLUYE EL CONTRATO',
+                                  'CUOTAS DEL PLAN',
+                                  'CÓMO QUEDA LA CUENTA',
+                                ])
+                                  pw.Padding(
+                                    padding: pw.EdgeInsets.fromLTRB(
+                                      8,
+                                      dRecibo.sp(4),
+                                      8,
+                                      dRecibo.sp(4),
+                                    ),
+                                    child: pw.Text(
+                                      t,
+                                      style: pw.TextStyle(
+                                        fontSize: dRecibo.fs(6, piso: 5),
+                                        color: _greyText,
+                                        letterSpacing: 0.6,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    4,
-                                    8,
-                                    4,
-                                  ),
-                                  child: pw.Text(
-                                    'CUOTAS DEL PLAN',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      color: _greyText,
-                                      letterSpacing: 0.6,
-                                    ),
-                                  ),
-                                ),
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
-                                    8,
-                                    4,
-                                    8,
-                                    4,
-                                  ),
-                                  child: pw.Text(
-                                    'CÓMO QUEDA LA CUENTA',
-                                    style: pw.TextStyle(
-                                      fontSize: 6,
-                                      color: _greyText,
-                                      letterSpacing: 0.6,
-                                    ),
-                                  ),
-                                ),
                               ],
                             ),
                             // Data row
@@ -2357,11 +2575,11 @@ class PdfService {
                               children: [
                                 // Columna 1: Desglose contrato
                                 pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
+                                  padding: pw.EdgeInsets.fromLTRB(
                                     8,
-                                    6,
+                                    dRecibo.sp(6),
                                     8,
-                                    6,
+                                    dRecibo.sp(6),
                                   ),
                                   child: pw.Column(
                                     crossAxisAlignment:
@@ -2396,7 +2614,10 @@ class PdfService {
                                               pw.Text(
                                                 '· Base: ${montoBase.toCurrency()}  (Resta: ${(saldoBaseRestante > 0.01 ? saldoBaseRestante : 0.0).toCurrency()})',
                                                 style: pw.TextStyle(
-                                                  fontSize: 7,
+                                                  fontSize: dRecibo.fs(
+                                                    7,
+                                                    piso: 6,
+                                                  ),
                                                   fontWeight:
                                                       pw.FontWeight.bold,
                                                   color: _darkText,
@@ -2424,7 +2645,11 @@ class PdfService {
                                                           child: pw.Text(
                                                             linea.texto,
                                                             style: pw.TextStyle(
-                                                              fontSize: 7,
+                                                              fontSize: dRecibo
+                                                                  .fs(
+                                                                    7,
+                                                                    piso: 6,
+                                                                  ),
                                                               color:
                                                                   linea
                                                                       .liquidada
@@ -2448,7 +2673,10 @@ class PdfService {
                                                   child: pw.Text(
                                                     '· Sillas Extras (${alumno.sillasExtraCantidad} sillas): ${alumno.sillasExtraPrecioTotal.toCurrency()}  (Resta: ${(saldoSillasRestante > 0.01 ? saldoSillasRestante : 0.0).toCurrency()} | Cuota ${alumno.sillasExtraCuotasPagadas}/${alumno.sillasExtraCuotas})',
                                                     style: pw.TextStyle(
-                                                      fontSize: 7,
+                                                      fontSize: dRecibo.fs(
+                                                        7,
+                                                        piso: 6,
+                                                      ),
                                                       color: _greyText,
                                                     ),
                                                   ),
@@ -2458,13 +2686,13 @@ class PdfService {
                                         },
                                       ),
                                       pw.Padding(
-                                        padding: const pw.EdgeInsets.only(
-                                          top: 3,
+                                        padding: pw.EdgeInsets.only(
+                                          top: dRecibo.sp(3),
                                         ),
                                         child: pw.Text(
                                           'TOTAL DEL CONTRATO: ${alumno.montoTotalPactado.toCurrency()}',
                                           style: pw.TextStyle(
-                                            fontSize: 7,
+                                            fontSize: dRecibo.fs(7, piso: 6),
                                             fontWeight: pw.FontWeight.bold,
                                             color: _darkText,
                                           ),
@@ -2475,11 +2703,11 @@ class PdfService {
                                 ),
                                 // Columna 2: Cuotas
                                 pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
+                                  padding: pw.EdgeInsets.fromLTRB(
                                     8,
-                                    6,
+                                    dRecibo.sp(6),
                                     8,
-                                    6,
+                                    dRecibo.sp(6),
                                   ),
                                   child: pw.Column(
                                     crossAxisAlignment:
@@ -2488,7 +2716,7 @@ class PdfService {
                                       pw.Text(
                                         '$cuotasPagadasRecibo/${alumno.totalCuotas}',
                                         style: pw.TextStyle(
-                                          fontSize: 13,
+                                          fontSize: dRecibo.fs(13, piso: 10),
                                           fontWeight: pw.FontWeight.bold,
                                           color:
                                               cuotasPagadasRecibo >=
@@ -2500,7 +2728,7 @@ class PdfService {
                                       pw.Text(
                                         'pagadas',
                                         style: pw.TextStyle(
-                                          fontSize: 6,
+                                          fontSize: dRecibo.fs(6, piso: 5),
                                           color: _greyText,
                                         ),
                                       ),
@@ -2509,11 +2737,11 @@ class PdfService {
                                 ),
                                 // Columna 3: Balance
                                 pw.Padding(
-                                  padding: const pw.EdgeInsets.fromLTRB(
+                                  padding: pw.EdgeInsets.fromLTRB(
                                     8,
-                                    6,
+                                    dRecibo.sp(6),
                                     8,
-                                    6,
+                                    dRecibo.sp(6),
                                   ),
                                   child: pw.Column(
                                     crossAxisAlignment:
@@ -2522,7 +2750,7 @@ class PdfService {
                                       pw.Text(
                                         'Abonado del plan (acumulado)',
                                         style: pw.TextStyle(
-                                          fontSize: 6,
+                                          fontSize: dRecibo.fs(6, piso: 5),
                                           color: _greyText,
                                         ),
                                       ),
@@ -2530,7 +2758,7 @@ class PdfService {
                                         (alumno.montoTotalPactado - valSaldo)
                                             .toCurrency(),
                                         style: pw.TextStyle(
-                                          fontSize: 8,
+                                          fontSize: dRecibo.fs(8, piso: 6.5),
                                           fontWeight: pw.FontWeight.bold,
                                           color: _greenAccent,
                                         ),
@@ -2538,23 +2766,23 @@ class PdfService {
                                       pw.Text(
                                         'todo el contrato, no solo hoy',
                                         style: pw.TextStyle(
-                                          fontSize: 5.5,
+                                          fontSize: dRecibo.fs(5.5, piso: 5),
                                           fontStyle: pw.FontStyle.italic,
                                           color: _greyText,
                                         ),
                                       ),
-                                      pw.SizedBox(height: 3),
+                                      pw.SizedBox(height: dRecibo.sp(3)),
                                       pw.Text(
                                         'Falta del plan',
                                         style: pw.TextStyle(
-                                          fontSize: 6,
+                                          fontSize: dRecibo.fs(6, piso: 5),
                                           color: _greyText,
                                         ),
                                       ),
                                       pw.Text(
                                         valSaldo.toCurrency(),
                                         style: pw.TextStyle(
-                                          fontSize: 9,
+                                          fontSize: dRecibo.fs(9, piso: 7),
                                           fontWeight: pw.FontWeight.bold,
                                           color: valSaldo < 0.01
                                               ? _greenAccent
@@ -2566,44 +2794,21 @@ class PdfService {
                                       pw.Text(
                                         'solo cuotas, sin mora',
                                         style: pw.TextStyle(
-                                          fontSize: 5.5,
+                                          fontSize: dRecibo.fs(5.5, piso: 5),
                                           fontStyle: pw.FontStyle.italic,
                                           color: _greyText,
                                         ),
                                       ),
-                                      if (moraPendienteRestante != null) ...[
-                                        pw.SizedBox(height: 3),
-                                        pw.Text(
-                                          'Mora pendiente',
-                                          style: pw.TextStyle(
-                                            fontSize: 6,
-                                            color: _greyText,
-                                          ),
-                                        ),
-                                        pw.Text(
-                                          moraPendienteRestante.toCurrency(),
-                                          style: pw.TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: pw.FontWeight.bold,
-                                            color: moraPendienteRestante > 0.01
-                                                ? _redAccent
-                                                : _greenAccent,
-                                          ),
-                                        ),
-                                        pw.Text(
-                                          // Columna angosta (120pt): el
-                                          // rótulo largo lo lleva el pie
-                                          // de la tabla.
-                                          moraPendienteRestante > 0.01
-                                              ? 'por pagar fuera de término'
-                                              : 'al día',
-                                          style: pw.TextStyle(
-                                            fontSize: 5.5,
-                                            fontStyle: pw.FontStyle.italic,
-                                            color: _greyText,
-                                          ),
-                                        ),
-                                      ],
+                                      // La mora pendiente no se repite acá: el
+                                      // recuadro rojo de arriba ya la grita,
+                                      // fechada y con las cuotas de las que
+                                      // sale. El mismo importe en dos lugares
+                                      // del papel invita a sumarlo dos veces.
+                                      //
+                                      // La mora saldada tampoco: que no quede
+                                      // nada pendiente lo dice el recuadro
+                                      // verde, y sin recuadro rojo no hay
+                                      // deuda que aclarar.
                                     ],
                                   ),
                                 ),
@@ -2611,35 +2816,42 @@ class PdfService {
                             ),
                           ],
                         ),
-                        // Qué significa cada número de la tabla, dicho en
-                        // castellano y una sola vez.
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.fromLTRB(8, 4, 8, 6),
-                          child: pw.Text(
-                            '"Abonado del plan (acumulado)" es todo lo que '
-                            'ya se cubrió del contrato desde el inicio, no '
-                            'lo de este recibo. "Falta del plan" es lo que '
-                            'resta de las cuotas. La mora es el interés por '
-                            'pagar fuera de término: se cobra aparte y no '
-                            'baja el saldo del plan.',
-                            style: pw.TextStyle(
-                              fontSize: 7,
-                              fontStyle: pw.FontStyle.italic,
-                              color: _greyText,
+                        // Lo único de la tabla que no se explica solo. Qué es
+                        // "abonado acumulado" y qué es "falta del plan" ya lo
+                        // dicen los rótulos en cursiva de cada número ("todo
+                        // el contrato, no solo hoy", "solo cuotas, sin mora"):
+                        // el párrafo largo que estaba acá los repetía y comía
+                        // cuatro renglones de una hoja que no sobraba.
+                        if (dRecibo.subtextos)
+                          pw.Padding(
+                            padding: pw.EdgeInsets.fromLTRB(
+                              8,
+                              dRecibo.sp(4),
+                              8,
+                              dRecibo.sp(6),
+                            ),
+                            child: pw.Text(
+                              'La mora es el interés por pagar fuera de '
+                              'término: se cobra aparte y no baja el saldo '
+                              'del plan.',
+                              style: pw.TextStyle(
+                                fontSize: dRecibo.fs(7, piso: 6),
+                                fontStyle: pw.FontStyle.italic,
+                                color: _greyText,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),
 
                   if (esReimpresionPdf)
                     pw.Padding(
-                      padding: const pw.EdgeInsets.only(top: 5),
+                      padding: pw.EdgeInsets.only(top: dRecibo.sp(5)),
                       child: pw.Text(
                         'Reimpreso el: $fechaEmision (Original: $fechaStr)',
                         style: pw.TextStyle(
-                          fontSize: 7,
+                          fontSize: dRecibo.fs(7, piso: 6),
                           fontStyle: pw.FontStyle.italic,
                           color: _greyText,
                         ),
@@ -2655,7 +2867,7 @@ class PdfService {
       );
     }
 
-    dRecibo = await _ajustarParaEntrar(
+    final ajusteRecibo = await _ajustarParaEntrar(
       objetivo: _mediaA4,
       theme: temaRecibo,
       construir: (a) {
@@ -2663,6 +2875,7 @@ class PdfService {
         return cuerpoRecibo();
       },
     );
+    dRecibo = ajusteRecibo.ajuste;
 
     pdf.addPage(
       pw.Page(
@@ -2684,6 +2897,7 @@ class PdfService {
         name: 'Recibo_${alumno.nombreAlumno}.pdf',
       );
     }
+    return ajusteRecibo;
   }
 
   // ── Resumen a abonar (informativo, pre-cobro) ────────────────────────────
@@ -3360,14 +3574,14 @@ class PdfService {
     // Se prueba de menos a más invasivo y se corta apenas entra: si con juntar
     // el aire alcanza, no se abrevia; si con abreviar alcanza, no se achica la
     // letra. Un cobro común no pasa del nivel 0 y sale igual que siempre.
-    d = await _ajustarParaEntrar(
+    d = (await _ajustarParaEntrar(
       objetivo: _mediaA4,
       theme: temaResumen,
       construir: (a) {
         d = a;
         return cuerpoResumen();
       },
-    );
+    )).ajuste;
 
     pdf.addPage(
       pw.Page(
@@ -4193,6 +4407,297 @@ class PdfService {
     final safeName = tituloSafe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
     final fname = 'Contratos_${safeName}_$fechaTxt.pdf'
         .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\\.]'), '_')
+        .replaceAll('__', '_');
+
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, fname);
+    } else {
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: fname);
+    }
+  }
+
+  /// Encabezados de la planilla de mora, en el orden en que salen impresos.
+  static const List<String> planillaMoraHeaders = <String>[
+    '',
+    'ALUMNO',
+    'TEL.',
+    'CUOTAS',
+    'MORA DE CUOTAS VENCIDAS',
+    'MORA NO COBRADA AL PAGAR',
+    'TOTAL MORA',
+    'SALDO DEL PLAN',
+  ];
+
+  /// Las filas de la planilla de mora, ya ordenadas de mayor a menor mora.
+  ///
+  /// Vive afuera del generador para que se pueda verificar lo único que no
+  /// puede fallar: que salgan **todos**. La primera columna va vacía a
+  /// propósito — el borde de la tabla la dibuja como casilla para tildar el
+  /// llamado a mano.
+  ///
+  /// [conDetalle] es lo que decide la escalera de [AjustePdf]: cuando el papel
+  /// aprieta, el desglose por cuota es lo primero que se va, y el total de cada
+  /// columna queda igual.
+  static List<List<String>> planillaMoraFilasTabla(
+    List<MoraPdfFila> filas, {
+    bool conDetalle = true,
+  }) {
+    String celda(double monto, String detalle) {
+      if (monto <= 0.01) return '—';
+      final base = monto.toCurrency();
+      if (!conDetalle || detalle.trim().isEmpty) return base;
+      return '$base\n${detalle.trim()}';
+    }
+
+    final ordenadas = [...filas]
+      ..sort((a, b) => b.moraTotal.compareTo(a.moraTotal));
+    return ordenadas
+        .map(
+          (f) => <String>[
+            '',
+            f.curso.trim().isEmpty ? f.nombre : '${f.nombre}\n${f.curso}',
+            f.telefono.trim().isEmpty ? '—' : f.telefono.trim(),
+            f.cuotas,
+            celda(f.moraVencida, f.detalleVencida),
+            celda(f.moraNoCobrada, f.detalleNoCobrada),
+            f.moraTotal.toCurrency(),
+            f.saldoPlan <= 0.01 ? '—' : f.saldoPlan.toCurrency(),
+          ],
+        )
+        .toList();
+  }
+
+  /// Planilla de mora: la hoja que se usa para llamar a los que deben.
+  ///
+  /// Ordenada de mayor a menor mora, con el teléfono al lado y una casilla en
+  /// blanco para ir tildando los llamados a mano.
+  ///
+  /// Los dos tipos de mora van en columnas separadas —la de cuotas vencidas
+  /// impagas y la que quedó sin cobrar al pagar una cuota— y el saldo del plan
+  /// va aparte: **la mora no forma parte del saldo del plan** y no se suman
+  /// nunca en el mismo número.
+  ///
+  /// Salen **todos** los alumnos de [filas]: es `MultiPage`, que se desparrama
+  /// en hojas y nunca recorta. Lo que ajusta [_ajustarParaPaginas] es cuántas
+  /// hojas, no cuántos alumnos.
+  static Future<void> generarPlanillaMoraPdf({
+    required String eventoTitulo,
+    required String filtroTitulo,
+    required DateTime generadoEn,
+    required List<MoraPdfFila> filas,
+
+    /// Alumnos suspendidos con mora congelada. Van en su propio bloque al final
+    /// y no se mezclan con los que sí hay que llamar.
+    List<MoraPdfFila> bajas = const [],
+
+    /// A cuántas hojas apuntar antes de empezar a compactar.
+    ///
+    /// Tres y no dos a propósito. Medido con 45 alumnos: en dos hojas entra,
+    /// pero la escalera tiene que sacar el desglose por cuota, que es
+    /// justamente el detalle por el que existe esta planilla. La hoja de más
+    /// vale más que el desglose perdido — no es un recibo, es un papel de
+    /// trabajo. Si el evento es más grande, la escalera compacta sola.
+    int maxPaginasObjetivo = 3,
+  }) async {
+    final fontRegular = await PdfGoogleFonts.outfitRegular();
+    final fontBold = await PdfGoogleFonts.outfitBold();
+    final tema = pw.ThemeData.withFont(base: fontRegular, bold: fontBold);
+
+    // De mayor a menor mora: se llama de arriba hacia abajo.
+    final activos = [...filas]
+      ..sort((a, b) => b.moraTotal.compareTo(a.moraTotal));
+    final suspendidos = [...bajas]
+      ..sort((a, b) => b.moraTotal.compareTo(a.moraTotal));
+
+    final fechaTxt = ArTime.formatFechaHora(generadoEn);
+    final tituloSafe = eventoTitulo.trim().isEmpty
+        ? 'Evento'
+        : eventoTitulo.trim();
+    final filtroSafe = filtroTitulo.trim().isEmpty
+        ? 'Alumnos con mora'
+        : filtroTitulo.trim();
+
+    final totalVencida = activos.fold<double>(0, (s, f) => s + f.moraVencida);
+    final totalNoCobrada = activos.fold<double>(
+      0,
+      (s, f) => s + f.moraNoCobrada,
+    );
+    final totalMora = totalVencida + totalNoCobrada;
+
+    const margen = pw.EdgeInsets.all(28);
+    const headers = planillaMoraHeaders;
+
+    pw.Widget tabla(List<List<String>> data, AjustePdf d) {
+      return pw.TableHelper.fromTextArray(
+        border: pw.TableBorder.all(color: _greyLight),
+        headerStyle: pw.TextStyle(
+          fontWeight: pw.FontWeight.bold,
+          color: _darkText,
+          fontSize: d.fs(8, piso: 6.5),
+        ),
+        headerDecoration: const pw.BoxDecoration(color: _headerBg),
+        cellStyle: pw.TextStyle(fontSize: d.fs(8, piso: 6.5)),
+        cellPadding: pw.EdgeInsets.all(d.sp(4)),
+        cellAlignments: const {
+          0: pw.Alignment.center,
+          2: pw.Alignment.centerLeft,
+          3: pw.Alignment.center,
+          4: pw.Alignment.centerRight,
+          5: pw.Alignment.centerRight,
+          6: pw.Alignment.centerRight,
+          7: pw.Alignment.centerRight,
+        },
+        columnWidths: const {
+          0: pw.FixedColumnWidth(16),
+          1: pw.FlexColumnWidth(2.0),
+          2: pw.FlexColumnWidth(1.0),
+          3: pw.FlexColumnWidth(0.6),
+          4: pw.FlexColumnWidth(2.1),
+          5: pw.FlexColumnWidth(2.1),
+          6: pw.FlexColumnWidth(1.0),
+          7: pw.FlexColumnWidth(1.0),
+        },
+        data: <List<String>>[headers, ...data],
+      );
+    }
+
+    /// Las tablas van en bloques: un solo [pw.Table] muy largo adentro de un
+    /// [pw.MultiPage] puede disparar `TooManyPagesException`.
+    List<pw.Widget> bloques(List<MoraPdfFila> lista, AjustePdf d) {
+      final out = <pw.Widget>[];
+      final data = planillaMoraFilasTabla(lista, conDetalle: d.subtextos);
+      for (var i = 0; i < data.length; i += _kFilasPorBloqueListado) {
+        final fin = math.min(i + _kFilasPorBloqueListado, data.length);
+        if (i > 0) out.add(pw.SizedBox(height: d.sp(6)));
+        out.add(tabla(data.sublist(i, fin), d));
+      }
+      return out;
+    }
+
+    List<pw.Widget> contenido(AjustePdf d) {
+      if (activos.isEmpty && suspendidos.isEmpty) {
+        return [
+          pw.Text(
+            'No hay alumnos con mora en este filtro.',
+            style: pw.TextStyle(
+              fontSize: d.fs(10),
+              color: _greyText,
+              fontStyle: pw.FontStyle.italic,
+            ),
+          ),
+        ];
+      }
+      return [
+        ...bloques(activos, d),
+        if (activos.isNotEmpty) ...[
+          pw.SizedBox(height: d.sp(8)),
+          pw.Container(
+            width: double.infinity,
+            padding: pw.EdgeInsets.symmetric(
+              horizontal: d.sp(10),
+              vertical: d.sp(7),
+            ),
+            decoration: const pw.BoxDecoration(color: _headerBg),
+            child: pw.Text(
+              '${activos.length} alumno(s) · '
+              'Cuotas vencidas ${totalVencida.toCurrency()} · '
+              'No cobrada al pagar ${totalNoCobrada.toCurrency()} · '
+              'TOTAL MORA ${totalMora.toCurrency()}',
+              style: pw.TextStyle(
+                fontSize: d.fs(9.5, piso: 7),
+                fontWeight: pw.FontWeight.bold,
+                color: _darkText,
+              ),
+            ),
+          ),
+        ],
+        if (suspendidos.isNotEmpty) ...[
+          pw.SizedBox(height: d.sp(12)),
+          pw.Text(
+            'BAJA TEMPORAL — MORA CONGELADA',
+            style: pw.TextStyle(
+              fontSize: d.fs(9.5, piso: 7),
+              fontWeight: pw.FontWeight.bold,
+              color: _greyText,
+              letterSpacing: 0.8,
+            ),
+          ),
+          pw.SizedBox(height: d.sp(2)),
+          pw.Text(
+            'Suspendidos: su mora no crece. No entran en los totales de arriba.',
+            style: pw.TextStyle(
+              fontSize: d.fs(8, piso: 6.5),
+              color: _greyText,
+              fontStyle: pw.FontStyle.italic,
+            ),
+          ),
+          pw.SizedBox(height: d.sp(4)),
+          ...bloques(suspendidos, d),
+        ],
+        pw.SizedBox(height: d.sp(10)),
+        pw.Text(
+          'La mora es el interés por pagar fuera de término: se cobra aparte y '
+          'no forma parte del saldo del plan.',
+          style: pw.TextStyle(
+            fontSize: d.fs(8, piso: 6.5),
+            color: _greyText,
+            fontStyle: pw.FontStyle.italic,
+          ),
+        ),
+      ];
+    }
+
+    final ajuste = await _ajustarParaPaginas(
+      maxPaginas: maxPaginasObjetivo,
+      theme: tema,
+      construir: contenido,
+      margin: margen,
+    );
+
+    final pdf = pw.Document(theme: tema);
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: margen,
+        header: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'MORA — $tituloSafe',
+              style: pw.TextStyle(
+                fontSize: ajuste.fs(15, piso: 10),
+                fontWeight: pw.FontWeight.bold,
+                color: _gold,
+              ),
+            ),
+            pw.SizedBox(height: ajuste.sp(3)),
+            pw.Text(
+              'Emitido: $fechaTxt · $filtroSafe · '
+              '${activos.length} alumno(s) · ${totalMora.toCurrency()}',
+              style: pw.TextStyle(
+                fontSize: ajuste.fs(9, piso: 7),
+                color: _greyText,
+              ),
+            ),
+            pw.Divider(color: _gold),
+            pw.SizedBox(height: ajuste.sp(4)),
+          ],
+        ),
+        footer: (context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'Página ${context.pageNumber} de ${context.pagesCount}',
+            style: pw.TextStyle(fontSize: 8, color: _greyText),
+          ),
+        ),
+        build: (context) => contenido(ajuste),
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final safeName = tituloSafe.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_');
+    final fname = 'Mora_$safeName.pdf'
+        .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\.]'), '_')
         .replaceAll('__', '_');
 
     if (!kIsWeb && Platform.isWindows) {
@@ -5601,15 +6106,15 @@ class PdfService {
       abierta: abierta,
     );
 
-    final aSup = await _ajustarParaEntrar(
+    final ajusteSup = await _ajustarParaEntrar(
       objetivo: _mediaA4 - _kAltoDivisorHoja,
       theme: tema,
       construir: resumen,
     );
-    var altoSup = _mediaA4 - _kAltoDivisorHoja;
-    try {
-      altoSup = await _medirAlto(theme: tema, contenido: resumen(aSup));
-    } catch (_) {}
+    final aSup = ajusteSup.ajuste;
+    final altoSup = ajusteSup.alto.isFinite
+        ? ajusteSup.alto
+        : _mediaA4 - _kAltoDivisorHoja;
 
     // El detalle recibe TODO lo que sobra: la mitad, o más. Un día normal el
     // resumen ocupa menos de su mitad y el detalle se queda con ~55-60%.

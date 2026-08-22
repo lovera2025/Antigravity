@@ -25,6 +25,7 @@ import '../../core/utils/pago_interes_mora.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/cronograma_cuotas_utils.dart';
 import 'services/cobro_mora_resolver.dart';
+import 'services/filtro_mora_masivos.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/mora_concepto_rotulo.dart';
 import 'services/mora_tracked_origen.dart';
@@ -86,6 +87,7 @@ class _DetalleEventoMasivoScreenState
   Map<String, List<MoraPendientePreviaDetalle>> _arrastreMoraPorContrato = {};
   String _busquedaAlumno = '';
   String? _cursoDivisionFiltro;
+  FiltroMora _filtroMora = FiltroMora.todos;
   bool _ordenAlfabetico = true;
   bool _modoSeleccionContratos = false;
   final Set<String> _idsSeleccionContratos = {};
@@ -286,6 +288,7 @@ class _DetalleEventoMasivoScreenState
           contratoBase: a,
           pagos: pagosPorContrato[a.id] ?? const [],
           trackedMonto: a.moraPendienteTracked,
+          recorte: MoraOrigenRecorte.loQueQueda,
         );
         if (detalle.isNotEmpty) out[a.id] = detalle;
       }
@@ -931,12 +934,34 @@ class _DetalleEventoMasivoScreenState
             .toList()
           ..sort();
 
+    // Un solo cálculo de mora por alumno, acá arriba: de acá comen el filtro,
+    // el chip, cada fila de la tabla y la planilla. Es puro y sin consultas —
+    // `_moraCobradaPorContrato` ya viene cargado para todo el evento en una
+    // sola query de `_fetchDatos`.
+    final moraPorAlumno = <String, MoraDeAlumno>{
+      for (final a in _alumnos)
+        a.id: MoraCuotaCalculator.moraPendienteOperativaDetallada(
+          contrato: a,
+          moraCobradaHistorial: _moraCobradaPorContrato[a.id] ?? 0.0,
+        ),
+    };
+
+    final alumnosConMora = _alumnos
+        .where((a) => cumpleFiltroMora(a, moraPorAlumno, FiltroMora.conMora))
+        .toList();
+    final totalMoraEvento = alumnosConMora.fold<double>(
+      0,
+      (s, a) => s + (moraPorAlumno[a.id]?.total ?? 0),
+    );
+
     final alumnosFiltrados = _alumnos.where((a) {
       if (_cursoDivisionFiltro != null &&
           (_cursoDivisionFiltro!.isNotEmpty) &&
           (a.cursoDivision ?? '').trim() != _cursoDivisionFiltro) {
         return false;
       }
+      // Se combina con el filtro de curso y con la búsqueda, no los reemplaza.
+      if (!cumpleFiltroMora(a, moraPorAlumno, _filtroMora)) return false;
       if (query.isEmpty) return true;
       final nombre = a.nombreAlumno.toLowerCase();
       final curso = (a.cursoDivision ?? '').toLowerCase();
@@ -966,15 +991,36 @@ class _DetalleEventoMasivoScreenState
             : (availableWidth > 800 ? 32 : 16);
         final double tableWidth = availableWidth - (horizontalPad * 2);
 
+        // El `DataTable` suma su propio margen a cada lado y un espacio entre
+        // cada par de columnas. Si las fracciones se aplican sobre el ancho
+        // completo, la tabla termina ~150px más ancha que la ventana y la
+        // última columna se va de pantalla. Se descuenta antes de repartir.
+        final double colSpacing = layoutCompact
+            ? 10
+            : (availableWidth > 1000 ? 24 : 16);
+        const int kColumnasTabla = 7;
         final double innerTable =
-            tableWidth - (_modoSeleccionContratos ? 52 : 0);
+            (tableWidth -
+                    (_modoSeleccionContratos ? 52 : 0) -
+                    (horizontalPad * 2) -
+                    (colSpacing * (kColumnasTabla - 1)))
+                .clamp(320.0, double.infinity);
         final double colAlumno = innerTable * 0.18;
         final double colTelefono = innerTable * 0.10;
         final double colAcomp = innerTable * 0.12;
         final double colMesa = innerTable * 0.08;
         final double colContrato = innerTable * 0.07;
-        final double colEstado = innerTable * 0.22;
-        final double colAcciones = innerTable * 0.23;
+        // Con las tres acciones de jefe adentro del menú ⋮, ACCIONES necesita
+        // mucho menos ancho. Ese aire se lo lleva ESTADO DE DEUDA, que es la
+        // que se lee todo el día. El piso de ACCIONES es el ancho real de sus
+        // cinco íconos: por debajo de eso el último se va de la pantalla.
+        final double anchoIconoFila = layoutCompact ? 34 : 40;
+        final double colAcciones = math.max(
+          innerTable * 0.15,
+          anchoIconoFila * (modoJefe ? 6 : 5) + 8,
+        );
+        final double colEstado = innerTable - colAcciones - colAlumno -
+            colTelefono - colAcomp - colMesa - colContrato;
 
         final int contratosFirmados = alumnosFiltrados
             .where(
@@ -983,7 +1029,6 @@ class _DetalleEventoMasivoScreenState
             .length;
 
         final double tbIcon = layoutCompact ? 15.0 : 18.0;
-        final double tbIconSm = layoutCompact ? 14.0 : 16.0;
         final EdgeInsets tbPadLg = EdgeInsets.symmetric(
           horizontal: layoutCompact ? 10 : 20,
           vertical: layoutCompact ? 6 : 12,
@@ -992,12 +1037,7 @@ class _DetalleEventoMasivoScreenState
           horizontal: layoutCompact ? 8 : 16,
           vertical: layoutCompact ? 6 : 12,
         );
-        final EdgeInsets tbPadSm = EdgeInsets.symmetric(
-          horizontal: layoutCompact ? 7 : 12,
-          vertical: layoutCompact ? 5 : 8,
-        );
         final double tbFs = layoutCompact ? 11.0 : 12.0;
-        final double tbFsSm = layoutCompact ? 10.0 : 11.0;
         final double tbRadius = layoutCompact ? 12.0 : 16.0;
 
         final tableHeaderStyle = TextStyle(
@@ -1006,97 +1046,141 @@ class _DetalleEventoMasivoScreenState
           letterSpacing: 1,
         );
 
-        final Widget secondaryAlumnosToolbarButtons = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ElevatedButton.icon(
-              onPressed: () {
+        // Todo lo que no se usa en cada cobro vive en un solo menú. Antes eran
+        // cuatro botones anchos que no dejaban lugar para el chip de mora ni
+        // para que la columna de deuda se leyera entera.
+        final Widget secondaryAlumnosToolbarButtons = PopupMenuButton<String>(
+          tooltip: 'Más acciones',
+          position: PopupMenuPosition.under,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(tbRadius),
+          ),
+          onSelected: (v) {
+            switch (v) {
+              case 'orden':
+                setState(() => _ordenAlfabetico = !_ordenAlfabetico);
+              case 'seleccion':
                 setState(() {
-                  _ordenAlfabetico = !_ordenAlfabetico;
+                  _modoSeleccionContratos = !_modoSeleccionContratos;
+                  if (!_modoSeleccionContratos) _idsSeleccionContratos.clear();
                 });
-              },
-              icon: Icon(
-                _ordenAlfabetico ? Icons.sort_by_alpha : Icons.schedule,
-                size: tbIconSm,
-              ),
-              label: Text(
-                _ordenAlfabetico ? 'ORDEN A-Z' : 'FECHA',
-                style: TextStyle(fontSize: tbFsSm),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white12 : Colors.black12,
-                foregroundColor: isDark ? Colors.white : Colors.black,
-                padding: tbPadSm,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(tbRadius),
+              case 'planilla':
+                if (_alumnos.isNotEmpty) {
+                  PdfService.generarPlanillaCursos(widget.evento, _alumnos);
+                }
+              case 'mora':
+                _exportarPlanillaMora(moraPorAlumno);
+              case 'sortear':
+                _sortearMesas();
+              case 'deshacer':
+                _deshacerSorteoMesas();
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem<String>(
+              value: 'orden',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  _ordenAlfabetico ? Icons.sort_by_alpha : Icons.schedule,
+                ),
+                title: Text(_ordenAlfabetico ? 'Ordenar por fecha' : 'Ordenar A-Z'),
+                subtitle: Text(
+                  _ordenAlfabetico ? 'Ahora: alfabético' : 'Ahora: por alta',
                 ),
               ),
             ),
-            SizedBox(width: layoutCompact ? 5 : 8),
-            Tooltip(
-              message: 'Planilla de cursos (PDF)',
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  if (_alumnos.isNotEmpty) {
-                    PdfService.generarPlanillaCursos(widget.evento, _alumnos);
-                  }
-                },
-                icon: Icon(Icons.print_rounded, size: tbIcon),
-                label: Text(
-                  layoutCompact ? 'PLANILLA' : 'PLANILLA CURSOS',
-                  style: TextStyle(fontSize: tbFs),
+            PopupMenuItem<String>(
+              value: 'seleccion',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  _modoSeleccionContratos
+                      ? Icons.close
+                      : Icons.checklist_rounded,
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white12,
-                  foregroundColor: Colors.white,
-                  padding: tbPadSm,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(tbRadius),
-                  ),
+                title: Text(
+                  _modoSeleccionContratos
+                      ? 'Salir de selección'
+                      : 'Selección múltiple',
+                ),
+                subtitle: const Text('Marcar contratos de varios a la vez'),
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'planilla',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.print_rounded),
+                title: Text('Planilla de cursos'),
+                subtitle: Text('PDF con el listado por curso'),
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'mora',
+              enabled: alumnosConMora.isNotEmpty,
+              child: ListTile(
+                dense: true,
+                enabled: alumnosConMora.isNotEmpty,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.picture_as_pdf_outlined),
+                title: const Text('Planilla de mora'),
+                subtitle: Text(
+                  alumnosConMora.isEmpty
+                      ? 'Nadie debe mora'
+                      : '${alumnosConMora.length} alumno(s) para llamar',
                 ),
               ),
             ),
-            SizedBox(width: layoutCompact ? 5 : 8),
-            Tooltip(
-              message: 'Sortear mesas',
-              child: ElevatedButton.icon(
-                onPressed: _sortearMesas,
-                icon: Icon(Icons.casino, size: tbIcon),
-                label: Text(
-                  layoutCompact ? 'SORTEAR' : 'SORTEAR MESAS',
-                  style: TextStyle(fontSize: tbFs),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.indigo,
-                  foregroundColor: Colors.white,
-                  padding: tbPadSm,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(tbRadius),
-                  ),
-                ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'sortear',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.casino, color: Colors.indigo),
+                title: Text('Sortear mesas'),
               ),
             ),
-            SizedBox(width: layoutCompact ? 5 : 8),
-            Tooltip(
-              message: 'Deshacer sorteo de mesas',
-              child: ElevatedButton.icon(
-                onPressed: _deshacerSorteoMesas,
-                icon: Icon(Icons.undo, size: tbIcon),
-                label: Text(
-                  layoutCompact ? 'DESHACER' : 'DESHACER MESAS',
-                  style: TextStyle(fontSize: tbFs),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepOrange,
-                  foregroundColor: Colors.white,
-                  padding: tbPadSm,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(tbRadius),
-                  ),
-                ),
+            const PopupMenuItem<String>(
+              value: 'deshacer',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.undo, color: Colors.deepOrange),
+                title: Text('Deshacer sorteo de mesas'),
               ),
             ),
           ],
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: layoutCompact ? 10 : 14,
+              vertical: layoutCompact ? 7 : 10,
+            ),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white12 : Colors.black12,
+              borderRadius: BorderRadius.circular(tbRadius),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.more_vert, size: tbIcon),
+                SizedBox(width: layoutCompact ? 2 : 4),
+                Text(
+                  'MÁS',
+                  style: TextStyle(
+                    fontSize: tbFs,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
         final Widget primaryAlumnosToolbarButtons = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1179,6 +1263,13 @@ class _DetalleEventoMasivoScreenState
                 ),
               ),
             ),
+            SizedBox(width: layoutCompact ? 6 : 10),
+            _chipMoraToolbar(
+              cantidad: alumnosConMora.length,
+              total: totalMoraEvento,
+              layoutCompact: layoutCompact,
+              onExportar: () => _exportarPlanillaMora(moraPorAlumno),
+            ),
             SizedBox(width: layoutCompact ? 8 : 16),
             Tooltip(
               message: 'Registrar nuevo alumno',
@@ -1229,27 +1320,20 @@ class _DetalleEventoMasivoScreenState
                 ),
               ),
             ),
-            SizedBox(width: layoutCompact ? 6 : 8),
-            Tooltip(
-              message:
-                  'Seleccionar varios alumnos en la tabla (usa la búsqueda de arriba) y marcar o quitar firma de contrato de una vez.',
-              child: OutlinedButton.icon(
+            // SELECCIÓN vive en el menú ⋮, pero CANCELAR no: un modo que se
+            // prende desde un menú tiene que poder apagarse sin volver a abrirlo.
+            if (_modoSeleccionContratos) ...[
+              SizedBox(width: layoutCompact ? 6 : 8),
+              OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
-                    _modoSeleccionContratos = !_modoSeleccionContratos;
-                    if (!_modoSeleccionContratos) {
-                      _idsSeleccionContratos.clear();
-                    }
+                    _modoSeleccionContratos = false;
+                    _idsSeleccionContratos.clear();
                   });
                 },
-                icon: Icon(
-                  _modoSeleccionContratos
-                      ? Icons.close
-                      : Icons.checklist_rounded,
-                  size: tbIcon,
-                ),
+                icon: Icon(Icons.close, size: tbIcon),
                 label: Text(
-                  _modoSeleccionContratos ? 'CANCELAR' : 'SELECCIÓN',
+                  'CANCELAR',
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
                     fontSize: tbFs,
@@ -1268,7 +1352,7 @@ class _DetalleEventoMasivoScreenState
                   ),
                 ),
               ),
-            ),
+            ],
           ],
         );
 
@@ -1439,13 +1523,17 @@ class _DetalleEventoMasivoScreenState
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minWidth: availableWidth),
                     child: DataTable(
-                      columnSpacing: layoutCompact
-                          ? 10
-                          : (availableWidth > 1000 ? 24 : 16),
+                      columnSpacing: colSpacing,
                       horizontalMargin: horizontalPad,
                       headingRowHeight: layoutCompact ? 36 : 48,
                       dataRowMinHeight: layoutCompact ? 44 : 56,
-                      dataRowMaxHeight: layoutCompact ? 72 : 102,
+                      // Un alumno con mora son siete renglones en ESTADO DE
+                      // DEUDA (estado, saldo, cuotas, cuota pendiente, próx.
+                      // vencimiento, mora pendiente y el desglose por cuota).
+                      // Con el tope viejo el último salía cortado por la mitad,
+                      // que es justo el que dice de qué meses viene la mora.
+                      // Las filas cortas no crecen: el alto lo pide cada una.
+                      dataRowMaxHeight: layoutCompact ? 112 : 136,
                       showCheckboxColumn: _modoSeleccionContratos,
                       onSelectAll: _modoSeleccionContratos
                           ? (selected) {
@@ -2298,268 +2386,52 @@ class _DetalleEventoMasivoScreenState
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  esBajaTemporal
-                                      ? Opacity(
-                                          opacity: 0.3,
-                                          child: IgnorePointer(
-                                            child: IconButton(
-                                              visualDensity: layoutCompact
-                                                  ? VisualDensity.compact
-                                                  : VisualDensity.standard,
-                                              constraints: BoxConstraints(
-                                                minWidth: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                                minHeight: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                              icon: Icon(
-                                                Icons.edit_outlined,
-                                                size: layoutCompact ? 18 : 20,
-                                              ),
-                                              tooltip: 'Editar alumno/cuotas',
-                                              onPressed: () {},
-                                            ),
-                                          ),
-                                        )
-                                      : IconButton(
-                                          visualDensity: layoutCompact
-                                              ? VisualDensity.compact
-                                              : VisualDensity.standard,
-                                          constraints: BoxConstraints(
-                                            minWidth: layoutCompact ? 34 : 40,
-                                            minHeight: layoutCompact ? 34 : 40,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          icon: Icon(
-                                            Icons.edit_outlined,
-                                            size: layoutCompact ? 18 : 20,
-                                          ),
-                                          tooltip: 'Editar alumno/cuotas',
-                                          onPressed: () =>
-                                              _mostrarModalEditarAlumno(a),
-                                        ),
-                                  esBajaTemporal
-                                      ? Opacity(
-                                          opacity: 0.3,
-                                          child: IgnorePointer(
-                                            child: IconButton(
-                                              visualDensity: layoutCompact
-                                                  ? VisualDensity.compact
-                                                  : VisualDensity.standard,
-                                              constraints: BoxConstraints(
-                                                minWidth: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                                minHeight: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                              icon: Icon(
-                                                Icons.payments_outlined,
-                                                size: layoutCompact ? 18 : 20,
-                                              ),
-                                              tooltip: 'Registrar pago',
-                                              onPressed: () {},
-                                            ),
-                                          ),
-                                        )
-                                      : IconButton(
-                                          visualDensity: layoutCompact
-                                              ? VisualDensity.compact
-                                              : VisualDensity.standard,
-                                          constraints: BoxConstraints(
-                                            minWidth: layoutCompact ? 34 : 40,
-                                            minHeight: layoutCompact ? 34 : 40,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          icon: Icon(
-                                            Icons.payments_outlined,
-                                            size: layoutCompact ? 18 : 20,
-                                          ),
-                                          tooltip: 'Registrar pago',
-                                          onPressed: () =>
-                                              _mostrarModalPagoAlumno(a),
-                                        ),
-                                  esBajaTemporal
-                                      ? Opacity(
-                                          opacity: 0.3,
-                                          child: IgnorePointer(
-                                            child: IconButton(
-                                              visualDensity: layoutCompact
-                                                  ? VisualDensity.compact
-                                                  : VisualDensity.standard,
-                                              constraints: BoxConstraints(
-                                                minWidth: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                                minHeight: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                              icon: Icon(
-                                                Icons
-                                                    .account_balance_wallet_outlined,
-                                                size: layoutCompact ? 18 : 20,
-                                                color: const Color(0xFFD4AF37),
-                                              ),
-                                              tooltip: 'Ver Estado de Cuenta',
-                                              onPressed: () {},
-                                            ),
-                                          ),
-                                        )
-                                      : IconButton(
-                                          visualDensity: layoutCompact
-                                              ? VisualDensity.compact
-                                              : VisualDensity.standard,
-                                          constraints: BoxConstraints(
-                                            minWidth: layoutCompact ? 34 : 40,
-                                            minHeight: layoutCompact ? 34 : 40,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          icon: Icon(
-                                            Icons
-                                                .account_balance_wallet_outlined,
-                                            size: layoutCompact ? 18 : 20,
-                                            color: const Color(0xFFD4AF37),
-                                          ),
-                                          tooltip: 'Ver Estado de Cuenta',
-                                          onPressed: () =>
-                                              _mostrarHistorialPagosAlumno(a),
-                                        ),
-                                  esBajaTemporal
-                                      ? Opacity(
-                                          opacity: 0.3,
-                                          child: IgnorePointer(
-                                            child: IconButton(
-                                              visualDensity: layoutCompact
-                                                  ? VisualDensity.compact
-                                                  : VisualDensity.standard,
-                                              constraints: BoxConstraints(
-                                                minWidth: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                                minHeight: layoutCompact
-                                                    ? 34
-                                                    : 40,
-                                              ),
-                                              padding: EdgeInsets.zero,
-                                              icon: Icon(
-                                                Icons.picture_as_pdf_outlined,
-                                                size: layoutCompact ? 18 : 20,
-                                              ),
-                                              tooltip: 'Generar Recibo',
-                                              onPressed: () {},
-                                            ),
-                                          ),
-                                        )
-                                      : IconButton(
-                                          visualDensity: layoutCompact
-                                              ? VisualDensity.compact
-                                              : VisualDensity.standard,
-                                          constraints: BoxConstraints(
-                                            minWidth: layoutCompact ? 34 : 40,
-                                            minHeight: layoutCompact ? 34 : 40,
-                                          ),
-                                          padding: EdgeInsets.zero,
-                                          icon: Icon(
-                                            Icons.picture_as_pdf_outlined,
-                                            size: layoutCompact ? 18 : 20,
-                                          ),
-                                          tooltip: 'Generar Recibo',
-                                          onPressed: () =>
-                                              _imprimirReciboAlumno(a),
-                                        ),
+                                  _accionFilaIcono(
+                                    icon: Icons.edit_outlined,
+                                    tooltip: 'Editar alumno/cuotas',
+                                    onPressed: () =>
+                                        _mostrarModalEditarAlumno(a),
+                                    habilitado: !esBajaTemporal,
+                                    layoutCompact: layoutCompact,
+                                  ),
+                                  _accionFilaIcono(
+                                    icon: Icons.payments_outlined,
+                                    tooltip: 'Registrar pago',
+                                    onPressed: () => _mostrarModalPagoAlumno(a),
+                                    habilitado: !esBajaTemporal,
+                                    layoutCompact: layoutCompact,
+                                  ),
+                                  _accionFilaIcono(
+                                    icon: Icons
+                                        .account_balance_wallet_outlined,
+                                    tooltip: 'Ver Estado de Cuenta',
+                                    color: const Color(0xFFD4AF37),
+                                    onPressed: () =>
+                                        _mostrarHistorialPagosAlumno(a),
+                                    habilitado: !esBajaTemporal,
+                                    layoutCompact: layoutCompact,
+                                  ),
+                                  _accionFilaIcono(
+                                    icon: Icons.picture_as_pdf_outlined,
+                                    tooltip: 'Generar Recibo',
+                                    onPressed: () => _imprimirReciboAlumno(a),
+                                    habilitado: !esBajaTemporal,
+                                    layoutCompact: layoutCompact,
+                                  ),
                                   _buildNotaOperativaButton(
                                     a,
                                     notaOp,
                                     layoutCompact,
                                   ),
-                                  if (modoJefe) ...[
-                                    IconButton(
-                                      visualDensity: layoutCompact
-                                          ? VisualDensity.compact
-                                          : VisualDensity.standard,
-                                      constraints: BoxConstraints(
-                                        minWidth: layoutCompact ? 34 : 40,
-                                        minHeight: layoutCompact ? 34 : 40,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      icon: Icon(
-                                        Icons.cleaning_services_rounded,
-                                        color: Colors.redAccent.shade200,
-                                        size: layoutCompact ? 18 : 20,
-                                      ),
-                                      tooltip: 'Perdonar mora',
-                                      onPressed: () => _mostrarPerdonarMora(a),
+                                  // Las tres de jefe viven en un menú: son las
+                                  // que menos se usan y las que más daño hacen
+                                  // si se tocan de más.
+                                  if (modoJefe)
+                                    _menuJefeFila(
+                                      a,
+                                      esBajaTemporal: esBajaTemporal,
+                                      layoutCompact: layoutCompact,
                                     ),
-                                    esBajaTemporal
-                                        ? IconButton(
-                                            visualDensity: layoutCompact
-                                                ? VisualDensity.compact
-                                                : VisualDensity.standard,
-                                            constraints: BoxConstraints(
-                                              minWidth: layoutCompact ? 34 : 40,
-                                              minHeight: layoutCompact
-                                                  ? 34
-                                                  : 40,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                            icon: Icon(
-                                              Icons.play_circle_outline_rounded,
-                                              color:
-                                                  Colors.greenAccent.shade700,
-                                              size: layoutCompact ? 18 : 20,
-                                            ),
-                                            tooltip: 'Reincorporar alumno',
-                                            onPressed: () =>
-                                                _toggleBajaTemporal(a),
-                                          )
-                                        : IconButton(
-                                            visualDensity: layoutCompact
-                                                ? VisualDensity.compact
-                                                : VisualDensity.standard,
-                                            constraints: BoxConstraints(
-                                              minWidth: layoutCompact ? 34 : 40,
-                                              minHeight: layoutCompact
-                                                  ? 34
-                                                  : 40,
-                                            ),
-                                            padding: EdgeInsets.zero,
-                                            icon: Icon(
-                                              Icons
-                                                  .pause_circle_outline_rounded,
-                                              color: Colors.orangeAccent,
-                                              size: layoutCompact ? 18 : 20,
-                                            ),
-                                            tooltip:
-                                                'Baja temporal (suspender)',
-                                            onPressed: () =>
-                                                _toggleBajaTemporal(a),
-                                          ),
-                                    IconButton(
-                                      visualDensity: layoutCompact
-                                          ? VisualDensity.compact
-                                          : VisualDensity.standard,
-                                      constraints: BoxConstraints(
-                                        minWidth: layoutCompact ? 34 : 40,
-                                        minHeight: layoutCompact ? 34 : 40,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      icon: Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.redAccent,
-                                        size: layoutCompact ? 18 : 20,
-                                      ),
-                                      tooltip: 'Eliminar definitivamente',
-                                      onPressed: () =>
-                                          _eliminarAlumnoPermanente(a),
-                                    ),
-                                  ],
                                 ],
                               ),
                             ),
@@ -2574,6 +2446,406 @@ class _DetalleEventoMasivoScreenState
           ],
         );
       },
+    );
+  }
+
+  /// `C1 (Abr) 113d $30.400 · C2 (May) 45d $18.000`.
+  static String _desgloseVencidaTexto(List<MoraCuotaDetalle> desglose) {
+    return desglose
+        .where((d) => d.interesBruto > 0.01)
+        .map(
+          (d) =>
+              'C${d.numeroCuota} (${d.mesLabel.split(' ').first}) '
+              '${d.diasMora}d ${d.interesBruto.toCurrency()}',
+        )
+        .join(' · ');
+  }
+
+  /// Arma la planilla de mora y la manda al PDF.
+  ///
+  /// Sale **lo que está filtrado en pantalla**, no lo dibujado: la tabla
+  /// renderiza de a 50 filas y va agregando al scrollear, así que armar la
+  /// planilla desde lo visible imprimiría 50 de 53 sin avisar.
+  Future<void> _exportarPlanillaMora(
+    Map<String, MoraDeAlumno> moraPorAlumno,
+  ) async {
+    final query = _busquedaAlumno.trim().toLowerCase();
+    // Con el chip en "Todos" la planilla igual es de mora: se exporta a los que
+    // deben, no a los 53.
+    final filtro = _filtroMora.activo ? _filtroMora : FiltroMora.conMora;
+
+    bool pasaCursoYBusqueda(ContratoAlumno a) {
+      if (_cursoDivisionFiltro != null &&
+          _cursoDivisionFiltro!.isNotEmpty &&
+          (a.cursoDivision ?? '').trim() != _cursoDivisionFiltro) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      final nombre = a.nombreAlumno.toLowerCase();
+      final curso = (a.cursoDivision ?? '').toLowerCase();
+      return nombre.contains(query) || curso.contains(query);
+    }
+
+    MoraPdfFila filaDe(ContratoAlumno a) {
+      final m = moraPorAlumno[a.id];
+      final vencida =
+          m?.desglose.fold<double>(0, (s, d) => s + d.interesBruto) ?? 0;
+      final total = a.totalCuotas > 0 ? a.totalCuotas : 9;
+      return MoraPdfFila(
+        nombre: a.nombreAlumno.replaceFirst('[BAJA]', '').trim(),
+        curso: (a.cursoDivision ?? '').trim(),
+        telefono: (a.telefono ?? '').trim(),
+        cuotas: '${a.cuotasPagadas}/$total',
+        moraVencida: vencida,
+        detalleVencida: _desgloseVencidaTexto(m?.desglose ?? const []),
+        moraNoCobrada: m?.tracked ?? 0,
+        detalleNoCobrada: MoraConceptoRotulo.desgloseArrastre(
+          _arrastreMoraPorContrato[a.id] ?? const [],
+          formatoMonto: (v) => v.toCurrency(),
+        ),
+        saldoPlan: a.saldoDeudor,
+      );
+    }
+
+    final activos = _alumnos
+        .where(pasaCursoYBusqueda)
+        .where((a) => cumpleFiltroMora(a, moraPorAlumno, filtro))
+        .toList();
+
+    // Baja temporal: suspendidos con la mora congelada. Quedan fuera del filtro
+    // y del conteo; se buscan aparte porque quién sale en el papel lo decide el
+    // operador, no el sistema. (Las bajas definitivas borran el contrato: esos
+    // alumnos no están en ninguna lista.)
+    final suspendidos = _alumnos
+        .where(esBajaTemporal)
+        .where(pasaCursoYBusqueda)
+        .where((a) => (moraPorAlumno[a.id]?.total ?? 0) > 0.01)
+        .toList();
+
+    if (activos.isEmpty && suspendidos.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay alumnos con mora en este filtro.')),
+      );
+      return;
+    }
+
+    final totalMora = activos.fold<double>(
+      0,
+      (s, a) => s + (moraPorAlumno[a.id]?.total ?? 0),
+    );
+
+    var incluirBajas = false;
+    if (!mounted) return;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('Planilla de mora'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${activos.length} alumno(s) · ${totalMora.toCurrency()}\n'
+                'Filtro: ${filtro.label}'
+                '${_cursoDivisionFiltro?.isNotEmpty == true ? ' · $_cursoDivisionFiltro' : ''}',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Ordenada de mayor a menor mora, con el teléfono al lado.',
+                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+              ),
+              if (suspendidos.isNotEmpty)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: incluirBajas,
+                  onChanged: (v) =>
+                      setDialog(() => incluirBajas = v ?? false),
+                  title: Text(
+                    'Incluir ${suspendidos.length} en baja temporal',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  subtitle: const Text(
+                    'Mora congelada. Van en un bloque aparte al final.',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Generar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Generando planilla de mora...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    try {
+      await PdfService.generarPlanillaMoraPdf(
+        eventoTitulo:
+            widget.evento.cliente?.nombreCompleto.trim().isNotEmpty == true
+            ? widget.evento.cliente!.nombreCompleto.trim()
+            : 'Evento masivo',
+        filtroTitulo: _cursoDivisionFiltro?.isNotEmpty == true
+            ? '${filtro.label} · $_cursoDivisionFiltro'
+            : filtro.label,
+        generadoEn: ArTime.nowAr(),
+        filas: activos.map(filaDe).toList(),
+        bajas: incluirBajas ? suspendidos.map(filaDe).toList() : const [],
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo generar la planilla: $e')),
+      );
+    }
+  }
+
+  /// Chip de mora: cuántos deben y cuánto, y el filtro por tipo.
+  ///
+  /// Vive al lado de los contadores de alumnos y contratos y se lee igual, pero
+  /// en rojo. Cuando hay filtro puesto queda encendido y dice cuál, porque los
+  /// otros dos contadores pasan a mostrar el subconjunto filtrado y sin esa
+  /// marca se leerían como si el evento hubiera encogido.
+  Widget _chipMoraToolbar({
+    required int cantidad,
+    required double total,
+    required bool layoutCompact,
+    required VoidCallback onExportar,
+  }) {
+    final activo = _filtroMora.activo;
+    final color = cantidad == 0 && !activo
+        ? Colors.grey
+        : Colors.redAccent.shade700;
+    final chip = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: layoutCompact ? 6 : 10,
+        vertical: layoutCompact ? 2 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: activo ? 0.22 : 0.12),
+        borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+        border: Border.all(
+          color: color.withValues(alpha: activo ? 1 : 0.45),
+          width: activo ? 2 : 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.report_gmailerrorred_rounded,
+            size: layoutCompact ? 13 : 14,
+            color: color,
+          ),
+          SizedBox(width: layoutCompact ? 4 : 6),
+          Text(
+            '$cantidad',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: layoutCompact ? 12 : 13,
+              color: color,
+            ),
+          ),
+          if (total > 0.01 && !_ocultarMontos) ...[
+            SizedBox(width: layoutCompact ? 4 : 6),
+            Text(
+              total.toCurrency(),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: layoutCompact ? 10 : 11,
+                color: color,
+              ),
+            ),
+          ],
+          if (activo) ...[
+            SizedBox(width: layoutCompact ? 3 : 5),
+            Text(
+              _filtroMora.label.toUpperCase(),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: layoutCompact ? 9 : 10,
+                letterSpacing: 0.4,
+                color: color,
+              ),
+            ),
+          ],
+          SizedBox(width: layoutCompact ? 2 : 4),
+          Icon(Icons.arrow_drop_down, size: layoutCompact ? 14 : 16, color: color),
+        ],
+      ),
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        PopupMenuButton<FiltroMora>(
+          tooltip: 'Filtrar por mora',
+          position: PopupMenuPosition.under,
+          initialValue: _filtroMora,
+          onSelected: (v) => setState(() => _filtroMora = v),
+          itemBuilder: (context) => [
+            for (final f in FiltroMora.values)
+              PopupMenuItem<FiltroMora>(
+                value: f,
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    f == _filtroMora
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    color: f == _filtroMora ? Colors.redAccent.shade700 : null,
+                  ),
+                  title: Text(f.label),
+                  subtitle: Text(f.ayuda),
+                ),
+              ),
+          ],
+          child: chip,
+        ),
+        if (activo) ...[
+          const SizedBox(width: 2),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            iconSize: layoutCompact ? 15 : 17,
+            tooltip: 'Quitar el filtro de mora',
+            icon: const Icon(Icons.close),
+            onPressed: () => setState(() => _filtroMora = FiltroMora.todos),
+          ),
+        ],
+        if (cantidad > 0) ...[
+          const SizedBox(width: 2),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            iconSize: layoutCompact ? 16 : 18,
+            tooltip: 'Planilla de mora (PDF) — para llamar',
+            color: Colors.redAccent.shade700,
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            onPressed: onExportar,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Un ícono de la columna ACCIONES.
+  ///
+  /// [habilitado] false lo deja a la vista pero muerto: en baja temporal las
+  /// acciones no se esconden, se apagan, así la fila no cambia de forma.
+  Widget _accionFilaIcono({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    required bool layoutCompact,
+    bool habilitado = true,
+    Color? color,
+  }) {
+    final boton = IconButton(
+      visualDensity: layoutCompact
+          ? VisualDensity.compact
+          : VisualDensity.standard,
+      constraints: BoxConstraints(
+        minWidth: layoutCompact ? 34 : 40,
+        minHeight: layoutCompact ? 34 : 40,
+      ),
+      padding: EdgeInsets.zero,
+      icon: Icon(icon, size: layoutCompact ? 18 : 20, color: color),
+      tooltip: habilitado ? tooltip : null,
+      onPressed: habilitado ? onPressed : () {},
+    );
+    if (habilitado) return boton;
+    return Opacity(opacity: 0.3, child: IgnorePointer(child: boton));
+  }
+
+  /// Menú ⋮ de la fila, solo en modo jefe.
+  Widget _menuJefeFila(
+    ContratoAlumno a, {
+    required bool esBajaTemporal,
+    required bool layoutCompact,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: 'Acciones de jefe',
+      position: PopupMenuPosition.under,
+      // `constraints` acá adentro dimensiona el menú, no el botón: el ancho del
+      // botón sale del ícono y del padding, igual que los otros de la fila.
+      padding: EdgeInsets.zero,
+      iconSize: layoutCompact ? 18 : 20,
+      icon: const Icon(Icons.more_vert),
+      onSelected: (v) {
+        switch (v) {
+          case 'perdonar':
+            _mostrarPerdonarMora(a);
+          case 'baja':
+            _toggleBajaTemporal(a);
+          case 'eliminar':
+            _eliminarAlumnoPermanente(a);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          value: 'perdonar',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              Icons.cleaning_services_rounded,
+              color: Colors.redAccent.shade200,
+            ),
+            title: const Text('Perdonar mora'),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'baja',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              esBajaTemporal
+                  ? Icons.play_circle_outline_rounded
+                  : Icons.pause_circle_outline_rounded,
+              color: esBajaTemporal
+                  ? Colors.greenAccent.shade700
+                  : Colors.orangeAccent,
+            ),
+            title: Text(
+              esBajaTemporal ? 'Reincorporar alumno' : 'Baja temporal',
+            ),
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'eliminar',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+            title: Text('Eliminar definitivamente'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -3497,6 +3769,7 @@ class _DetalleEventoMasivoScreenState
                 contratoBase: alumno,
                 pagos: pagosAlumno,
                 trackedMonto: remanenteMora,
+                recorte: MoraOrigenRecorte.loQueQueda,
               )
             : const <MoraPendientePreviaDetalle>[];
     Set<int> moraCuotasSeleccionadas = {};
@@ -3573,12 +3846,14 @@ class _DetalleEventoMasivoScreenState
       if (montoPendiente <= 0.01 &&
           g > sumDetalles + 0.01 &&
           remanenteMora > 0.01) {
+        // Monto escrito a mano por encima de lo tildado. El excedente va al
+        // arrastre —el bucket más viejo— y adentro se reparte de la cuota más
+        // vieja a la más nueva, igual que el libro mayor.
         montoPendiente = double.parse(
           (g - sumDetalles)
               .clamp(0.0, remanenteMora)
               .toStringAsFixed(2),
         );
-        // Excedente escrito a mano: se atribuye FIFO al arrastre completo.
         detalleArrastre = arrastreItems;
       }
       // La entrada genérica (cuota 0) es solo para el check: no puede llegar al
@@ -3646,13 +3921,56 @@ class _DetalleEventoMasivoScreenState
               }
             }
 
-            void aplicarSeleccionArrastre(int numeroCuota, bool? v) {
-              if (v == true) {
-                arrastreSeleccionado.add(numeroCuota);
+            /// La mora se cobra de la más vieja a la más nueva, así que los
+            /// checks van por prefijo sobre **una sola cola**: primero el
+            /// arrastre (cuotas ya liquidadas) y después el calendario (cuotas
+            /// todavía impagas).
+            ///
+            /// Tildar un ítem tilda todos los anteriores; destildar uno destilda
+            /// todos los siguientes. Es la misma forma que el diálogo de perdón
+            /// usa para las cuotas vencidas.
+            void aplicarSeleccionPrefijo({
+              required bool esArrastre,
+              required int numeroCuota,
+              required bool marcar,
+            }) {
+              final arr = arrastreItems.map((d) => d.numeroCuota).toList()
+                ..sort();
+              final cal = moraDesglose.map((d) => d.numeroCuota).toList()
+                ..sort();
+              // Índice del ítem tocado dentro de la cola combinada.
+              final tocado = esArrastre
+                  ? arr.indexOf(numeroCuota)
+                  : arr.length + cal.indexOf(numeroCuota);
+
+              arrastreSeleccionado.clear();
+              moraCuotasSeleccionadas.clear();
+              if (marcar) {
+                for (var i = 0; i <= tocado; i++) {
+                  if (i < arr.length) {
+                    arrastreSeleccionado.add(arr[i]);
+                  } else {
+                    moraCuotasSeleccionadas.add(cal[i - arr.length]);
+                  }
+                }
               } else {
-                arrastreSeleccionado.remove(numeroCuota);
+                for (var i = 0; i < tocado; i++) {
+                  if (i < arr.length) {
+                    arrastreSeleccionado.add(arr[i]);
+                  } else {
+                    moraCuotasSeleccionadas.add(cal[i - arr.length]);
+                  }
+                }
               }
               recalcMoraMontoDesdeSeleccion();
+            }
+
+            void aplicarSeleccionArrastre(int numeroCuota, bool? v) {
+              aplicarSeleccionPrefijo(
+                esArrastre: true,
+                numeroCuota: numeroCuota,
+                marcar: v == true,
+              );
             }
 
             double montoMoraLineaIngresado() {
@@ -3679,12 +3997,11 @@ class _DetalleEventoMasivoScreenState
             }
 
             void aplicarSeleccionMoraCuota(int numeroCuota, bool? v) {
-              if (v == true) {
-                moraCuotasSeleccionadas.add(numeroCuota);
-              } else {
-                moraCuotasSeleccionadas.remove(numeroCuota);
-              }
-              recalcMoraMontoDesdeSeleccion();
+              aplicarSeleccionPrefijo(
+                esArrastre: false,
+                numeroCuota: numeroCuota,
+                marcar: v == true,
+              );
             }
 
             double pctCargoInformeDesdeCampo() {
@@ -7248,6 +7565,7 @@ class _DetalleEventoMasivoScreenState
               contratoBase: alumno,
               pagos: await repo.getHistorialPagosAlumno(alumno.id),
               trackedMonto: tracked,
+              recorte: MoraOrigenRecorte.loQueQueda,
             )
           : const <MoraPendientePreviaDetalle>[];
 
@@ -7391,11 +7709,21 @@ class _DetalleEventoMasivoScreenState
       final bool reimpresion = esReimpresion ?? (fechaManual != null);
       double? moraRestantePdf = moraPendientePost;
       String? moraOrigenPdf = moraPendienteOrigenPost;
-      if (!reimpresion) {
+      // En una reimpresión el número es el de HOY, no el del día del recibo, así
+      // que se imprime fechado. Callárselo no era más honesto: el papel mostraba
+      // los $25.000 que entraron y nada de los $22.200 que seguían debiéndose,
+      // y se leía como si el pago hubiera saldado la mora.
+      DateTime? moraMedidaEl;
+      // Desglose por cuota para el aviso rojo. La línea en prosa
+      // (`moraOrigenPdf`) queda de red: el recibo la usa solo si esto viene
+      // vacío.
+      var moraDesglosePdf = const <MoraCuotaDetalle>[];
+      var moraArrastrePdf = const <MoraPendientePreviaDetalle>[];
+      {
         // Sin monto del modal hay que calcularlo sí o sí: un recibo que se come
         // el aviso de mora es peor que un recibo que no sale. Con monto ya
         // resuelto, todo esto es cosmético y no puede tumbar la impresión.
-        final bool montoExigido = moraRestantePdf == null;
+        final bool montoExigido = moraRestantePdf == null && !reimpresion;
         try {
           final moraHistPdf = await repo.sumMoraCobradaHistorial(
             alumnoParaPdf.id,
@@ -7404,6 +7732,10 @@ class _DetalleEventoMasivoScreenState
             contrato: alumnoParaPdf,
             moraCobradaHistorial: moraHistPdf,
           );
+          if (reimpresion) {
+            moraRestantePdf = detalle.total;
+            moraMedidaEl = ArTime.nowAr();
+          }
           moraRestantePdf ??= detalle.total;
           // El "viene de" tiene que nombrar las cuotas. El tracked es un solo
           // número en la ficha: de qué cuotas salió se reconstruye del
@@ -7416,6 +7748,7 @@ class _DetalleEventoMasivoScreenState
                     contratoBase: alumnoParaPdf,
                     pagos: await repo.getHistorialPagosAlumno(alumnoParaPdf.id),
                     trackedMonto: detalle.tracked,
+                    recorte: MoraOrigenRecorte.loQueQueda,
                   )
                 : const <MoraPendientePreviaDetalle>[];
             final linea = MoraConceptoRotulo.origenMoraPendienteLinea(
@@ -7425,6 +7758,8 @@ class _DetalleEventoMasivoScreenState
               formatoMonto: (v) => v.toCurrency(),
             );
             if (linea.isNotEmpty) moraOrigenPdf = linea;
+            moraDesglosePdf = detalle.desglose;
+            moraArrastrePdf = trackedDetalle;
           }
         } catch (e) {
           if (montoExigido) rethrow;
@@ -7442,6 +7777,9 @@ class _DetalleEventoMasivoScreenState
         fechaManual: fechaManual,
         moraPendienteRestante: moraRestantePdf,
         moraPendienteOrigen: moraOrigenPdf,
+        moraPendienteDesglose: moraDesglosePdf,
+        moraPendienteArrastre: moraArrastrePdf,
+        moraRestanteMedidaEl: moraMedidaEl,
         esReimpresion: reimpresion,
         medioPago: medioPago,
         montoEfectivoDetalle: montoEfectivoDetalle,

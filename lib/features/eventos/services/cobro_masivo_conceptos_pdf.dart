@@ -101,44 +101,139 @@ void anexarMetadatosMoraDisplay(Map<String, dynamic> line) {
     line['cuotaPrevia'] = numsPend.first;
     return;
   }
+  // Arrastre sin cuota reconstruible. Sin la marca, el recibo lo trataba como
+  // mora suelta y le cambiaba el título al bloque entero.
+  final folded = texto.toLowerCase();
+  if (folded.contains('mora pendiente') ||
+      folded.contains('cuotas ya pagadas')) {
+    line['arrastreGenerico'] = true;
+    return;
+  }
   final nCal = MoraConceptoRotulo.numeroCuotaCalendarioDesdeConcepto(texto);
   if (nCal != null && nCal > 0) {
     line['numeroCuota'] = nCal;
   }
 }
 
-/// Texto del recuadro verde: de qué cuota y si es vencida o remanente.
-String detalleMoraCobradaRecibo(Iterable<Map<String, dynamic>> lineas) {
-  final vencidas = <int>{};
-  final remanentes = <int>{};
+/// Un renglón del detalle de mora en el recibo: rótulo a la izquierda, importe
+/// alineado a la derecha.
+class FilaMoraPdf {
+  final String rotulo;
+  final double monto;
+
+  const FilaMoraPdf({required this.rotulo, required this.monto});
+}
+
+/// Rótulo bolsa de la mora de cuotas ya liquidadas que no se puede atribuir.
+const String rotuloMoraOtrasCuotasPdf = 'Otras cuotas ya pagadas';
+
+/// Rótulo bolsa de la mora que no se puede atribuir a ninguna cuota.
+const String rotuloMoraSinCuotaPdf = 'Mora por pagar fuera de término';
+
+/// Detalle de la mora cobrada en este recibo, una fila por cuota.
+///
+/// **La suma de las filas es siempre igual a [moraSeleccionadaPdf] de las mismas
+/// líneas.** Es la regla que se rompió en la 4.9: la función anterior
+/// (`detalleMoraCobradaRecibo`) descartaba las líneas sin número de cuota, y por
+/// eso el recibo Nº FF677977 rotuló $25.000 como "de la cuota 1" cuando de ahí
+/// salían $5.600. Acá toda línea sin cuota reconstruible cae en un renglón
+/// bolsa: se puede no saber de qué cuota sale un peso, pero no se lo puede
+/// perder.
+///
+/// La mora del calendario (la cuota que se está pagando ahora) y la de arrastre
+/// (la que quedó sin cobrar cuando esa cuota se liquidó) se agrupan por
+/// separado aunque compartan número: son dos deudas distintas de la misma
+/// cuota.
+List<FilaMoraPdf> filasMoraCobradaPdf(Iterable<Map<String, dynamic>> lineas) {
+  final montos = <String, double>{};
+  final rotulos = <String, String>{};
+  final orden = <String, int>{};
+
+  void sumar(String clave, String rotulo, int posicion, double monto) {
+    montos[clave] = (montos[clave] ?? 0) + monto;
+    rotulos[clave] ??= rotulo;
+    orden[clave] ??= posicion;
+  }
+
   for (final c in lineas) {
     if (c['esMora'] != true) continue;
+    final monto = (c['monto'] as num?)?.toDouble() ?? 0;
+    if (monto.abs() <= 0.001) continue;
+    final dias = (c['diasMora'] as num?)?.toInt() ?? 0;
+
     final previa = (c['cuotaPrevia'] as num?)?.toInt();
-    final n = (c['numeroCuota'] as num?)?.toInt();
     if (previa != null && previa > 0) {
-      remanentes.add(previa);
-    } else if (n != null && n > 0) {
-      vencidas.add(n);
+      sumar(
+        'prev:$previa',
+        MoraConceptoRotulo.rotuloCuotaMora(
+          numeroCuota: previa,
+          mesLabel: (c['mesCuotaPrevia'] as String?)?.trim() ?? '',
+          diasMora: dias,
+        ),
+        previa,
+        monto,
+      );
+      continue;
+    }
+
+    final n = (c['numeroCuota'] as num?)?.toInt();
+    if (n != null && n > 0) {
+      sumar(
+        'cal:$n',
+        MoraConceptoRotulo.rotuloCuotaMora(
+          numeroCuota: n,
+          mesLabel: (c['mesLabel'] as String?)?.trim() ?? '',
+          diasMora: dias,
+        ),
+        n,
+        monto,
+      );
+      continue;
+    }
+
+    // Bolsas: van al final, después de toda cuota nombrada.
+    if (c['arrastreGenerico'] == true) {
+      sumar('bolsa:previas', rotuloMoraOtrasCuotasPdf, 1 << 20, monto);
+    } else {
+      sumar('bolsa:suelta', rotuloMoraSinCuotaPdf, 1 << 21, monto);
     }
   }
-  final partes = <String>[];
-  if (vencidas.isNotEmpty) {
-    final ns = vencidas.toList()..sort();
-    final una = ns.length == 1;
-    partes.add(
-      '${una ? 'la' : 'las'} ${fraseCuotasEs(ns)} '
-      '(${una ? 'vencida' : 'vencidas'})',
-    );
-  }
-  if (remanentes.isNotEmpty) {
-    final ns = remanentes.toList()..sort();
-    final una = ns.length == 1;
-    partes.add(
-      '${una ? 'la' : 'las'} ${fraseCuotasEs(ns)} (no cobrada al pagar)',
-    );
-  }
-  if (partes.isEmpty) return 'detallada arriba';
-  return 'de ${partes.join(' y de ')}';
+
+  final claves = montos.keys.toList()
+    ..sort((a, b) {
+      final byOrden = orden[a]!.compareTo(orden[b]!);
+      return byOrden != 0 ? byOrden : a.compareTo(b);
+    });
+
+  return [
+    for (final k in claves)
+      FilaMoraPdf(
+        rotulo: rotulos[k]!,
+        monto: double.parse(montos[k]!.toStringAsFixed(2)),
+      ),
+  ];
+}
+
+/// Recorta [filas] a [maximo] renglones, juntando el resto en uno solo.
+///
+/// El renglón de cierre lleva **la suma de lo recortado**, para que el detalle
+/// siga cerrando con el total del recuadro en cualquier nivel de compactación.
+/// Nunca devuelve una lista vacía teniendo filas: el papel se abrevia, no se
+/// queda mudo.
+List<FilaMoraPdf> recortarFilasMoraPdf(List<FilaMoraPdf> filas, int maximo) {
+  if (maximo < 1 || filas.length <= maximo) return filas;
+  // Una fila del tope la ocupa el renglón de cierre, así que se muestran
+  // `maximo - 1` y el resto se agrupa.
+  final visibles = filas.take(maximo - 1).toList();
+  final resto = filas.skip(maximo - 1).toList();
+  final suma = resto.fold<double>(0, (s, f) => s + f.monto);
+  return [
+    ...visibles,
+    FilaMoraPdf(
+      rotulo: 'y ${resto.length} cuotas más',
+      monto: double.parse(suma.toStringAsFixed(2)),
+    ),
+  ];
 }
 
 String etiquetaDisplayRecibo(Map<String, dynamic> c) {
@@ -795,19 +890,15 @@ String _displayPlan(Map<String, dynamic> c, DateTime? regAr, DateTime? hoyAr) {
 /// cobro de sola mora no tiene ese renglón, y la línea salía como "Mora · 7 d",
 /// huérfana, sin forma de saber a qué cuota correspondía (recibo Nº 0661293D).
 String _displayMora(Map<String, dynamic> c, {required bool anidada}) {
-  final conSubtexto = ((c['subtexto'] as String?) ?? '').trim().isNotEmpty;
-
+  // Las de arrastre viven bajo el título del bloque ("MORA NO COBRADA AL PAGAR"
+  // / "INTERESES POR PAGAR FUERA DE TÉRMINO"), que ya dice qué son. Repetir esa
+  // frase en cada renglón la ponía tres veces en cuatro líneas.
   final previa = (c['cuotaPrevia'] as num?)?.toInt();
   if (previa != null) {
-    if (conSubtexto) return 'Mora no cobrada al pagar la cuota $previa';
-    final mes = (c['mesCuotaPrevia'] as String?)?.trim() ?? '';
-    final dias = (c['diasMora'] as num?)?.toInt() ?? 0;
-    final cuando = mes.isEmpty ? '' : ' de $mes';
-    final atraso = dias > 0
-        ? ' — $dias ${dias == 1 ? 'día' : 'días'} fuera de término'
-        : '';
-    return 'Mora no cobrada al pagar la cuota $previa$cuando$atraso';
+    final mes = (c['mesCuotaPrevia'] as String?)?.trim().split(' ').first ?? '';
+    return mes.isEmpty ? 'Cuota $previa' : 'Cuota $previa ($mes)';
   }
+  if (c['arrastreGenerico'] == true) return 'De cuotas ya pagadas';
   final dias = (c['diasMora'] as num?)?.toInt();
   if (dias != null && dias > 0) {
     final atraso = '$dias ${dias == 1 ? 'día' : 'días'} fuera de término';
@@ -822,12 +913,10 @@ String _displayMora(Map<String, dynamic> c, {required bool anidada}) {
   final nCal = MoraConceptoRotulo.numeroCuotaCalendarioDesdeConcepto(texto);
   if (nCal != null && nCal > 0) return 'Mora de la cuota $nCal';
   final numsPend = MoraConceptoRotulo.numerosCuotaPendienteDesdeConcepto(texto);
-  if (numsPend.length == 1) {
-    return 'Mora no cobrada al pagar la cuota ${numsPend.first}';
-  }
+  if (numsPend.length == 1) return 'Cuota ${numsPend.first}';
   if (texto.toLowerCase().contains('mora pendiente') ||
       texto.toLowerCase().contains('cuotas ya pagadas')) {
-    return 'Mora no cobrada al pagar (cuotas ya pagadas)';
+    return 'De cuotas ya pagadas';
   }
   return 'Mora por pagar fuera de término';
 }

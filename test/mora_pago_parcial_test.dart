@@ -76,16 +76,59 @@ void main() {
       expect(r.detallePendiente.first.montoAtribuido, 3000);
     });
 
-    test('si supera el arrastre, primero calendario y el resto al arrastre', () {
+    test('si supera el arrastre, lo salda entero y el resto va al calendario', () {
+      // El arrastre es de cuotas ya liquidadas y el calendario de cuotas
+      // todavía impagas: el arrastre es siempre el bucket más viejo, así que se
+      // consume entero antes de tocar el calendario.
       final r = MoraConceptoRotulo.repartirMoraParcial(
         montoTotal: 8000,
         calendario: [cuota(5, 6000)],
         pendientePrevias: 4000,
         detallePendiente: [arrastre(2, 4000)],
       );
-      expect(r.calendario.single.interesBruto, 6000);
-      expect(r.pendientePrevias, 2000);
-      expect(r.detallePendiente.single.montoAtribuido, 2000);
+      expect(r.pendientePrevias, 4000, reason: 'el arrastre se salda entero');
+      expect(r.detallePendiente.single.montoAtribuido, 4000);
+      expect(
+        r.calendario.single.interesBruto,
+        4000,
+        reason: 'al calendario le llega solo lo que sobró',
+      );
+    });
+
+    test('un peso de más no da vuelta la imputación', () {
+      // Antes la regla era "si entra justo en el arrastre va todo ahí, si no
+      // va todo al calendario": cobrar \$4.000 imputaba al arrastre y cobrar
+      // \$4.001 imputaba al calendario, sin nada que lo explicara en el papel.
+      List<double> reparto(double monto) {
+        final r = MoraConceptoRotulo.repartirMoraParcial(
+          montoTotal: monto,
+          calendario: [cuota(5, 6000)],
+          pendientePrevias: 4000,
+          detallePendiente: [arrastre(2, 4000)],
+        );
+        return [
+          r.pendientePrevias,
+          r.calendario.fold<double>(0, (s, d) => s + d.interesBruto),
+        ];
+      }
+
+      expect(reparto(4000), [4000, 0]);
+      expect(reparto(4001), [4000, 1]);
+    });
+
+    test('VAREIRO: \$25.000 sobre arrastre \$19.400 y calendario vivo', () {
+      // Recibo Nº FF677977. El arrastre entero primero; al calendario le llega
+      // el resto, y la cuota más vieja del calendario queda parcial.
+      final r = MoraConceptoRotulo.repartirMoraParcial(
+        montoTotal: 25000,
+        calendario: [cuota(5, 15000), cuota(6, 12800, mes: 'Jun 2026')],
+        pendientePrevias: 19400,
+        detallePendiente: [arrastre(1, 19400)],
+      );
+      expect(r.pendientePrevias, 19400);
+      expect(r.detallePendiente.single.numeroCuota, 1);
+      expect(r.calendario.single.numeroCuota, 5);
+      expect(r.calendario.single.interesBruto, 5600);
     });
 
     test('conserva moraDebida para que el recibo no mienta lo adeudado', () {

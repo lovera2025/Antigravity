@@ -186,6 +186,27 @@ class MoraConceptoRotulo {
     }).join(' · ');
   }
 
+  /// Rótulo de una cuota en el detalle de mora: `Cuota 1 (Abr, 14 d)`.
+  ///
+  /// **Sin el monto**: en el recibo el importe se alinea a la derecha del
+  /// renglón, así que meterlo acá lo imprimiría dos veces. La línea corrida de
+  /// [origenMoraPendienteLinea] usa este mismo texto en minúscula y le pega el
+  /// importe atrás, para que las dos formas del papel digan lo mismo.
+  static String rotuloCuotaMora({
+    required int numeroCuota,
+    required String mesLabel,
+    int diasMora = 0,
+  }) {
+    final mes = mesLabel.split(' ').first;
+    final entre = [
+      if (mes.isNotEmpty) mes,
+      if (diasMora > 0) '$diasMora d',
+    ].join(', ');
+    return entre.isEmpty
+        ? 'Cuota $numeroCuota'
+        : 'Cuota $numeroCuota ($entre)';
+  }
+
   /// De dónde viene la mora que queda debiendo, para el aviso del recibo.
   ///
   /// Dos bloques, para que la familia distinga:
@@ -202,13 +223,15 @@ class MoraConceptoRotulo {
     int maxCuotas = 3,
   }) {
     String parte(int numeroCuota, String mesLabel, int diasMora, double monto) {
-      final mes = mesLabel.split(' ').first;
-      final entre = [
-        if (mes.isNotEmpty) mes,
-        if (diasMora > 0) '$diasMora d',
-      ].join(', ');
-      final cuando = entre.isEmpty ? '' : ' ($entre)';
-      return 'cuota $numeroCuota$cuando ${formatoMonto(monto)}';
+      final rotulo = rotuloCuotaMora(
+        numeroCuota: numeroCuota,
+        mesLabel: mesLabel,
+        diasMora: diasMora,
+      );
+      // Minúscula: acá va en medio de una frase ("Mora de cuotas vencidas:
+      // cuota 1 (Abr, 14 d) …"), no como renglón suelto.
+      return '${rotulo[0].toLowerCase()}${rotulo.substring(1)} '
+          '${formatoMonto(monto)}';
     }
 
     String recortar(List<({int cuota, String texto})> items) {
@@ -355,6 +378,14 @@ class MoraConceptoRotulo {
   /// Sufijo de la cuota que este cobro cubre solo en parte.
   static const sufijoParcial = ' (parcial)';
 
+  /// Subtexto de una línea de mora cubierta a medias: de cuánto era.
+  ///
+  /// Solo el "de cuánto era". Cuánto falta en total lo dice **una sola vez** el
+  /// aviso rojo al pie del recibo; repetirlo por línea ponía dos "quedan" con
+  /// números distintos en la misma hoja.
+  static String subtextoParcialMora(double montoPleno) =>
+      'De \$${fmtPesosMora(montoPleno)} de mora de esa cuota';
+
   /// Reparto de un pago **parcial** de mora entre las cuotas involucradas.
   ///
   /// El monto que entrega la familia puede ser menor que la mora seleccionada
@@ -362,10 +393,10 @@ class MoraConceptoRotulo {
   /// su importe completo y el papel termina sumando más de lo que se cobró.
   ///
   /// Orden espejado de `MoraCuotaCalculator.postCobroTrackedOffset`, para que el
-  /// papel no contradiga el saldo que queda en la ficha:
-  ///  - si el pago entra entero en el arrastre, va todo al arrastre;
-  ///  - si no, primero las cuotas vencidas del calendario (de la más vieja a la
-  ///    más nueva) y el resto al arrastre.
+  /// papel no contradiga el saldo que queda en la ficha: **de la más vieja a la
+  /// más nueva**. El arrastre viene de cuotas ya liquidadas y el calendario
+  /// arranca en la primera impaga, así que el arrastre es siempre el bucket más
+  /// viejo y se consume entero antes de tocar el calendario.
   ///
   /// **No hace nada** si lo cobrado alcanza para todo: un cobro de mora completa
   /// y las reimpresiones históricas salen exactamente igual que antes.
@@ -415,15 +446,13 @@ class MoraConceptoRotulo {
         ),
     ]..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
 
-    final double pendAsignado;
-    if (pend > 0.01 && total <= pend + 0.01) {
-      pendAsignado = total;
-      _asignarFifo(arrItems, total);
-    } else {
-      final usadoCal = _asignarFifo(calItems, total);
-      pendAsignado = _r2((total - usadoCal).clamp(0.0, pend));
-      _asignarFifo(arrItems, pendAsignado);
-    }
+    // De la más vieja a la más nueva: primero el arrastre (mora de cuotas ya
+    // liquidadas), después el calendario (cuotas todavía impagas). El tope del
+    // arrastre es [pend] y no la suma de [arrItems], porque puede haber una
+    // parte sin origen reconstruible que igual pertenece a ese bucket.
+    final pendAsignado = _r2(total < pend ? total : pend);
+    _asignarFifo(arrItems, pendAsignado);
+    _asignarFifo(calItems, _r2(total - pendAsignado));
 
     return (
       calendario: [
@@ -610,6 +639,9 @@ class MoraConceptoRotulo {
             if (l['mesCuotaPrevia'] != null)
               'mesCuotaPrevia': l['mesCuotaPrevia'],
             if (l['subtexto'] != null) 'subtexto': l['subtexto'],
+            if (l['montoPleno'] != null) 'montoPleno': l['montoPleno'],
+            if (l['arrastreGenerico'] != null)
+              'arrastreGenerico': l['arrastreGenerico'],
           },
         )
         .toList();
@@ -690,17 +722,12 @@ class MoraConceptoRotulo {
         ),
     ]..sort((a, b) => a.numeroCuota.compareTo(b.numeroCuota));
 
-    // Mismo orden que el libro mayor: si el pago entra entero en el arrastre va
-    // todo ahí; si no, primero el calendario y el resto al arrastre.
-    final double pendAsignado;
-    if (pendiente > 0.01 && total <= pendiente + 0.01) {
-      pendAsignado = _r2(total.clamp(0.0, pendiente));
-      _asignarFifo(arrItems, pendAsignado);
-    } else {
-      final usadoCal = _asignarFifo(calItems, total);
-      pendAsignado = _r2((total - usadoCal).clamp(0.0, pendiente));
-      _asignarFifo(arrItems, pendAsignado);
-    }
+    // Mismo orden que el libro mayor (`postCobroTrackedOffset`): de la más vieja
+    // a la más nueva. El arrastre es siempre el bucket más viejo, así que se
+    // consume entero antes de tocar el calendario.
+    final pendAsignado = _r2(total < pendiente ? total : pendiente);
+    _asignarFifo(arrItems, pendAsignado);
+    _asignarFifo(calItems, _r2(total - pendAsignado));
 
     for (final it in calItems) {
       if (it.asignado <= 0.01) continue;
@@ -714,6 +741,12 @@ class MoraConceptoRotulo {
         // que es la clave que reconocen los detectores de pago_interes_mora).
         if (it.numeroCuota > 0) 'numeroCuota': it.numeroCuota,
         if (it.diasMora > 0) 'diasMora': it.diasMora,
+        // Cuánto se debía por esa cuota. Es lo que después permite decir en el
+        // papel "de $X se cobró $Y" sin recalcular nada.
+        if (it.parcial) ...{
+          'montoPleno': it.pleno,
+          'subtexto': subtextoParcialMora(it.pleno),
+        },
       });
     }
 
@@ -734,7 +767,14 @@ class MoraConceptoRotulo {
           'cuotaPrevia': it.numeroCuota,
           if (it.mesLabel.isNotEmpty) 'mesCuotaPrevia': it.mesLabel,
           if (it.diasMora > 0) 'diasMora': it.diasMora,
-          'subtexto': d.subtextoDetalle,
+          // Este cobro deja saldo en esta cuota: el subtexto dice de cuánto
+          // era lo que había para cobrarle. Cuando la salda —aunque parte se
+          // haya cobrado en su momento— no hay nada que aclarar, y vale más el
+          // origen (cuándo venció, cuánto tardó en pagarse).
+          if (it.parcial) 'montoPleno': it.pleno,
+          'subtexto': it.parcial
+              ? subtextoParcialMora(it.pleno)
+              : d.subtextoDetalle,
         });
       }
       // Lo que quedó sin detalle que lo explique: línea genérica residual. El
@@ -745,6 +785,10 @@ class MoraConceptoRotulo {
           'concepto': conceptoPendientePreviasGenerico,
           'monto': resto,
           'esMora': true,
+          // Sin número de cuota, pero es arrastre igual: sin esta marca el
+          // recibo la trataba como mora suelta y le cambiaba el título al
+          // bloque entero.
+          'arrastreGenerico': true,
         });
       }
     }

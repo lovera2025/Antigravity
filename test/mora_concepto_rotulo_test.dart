@@ -437,6 +437,210 @@ void main() {
       expect(origen.first.numeroCuota, 3);
       expect(origen.first.montoAtribuido, closeTo(8100, 0.01));
     });
+
+    test('un cobro parcial de mora no le borra los días a la cuota', () {
+      // Entran 3.000 de los 6.900 de la C2: queda viva con 3.900. Al
+      // reconstruirla se perdían los días de atraso y el rótulo se quedaba sin
+      // el "23d" que explica el monto.
+      final conPagoParcial = [
+        ...pagos,
+        {
+          'id': 'p4',
+          'concepto': 'Mora pendiente cuota 2 (no cobrada al pagar)',
+          'monto': 3000.0,
+          'monto_gross': 3000.0,
+          'fecha_pago': '2026-07-28T12:00:00.000000+00:00',
+          'anulado': 0,
+          'line_kind': kLineKindInteresMora,
+        },
+      ];
+      final origen = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: conPagoParcial,
+        trackedMonto: 12000,
+      );
+
+      expect(origen.length, 2);
+      expect(origen[0].numeroCuota, 2);
+      expect(origen[0].montoAtribuido, closeTo(3900, 0.01));
+      expect(origen[0].diasMora, 23);
+      expect(origen[0].etiquetaCorta, 'C2 (May) 23d');
+      expect(origen[1].numeroCuota, 3);
+      expect(origen[1].diasMora, 27);
+    });
+  });
+
+  group('MoraOrigenRecorte — el perdón suelta la cuota más vieja (VAREIRO)', () {
+    // Mismo historial que Bernel: tres cuotas base sin una sola línea de mora,
+    // así que el arrastre son $15.000 abiertos en C2 (May) $6.900 y C3 (Jun)
+    // $8.100. Lo que cambia acá es qué se pregunta sobre ese arrastre.
+    final contrato = ContratoAlumno(
+      id: 'perdon-remanente',
+      eventoId: 'ev',
+      nombreAlumno: 'VAREIRO, YOSELIE ANAHI',
+      cantidadAcompanantes: 0,
+      montoTotalPactado: 270000,
+      totalCuotas: 9,
+      cuotasPagadas: 3,
+      saldoDeudor: 180000,
+      createdAt: DateTime.parse('2026-03-30T03:00:00+00:00'),
+    );
+    final pagos = <Map<String, dynamic>>[
+      {
+        'id': 'p1',
+        'concepto': 'Cuota Base (1/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-04-28T21:28:04.595192+00:00',
+        'anulado': 0,
+      },
+      {
+        'id': 'p2',
+        'concepto': 'Cuota Base (2/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-06-23T20:22:45.683166+00:00',
+        'anulado': 0,
+      },
+      {
+        'id': 'p3',
+        'concepto': 'Cuota Base (3/9)',
+        'monto': 30000.0,
+        'monto_gross': 30000.0,
+        'fecha_pago': '2026-07-27T20:08:41.809065+00:00',
+        'anulado': 0,
+      },
+    ];
+
+    List<MoraPendientePreviaDetalle> queQueda(double tracked) =>
+        MoraTrackedOrigen.inferir(
+          contratoBase: contrato,
+          pagos: pagos,
+          trackedMonto: tracked,
+          recorte: MoraOrigenRecorte.loQueQueda,
+        );
+
+    test('perdonar la C2 entera la saca del rótulo, no a la C3', () {
+      // El perdón baja el número en ficha ($15.000 → $8.100) pero no deja
+      // rastro de qué mes se perdonó: el historial sigue diciendo C2 + C3.
+      // Recortar por la cola dejaba nombrada justo la que se quiso perdonar.
+      final queda = queQueda(8100);
+
+      expect(queda.length, 1);
+      expect(queda.first.numeroCuota, 3);
+      expect(queda.first.mesLabel, 'Jun 2026');
+      expect(queda.first.montoAtribuido, closeTo(8100, 0.01));
+      expect(
+        MoraConceptoRotulo.labelPendientePrevias(detalle: queda),
+        'Mora pendiente cuota 3',
+      );
+    });
+
+    test('la regla vieja seguía nombrando la cuota perdonada', () {
+      // Guarda del bug: sin el recorte nuevo, los $8.100 que quedan se imputan
+      // desde la cabeza y el rótulo insiste con la C2 (mayo).
+      final comoAntes = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: pagos,
+        trackedMonto: 8100,
+      );
+
+      expect(comoAntes.first.numeroCuota, 2);
+      expect(
+        MoraConceptoRotulo.labelPendientePrevias(detalle: comoAntes),
+        'Mora pendiente cuotas 2 y 3',
+      );
+    });
+
+    test('un perdón que corta en medio de una cuota la deja recortada', () {
+      // Se perdonan $10.000 de $15.000: la C2 se va entera y a la C3 le quedan
+      // $5.000 de los $8.100. Sigue nombrada, con el monto que de verdad queda.
+      final queda = queQueda(5000);
+
+      expect(queda.length, 1);
+      expect(queda.first.numeroCuota, 3);
+      expect(queda.first.montoAtribuido, closeTo(5000, 0.01));
+      expect(queda.first.diasMora, 27, reason: 'el recorte no toca los días');
+      expect(
+        queda.first.moraCobrada,
+        0,
+        reason: 'un perdón no es plata que entró',
+      );
+      expect(queda.first.moraDebida, closeTo(8100, 0.01));
+    });
+
+    test('sin perdón las dos reglas dicen lo mismo', () {
+      // El caso de la enorme mayoría de los contratos: la cola suma exactamente
+      // lo que hay en ficha, no hay brecha que recortar por ninguna punta.
+      final queda = queQueda(15000);
+      final seCobra = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: pagos,
+        trackedMonto: 15000,
+      );
+
+      expect(queda.map((d) => d.numeroCuota).toList(), [2, 3]);
+      expect(
+        queda.map((d) => d.montoAtribuido).toList(),
+        seCobra.map((d) => d.montoAtribuido).toList(),
+      );
+    });
+
+    test('poner mora a mano por encima del historial no recorta nada', () {
+      // Ajuste positivo (admin escribe un tracked mayor que el que el historial
+      // explica): no hay brecha, y lo que sobra sigue cayendo fuera del
+      // desglose para que el diálogo lo muestre como "sin origen".
+      final queda = queQueda(20000);
+
+      expect(queda.map((d) => d.numeroCuota).toList(), [2, 3]);
+      final total = queda.fold<double>(0, (s, d) => s + d.montoAtribuido);
+      expect(total, closeTo(15000, 0.01));
+    });
+  });
+
+  group('seleccionPerdonRemanentePrefijo', () {
+    // La cola viene de `inferir`, viejo→nuevo. La entrada sin origen
+    // reconstruible lleva el 0 y va al final: por eso no se ordena por número.
+    const cola = [2, 3, 0];
+
+    test('tildar un mes incluye los anteriores', () {
+      expect(
+        MoraCuotaCalculator.seleccionPerdonRemanentePrefijo(
+          ordenViejoANuevo: cola,
+          seleccionActual: const {},
+          tocado: 3,
+          marcar: true,
+        ),
+        {2, 3},
+      );
+    });
+
+    test('destildar un mes saca los posteriores', () {
+      expect(
+        MoraCuotaCalculator.seleccionPerdonRemanentePrefijo(
+          ordenViejoANuevo: cola,
+          seleccionActual: const {2, 3, 0},
+          tocado: 3,
+          marcar: false,
+        ),
+        {2},
+      );
+    });
+
+    test('la entrada sin origen es la última, no la primera', () {
+      // Su número es 0; ordenar por número la pondría al frente y perdonarla
+      // sola dejaría el resto sin tocar, que es justo lo que no se puede
+      // sostener al releer.
+      expect(
+        MoraCuotaCalculator.seleccionPerdonRemanentePrefijo(
+          ordenViejoANuevo: cola,
+          seleccionActual: const {},
+          tocado: 0,
+          marcar: true,
+        ),
+        {2, 3, 0},
+      );
+    });
   });
 
   group('conceptosFinalesDesdePreviewMasivo — mora mixto', () {

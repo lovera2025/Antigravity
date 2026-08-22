@@ -8,6 +8,7 @@ import '../../common/widgets/admin_gate.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
 import '../repositories/contratos_repository.dart';
 import '../services/mora_cuota_calculator.dart';
+import '../services/mora_tracked_origen.dart';
 
 /// Diálogo de perdón por alumno (grilla masivo, modo jefe).
 class PerdonarMoraAlumnoDialog extends ConsumerWidget {
@@ -86,9 +87,24 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
   double _moraHist = 0;
   List<MoraCuotaDetalle> _desgloseNeto = [];
   final Set<int> _cuotasSeleccion = {};
-  bool _incluirTracked = true;
+
+  /// El remanente en ficha, abierto por cuota de origen. Es un solo número en
+  /// la base; de qué cuotas salió se reconstruye del historial.
+  List<MoraPendientePreviaDetalle> _origenTracked = [];
+
+  /// Cuotas del remanente tildadas. `0` es la parte sin origen reconstruible.
+  final Set<int> _trackedSeleccion = {};
 
   bool get _busy => !widget.enabled || _submitting;
+
+  /// Cuánto del remanente está tildado.
+  double get _trackedPerdonado => double.parse(
+    _origenTracked
+        .where((d) => _trackedSeleccion.contains(d.numeroCuota))
+        .fold<double>(0, (s, d) => s + d.montoAtribuido)
+        .clamp(0.0, widget.contrato.moraPendienteTracked)
+        .toStringAsFixed(2),
+  );
 
   @override
   void initState() {
@@ -108,8 +124,9 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
     setState(() {
       _loading = true;
       _desgloseNeto = [];
+      _origenTracked = [];
       _cuotasSeleccion.clear();
-      _incluirTracked = true;
+      _trackedSeleccion.clear();
       _moraHist = 0;
     });
     try {
@@ -124,10 +141,19 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
       final bruto =
           MoraCuotaCalculator.calcularDesglose(widget.contrato, hoy);
       final neto = MoraCuotaCalculator.desglosePendiente(bruto, fifo);
+
+      final tracked =
+          widget.contrato.moraPendienteTracked.clamp(0.0, double.infinity);
+      final origen = tracked > 0.01
+          ? await _origenDelRemanente(repo, tracked)
+          : const <MoraPendientePreviaDetalle>[];
+      if (!mounted) return;
       setState(() {
         _moraHist = hist;
         _desgloseNeto = neto;
+        _origenTracked = origen;
         _cuotasSeleccion.addAll(neto.map((d) => d.numeroCuota));
+        _trackedSeleccion.addAll(origen.map((d) => d.numeroCuota));
         _loading = false;
       });
     } catch (e) {
@@ -137,6 +163,51 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
         SnackBar(content: Text('No se pudo cargar el desglose de mora: $e')),
       );
     }
+  }
+
+  /// Abre el remanente por cuota. Lo que el historial no alcance a explicar
+  /// queda como una entrada residual (cuota 0), tildable igual que las demás:
+  /// es plata que está en la ficha y tiene que poder perdonarse.
+  Future<List<MoraPendientePreviaDetalle>> _origenDelRemanente(
+    ContratosRepository repo,
+    double tracked,
+  ) async {
+    final pagos = await repo.getHistorialPagosAlumno(widget.contrato.id);
+    final origen = MoraTrackedOrigen.inferir(
+      contratoBase: widget.contrato,
+      pagos: pagos,
+      trackedMonto: tracked,
+      recorte: MoraOrigenRecorte.loQueQueda,
+    );
+    final atribuido = origen.fold<double>(0, (s, d) => s + d.montoAtribuido);
+    final resto = double.parse((tracked - atribuido).toStringAsFixed(2));
+    return [
+      ...origen,
+      if (resto > 0.01)
+        MoraPendientePreviaDetalle(
+          numeroCuota: 0,
+          mesLabel: '',
+          montoAtribuido: resto,
+        ),
+    ];
+  }
+
+  /// El remanente se perdona de la más vieja a la más nueva, igual que se
+  /// cobra: tildar un mes incluye los anteriores. El orden es el de la cola que
+  /// devuelve `inferir`, no el número de cuota — la entrada sin origen lleva el
+  /// 0 y va al final.
+  void _toggleTracked(int numeroCuota, bool marcar) {
+    setState(() {
+      final nueva = MoraCuotaCalculator.seleccionPerdonRemanentePrefijo(
+        ordenViejoANuevo: _origenTracked.map((d) => d.numeroCuota).toList(),
+        seleccionActual: _trackedSeleccion,
+        tocado: numeroCuota,
+        marcar: marcar,
+      );
+      _trackedSeleccion
+        ..clear()
+        ..addAll(nueva);
+    });
   }
 
   void _toggleCuota(int numeroCuota, bool marcar) {
@@ -155,17 +226,35 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
 
   MoraPerdonSimulacion? get _sim {
     final sel = widget.contrato;
-    if (_cuotasSeleccion.isEmpty &&
-        (!_incluirTracked || sel.moraPendienteTracked <= 0.01)) {
-      return null;
-    }
+    final tracked = _trackedPerdonado;
+    if (_cuotasSeleccion.isEmpty && tracked <= 0.01) return null;
     return MoraCuotaCalculator.simularPerdonMora(
       contrato: sel,
       numerosCuotaSeleccionados: _cuotasSeleccion,
       moraCobradaHistorial: _moraHist,
       ahoraAr: ArTime.nowAr(),
-      incluirTracked: _incluirTracked,
+      trackedPerdonado: tracked,
     );
+  }
+
+  /// Cómo se nombra en la confirmación lo que se tildó del remanente. Con el
+  /// remanente entero dice el total; con meses sueltos, cuáles.
+  String _labelTrackedElegido() {
+    final elegidas = _origenTracked
+        .where((d) => _trackedSeleccion.contains(d.numeroCuota))
+        .toList();
+    final monto = _trackedPerdonado.toCurrency();
+    if (elegidas.length == _origenTracked.length) {
+      return 'la mora de cuotas ya pagadas ($monto)';
+    }
+    final nombres = elegidas
+        .map(
+          (d) => d.numeroCuota > 0
+              ? 'C${d.numeroCuota}'
+              : 'sin origen identificado',
+        )
+        .join(', ');
+    return 'la mora de cuotas ya pagadas de $nombres ($monto)';
   }
 
   Future<void> _aplicar() async {
@@ -195,8 +284,7 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
         ),
         content: Text(
           sim.soloTracked
-              ? 'Se limpiará la mora de cuotas ya pagadas'
-                  '${sim.incluyeTracked ? ' ${sel.moraPendienteTracked.toCurrency()}' : ''}.\n\n'
+              ? 'Se limpiará de la ficha ${_labelTrackedElegido()}.\n\n'
                   'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
                   'La mora calendario NO se toca'
                   '${sim.cuotasRestantes.isNotEmpty ? ' (queda ${sim.cuotasRestantes.map((d) => 'C${d.numeroCuota}').join(', ')})' : ''}.\n'
@@ -204,7 +292,7 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
                   '${sim.moraOperativaPost.toCurrency()}.\n\n'
                   '¿Continuar?'
               : 'Se perdonará la mora de: ${labels.isEmpty ? '(ninguna cuota)' : labels}'
-                  '${sim.incluyeTracked ? ' + remanente en ficha' : ''}.\n\n'
+                  '${sim.incluyeTracked ? ' + ${_labelTrackedElegido()}' : ''}.\n\n'
                   'Monto ≈ ${sim.montoPerdonado.toCurrency()}\n'
                   '${sim.aplicaExencion ? 'Exención hasta ${ArTime.formatFechaCorta(sim.exentaHasta)}${sim.cubreHastaFinDeMes ? ' (fin de mes)' : ''}.\n' : ''}'
                   'Las cuotas base siguen atrasadas; no se mueve Reg.\n'
@@ -306,8 +394,10 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
           const SizedBox(height: 6),
           Text(
             '${sel.nombreAlumno}\n'
-            'Marcá las cuotas desde la más vieja. Si tildás una, se incluyen las anteriores. '
-            'La mora de cuotas ya pagadas se puede limpiar sola, sin tocar el calendario. '
+            'Cuotas vencidas: marcá desde la más vieja; si tildás una, se incluyen '
+            'las anteriores (el perdón es una exención hasta una fecha). '
+            'La mora de cuotas ya pagadas se elige mes por mes, salteado si querés, '
+            'y se puede limpiar sola sin tocar el calendario. '
             'Las cuotas base siguen atrasadas; solo se congela/perdona el interés.',
             style: TextStyle(
               fontSize: 11.5,
@@ -326,38 +416,62 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
               ),
             )
           else ...[
-            if (_desgloseNeto.isNotEmpty) ...[
-              Row(
-                children: [
+            Row(
+              children: [
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _cuotasSeleccion
+                              ..clear()
+                              ..addAll(
+                                _desgloseNeto.map((d) => d.numeroCuota),
+                              );
+                            _trackedSeleccion
+                              ..clear()
+                              ..addAll(
+                                _origenTracked.map((d) => d.numeroCuota),
+                              );
+                          }),
+                  child: const Text('Todas'),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(() {
+                            _cuotasSeleccion.clear();
+                            _trackedSeleccion.clear();
+                          }),
+                  child: const Text('Ninguna'),
+                ),
+                if (tieneTracked && _desgloseNeto.isNotEmpty)
                   TextButton(
                     onPressed: _busy
                         ? null
                         : () => setState(() {
-                              _cuotasSeleccion
+                              _cuotasSeleccion.clear();
+                              _trackedSeleccion
                                 ..clear()
                                 ..addAll(
-                                  _desgloseNeto.map((d) => d.numeroCuota),
+                                  _origenTracked.map((d) => d.numeroCuota),
                                 );
                             }),
-                    child: const Text('Todas'),
+                    child: const Text('Solo ficha'),
                   ),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _cuotasSeleccion.clear()),
-                    child: const Text('Ninguna'),
+              ],
+            ),
+            if (_desgloseNeto.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 2),
+                child: Text(
+                  'CUOTAS VENCIDAS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                    color: isDark ? Colors.white54 : Colors.grey.shade700,
                   ),
-                  if (tieneTracked)
-                    TextButton(
-                      onPressed: _busy
-                          ? null
-                          : () => setState(() {
-                                _cuotasSeleccion.clear();
-                                _incluirTracked = true;
-                              }),
-                      child: const Text('Solo ficha'),
-                    ),
-                ],
+                ),
               ),
               ..._desgloseNeto.map((d) {
                 final checked = _cuotasSeleccion.contains(d.numeroCuota);
@@ -388,30 +502,72 @@ class _PerdonarMoraFormState extends ConsumerState<PerdonarMoraForm> {
                 );
               }),
             ],
-            if (tieneTracked)
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                checkboxShape: const CircleBorder(),
-                activeColor: Colors.redAccent,
-                value: _incluirTracked,
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() => _incluirTracked = v ?? true),
-                title: const Text(
-                  'Mora de cuotas ya pagadas',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-                subtitle: Text(
-                  '${sel.moraPendienteTracked.toCurrency()}'
-                  '${_cuotasSeleccion.isEmpty && _incluirTracked ? ' · solo limpia ficha, calendario intacto' : ''}',
+            if (tieneTracked && _origenTracked.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 6, bottom: 2),
+                child: Text(
+                  'MORA DE CUOTAS YA PAGADAS · '
+                  '${sel.moraPendienteTracked.toCurrency()}',
                   style: TextStyle(
-                    fontSize: 11.5,
-                    color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                    color: isDark ? Colors.white54 : Colors.grey.shade700,
                   ),
                 ),
               ),
+              // Un checkbox por mes de origen, y se perdona de la más vieja a
+              // la más nueva: tildar junio incluye abril y mayo. La ficha
+              // guarda un monto, no un mes — dejar elegir salteado prometía
+              // algo que al releer no se podía sostener.
+              ..._origenTracked.map((d) {
+                final generica = d.numeroCuota <= 0;
+                final mes = d.mesLabel.split(' ').first;
+                return CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  checkboxShape: const CircleBorder(),
+                  activeColor: Colors.redAccent,
+                  value: _trackedSeleccion.contains(d.numeroCuota),
+                  onChanged: _busy
+                      ? null
+                      : (v) => _toggleTracked(d.numeroCuota, v ?? false),
+                  title: Text(
+                    generica
+                        ? 'Sin origen identificado'
+                        : 'C${d.numeroCuota}${mes.isEmpty ? '' : ' · $mes'}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  subtitle: Text(
+                    generica
+                        ? '${d.montoAtribuido.toCurrency()} · el historial no '
+                              'alcanza para decir de qué cuota salió'
+                        : '${d.diasMora > 0 ? '${d.diasMora}d · ' : ''}'
+                              '${d.montoAtribuido.toCurrency()}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    ),
+                  ),
+                );
+              }),
+              if (_cuotasSeleccion.isEmpty && _trackedPerdonado > 0.01)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Solo limpia ficha, calendario intacto.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+            ],
             if (sim != null) ...[
               const SizedBox(height: 8),
               Text(

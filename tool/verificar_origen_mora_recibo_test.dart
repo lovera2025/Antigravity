@@ -93,6 +93,7 @@ void main() {
               contratoBase: c,
               pagos: pagos,
               trackedMonto: detalle.tracked,
+              recorte: MoraOrigenRecorte.loQueQueda,
             )
           : const <MoraPendientePreviaDetalle>[];
 
@@ -131,7 +132,39 @@ void main() {
       print('${row['evento_nombre']} / ${c.nombreAlumno}');
       print('  cuotas ${c.cuotasPagadas}/${c.totalCuotas} · '
           'tracked ${c.moraPendienteTracked.toCurrency()} · '
+          'ajuste ${c.moraTrackedAjuste.toCurrency()} · '
           'desglose ${detalle.desglose.length} cuota(s)');
+
+      // Cuando la ficha tiene menos plata que la que el historial explica, hubo
+      // un perdón (o un ajuste a mano). Ahí es donde las dos reglas difieren y
+      // conviene ver las dos: la vieja recortaba por la cola y dejaba nombrado
+      // el mes más viejo — justo el que se quiso perdonar.
+      if (detalle.tracked > 0.01) {
+        final vivos = MoraTrackedOrigen.inferir(
+          contratoBase: c,
+          pagos: pagos,
+          trackedMonto: double.maxFinite,
+        );
+        final totalVivo = vivos.fold<double>(0, (s, d) => s + d.montoAtribuido);
+        if ((totalVivo - detalle.tracked).abs() > 0.02) {
+          final comoAntes = MoraTrackedOrigen.inferir(
+            contratoBase: c,
+            pagos: pagos,
+            trackedMonto: detalle.tracked,
+          );
+          String cola(List<MoraPendientePreviaDetalle> l) => l.isEmpty
+              ? '(sin origen)'
+              : l
+                    .map((d) => '${d.etiquetaCorta} '
+                        '${d.montoAtribuido.toCurrency()}')
+                    .join(' · ');
+          print('  ── el historial explica ${totalVivo.toCurrency()} y la '
+              'ficha tiene ${detalle.tracked.toCurrency()}');
+          print('     historial:  ${cola(vivos)}');
+          print('     regla vieja: ${cola(comoAntes)}');
+          print('     regla nueva: ${cola(trackedDetalle)}');
+        }
+      }
       print('  ┌ ATENCIÓN: QUEDA MORA SIN PAGAR — ${detalle.total.toCurrency()}');
       print('  │ En este pago no se cobró.');
       if (linea.isNotEmpty) print('  │ $linea');

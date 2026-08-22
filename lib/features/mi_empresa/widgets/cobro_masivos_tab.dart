@@ -895,6 +895,7 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                 contratoBase: a,
                 pagos: list,
                 trackedMonto: a.moraPendienteTracked,
+                recorte: MoraOrigenRecorte.loQueQueda,
               )
             : const <MoraPendientePreviaDetalle>[];
 

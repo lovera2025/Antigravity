@@ -168,7 +168,7 @@ este caso.
 | `lib/features/eventos/detalle_evento_masivo_screen.dart` | Banderas en el reimprimir por fila; `concepto_ficha` + subtexto; tilde en mora |
 | `lib/features/eventos/services/mora_concepto_rotulo.dart` | `rotuloFichaMora`, `numerosCuotaPendienteDesdeConcepto`, `sufijoNoCobradaAlPagar` |
 | `lib/features/eventos/services/concepto_pago_display.dart` | `concepto_ficha`/`subtexto_ficha`; `_detalleDesdeElConcepto` |
-| `docs/CONTEXTO_MORA_OPERATIVA.md` | Sección "Persistido vs display" + incidente 0 |
+| `docs/CONTEXTO_MORA_OPERATIVA.md` | Sección "Persistido vs display" + incidente VIZGARRA |
 
 **Tests:** `test/mora_concepto_rotulo_test.dart` (`rotuloFichaMora`),
 `test/cobro_pdf_display_test.dart` (mapas armados a mano),

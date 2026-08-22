@@ -927,8 +927,13 @@ class ConceptoPagoDisplay {
     final n = nMeta ?? nTexto ?? 0;
     if (esMora) {
       final arrastre = c['cuotaPrevia'] != null ||
+          c['arrastreGenerico'] == true ||
           folded.contains('mora pendiente') ||
           folded.contains('cuotas ya pagadas');
+      // El arrastre sin cuota reconstruible va al final de su bloque: puesto
+      // antes de una cuota identificada se lee como si fuera más viejo, y el
+      // orden del recibo es justamente de la más vieja a la más nueva.
+      if (arrastre && n <= 0) return 409999;
       return (arrastre ? 400000 : 300000) + n;
     }
     if (folded.contains('silla')) return 200000 + n;

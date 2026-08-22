@@ -263,24 +263,24 @@ void main() {
       anexarMetadatosMoraDisplay(line);
       expect(line['cuotaPrevia'], 3);
       final display = lineasDisplayParaPdf([line]);
-      expect(
-        display.single['display'],
-        'Mora no cobrada al pagar la cuota 3',
-      );
+      // El título del bloque ya dice que es mora no cobrada al pagar: el
+      // renglón solo tiene que decir cuál.
+      expect(display.single['display'], 'Cuota 3');
     });
 
-    test('el recuadro verde distingue vencida vs remanente', () {
+    test('el arrastre sin cuota reconstruible queda marcado como arrastre', () {
+      final line = <String, dynamic>{
+        'concepto': 'Mora pendiente de cuotas ya pagadas (no cobrada al pagar)',
+        'monto': 19400.0,
+        'esMora': true,
+      };
+      anexarMetadatosMoraDisplay(line);
+      // Sin esta marca el recibo la trataba como mora suelta y le cambiaba el
+      // título al bloque entero.
+      expect(line['arrastreGenerico'], isTrue);
       expect(
-        detalleMoraCobradaRecibo([
-          {'esMora': true, 'numeroCuota': 4, 'monto': 4200.0},
-        ]),
-        'de la cuota 4 (vencida)',
-      );
-      expect(
-        detalleMoraCobradaRecibo([
-          {'esMora': true, 'cuotaPrevia': 3, 'monto': 3150.0},
-        ]),
-        'de la cuota 3 (no cobrada al pagar)',
+        lineasDisplayParaPdf([line]).single['display'],
+        'De cuotas ya pagadas',
       );
     });
   });

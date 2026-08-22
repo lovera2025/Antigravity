@@ -113,10 +113,8 @@ void main() {
       final arrastre = display.where((c) => c['arrastre'] == true).toList();
       expect(arrastre.length, 1);
       expect(arrastre.single['anidada'], isNot(true));
-      expect(
-        arrastre.single['display'],
-        'Mora no cobrada al pagar (cuotas ya pagadas)',
-      );
+      // El título del bloque ya dice que es mora no cobrada al pagar.
+      expect(arrastre.single['display'], 'De cuotas ya pagadas');
       // Y va después de la cuota, no intercalada.
       expect(display.last['arrastre'], isTrue);
     });
@@ -293,10 +291,7 @@ void main() {
       final arrastre = display.where((l) => l['arrastre'] == true).toList();
 
       expect(arrastre.length, 1);
-      expect(
-        arrastre.first['display'],
-        'Mora no cobrada al pagar la cuota 3',
-      );
+      expect(arrastre.first['display'], 'Cuota 3');
     });
 
     test('también reconoce el rótulo genérico del modal', () {
