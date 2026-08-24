@@ -15,7 +15,15 @@ param(
     # Preferir esto cuando el texto tenga comillas o varias líneas: pasarlo por
     # -Notes hace que PowerShell lo parta en varios argumentos y gh termine
     # buscando un archivo que no existe.
-    [string]$NotesFile = ""
+    [string]$NotesFile = "",
+    # El cuerpo del release es EXACTAMENTE las novedades, sin la línea
+    # "Instalador Windows de Junior Eventos X.Y.Z.".
+    #
+    # Esa línea es redundante en GitHub —el título y el asset ya lo dicen— y en
+    # la app no es inocua: el aviso de novedades muestra el cuerpo entero
+    # (`plainNotesFromGithubBody` conserva todas las líneas no vacías), así que
+    # una nota de un renglón le aparecía al operador como dos.
+    [switch]$SoloNotas
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,8 +73,13 @@ if ($existente) {
         $texto = Get-Content -Raw -Path $NotesFile -Encoding UTF8
     }
 
-    $cuerpo = "Instalador Windows de Junior Eventos $Version."
-    if ($texto) { $cuerpo = "$cuerpo`r`n`r`n$($texto.Trim())" }
+    if ($SoloNotas) {
+        if (-not $texto) { throw "-SoloNotas necesita -Notes o -NotesFile." }
+        $cuerpo = $texto.Trim()
+    } else {
+        $cuerpo = "Instalador Windows de Junior Eventos $Version."
+        if ($texto) { $cuerpo = "$cuerpo`r`n`r`n$($texto.Trim())" }
+    }
 
     # Por archivo y no por argumento: el cuerpo tiene comillas y saltos de línea.
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "junior-release-$Version.md"
