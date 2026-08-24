@@ -6554,9 +6554,16 @@ class _DetalleEventoMasivoScreenState
                               historicoGrossPorClave,
                             );
 
-                            Future<void> registrarLineaUna(
-                              Map<String, dynamic> conc,
-                            ) async {
+                            // El cobro se arma entero en memoria y se persiste
+                            // de una sola vez. Antes era un `registrarPago` por
+                            // línea —cada uno con su transacción— más dos
+                            // `actualizarContrato` sueltos: si algo fallaba a
+                            // mitad quedaban líneas escritas, el cartel decía
+                            // "Reintentá" y, como no hay deduplicación en
+                            // ninguna parte, el reintento las duplicaba.
+                            final lineasLote = <PagoLoteLinea>[];
+
+                            void agregarLineasDe(Map<String, dynamic> conc) {
                               final cTexto = conc['concepto'] as String;
                               final conceptoPersistido =
                                   MesasExtraUtils.conceptoPagoPersistido(
@@ -6574,16 +6581,16 @@ class _DetalleEventoMasivoScreenState
 
                               if (lineKind == 'cargo_canal_ref') {
                                 if (monto > 0.004) {
-                                  await repo.registrarPago(
-                                    contratoId: alumno.id,
-                                    monto: monto,
-                                    concepto: cTexto,
-                                    montoADescontarDeSaldo: 0,
-                                    descuentoPorcentaje: 0,
-                                    cuotasLiquidadas: 0,
-                                    medioPago: 'Transferencia',
-                                    lineKind: lineKind,
-                                    sesionCajaId: sesionCajaIdCobro,
+                                  lineasLote.add(
+                                    PagoLoteLinea(
+                                      monto: monto,
+                                      concepto: cTexto,
+                                      montoADescontarDeSaldo: 0,
+                                      descuentoPorcentaje: 0,
+                                      cuotasLiquidadas: 0,
+                                      medioPago: 'Transferencia',
+                                      lineKind: lineKind,
+                                    ),
                                   );
                                 }
                                 return;
@@ -6607,32 +6614,28 @@ class _DetalleEventoMasivoScreenState
                                   ? gross
                                   : 0.0;
 
-                              Future<void> uno(
+                              void uno(
                                 double m,
                                 double mg,
                                 String med,
-                                int cq, {
-                                String? conceptoRegistro,
-                                String? lineKindOverride,
-                              }) async {
+                                int cq,
+                              ) {
                                 if (m <= 0.004) return;
-                                await repo.registrarPago(
-                                  contratoId: alumno.id,
-                                  monto: m,
-                                  concepto:
-                                      conceptoRegistro ?? conceptoPersistido,
-                                  montoADescontarDeSaldo: mg,
-                                  descuentoPorcentaje:
-                                      double.tryParse(descStr) ?? 0,
-                                  cuotasLiquidadas: cq,
-                                  medioPago: med,
-                                  lineKind: lineKindOverride ?? lineKind,
-                                  moraPendienteAntesDeLote:
-                                      (lineKindOverride ?? lineKind) ==
-                                          kLineKindInteresMora
-                                      ? moraPendienteEfectivo
-                                      : null,
-                                  sesionCajaId: sesionCajaIdCobro,
+                                lineasLote.add(
+                                  PagoLoteLinea(
+                                    monto: m,
+                                    concepto: conceptoPersistido,
+                                    montoADescontarDeSaldo: mg,
+                                    descuentoPorcentaje:
+                                        double.tryParse(descStr) ?? 0,
+                                    cuotasLiquidadas: cq,
+                                    medioPago: med,
+                                    lineKind: lineKind,
+                                    moraPendienteAntesDeLote:
+                                        lineKind == kLineKindInteresMora
+                                        ? moraPendienteEfectivo
+                                        : null,
+                                  ),
                                 );
                               }
 
@@ -6643,9 +6646,9 @@ class _DetalleEventoMasivoScreenState
                                   !esLineaInteresMora(conc);
 
                               if (mE <= 0.004 && mT > 0.004) {
-                                await uno(mT, gT, 'Transferencia', cCuotas);
+                                uno(mT, gT, 'Transferencia', cCuotas);
                               } else if (mT <= 0.004 && mE > 0.004) {
-                                await uno(mE, gE, 'Efectivo', cCuotas);
+                                uno(mE, gE, 'Efectivo', cCuotas);
                               }
 
                               if (esPlanLinea) {
@@ -6663,16 +6666,16 @@ class _DetalleEventoMasivoScreenState
                                 if (!esLineaCargoCanal(conc)) continue;
                                 final monto = (conc['monto'] as num).toDouble();
                                 if (monto <= 0.004) continue;
-                                await repo.registrarPago(
-                                  contratoId: alumno.id,
-                                  monto: monto,
-                                  concepto: conc['concepto'] as String,
-                                  montoADescontarDeSaldo: 0,
-                                  descuentoPorcentaje: 0,
-                                  cuotasLiquidadas: 0,
-                                  medioPago: 'Transferencia',
-                                  lineKind: kLineKindCargoCanal,
-                                  sesionCajaId: sesionCajaIdCobro,
+                                lineasLote.add(
+                                  PagoLoteLinea(
+                                    monto: monto,
+                                    concepto: conc['concepto'] as String,
+                                    montoADescontarDeSaldo: 0,
+                                    descuentoPorcentaje: 0,
+                                    cuotasLiquidadas: 0,
+                                    medioPago: 'Transferencia',
+                                    lineKind: kLineKindCargoCanal,
+                                  ),
                                 );
                               }
 
@@ -6688,35 +6691,34 @@ class _DetalleEventoMasivoScreenState
                                   );
                               for (final part in partes) {
                                 if (part.net <= 0.004) continue;
-                                await repo.registrarPago(
-                                  contratoId: alumno.id,
-                                  monto: part.net,
-                                  concepto: part.concepto,
-                                  montoADescontarDeSaldo: part.gross,
-                                  descuentoPorcentaje:
-                                      double.tryParse(descStr) ?? 0,
-                                  cuotasLiquidadas: part.cuotasLiquidadas,
-                                  medioPago: part.medio,
-                                  lineKind: part.lineKind,
-                                  moraPendienteAntesDeLote:
-                                      part.lineKind == kLineKindInteresMora
-                                      ? moraPendienteEfectivo
-                                      : null,
-                                  sesionCajaId: sesionCajaIdCobro,
+                                lineasLote.add(
+                                  PagoLoteLinea(
+                                    monto: part.net,
+                                    concepto: part.concepto,
+                                    montoADescontarDeSaldo: part.gross,
+                                    descuentoPorcentaje:
+                                        double.tryParse(descStr) ?? 0,
+                                    cuotasLiquidadas: part.cuotasLiquidadas,
+                                    medioPago: part.medio,
+                                    lineKind: part.lineKind,
+                                    moraPendienteAntesDeLote:
+                                        part.lineKind == kLineKindInteresMora
+                                        ? moraPendienteEfectivo
+                                        : null,
+                                  ),
                                 );
                               }
                             } else {
                               for (final conc in previewSnapshot) {
-                                await registrarLineaUna(conc);
+                                agregarLineasDe(conc);
                               }
                             }
 
-                            await repo.reconciliarMesasEstadoContrato(
-                              alumno.id,
-                            );
-
-                            if (mesasEstadoPatchCaptura.isNotEmpty) {
-                              await repo.actualizarContrato(alumno.id, {
+                            // Mesas y mora iban en dos `actualizarContrato`
+                            // seguidos; las claves son disjuntas, así que van
+                            // juntas en el mismo patch del lote.
+                            final contratoPatchLote = <String, dynamic>{
+                              if (mesasEstadoPatchCaptura.isNotEmpty) ...{
                                 'mesas_extra_estado': mesasEstadoPatchCaptura
                                     .map((e) => e.toJson())
                                     .toList(),
@@ -6729,10 +6731,7 @@ class _DetalleEventoMasivoScreenState
                                     MesasExtraUtils.maxCuotasPagadas(
                                       mesasEstadoPatchCaptura,
                                     ),
-                              });
-                            }
-
-                            await repo.actualizarContrato(alumno.id, {
+                              },
                               'mora_pendiente_tracked': double.parse(
                                 trackedNuevoPersist.toStringAsFixed(2),
                               ),
@@ -6744,9 +6743,19 @@ class _DetalleEventoMasivoScreenState
                               'mora_exencion_reinicia': exencionReiniciaPersist
                                   ? 1
                                   : 0,
-                            });
+                            };
 
-                            await repo.recalcularProgresoContrato(alumno.id);
+                            // Todo el cobro, en una transacción. El recálculo de
+                            // progreso corre adentro y termina reconciliando las
+                            // mesas, así que la llamada suelta que había acá
+                            // antes ya no hace falta.
+                            await repo.registrarPagosLote(
+                              contratoId: alumno.id,
+                              lineas: lineasLote,
+                              contratoPatch: contratoPatchLote,
+                              sesionCajaId: sesionCajaIdCobro,
+                            );
+
                             await ref
                                 .read(cajaAutoSyncServiceProvider)
                                 .afterMassiveMutation(

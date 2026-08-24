@@ -22,6 +22,35 @@ import '../services/mora_tracked_recovery.dart';
 import '../../../models/mesa_extra_item.dart';
 
 /// Repositorio de Contratos de Alumnos (Eventos Masivos) ÔÇö Offline-First.
+/// Una línea de un cobro, tal como la arma el modal de cobro masivo.
+///
+/// Existe para que [ContratosRepository.registrarPagosLote] reciba el cobro
+/// entero de una vez y pueda escribirlo en una sola transacción.
+class PagoLoteLinea {
+  final double monto;
+  final String concepto;
+  final double? montoADescontarDeSaldo;
+  final double descuentoPorcentaje;
+  final int cuotasLiquidadas;
+  final String? medioPago;
+  final String? lineKind;
+
+  /// Marca que el tracked de mora lo maneja quien arma el lote. Ver
+  /// [ContratosRepository.registrarPago].
+  final double? moraPendienteAntesDeLote;
+
+  const PagoLoteLinea({
+    required this.monto,
+    required this.concepto,
+    this.montoADescontarDeSaldo,
+    this.descuentoPorcentaje = 0,
+    this.cuotasLiquidadas = 1,
+    this.medioPago,
+    this.lineKind,
+    this.moraPendienteAntesDeLote,
+  });
+}
+
 class ContratosRepository {
   final SupabaseClient _supabase;
   final ConnectivityService _connectivity;
@@ -112,7 +141,21 @@ class ContratosRepository {
   /// Actualiza un contrato (ej: dar de baja o editar datos).
   Future<void> actualizarContrato(String id, Map<String, dynamic> updates) async {
     final db = await LocalDatabase.instance;
-    
+    await _actualizarContratoEn(db, id, updates);
+  }
+
+  /// Núcleo de [actualizarContrato] que acepta el ejecutor.
+  ///
+  /// Con una transacción como [exec], el update del contrato y su encolado de
+  /// sync se confirman —o se caen— junto con el resto del lote. Lo usa
+  /// [registrarPagosLote]; el resto de la app sigue entrando por
+  /// [actualizarContrato], que es esto mismo sobre la base suelta.
+  Future<void> _actualizarContratoEn(
+    DatabaseExecutor exec,
+    String id,
+    Map<String, dynamic> updates,
+  ) async {
+
     // Serializar arr├®glos para DB Local
     final localUpdates = Map<String, dynamic>.from(updates);
     if (localUpdates.containsKey('nombres_acompanantes') && localUpdates['nombres_acompanantes'] is List) {
@@ -134,8 +177,8 @@ class ContratosRepository {
           _encodeMesasEstadoLocal(localUpdates['mesas_extra_estado']);
     }
 
-    await db.update('contratos_alumnos', localUpdates, where: 'id = ?', whereArgs: [id]);
-    
+    await exec.update('contratos_alumnos', localUpdates, where: 'id = ?', whereArgs: [id]);
+
     final remotePayload = Map<String, dynamic>.from(updates);
     if (remotePayload.containsKey('mesas_extra_estado')) {
       final raw = remotePayload['mesas_extra_estado'];
@@ -146,6 +189,7 @@ class ContratosRepository {
       }
     }
     await SyncQueue.enqueue(
+      executor: exec,
       tabla: 'contratos_alumnos',
       operacion: SyncOperation.update,
       registroId: id,
@@ -208,6 +252,110 @@ class ContratosRepository {
     String? sesionCajaId,
   }) async {
     final db = await LocalDatabase.instance;
+    await db.transaction((txn) async {
+      await _aplicarLineaPagoEn(
+        txn,
+        contratoId: contratoId,
+        monto: monto,
+        concepto: concepto,
+        montoADescontarDeSaldo: montoADescontarDeSaldo,
+        descuentoPorcentaje: descuentoPorcentaje,
+        cuotasLiquidadas: cuotasLiquidadas,
+        medioPago: medioPago,
+        lineKind: lineKind,
+        moraPendienteAntesDeLote: moraPendienteAntesDeLote,
+        sesionCajaId: sesionCajaId,
+      );
+    });
+
+    // Retornar contrato actualizado post-transacci├│n
+    await recalcularProgresoContrato(contratoId);
+
+    final finalRows = await db.query('contratos_alumnos',
+        where: 'id = ?', whereArgs: [contratoId], limit: 1);
+    return _fromLocalRow(finalRows.first);
+  }
+
+  /// Registra **todas** las líneas de un cobro y el patch del contrato en una
+  /// sola transacción.
+  ///
+  /// Antes el modal hacía un [registrarPago] por línea —cada uno con su propia
+  /// transacción— y después dos `actualizarContrato` para la mora y las mesas.
+  /// Si algo fallaba en el medio quedaban líneas persistidas, el modal decía
+  /// "Reintentá", y como no hay deduplicación en ninguna parte, el reintento las
+  /// volvía a insertar: `recalcularProgresoContrato` recalcula el saldo desde
+  /// los pagos, así que el alumno terminaba figurando como que pagó el doble.
+  ///
+  /// Acá o entra todo o no entra nada, encolado de sync incluido: `enqueue`
+  /// acepta el ejecutor de la transacción, así que la cola tampoco puede quedar
+  /// con la mitad de un cobro.
+  ///
+  /// [contratoPatch] son las columnas que el modal calcula por afuera (tracked,
+  /// offset, exención, estado de mesas). Se aplica **después** de las líneas,
+  /// igual que antes, para que gane sobre lo que hayan tocado.
+  ///
+  /// Devuelve el contrato ya recalculado, o `null` si no existe.
+  Future<ContratoAlumno?> registrarPagosLote({
+    required String contratoId,
+    required List<PagoLoteLinea> lineas,
+    Map<String, dynamic> contratoPatch = const {},
+    String? sesionCajaId,
+  }) async {
+    final db = await LocalDatabase.instance;
+
+    await db.transaction((txn) async {
+      for (final l in lineas) {
+        await _aplicarLineaPagoEn(
+          txn,
+          contratoId: contratoId,
+          monto: l.monto,
+          concepto: l.concepto,
+          montoADescontarDeSaldo: l.montoADescontarDeSaldo,
+          descuentoPorcentaje: l.descuentoPorcentaje,
+          cuotasLiquidadas: l.cuotasLiquidadas,
+          medioPago: l.medioPago,
+          lineKind: l.lineKind,
+          moraPendienteAntesDeLote: l.moraPendienteAntesDeLote,
+          sesionCajaId: sesionCajaId,
+        );
+      }
+      if (contratoPatch.isNotEmpty) {
+        await _actualizarContratoEn(txn, contratoId, contratoPatch);
+      }
+    });
+
+    // Fuera de la transacción y una sola vez para todo el lote: antes corría
+    // una vez por línea (adentro de cada `registrarPago`) más otra al final.
+    await recalcularProgresoContrato(contratoId);
+
+    final rows = await db.query(
+      'contratos_alumnos',
+      where: 'id = ?',
+      whereArgs: [contratoId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _fromLocalRow(rows.first);
+  }
+
+  /// Aplica UNA línea de pago dentro de [txn]: inserta el pago, mueve el
+  /// contrato según el concepto y encola las dos cosas.
+  ///
+  /// La comparten [registrarPago] y [registrarPagosLote] para que no puedan
+  /// divergir: es exactamente la misma escritura, y lo único que cambia es
+  /// cuántas líneas entran en la misma transacción.
+  Future<String> _aplicarLineaPagoEn(
+    DatabaseExecutor txn, {
+    required String contratoId,
+    required double monto,
+    required String concepto,
+    double? montoADescontarDeSaldo,
+    double descuentoPorcentaje = 0,
+    int cuotasLiquidadas = 1,
+    String? medioPago,
+    String? lineKind,
+    double? moraPendienteAntesDeLote,
+    String? sesionCajaId,
+  }) async {
     final id = UuidUtils.generate();
     // Sello temporal ESTRICTO del pago (instante UTC preciso). Se muestra en
     // huso America/Argentina/Buenos_Aires v├¡a ArTime.
@@ -230,7 +378,7 @@ class ContratosRepository {
       if (sid != null && sid.isNotEmpty) 'sesion_caja_id': sid,
     };
 
-    await db.transaction((txn) async {
+    {
       final conceptoLower = concepto.toLowerCase();
 
       final bool esInteres =
@@ -315,10 +463,12 @@ class ContratosRepository {
           WHERE id = ?
         ''', [monto, contratoId]);
       }
-    });
+    }
 
-    // Leer los valores actualizados del contrato para sincronizar al cloud
-    final updatedRows = await db.query('contratos_alumnos',
+    // Leer los valores actualizados del contrato para sincronizar al cloud.
+    // Va con el mismo ejecutor: la transacción ve sus propias escrituras, y así
+    // el encolado se confirma o se cae junto con el pago.
+    final updatedRows = await txn.query('contratos_alumnos',
         where: 'id = ?', whereArgs: [contratoId], limit: 1);
     if (updatedRows.isNotEmpty) {
       final contratoActualizado = updatedRows.first;
@@ -335,6 +485,7 @@ class ContratosRepository {
 
       // Encolar sync del contrato actualizado
       await SyncQueue.enqueue(
+        executor: txn,
         tabla: 'contratos_alumnos',
         operacion: SyncOperation.update,
         registroId: contratoId,
@@ -345,18 +496,14 @@ class ContratosRepository {
     // Encolar sync del pago (sin columnas solo-locales).
     final syncPayload = Map<String, dynamic>.from(pagoData)..remove('line_kind');
     await SyncQueue.enqueue(
+      executor: txn,
       tabla: 'pagos_contrato_alumno',
       operacion: SyncOperation.insert,
       registroId: id,
       payload: syncPayload,
     );
 
-    // Retornar contrato actualizado post-transacci├│n
-    await recalcularProgresoContrato(contratoId);
-    
-    final finalRows = await db.query('contratos_alumnos',
-        where: 'id = ?', whereArgs: [contratoId], limit: 1);
-    return _fromLocalRow(finalRows.first);
+    return id;
   }
 
   /// Recalcula los contadores de cuotas de un contrato basándose en el historial de pagos.
