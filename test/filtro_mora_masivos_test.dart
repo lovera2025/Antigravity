@@ -121,6 +121,95 @@ void main() {
     });
   });
 
+  // El chip de mora, la grilla y la planilla tienen que hablar del mismo
+  // conjunto. Mientras el chip ignoró el curso, la búsqueda y hasta el filtro de
+  // mora que él mismo rotulaba, decía "59 · $3.530.504" con 18 filas abajo y un
+  // PDF de $297.788 saliendo de su propio botón.
+  group('cumpleCursoYBusqueda', () {
+    final dosA = alumno('PEREZ', curso: '2');
+    final dosB = alumno('GOMEZ', curso: '2');
+    final tres = alumno('LOPEZ', curso: '3');
+    final todos = [dosA, dosB, tres];
+
+    test('sin curso ni búsqueda no recorta nada', () {
+      expect(todos.where(cumpleCursoYBusqueda).length, 3);
+    });
+
+    test('el curso recorta y respeta espacios de sobra', () {
+      final conEspacios = alumno('RUIZ', curso: '  2  ');
+      expect(
+        [...todos, conEspacios]
+            .where((a) => cumpleCursoYBusqueda(a, cursoDivision: '2'))
+            .map((a) => a.id),
+        ['PEREZ', 'GOMEZ', 'RUIZ'],
+      );
+    });
+
+    test('la búsqueda mira nombre y curso', () {
+      expect(
+        todos.where((a) => cumpleCursoYBusqueda(a, busqueda: 'lop')).map((a) => a.id),
+        ['LOPEZ'],
+      );
+      expect(
+        todos.where((a) => cumpleCursoYBusqueda(a, busqueda: '3')).map((a) => a.id),
+        ['LOPEZ'],
+      );
+    });
+
+    test('curso y búsqueda se combinan, no se pisan', () {
+      expect(
+        todos
+            .where((a) => cumpleCursoYBusqueda(a, cursoDivision: '2', busqueda: 'gom'))
+            .map((a) => a.id),
+        ['GOMEZ'],
+      );
+    });
+
+    test('una búsqueda de solo espacios no filtra', () {
+      expect(todos.where((a) => cumpleCursoYBusqueda(a, busqueda: '   ')).length, 3);
+    });
+  });
+
+  group('el chip y la planilla cuentan lo mismo', () {
+    final conMoraDos = alumno('CON_MORA_2', curso: '2');
+    final sinMoraDos = alumno('SIN_MORA_2', curso: '2');
+    final conMoraTres = alumno('CON_MORA_3', curso: '3');
+    final fichaDos = alumno('FICHA_2', curso: '2');
+    final padron = [conMoraDos, sinMoraDos, conMoraTres, fichaDos];
+
+    final m = <String, MoraDeAlumno>{
+      'CON_MORA_2': mora(vencida: 30400),
+      'SIN_MORA_2': mora(),
+      'CON_MORA_3': mora(vencida: 8000),
+      'FICHA_2': mora(tracked: 19400),
+    };
+
+    /// El conjunto que alimentan el chip y la planilla: los dos recortes juntos.
+    List<String> alcance({String? curso, String busqueda = '', required FiltroMora filtro}) =>
+        padron
+            .where((a) => cumpleCursoYBusqueda(a, cursoDivision: curso, busqueda: busqueda))
+            .where((a) => cumpleFiltroMora(a, m, filtro))
+            .map((a) => a.id)
+            .toList();
+
+    test('el curso recorta el conjunto de mora', () {
+      expect(alcance(filtro: FiltroMora.conMora),
+          ['CON_MORA_2', 'CON_MORA_3', 'FICHA_2']);
+      expect(alcance(curso: '2', filtro: FiltroMora.conMora),
+          ['CON_MORA_2', 'FICHA_2']);
+    });
+
+    test('el filtro por tipo recorta dentro del curso', () {
+      expect(alcance(curso: '2', filtro: FiltroMora.soloNoCobrada), ['FICHA_2']);
+      expect(alcance(curso: '2', filtro: FiltroMora.soloVencida), ['CON_MORA_2']);
+    });
+
+    test('la búsqueda también', () {
+      expect(alcance(busqueda: 'con_mora', filtro: FiltroMora.conMora),
+          ['CON_MORA_2', 'CON_MORA_3']);
+    });
+  });
+
   group('moraVencidaDe', () {
     test('suma el desglose y no cuenta el remanente', () {
       final m = (

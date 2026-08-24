@@ -333,6 +333,51 @@ void main() {
       expect(r.offset, closeTo(6900, 0.01));
     });
 
+    // El caso que antes no tenía puerta: el plan quedó saldado y la mora sigue
+    // viva. Es el final del recorrido de los 73 contratos que hoy arrastran
+    // $1.014.576 en ficha.
+    test('plan saldado: cobrar solo mora baja el arrastre y no exime', () {
+      final r = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: 1200,
+        moraCobradaOffsetActual: 0,
+        moraEsteCobro: 1200,
+        cuotasBaseLiquidadasEnCobro: 0,
+        cuotasBasePagadasPostCobro: 9,
+        // Con saldo cero `calcularDesglose` devuelve vacío: no hay calendario,
+        // solo el arrastre.
+        moraDesglosePreCobro: const [],
+        moraDesgloseNetoPreCobro: const [],
+        moraDesgloseNetoTotal: 0,
+        saldoDeudorPost: 0,
+        fechaCobroAr: DateTime(2026, 8, 24),
+        exencionActual: null,
+        reiniciaActual: false,
+      );
+      expect(r.tracked, closeTo(0, 0.01));
+      expect(r.offset, closeTo(1200, 0.01));
+      // Sin saldo no hay calendario que proteger: la exención no se otorga.
+      expect(r.exentaHasta, isNull);
+    });
+
+    test('plan saldado: pago parcial de la mora deja el resto en ficha', () {
+      final r = MoraCuotaCalculator.postCobroTrackedOffset(
+        moraPendienteTrackedActual: 15000,
+        moraCobradaOffsetActual: 0,
+        moraEsteCobro: 6900,
+        cuotasBaseLiquidadasEnCobro: 0,
+        cuotasBasePagadasPostCobro: 9,
+        moraDesglosePreCobro: const [],
+        moraDesgloseNetoPreCobro: const [],
+        moraDesgloseNetoTotal: 0,
+        saldoDeudorPost: 0,
+        fechaCobroAr: DateTime(2026, 8, 24),
+        exencionActual: null,
+        reiniciaActual: false,
+      );
+      expect(r.tracked, closeTo(8100, 0.01));
+      expect(r.offset, closeTo(6900, 0.01));
+    });
+
     test('cuota base + una sola cuota del arrastre → resto sigue en ficha', () {
       // Mismo caso pero liquidando además la cuota 4, que aún no venció
       // (desglose calendario en cero).

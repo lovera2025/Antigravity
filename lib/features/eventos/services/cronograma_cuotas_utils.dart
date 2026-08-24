@@ -40,6 +40,13 @@ enum ContratoEstadoDeudaKind {
   cuotasAtrasadas,
   moraVencida,
   moraPendiente,
+
+  /// Terminó de pagar las cuotas pero le quedó mora sin cobrar.
+  ///
+  /// No es [liquidado]: el plan está saldado, la deuda no. Mientras los dos
+  /// estados eran el mismo, la ficha decía LIQUIDADO en verde y dos renglones
+  /// más abajo "Mora pendiente: $X" — la misma celda contradiciéndose.
+  planSaldadoConMora,
   alDia,
 }
 
@@ -66,6 +73,7 @@ class CronogramaCuotasUtils {
   static const Color colorMoraVencida = Colors.redAccent;
   static const Color colorMoraPendiente = Colors.deepOrangeAccent;
   static const Color colorLiquidado = Colors.greenAccent;
+  static const Color colorPlanSaldadoConMora = Colors.deepOrangeAccent;
 
   /// Eventos/colegios que conservan su [created_at] real (no Reg unificado).
   static bool excluidoDeRegUnificado({
@@ -244,6 +252,16 @@ class CronogramaCuotasUtils {
     DateTime? ahoraAr,
   }) {
     if (contrato.saldoDeudor <= 0.01) {
+      // El plan saldado no implica que no deba nada: la mora que no se cobró al
+      // liquidar queda en ficha y sobrevive al saldo cero.
+      if (moraPendientePesos > 0.01) {
+        return const ContratoEstadoDeudaUi(
+          kind: ContratoEstadoDeudaKind.planSaldadoConMora,
+          texto: 'PLAN SALDADO · DEBE MORA',
+          color: colorPlanSaldadoConMora,
+          icono: Icons.pending_actions_rounded,
+        );
+      }
       return const ContratoEstadoDeudaUi(
         kind: ContratoEstadoDeudaKind.liquidado,
         texto: 'LIQUIDADO',

@@ -1793,7 +1793,13 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                   ],
                 ),
               ),
-            if (mora.enMora && f.moraPendiente > 0.01)
+            // Solo `moraPendiente`, sin `enMora`: la grilla del evento muestra
+            // esta línea con ese mismo criterio, y `calcular().enMora` mira
+            // únicamente la próxima cuota impaga — no ve el arrastre de cuotas
+            // ya liquidadas ni las que la exención salteó, y con saldo cero da
+            // false de entrada. Esta pantalla escondía así mora que la grilla sí
+            // mostraba: 33 alumnos, $380.380.
+            if (f.moraPendiente > 0.01)
               Text(
                 () {
                   final tracked = f.contrato.moraPendienteTracked

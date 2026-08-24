@@ -38,6 +38,33 @@ enum FiltroMora {
 bool esBajaTemporal(ContratoAlumno a) =>
     a.nombreAlumno.trim().toUpperCase().startsWith('[BAJA]');
 
+/// Recorte por curso y por texto buscado. **Sin** filtro de mora.
+///
+/// Es la regla única de "a qué alumnos está mirando el operador". La usan la
+/// grilla, el chip de mora y la planilla, y por eso vive acá y no adentro de la
+/// pantalla: mientras estuvo escrita tres veces, el chip contaba el evento
+/// entero mientras el PDF que salía de ese mismo chip traía el curso filtrado.
+/// Con un curso elegido el chip decía 59 · $3.530.504 y el papel 14 · $1.107.804.
+///
+/// Se combina con [cumpleFiltroMora], no lo reemplaza: uno recorta por quién se
+/// está mirando y el otro por cuánto debe.
+bool cumpleCursoYBusqueda(
+  ContratoAlumno a, {
+  String? cursoDivision,
+  String busqueda = '',
+}) {
+  if (cursoDivision != null &&
+      cursoDivision.isNotEmpty &&
+      (a.cursoDivision ?? '').trim() != cursoDivision) {
+    return false;
+  }
+  final query = busqueda.trim().toLowerCase();
+  if (query.isEmpty) return true;
+  final nombre = a.nombreAlumno.toLowerCase();
+  final curso = (a.cursoDivision ?? '').toLowerCase();
+  return nombre.contains(query) || curso.contains(query);
+}
+
 /// ¿Este alumno entra en [filtro]?
 ///
 /// Las bajas temporales nunca entran: están suspendidas, su mora está congelada

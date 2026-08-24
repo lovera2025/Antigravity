@@ -791,7 +791,11 @@ class _DetalleEventoMasivoScreenState
       0,
       (sum, a) => sum + a.saldoDeudor,
     );
-    final recaudado = totalPactado - saldoPendiente;
+    // `pactado − saldo` es lo abonado **al plan**, gross y antes de descuento.
+    // No es plata que entró: deja afuera la mora cobrada y el costo por
+    // transferencia. En el Dashboard "recaudado" es `SUM(transacciones)`, que sí
+    // es caja, así que el rótulo no puede ser el mismo.
+    final abonadoPlan = totalPactado - saldoPendiente;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenW = MediaQuery.sizeOf(context).width;
@@ -869,10 +873,10 @@ class _DetalleEventoMasivoScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('RECAUDADO', style: labelStyle),
+                    Text('ABONADO DEL PLAN', style: labelStyle),
                     SizedBox(height: layoutCompact ? 2 : 4),
                     Text(
-                      _ocultarMontos ? '***' : recaudado.toCurrency(),
+                      _ocultarMontos ? '***' : abonadoPlan.toCurrency(),
                       style: montoGrandeStyle.copyWith(color: Colors.green),
                     ),
                   ],
@@ -898,6 +902,22 @@ class _DetalleEventoMasivoScreenState
     );
   }
 
+  /// Los alumnos que el operador está mirando: curso + búsqueda, sin mora.
+  /// La regla vive en `filtro_mora_masivos.dart` para que la comparta la
+  /// planilla y para que un test la pueda fijar.
+  bool _pasaCursoYBusqueda(ContratoAlumno a) => cumpleCursoYBusqueda(
+    a,
+    cursoDivision: _cursoDivisionFiltro,
+    busqueda: _busquedaAlumno,
+  );
+
+  /// El filtro de mora con el que se cuenta y se exporta.
+  ///
+  /// Con el chip en "Todos" igual se habla de mora: el chip cuenta a los que
+  /// deben y la planilla exporta a los que deben, no a los 53 del evento.
+  FiltroMora get _filtroMoraEfectivo =>
+      _filtroMora.activo ? _filtroMora : FiltroMora.conMora;
+
   Widget _buildAlumnosTab() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final bool modoJefe = ref.watch(adminAuthProvider).esModoJefe;
@@ -922,8 +942,6 @@ class _DetalleEventoMasivoScreenState
       );
     }
 
-    final query = _busquedaAlumno.trim().toLowerCase();
-
     final divisionesDisponibles =
         _alumnos
             .where((a) => !a.nombreAlumno.startsWith('[BAJA]'))
@@ -946,27 +964,26 @@ class _DetalleEventoMasivoScreenState
         ),
     };
 
+    // El chip cuenta lo mismo que la grilla muestra y lo mismo que la planilla
+    // imprime: curso, búsqueda y filtro de mora. Antes ignoraba los tres y
+    // rotulaba el filtro igual, así que con "Mora no cobrada al pagar" mostraba
+    // 59 · $3.530.504 cuando abajo había 18 filas por $297.788.
     final alumnosConMora = _alumnos
-        .where((a) => cumpleFiltroMora(a, moraPorAlumno, FiltroMora.conMora))
+        .where(_pasaCursoYBusqueda)
+        .where((a) => cumpleFiltroMora(a, moraPorAlumno, _filtroMoraEfectivo))
         .toList();
     final totalMoraEvento = alumnosConMora.fold<double>(
       0,
       (s, a) => s + (moraPorAlumno[a.id]?.total ?? 0),
     );
 
-    final alumnosFiltrados = _alumnos.where((a) {
-      if (_cursoDivisionFiltro != null &&
-          (_cursoDivisionFiltro!.isNotEmpty) &&
-          (a.cursoDivision ?? '').trim() != _cursoDivisionFiltro) {
-        return false;
-      }
-      // Se combina con el filtro de curso y con la búsqueda, no los reemplaza.
-      if (!cumpleFiltroMora(a, moraPorAlumno, _filtroMora)) return false;
-      if (query.isEmpty) return true;
-      final nombre = a.nombreAlumno.toLowerCase();
-      final curso = (a.cursoDivision ?? '').toLowerCase();
-      return nombre.contains(query) || curso.contains(query);
-    }).toList();
+    // Acá va `_filtroMora` crudo, no el efectivo: en la grilla "Todos" significa
+    // mostrar a todos, mientras que para el chip y la planilla significa "los
+    // que deben mora".
+    final alumnosFiltrados = _alumnos
+        .where(_pasaCursoYBusqueda)
+        .where((a) => cumpleFiltroMora(a, moraPorAlumno, _filtroMora))
+        .toList();
 
     if (_ordenAlfabetico) {
       alumnosFiltrados.sort(
@@ -2469,22 +2486,8 @@ class _DetalleEventoMasivoScreenState
   Future<void> _exportarPlanillaMora(
     Map<String, MoraDeAlumno> moraPorAlumno,
   ) async {
-    final query = _busquedaAlumno.trim().toLowerCase();
-    // Con el chip en "Todos" la planilla igual es de mora: se exporta a los que
-    // deben, no a los 53.
-    final filtro = _filtroMora.activo ? _filtroMora : FiltroMora.conMora;
-
-    bool pasaCursoYBusqueda(ContratoAlumno a) {
-      if (_cursoDivisionFiltro != null &&
-          _cursoDivisionFiltro!.isNotEmpty &&
-          (a.cursoDivision ?? '').trim() != _cursoDivisionFiltro) {
-        return false;
-      }
-      if (query.isEmpty) return true;
-      final nombre = a.nombreAlumno.toLowerCase();
-      final curso = (a.cursoDivision ?? '').toLowerCase();
-      return nombre.contains(query) || curso.contains(query);
-    }
+    // Los mismos dos recortes que usa el chip que dispara esta exportación.
+    final filtro = _filtroMoraEfectivo;
 
     MoraPdfFila filaDe(ContratoAlumno a) {
       final m = moraPorAlumno[a.id];
@@ -2508,7 +2511,7 @@ class _DetalleEventoMasivoScreenState
     }
 
     final activos = _alumnos
-        .where(pasaCursoYBusqueda)
+        .where(_pasaCursoYBusqueda)
         .where((a) => cumpleFiltroMora(a, moraPorAlumno, filtro))
         .toList();
 
@@ -2518,7 +2521,7 @@ class _DetalleEventoMasivoScreenState
     // alumnos no están en ninguna lista.)
     final suspendidos = _alumnos
         .where(esBajaTemporal)
-        .where(pasaCursoYBusqueda)
+        .where(_pasaCursoYBusqueda)
         .where((a) => (moraPorAlumno[a.id]?.total ?? 0) > 0.01)
         .toList();
 
@@ -3653,7 +3656,25 @@ class _DetalleEventoMasivoScreenState
           await cRepo.getContratoById(alumnoFresco.id) ?? alumnoFresco;
     }
     alumno = alumnoFresco;
-    if (alumno.saldoDeudor <= 0) {
+
+    // La mora se lee ANTES de la guarda, y la guarda mira las dos cosas.
+    //
+    // Terminar de pagar el plan no salda la mora: al cobrar la última cuota sin
+    // el interés, el arrastre queda en ficha (`mora_pendiente_tracked`) y el
+    // saldo llega a cero. Con la guarda mirando solo el saldo, esa mora se
+    // quedaba sin ninguna pantalla capaz de cobrarla —la grilla la cuenta en el
+    // chip y la planilla manda a llamar al alumno, pero acá la puerta no abría—.
+    // El modal ya sabe funcionar en modo solo-mora: con saldo cero las deudas de
+    // base, mesa y sillas dan cero y queda en pie el bloque de interés.
+    //
+    // La verificación de caja va antes que todo esto y no se toca.
+    final moraYaCobradaHist = await cRepo.sumMoraCobradaHistorial(alumno.id);
+    final double moraPendienteEfectivo =
+        MoraCuotaCalculator.moraPendienteOperativa(
+          contrato: alumno,
+          moraCobradaHistorial: moraYaCobradaHist,
+        );
+    if (alumno.saldoDeudor <= 0 && moraPendienteEfectivo <= 0.01) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -3666,7 +3687,6 @@ class _DetalleEventoMasivoScreenState
     }
 
     final prefsMedio = await SharedPreferences.getInstance();
-    final moraYaCobradaHist = await cRepo.sumMoraCobradaHistorial(alumno.id);
     final pagosAlumno = await cRepo.getHistorialPagosAlumno(alumno.id);
     final historicoGrossPorClave = grossHistoricoPorConceptoKeyExtended(
       pagosAlumno,
@@ -3773,11 +3793,8 @@ class _DetalleEventoMasivoScreenState
               )
             : const <MoraPendientePreviaDetalle>[];
     Set<int> moraCuotasSeleccionadas = {};
-    final double moraPendienteEfectivo =
-        MoraCuotaCalculator.moraPendienteOperativa(
-          contrato: alumno,
-          moraCobradaHistorial: moraYaCobradaHist,
-        );
+    // `moraPendienteEfectivo` ya se calculó arriba: es el mismo número con el
+    // que la guarda decidió abrir este modal.
     final cronogramaModal = CronogramaCuotasUtils.lineasInformativas(
       alumno,
       moraPendientePesos: moraPendienteEfectivo,
