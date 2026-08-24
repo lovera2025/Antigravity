@@ -3,10 +3,10 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Sábado 22 de agosto de 2026 (el perdón del remanente suelta la cuota más vieja — `MoraOrigenRecorte`)**  
+**Última actualización:** **Lunes 24 de agosto de 2026 (el plan saldado con mora en ficha vuelve a ser cobrable — `planSaldadoConMora`)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
-**Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart` · `test/cobro_pdf_display_test.dart`  
-**Release notes del día:** `docs/CONTEXTO_v4.7.8_2026-08-16.md` · columna `mora_tracked_ajuste` (SQLite v68)
+**Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart` · `test/cobro_pdf_display_test.dart` · `test/filtro_mora_masivos_test.dart` · `test/cronograma_cuotas_utils_test.dart`  
+**Release notes del día:** `docs/CONTEXTO_v4.9.1_2026-08-24.md` · sin migración de base
 
 ---
 
@@ -212,6 +212,9 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 
 | Archivo | Cambio |
 |---------|--------|
+| `cronograma_cuotas_utils.dart` | (v4.9.1) `planSaldadoConMora`: el `return liquidado` temprano ganaba antes de mirar la mora. |
+| `filtro_mora_masivos.dart` | (v4.9.1) `cumpleCursoYBusqueda`: regla única de curso+búsqueda para grilla, chip y planilla. |
+| `contratos_repository.dart` | (v4.9.1) `registrarPagosLote` + `_aplicarLineaPagoEn` + núcleo con ejecutor de `actualizarContrato`. |
 | `mora_cuota_calculator.dart` | `moraPendienteOperativa()` simplificada: desglose offset-adjusted + tracked. |
 | `detalle_evento_masivo_screen.dart` | FIFO usa `moraCobradaAjustada`; tracked solo con pago parcial real; offset se persiste; label "Remanente mora parcial". |
 | `contratos_repository.dart` | Removido snapshot de tracked en `registrarPago` (dialog lo maneja). |
@@ -233,7 +236,7 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 
 | UI | Campo / texto | Cálculo |
 |----|---------------|---------|
-| Grilla — chip MORA | cantidad + total, y filtro por tipo | `moraPendienteOperativaDetallada()` una vez por build; `cumpleFiltroMora` (`filtro_mora_masivos.dart`) |
+| Grilla — chip MORA | cantidad + total, y filtro por tipo | `moraPendienteOperativaDetallada()` una vez por build; recortado por `cumpleCursoYBusqueda` + `cumpleFiltroMora` (`filtro_mora_masivos.dart`) |
 | Planilla de mora (PDF) | hoja para llamar, mayor a menor | `PdfService.generarPlanillaMoraPdf` · filas en `planillaMoraFilasTabla` |
 | Grilla detalle masivo | `Mora pendiente: $…` | `moraPendienteOperativa()` |
 | Grilla (subtítulo naranja) | `C1 (Abr) 59d · C2 (May)…` | `calcularDesglose()` bruto (informativo) |
@@ -243,6 +246,15 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 | Modal | Checkbox maestro | **Incluir mora en este cobro** (siempre visible si hay mora) |
 | Modal | Cuotas vencidas | Opcional: refina monto sugerido |
 | Modal | Remanente parcial | Texto informativo si `tracked > 0` |
+| Grilla — estado de deuda | `PLAN SALDADO · DEBE MORA` | `resolverEstadoUi` con `saldoDeudor <= 0.01 && moraPendientePesos > 0.01` |
+| Cobro masivos | línea `Mora pendiente: $…` | Gate `f.moraPendiente > 0.01`, **sin** `enMora` (ver abajo) |
+
+> ⚠️ `MoraCuotaCalculator.calcular().enMora` mira **solo la próxima cuota impaga**:
+> no ve el arrastre de cuotas ya liquidadas, no ve las cuotas que la exención
+> salteó, y con saldo cero da `false` de entrada. No sirve para decidir si hay
+> mora — para eso está `moraPendienteOperativa()`. Cobro masivos gateaba su línea
+> con `enMora` y escondía mora que la grilla sí mostraba: 33 alumnos, $380.380
+> (24-ago-2026).
 
 ---
 
@@ -250,9 +262,10 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 
 1. **Cobro normal:** Grilla y modal coinciden. El tracked muestra el arrastre acumulado, abierto por cuota.
 2. **Cobro sin mora:** La mora de la cuota pagada queda **en ficha** (se acumula al tracked). Para perdonarla de verdad, usar el perdón admin (Mi Empresa o el botón de la grilla, modo jefe).
-3. **Restaurar mora (admin):** Preferir ajustar Reg sin tracked; si se setea tracked manual, el sistema lo trata como remanente parcial. El monto a mano ahora lleva `mora_tracked_ajuste` y **sobrevive** al sync.
-4. **Perdonar mora (admin):** Exención hasta fin de mes (o corte de prefijo) con `reinicia=false`. El **remanente en ficha va por prefijo**, igual que el calendario: de la más vieja a la más nueva (tildar junio incluye abril y mayo). Lo que el historial no logre atribuir queda como entrada "sin origen identificado", **al final** de la cola. Un perdón **parcial** es tan durable como uno total: `aplicarTrackedDeseado` escribe `mora_tracked_ajuste` con el resto. **No mueve Reg.** El alumno sigue atrasado en cuotas. Recovery post-sync **no degrada** la exención **ni** la ficha (`mora_tracked_ajuste`). Botón por alumno en la grilla masivo (modo jefe). Ver `CONTEXTO_v4.7.8`.
-5. **Migración v49 / v68:** v49 limpia tracked inflado. v68 agrega `mora_tracked_ajuste` (app 4.7.8). Instalar en todas las PCs que sincronizan.
+3. **Plan saldado con mora en ficha (v4.9.1):** cobrar la **última** cuota sin el interés deja `saldoDeudor = 0` y el tracked vivo. `postCobroTrackedOffset` no lo pone en cero y `calcularDesglose` devuelve vacío sin saldo, así que la mora operativa **es** el tracked. Ese alumno se cobra por el mismo modal, que abre en modo solo-mora: entra por la rama `cuotasBaseLiquidadasEnCobro == 0` y **no** otorga exención (la guarda pide `saldoDeudorPost > 0.01`). La ficha lo muestra como `PLAN SALDADO · DEBE MORA`, no como LIQUIDADO. Hasta v4.9.0 la guarda del modal miraba solo el saldo y esa mora no tenía ninguna pantalla que pudiera cobrarla.
+4. **Restaurar mora (admin):** Preferir ajustar Reg sin tracked; si se setea tracked manual, el sistema lo trata como remanente parcial. El monto a mano ahora lleva `mora_tracked_ajuste` y **sobrevive** al sync.
+5. **Perdonar mora (admin):** Exención hasta fin de mes (o corte de prefijo) con `reinicia=false`. El **remanente en ficha va por prefijo**, igual que el calendario: de la más vieja a la más nueva (tildar junio incluye abril y mayo). Lo que el historial no logre atribuir queda como entrada "sin origen identificado", **al final** de la cola. Un perdón **parcial** es tan durable como uno total: `aplicarTrackedDeseado` escribe `mora_tracked_ajuste` con el resto. **No mueve Reg.** El alumno sigue atrasado en cuotas. Recovery post-sync **no degrada** la exención **ni** la ficha (`mora_tracked_ajuste`). Botón por alumno en la grilla masivo (modo jefe). Ver `CONTEXTO_v4.7.8`.
+6. **Migración v49 / v68:** v49 limpia tracked inflado. v68 agrega `mora_tracked_ajuste` (app 4.7.8). Instalar en todas las PCs que sincronizan.
 
 ---
 
@@ -271,6 +284,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 | Fecha | Qué |
 |-------|-----|
+| 24-ago-2026 (**v4.9.1**) | **El plan saldado con mora en ficha vuelve a ser cobrable.** La guarda del modal miraba solo el saldo, así que un alumno que terminaba de pagar debiendo mora quedaba sin ninguna pantalla capaz de cobrarle, mientras el chip lo contaba y la planilla lo mandaba a llamar. Nuevo estado `planSaldadoConMora` (“PLAN SALDADO · DEBE MORA”): antes esa ficha decía **LIQUIDADO en verde** con “Mora pendiente” dos renglones abajo. Cobro masivos deja de gatear su línea de mora con `enMora`, que no ve el arrastre — eran 33 alumnos y $380.380 que la grilla ya mostraba. **Chip:** pasa a contar lo mismo que la grilla y que su propia planilla (curso + búsqueda + filtro de mora); ignoraba los tres y rotulaba el filtro igual, así que con “Mora no cobrada al pagar” decía 59 · $3.530.504 con 18 filas abajo. Regla única en `cumpleCursoYBusqueda`. **Cobro atómico:** `registrarPagosLote` mete las líneas y el patch del contrato en una sola transacción, encolado de sync incluido; antes una falla a mitad dejaba líneas escritas y el reintento las duplicaba. Ver `CONTEXTO_v4.9.1_2026-08-24.md`. |
 | 22-ago-2026 | **El perdón del remanente suelta la cuota más vieja** (`MoraOrigenRecorte`). El rótulo del arrastre se recorta por la **cabeza** cuando la pregunta es "qué queda debiéndose" y por la cola cuando es "de qué cuotas salió lo que entró". El perdón del remanente pasa a **prefijo** (`seleccionPerdonRemanentePrefijo`). Además: un cobro parcial de mora ya no le borra los días de atraso a la cuota. Caso VAREIRO, abajo. |
 | 21-ago-2026 (**v4.9**) | **La mora se cobra de la más vieja a la más nueva**, siempre: el arrastre se consume entero antes del calendario, en la ficha (`postCobroTrackedOffset`), en las líneas del papel (`repartirMoraParcial` / `lineasPdfDesdePreviewMora`) y en los checks del modal (prefijo sobre la cola combinada). **Recibo:** verde = lo que entró (“Pago parcial: la mora era de $X”), rojo = lo que falta (“FALTA PAGAR DE MORA”); nunca los dos diciendo lo mismo. En **reimpresión** el rojo ahora sale **fechado** (“FALTA PAGAR DE MORA AL DD/MM/AAAA” + “Es la mora al día de hoy, no la del día de este recibo”) y el verde solo dice “Es un pago parcial de la mora”, sin el total pre-cobro: sumar el restante de hoy daría un total que nunca existió. Omitir el aviso era peor — el papel mostraba lo que entró y nada de lo que seguía debiéndose. Además, y los renglones de arrastre dejan de repetir el título del bloque (`Cuota 1 (May)`, `De cuotas ya pagadas`). Se eliminó `detalleMoraCobradaRecibo`. **Perdón:** el remanente se abre por cuota de origen (`simularPerdonMora(trackedPerdonado:)`); el corte va por prefijo, igual que el calendario (corregido el 22-ago, ver abajo). **Grilla:** chip MORA con filtro por tipo + planilla de mora en PDF para llamar (`generarPlanillaMoraPdf`, ajustada con `_ajustarParaPaginas`). Arneses: `tool/recibo_muestra_vareiro_test.dart`, `tool/planilla_mora_muestra_test.dart`. |
 | 16-ago-2026 (**v4.7.8**, v68) | **Perdón durable:** `mora_tracked_ajuste` (SQLite + Supabase). Recovery: `tracked = max(0, historial + ajuste)`. Botón perdonar en cada alumno (modo jefe). No mueve Reg. Ver `CONTEXTO_v4.7.8_2026-08-16.md`. |
@@ -285,6 +299,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 ## Documentos relacionados
 
+- **`docs/CONTEXTO_v4.9.1_2026-08-24.md`** — plan saldado con mora, alcance del chip, cobro atómico.
 - **`docs/CONTEXTO_v4.7.8_2026-08-16.md`** — perdón durable (`mora_tracked_ajuste`) + botón por alumno.
 - **`docs/CONTEXTO_SYNC_v4.1.6.md`** — sync offline, mesas, instalador v4.1.6–4.1.7 (24–25-jun-2026).
 - **`docs/CONTEXTO_COBRO_PARCIALES_SALDO.md`** — saldo fantasma con adelantos/parciales, saneamiento `recalcular_contrato`, casos Chamorro/Ayala/Díaz Leiva (30-jun-2026).
