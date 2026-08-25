@@ -156,14 +156,20 @@ aviso dentro de la app muestre un solo renglón.
 
 ---
 
-## FALTA PROBAR EN LA APP
+## PROBADO EN LA APP
 
-Nada de esto se pudo ejercitar desde el arnés: son cosas de mirar.
+Nada de esto se podía ejercitar desde el arnés: son cosas de mirar, y se miraron
+con el 4.9.2 ya instalado.
 
-- Que el chip de cada cobro coincida con el colegio del alumno.
-- Que los retiros y los otros egresos vayan **sin** chip.
-- El panel de EFECTIVO y el de TRANSFERENCIA, incluidas las filas `(mixto)`.
-- Achicar la ventana: ni el nombre ni el chip tienen que desbordar.
+**Verificado sobre una sesión ya cerrada del día anterior** —mejor caso que la
+sesión de hoy: una sesión vieja tiene la mezcla real de colegios, que es la que
+motivó el cambio—. Todos los cobros de la lista muestran su chip y el colegio
+corresponde.
+
+Lo que no se recorrió punto por punto y queda para la primera oportunidad, sin
+bloquear nada: el panel de EFECTIVO / TRANSFERENCIA —en particular las filas
+`(mixto)`, que son las únicas que además llevan el rótulo del desglose— y achicar
+la ventana hasta que el nombre tenga que recortar.
 
 Cotejo del dato para una sesión concreta, read-only:
 
