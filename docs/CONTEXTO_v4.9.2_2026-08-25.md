@@ -139,6 +139,16 @@ repositorios), ninguno nuevo.
   el dato, el chip desaparecería solo ahí.
 - `6d` — sin institución no explota; la fila va sin chip.
 
+**Después de publicar** se eliminó `installer/junior_eventos.iss`, un segundo
+script de Inno Setup que no compilaba nadie. No era una copia vieja del bueno:
+tenía **otro `AppId`**, y el `AppId` es lo que Inno usa para reconocer una app ya
+instalada — ese instalador no actualizaba Junior Eventos, ponía un segundo Junior
+Eventos al lado, con su propia entrada en Programas y sus accesos directos, sobre
+la misma base local. Aparte copiaba archivos a mano (`.exe`, `data\*`, `*.dll`) en
+vez de la carpeta Release entera, no cerraba la app abierta y no pedía admin. El
+único que se compila es `junior_eventos_setup.iss`, el que nombra
+`build_installer.ps1`.
+
 **Release publicado:** `v4.9.2` → commit `255172d`, asset
 `Setup.Junior.Eventos.v4.9.2.exe` (32.618.232 bytes). El cuerpo del release es
 exactamente `Nuevas características.`, publicado con `-SoloNotas` para que el
@@ -173,11 +183,6 @@ ORDER BY p.fecha_pago DESC;
 —`SAGRADO CORAZON · cuota base 5/9`—, que es el que ya se apaga cuando el papel
 aprieta. Hora, nombre y monto no se tocarían y la hoja seguiría entrando en una
 carilla, porque ese `pw.Text` es de `maxLines: 1` y no cambia el alto.
-
-**`installer/junior_eventos.iss` quedó congelado en 4.9.0.** Hay dos `.iss` en
-`installer/` y solo se compila `junior_eventos_setup.iss`. Los dos escriben el
-mismo `OutputBaseFilename`, así que compilar el equivocado genera un instalador
-con el número de versión de otra época.
 
 **Sigue vigente todo lo de `CONTEXTO_v4.9.1_2026-08-24.md`**: el subtítulo naranja
 de la grilla con el bruto, la higiene de `detalle_evento_masivo_screen.dart` y las
