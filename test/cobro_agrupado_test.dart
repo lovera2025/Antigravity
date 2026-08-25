@@ -16,6 +16,7 @@ IngresoDetallado ing({
   Duration desde = Duration.zero,
   String fuente = 'Masivo',
   String? lineKind,
+  String? institucion,
   String? id,
 }) {
   return IngresoDetallado(
@@ -29,6 +30,7 @@ IngresoDetallado ing({
     medioPago: medio,
     sesionCajaId: 's-1',
     contratoAlumnoId: contratoId,
+    institucion: institucion,
     lineKind: lineKind,
   );
 }
@@ -325,6 +327,43 @@ void main() {
       expect(sumaEf, brutoEfectivo);
       expect(sumaTr, brutoTransf);
       expect(_sumaGrupos(grupos), brutoEfectivo + brutoTransf);
+    });
+
+    test('6c · la institución sobrevive al grupo y a las dos mitades', () {
+      // El chip de colegio de la fila de caja sale de acá. En un cobro mixto la
+      // pantalla dibuja la fila entera y además cada mitad en el panel de su
+      // medio: si `parte()` perdiera el dato, el chip desaparecería solo ahí.
+      final ingresos = [
+        ing(
+          monto: 20000,
+          concepto: 'Cuota Base (4/9)',
+          institucion: 'SAGRADO CORAZON',
+        ),
+        ing(
+          monto: 18000,
+          concepto: 'Cuota Base (5/9)',
+          medio: 'Transferencia',
+          desde: const Duration(milliseconds: 30),
+          institucion: 'SAGRADO CORAZON',
+        ),
+      ];
+      final grupos = agruparIngresosPorCobro(ingresos);
+
+      expect(grupos.length, 1);
+      final g = grupos.first;
+      expect(g.esMixto, isTrue);
+      expect(g.institucion, 'SAGRADO CORAZON');
+      expect(g.parte(transferencia: false).institucion, 'SAGRADO CORAZON');
+      expect(g.parte(transferencia: true).institucion, 'SAGRADO CORAZON');
+    });
+
+    test('6d · sin institución no explota: la fila va sin chip', () {
+      // Hay contratos viejos con la columna vacía, y los cobros que no son de
+      // masivos nunca la tienen.
+      final grupos = agruparIngresosPorCobro([
+        ing(monto: 1000, concepto: 'Cuota Base (1/9)'),
+      ]);
+      expect(grupos.single.institucion, isNull);
     });
 
     test('7 · eventos particulares del mismo segundo no se fusionan', () {

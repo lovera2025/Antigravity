@@ -82,6 +82,13 @@ class CobroAgrupado {
     return lineas.isEmpty ? null : medioPagoLabel(lineas.first.medioPago);
   }
 
+  /// Colegio del alumno, o `null` cuando la fila no lo tiene.
+  ///
+  /// Getter y no campo: todas las líneas de un cobro son del mismo contrato, así
+  /// que alcanza con la primera, y así el dato viaja solo a través de [parte] sin
+  /// depender de que alguien se acuerde de copiarlo.
+  String? get institucion => lineas.isEmpty ? null : lineas.first.institucion;
+
   /// Resumen corto de qué se pagó: `"cuota base 4/9, int. mora Jul"`.
   ///
   /// Es contexto, no plata: es lo primero que se sacrifica cuando el papel no

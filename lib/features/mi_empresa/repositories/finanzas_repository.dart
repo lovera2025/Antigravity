@@ -60,7 +60,7 @@ class FinanzasRepository {
       SELECT
         p.id, p.monto, p.concepto, p.fecha_pago as created_at, p.medio_pago,
         p.sesion_caja_id, p.contrato_alumno_id, p.line_kind,
-        ca.nombre_alumno, ca.evento_id,
+        ca.nombre_alumno, ca.evento_id, ca.institucion,
         ev.tipo as evento_tipo
       FROM pagos_contrato_alumno p
       JOIN contratos_alumnos ca ON p.contrato_alumno_id = ca.id
@@ -149,6 +149,7 @@ class FinanzasRepository {
           medioPago: r['medio_pago']?.toString(),
           sesionCajaId: r['sesion_caja_id']?.toString(),
           contratoAlumnoId: r['contrato_alumno_id']?.toString(),
+          institucion: r['institucion']?.toString(),
           lineKind: r['line_kind']?.toString(),
         ),
       );
@@ -202,7 +203,7 @@ class FinanzasRepository {
       SELECT
         p.id, p.monto, p.concepto, p.fecha_pago as created_at, p.medio_pago,
         p.sesion_caja_id, p.contrato_alumno_id, p.line_kind,
-        ca.nombre_alumno, ca.evento_id,
+        ca.nombre_alumno, ca.evento_id, ca.institucion,
         ev.tipo as evento_tipo
       FROM pagos_contrato_alumno p
       JOIN contratos_alumnos ca ON p.contrato_alumno_id = ca.id
@@ -227,6 +228,7 @@ class FinanzasRepository {
         medioPago: r['medio_pago']?.toString(),
         sesionCajaId: r['sesion_caja_id']?.toString(),
         contratoAlumnoId: r['contrato_alumno_id']?.toString(),
+        institucion: r['institucion']?.toString(),
         lineKind: r['line_kind']?.toString(),
       );
     }).toList();

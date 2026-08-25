@@ -23,6 +23,13 @@ class IngresoDetallado {
   /// fusionados en una fila, poniendo la plata de una familia en la de otra.
   final String? contratoAlumnoId;
 
+  /// Solo `fuente == 'Masivo'`: colegio del alumno (`contratos_alumnos.institucion`).
+  ///
+  /// Es texto libre copiado del cliente del evento masivo al guardar el alumno,
+  /// no una entidad con id: puede venir vacío. La vista no dibuja el chip cuando
+  /// no hay valor, en vez de inventar un "Sin colegio".
+  final String? institucion;
+
   /// Solo `fuente == 'Masivo'`: `interes_mora` / `cargo_canal_ref` cuando la fila
   /// lo tiene. Clasifica mora y recargo sin adivinar por el texto del concepto.
   ///
@@ -44,6 +51,7 @@ class IngresoDetallado {
     this.medioPago,
     this.sesionCajaId,
     this.contratoAlumnoId,
+    this.institucion,
     this.lineKind,
   });
 

@@ -1158,14 +1158,28 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    m.titulo,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      // Solo el nombre va Flexible: el chip se mide primero y se
+                      // queda entero, y si la ventana aprieta es el nombre el
+                      // que recorta con `…`. Un apellido a medias se sigue
+                      // reconociendo; media sigla de colegio, no.
+                      Flexible(
+                        child: Text(
+                          m.titulo,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if ((m.institucion ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        _chipInstitucion(m.institucion!, muted, isDark),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -1359,6 +1373,46 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   }
 }
 
+/// Colegio del alumno, al lado del nombre en la fila del movimiento.
+///
+/// Una sesión mezcla varias instituciones —siete en una tarde normal—, así que
+/// sin esto la única forma de saber de dónde salió la plata es reconocer al
+/// alumno de memoria.
+///
+/// Va gris neutro a propósito: en esta pantalla el color significa medio de pago
+/// (verde efectivo, violeta transferencia, naranja mixto) y teñir el chip
+/// rompería esa lectura. Y va acá arriba y no en el renglón de conceptos porque
+/// ese renglón se corta con `…` justo en los cobros más cargados —mora, recargo,
+/// varias cuotas—, que son los que más ganas dan de saber de qué colegio son.
+Widget _chipInstitucion(
+  String texto,
+  Color muted,
+  bool isDark,
+) => ConstrainedBox(
+  // El colegio más largo de la base mide 20 caracteres y entra holgado. El tope
+  // es contra un nombre cargado con la mano: que se corte el chip, no la fila.
+  constraints: const BoxConstraints(maxWidth: 150),
+  child: Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: muted.withValues(alpha: 0.25)),
+    ),
+    child: Text(
+      texto.trim().toUpperCase(),
+      style: TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
+        color: muted,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    ),
+  ),
+);
+
 enum _MovKind { ingreso, retiroCaja, otroEgreso }
 
 class _Movimiento {
@@ -1368,6 +1422,10 @@ class _Movimiento {
   final String? subtitulo;
   final String? medioPago;
   final _MovKind kind;
+
+  /// Solo ingresos: colegio del alumno, como chip al lado del nombre. Los retiros
+  /// y los egresos lo dejan en `null` — no pertenecen a ninguna institución.
+  final String? institucion;
 
   /// Solo [retiroCaja]: permite anular el egreso desde la lista (PIN admin).
   final Egreso? retiroParaEliminar;
@@ -1387,6 +1445,7 @@ class _Movimiento {
     required this.kind,
     this.subtitulo,
     this.medioPago,
+    this.institucion,
     this.retiroParaEliminar,
     this.montoEfectivo,
     this.montoTransferencia,
@@ -1402,6 +1461,7 @@ class _Movimiento {
     titulo: c.alumno,
     subtitulo: c.resumenConceptos,
     medioPago: c.medioUnico ?? 'MIXTO',
+    institucion: c.institucion,
     kind: _MovKind.ingreso,
     montoEfectivo: c.esMixto ? c.montoEfectivo : null,
     montoTransferencia: c.esMixto ? c.montoTransferencia : null,
@@ -1571,14 +1631,24 @@ class _DetalleBucketSheet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  nombre,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        nombre,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if ((c.institucion ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      _chipInstitucion(c.institucion!, muted, isDark),
+                    ],
+                  ],
                 ),
                 Text(
                   '${ArTime.formatHora(c.fecha)} · ${c.resumenConceptos}',
