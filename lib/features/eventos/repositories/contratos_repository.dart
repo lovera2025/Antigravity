@@ -975,12 +975,40 @@ class ContratosRepository {
         }
       }
 
+      // Exención local que todavía no subió: `toJson` omite la clave cuando la
+      // nube la trae vacía, y el INSERT OR REPLACE la dejaría en el default,
+      // borrando el perdón de la única máquina que lo tiene. Mismo criterio
+      // que SyncEngine._pullTable: la nube manda, salvo que no traiga nada.
+      final localMoraRows = await db.query(
+        'contratos_alumnos',
+        columns: ['id', 'mora_exenta_hasta', 'mora_exencion_reinicia'],
+        where: 'evento_id = ?',
+        whereArgs: [eventoId],
+      );
+      final localExencion = {
+        for (final r in localMoraRows)
+          r['id'] as String: (
+            hasta: (r['mora_exenta_hasta'] as String?)?.trim(),
+            reinicia: r['mora_exencion_reinicia'],
+          ),
+      };
+
       final batch = db.batch();
       for (final row in list) {
         final id = row['id'] as String;
         if (pendingIds.contains(id)) continue;
 
-        batch.insert('contratos_alumnos', _toLocalRow(ContratoAlumno.fromJson(row)), 
+        final localRow = _toLocalRow(ContratoAlumno.fromJson(row));
+        final cloudExenta = (row['mora_exenta_hasta'] as String?)?.trim();
+        if (cloudExenta == null || cloudExenta.isEmpty) {
+          final local = localExencion[id];
+          final hasta = local?.hasta;
+          if (hasta != null && hasta.isNotEmpty) {
+            localRow['mora_exenta_hasta'] = hasta;
+            localRow['mora_exencion_reinicia'] = local?.reinicia ?? 1;
+          }
+        }
+        batch.insert('contratos_alumnos', localRow,
           conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);

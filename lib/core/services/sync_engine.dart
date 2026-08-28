@@ -1042,24 +1042,42 @@ class SyncEngine {
           final cid = cleanRow['id'] as String;
           final insertRow = Map<String, dynamic>.from(cleanRow);
           final preserved = preservedContratoMoraLocal[cid];
-          insertRow['mora_cobrada_offset'] = preserved?.offset ?? 0;
-          final exenta = preserved?.exentaHasta;
-          if (exenta != null && exenta.isNotEmpty) {
-            insertRow['mora_exenta_hasta'] = exenta;
+
+          // La nube ya tiene las columnas de mora, así que manda ella: las
+          // filas con cambios locales sin subir quedaron afuera más arriba,
+          // por el guard de pendingIds. Antes se forzaba el valor local acá y
+          // eso era correcto mientras la nube no las tuviera; ahora impediría
+          // que el perdón del jefe llegue a la máquina de operarios.
+          //
+          // La exención viaja como par (hasta + reinicia): de nada sirve la
+          // fecha sin la permanencia, porque la mora vuelve apenas la fecha
+          // pasa. Si la nube no la trae, es un perdón viejo que el
+          // `_cleanForRemote` anterior nunca dejó subir: se conserva el par
+          // local, que es la única copia que existe.
+          final cloudExenta = (insertRow['mora_exenta_hasta'] as String?)?.trim();
+          if (cloudExenta == null || cloudExenta.isEmpty) {
+            final localExenta = preserved?.exentaHasta;
+            if (localExenta != null && localExenta.isNotEmpty) {
+              insertRow['mora_exenta_hasta'] = localExenta;
+              insertRow['mora_exencion_reinicia'] = preserved?.reinicia ?? 1;
+            }
           }
-          final fechaRef = preserved?.fechaReferencia;
-          if (fechaRef != null && fechaRef.isNotEmpty) {
-            insertRow['mora_fecha_referencia'] = fechaRef;
+
+          final cloudFechaRef =
+              (insertRow['mora_fecha_referencia'] as String?)?.trim();
+          if (cloudFechaRef == null || cloudFechaRef.isEmpty) {
+            final localFechaRef = preserved?.fechaReferencia;
+            if (localFechaRef != null && localFechaRef.isNotEmpty) {
+              insertRow['mora_fecha_referencia'] = localFechaRef;
+            }
           }
-          insertRow['mora_exencion_reinicia'] = preserved?.reinicia ?? 1;
+
           final localAjuste = preserved?.trackedAjuste ?? 0;
           final cloudAjuste =
               (insertRow['mora_tracked_ajuste'] as num?)?.toDouble() ?? 0;
-          // Nube en 0 / sin columna no pisa un perdón local.
+          // Nube en 0 no pisa un perdón local que todavía no subió.
           insertRow['mora_tracked_ajuste'] =
-              localAjuste.abs() > 0.01 && cloudAjuste.abs() <= 0.01
-                  ? localAjuste
-                  : (cloudAjuste.abs() > 0.01 ? cloudAjuste : localAjuste);
+              cloudAjuste.abs() > 0.01 ? cloudAjuste : localAjuste;
           batch.insert(
             table,
             insertRow,
@@ -1144,12 +1162,16 @@ class SyncEngine {
   }
 
   /// Filtra payload antes de subir: solo columnas de nube, sin campos solo SQLite.
+  ///
+  /// Los cuatro campos de mora operativa (`mora_exenta_hasta`,
+  /// `mora_exencion_reinicia`, `mora_cobrada_offset`, `mora_fecha_referencia`)
+  /// se borraban acá porque no existían en Supabase. Eso hacía que el perdón de
+  /// mora se guardara bien en la PC del jefe y nunca llegara a la de operarios:
+  /// subía `mora_tracked_ajuste` —la única de las cinco que sí existía— y la
+  /// exención, que es la que apaga el calendario, se perdía en silencio.
+  /// Ya están en la nube, así que viajan como cualquier otra columna.
   Map<String, dynamic> _cleanForRemote(String table, Map<String, dynamic> row) {
     final copy = Map<String, dynamic>.from(row);
-    copy.remove('mora_cobrada_offset');
-    copy.remove('mora_exenta_hasta');
-    copy.remove('mora_exencion_reinicia');
-    copy.remove('mora_fecha_referencia');
     copy.remove('line_kind');
 
     final cleaned = _cleanForSqlite(table, copy);
