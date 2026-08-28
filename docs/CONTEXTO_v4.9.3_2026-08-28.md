@@ -135,6 +135,46 @@ Los otros 12 tienen la próxima cuota sin vencer (31/8 o 30/9), así que jefe y
 operario coincidían en $0. Son **latentes**: divergen cuando pase el vencimiento si
 el perdón sigue sin estar en la nube.
 
+### Lo que se vio recién al abrir la base local
+
+Ese cuadro estaba hecho **solo con datos de la nube**, y subestimaba el problema. Con
+el `data.db` del jefe a la vista (`Documents\Junior Eventos\data.db` — con espacio, no
+`JuniorEventos` como dice el comentario de `local_database.dart`) apareció esto:
+
+| Campo | Contratos con valor propio | Había en Supabase |
+|---|---|---|
+| `mora_exenta_hasta` | 156 | 0 |
+| `mora_cobrada_offset` | 183 | 0 |
+| `mora_tracked_ajuste` | 15 | 14 |
+| `mora_fecha_referencia` | 3 | 0 |
+
+**12 contratos divergían de verdad, por $436.260** de mora que la notebook le habría
+cobrado a familias que no la debían. No eran los 12 latentes estimados: son otros
+alumnos y el problema arranca en **junio**, no en agosto.
+
+- **10 perdones** (`reinicia = 0`): Moreira, Arrieta, los dos Espíndola, Barrios,
+  Romero, Fernández, Toledo, Álvarez y Espinoza. Son permanentes: no se arreglaban
+  solos nunca.
+- **2 exenciones de rutina** post-cobro: Lezcano y Pared, que pasaban de $8.400 a
+  $26.700.
+
+De las 156 exenciones locales, **10 son perdones** y 146 salieron de cobros normales
+(`postCobroTrackedOffset` deja exención a fin de mes con `reinicia = 1`). Las de
+rutina también cuentan: mueven el vencimiento efectivo aunque ya hayan pasado.
+
+**Se subió el estado completo** de los cuatro campos desde la base del jefe (197
+contratos con algún valor propio), con `coalesce` para no pisar nada que la nube ya
+tuviera. Verificado campo por campo: 156/156 exenciones, 10/10 perdones, 183/183
+offsets, 15/15 ajustes, y las sumas de offset (1.753.566,67) y ajuste (−324.243,50)
+coinciden al centavo. La nube quedó como espejo exacto de esa máquina.
+
+**Trampa en el camino, anotada para la próxima:** el generador del SQL usaba
+`int(r[2] or 1)` para `mora_exencion_reinicia`. En Python `0 or 1` da `1`, así que
+convertía **todos los perdones en exenciones de rutina** —justo la permanencia que se
+quería preservar— sin fallar en ningún lado. Se agarró comparando contra una versión
+previa del mismo archivo. Cualquier script de rescate que toque este campo tiene que
+contar los `reinicia = 0` antes y después.
+
 **Reparación de los 2, por SQL y no por la app.** La build instalada *lee* esas
 columnas —el allowlist de `_cleanForSqlite` ya las incluía— pero no las escribe, así
 que rehacer el perdón desde la app no habría servido hasta tener la 4.9.3 puesta. Se
@@ -156,8 +196,8 @@ exención permanente.
   No había valores varados ahí —esa columna sí existía—, pero cambiarla no aportaba
   nada y sí agregaba riesgo.
 - **El filtro `line_kind`** de `_cleanForRemote`, que sigue siendo local-only.
-- **Los 12 latentes.** Se dejaron como estaban: no molestan hoy y conviene rehacerlos
-  desde la app con las dos máquinas ya actualizadas.
+- **La base local del jefe.** El rescate se leyó en modo `?mode=ro`; no se escribió una
+  sola fila ahí. La nube se alineó a esa máquina, no al revés.
 
 ---
 
@@ -197,9 +237,16 @@ Para la primera oportunidad, en este orden:
 
 ## PENDIENTE PARA OTRA TANDA
 
-**Los 12 latentes**, antes del 31/8. Con ambas PCs en la 4.9.3, comparar jefe vs
-operario y rehacer desde la app los que difieran. Consulta de partida: contratos con
-`mora_tracked_ajuste < -0.01` y `mora_exenta_hasta IS NULL`.
+**La PC de oficina.** Los perdones se hacen en **las dos** máquinas, y este rescate
+salió de una sola. Esa otra base puede tener exenciones que acá no están, y hay que
+sacarlas **antes** de instalarle la 4.9.3: con la 4.9.2 el pull conserva lo local
+—`_pullTable` fuerza el valor local— así que su estado sigue intacto, pero con la
+4.9.3 manda la nube y lo que no esté subido se pisa. El procedimiento es el mismo:
+leer `Documents\Junior Eventos\data.db` en `?mode=ro`, comparar contra la nube y
+subir lo que falte.
+
+Ojo aparte: en la 4.9.2 el `_pullByEvento` sigue borrando exenciones locales al
+refrescar masivos, así que esa base se degrada sola mientras no se actualice.
 
 **Un test del contrato de sync.** Lo que falló acá no fue una cuenta sino un acuerdo
 entre dos esquemas, y eso hoy no lo cubre nada. Lo más barato que lo habría agarrado:
