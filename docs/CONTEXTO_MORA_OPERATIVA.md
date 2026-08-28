@@ -3,10 +3,10 @@
 > **Referencia para Cursor / equipo:** `CONTEXTO_MORA_OPERATIVA` · `mora pendiente grilla modal` · `fix tracked carry-over` · `migración v49`  
 > Si en un chat futuro decís *"leé el contexto de mora"*, *"mora operativa"* o *"fix remanente carry-over"*, apuntá a este archivo.
 
-**Última actualización:** **Lunes 24 de agosto de 2026 (el plan saldado con mora en ficha vuelve a ser cobrable — `planSaldadoConMora`)**  
+**Última actualización:** **Viernes 28 de agosto de 2026 (el perdón cruza entre las dos PCs — cuatro columnas de mora que nunca se crearon en Supabase)**  
 **Archivo:** `docs/CONTEXTO_MORA_OPERATIVA.md`  
 **Tests:** `test/mora_pendiente_display_test.dart` · `test/mora_concepto_rotulo_test.dart` · `test/cobro_pdf_display_test.dart` · `test/filtro_mora_masivos_test.dart` · `test/cronograma_cuotas_utils_test.dart`  
-**Release notes del día:** `docs/CONTEXTO_v4.9.1_2026-08-24.md` · sin migración de base
+**Release notes del día:** `docs/CONTEXTO_v4.9.3_2026-08-28.md` · **con migración de base** (`20260828000000_mora_exencion_columns.sql`; va **antes** que el instalador)
 
 ---
 
@@ -151,7 +151,46 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 
 ## Incidentes previos
 
-### 0. VAREIRO — perdonar abril y que abril siguiera ahí (22-ago-2026)
+### 0. MOREIRA — el perdón que se veía en una PC y no en la otra (28-ago-2026)
+
+- **Síntoma:** el jefe le perdonó la mora en la PC de oficina y la ficha quedó en $0.
+  En la notebook de operarios el mismo alumno seguía con la mora corriendo: 89 días,
+  **$92.783**. Las dos máquinas con la 4.9.2 instalada. Mismo caso en ARRIETA
+  ($75.027).
+- **Causa:** de los cinco campos del perdón, en Supabase existían **dos**
+  (`mora_pendiente_tracked` y `mora_tracked_ajuste`). `mora_exenta_hasta`,
+  `mora_exencion_reinicia`, `mora_cobrada_offset` y `mora_fecha_referencia` se
+  agregaron al SQLite local (v44, v52, v56, v61) y **la migración de la nube nunca se
+  escribió**. `SyncEngine._cleanForRemote` las borraba del payload antes de subir —lo
+  correcto mientras no existieran, porque si no PostgREST habría rechazado el update
+  entero y frenado la sincronización de todos los contratos—. Así, subía el ajuste y
+  la exención se perdía **sin un solo error**: el pendiente bajaba a cero y todo
+  parecía bien.
+- **Por qué el ajuste solo no alcanza:** `mora_tracked_ajuste` protege la ficha; lo
+  que apaga el calendario es la exención. Con `tracked = 0`, `pendienteDisplay`
+  devuelve `max(f, 0) = f` —la fórmula pura—, así que poner la ficha en cero no
+  perdona nada por sí solo.
+- **Fix:** migración `20260828000000_mora_exencion_columns.sql` (las cuatro columnas;
+  `mora_exencion_reinicia` va `smallint` y no `boolean`, porque `payloadForRemote`
+  manda `1`/`0`). Se sacan los cuatro `remove` de `_cleanForRemote`. En el merge del
+  pull pasa a mandar la nube: forzar el valor local era correcto cuando no existían y
+  ahora es justo lo que impide que el perdón cruce. La exención viaja como **par
+  indivisible** (hasta + reinicia): la fecha sin la permanencia no alcanza, porque la
+  mora vuelve apenas la fecha pasa. Si la nube no trae exención se conserva la local,
+  que es un perdón viejo y la única copia que existe. Mismo criterio en
+  `contratos_repository._pullByEvento`, que reescribía el contrato sin preservar nada
+  y borraba el perdón **en la propia máquina del jefe** al refrescar masivos.
+- **Reparación:** por SQL y no por la app. La 4.9.2 *lee* esas columnas pero no las
+  escribe, así que rehacer el perdón desde la app no habría servido. Se escribió lo
+  mismo que `payloadPerdonMora`: `mora_exenta_hasta = 2026-08-31` y
+  `mora_exencion_reinicia = 0`.
+- **El orden importa:** la migración va **antes** que el instalador. Al revés, la app
+  manda una columna que no existe y PostgREST corta el update completo.
+- **Quedan 12 latentes:** contratos con `mora_tracked_ajuste < -0.01` y
+  `mora_exenta_hasta IS NULL`. Hoy no molestan porque su cuota no venció; hay que
+  rehacerlos desde la app antes del 31/8, con las dos PCs ya en la 4.9.3.
+
+### 1. VAREIRO — perdonar abril y que abril siguiera ahí (22-ago-2026)
 
 - **Síntoma:** remanente $16.600 rotulado "cuotas 1, 2 y 3" (abril, mayo, junio). Se
   perdonaron $5.600 —exactamente la mora de abril— esperando que abril
@@ -173,7 +212,7 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
 - **Arnés:** `flutter test tool/verificar_origen_mora_recibo_test.dart --dart-define=NOMBRE=vareiro`
   (solo lectura) imprime la cola del historial y el rótulo bajo las dos reglas.
 
-### 1. VIZGARRA — la mora cobrada que la ficha llamaba "no cobrada" (10-ago-2026)
+### 2. VIZGARRA — la mora cobrada que la ficha llamaba "no cobrada" (10-ago-2026)
 
 - **Síntoma:** recibo Nº 11408158 (08/07/2026): `Interés mora (cuota base — este cobro)
   $3.150`. El Estado de cuenta, del mismo movimiento, `Mora pendiente cuota 3 (no cobrada
@@ -189,18 +228,18 @@ MoraCuotaCalculator.postCobroTrackedOffset(...)
   igual que `getUltimosPagosLote`.
 - **Arnés:** `flutter test tool/recibo_muestra_vizgarra_test.dart`.
 
-### 2. Barrientos — grilla inflaba mora (28-jun-2026)
+### 3. Barrientos — grilla inflaba mora (28-jun-2026)
 
 - **Síntoma:** Grilla ~$8.400; modal ~$600 tras cobrar $7.800 de mora.
 - **Fix:** Grilla y cobro masivos pasan a `moraPendienteOperativa()`.
 
-### 3. Ayala / restore — tercera línea fantasma (28-jun-2026)
+### 4. Ayala / restore — tercera línea fantasma (28-jun-2026)
 
 - **Síntoma:** 0/9 cuotas, cero pagos; modal mostraba "cuotas ya pagadas" $9.000.
 - **Fix temporal:** `remanenteOperativo()` ignora tracked con 0 cuotas pagadas.
 - **Fix definitivo (v49):** Tracked ya no almacena carry-over; migración limpia DB.
 
-### 4. ARROSPIDE / TOLEDO — double-counting mora (29-jun-2026)
+### 5. ARROSPIDE / TOLEDO — double-counting mora (29-jun-2026)
 
 - **Síntoma:** Modal mostraba desglose $8,700 + remanente "cuotas sin liquidar" $8,700 = total $17,400 (doble conteo).
 - **Causa raíz:** Al confirmar cobro sin cobrar mora, `trackedNuevoPostCobro = moraPendienteEfectivo` (incluía calendario completo). Eso inflaba tracked con mora de cuotas aún vencidas, que luego se duplicaba con el desglose vivo.
@@ -284,6 +323,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 | Fecha | Qué |
 |-------|-----|
+| 28-ago-2026 (**v4.9.3**, migración Supabase) | **El perdón cruza entre las dos PCs.** De los cinco campos del perdón, cuatro nunca se crearon en Supabase: se agregaron al SQLite local (v44, v52, v56, v61) y la migración de la nube quedó sin escribir. `_cleanForRemote` los borraba del payload —correcto mientras no existieran, porque si no PostgREST rechazaba el update entero— así que subía `mora_tracked_ajuste` y **la exención se perdía sin un solo error**: el jefe veía la mora perdonada, el operario la veía corriendo. Nueva migración `20260828000000_mora_exencion_columns.sql`; en el merge del pull pasa a mandar la nube, con la exención tratada como **par indivisible** (hasta + reinicia) y la excepción de conservar la local cuando la nube no trae ninguna. Se arregla también `_pullByEvento`, que borraba el perdón en la máquina del jefe al refrescar masivos. Casos MOREIRA y ARRIETA reparados por SQL; quedan 12 latentes. **La migración va antes que el instalador.** Ver `CONTEXTO_v4.9.3_2026-08-28.md`. |
 | 24-ago-2026 (**v4.9.1**) | **El plan saldado con mora en ficha vuelve a ser cobrable.** La guarda del modal miraba solo el saldo, así que un alumno que terminaba de pagar debiendo mora quedaba sin ninguna pantalla capaz de cobrarle, mientras el chip lo contaba y la planilla lo mandaba a llamar. Nuevo estado `planSaldadoConMora` (“PLAN SALDADO · DEBE MORA”): antes esa ficha decía **LIQUIDADO en verde** con “Mora pendiente” dos renglones abajo. Cobro masivos deja de gatear su línea de mora con `enMora`, que no ve el arrastre — eran 33 alumnos y $380.380 que la grilla ya mostraba. **Chip:** pasa a contar lo mismo que la grilla y que su propia planilla (curso + búsqueda + filtro de mora); ignoraba los tres y rotulaba el filtro igual, así que con “Mora no cobrada al pagar” decía 59 · $3.530.504 con 18 filas abajo. Regla única en `cumpleCursoYBusqueda`. **Cobro atómico:** `registrarPagosLote` mete las líneas y el patch del contrato en una sola transacción, encolado de sync incluido; antes una falla a mitad dejaba líneas escritas y el reintento las duplicaba. Ver `CONTEXTO_v4.9.1_2026-08-24.md`. |
 | 22-ago-2026 | **El perdón del remanente suelta la cuota más vieja** (`MoraOrigenRecorte`). El rótulo del arrastre se recorta por la **cabeza** cuando la pregunta es "qué queda debiéndose" y por la cola cuando es "de qué cuotas salió lo que entró". El perdón del remanente pasa a **prefijo** (`seleccionPerdonRemanentePrefijo`). Además: un cobro parcial de mora ya no le borra los días de atraso a la cuota. Caso VAREIRO, abajo. |
 | 21-ago-2026 (**v4.9**) | **La mora se cobra de la más vieja a la más nueva**, siempre: el arrastre se consume entero antes del calendario, en la ficha (`postCobroTrackedOffset`), en las líneas del papel (`repartirMoraParcial` / `lineasPdfDesdePreviewMora`) y en los checks del modal (prefijo sobre la cola combinada). **Recibo:** verde = lo que entró (“Pago parcial: la mora era de $X”), rojo = lo que falta (“FALTA PAGAR DE MORA”); nunca los dos diciendo lo mismo. En **reimpresión** el rojo ahora sale **fechado** (“FALTA PAGAR DE MORA AL DD/MM/AAAA” + “Es la mora al día de hoy, no la del día de este recibo”) y el verde solo dice “Es un pago parcial de la mora”, sin el total pre-cobro: sumar el restante de hoy daría un total que nunca existió. Omitir el aviso era peor — el papel mostraba lo que entró y nada de lo que seguía debiéndose. Además, y los renglones de arrastre dejan de repetir el título del bloque (`Cuota 1 (May)`, `De cuotas ya pagadas`). Se eliminó `detalleMoraCobradaRecibo`. **Perdón:** el remanente se abre por cuota de origen (`simularPerdonMora(trackedPerdonado:)`); el corte va por prefijo, igual que el calendario (corregido el 22-ago, ver abajo). **Grilla:** chip MORA con filtro por tipo + planilla de mora en PDF para llamar (`generarPlanillaMoraPdf`, ajustada con `_ajustarParaPaginas`). Arneses: `tool/recibo_muestra_vareiro_test.dart`, `tool/planilla_mora_muestra_test.dart`. |
@@ -299,6 +339,7 @@ flutter test test/mora_pendiente_display_test.dart
 
 ## Documentos relacionados
 
+- **`docs/CONTEXTO_v4.9.3_2026-08-28.md`** — el perdón cruza entre las dos PCs; las cuatro columnas de mora que faltaban en Supabase y por qué la migración va antes que el instalador.
 - **`docs/CONTEXTO_v4.9.1_2026-08-24.md`** — plan saldado con mora, alcance del chip, cobro atómico.
 - **`docs/CONTEXTO_v4.7.8_2026-08-16.md`** — perdón durable (`mora_tracked_ajuste`) + botón por alumno.
 - **`docs/CONTEXTO_SYNC_v4.1.6.md`** — sync offline, mesas, instalador v4.1.6–4.1.7 (24–25-jun-2026).
