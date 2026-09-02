@@ -4651,7 +4651,6 @@ class _DetalleEventoMasivoScreenState
                 await PdfService.generarResumenAbonarAlumno(
                   alumno: alumno,
                   evento: widget.evento,
-                  saldoActualPlan: alumno.saldoDeudor,
                   subtotalLiquidacion: sumLiquido,
                   totalAbonar: totalEsperado,
                   conceptosLineas: conceptosFinales,

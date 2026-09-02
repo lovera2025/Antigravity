@@ -2904,7 +2904,6 @@ class PdfService {
   static Future<void> generarResumenAbonarAlumno({
     required ContratoAlumno alumno,
     required Evento evento,
-    required double saldoActualPlan,
     required double subtotalLiquidacion,
     required double totalAbonar,
     required List<Map<String, dynamic>> conceptosLineas,
@@ -2988,11 +2987,6 @@ class PdfService {
       conceptosLineasDisplay,
     );
     final double moraSeleccionada = moraSeleccionadaPdf(conceptosLineasDisplay);
-    final double saldoPlanDespues = double.parse(
-      (saldoActualPlan - planSeleccionado)
-          .clamp(0.0, double.infinity)
-          .toStringAsFixed(2),
-    );
     final double moraDespues = moraPendienteNoIncluida ?? 0;
     final bool hayDescuento = porcentajeDescuentoLiquidacion > 0.01;
     final bool mostrarSubtotalLiquido =
@@ -3468,101 +3462,28 @@ class PdfService {
                       ],
                     ),
                   ),
-                  pw.SizedBox(height: 10),
-                  pw.Container(
-                    width: double.infinity,
-                    padding: const pw.EdgeInsets.all(10),
-                    decoration: pw.BoxDecoration(
-                      color: _cardBg,
-                      borderRadius: const pw.BorderRadius.all(
-                        pw.Radius.circular(6),
+                  // Acá NO va ninguna proyección de cómo quedaría la cuenta si
+                  // se paga este total: el papel dice arriba que el pago todavía
+                  // no se registró, y ese cálculo ya lo imprime el recibo al
+                  // confirmar el cobro ('CÓMO QUEDA LA CUENTA DESPUÉS DE ESTE
+                  // PAGO'). Con los dos números dando vueltas, las familias
+                  // leían el proyectado como si fuera la deuda del día.
+                  //
+                  // La leyenda de la mora sale sólo si el papel habla de mora,
+                  // sea la que se cobra o la que queda debiendo: en un cobro
+                  // limpio no tiene nada que explicar.
+                  if (moraSeleccionada > 0.01 || moraDespues > 0.01) ...[
+                    pw.SizedBox(height: 10),
+                    pw.Text(
+                      'La mora no forma parte del saldo del plan de cuotas; '
+                      'sí suma al total a pagar ahora si está en la selección.',
+                      style: pw.TextStyle(
+                        fontSize: 7.5,
+                        fontStyle: pw.FontStyle.italic,
+                        color: _greyText,
                       ),
-                      border: pw.Border.all(color: _greyLight, width: 0.5),
                     ),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          'CÓMO QUEDA LA CUENTA SI PAGÁS ESTE TOTAL',
-                          style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            color: _greyText,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        pw.SizedBox(height: 6),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text(
-                              'Saldo del plan',
-                              style: pw.TextStyle(
-                                fontSize: 9,
-                                color: _darkText,
-                              ),
-                            ),
-                            pw.Text(
-                              saldoPlanDespues.toCurrency(),
-                              style: pw.TextStyle(
-                                fontSize: 10,
-                                fontWeight: pw.FontWeight.bold,
-                                color: _darkText,
-                              ),
-                            ),
-                          ],
-                        ),
-                        pw.SizedBox(height: 3),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text(
-                              // El recuadro rojo de arriba ya la definió.
-                              'Mora',
-                              style: pw.TextStyle(
-                                fontSize: 9,
-                                color: moraDespues > 0.01
-                                    ? _redAccent
-                                    : _darkText,
-                              ),
-                            ),
-                            pw.Text(
-                              moraDespues.toCurrency(),
-                              style: pw.TextStyle(
-                                fontSize: 10,
-                                fontWeight: pw.FontWeight.bold,
-                                color: moraDespues > 0.01
-                                    ? _redAccent
-                                    : _darkText,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (saldoActualPlan > 0.01) ...[
-                          pw.SizedBox(height: 4),
-                          pw.Text(
-                            'Saldo del plan hoy (sin mora): '
-                            '${saldoActualPlan.toCurrency()}',
-                            style: pw.TextStyle(
-                              fontSize: 7.5,
-                              fontStyle: pw.FontStyle.italic,
-                              color: _greyText,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Text(
-                    'La mora no forma parte del saldo del plan de cuotas; '
-                    'sí suma al total a pagar ahora si está en la selección.',
-                    style: pw.TextStyle(
-                      fontSize: 7.5,
-                      fontStyle: pw.FontStyle.italic,
-                      color: _greyText,
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
