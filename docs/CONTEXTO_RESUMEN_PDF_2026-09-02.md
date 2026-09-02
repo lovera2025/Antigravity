@@ -80,6 +80,37 @@ salió de la firma y del call site en `detalle_evento_masivo_screen.dart`.
 
 ---
 
+## SEGUNDA PASADA: EL SUBTOTAL QUE REPETÍA
+
+Con el bloque de proyección afuera apareció la otra redundancia. El papel de **AZUAGA,
+MIA** (2 de septiembre, 06:03), una sola cuota pagada por transferencia:
+
+```
+LO QUE SE PAGA HOY
+  · Cuota 6 de 9 — vence 30/09/2026            $ 35.000,00
+  Subtotal liquidación                         $ 35.000,00
+```
+
+Y tres renglones más arriba ya decía
+`Transferencia total canal: $ 36.500,00 (liquidación $ 35.000,00 + cargo $ 1.500,00)`.
+El mismo `$ 35.000,00` tres veces en media hoja.
+
+`mostrarSubtotalLiquido` se prendía con `cargoTotal > 0.01 || hayDescuento || ...`, sin
+mirar **cuántas líneas** había que sumar. Con una sola, el subtotal es esa línea otra vez.
+
+Ahora se exige además que haya algo que sumar:
+
+```dart
+final bool subtotalRepiteLaUnicaLinea =
+    lineasLiquidacion.length + lineasArrastreMora.length <= 1;
+```
+
+Con dos o más conceptos el renglón vuelve, que es cuando se gana el lugar: ahí sí evita
+sumar tres cuotas de cabeza, y el subtotal (`$ 105.000,00`) **no** es el total
+(`$ 109.500,00`, con el cargo adentro). Son números distintos y los dos hacen falta.
+
+---
+
 ## LO QUE NO SE TOCÓ
 
 - **El recuadro rojo** `ATENCIÓN: queda debiendo mora (interés por pagar fuera de
@@ -135,14 +166,19 @@ siempre y ninguno cae en las líneas tocadas —el `unnecessary_non_null_asserti
 La verificación fue por arnés y por diff. El papel real no se generó. Para la primera
 oportunidad:
 
-1. Modal de cobro de **ACOSTA, NATALIA ALDANA**, tildar la Cuota 6 de 9 y apretar
-   `RESUMEN PDF`. Tiene que salir idéntico al de la captura pero cortado justo después
-   del `TOTAL A PAGAR AHORA $ 30.000,00`, **sin la leyenda del pie** (no tiene mora).
-   Esto no cobra nada: el botón sólo genera el papel.
-2. Lo mismo con un alumno **con mora**: confirmar que el recuadro rojo sigue arriba del
-   total, que el detalle por cuota sigue anidado y que la leyenda del pie vuelve.
-3. Confirmar que entra en media hoja en los dos casos.
-4. Reimprimir un recibo viejo desde el historial y ver que su bloque
+La primera pasada **sí se probó**: los papeles de ACOSTA (efectivo, sin mora) y AZUAGA
+(transferencia con cargo) salieron cortados en el total, como se esperaba. Falta:
+
+1. **Dos o más cuotas** en el mismo cobro, con cargo por transferencia: el
+   `Subtotal liquidación` tiene que **volver** a aparecer, con la suma de las líneas y
+   distinto del total. Es el caso que la segunda pasada podría haber roto.
+2. Un alumno **con mora**: confirmar que el recuadro rojo sigue arriba del total, que el
+   detalle por cuota sigue anidado y que la leyenda del pie vuelve.
+3. Un cobro **con descuento** y una sola línea: el bloque `DESCUENTO LIQUIDACIÓN` con su
+   `Subtotal nominal` y su `Descuento` tiene que seguir entero; lo único que se va es el
+   `Subtotal liquidación`.
+4. Confirmar que entra en media hoja en todos los casos.
+5. Reimprimir un recibo viejo desde el historial y ver que su bloque
    `CÓMO QUEDA LA CUENTA DESPUÉS DE ESTE PAGO` está intacto.
 
 ---

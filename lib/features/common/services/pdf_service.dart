@@ -2989,10 +2989,18 @@ class PdfService {
     final double moraSeleccionada = moraSeleccionadaPdf(conceptosLineasDisplay);
     final double moraDespues = moraPendienteNoIncluida ?? 0;
     final bool hayDescuento = porcentajeDescuentoLiquidacion > 0.01;
+    // Con una sola línea el subtotal no suma nada: repite el monto que se lee
+    // dos renglones más arriba. En el papel de AZUAGA el mismo $35.000 quedaba
+    // tres veces —la cuota, la leyenda del canal y el subtotal—. Recién con dos
+    // o más conceptos el renglón se gana el lugar, que es cuando ahorra sumarlos
+    // de cabeza.
+    final bool subtotalRepiteLaUnicaLinea =
+        lineasLiquidacion.length + lineasArrastreMora.length <= 1;
     final bool mostrarSubtotalLiquido =
-        cargoTotal > 0.01 ||
-        hayDescuento ||
-        (subtotalLiquidacion - totalAbonar).abs() > 0.03;
+        !subtotalRepiteLaUnicaLinea &&
+        (cargoTotal > 0.01 ||
+            hayDescuento ||
+            (subtotalLiquidacion - totalAbonar).abs() > 0.03);
 
     final double? efDet = montoEfectivoDetalle;
     final double? trDet = montoTransferenciaDetalle;
