@@ -145,10 +145,47 @@ Tras el saneamiento matutino, **Auditoría inteligente** (`ejecutarAuditoriaInte
 
 ---
 
+---
+
+## 2026-09-02 — "Auditoría inteligente" se retiró
+
+El botón **"Auditar y Sincronizar DB"** (ícono de sync dorado en el AppBar del
+detalle de evento masivo, modo jefe) y su `ejecutarAuditoriaInteligente` ya no
+existen.
+
+Este mismo documento lo venía marcando: la línea sobre el saneamiento matutino
+deja constancia de que la auditoría **volvió a corromper saldos**, y la nota
+posterior avisaba que solo era segura después del fix del 30-jun. El 1-sep-2026
+volvió a morder, esta vez con la mora: el jefe perdonó una mora en la PC de
+oficina, en la otra se apretó el botón sin querer y la mora volvió.
+
+**El defecto era la fuente, no el cálculo.** Recalculaba desde
+`pagos_contrato_alumno` de la base **local** y encolaba el resultado a Supabase.
+Si un pago no había bajado todavía de la otra PC, concluía que el alumno debía
+más, pisaba un saldo correcto y publicaba el error a la nube.
+
+Contraste útil: `MoraTrackedRecovery.reconciliarTodos` hace un recálculo
+automático y está bien hecho — *"solo escribe exención si el merge la mejora;
+nunca degrada admin"* (`mora_tracked_recovery.dart:520`). El botón nunca recibió
+esa regla.
+
+Era además el mayor generador de escritura de la base: 66.627 updates de
+recálculo contra 3.368 pagos realmente registrados.
+
+**`recalcularProgresoContrato` sigue intacto** y es el que hay que usar: corre
+sobre un contrato puntual, justo después de persistir sus pagos. Lo llaman
+`registrarPago`, la anulación de cobro y la purga inteligente.
+
+Para auditar, `tool/recalcular_contrato.dart --dry-run` (sincronizando antes).
+Detalle en [`docs/pendientes/chequeo-salud-saldos.md`](pendientes/chequeo-salud-saldos.md).
+
+---
+
 ## Docs hermanos
 
 - **`docs/CONTEXTO_MORA_OPERATIVA.md`** — mora pendiente, tracked, offset (no mezclar con saldo de capital).
 - **`docs/CONTEXTO_SYNC_v4.1.6.md`** — sync offline, mesas, instalador.
+- **`docs/pendientes/PENDIENTES.md`** — lo que quedó a medio hacer y por qué.
 
 ---
 
