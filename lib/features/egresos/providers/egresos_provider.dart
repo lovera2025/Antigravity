@@ -1,21 +1,17 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/egresos_repository.dart';
+import '../../common/widgets/operational_sync_coordinator.dart';
 
-/// Notifier que maneja el estado de los egresos con soporte para Realtime.
+/// Notifier que maneja el estado de los egresos.
 class EgresosNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
-  RealtimeChannel? _channel;
-
   @override
   FutureOr<List<Map<String, dynamic>>> build() async {
-    // Al destruir el notifier, nos aseguramos de limpiar el canal.
-    ref.onDispose(() {
-      _channel?.unsubscribe();
+    // El canal de Realtime se retiró el 2026-09-02: `egresos` ya baja cada 10
+    // segundos en el pull incremental, así que basta con escuchar ese pull.
+    ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
+      if (prev != next) unawaited(refresh());
     });
-
-    // Suscripción al canal de cambios
-    _setupRealtime();
 
     return _fetchEgresos();
   }
@@ -23,15 +19,6 @@ class EgresosNotifier extends AsyncNotifier<List<Map<String, dynamic>>> {
   Future<List<Map<String, dynamic>>> _fetchEgresos() async {
     final repo = ref.read(egresosRepositoryProvider);
     return await repo.getEgresosConEvento();
-  }
-
-  void _setupRealtime() {
-    final repo = ref.read(egresosRepositoryProvider);
-    _channel = repo.subscribeToChanges(() async {
-      // Cuando hay un cambio en la DB, refrescamos el estado.
-      state = const AsyncValue.loading();
-      state = await AsyncValue.guard(() => _fetchEgresos());
-    });
   }
 
   /// Método para refrescar manualmente (ej. pull-to-refresh)

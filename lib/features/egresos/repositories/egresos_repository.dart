@@ -223,20 +223,9 @@ class EgresosRepository {
     );
   }
 
-  /// Escucha cambios en la tabla de egresos para refrescar UI.
-  RealtimeChannel subscribeToChanges(void Function() onUpdate) {
-    // Sigue usando Supabase Realtime para cambios remotos
-    final channel = _supabase.channel('public:egresos_repo_changes');
-    channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'egresos',
-          callback: (_) => onUpdate(),
-        )
-        .subscribe();
-    return channel;
-  }
+  // `subscribeToChanges` se retiró el 2026-09-02: `egresos` ya baja cada 10
+  // segundos en el pull incremental, así que el canal era redundante y solo
+  // servía para mantener viva la conexión de Realtime.
 }
 
 final egresosRepositoryProvider = Provider<EgresosRepository>((ref) {

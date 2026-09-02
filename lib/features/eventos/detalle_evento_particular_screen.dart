@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../common/widgets/admin_gate.dart';
+import '../common/widgets/operational_sync_coordinator.dart';
 
 
 import '../../models/evento.dart';
@@ -30,8 +30,6 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   late Evento _eventoActual;
   List<EventosServicios> _servicios = [];
   List<Transaccion> _transacciones = [];
-  RealtimeChannel? _eventoChannel;
-  RealtimeChannel? _transaccionesChannel;
   bool _maestroPromptMostrado = false;
 
   List<Transaccion> get _transaccionesActivas =>
@@ -47,20 +45,6 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     _eventoActual = widget.evento;
     _fechaEventoActual = widget.evento.fechaEvento;
     _fetchDatos();
-    _setupRealtime();
-  }
-
-  void _setupRealtime() {
-    final eventoRepo = ref.read(eventosRepositoryProvider);
-    final transRepo = ref.read(transaccionesRepositoryProvider);
-
-    _eventoChannel = eventoRepo.subscribeToEvent(widget.evento.id, () {
-      if (mounted) _fetchDatos(cargaSilenciosa: true);
-    });
-
-    _transaccionesChannel = transRepo.subscribeToChanges(widget.evento.id, () {
-      if (mounted) _fetchDatos(cargaSilenciosa: true);
-    });
   }
 
   Future<void> _fetchDatos({bool cargaSilenciosa = false}) async {
@@ -712,14 +696,17 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   }
 
   @override
-  void dispose() {
-    _eventoChannel?.unsubscribe();
-    _transaccionesChannel?.unsubscribe();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // Antes esta pantalla se mantenía fresca con dos canales de Realtime
+    // (`evento_detalle_$id` y `transacciones_$id`). Se retiraron el 2026-09-02
+    // porque sostener la conexión abierta hacía que Realtime consultara el WAL
+    // cada 100 ms y agotara el Disk IO Budget del proyecto. Ahora `eventos`,
+    // `eventos_servicios`, `servicios` y `transacciones` bajan en el pull
+    // incremental, y este listen refresca cuando ese pull trae algo.
+    ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
+      if (prev != next && mounted) _fetchDatos(cargaSilenciosa: true);
+    });
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryGold = const Color(0xFFD4AF37);
     final expenseRed = const Color(0xFFE74C3C);

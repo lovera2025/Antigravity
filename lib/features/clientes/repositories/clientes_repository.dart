@@ -279,21 +279,11 @@ class ClientesRepository {
   /// Genera un UUID v4 simple (sin dependencia externa).
 
   // ── REALTIME ──────────────────────────────────────────────────────────────
-
-  /// Escucha cambios en la tabla clientes para actualizar la base local.
-  RealtimeChannel subscribeToChanges(void Function() onUpdate) {
-    final channel = _supabase.channel('public:clientes_repo_changes');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'clientes',
-      callback: (payload) {
-        debugPrint('🔔 Realtime clientes: ${payload.eventType}');
-        _refreshLocal().then((_) => onUpdate());
-      },
-    ).subscribe();
-    return channel;
-  }
+  //
+  // `subscribeToChanges` se retiró el 2026-09-02. Escuchaba `clientes`, que
+  // nunca estuvo en la publicación `supabase_realtime`: el canal se abría y no
+  // disparaba nunca. Encima su callback bajaba la tabla entera. Ahora
+  // `clientes` viaja por el pull incremental.
 
   /// Refresh: pull clientes desde la nube y actualizar SQLite.
   Future<void> _refreshLocal() async {

@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
@@ -180,7 +179,6 @@ class CierreCajaState {
 }
 
 class CierreCajaNotifier extends Notifier<CierreCajaState> {
-  RealtimeChannel? _channel;
   bool _registrandoRetiro = false;
 
   static const _kPrefsDiaKey = 'cierre_caja_vista_dia_ar';
@@ -252,16 +250,12 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       state = state.copyWith(dia: diaVista, turno: turnoVista);
       await _guardarVistaSeleccion(state.dia, state.turno);
     } catch (_) {}
-    _setupRealtime();
     await _refrescar();
   }
 
   @override
   CierreCajaState build() {
     final appRole = ref.read(appRoleProvider);
-    ref.onDispose(() {
-      _channel?.unsubscribe();
-    });
     ref.listen(adminAuthProvider, (prev, next) {
       if (prev == null) return;
       if (prev.modoJefe && !next.modoJefe) {
@@ -281,12 +275,6 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       corteHorarioAr: 14,
       cargando: true,
     );
-  }
-
-  void _setupRealtime() {
-    _channel?.unsubscribe();
-    final repo = ref.read(finanzasRepositoryProvider);
-    _channel = repo.subscribeToChanges(_refrescar);
   }
 
   Future<void> setDia(DateTime nuevoDia) async {

@@ -138,60 +138,14 @@ class _DetalleEventoMasivoScreenState
     await prefs.setBool(key, valor);
   }
 
-  Future<void> _forzarAuditoriaInteligente({bool silencioso = false}) async {
-    if (!silencioso) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Ejecutando Auditoría Inteligente en la Base de Datos...',
-          ),
-          backgroundColor: Colors.blueAccent,
-        ),
-      );
-      setState(() => _isLoading = true);
-    }
-
-    try {
-      final repo = ref.read(contratosRepositoryProvider);
-
-      // Ejecutar la auditoría en lote súper veloz dentro de una sola transacción
-      final huboCambios = await repo.ejecutarAuditoriaInteligente(
-        widget.evento.id,
-      );
-
-      final listos = await repo.getByEvento(widget.evento.id);
-      final moraMap = await _cargarMoraHistorialMap(repo, listos);
-      final moraPeriodoMap = await _cargarMoraPeriodoMap(repo, listos);
-      if (mounted) {
-        _aplicarSnapshotAlumnos(
-          listos,
-          moraMap,
-          moraCobradaPeriodoPorContrato: moraPeriodoMap,
-          isLoading: false,
-        );
-        if (!silencioso) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                huboCambios
-                    ? '¡Auditoría completada! Saldos y cuotas corregidos e integrados.'
-                    : '¡Auditoría completada! Todos los saldos y cuotas están correctos.',
-              ),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('Error en auditoria: $e');
-      if (!silencioso && mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error en auditoría: $e')));
-      }
-    }
-  }
+  // El botón "Auditar y Sincronizar DB" y su `_forzarAuditoriaInteligente` se
+  // retiraron el 2026-09-02. Ver la nota en ContratosRepository: recalculaba
+  // los saldos del evento entero desde la copia LOCAL de los pagos y subía el
+  // resultado, así que una PC desactualizada publicaba su atraso como si fuera
+  // una decisión — fue lo que revivió una mora ya perdonada por el jefe.
+  //
+  // `recalcularProgresoContrato` sigue en pie: ahí el mismo cálculo está bien
+  // usado, sobre un contrato puntual y justo después de persistir sus pagos.
 
   Future<void> _fetchDatos({bool cargaSilenciosa = false}) async {
     if (!cargaSilenciosa) setState(() => _isLoading = true);
@@ -708,11 +662,6 @@ class _DetalleEventoMasivoScreenState
         backgroundColor: Colors.transparent,
         actions: [
           if (!_isLoading && modoJefe) ...[
-            IconButton(
-              icon: const Icon(Icons.sync_rounded, color: Color(0xFFD4AF37)),
-              onPressed: () => _forzarAuditoriaInteligente(silencioso: false),
-              tooltip: 'Auditar y Sincronizar DB',
-            ),
             IconButton(
               icon: const Icon(
                 Icons.edit_calendar_outlined,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../common/widgets/operational_sync_coordinator.dart';
 
 import '../../models/evento.dart';
 import 'crear_evento_screen.dart';
@@ -25,13 +25,11 @@ class _EventosScreenState extends ConsumerState<EventosScreen> {
   List<Evento> _eventos = [];
   String _searchQuery = '';
   final _searchController = TextEditingController();
-  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
     _fetchEventos();
-    _setupRealtime();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -41,9 +39,6 @@ class _EventosScreenState extends ConsumerState<EventosScreen> {
 
   @override
   void dispose() {
-    if (_channel != null) {
-      Supabase.instance.client.removeChannel(_channel!);
-    }
     _searchController.dispose();
     super.dispose();
   }
@@ -71,20 +66,21 @@ class _EventosScreenState extends ConsumerState<EventosScreen> {
     }
   }
 
-  void _setupRealtime() {
-    final repo = ref.read(eventosRepositoryProvider);
-    _channel = repo.subscribeToChanges(() {
-      debugPrint('REALTIME: Cambio detectado en tabla eventos');
-      if (!_isLoading) {
+  @override
+  Widget build(BuildContext context) {
+    // El canal de Realtime sobre `eventos` se retiró el 2026-09-02: escuchaba
+    // una tabla que nunca estuvo en la publicación `supabase_realtime`, así que
+    // no disparó una sola vez. Ahora `eventos` baja en el pull incremental y
+    // este listen refresca la grilla cuando trae algo — que es la primera vez
+    // que un evento cargado en la otra PC aparece acá sin sincronizar a mano.
+    ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
+      if (prev != next && mounted && !_isLoading) {
         _fetchEventos(showLoading: false);
       }
     });
-  }
 
-  @override
-  Widget build(BuildContext context) {
     final bool esMasivo = widget.modalidad == 'masivo';
-    
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(

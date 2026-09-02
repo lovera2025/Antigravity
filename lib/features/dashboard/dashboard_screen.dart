@@ -17,6 +17,7 @@ import '../cierre_caja/cierre_caja_screen.dart';
 import '../common/providers/user_role_provider.dart';
 import '../recepcion/recepcion_unified_screen.dart';
 import '../common/widgets/animated_background.dart';
+import '../common/widgets/operational_sync_coordinator.dart';
 import 'providers/dashboard_provider.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -112,8 +113,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _appVersionLabel = '3.5.1';
   String _appBuildNumber = '';
   late SupabaseClient _supabase;
-  RealtimeChannel? _solicitudesChannel;
-  RealtimeChannel? _finanzasChannel;
   int _pendingRequestsCount = 0;
   bool _isLaunchingPortal = false; // Estado para el efecto Portal
   Timer? _statsRefreshDebounce;
@@ -149,8 +148,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     super.initState();
     _supabase = ref.read(supabaseProvider);
     _greeting = (List.from(_greetingOptions)..shuffle()).first;
-    _setupSolicitudesRealtime();
-    _setupFinanzasRealtime();
     _fetchPendingRequestsCount();
     _loadAppVersion();
   }
@@ -195,12 +192,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void dispose() {
     _statsRefreshDebounce?.cancel();
-    if (_solicitudesChannel != null) {
-      _supabase.removeChannel(_solicitudesChannel!);
-    }
-    if (_finanzasChannel != null) {
-      _supabase.removeChannel(_finanzasChannel!);
-    }
     super.dispose();
   }
 
@@ -226,24 +217,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  void _setupSolicitudesRealtime() {
-    _solicitudesChannel = _supabase.channel('public:solicitudes_changes');
-    _solicitudesChannel!
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'solicitudes_cotizacion',
-          callback: (payload) {
-            debugPrint('REALTIME: Cambio en solicitudes detectado');
-            _fetchPendingRequestsCount();
-          },
-        )
-        .subscribe();
-  }
-
-  void _setupFinanzasRealtime() {
-    // Local-first: no refrescar dashboard desde cambios remotos automáticos.
-  }
+  // El canal `solicitudes_changes` se retiró el 2026-09-02: mantenerlo abierto
+  // hacía que Realtime consultara el WAL cada 100 ms. `solicitudes_cotizacion`
+  // ahora baja en el pull incremental, y el contador se recuenta desde el
+  // listen de `operationalSyncRevisionProvider` en build().
 
   Future<void> _signOut() async => UserRoleCache.signOut(_supabase);
 
@@ -260,6 +237,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (prev != null && prev != next && mounted) {
         _scheduleDashboardStatsRefresh();
       }
+    });
+
+    // Reemplaza al canal `solicitudes_changes`: el pull incremental baja
+    // `solicitudes_cotizacion` y acá se recuenta lo pendiente.
+    ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
+      if (prev != next && mounted) _fetchPendingRequestsCount();
     });
 
     final bool isDark = Theme.of(context).brightness == Brightness.dark;

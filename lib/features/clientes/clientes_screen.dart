@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
 import '../../models/cliente.dart';
 import '../common/widgets/animated_background.dart';
+import '../common/widgets/operational_sync_coordinator.dart';
 import '../common/widgets/admin_gate.dart';
 import 'widgets/cliente_form_dialog.dart';
 import 'widgets/cliente_detalle_sheet.dart';
@@ -23,21 +23,16 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   List<Cliente> _clientes = [];
   List<Cliente> _filteredClientes = [];
   final _searchController = TextEditingController();
-  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
     _fetchClientes();
-    _setupRealtime();
     _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
-    if (_channel != null) {
-      Supabase.instance.client.removeChannel(_channel!);
-    }
     _searchController.dispose();
     super.dispose();
   }
@@ -63,15 +58,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     } finally {
       if (mounted && showLoading) setState(() => _isLoading = false);
     }
-  }
-
-  void _setupRealtime() {
-    final repo = ref.read(clientesRepositoryProvider);
-    _channel = repo.subscribeToChanges(() {
-      if (!_isLoading) {
-        _fetchClientes(showLoading: false);
-      }
-    });
   }
 
   Future<void> _toggleArchive(Cliente cliente) async {
@@ -141,6 +127,15 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // El canal de Realtime sobre `clientes` se retiró el 2026-09-02: como el de
+    // `eventos`, escuchaba una tabla que nunca estuvo publicada. Ahora
+    // `clientes` baja en el pull incremental y esto refresca la lista.
+    ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
+      if (prev != next && mounted && !_isLoading) {
+        _fetchClientes(showLoading: false);
+      }
+    });
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryGold = const Color(0xFFD4AF37);
 

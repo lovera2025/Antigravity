@@ -532,60 +532,22 @@ class EventosRepository {
   }
 
   // ── REALTIME ──────────────────────────────────────────────────────────────
-
-  RealtimeChannel subscribeToChanges(void Function() onUpdate) {
-    final channel = _supabase.channel('public:eventos_repo_changes');
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'eventos',
-      callback: (_) {
-        _refreshLocal().then((_) => onUpdate());
-      },
-    ).subscribe();
-    return channel;
-  }
-
-  /// Escucha cambios en tiempo real para un evento específico y su presupuesto.
-  RealtimeChannel subscribeToEvent(String eventoId, void Function() onUpdate) {
-    debugPrint('🔔 Suscribiendo a cambios en tiempo real para evento: $eventoId');
-    final channel = _supabase.channel('public:evento_detalle_$eventoId');
-    
-    // Cambios en el evento (estado, fecha, etc)
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'eventos',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'id',
-        value: eventoId,
-      ),
-      callback: (payload) {
-        debugPrint('🔔 Realtime: Cambio detectado en evento');
-        onUpdate();
-      },
-    );
-
-    // Cambios en el presupuesto
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'eventos_servicios',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'evento_id',
-        value: eventoId,
-      ),
-      callback: (payload) {
-        debugPrint('🔔 Realtime: Cambio detectado en presupuesto');
-        onUpdate();
-      },
-    );
-
-    channel.subscribe();
-    return channel;
-  }
+  //
+  // `subscribeToChanges` y `subscribeToEvent` se retiraron el 2026-09-02.
+  //
+  // El primero escuchaba `eventos`, que **nunca estuvo en la publicación
+  // `supabase_realtime`**: el canal se abría, se suscribía y no disparó una
+  // sola vez en toda la vida del proyecto. Por eso un evento nuevo no llegaba
+  // a la otra PC hasta que alguien apretaba sincronización manual — `eventos`
+  // tampoco estaba en el pull corto.
+  //
+  // El segundo sí funcionaba para el detalle de evento particular, pero al
+  // precio de sostener una conexión Realtime abierta: el servicio consulta el
+  // slot de replicación cada 100 ms mientras haya un cliente, y eso agotaba el
+  // Disk IO Budget del proyecto.
+  //
+  // Ahora `eventos` y `eventos_servicios` viajan por el pull incremental de
+  // OperationalSyncCoordinator, que además arregla el caso que nunca anduvo.
 
   // ── PULL FROM CLOUD ───────────────────────────────────────────────────────
 

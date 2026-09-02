@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/ingreso_detallado.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../cierre_caja/models/turno_caja.dart';
@@ -322,41 +321,13 @@ class FinanzasState {
 }
 
 class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
-  RealtimeChannel? _channel;
-
   @override
   Future<FinanzasState> build() async {
-    ref.onDispose(() {
-      _channel?.unsubscribe();
-    });
-
-    _setupRealtime();
+    // Sin canal de Realtime: el refresco lo trae OperationalSyncCoordinator,
+    // que baja estas tablas cada 10 s. Ver la nota en FinanzasRepository.
     final ar = ArTime.nowAr();
     final mesDefecto = DateTime(ar.year, ar.month, 1);
     return _fetchData(mesDefecto, null);
-  }
-
-  void _setupRealtime() {
-    final repo = ref.read(finanzasRepositoryProvider);
-    _channel = repo.subscribeToChanges(() async {
-      // Recarga silenciosa: mantenemos los filtros actuales
-      final curMes = state.value?.mesFiltro;
-      final curEventoId = state.value?.eventoIdFiltro;
-      final curFe = state.value?.fechaExactaFiltro;
-      final curHudFe = state.value?.fechaInteligenciaHud;
-
-      // Actualizamos solo si el estado actual tiene valor (evita carreras en carga inicial)
-      if (state.hasValue) {
-        state = await AsyncValue.guard(() => _fetchData(
-              curMes,
-              curEventoId,
-              preserveFechaExacta: curFe,
-              preserveHudModo: state.value?.hudModoInteligencia,
-              preserveFechaInteligenciaHud: curHudFe,
-              preserveHudTurno: state.value?.hudTurno,
-            ));
-      }
-    });
   }
 
   /// Suma de egresos cuyo día (AR) cae en [inicioDiaAr, finDiaAr] inclusive.

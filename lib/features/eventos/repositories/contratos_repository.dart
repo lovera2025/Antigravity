@@ -910,39 +910,10 @@ class ContratosRepository {
 
   // ÔöÇÔöÇ SYNC & REALTIME ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   
-  /// Escucha cambios en tiempo real para alumnos y pagos de un evento.
-  RealtimeChannel subscribeToChanges(String eventoId, void Function() onUpdate) {
-    debugPrint('­ƒöö Suscribiendo a cambios en tiempo real para evento: $eventoId');
-    final channel = _supabase.channel('public:contratos_repo_$eventoId');
-    
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'contratos_alumnos',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'evento_id',
-        value: eventoId,
-      ),
-      callback: (payload) {
-        debugPrint('­ƒöö Realtime: Cambio detectado en contrato_alumno');
-        onUpdate();
-      },
-    );
-
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'pagos_contrato_alumno',
-      callback: (payload) {
-        debugPrint('­ƒöö Realtime: Cambio detectado en pagos');
-        onUpdate();
-      },
-    );
-
-    channel.subscribe();
-    return channel;
-  }
+  // `subscribeToChanges` se retiró el 2026-09-02. Escuchaba `contratos_alumnos`
+  // filtrado por evento y `pagos_contrato_alumno` SIN filtro, o sea que un
+  // cobro de cualquier evento despertaba a todos los demás. Las dos tablas ya
+  // bajan cada 10 segundos en el pull incremental, así que era redundante.
 
   Future<void> _pullByEvento(Database db, String eventoId, {bool prune = false}) async {
     try {
@@ -1544,38 +1515,27 @@ class ContratosRepository {
     return out;
   }
 
-  Future<bool> ejecutarAuditoriaInteligente(String eventoId) async {
-    final db = await LocalDatabase.instance;
-    final alumnos = await db.query('contratos_alumnos', where: 'evento_id = ?', whereArgs: [eventoId]);
-
-    bool huboCambios = false;
-    for (final aRow in alumnos) {
-      final id = aRow['id'] as String;
-      final saldoAnt = (aRow['saldo_deudor'] as num?)?.toDouble() ?? 0.0;
-      final cuotasAnt = (aRow['cuotas_pagadas'] as num?)?.toInt() ?? 0;
-      final mesaAnt = (aRow['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
-      final sillasAnt = (aRow['sillas_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
-
-      await recalcularProgresoContrato(id);
-
-      final freshRows = await db.query('contratos_alumnos', where: 'id = ?', whereArgs: [id], limit: 1);
-      if (freshRows.isNotEmpty) {
-        final fRow = freshRows.first;
-        final saldoNew = (fRow['saldo_deudor'] as num?)?.toDouble() ?? 0.0;
-        final cuotasNew = (fRow['cuotas_pagadas'] as num?)?.toInt() ?? 0;
-        final mesaNew = (fRow['mesa_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
-        final sillasNew = (fRow['sillas_extra_cuotas_pagadas'] as num?)?.toInt() ?? 0;
-
-        if ((saldoAnt - saldoNew).abs() > 0.01 ||
-            cuotasAnt != cuotasNew ||
-            mesaAnt != mesaNew ||
-            sillasAnt != sillasNew) {
-          huboCambios = true;
-        }
-      }
-    }
-    return huboCambios;
-  }
+  // `ejecutarAuditoriaInteligente` se retiró el 2026-09-02.
+  //
+  // Recorría todos los contratos de un evento llamando a
+  // `recalcularProgresoContrato`, que recalcula saldo y cuotas desde las filas
+  // de `pagos_contrato_alumno` **de la base local** y encola el resultado para
+  // subirlo. La premisa era correcta —los pagos son la verdad, los totales un
+  // caché— pero la fuente no: si un pago todavía no había bajado de la otra PC,
+  // el recálculo concluía que el alumno debía más, pisaba un saldo que estaba
+  // bien y publicaba el error a la nube, de donde volvía a la otra máquina.
+  //
+  // Ya había corrompido saldos antes (ver CONTEXTO_COBRO_PARCIALES_SALDO.md) y
+  // el 1-sep-2026 revivió una mora que el jefe había perdonado. Además era el
+  // mayor generador de escritura de la base: 66.627 updates de recálculo contra
+  // 3.368 pagos realmente registrados.
+  //
+  // `recalcularProgresoContrato` NO se toca: ahí el mismo cálculo corre sobre
+  // un contrato puntual, justo después de una operación que ya persistió sus
+  // pagos, y lo usan `registrarPago`, la anulación de cobro y la purga.
+  // `MoraTrackedRecovery.reconciliarTodos` muestra cómo debe hacerse un
+  // recálculo automático: solo escribe si mejora, y nunca degrada lo que
+  // decidió un admin.
 }
 
 final contratosRepositoryProvider = Provider<ContratosRepository>((ref) {

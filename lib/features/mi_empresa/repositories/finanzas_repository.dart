@@ -269,57 +269,18 @@ class FinanzasRepository {
     return null;
   }
 
-  /// Escucha cambios remotos para disparar refrescos locales.
-  RealtimeChannel subscribeToChanges(void Function() onUpdate) {
-    final channel = _supabase.channel('public:finanzas_dashboard_changes');
-
-    channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'transacciones',
-          callback: (_) => onUpdate(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'pagos_contrato_alumno',
-          callback: (_) => onUpdate(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'egresos',
-          callback: (_) => onUpdate(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'pagos_prestamo_alquiler',
-          callback: (_) => onUpdate(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'contratos_alumnos',
-          callback: (_) => onUpdate(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'cierre_caja_guia_movimientos',
-          callback: (_) => onUpdate(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'cierre_caja_anotaciones',
-          callback: (_) => onUpdate(),
-        )
-        .subscribe();
-
-    return channel;
-  }
+  // `subscribeToChanges` se retiró el 2026-09-02.
+  //
+  // Escuchaba siete tablas sin filtro, y la consumían DOS lugares a la vez
+  // (finanzas_provider y cierre_caja_provider), o sea que la app se suscribía
+  // dos veces a lo mismo. Realtime consulta el slot de replicación cada 100 ms
+  // mientras haya un cliente conectado, y el costo de cada consulta escala con
+  // la cantidad de suscripciones vivas: entre todos los canales, eso se comía
+  // el 89,5% del CPU de la base y el 99,7% de los bloques leídos, agotando el
+  // Disk IO Budget del proyecto.
+  //
+  // Era redundante: OperationalSyncCoordinator ya baja esas mismas tablas cada
+  // 10 segundos. El refresco ahora llega por ahí.
 
   /// Busca registros vinculados a un nombre en Clientes y Contratos Alumnos (Purga Inteligente).
   Future<Map<String, List<Map<String, dynamic>>>> buscarVinculadosPorNombre(

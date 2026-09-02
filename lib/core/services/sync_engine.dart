@@ -87,6 +87,28 @@ class SyncEngine {
   String? _lastError;
   String? get lastError => _lastError;
 
+  /// Tablas cuyo `_pullTable` falló en la tanda actual.
+  ///
+  /// `_pullTable` se traga sus excepciones a propósito: si una tabla falla, su
+  /// watermark no avanza y el próximo ciclo vuelve a pedir el mismo rango, así
+  /// que un corte pasajero se cura solo y no se pierde nada. El problema era
+  /// que, como nunca lanzaba, el `Future.wait` no veía el fallo y el estado
+  /// quedaba en `idle`: la app decía "sincronizado" aunque no hubiera bajado
+  /// una fila. El mismo silencio que escondió el incidente de la mora.
+  final Set<String> _tablasConFalloPull = {};
+
+  /// Pasa el estado a error si alguna tabla no bajó, nombrándolas.
+  void _reportarFallosDePull() {
+    if (_tablasConFalloPull.isEmpty) {
+      _updateStatus(SyncStatus.idle);
+      return;
+    }
+    final fallidas = _tablasConFalloPull.toList()..sort();
+    _lastError = 'No bajaron: ${fallidas.join(", ")}';
+    debugPrint('  ⚠️ Pull incompleto — $_lastError');
+    _updateStatus(SyncStatus.error);
+  }
+
   DateTime? _lastUploadTime;
   DateTime? get lastUploadTime => _lastUploadTime;
 
@@ -250,7 +272,9 @@ class SyncEngine {
       _updateStatus(SyncStatus.syncing);
       _lastError = null;
       final db = await LocalDatabase.instance;
+      _tablasConFalloPull.clear();
       await Future.wait([
+        // Lo que se mueve durante un cobro.
         _pullTable(db, 'operadores_caja', 'updated_at'),
         _pullTable(db, 'sesiones_caja', 'updated_at'),
         _pullTable(db, 'contratos_alumnos', 'updated_at'),
@@ -259,10 +283,33 @@ class SyncEngine {
         _pullTable(db, 'egresos', 'updated_at'),
         _pullTable(db, 'cierre_caja_guia_movimientos', 'updated_at'),
         _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
+
+        // Eventos y su contexto. Sin esto, un evento nuevo —masivo o
+        // particular— no llegaba nunca a la otra PC: `eventos` no estaba acá ni
+        // en la publicación de Realtime, así que el canal de eventos_repository
+        // escuchaba una tabla que no publicaba nada y nunca disparó. Los
+        // contratos y sus cobros sí bajaban, pero colgados de un evento_id que
+        // localmente no existía, y el desplegable de Cobros masivos —que sale
+        // de `eventos LEFT JOIN clientes`— no tenía de dónde mostrarlos.
+        _pullTable(db, 'eventos', 'updated_at'),
+        _pullTable(db, 'clientes', 'updated_at'),
+        _pullTable(db, 'eventos_servicios', 'updated_at', primaryKey: 'id'),
+        _pullTable(db, 'transacciones', 'updated_at'),
+
+        // Catálogo y presupuestos: el detalle de evento particular los necesita
+        // para armar la grilla (`eventos_servicios LEFT JOIN servicios`), y
+        // hasta ahora se apoyaba en dos canales de Realtime que ya no existen.
+        _pullTable(db, 'servicios', 'updated_at'),
+        _pullTable(db, 'presupuestos', 'updated_at'),
+        _pullTable(db, 'presupuesto_servicios', 'updated_at', primaryKey: 'id'),
+        _pullTable(db, 'solicitudes_cotizacion', 'updated_at'),
       ]);
       FinanzasRepository.invalidateProyeccionCache();
       _lastPullTime = DateTime.now();
-      _updateStatus(SyncStatus.idle);
+      // Lo que sí bajó tiene que refrescar igual la pantalla, así que esto
+      // devuelve true de todos modos: lo único que cambia es dejar de informar
+      // "sincronizado" cuando alguna tabla no llegó.
+      _reportarFallosDePull();
       return true;
     } catch (e) {
       debugPrint('❌ Error pull operativo: $e');
@@ -398,7 +445,11 @@ class SyncEngine {
         query = query.gte('fecha', kCierreCajaSyncFechaCorte);
       }
 
-      final response = await query.count(CountOption.exact);
+      // `planned` en vez de `exact`: esto corre sobre las 24 tablas de una, y
+      // con `exact` cada una era un scan completo de conteo — el pico más caro
+      // del sistema. Acá el número solo alimenta un "hay N cambios para bajar",
+      // así que la estimación del planner alcanza y sobra.
+      final response = await query.count(CountOption.planned);
       return response.count;
     } catch (e) {
       debugPrint('  ⚠️ Error probe $table: $e');
@@ -762,6 +813,7 @@ class SyncEngine {
 
     debugPrint('📥 Pull Cloud → Local (En Paralelo)...');
 
+    _tablasConFalloPull.clear();
     await Future.wait([
       _pullTable(db, 'clientes', 'updated_at'),
       _pullTable(db, 'servicios', 'updated_at'),
@@ -810,7 +862,13 @@ class SyncEngine {
       debugPrint('  ⚠️ Post-pull mora reconcile: $e');
     }
 
-    debugPrint('📥 Pull completado');
+    if (_tablasConFalloPull.isNotEmpty) {
+      final fallidas = _tablasConFalloPull.toList()..sort();
+      _lastError = 'No bajaron: ${fallidas.join(", ")}';
+      debugPrint('📥 Pull incompleto — $_lastError');
+    } else {
+      debugPrint('📥 Pull completado');
+    }
   }
 
   /// Descarga y upsert de una tabla. Soporta pull incremental mediante _sync_meta.
@@ -1157,6 +1215,11 @@ class SyncEngine {
         '  📥 $table: $stored registros${skipped > 0 ? " ($skipped corruptos omitidos)" : ""}',
       );
     } catch (e) {
+      // No se relanza: el watermark no avanzó, así que el próximo ciclo
+      // reintenta el mismo rango y nada se pierde. Pero se anota, para que
+      // quien llamó pueda decir que el pull quedó incompleto en vez de
+      // informar "sincronizado".
+      _tablasConFalloPull.add(table);
       debugPrint('  ⚠️ Error pull $table: $e');
     }
   }

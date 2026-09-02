@@ -573,11 +573,20 @@ class InvitadosRepository {
     // Usamos el mismo nombre de canal que usa el Tótem nativo/web
     final channel = _supabase.channel('totem_$eventoId');
     
-    // 1. Escuchar cambios lentos (nube Postgres) para sincronización global
+    // 1. Escuchar cambios lentos (nube Postgres) para sincronización global.
+    //
+    // El filtro por evento se agregó el 2026-09-02: sin él, un check-in en
+    // cualquier evento disparaba el forceRefresh de todos los demás abiertos, y
+    // Realtime tenía que evaluar cada fila del WAL contra esta suscripción.
     channel.onPostgresChanges(
       event: PostgresChangeEvent.all,
       schema: 'public',
       table: 'invitados',
+      filter: PostgresChangeFilter(
+        type: PostgresChangeFilterType.eq,
+        column: 'evento_id',
+        value: eventoId,
+      ),
       callback: (payload) {
         _realtimeDebounceTimers[eventoId]?.cancel();
         _realtimeDebounceTimers[eventoId] = Timer(const Duration(milliseconds: 500), () {

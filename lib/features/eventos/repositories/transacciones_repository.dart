@@ -125,31 +125,12 @@ class TransaccionesRepository {
     );
   }
 
-  // ── SYNC & REALTIME ────────────────────────────────────────────────────────
-  
-  /// Escucha cambios en tiempo real para transacciones de un evento.
-  RealtimeChannel subscribeToChanges(String eventoId, void Function() onUpdate) {
-    debugPrint('🔔 Suscribiendo a transacciones en tiempo real para evento: $eventoId');
-    final channel = _supabase.channel('public:transacciones_$eventoId');
-    
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'transacciones',
-      filter: PostgresChangeFilter(
-        type: PostgresChangeFilterType.eq,
-        column: 'evento_id',
-        value: eventoId,
-      ),
-      callback: (payload) {
-        debugPrint('🔔 Realtime: Cambio detectado en transacciones');
-        onUpdate();
-      },
-    );
-
-    channel.subscribe();
-    return channel;
-  }
+  // ── SYNC ───────────────────────────────────────────────────────────────────
+  //
+  // `subscribeToChanges` se retiró el 2026-09-02. Mantener la conexión de
+  // Realtime abierta hacía que el servicio consultara el WAL cada 100 ms, y eso
+  // agotaba el Disk IO Budget del proyecto. `transacciones` ahora baja en el
+  // pull incremental y el detalle de evento particular se refresca con él.
 
   Future<void> _pullByEvento(Database db, String eventoId, {bool prune = false}) async {
     try {
