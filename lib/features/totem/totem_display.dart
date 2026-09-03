@@ -5,15 +5,19 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
 import '../../models/invitado.dart';
+import '../../models/totem_config.dart';
 import '../../../main.dart' show kWebBaseUrl;
+import 'providers/totem_config_provider.dart';
+import 'totem_orientation.dart';
 
-class TotemDisplay extends StatefulWidget {
+class TotemDisplay extends ConsumerStatefulWidget {
   final String eventoId;
   final SupabaseService? svc;
   final bool showExitButton;
@@ -28,11 +32,29 @@ class TotemDisplay extends StatefulWidget {
   });
 
   @override
-  State<TotemDisplay> createState() => _TotemDisplayState();
+  ConsumerState<TotemDisplay> createState() => _TotemDisplayState();
 }
 
-class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMixin {
-  static const _gold = Color(0xFFD4AF37);
+class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProviderStateMixin {
+  /// Config visual del evento. Se refresca sola en cada build desde el stream;
+  /// mientras no haya fila en `totem_config` son los valores de siempre.
+  late TotemConfig _cfg = TotemConfig.defaults(widget.eventoId);
+
+  /// Color de acento. Se sigue llamando `_gold` porque durante años ESE fue el
+  /// color; ahora sale de la config del evento (dorado por defecto).
+  Color get _gold => _cfg.colorAcento;
+
+  // ── Orientación ────────────────────────────────────────────────────────────
+  TotemOrientation _orientacion = TotemOrientation.auto;
+
+  /// Los controles flotantes se esconden solos: un botón fijo arruina la
+  /// proyección en el salón.
+  bool _controlesVisibles = true;
+  Timer? _ocultarControlesTimer;
+
+  /// Escala vigente, calculada en el build y usada por los sub-widgets que no
+  /// reciben los constraints (el panel de ingresados, por ejemplo).
+  double _escalaPanel = 1.0;
 
   // ── Animaciones bienvenida ─────────────────────────────────────────────────
   late final AnimationController _entryCtrl;
@@ -70,6 +92,14 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
   Timer? _displayTimer;
   Timer? _cleanupTimer;
 
+  /// Reconciliación periódica contra la base.
+  ///
+  /// El tótem corre ocho horas sin que nadie lo mire. Si el websocket queda
+  /// mudo (no caído — mudo), el backoff no se entera porque solo reacciona a
+  /// errores explícitos, y la pantalla se congela con una lista vieja. Este
+  /// timer vuelve a leer la verdad cada minuto.
+  Timer? _reconciliarTimer;
+
   // ── Reconexión ────────────────────────────────────────────────────────────
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
@@ -86,6 +116,97 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
     _connect();
     _startCleanupTimer();
     _setupInterWindowChannel();
+    _cargarOrientacion();
+    _programarOcultadoControles();
+  }
+
+  // ── Orientación ────────────────────────────────────────────────────────────
+
+  Future<void> _cargarOrientacion() async {
+    final guardada = await TotemOrientationStore.load(widget.eventoId);
+    if (!mounted || guardada == _orientacion) return;
+    setState(() => _orientacion = guardada);
+    _aplicarFrameVentana(guardada);
+  }
+
+  /// Cicla auto → vertical → horizontal. En la ventana secundaria de escritorio
+  /// además da vuelta la ventana de verdad, no solo el layout.
+  Future<void> _girarPantalla() async {
+    final siguiente = _orientacion.siguiente;
+    setState(() => _orientacion = siguiente);
+    _mostrarControles();
+    await TotemOrientationStore.save(widget.eventoId, siguiente);
+    await _aplicarFrameVentana(siguiente);
+  }
+
+  /// Redimensiona la ventana real a 9:16 o 16:9.
+  ///
+  /// Solo aplica a la ventana secundaria de escritorio. En web y en el panel
+  /// embebido no hay ventana propia que redimensionar: ahí alcanza con que
+  /// cambie el layout, que es justo lo que hace falta cuando la pantalla del
+  /// salón ya está rotada pero el navegador informa apaisado.
+  Future<void> _aplicarFrameVentana(TotemOrientation orientacion) async {
+    if (kIsWeb || widget.windowId == null) return;
+    if (orientacion == TotemOrientation.auto) return;
+    if (!mounted) return;
+
+    try {
+      final vista = View.of(context);
+      final dpr = vista.display.devicePixelRatio;
+      final pantalla = vista.display.size / dpr;
+
+      // Dejamos margen para que la barra de tareas siga alcanzable.
+      final altoUtil = pantalla.height * 0.92;
+      final anchoUtil = pantalla.width * 0.92;
+
+      final Size destino;
+      if (orientacion == TotemOrientation.vertical) {
+        var alto = altoUtil;
+        var ancho = alto * 9 / 16;
+        if (ancho > anchoUtil) {
+          ancho = anchoUtil;
+          alto = ancho * 16 / 9;
+        }
+        destino = Size(ancho, alto);
+      } else {
+        var ancho = anchoUtil;
+        var alto = ancho * 9 / 16;
+        if (alto > altoUtil) {
+          alto = altoUtil;
+          ancho = alto * 16 / 9;
+        }
+        destino = Size(ancho, alto);
+      }
+
+      final origen = Offset(
+        (pantalla.width - destino.width) / 2,
+        (pantalla.height - destino.height) / 2,
+      );
+
+      await WindowController.fromWindowId(widget.windowId!)
+          .setFrame(origen & destino);
+    } catch (e) {
+      // Si la ventana ya no existe o la plataforma no lo soporta, el cambio de
+      // layout igual se aplicó. No es motivo para romper la pantalla.
+      debugPrint('No se pudo redimensionar la ventana del tótem: $e');
+    }
+  }
+
+  // ── Controles flotantes ────────────────────────────────────────────────────
+
+  void _mostrarControles() {
+    if (!_controlesVisibles && mounted) {
+      setState(() => _controlesVisibles = true);
+    }
+    _programarOcultadoControles();
+  }
+
+  void _programarOcultadoControles() {
+    _ocultarControlesTimer?.cancel();
+    _ocultarControlesTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      setState(() => _controlesVisibles = false);
+    });
   }
 
   void _setupInterWindowChannel() {
@@ -102,6 +223,11 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
             final data = jsonDecode(call.arguments as String);
             final guest = Invitado.fromJson(data);
             _handleManualIncoming(guest);
+          }
+          return null;
+        case 'guest_removed':
+          if (call.arguments != null) {
+            _handleGuestRemoved(call.arguments as String);
           }
           return null;
       }
@@ -263,6 +389,12 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
             _handleManualIncoming(guest);
           }
         });
+        // Borrado instantáneo para tótems que no corren en la PC de Recepción.
+        _broadcastChannel!.onBroadcast(event: 'guest_removed', callback: (payload) {
+          final data = payload['payload'];
+          final id = data is Map ? data['id']?.toString() : null;
+          if (id != null && mounted) _handleGuestRemoved(id);
+        });
         _broadcastChannel!.subscribe();
       }
 
@@ -270,10 +402,65 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
         _isConnected = true;
         _reconnectAttempts = 0;
       });
+
+      // Al (re)conectar, repoblar de una. El stream solo avisa de lo que pasa
+      // de acá en adelante: si estuvimos caídos treinta segundos, todo lo que
+      // ocurrió en el medio no llega nunca.
+      _reconciliar();
+      _iniciarReconciliacionPeriodica();
     } catch (e) {
       debugPrint('Error connecting to stream: $e');
       _onError(e);
     }
+  }
+
+  void _iniciarReconciliacionPeriodica() {
+    _reconciliarTimer?.cancel();
+    _reconciliarTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _reconciliar(),
+    );
+  }
+
+  /// Vuelve a leer los invitados del evento y los pasa por el mismo camino que
+  /// el stream.
+  ///
+  /// Reutiliza [_onData] a propósito: ahí vive el guard de `_processedIds` que
+  /// evita volver a disparar la bienvenida de gente que ya entró. Si esto
+  /// armara la lista por su cuenta, cada minuto se llenaría la pantalla de
+  /// saludos repetidos.
+  Future<void> _reconciliar() async {
+    if (!mounted || widget.eventoId.length != 36) return;
+    try {
+      final filas = await svc.client
+          .from('invitados')
+          .select()
+          .eq('evento_id', widget.eventoId)
+          .order('nombre_completo');
+
+      if (!mounted) return;
+      final invitados = (filas as List)
+          .map((f) => Invitado.fromJson(f as Map<String, dynamic>))
+          .toList();
+      _onData(invitados);
+    } catch (e) {
+      debugPrint('Reconciliación del tótem falló: $e');
+    }
+  }
+
+  /// Saca a un invitado de la pantalla al instante.
+  ///
+  /// Lo llama Recepción por el puente entre ventanas cuando se borra a alguien
+  /// en la misma PC, sin esperar a la nube.
+  void _handleGuestRemoved(String invitadoId) {
+    if (!mounted) return;
+    setState(() {
+      _ingresados.removeWhere((i) => i.id == invitadoId);
+      _queue.removeWhere((i) => i.id == invitadoId);
+      _processedIds.remove(invitadoId);
+      _recentIds.remove(invitadoId);
+      if (_current?.id == invitadoId) _current = null;
+    });
   }
 
   void _onData(List<Invitado> invitados) {
@@ -396,6 +583,8 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
     _displayTimer?.cancel();
     _reconnectTimer?.cancel();
     _cleanupTimer?.cancel();
+    _ocultarControlesTimer?.cancel();
+    _reconciliarTimer?.cancel();
     _entryCtrl.dispose();
     _pulseCtrl.dispose();
     _particleCtrl.dispose();
@@ -409,47 +598,78 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    // La config del evento entra por acá y se propaga a todos los _build*.
+    // Si el evento no tiene fila, son los valores de siempre.
+    _cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
+
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isWidescreen = constraints.maxWidth > constraints.maxHeight * 1.2;
-          
+          final isWidescreen = _esWidescreen(constraints);
+          _escalaPanel = _escala(constraints);
+
           return Stack(
             children: [
               const _EliteAtmosphericBackground(),
-              Column(
-                children: [
-                  Expanded(
-                    flex: isWidescreen ? 100 : 55,
-                    child: _buildQRSection(constraints),
-                  ),
-                  if (!isWidescreen)
-                    Expanded(
-                      flex: 45,
-                      child: _buildIngresadosPanel(),
-                    ),
-                ],
-              ),
-              // En widescreen, el panel de ingresados flota a un lado
+
+              // Vertical: marca arriba, lista abajo.
+              // Horizontal: dos columnas que reparten el ancho entre ellas.
+              //
+              // Antes el panel de ingresados iba en un Positioned con un ancho
+              // del 30% mientras la sección del QR reservaba un padding del
+              // 35%: dos números sueltos que había que mantener sincronizados a
+              // mano. Con Row/Expanded el reparto lo hace el layout y no hay
+              // forma de que se pisen al cambiar el tamaño de la ventana.
               if (isWidescreen)
-                Positioned(
-                  top: 80,
-                  right: 40,
-                  bottom: 40,
-                  width: constraints.maxWidth * 0.3,
-                  child: _buildIngresadosPanel(),
+                Row(
+                  children: [
+                    Expanded(flex: 60, child: _buildQRSection(constraints)),
+                    Expanded(
+                      flex: 40,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 24, 24, 24),
+                        child: _buildIngresadosPanel(),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  children: [
+                    Expanded(flex: 62, child: _buildQRSection(constraints)),
+                    Expanded(flex: 38, child: _buildIngresadosPanel()),
+                  ],
                 ),
-                
+
               if (_current != null) _buildWelcomeCard(constraints),
-              _buildHandshakeOverlay(), 
+              _buildHandshakeOverlay(),
               _buildConnectionIndicator(),
               _buildStatsIndicator(),
-              if (widget.showExitButton) _buildExitButton(context),
+              _buildFloatingControls(context),
             ],
           );
         },
       ),
     );
+  }
+
+  /// Decide el layout. En `auto` conserva el criterio histórico (la forma de
+  /// la ventana); si el operador eligió una orientación, manda esa.
+  bool _esWidescreen(BoxConstraints c) => switch (_orientacion) {
+        TotemOrientation.vertical => false,
+        TotemOrientation.horizontal => true,
+        TotemOrientation.auto => c.maxWidth > c.maxHeight * 1.2,
+      };
+
+  /// Escala tipográfica.
+  ///
+  /// Antes salía siempre de `maxHeight / 900`, calibrado para 720p: en una
+  /// pantalla vertical de 1920 saturaba el tope y quedaba todo diminuto. Ahora
+  /// se calcula sobre la dimensión que realmente limita en cada orientación.
+  double _escala(BoxConstraints c) {
+    final base = _esWidescreen(c) ? c.maxHeight / 780 : c.maxWidth / 620;
+    if (!base.isFinite) return 1.0; // constraints sin límite (scroll, tests)
+    return base.clamp(0.7, 1.8).toDouble();
   }
 
   Widget _buildHandshakeOverlay() {
@@ -511,68 +731,156 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
     );
   }
 
-  Widget _buildExitButton(BuildContext context) {
-    return Positioned(
-      top: 12,
-      right: 12,
-      child: _ExitButton(
-        onExit: () async {
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-          if (widget.windowId != null) {
-            await WindowController.fromWindowId(widget.windowId!).hide();
-          } else if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          }
-        },
+  /// Barra flotante: girar y salir.
+  ///
+  /// Cubre toda la pantalla con un detector transparente para que cualquier
+  /// movimiento del mouse o toque los traiga de vuelta, y a los 5 segundos se
+  /// desvanecen. Así se puede operar el tótem sin que la proyección tenga un
+  /// par de botones encima toda la noche.
+  Widget _buildFloatingControls(BuildContext context) {
+    return Positioned.fill(
+      child: MouseRegion(
+        opaque: false,
+        onHover: (_) => _mostrarControles(),
+        child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => _mostrarControles(),
+          child: Align(
+            alignment: Alignment.topRight,
+            child: AnimatedOpacity(
+              opacity: _controlesVisibles ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 400),
+              child: IgnorePointer(
+                ignoring: !_controlesVisibles,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ControlPill(
+                        icono: Icons.screen_rotation_rounded,
+                        etiqueta: _orientacion.etiqueta,
+                        color: _gold,
+                        onTap: _girarPantalla,
+                      ),
+                      if (widget.showExitButton) ...[
+                        const SizedBox(width: 10),
+                        _ExitButton(
+                          onExit: () async {
+                            SystemChrome.setEnabledSystemUIMode(
+                                SystemUiMode.edgeToEdge);
+                            if (widget.windowId != null) {
+                              await WindowController.fromWindowId(
+                                      widget.windowId!)
+                                  .hide();
+                            } else if (context.mounted &&
+                                Navigator.canPop(context)) {
+                              Navigator.pop(context);
+                            }
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  // ── Sección superior: Logo + QR ────────────────────────────────────────────
+  /// Foto principal del evento.
+  ///
+  /// Con `imagen_url` cargada muestra la foto en círculo, con borde y
+  /// resplandor del color de acento — es la cara del evento, la de la
+  /// quinceañera o los novios. Sin foto cae al logo de la empresa tintado en
+  /// perla, que es exactamente lo que se veía antes de que esto existiera.
+  Widget _buildPortada(double scale) {
+    final lado = 150 * scale;
+    final tieneFoto = _cfg.imagenUrl != null;
+
+    final Widget contenido = tieneFoto
+        ? ClipOval(
+            child: Image.network(
+              _cfg.imagenUrl!,
+              width: lado,
+              height: lado,
+              fit: BoxFit.cover,
+              // Nunca dejamos un hueco: mientras baja, y si falla, se ve el logo.
+              loadingBuilder: (context, child, progreso) =>
+                  progreso == null ? child : _logoEmpresa(lado),
+              errorBuilder: (_, _, _) => _logoEmpresa(lado),
+            ),
+          )
+        : _logoEmpresa(lado);
+
+    return FadeTransition(
+      opacity: _pulseCtrl.drive(
+        // La foto se muestra plena; el logo mantiene su respiración tenue.
+        Tween(begin: tieneFoto ? 0.92 : 0.3, end: tieneFoto ? 1.0 : 0.6),
+      ),
+      child: Container(
+        width: lado,
+        height: lado,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: tieneFoto
+              ? Border.all(color: _gold.withValues(alpha: 0.65), width: 3)
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: tieneFoto
+                  ? _gold.withValues(alpha: 0.28)
+                  : const Color(0xFFE2E2E2).withValues(alpha: 0.1),
+              blurRadius: 40,
+              spreadRadius: 10,
+            ),
+          ],
+        ),
+        child: contenido,
+      ),
+    );
+  }
+
+  Widget _logoEmpresa(double lado) => Image.asset(
+        'assets/icons/logo-transparent-final.png',
+        width: lado,
+        height: lado,
+        fit: BoxFit.contain,
+        color: const Color(0xFFF2F0EB), // Plata Perla
+        errorBuilder: (_, _, _) => Icon(
+          Icons.celebration_rounded,
+          size: lado * 0.6,
+          color: const Color(0xFFF2F0EB),
+        ),
+      );
+
+  // ── Sección superior: Portada + QR ────────────────────────────────────────
 
   Widget _buildQRSection(BoxConstraints constraints) {
     final qrUrl = '$kWebBaseUrl/lista?evento=${widget.eventoId}';
-    final isWidescreen = constraints.maxWidth > constraints.maxHeight * 1.2;
-    final scale = (constraints.maxHeight / 900).clamp(0.7, 1.2);
+    final isWidescreen = _esWidescreen(constraints);
+    final scale = _escala(constraints);
 
     return Container(
-      padding: EdgeInsets.only(
-        left: isWidescreen ? 60 : 20,
-        right: isWidescreen ? constraints.maxWidth * 0.35 : 20,
-      ),
-      alignment: isWidescreen ? Alignment.centerLeft : Alignment.center,
+      padding: EdgeInsets.symmetric(horizontal: isWidescreen ? 48 : 20),
+      alignment: Alignment.center,
       child: SingleChildScrollView(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: isWidescreen ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const SizedBox(height: 20),
-            // Logo con resplandor Plata Perla
-            FadeTransition(
-              opacity: _pulseCtrl.drive(Tween(begin: 0.3, end: 0.6)),
-              child: Container(
-                width: 140 * scale,
-                height: 140 * scale,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE2E2E2).withValues(alpha: 0.1),
-                      blurRadius: 40,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Image.asset(
-                  'assets/icons/logo-transparent-final.png',
-                  fit: BoxFit.contain,
-                  color: const Color(0xFFF2F0EB), // Plata Perla
-                ),
-              ),
-            ),
+
+            // Foto del evento, o el logo de la empresa si nadie cargó una.
+            _buildPortada(scale),
+
             const SizedBox(height: 20),
             Text(
-              'JUNIOR EVENTOS',
+              _cfg.titulo,
+              textAlign: TextAlign.center,
               style: GoogleFonts.oswald(
                 fontSize: 38 * scale,
                 fontWeight: FontWeight.w900,
@@ -580,7 +888,20 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                 color: const Color(0xFFE2E2E2).withValues(alpha: 0.4),
               ),
             ),
-            SizedBox(height: 40 * scale),
+            if (_cfg.subtitulo.isNotEmpty) ...[
+              SizedBox(height: 8 * scale),
+              Text(
+                _cfg.subtitulo.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 15 * scale,
+                  fontWeight: FontWeight.w200,
+                  letterSpacing: 9,
+                  color: _gold.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+            SizedBox(height: 36 * scale),
             // QR en contenedor Glassmorphic de Lujo
             AnimatedBuilder(
               animation: _pulseCtrl,
@@ -635,6 +956,7 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                         const SizedBox(height: 20),
                         Text(
                           'BIENVENIDO',
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.oswald(
                             fontSize: 14 * scale,
                             fontWeight: FontWeight.w600,
@@ -644,7 +966,8 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'ESCANEÁ PARA INGRESAR',
+                          _cfg.mensajeQr,
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             fontSize: 10 * scale,
                             fontWeight: FontWeight.w300,
@@ -672,25 +995,32 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
         border: Border(
           top: BorderSide(color: _gold.withValues(alpha: 0.2), width: 1),
         ),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF1A0A2E), Color(0xFF0D0618), Color(0xFF080808)],
+          // Con el dorado de siempre es el violeta de toda la vida; con un
+          // acento elegido, se deriva de ese tono.
+          colors: _cfg.gradientePanel,
         ),
       ),
       child: Column(
         children: [
           // ── Header ─────────────────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+            padding: EdgeInsets.fromLTRB(
+              20 * _escalaPanel,
+              10 * _escalaPanel,
+              20 * _escalaPanel,
+              6 * _escalaPanel,
+            ),
             child: Row(
               children: [
-                const Text('🎉', style: TextStyle(fontSize: 14)),
-                const SizedBox(width: 8),
+                Text('🎉', style: TextStyle(fontSize: 14 * _escalaPanel)),
+                SizedBox(width: 8 * _escalaPanel),
                 Text(
                   'YA LLEGARON',
                   style: GoogleFonts.oswald(
-                    fontSize: 12,
+                    fontSize: 12 * _escalaPanel,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 3,
                     color: _gold.withValues(alpha: 0.6),
@@ -699,7 +1029,10 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                 const Spacer(),
                 if (_ingresados.isNotEmpty)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10 * _escalaPanel,
+                      vertical: 3 * _escalaPanel,
+                    ),
                     decoration: BoxDecoration(
                       color: _gold.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -708,7 +1041,7 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                     child: Text(
                       '${_ingresados.length}',
                       style: GoogleFonts.oswald(
-                        fontSize: 13,
+                        fontSize: 13 * _escalaPanel,
                         fontWeight: FontWeight.w700,
                         color: _gold.withValues(alpha: 0.7),
                       ),
@@ -735,6 +1068,7 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                 : _CascadeNames(
                     ingresados: List.unmodifiable(_ingresados),
                     recentIds: Set.unmodifiable(_recentIds),
+                    scale: _escalaPanel,
                   ),
           ),
         ],
@@ -745,7 +1079,7 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
   // ── Tarjeta de bienvenida — Spotlight Entrance ────────────────────────────
 
   Widget _buildWelcomeCard(BoxConstraints constraints) {
-    final scale = (constraints.maxHeight / 900).clamp(0.7, 1.4);
+    final scale = _escala(constraints);
     const perla = Color(0xFFE2E2E2);
 
     return Positioned.fill(
@@ -764,12 +1098,12 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
               Opacity(
                 opacity: (_goldBloom.value * 0.42).clamp(0.0, 1.0),
                 child: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: RadialGradient(
                       center: Alignment.center,
                       radius: 1.1,
                       colors: [_gold, Colors.transparent],
-                      stops: [0.0, 1.0],
+                      stops: const [0.0, 1.0],
                     ),
                   ),
                 ),
@@ -778,16 +1112,16 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
               // ── Onda de choque ────────────────────────────────────────────
               IgnorePointer(
                 child: CustomPaint(
-                  painter: _ShockwavePainter(_shockwave.value),
+                  painter: _ShockwavePainter(_shockwave.value, _gold),
                   child: const SizedBox.expand(),
                 ),
               ),
 
-              // ── Partículas doradas flotantes ──────────────────────────────
+              // ── Partículas del color del evento ───────────────────────────
               if (_bgFade.value > 0.4)
                 IgnorePointer(
                   child: CustomPaint(
-                    painter: _ParticlePainter(_particleCtrl.value),
+                    painter: _ParticlePainter(_particleCtrl.value, _gold),
                     child: const SizedBox.expand(),
                   ),
                 ),
@@ -803,10 +1137,10 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                       vertical: 42,
                     ),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
+                      gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xFF1C0F35), Color(0xFF0C0518)],
+                        colors: _cfg.gradienteCard,
                       ),
                       borderRadius: BorderRadius.circular(36),
                       border: Border.all(
@@ -840,35 +1174,71 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
                           Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Icono de celebración
+                              // La foto del evento si la hay; si no, el
+                              // apretón de manos de siempre.
                               FadeTransition(
                                 opacity: _iconFade,
-                                child: Container(
-                                  padding: EdgeInsets.all(20 * scale),
-                                  decoration: BoxDecoration(
-                                    color: perla.withValues(alpha: 0.12),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: perla.withValues(alpha: 0.30),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '🤝',
-                                    style: TextStyle(fontSize: 72 * scale),
-                                  ),
-                                ),
+                                child: _cfg.imagenUrl != null
+                                    ? Container(
+                                        width: 128 * scale,
+                                        height: 128 * scale,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: _gold.withValues(alpha: 0.75),
+                                            width: 3,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color:
+                                                  _gold.withValues(alpha: 0.45),
+                                              blurRadius: 40,
+                                              spreadRadius: 6,
+                                            ),
+                                          ],
+                                        ),
+                                        child: ClipOval(
+                                          child: Image.network(
+                                            _cfg.imagenUrl!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, _, _) => Center(
+                                              child: Text(
+                                                '🤝',
+                                                style: TextStyle(
+                                                    fontSize: 62 * scale),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        padding: EdgeInsets.all(20 * scale),
+                                        decoration: BoxDecoration(
+                                          color: perla.withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: perla.withValues(alpha: 0.30),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '🤝',
+                                          style:
+                                              TextStyle(fontSize: 72 * scale),
+                                        ),
+                                      ),
                               ),
                               SizedBox(height: 22 * scale),
 
-                              // "¡Bienvenido!" con slide desde abajo
+                              // El saludo del evento, con slide desde abajo
                               ClipRect(
                                 child: SlideTransition(
                                   position: _titleSlide,
                                   child: FadeTransition(
                                     opacity: _titleFade,
                                     child: Text(
-                                      '¡Bienvenido!',
+                                      _cfg.mensajeBienvenida,
+                                      textAlign: TextAlign.center,
                                       style: GoogleFonts.oswald(
                                         fontSize: 50 * scale,
                                         fontWeight: FontWeight.w700,
@@ -1038,7 +1408,8 @@ class _TotemDisplayState extends State<TotemDisplay> with TickerProviderStateMix
 
   Widget _buildConnectionIndicator() {
     return Positioned(
-      top: 16,
+      // Debajo de la barra de controles, que ocupa la esquina superior derecha.
+      top: 68,
       right: 16,
       child: AnimatedOpacity(
         opacity: _isConnected ? 0.0 : 1.0,
@@ -1183,7 +1554,16 @@ class _EliteAtmosphericBackgroundState extends State<_EliteAtmosphericBackground
 class _CascadeNames extends StatefulWidget {
   final List<Invitado> ingresados;
   final Set<String> recentIds;
-  const _CascadeNames({required this.ingresados, required this.recentIds});
+
+  /// Escala tipográfica del tótem. Sin esto, en una pantalla vertical de 1920
+  /// los nombres quedaban diminutos al lado de la foto.
+  final double scale;
+
+  const _CascadeNames({
+    required this.ingresados,
+    required this.recentIds,
+    this.scale = 1.0,
+  });
 
   @override
   State<_CascadeNames> createState() => _CascadeNamesState();
@@ -1191,7 +1571,9 @@ class _CascadeNames extends StatefulWidget {
 
 class _CascadeNamesState extends State<_CascadeNames>
     with SingleTickerProviderStateMixin {
-  static const _itemH = 58.0;
+  static const _itemBase = 58.0;
+
+  double get _itemH => _itemBase * widget.scale;
 
   late final Ticker _ticker;
   late final ScrollController _scrollCtrl;
@@ -1399,9 +1781,11 @@ class _IngresadoItem extends StatelessWidget {
 
 class _ShockwavePainter extends CustomPainter {
   final double progress;
-  const _ShockwavePainter(this.progress);
 
-  static const _gold = Color(0xFFD4AF37);
+  /// Color de acento del evento (dorado por defecto).
+  final Color _gold;
+
+  const _ShockwavePainter(this.progress, this._gold);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1451,16 +1835,19 @@ class _ShockwavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ShockwavePainter old) => old.progress != progress;
+  bool shouldRepaint(_ShockwavePainter old) =>
+      old.progress != progress || old._gold != _gold;
 }
 
 // ── Partículas doradas flotantes ──────────────────────────────────────────
 
 class _ParticlePainter extends CustomPainter {
   final double t;
-  const _ParticlePainter(this.t);
 
-  static const _gold = Color(0xFFD4AF37);
+  /// Color de acento del evento (dorado por defecto).
+  final Color _gold;
+
+  const _ParticlePainter(this.t, this._gold);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1487,7 +1874,8 @@ class _ParticlePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ParticlePainter old) => old.t != t;
+  bool shouldRepaint(_ParticlePainter old) =>
+      old.t != t || old._gold != _gold;
 }
 
 // ── Barrido de brillo diagonal (shimmer) ─────────────────────────────────
@@ -1530,6 +1918,71 @@ class _ShimmerPainter extends CustomPainter {
 }
 
 // ── Botón de salida para modo tótem web ──────────────────────────────────────
+
+/// Botón cápsula de la barra flotante del tótem: ícono + etiqueta.
+///
+/// La etiqueta importa: sin ella no habría forma de saber si el tótem quedó en
+/// AUTO, VERTICAL u HORIZONTAL sin ponerse a mirar la forma de la pantalla.
+class _ControlPill extends StatefulWidget {
+  final IconData icono;
+  final String etiqueta;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ControlPill({
+    required this.icono,
+    required this.etiqueta,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  State<_ControlPill> createState() => _ControlPillState();
+}
+
+class _ControlPillState extends State<_ControlPill> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: _hovered ? 0.85 : 0.6),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: widget.color.withValues(alpha: _hovered ? 0.9 : 0.35),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icono, color: widget.color, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                widget.etiqueta,
+                style: GoogleFonts.oswald(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 2,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _ExitButton extends StatefulWidget {
   final VoidCallback onExit;

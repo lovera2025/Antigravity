@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/invitado.dart';
+import '../../models/totem_config.dart';
 import '../../services/supabase_service_provider.dart';
 import '../recepcion/providers/recepcion_provider.dart';
+import '../totem/providers/totem_config_provider.dart';
 
 class ListaInvitadosScreen extends ConsumerStatefulWidget {
   final String eventoId;
@@ -18,7 +20,11 @@ enum _ListaState { loading, error, browsing, verifyingDni, welcome }
 
 class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
     with SingleTickerProviderStateMixin {
-  static const _gold = Color(0xFFD4AF37);
+  /// Misma config que el tótem del salón: el invitado ve en su celular la
+  /// misma foto y el mismo saludo que están proyectados en la pantalla.
+  late TotemConfig _cfg = TotemConfig.defaults(widget.eventoId);
+
+  Color get _gold => _cfg.colorAcento;
 
   List<Invitado> _all = [];
   List<Invitado> _filtered = [];
@@ -223,6 +229,10 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Misma fuente de verdad que el tótem: si el jefe cambia la foto o el
+    // saludo, el celular del invitado lo refleja al instante.
+    _cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
+
     return Scaffold(
       backgroundColor: const Color(0xFFF2F0EB), // Gris Perla
       body: SafeArea(
@@ -244,7 +254,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(color: _gold, strokeWidth: 2),
+          CircularProgressIndicator(color: _gold, strokeWidth: 2),
           const SizedBox(height: 24),
           Text(
             'SINCRONIZANDO...',
@@ -302,7 +312,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
             children: [
               // Logo / marca
               Text(
-                'JUNIOR EVENTOS',
+                _cfg.titulo,
                 style: GoogleFonts.oswald(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
@@ -348,7 +358,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
             decoration: InputDecoration(
               hintText: 'ESCRIBÍ TU NOMBRE...',
               hintStyle: GoogleFonts.outfit(color: Colors.black26, fontSize: 14),
-              prefixIcon: const Icon(Icons.search_rounded, color: _gold, size: 22),
+              prefixIcon: Icon(Icons.search_rounded, color: _gold, size: 22),
               suffixIcon: _query.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.close_rounded, color: Colors.black26, size: 20),
@@ -371,7 +381,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(20),
-                borderSide: const BorderSide(color: _gold, width: 1.5),
+                borderSide: BorderSide(color: _gold, width: 1.5),
               ),
             ),
           ),
@@ -394,6 +404,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
       itemBuilder: (_, i) => _InvitadoTile(
         invitado: _filtered[i],
         onTap: () => _onSelect(_filtered[i]),
+        acento: _gold,
       ),
     );
   }
@@ -455,7 +466,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
                 shape: BoxShape.circle,
                 border: Border.all(color: _gold.withValues(alpha: 0.3), width: 1.5),
               ),
-              child: const Icon(Icons.badge_rounded, color: _gold, size: 52),
+              child: Icon(Icons.badge_rounded, color: _gold, size: 52),
             ),
             const SizedBox(height: 24),
             Text(
@@ -616,15 +627,16 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ── Ícono celebración ──────────────────────────────────────
+                // ── Foto del evento, o el ícono de siempre ─────────────────
                 Container(
-                  padding: const EdgeInsets.all(26),
+                  padding: EdgeInsets.all(_cfg.imagenUrl != null ? 0 : 26),
                   decoration: BoxDecoration(
                     color: _gold.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: _gold.withValues(alpha: 0.3),
-                      width: 1.5,
+                      color: _gold.withValues(
+                          alpha: _cfg.imagenUrl != null ? 0.7 : 0.3),
+                      width: _cfg.imagenUrl != null ? 3 : 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -634,18 +646,32 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.celebration_rounded,
-                    color: _gold,
-                    size: 64,
-                  ),
+                  child: _cfg.imagenUrl != null
+                      ? ClipOval(
+                          child: Image.network(
+                            _cfg.imagenUrl!,
+                            width: 138,
+                            height: 138,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Padding(
+                              padding: const EdgeInsets.all(26),
+                              child: Icon(Icons.celebration_rounded,
+                                  color: _gold, size: 64),
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.celebration_rounded,
+                          color: _gold,
+                          size: 64,
+                        ),
                 ),
 
                 const SizedBox(height: 32),
 
                 // ── Bienvenida ─────────────────────────────────────────────
                 Text(
-                  '¡BIENVENIDO!',
+                  _cfg.mensajeBienvenida.toUpperCase(),
                   style: GoogleFonts.oswald(
                     fontSize: 44,
                     fontWeight: FontWeight.w900,
@@ -825,9 +851,15 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
 class _InvitadoTile extends StatelessWidget {
   final Invitado invitado;
   final VoidCallback onTap;
-  const _InvitadoTile({required this.invitado, required this.onTap});
 
-  static const _gold = Color(0xFFD4AF37);
+  /// Color de acento del evento (dorado por defecto).
+  final Color _gold;
+
+  const _InvitadoTile({
+    required this.invitado,
+    required this.onTap,
+    required Color acento,
+  }) : _gold = acento;
 
   @override
   Widget build(BuildContext context) {
@@ -850,7 +882,7 @@ class _InvitadoTile extends StatelessWidget {
                 color: _gold.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.person_rounded, color: _gold, size: 18),
+              child: Icon(Icons.person_rounded, color: _gold, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../models/invitado.dart';
+import '../../models/totem_config.dart';
 import '../recepcion/repositories/invitados_repository.dart';
 import '../../../main.dart' show kWebBaseUrl;
+import 'providers/totem_config_provider.dart';
 
 enum TotemPanelMode { panel, fullscreen, focus }
 
@@ -29,7 +31,13 @@ class TotemPanel extends ConsumerStatefulWidget {
 }
 
 class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStateMixin {
-  static const _gold = Color(0xFFD4AF37);
+  /// Config visual del evento; sin fila en `totem_config` son los valores de
+  /// siempre, así que el panel se ve igual que antes.
+  late TotemConfig _cfg = TotemConfig.defaults(widget.eventoId);
+
+  /// Se sigue llamando `_gold` porque durante años ese fue el color; ahora sale
+  /// de la config del evento.
+  Color get _gold => _cfg.colorAcento;
 
   TotemPanelMode _currentMode = TotemPanelMode.panel;
 
@@ -377,8 +385,24 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
     super.dispose();
   }
 
+  /// Logo de la empresa, para cuando el evento no tiene foto cargada.
+  Widget _logoEmpresa() => Image.asset(
+        'assets/icons/logo-transparent-final.png',
+        width: 130,
+        height: 130,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => Icon(
+          Icons.event_rounded,
+          size: 70,
+          color: Colors.white.withValues(alpha: 0.15),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    // La config del evento entra acá y se propaga a todos los _build*.
+    _cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
+
     return GestureDetector(
       onTapDown: _currentMode == TotemPanelMode.focus
           ? (_) => _handleFocusModeExit()
@@ -507,23 +531,34 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
                       ),
                     ],
                   ),
-                  child: Image.asset(
-                    'assets/icons/logo-transparent-final.png',
-                    width: 130,
-                    height: 130,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) => Icon(
-                      Icons.event_rounded,
-                      size: 70,
-                      color: Colors.white.withValues(alpha: 0.15),
-                    ),
-                  ),
+                  child: _cfg.imagenUrl != null
+                      // Foto del evento, en círculo con el borde del acento.
+                      ? Container(
+                          width: 130,
+                          height: 130,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _gold.withValues(alpha: 0.7),
+                              width: 3,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: Image.network(
+                              _cfg.imagenUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => _logoEmpresa(),
+                            ),
+                          ),
+                        )
+                      : _logoEmpresa(),
                 ),
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Junior Eventos',
+              _cfg.titulo,
+              textAlign: TextAlign.center,
               style: GoogleFonts.oswald(
                 fontSize: 32,
                 fontWeight: FontWeight.w900,
@@ -531,6 +566,19 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
                 color: Colors.white.withValues(alpha: 0.2),
               ),
             ),
+            if (_cfg.subtitulo.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                _cfg.subtitulo.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w200,
+                  letterSpacing: 7,
+                  color: _gold.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
             const SizedBox(height: 28),
             AnimatedBuilder(
               animation: _pulseCtrl,
@@ -579,7 +627,7 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Escaneá con la cámara de tu celular',
+                    _cfg.mensajeQr,
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.w300,
@@ -605,10 +653,11 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
         border: Border(
           top: BorderSide(color: _gold.withValues(alpha: 0.2), width: 1),
         ),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF1A0A2E), Color(0xFF0D0618), Color(0xFF080808)],
+          // Violeta de siempre con el dorado; derivado del acento si se eligió otro.
+          colors: _cfg.gradientePanel,
         ),
       ),
       child: Column(
@@ -678,6 +727,7 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
                 : _CascadeNames(
                     ingresados: List.unmodifiable(_ingresados),
                     recentIds: Set.unmodifiable(_recentIds),
+                    acento: _gold,
                   ),
           ),
         ],
@@ -701,26 +751,26 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
               Opacity(
                 opacity: (_goldBloom.value * 0.42).clamp(0.0, 1.0),
                 child: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: RadialGradient(
                       center: Alignment.center,
                       radius: 1.1,
                       colors: [_gold, Colors.transparent],
-                      stops: [0.0, 1.0],
+                      stops: const [0.0, 1.0],
                     ),
                   ),
                 ),
               ),
               IgnorePointer(
                 child: CustomPaint(
-                  painter: _ShockwavePainter(_shockwave.value),
+                  painter: _ShockwavePainter(_shockwave.value, _gold),
                   child: const SizedBox.expand(),
                 ),
               ),
               if (_bgFade.value > 0.4)
                 IgnorePointer(
                   child: CustomPaint(
-                    painter: _ParticlePainter(_particleCtrl.value),
+                    painter: _ParticlePainter(_particleCtrl.value, _gold),
                     child: const SizedBox.expand(),
                   ),
                 ),
@@ -734,10 +784,10 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
                       vertical: 42,
                     ),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
+                      gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xFF1C0F35), Color(0xFF0C0518)],
+                        colors: _cfg.gradienteCard,
                       ),
                       borderRadius: BorderRadius.circular(36),
                       border: Border.all(
@@ -796,7 +846,7 @@ class _TotemPanelState extends ConsumerState<TotemPanel> with TickerProviderStat
                                   child: FadeTransition(
                                     opacity: _titleFade,
                                     child: Text(
-                                      '¡Bienvenido!',
+                                      _cfg.mensajeBienvenida,
                                       style: GoogleFonts.oswald(
                                         fontSize: 50,
                                         fontWeight: FontWeight.w700,
@@ -1099,7 +1149,14 @@ class _FestiveBackgroundState extends State<_FestiveBackground> with SingleTicke
 class _CascadeNames extends StatefulWidget {
   final List<Invitado> ingresados;
   final Set<String> recentIds;
-  const _CascadeNames({required this.ingresados, required this.recentIds});
+  /// Color de acento del evento, para resaltar a los recién llegados.
+  final Color acento;
+
+  const _CascadeNames({
+    required this.ingresados,
+    required this.recentIds,
+    required this.acento,
+  });
 
   @override
   State<_CascadeNames> createState() => _CascadeNamesState();
@@ -1181,6 +1238,7 @@ class _CascadeNamesState extends State<_CascadeNames>
               child: _IngresadoItem(
                 invitado: inv,
                 isRecent: widget.recentIds.contains(inv.id),
+                acento: widget.acento,
               ),
             );
           },
@@ -1223,9 +1281,14 @@ class _CascadeNamesState extends State<_CascadeNames>
 class _IngresadoItem extends StatelessWidget {
   final Invitado invitado;
   final bool isRecent;
-  const _IngresadoItem({required this.invitado, required this.isRecent});
+  /// Color de acento del evento (dorado por defecto).
+  final Color _gold;
 
-  static const _gold = Color(0xFFD4AF37);
+  const _IngresadoItem({
+    required this.invitado,
+    required this.isRecent,
+    required Color acento,
+  }) : _gold = acento;
 
   @override
   Widget build(BuildContext context) {
@@ -1289,9 +1352,11 @@ class _IngresadoItem extends StatelessWidget {
 
 class _ShockwavePainter extends CustomPainter {
   final double progress;
-  const _ShockwavePainter(this.progress);
 
-  static const _gold = Color(0xFFD4AF37);
+  /// Color de acento del evento (dorado por defecto).
+  final Color _gold;
+
+  const _ShockwavePainter(this.progress, this._gold);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1338,14 +1403,17 @@ class _ShockwavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ShockwavePainter old) => old.progress != progress;
+  bool shouldRepaint(_ShockwavePainter old) =>
+      old.progress != progress || old._gold != _gold;
 }
 
 class _ParticlePainter extends CustomPainter {
   final double t;
-  const _ParticlePainter(this.t);
 
-  static const _gold = Color(0xFFD4AF37);
+  /// Color de acento del evento (dorado por defecto).
+  final Color _gold;
+
+  const _ParticlePainter(this.t, this._gold);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1372,7 +1440,7 @@ class _ParticlePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ParticlePainter old) => old.t != t;
+  bool shouldRepaint(_ParticlePainter old) => old.t != t || old._gold != _gold;
 }
 
 class _ShimmerPainter extends CustomPainter {

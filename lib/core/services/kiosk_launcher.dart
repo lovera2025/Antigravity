@@ -2,10 +2,28 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
+import '../../features/totem/totem_orientation.dart';
+
 class KioskLauncher {
   static int? _totemWindowId;
 
-  static Future<void> launch(String eventoId) async {
+  /// Abre la ventana del tótem.
+  ///
+  /// [orientacion] define la forma inicial de la ventana. Si no se pasa, se usa
+  /// la que quedó guardada para ese evento, y si nunca se eligió una, abre
+  /// **vertical**: el tótem se lleva a una pantalla parada, y hasta ahora nacía
+  /// en 1280x720 apaisado, con lo cual el layout vertical que ya existía en el
+  /// código no se activaba nunca. Desde la propia ventana se puede girar.
+  static Future<void> launch(
+    String eventoId, {
+    TotemOrientation? orientacion,
+  }) async {
+    final guardada = await TotemOrientationStore.load(eventoId);
+    final inicial = orientacion ??
+        (guardada == TotemOrientation.auto
+            ? TotemOrientation.vertical
+            : guardada);
+
     if (_totemWindowId != null) {
       final activeIds = await DesktopMultiWindow.getAllSubWindowIds();
       if (activeIds.contains(_totemWindowId)) {
@@ -23,15 +41,26 @@ class KioskLauncher {
 
     final window = await DesktopMultiWindow.createWindow(jsonEncode({
       'eventoId': eventoId,
+      'orientacion': inicial.name,
     }));
 
     _totemWindowId = window.windowId;
 
     window
-      ..setFrame(const Offset(100, 100) & const Size(1280, 720))
+      ..setFrame(const Offset(100, 100) & _tamanioInicial(inicial))
       ..center()
       ..setTitle('Tótem — Junior Eventos')
       ..show();
+  }
+
+  /// Tamaño de arranque. Es una aproximación razonable para cualquier monitor;
+  /// apenas la ventana está viva, el tótem la reajusta a la pantalla real.
+  static Size _tamanioInicial(TotemOrientation orientacion) {
+    return switch (orientacion) {
+      TotemOrientation.vertical => const Size(608, 1080),
+      TotemOrientation.horizontal => const Size(1280, 720),
+      TotemOrientation.auto => const Size(1280, 720),
+    };
   }
 
   static Future<void> close() async {
@@ -102,6 +131,20 @@ class KioskLauncher {
         await DesktopMultiWindow.invokeMethod(_totemWindowId!, 'guest_checkin', jsonEncode(guestJson));
       } catch (e) {
         debugPrint('KIOSK: Error al notificar checkin (ventana cerrada): $e');
+        _totemWindowId = null;
+      }
+    }
+  }
+
+  /// Notifica que se borró un invitado, para que desaparezca del tótem al
+  /// instante sin esperar a que la nube replique.
+  static Future<void> notifyGuestRemoved(String invitadoId) async {
+    if (_totemWindowId != null) {
+      try {
+        await DesktopMultiWindow.invokeMethod(
+            _totemWindowId!, 'guest_removed', invitadoId);
+      } catch (e) {
+        debugPrint('KIOSK: Error al notificar borrado (ventana cerrada): $e');
         _totemWindowId = null;
       }
     }

@@ -187,7 +187,26 @@ class InvitadosRepository {
     await db.delete('invitados', where: 'id = ?', whereArgs: [id]);
     await SyncQueue.enqueue(tabla: 'invitados', operacion: SyncOperation.delete, registroId: id, payload: {'id': id});
 
+    // Sacarlo del tótem al instante, igual que se hace con el check-in.
+    // Sin esto el nombre queda proyectado en la pantalla del salón hasta que
+    // la nube replique el borrado.
+    if (KioskLauncher.isTotemActive) {
+      KioskLauncher.notifyGuestRemoved(id);
+    }
+
     if (eventoId != null) {
+      // Broadcast para tótems remotos y web, que no comparten esta PC.
+      try {
+        final channel = _activeChannels[eventoId];
+        if (channel != null) {
+          await channel.sendBroadcastMessage(
+            event: 'guest_removed',
+            payload: {'id': id},
+          );
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error al enviar broadcast de borrado: $e');
+      }
       _notifyChanges(eventoId);
     }
 
