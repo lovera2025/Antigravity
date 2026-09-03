@@ -120,51 +120,33 @@ CREATE POLICY "Escritura totem bucket con permiso" ON storage.objects
   );
 
 
--- ── 3. ARREGLAR EL REALTIME (el bug del borrado en el tótem) ────────────────
+-- ── 3. ARREGLAR EL BORRADO EN EL TÓTEM ──────────────────────────────────────
 -- Con REPLICA IDENTITY DEFAULT, el payload de un DELETE en la replicación
--- lógica lleva SOLO la primary key. El tótem se suscribe filtrando por
--- evento_id, filtro que el servidor no puede evaluar sobre ese payload pelado,
--- así que descarta el evento y el invitado borrado queda para siempre en
--- pantalla. FULL hace que el DELETE viaje con la fila completa.
+-- lógica lleva SOLO la primary key. Toda suscripción filtrada por una columna
+-- —el `.stream().eq('evento_id')` del tótem y el PostgresChangeFilter que se le
+-- agregó al panel de Recepción el 2026-09-02— queda sin poder evaluar el
+-- filtro sobre ese payload pelado, así que el servidor descarta el evento: el
+-- invitado borrado sigue proyectado en la pantalla del salón hasta reiniciar.
+-- FULL hace que el DELETE viaje con la fila completa y el filtro pueda
+-- resolverse.
 --
--- Costo: el WAL de cada UPDATE/DELETE pasa a llevar la fila vieja entera.
--- En invitados (8 columnas cortas) es despreciable.
+-- SOBRE EL DISK IO (ver docs/CONTEXTO_v4.9.4_2026-09-02.md)
+--   FULL agranda el registro de WAL de cada UPDATE/DELETE de esta tabla, y el
+--   costo de apply_rls escala con el volumen de WAL. Se acota a `invitados` a
+--   propósito: es la única tabla que quedó en la publicación, tiene 8 columnas
+--   cortas y unos cientos de filas por evento, contra las 3.121 de
+--   pagos_contrato_alumno. Los INSERT —que son la mayoría durante una carga de
+--   lista— no se ven afectados: FULL solo agrega la fila vieja, y en un INSERT
+--   no hay fila vieja.
 --
--- ROLLBACK:
---   ALTER TABLE public.invitados REPLICA IDENTITY DEFAULT;
---   ALTER TABLE public.permisos_usuario REPLICA IDENTITY DEFAULT;
---   ALTER TABLE public.perfiles REPLICA IDENTITY DEFAULT;
---   ALTER PUBLICATION supabase_realtime DROP TABLE public.permisos_usuario;
---   ALTER PUBLICATION supabase_realtime DROP TABLE public.perfiles;
+--   NO se agrega ninguna tabla a la publicación. La v4.9.4 la dejó en una sola
+--   (`invitados`) para salir del agotamiento de Disk IO Budget, y eso se
+--   respeta: los permisos en vivo y la presencia van por canales de broadcast
+--   y presence, que no consultan el WAL ni disparan apply_rls.
+--
+-- ROLLBACK: ALTER TABLE public.invitados REPLICA IDENTITY DEFAULT;
 
 ALTER TABLE public.invitados REPLICA IDENTITY FULL;
-
--- permisos_usuario no estaba en la publicación realtime, por eso hoy el
--- operador no se entera de que le habilitaron un módulo hasta re-loguearse.
-ALTER TABLE public.permisos_usuario REPLICA IDENTITY FULL;
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime' AND schemaname = 'public'
-      AND tablename = 'permisos_usuario'
-  ) THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.permisos_usuario;
-  END IF;
-END $$;
-
--- perfiles, para que un alta nueva aparezca sola en la lista de OPERADORES.
-ALTER TABLE public.perfiles REPLICA IDENTITY FULL;
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime' AND schemaname = 'public'
-      AND tablename = 'perfiles'
-  ) THEN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.perfiles;
-  END IF;
-END $$;
 
 
 -- ── 4. COLUMNA last_seen_at EN perfiles ─────────────────────────────────────
@@ -253,16 +235,18 @@ CREATE POLICY "Admin gestiona perfiles" ON public.perfiles
 -- VERIFICACIÓN — correr después de aplicar
 -- ============================================================================
 --
--- 1) Replicación y realtime (invitados debe decir FULL; permisos_usuario y
---    perfiles, FULL + en_realtime true):
+-- 1) Replicación: `invitados` debe decir FULL, y la publicación de Realtime
+--    tiene que seguir teniendo UNA SOLA tabla. Si aparece alguna más, algo
+--    revirtió el trabajo de la v4.9.4.
 --
 --   SELECT c.relname AS tabla,
 --          CASE c.relreplident WHEN 'd' THEN 'DEFAULT' WHEN 'f' THEN 'FULL'
---                              WHEN 'n' THEN 'NOTHING' WHEN 'i' THEN 'INDEX' END AS replica_identity,
---          EXISTS (SELECT 1 FROM pg_publication_tables pt
---                  WHERE pt.pubname='supabase_realtime' AND pt.tablename=c.relname) AS en_realtime
+--                              WHEN 'n' THEN 'NOTHING' WHEN 'i' THEN 'INDEX' END AS replica_identity
 --   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
---   WHERE n.nspname='public' AND c.relname IN ('invitados','permisos_usuario','perfiles');
+--   WHERE n.nspname='public' AND c.relname = 'invitados';
+--
+--   SELECT tablename FROM pg_publication_tables
+--   WHERE pubname = 'supabase_realtime';   -- esperado: solo `invitados`
 --
 -- 2) Conteo de control: debe dar idéntico al del encabezado de este archivo.
 --
