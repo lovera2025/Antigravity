@@ -9,6 +9,7 @@ import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
+import '../../../models/transaccion.dart';
 import '../../eventos/services/mora_tracked_recovery.dart';
 import '../models/ingreso_detallado.dart';
 
@@ -104,6 +105,17 @@ class FinanzasRepository {
 
     // Mapeo Transacciones Particulares
     for (var r in transData) {
+      // Las bonificaciones no son plata: son crédito imputado al evento para
+      // que su cuenta cierre en cero. Contarlas como cobrado inflaba el total
+      // y —como se guardan sin medio de pago— caían en el bucket de efectivo,
+      // que es justo el número contra el que se compara la caja física. Eran
+      // $869.500 de efectivo que el sistema decía tener y la caja no.
+      //
+      // La pantalla del evento ya hacía esta distinción ("Total imputado" vs
+      // "Efectivo recibido" vs "Bonificaciones"); Mi Empresa era el único lugar
+      // que las mezclaba.
+      if (conceptoEsBonificacion(r['concepto']?.toString())) continue;
+
       final fechaRaw = r['fecha_pago'];
       final DateTime fecha = fechaRaw != null
           ? _parseFechaPagoUtc(fechaRaw)

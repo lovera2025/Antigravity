@@ -57,14 +57,24 @@ class Transaccion {
   }
 }
 
+/// Una bonificación es **crédito imputado al evento, no plata recibida**.
+///
+/// Se guarda como transacción para que la cuenta del evento cierre en cero, y la
+/// pantalla del evento ya las separa: muestra "Efectivo recibido" por un lado y
+/// "Bonificaciones" por otro, debajo de "Total imputado". Mi Empresa tiene que
+/// respetar la misma distinción o cuenta como cobrado un descuento que nadie
+/// pagó — eso inflaba el efectivo neto, que es contra lo que se compara la caja.
+///
+/// La regla vive acá, en un solo lugar, para que no se escriba distinto en cada
+/// consulta que la necesite.
+bool conceptoEsBonificacion(String? concepto) =>
+    (concepto ?? '').toLowerCase().contains('bonificaci');
+
 /// Crédito registrado al aplicar descuento en el diálogo de pago (`Bonificación Especial`).
 extension TransaccionTipo on Transaccion {
   bool get esAnulada => anulado != 0;
 
-  bool get esBonificacion {
-    final c = concepto?.toLowerCase() ?? '';
-    return c.contains('bonificaci');
-  }
+  bool get esBonificacion => conceptoEsBonificacion(concepto);
 
   bool get esBonificacionGlobal {
     final c = concepto ?? '';

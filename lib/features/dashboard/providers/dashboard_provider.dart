@@ -307,9 +307,21 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
 
     for (var ev in particularesRes) {
       final double presupuestoBase = (ev['presupuesto_base'] as num?)?.toDouble() ?? 0;
-      final double bonificacionPct = (ev['bonificacion_global_pct'] as num?)?.toDouble() ?? 0;
-      final double presupuestoFinal = presupuestoBase * (1 - (bonificacionPct / 100));
-      
+
+      // El presupuesto va ENTERO. La bonificación ya está descontada del otro
+      // lado: al aplicarla, el diálogo de pago crea una transacción de crédito
+      // ("Bonificación global (X% sobre presupuesto total)") que entra en
+      // `recaudado`. Restarle además el porcentaje al presupuesto descontaba el
+      // descuento dos veces y dejaba en deuda negativa a quien había pagado
+      // justo: RAMON CACERES, con $7.200.000 de presupuesto, $6.480.000
+      // cobrados y $720.000 de bonificación, daba −$720.000 estando saldado.
+      //
+      // La transacción es la fuente de verdad, no el porcentaje —
+      // `bonificacion_global_pct` solo recuerda qué se pactó para no volver a
+      // pedirlo—, y así lo calcula también `registrar_pago_dialog`
+      // (`presupuestoTotal − créditos − montoBonif`).
+      final double presupuestoFinal = presupuestoBase;
+
       final double recaudado = (ev['recaudado'] as num?)?.toDouble() ?? 0;
       final double saldoReal = (presupuestoFinal - recaudado).clamp(0.0, double.infinity);
       
