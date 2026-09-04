@@ -471,7 +471,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
 
       // Usar Supabase Realtime Broadcast para reacción INMEDIATA sin esperar replicación
       if (_broadcastChannel == null) {
-        _broadcastChannel = svc.client.channel('totem_${_eventoId}');
+        _broadcastChannel = svc.client.channel('totem_$_eventoId');
         _broadcastChannel!.onBroadcast(event: 'checkin', callback: (payload) {
           final data = payload['payload'];
           if (data != null && mounted) {
@@ -956,7 +956,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   // ── Sección superior: Portada + QR ────────────────────────────────────────
 
   Widget _buildQRSection(BoxConstraints constraints) {
-    final qrUrl = '$kWebBaseUrl/lista?evento=${_eventoId}';
+    final qrUrl = '$kWebBaseUrl/lista?evento=$_eventoId';
     final isWidescreen = _esWidescreen(constraints);
     final scale = _escala(constraints);
 
