@@ -2,8 +2,9 @@
 
 **Fecha:** 2026-09-03
 **Rama:** `claude/session-r5lh1d` (sale de `feature/v4.6-cierre-por-sesiones`, v4.9.4)
-**CON migración de base.** `supabase/migracion_totem_config.sql` — **no aplicada
-todavía**, a pedido. Cada sentencia lleva su `ROLLBACK` comentado arriba.
+**CON migración de base.** `supabase/migracion_totem_config.sql` — **aplicada el
+2026-09-03**, después de auditarla contra la base. Cada sentencia lleva su
+`ROLLBACK` comentado arriba.
 
 **En curso, no publicado.** Este documento se escribe a mitad del trabajo porque
 aparecieron dos hallazgos que cambian decisiones ya tomadas y conviene que
@@ -175,9 +176,17 @@ quedó mudo. De ahí la reconciliación.
 
 ## LO QUE FALTA
 
-- **Editor** (`TotemConfigSheet`): subir la foto con `file_picker` (`withData: true`,
-  obligatorio para que ande en web) a Storage, campos de texto y paleta de acento,
-  con preview en vivo. Es lo único que necesita la tabla nueva.
+- ~~**Editor** (`TotemConfigSheet`)~~ — **hecho el 2026-09-03.**
+  `lib/features/totem/widgets/totem_config_sheet.dart` con
+  `lib/features/totem/repositories/totem_config_repository.dart`. Se entra por el
+  botón dorado de la paleta en Recepción, gateado por `puede_totem`. Paleta de
+  swatches fija en vez de un color picker de terceros: el acento se mira
+  proyectado y `gradientePanel` deriva el fondo de ese tono, así que una rueda
+  libre deja pasar combinaciones ilegibles a cinco metros. Queda un campo de hex
+  para el color exacto de una marca. **Trampa que costó encontrar:** el path del
+  bucket es fijo (`<evento_id>/portada.<ext>`) y con `upsert` la URL pública
+  nunca cambia, así que sin un `?v=<timestamp>` el CDN y `Image.network` siguen
+  sirviendo la foto vieja y parece que guardar no hizo nada.
 - **Permisos en vivo**, rediseñado: broadcast en un canal `permisos_<uid>` al
   guardar, más refetch en el tick del pull. **Sin tocar la publicación.**
 - **Presencia confiable**, rediseñado: el payload de `online_users` ya trae

@@ -28,6 +28,39 @@ class InvitadosRepository {
   // Set in memory to prevent unnecessary pulls when the db is explicitly empty
   final _hasInitialPull = <String>{};
 
+  /// Canales usados solo para **emitir** broadcasts al tótem.
+  ///
+  /// Memoizado porque `RealtimeClient.channel()` agrega un canal nuevo a su
+  /// lista en cada llamada: sin esto se filtrarían durante una fiesta larga.
+  final _emisores = <String, RealtimeChannel>{};
+
+  RealtimeChannel _canalEmisor(String eventoId) =>
+      _activeChannels[eventoId] ??
+      (_emisores[eventoId] ??= _supabase.channel('totem_$eventoId'));
+
+  /// Le avisa al tótem por Realtime.
+  ///
+  /// Antes cada emisor chequeaba `_activeChannels[eventoId] != null` y, si no
+  /// había canal, el aviso se perdía en silencio — justo el caso del check-in
+  /// hecho desde el celular del invitado, cuando nadie tiene el panel abierto.
+  /// `sendBroadcastMessage` no necesita suscripción: si el socket no está
+  /// disponible, el cliente cae solo al endpoint REST de broadcast.
+  Future<void> _emitir(
+    String eventoId,
+    String evento,
+    Map<String, dynamic> payload,
+  ) async {
+    // Mismo blindaje que el resto del repo: un UUID inválido le saca un 22P02
+    // a Supabase.
+    if (eventoId.length != 36) return;
+    try {
+      await _canalEmisor(eventoId)
+          .sendBroadcastMessage(event: evento, payload: payload);
+    } catch (e) {
+      debugPrint('⚠️ Broadcast "$evento" falló: $e');
+    }
+  }
+
   // ── LECTURA ────────────────────────────────────────────────────────────────
 
   /// Obtiene todos los invitados de un evento desde SQLite.
@@ -196,17 +229,7 @@ class InvitadosRepository {
 
     if (eventoId != null) {
       // Broadcast para tótems remotos y web, que no comparten esta PC.
-      try {
-        final channel = _activeChannels[eventoId];
-        if (channel != null) {
-          await channel.sendBroadcastMessage(
-            event: 'guest_removed',
-            payload: {'id': id},
-          );
-        }
-      } catch (e) {
-        debugPrint('⚠️ Error al enviar broadcast de borrado: $e');
-      }
+      unawaited(_emitir(eventoId, 'guest_removed', {'id': id}));
       _notifyChanges(eventoId);
     }
 
@@ -243,20 +266,12 @@ class InvitadosRepository {
         KioskLauncher.notifyGuestCheckin(invitado.toJson());
       }
       
-      // Sincronización Realtime instantánea para Tótems remotos y Web (Broadcast)
-      // Esto evita esperar la replicación de la DB de Postgres
-      try {
-        final channel = _activeChannels[invitado.eventoId];
-        if (channel != null) {
-          await channel.sendBroadcastMessage(
-            event: 'checkin',
-            payload: invitado.toJson(),
-          );
-        }
-      } catch (e) {
-        debugPrint('⚠️ Error al enviar broadcast de check-in: $e');
-      }
-      
+      // Sincronización Realtime instantánea para Tótems remotos y Web (Broadcast).
+      // Evita esperar la replicación de Postgres. Va sin `await`: el check-in en
+      // la puerta es lo más sensible a latencia de toda la app y el fallback
+      // REST agrega un viaje HTTP.
+      unawaited(_emitir(invitado.eventoId, 'checkin', invitado.toJson()));
+
       _notifyChanges(invitado.eventoId);
     }
 
@@ -295,6 +310,17 @@ class InvitadosRepository {
     final row = await db.query('invitados', where: 'id = ?', whereArgs: [invitadoId]);
     if (row.isNotEmpty) {
       final invitado = Invitado.fromJson(row.first);
+
+      // Se usa el mismo aviso que el borrado a propósito: para el tótem el
+      // efecto es idéntico —el nombre sale de "YA LLEGARON"— y
+      // `_handleGuestRemoved` saca el id de `_processedIds`, así que si lo
+      // vuelven a marcar la bienvenida se anima de nuevo, que es lo correcto.
+      // Sin esto, deshacer un ingreso tardaba hasta 60 s en verse en el salón.
+      if (KioskLauncher.isTotemActive) {
+        KioskLauncher.notifyGuestRemoved(invitadoId);
+      }
+      unawaited(_emitir(invitado.eventoId, 'guest_removed', {'id': invitadoId}));
+
       _notifyChanges(invitado.eventoId);
     }
 
@@ -347,6 +373,10 @@ class InvitadosRepository {
       }
     });
 
+    // Volvieron todos a pendiente: para el tótem equivale a vaciar la lista.
+    if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset();
+    unawaited(_emitir(eventoId, 'list_reset', {'evento_id': eventoId}));
+
     _notifyChanges(eventoId);
 
     if (_connectivity.currentStatus == AppConnectivity.online) {
@@ -397,6 +427,12 @@ class InvitadosRepository {
         );
       }
     });
+
+    // El aviso vive acá y no en la pantalla que llamó: hay varias superficies
+    // que vacían listas, y la que se olvide la línea deja el salón proyectando
+    // gente que ya no existe.
+    if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset();
+    unawaited(_emitir(eventoId, 'list_reset', {'evento_id': eventoId}));
 
     _notifyChanges(eventoId);
 

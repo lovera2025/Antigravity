@@ -4,6 +4,13 @@
 -- ============================================================================
 -- Ejecutar en el SQL Editor de Supabase.
 --
+-- ESTADO: **APLICADA** el 2026-09-03 en `bucnrydgojyzntgesxqb`.
+--   Verificado después de aplicar: invitados = REPLICA IDENTITY FULL, la
+--   publicación `supabase_realtime` sigue con UNA sola tabla, totem_config
+--   creada y vacía, bucket `totem` público con tope de 5 MB, y los conteos de
+--   todas las tablas idénticos a los de antes. Se deja el archivo como registro
+--   y por los ROLLBACK.
+--
 -- GARANTÍA DE SEGURIDAD DE DATOS
 --   Este archivo NO contiene ningún DELETE, DROP TABLE ni DROP COLUMN.
 --   No modifica una sola fila de: eventos, eventos_servicios, clientes,
@@ -12,12 +19,15 @@
 --   El único DROP es de policies (reglas de seguridad), que se recrean
 --   inmediatamente debajo.
 --
--- CONTEO BASE antes de aplicar (3 Sep 2026):
---   accesos 0 · clientes 49 · contratos_alumnos 642 · egresos 120
+-- CONTEO BASE, medido justo antes de aplicar (3 Sep 2026):
+--   accesos 0 · clientes 49 · contratos_alumnos 642 · egresos 121
 --   eventos 23 · eventos_servicios 68 · invitados 3
---   pagos_contrato_alumno 3121 · perfiles 3 · permisos_usuario 1
+--   pagos_contrato_alumno 3124 · perfiles 3 · permisos_usuario 1
 --   presupuesto_servicios 197 · presupuestos 29 · transacciones 20
 --   Volver a correr el conteo al terminar: debe dar exactamente lo mismo.
+--   (Los primeros números escritos acá —egresos 120, pagos 3121— quedaron
+--    viejos entre que se redactó el archivo y que se aplicó: la app siguió
+--    operando en el medio. Estos son los que se verificaron.)
 --
 -- Cada bloque lleva su ROLLBACK escrito arriba, comentado.
 -- ============================================================================

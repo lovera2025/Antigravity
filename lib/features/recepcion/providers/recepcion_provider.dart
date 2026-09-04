@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/invitado.dart';
 import '../../../models/evento.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/services/kiosk_launcher.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../repositories/invitados_repository.dart';
 import '../repositories/supabase_invitados_repository.dart';
@@ -23,7 +24,20 @@ class SelectedEventNotifier extends Notifier<String?> {
   String? build() => null;
 
   void select(String? eventoId) {
+    if (state == eventoId) return;
     state = eventoId;
+
+    // El tótem proyectado sigue al evento activo. Va acá y no con un `ref.listen`
+    // en alguna pantalla porque este es el **único** punto de mutación —los tres
+    // dropdowns pasan por `select`— y así funciona aunque la pantalla que cambió
+    // el evento no esté montada.
+    //
+    // Si se limpia la selección no se toca el tótem a propósito: dejar la
+    // pantalla del salón en blanco a mitad de un evento es peor que que muestre
+    // el anterior un rato.
+    if (eventoId != null && KioskLauncher.isTotemActive) {
+      KioskLauncher.setEvento(eventoId);
+    }
   }
 
   void clear() {

@@ -10,6 +10,8 @@ import 'package:excel/excel.dart' hide Border;
 import '../../core/services/sync_engine.dart';
 import '../../models/invitado.dart';
 import '../totem/totem_panel.dart';
+import '../totem/widgets/totem_config_sheet.dart';
+import '../common/providers/user_role_provider.dart';
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
 import '../../core/services/kiosk_launcher.dart';
@@ -264,6 +266,31 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // ── Personalizar (foto y textos del evento) ────────────────────
+              // Va acá porque el operador ya está mirando el panel en vivo del
+              // mismo evento: edita y ve el resultado al lado, sin navegar.
+              if (ref.watch(userRoleProvider).maybeWhen(
+                    data: (d) => d.permisos.puedeTotem,
+                    orElse: () => false,
+                  )) ...[
+                Tooltip(
+                  message: 'Personalizar tótem',
+                  child: FloatingActionButton(
+                    mini: true,
+                    heroTag: 'config_totem',
+                    backgroundColor: _perla,
+                    onPressed: () => showTotemConfigSheet(
+                      context: context,
+                      eventoId: eventoId,
+                    ),
+                    child: const Icon(Icons.palette_rounded,
+                        color: Colors.black, size: 18),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: Colors.white12, height: 1),
+                const SizedBox(height: 12),
+              ],
               // ── Controles de Ventana (Solo si hay tótem activo) ──────────
               if (KioskLauncher.isTotemActive) ...[
                 Tooltip(
@@ -1086,32 +1113,116 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
     }
   }
 
+  /// Vacía la lista de invitados del evento.
+  ///
+  /// No pide PIN: el operador que está en Recepción ya está autorizado y
+  /// pedírselo cada vez sería fricción sin sentido. En cambio la fricción es
+  /// **proporcional al daño**: si todavía no ingresó nadie —el caso común de
+  /// "cargué la lista equivocada"— alcanza con confirmar. Si ya entró gente, hay
+  /// que escribir la palabra, porque ahí se pierde también el registro de quién
+  /// llegó y a qué hora (los `accesos` se van por cascada).
   Future<void> _confirmarVaciarLista(String eventoId, BuildContext context) async {
+    final stats = ref.read(statsEventoProvider(eventoId)).maybeWhen(
+          data: (s) => s,
+          orElse: () => const <String, int>{},
+        );
+    final total = stats['total'] ?? 0;
+    final ingresados = stats['ingresados'] ?? 0;
+
+    if (total == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La lista ya está vacía.')),
+      );
+      return;
+    }
+
+    final exigeEscribir = ingresados > 0;
+    final escrito = TextEditingController();
+
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Vaciar Toda la Lista', style: TextStyle(color: Colors.redAccent)),
-        content: const Text('¡ATENCIÓN! ¿Estás seguro de que querés ELIMINAR COMPLETAMENTE a todos los invitados de este evento?\n\nEsta acción borrará el historial entero de este evento para que ingreses una nueva lista de otra fiesta. Es irreversible.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('VACIAR LISTA'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final habilitado = !exigeEscribir ||
+              escrito.text.trim().toUpperCase() == 'VACIAR';
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            title: const Text('Vaciar toda la lista',
+                style: TextStyle(color: Colors.redAccent)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Se van a borrar los $total invitados de este evento.',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                if (ingresados > 0) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    '$ingresados ya ingresaron. También se pierde el registro '
+                    'de su entrada.',
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                const Text(
+                  'Es irreversible.',
+                  style: TextStyle(color: Colors.white54),
+                ),
+                if (exigeEscribir) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Escribí VACIAR para confirmar:',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: escrito,
+                    autofocus: true,
+                    onChanged: (_) => setDialogState(() {}),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: 'VACIAR',
+                      hintStyle: TextStyle(color: Colors.white24),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('CANCELAR'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.redAccent.withValues(alpha: 0.25),
+                ),
+                onPressed: habilitado ? () => Navigator.pop(ctx, true) : null,
+                child: const Text('VACIAR LISTA'),
+              ),
+            ],
+          );
+        },
       ),
     );
+
+    escrito.dispose();
 
     if (confirmar == true) {
       try {
         final repo = ref.read(invitadosRepositoryProvider);
+        // El aviso al tótem lo hace `vaciarEvento` adentro del repositorio, para
+        // que valga desde cualquier pantalla y no solo desde esta.
         await repo.vaciarEvento(eventoId);
-        
-        // Notificar al tótem para reflejo inmediato sin esperar sync
-        if (KioskLauncher.isTotemActive) {
-          KioskLauncher.notifyListReset();
-        }
 
         // Invalidar para que refresque stats y lista inmediatamente en el operador
         ref.invalidate(invitadosStreamProvider(eventoId));
@@ -1215,17 +1326,35 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _confirmarVaciarLista(eventoId, context),
-              icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-              label: const Text('VACIAR LISTA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          // Vaciar la lista borra de verdad y es irreversible. Antes era un
+          // botón del mismo tamaño y al lado de EXPORTAR: de noche, en un salón
+          // y con pantalla táctil, un dedazo alcanzaba. Ahora hay que abrir el
+          // menú a propósito.
+          Tooltip(
+            message: 'Más acciones',
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white70),
+              color: const Color(0xFF1E1E1E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
+              onSelected: (v) {
+                if (v == 'vaciar') _confirmarVaciarLista(eventoId, context);
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem<String>(
+                  value: 'vaciar',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.delete_sweep_rounded,
+                        color: Colors.redAccent, size: 20),
+                    title: Text('Vaciar lista',
+                        style: TextStyle(color: Colors.redAccent)),
+                    subtitle: Text('Borra todos los invitados',
+                        style: TextStyle(color: Colors.white38, fontSize: 11)),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

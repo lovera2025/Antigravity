@@ -12,6 +12,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
+import '../../core/services/totem_config_cache.dart';
 import '../../models/invitado.dart';
 import '../../models/totem_config.dart';
 import '../../../main.dart' show kWebBaseUrl;
@@ -37,6 +38,15 @@ class TotemDisplay extends ConsumerStatefulWidget {
 }
 
 class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProviderStateMixin {
+  /// Evento que se está proyectando ahora mismo.
+  ///
+  /// Es estado y no `widget.eventoId` porque en la ventana secundaria el evento
+  /// llega **una sola vez**, en los argumentos con que se creó la ventana. Sin
+  /// esto, cambiar de evento en Recepción dejaba el salón proyectando el
+  /// anterior para siempre. Recepción lo cambia en caliente por el puente
+  /// (`set_evento`), sin recrear la ventana.
+  late String _eventoId = widget.eventoId;
+
   /// Config visual del evento. Se refresca sola en cada build desde el stream;
   /// mientras no haya fila en `totem_config` son los valores de siempre.
   late TotemConfig _cfg = TotemConfig.defaults(widget.eventoId);
@@ -124,7 +134,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   // ── Orientación ────────────────────────────────────────────────────────────
 
   Future<void> _cargarOrientacion() async {
-    final guardada = await TotemOrientationStore.load(widget.eventoId);
+    final guardada = await TotemOrientationStore.load(_eventoId);
     if (!mounted || guardada == _orientacion) return;
     setState(() => _orientacion = guardada);
     _aplicarFrameVentana(guardada);
@@ -136,7 +146,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     final siguiente = _orientacion.siguiente;
     setState(() => _orientacion = siguiente);
     _mostrarControles();
-    await TotemOrientationStore.save(widget.eventoId, siguiente);
+    await TotemOrientationStore.save(_eventoId, siguiente);
     await _aplicarFrameVentana(siguiente);
   }
 
@@ -231,9 +241,88 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
             _handleGuestRemoved(call.arguments as String);
           }
           return null;
+        case 'set_evento':
+          final nuevo = call.arguments as String?;
+          // Mismo blindaje de UUID que usan los repos: un id malformado le saca
+          // un 22P02 a Supabase y dejaría la pantalla del salón en error.
+          if (nuevo != null && nuevo.length == 36) _cambiarEvento(nuevo);
+          return null;
+        case 'config_updated':
+          if (call.arguments != null) {
+            final data = jsonDecode(call.arguments as String);
+            _handleConfigUpdated(TotemConfig.fromJson(data));
+          }
+          return null;
       }
       return null;
     });
+  }
+
+  /// Cambia de evento sin recrear la ventana.
+  ///
+  /// Es el `didUpdateWidget` de [TotemPanel] más lo que el panel no necesita por
+  /// vivir en el mismo proceso que Recepción.
+  void _cambiarEvento(String nuevo) {
+    if (!mounted || nuevo == _eventoId) return;
+
+    _sub?.cancel();
+    _sub = null;
+    _displayTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _reconciliarTimer?.cancel();
+
+    // IMPRESCINDIBLE: el canal se llama `totem_<eventoId>` y `_connect()` solo
+    // lo crea si es null. Sin esto el tótem seguiría escuchando los check-ins
+    // del evento viejo, y sería un bug mudo porque la lista de Postgres sí
+    // cambia.
+    _broadcastChannel?.unsubscribe();
+    _broadcastChannel = null;
+
+    // Corta en seco una bienvenida del evento anterior que esté en pantalla.
+    _entryCtrl.reset();
+
+    setState(() {
+      _eventoId = nuevo;
+      _queue.clear();
+      _processedIds.clear();
+      _ingresados.clear();
+      _recentIds.clear();
+      _current = null;
+      // `false` es lo que evita re-animar bienvenidas: la primera pasada por
+      // `_onData` puebla la lista y llena `_processedIds` sin encolar nada, así
+      // que la gente ya ingresada del evento nuevo aparece en silencio.
+      _initialized = false;
+      _reconnectAttempts = 0;
+      _isConnected = true;
+      // Evita un frame con el branding del evento anterior.
+      _cfg = TotemConfig.defaults(nuevo);
+    });
+
+    _connect();
+    _cargarOrientacion();
+  }
+
+  /// Aplica una config recién guardada desde el editor.
+  ///
+  /// Viene por el puente con el JSON entero porque `SharedPreferences` cachea en
+  /// memoria por proceso: hay que reescribir la caché **de este** proceso para
+  /// que el provider la levante. El `setState` solo pinta un frame; el que
+  /// manda es el invalidate.
+  void _handleConfigUpdated(TotemConfig cfg) {
+    if (!mounted || cfg.eventoId != _eventoId) return;
+    TotemConfigCache.save(cfg);
+    setState(() => _cfg = cfg);
+    ref.invalidate(totemConfigProvider(_eventoId));
+  }
+
+  @override
+  void didUpdateWidget(covariant TotemDisplay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Para el tótem embebido y el web, donde el evento llega por constructor y
+    // no por el puente. Deja las tres superficies con el mismo comportamiento.
+    if (oldWidget.eventoId != widget.eventoId) {
+      _cambiarEvento(widget.eventoId);
+    }
   }
 
   void _handleManualIncoming(Invitado guest) {
@@ -374,7 +463,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   void _connect() {
     try {
       _sub?.cancel();
-      _sub = svc.streamInvitados(widget.eventoId).listen(
+      _sub = svc.streamInvitados(_eventoId).listen(
         _onData,
         onError: _onError,
         cancelOnError: false,
@@ -382,7 +471,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
 
       // Usar Supabase Realtime Broadcast para reacción INMEDIATA sin esperar replicación
       if (_broadcastChannel == null) {
-        _broadcastChannel = svc.client.channel('totem_${widget.eventoId}');
+        _broadcastChannel = svc.client.channel('totem_${_eventoId}');
         _broadcastChannel!.onBroadcast(event: 'checkin', callback: (payload) {
           final data = payload['payload'];
           if (data != null && mounted) {
@@ -395,6 +484,11 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
           final data = payload['payload'];
           final id = data is Map ? data['id']?.toString() : null;
           if (id != null && mounted) _handleGuestRemoved(id);
+        });
+        // Vaciar lista / deshacer todos los ingresos. Sin esto, un tótem que no
+        // corre en la PC de Recepción se enteraba solo por la reconciliación.
+        _broadcastChannel!.onBroadcast(event: 'list_reset', callback: (_) {
+          if (mounted) _handleListReset();
         });
         _broadcastChannel!.subscribe();
       }
@@ -431,12 +525,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   /// armara la lista por su cuenta, cada minuto se llenaría la pantalla de
   /// saludos repetidos.
   Future<void> _reconciliar() async {
-    if (!mounted || widget.eventoId.length != 36) return;
+    if (!mounted || _eventoId.length != 36) return;
     try {
       final filas = await svc.client
           .from('invitados')
           .select()
-          .eq('evento_id', widget.eventoId)
+          .eq('evento_id', _eventoId)
           .order('nombre_completo');
 
       if (!mounted) return;
@@ -590,6 +684,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     _pulseCtrl.dispose();
     _particleCtrl.dispose();
     _shimmerCtrl.dispose();
+    _handshakeCtrl.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -601,7 +696,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   Widget build(BuildContext context) {
     // La config del evento entra por acá y se propaga a todos los _build*.
     // Si el evento no tiene fila, son los valores de siempre.
-    _cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
+    _cfg = ref.watch(totemConfigValueProvider(_eventoId));
 
     return Scaffold(
       body: LayoutBuilder(
@@ -861,7 +956,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   // ── Sección superior: Portada + QR ────────────────────────────────────────
 
   Widget _buildQRSection(BoxConstraints constraints) {
-    final qrUrl = '$kWebBaseUrl/lista?evento=${widget.eventoId}';
+    final qrUrl = '$kWebBaseUrl/lista?evento=${_eventoId}';
     final isWidescreen = _esWidescreen(constraints);
     final scale = _escala(constraints);
 

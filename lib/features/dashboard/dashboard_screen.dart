@@ -959,24 +959,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _CommandAction(
         label: 'TÓTEM',
         icon: Icons.monitor_rounded,
-        onTap: () {
-          final selectedId = ref.read(selectedEventProvider);
-          if (selectedId != null) {
-            _triggerPortal(selectedId);
-          } else {
-            ref.read(eventosActivosProvider).whenData((eventos) {
-              if (eventos.isNotEmpty) {
-                _triggerPortal(eventos.first.id);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('No hay eventos activos para el tótem'),
-                  ),
-                );
-              }
-            });
-          }
-        },
+        onTap: _abrirTotem,
       ),
     ];
 
@@ -1104,14 +1087,113 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  void _triggerPortal(String eventoId) {
-    setState(() => _isLaunchingPortal = true);
-    KioskLauncher.launch(eventoId);
+  /// Abre el tótem.
+  ///
+  /// Antes esto usaba `ref.read(eventosActivosProvider).whenData(...)`. Como el
+  /// provider no se observa en ninguna otra parte de esta pantalla, al primer
+  /// clic estaba en `AsyncLoading` y `whenData` **no ejecutaba nada y no
+  /// fallaba**: ni abría, ni avisaba, ni prendía el overlay. Recién al segundo
+  /// clic, ya cacheado, funcionaba. De ahí el "hay que apretarlo dos veces".
+  Future<void> _abrirTotem() async {
+    if (_isLaunchingPortal) return;
 
-    // Desactivar portal después de un tiempo para que el Dashboard vuelva a ser usable
-    Future.delayed(const Duration(milliseconds: 2500), () {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isLaunchingPortal = true);
+
+    try {
+      var eventoId = ref.read(selectedEventProvider);
+
+      if (eventoId == null) {
+        // `.future` espera de verdad. Y `refresh` porque el provider es global y
+        // no autoDispose: un evento recién creado no aparecería en la caché.
+        final eventos = await ref.refresh(eventosActivosProvider.future);
+
+        if (eventos.isEmpty) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('No hay eventos activos para el tótem'),
+            ),
+          );
+          return;
+        }
+
+        if (eventos.length == 1) {
+          eventoId = eventos.first.id;
+        } else {
+          // Proyectar la fiesta equivocada en un salón lleno es peor que un clic
+          // de más, así que con varios activos se pregunta.
+          if (!mounted) return;
+          eventoId = await _elegirEventoParaTotem(eventos);
+          if (eventoId == null) return;
+        }
+
+        // Deja el estado global coherente con lo que se va a proyectar: es lo
+        // que después usa `SelectedEventNotifier.select` para seguir al tótem.
+        ref.read(selectedEventProvider.notifier).select(eventoId);
+      }
+
+      await KioskLauncher.launch(eventoId);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo abrir el tótem: $e')),
+      );
+    } finally {
       if (mounted) setState(() => _isLaunchingPortal = false);
-    });
+    }
+  }
+
+  Future<String?> _elegirEventoParaTotem(List<Evento> eventos) {
+    const gold = Color(0xFFD4AF37);
+
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C0F35),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: gold.withValues(alpha: 0.28), width: 1.5),
+        ),
+        title: Text(
+          '¿QUÉ EVENTO PROYECTO?',
+          style: GoogleFonts.oswald(
+            color: gold,
+            letterSpacing: 2,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: eventos.length,
+            itemBuilder: (_, i) {
+              final evento = eventos[i];
+              final cliente = evento.cliente?.nombreCompleto ?? 'Sin cliente';
+              final fecha = evento.fechaEvento;
+              return ListTile(
+                leading: const Icon(Icons.monitor_rounded, color: gold),
+                title: Text(
+                  '$cliente — ${evento.tipoParaMostrar}',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                subtitle: Text(
+                  '${fecha.day}/${fecha.month}/${fecha.year}',
+                  style: const TextStyle(color: Colors.white54),
+                ),
+                onTap: () => Navigator.pop(ctx, evento.id),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildPortalOverlay(Color gold) {
