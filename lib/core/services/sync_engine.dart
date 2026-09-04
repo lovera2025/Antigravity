@@ -34,6 +34,28 @@ class RemoteProbeInfo {
   bool get hasRemoteChanges => probeSucceeded && remoteChangeCount > 0;
 }
 
+/// Hasta dónde puede avanzar el marcador de "última bajada" de una tabla.
+///
+/// El pull incremental pide `updated_at > marcador`, así que el marcador es una
+/// promesa: *todo lo anterior ya está escrito localmente*. Cuando una fila baja
+/// pero no se escribe —porque tiene un cambio local sin subir y no se la quiere
+/// pisar— esa promesa se rompe, y si el marcador avanza igual la fila queda del
+/// otro lado del filtro y **no se vuelve a pedir nunca**.
+///
+/// Por eso, si hubo alguna retenida, la marca se queda un milisegundo antes de
+/// la más vieja: la próxima pasada la vuelve a traer. Cuesta re-bajar unas pocas
+/// filas por ciclo y paga no perder ninguna.
+String marcadorPullSeguro({
+  required String ahora,
+  DateTime? pendienteMasVieja,
+}) {
+  if (pendienteMasVieja == null) return ahora;
+  return pendienteMasVieja
+      .toUtc()
+      .subtract(const Duration(milliseconds: 1))
+      .toIso8601String();
+}
+
 /// Motor de sincronización — local-first, nube manual.
 class SyncEngine {
   final ConnectivityService _connectivity;
@@ -66,6 +88,7 @@ class SyncEngine {
     'cierre_caja_anotaciones': 'updated_at',
     'operadores_caja': 'updated_at',
     'sesiones_caja': 'updated_at',
+    'compromisos_personal': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -527,6 +550,9 @@ class SyncEngine {
           table == 'cierre_caja_anotaciones')
         return 5;
       if (table == 'operadores_caja') return 1;
+      // Antes que los egresos (que caen en el 2 por defecto): el egreso lleva
+      // `compromiso_id`, así que la cuenta tiene que existir arriba primero.
+      if (table == 'compromisos_personal') return 1;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -834,6 +860,7 @@ class SyncEngine {
       _pullTable(db, 'calculos_rentabilidad', 'updated_at'),
       _pullTable(db, 'obligaciones_pago', 'updated_at'),
       _pullTable(db, 'caja_fuerte_movimientos', 'updated_at'),
+      _pullTable(db, 'compromisos_personal', 'updated_at'),
       _pullTable(db, 'rentabilidad_config', 'updated_at'),
       _pullTable(db, 'cierre_caja_guia_movimientos', 'updated_at'),
       _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
@@ -963,16 +990,25 @@ class SyncEngine {
       ];
 
       Map<String, double?>? preservedBonifPctByEventoId;
+      // El vínculo al presupuesto se rellena hacia atrás en la migración v69,
+      // local en cada PC. Si la nube todavía no lo tiene (la migración de
+      // Supabase se corre a mano), un pull lo pisaría con null y el evento
+      // volvería a quedar huérfano. Se conserva el local cuando la nube no trae.
+      Map<String, String?>? preservedPresupuestoIdByEventoId;
       if (table == 'eventos') {
         final localPctRows = await db.query(
           'eventos',
-          columns: ['id', 'bonificacion_global_pct'],
+          columns: ['id', 'bonificacion_global_pct', 'presupuesto_id'],
         );
         preservedBonifPctByEventoId = {
           for (final r in localPctRows)
             r['id'] as String: r['bonificacion_global_pct'] != null
                 ? (r['bonificacion_global_pct'] as num).toDouble()
                 : null,
+        };
+        preservedPresupuestoIdByEventoId = {
+          for (final r in localPctRows)
+            r['id'] as String: (r['presupuesto_id'] as String?)?.trim(),
         };
       }
 
@@ -1019,6 +1055,37 @@ class SyncEngine {
 
       final batch = db.batch();
       int skipped = 0;
+
+      // Fila más vieja que bajó de la nube y NO se pudo escribir por tener un
+      // cambio local sin subir. El marcador de esta tanda no puede pasarla.
+      //
+      // Sin esto se pierden datos en silencio: el pull pide
+      // `updated_at > marcador`, así que una fila salteada mientras el marcador
+      // avanza queda del otro lado y no se vuelve a pedir nunca. Le pegaba justo
+      // a la fila más caliente —la que dos personas tocaron a la vez—: el
+      // operador cobraba un contrato, el jefe lo modificaba, el pull bajaba la
+      // versión del jefe, la salteaba para no pisar el cobro, y movía el
+      // marcador igual. Al vaciarse la cola la modificación ya estaba atrás y
+      // la otra PC no la veía más.
+      //
+      // Solo retiene este caso. Un id o una FK malformados también saltean, pero
+      // arreglarlos en la nube les bumpea el `updated_at` y vuelven a bajar
+      // solos; retener por ellos clavaría el marcador para siempre y la tabla se
+      // re-descargaría entera cada 10 segundos. El corte de fecha de cierre es
+      // deliberado y permanente, así que tampoco cuenta.
+      DateTime? marcaPendienteMasVieja;
+      void retenerMarcador(Map<String, dynamic> row) {
+        if (dateColumn == null) return;
+        final crudo = row[dateColumn]?.toString();
+        if (crudo == null || crudo.isEmpty) return;
+        final fecha = DateTime.tryParse(crudo)?.toUtc();
+        if (fecha == null) return;
+        if (marcaPendienteMasVieja == null ||
+            fecha.isBefore(marcaPendienteMasVieja!)) {
+          marcaPendienteMasVieja = fecha;
+        }
+      }
+
       for (var index = 0; index < rows.length; index++) {
         final row = rows[index];
         if (_tablasFechaCorteCierre.contains(table)) {
@@ -1031,6 +1098,7 @@ class SyncEngine {
         final id = row['id'] as String?;
         if (id != null && pendingIds.contains(id)) {
           skipped++;
+          retenerMarcador(row);
           continue;
         }
         if (id != null && id.length != 36) {
@@ -1088,6 +1156,14 @@ class SyncEngine {
             final preserved = preservedBonifPctByEventoId[eid];
             if (preserved != null) {
               insertRow['bonificacion_global_pct'] = preserved;
+            }
+          }
+          final cloudPresupuestoId =
+              (row['presupuesto_id'] as String?)?.trim();
+          if (cloudPresupuestoId == null || cloudPresupuestoId.isEmpty) {
+            final preservado = preservedPresupuestoIdByEventoId?[eid];
+            if (preservado != null && preservado.isNotEmpty) {
+              insertRow['presupuesto_id'] = preservado;
             }
           }
           batch.insert(
@@ -1151,11 +1227,25 @@ class SyncEngine {
       }
       await batch.commit(noResult: true);
 
-      // Guardar última marca de tiempo de sincronización exitosa
+      // Guardar última marca de tiempo de sincronización exitosa.
+      //
+      // Si algo quedó sin escribirse por tener un cambio local sin subir, el
+      // marcador se queda un milisegundo antes de esa fila: el próximo pull la
+      // vuelve a pedir en vez de saltearla para siempre. Cuesta re-bajar unas
+      // pocas filas por ciclo y paga no perder ninguna.
       if (dateColumn != null) {
+        final marca = marcadorPullSeguro(
+          ahora: currentSyncStr,
+          pendienteMasVieja: marcaPendienteMasVieja,
+        );
+        if (marcaPendienteMasVieja != null) {
+          debugPrint(
+            '  ⏸️ $table: marcador retenido en $marca — $skipped fila(s) con cambios locales sin subir',
+          );
+        }
         await db.insert('_sync_meta', {
           'clave': claveMeta,
-          'valor': currentSyncStr,
+          'valor': marca,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
 
@@ -1280,6 +1370,7 @@ class SyncEngine {
         'nombre_festejado',
         'encabezado_evento',
         'bonificacion_global_pct',
+        'presupuesto_id',
         'created_at',
         'updated_at',
       ],
@@ -1360,6 +1451,23 @@ class SyncEngine {
         'created_by',
         'medio_pago',
         'sesion_caja_id',
+        // Si estas dos faltaran acá, el pull las descartaría en silencio: el
+        // pago seguiría existiendo pero dejaría de descontar de su cuenta, y
+        // uno que salió del bolsillo volvería a restar del negocio.
+        'compromiso_id',
+        'origen_fondos',
+        'updated_at',
+      ],
+      'compromisos_personal': [
+        'id',
+        'persona',
+        'tipo',
+        'concepto',
+        'monto_total',
+        'fecha_inicio',
+        'estado',
+        'nota',
+        'created_at',
         'updated_at',
       ],
       'contratos_alumnos': [

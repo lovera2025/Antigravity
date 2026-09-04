@@ -54,13 +54,29 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       final transaccionesRepo = ref.read(transaccionesRepositoryProvider);
 
       // 1. Fetch Presupuesto (Servicios)
-      final presData = await eventosRepo.getPresupuesto(widget.evento.id);
+      var presData = await eventosRepo.getPresupuesto(widget.evento.id);
 
       // 2. Fetch Ledger (Transacciones)
       final transData = await transaccionesRepo.getByEvento(widget.evento.id);
 
       // 3. Evento fresco (bonificación global %, etc.)
       final evFresh = await eventosRepo.getById(widget.evento.id);
+
+      // 4. Si el evento quedó sin un solo ítem pero su presupuesto los tiene, se
+      // traen. Es el rescate de los eventos que se confirmaron contra una base
+      // incompleta: se creaban vacíos y sin monto, sin avisar. Solo con cero
+      // servicios, que es cuando no hay nada que pisar.
+      var reparados = 0;
+      final presupuestoId = evFresh?.presupuestoId;
+      if (presData.isEmpty && presupuestoId != null && presupuestoId.isNotEmpty) {
+        reparados = await eventosRepo.repararItemsDesdePresupuesto(
+          eventoId: widget.evento.id,
+          presupuestoId: presupuestoId,
+        );
+        if (reparados > 0) {
+          presData = await eventosRepo.getPresupuesto(widget.evento.id);
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -69,6 +85,17 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           if (evFresh != null) _eventoActual = evFresh;
           _isLoading = false;
         });
+        if (reparados > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF00B894),
+              duration: const Duration(seconds: 5),
+              content: Text(
+                'Este evento estaba sin ítems: se trajeron los $reparados del presupuesto.',
+              ),
+            ),
+          );
+        }
         _maybePromptConfigMaestra();
       }
     } catch (e) {

@@ -14,6 +14,24 @@ import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/uuid_utils.dart';
 import 'eventos_repository.dart';
 
+/// Se intentó confirmar un presupuesto cuyos ítems no están en esta PC.
+///
+/// No es un error del usuario ni un dato roto: los ítems existen, pero todavía
+/// no bajaron de la nube. Confirmar igual crearía el evento vacío, así que se
+/// frena y se le dice cómo destrabarlo.
+class PresupuestoSinItemsException implements Exception {
+  const PresupuestoSinItemsException();
+
+  static const String mensaje =
+      'Este presupuesto no tiene sus ítems cargados en esta PC, así que el '
+      'evento se crearía sin monto.\n\n'
+      'Bajá los datos de la nube y volvé a intentar: tocá el ícono de nube '
+      'arriba en el Panel y elegí "Pull completo forzado".';
+
+  @override
+  String toString() => mensaje;
+}
+
 class PresupuestosRepository {
   final SupabaseClient _supabase;
   final ConnectivityService _connectivity;
@@ -165,6 +183,18 @@ class PresupuestosRepository {
     final p = await getById(id);
     if (p == null) return;
 
+    // Sin ítems no se confirma. `getById` lee la base LOCAL, así que un
+    // presupuesto cuyos ítems todavía no bajaron de la nube llega acá con la
+    // lista vacía, y el evento se creaba sin un solo servicio, en silencio. Como
+    // el monto de un evento particular sale de sumar sus servicios, quedaba en
+    // $0 para siempre y el presupuesto igual pasaba a "confirmado".
+    //
+    // Le pasó al de braian colman el 2026-09-04: 6 ítems por $1.750.000 en la
+    // nube, cero en la PC que lo confirmó. Mejor no confirmar y decir por qué.
+    if (p.servicios.isEmpty) {
+      throw const PresupuestoSinItemsException();
+    }
+
     // 1. Crear Evento Real
     final repoEventos = _ref.read(eventosRepositoryProvider);
     // Convertir servicios de presupuesto a formato compatible con el nuevo selector {'precio': x, 'cantidad': y}
@@ -191,6 +221,7 @@ class PresupuestosRepository {
       nombreFestejado: p.nombreFestejado,
       encabezadoEvento: p.encabezadoEvento,
       tituloFestejado: p.encabezadoEvento ?? p.tituloFestejado ?? p.nombreFestejado,
+      presupuestoId: p.id,
       serviciosSeleccionados: serviciosMap,
     );
 

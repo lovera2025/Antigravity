@@ -144,6 +144,10 @@ class EventosRepository {
     String? tituloFestejado,
     String? nombreFestejado,
     String? encabezadoEvento,
+    /// Presupuesto del que sale este evento, cuando nace de confirmar uno.
+    /// Queda declarado en el evento para poder repararlo si la copia de ítems
+    /// salió vacía — ahí no hay líneas de las que rastrear el origen.
+    String? presupuestoId,
     /// [lineaId] -> { 'servicio_id', 'precio', 'cantidad', 'grupo', 'combo_orden', 'detalle_servicio' } (mismo servicio varias filas)
     required Map<String, Map<String, dynamic>> serviciosSeleccionados,
   }) async {
@@ -185,6 +189,8 @@ class EventosRepository {
         'encabezado_evento': encabezadoEvento.trim(),
       if (tituloFestejado != null && tituloFestejado.trim().isNotEmpty)
         'titulo_festejado': tituloFestejado.trim(),
+      if (presupuestoId != null && presupuestoId.trim().isNotEmpty)
+        'presupuesto_id': presupuestoId.trim(),
       'created_at': now,
     };
     await db.insert('eventos', eventoData, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -217,6 +223,86 @@ class EventosRepository {
 
     debugPrint('✅ Evento creado localmente: $eventoId');
     return eventoId;
+  }
+
+  /// Copia los ítems del presupuesto a un evento que quedó **sin ninguno**.
+  ///
+  /// Repara los eventos que se confirmaron contra una base incompleta: como
+  /// `confirmarPresupuesto` lee local, si los ítems del presupuesto todavía no
+  /// habían bajado, el evento se creaba vacío y sin monto, en silencio.
+  ///
+  /// Solo actúa con cero servicios, que es el único caso seguro: no hay nada que
+  /// pisar y es restaurar lo que debería haber estado. Con aunque sea una línea
+  /// cargada no toca nada, porque ahí no se puede distinguir un evento reparable
+  /// de uno que alguien editó a mano.
+  ///
+  /// Mantiene el id de la línea del presupuesto, igual que la confirmación: eso
+  /// preserva el rastro histórico y hace que repetir la operación sea inocuo.
+  ///
+  /// Devuelve cuántas líneas trajo (0 si no había nada que hacer).
+  Future<int> repararItemsDesdePresupuesto({
+    required String eventoId,
+    required String presupuestoId,
+  }) async {
+    if (eventoId.length != 36 || presupuestoId.length != 36) return 0;
+    final db = await LocalDatabase.instance;
+
+    final yaTiene = await db.query(
+      'eventos_servicios',
+      columns: ['id'],
+      where: 'evento_id = ?',
+      whereArgs: [eventoId],
+      limit: 1,
+    );
+    if (yaTiene.isNotEmpty) return 0;
+
+    final lineas = await db.query(
+      'presupuesto_servicios',
+      where: 'presupuesto_id = ?',
+      whereArgs: [presupuestoId],
+    );
+    if (lineas.isEmpty) return 0;
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    for (final l in lineas) {
+      final lineaId = (l['id'] as String?)?.trim() ?? '';
+      final servicioId = (l['servicio_id'] as String?)?.trim() ?? '';
+      if (lineaId.length != 36 || servicioId.isEmpty) continue;
+      final esData = {
+        'id': lineaId,
+        'evento_id': eventoId,
+        'servicio_id': servicioId,
+        'precio_final_acordado': l['precio_final'] ?? 0.0,
+        'cantidad': l['cantidad'] ?? 1.0,
+        'grupo': l['grupo'],
+        'combo_orden': l['combo_orden'] ?? 0,
+        'detalle_servicio': l['detalle_servicio'],
+        'es_extra': (l['es_extra'] == true || l['es_extra'] == 1) ? 1 : 0,
+        'updated_at': now,
+      };
+      await db.insert(
+        'eventos_servicios',
+        esData,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await SyncQueue.enqueue(
+        tabla: 'eventos_servicios',
+        operacion: SyncOperation.insert,
+        registroId: lineaId,
+        payload: esData,
+      );
+    }
+
+    final traidas = await db.query(
+      'eventos_servicios',
+      columns: ['id'],
+      where: 'evento_id = ?',
+      whereArgs: [eventoId],
+    );
+    debugPrint(
+      '🔧 Evento $eventoId reparado: ${traidas.length} ítem(s) traídos del presupuesto $presupuestoId',
+    );
+    return traidas.length;
   }
 
   /// Actualiza presupuesto de un evento existente.
@@ -773,6 +859,7 @@ class EventosRepository {
       bonificacionGlobalPct: row['bonificacion_global_pct'] != null
           ? (row['bonificacion_global_pct'] as num).toDouble()
           : null,
+      presupuestoId: row['presupuesto_id'] as String?,
       createdAt: row['created_at'] != null ? DateTime.tryParse(row['created_at'] as String) : null,
       cliente: clienteData != null ? Cliente.fromJson(clienteData) : null,
     );

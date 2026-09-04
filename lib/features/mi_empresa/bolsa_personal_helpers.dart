@@ -48,6 +48,13 @@ String proveedorGastoPersonalVisible(String? proveedor) =>
 
 /// Egresos que restan saldo empresa en el HUD / caja contable.
 bool finanzasEgresoAfectaCajaEmpresa(Egreso e) {
+  // Salió del bolsillo del dueño: al negocio ya le restó el día que se retiró
+  // esa plata. Contarlo otra vez sería restar dos veces la misma salida.
+  //
+  // `origen_fondos` es NULL en todo lo histórico y NULL no entra acá, así que
+  // esta rama no cambia ni un peso de lo ya registrado.
+  if (e.salioDelBolsillo) return false;
+
   final cat = (e.categoria ?? '').trim();
   if (cat == kCategoriaGastoPersonal) {
     return gastoPersonalEsDesdeEmpresa(e);

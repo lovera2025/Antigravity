@@ -130,13 +130,20 @@ class EgresosRepository {
   }
 
   /// Registra un egreso sin `evento_id` (SQLite + sync), p. ej. gasto empresa, retiro dueño o gasto personal desde bolsillo.
-  Future<void> registrarEgresoSinEvento({
+  ///
+  /// Devuelve el id del egreso creado.
+  Future<String> registrarEgresoSinEvento({
     required double monto,
     required String proveedor,
     required String categoria,
     DateTime? fecha,
     String? medioPago,
     String? sesionCajaId,
+    /// Cuenta pendiente a la que se aplica, si va contra una.
+    String? compromisoId,
+    /// De qué bolsa sale: `'negocio'` o `'bolsillo'`. Se omite en el registro
+    /// normal, y ahí queda NULL, que se comporta como negocio.
+    String? origenFondos,
   }) async {
     final db = await LocalDatabase.instance;
     final id = UuidUtils.generate();
@@ -152,6 +159,10 @@ class EgresosRepository {
       'created_by': _supabase.auth.currentUser?.id,
       'medio_pago': medioPago,
       'sesion_caja_id': sesionCajaId,
+      if (compromisoId != null && compromisoId.trim().isNotEmpty)
+        'compromiso_id': compromisoId.trim(),
+      if (origenFondos != null && origenFondos.trim().isNotEmpty)
+        'origen_fondos': origenFondos.trim(),
       'updated_at': now,
     };
 
@@ -165,6 +176,8 @@ class EgresosRepository {
       registroId: id,
       payload: data,
     );
+
+    return id;
   }
 
   /// Actualiza campos de un egreso existente (offline-first).

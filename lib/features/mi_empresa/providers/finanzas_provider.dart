@@ -113,6 +113,10 @@ class FinanzasState {
 
   /// Gastos registrados desde el bolsillo ([kCategoriaGastoPersonal]) por medio.
   final double hudGastosBolsaPersonalTotal;
+
+  /// Pagos del negocio hechos con plata del bolsillo del dueño.
+  /// Bajan el bolsillo pero no son gasto personal: se muestran aparte.
+  final double hudPagosDesdeBolsilloTotal;
   final double hudGastosBolsaPersonalEfectivo;
   final double hudGastosBolsaPersonalTransferencia;
   final double hudGastosBolsaPersonalHoy;
@@ -164,6 +168,7 @@ class FinanzasState {
     this.hudRetirosBolsaPersonalTransferencia = 0,
     this.hudRetirosBolsaPersonalHoy = 0,
     this.hudGastosBolsaPersonalTotal = 0,
+    this.hudPagosDesdeBolsilloTotal = 0,
     this.hudGastosBolsaPersonalEfectivo = 0,
     this.hudGastosBolsaPersonalTransferencia = 0,
     this.hudGastosBolsaPersonalHoy = 0,
@@ -214,6 +219,7 @@ class FinanzasState {
     double? hudRetirosBolsaPersonalTransferencia,
     double? hudRetirosBolsaPersonalHoy,
     double? hudGastosBolsaPersonalTotal,
+    double? hudPagosDesdeBolsilloTotal,
     double? hudGastosBolsaPersonalEfectivo,
     double? hudGastosBolsaPersonalTransferencia,
     double? hudGastosBolsaPersonalHoy,
@@ -270,6 +276,7 @@ class FinanzasState {
       hudRetirosBolsaPersonalTransferencia: hudRetirosBolsaPersonalTransferencia ?? this.hudRetirosBolsaPersonalTransferencia,
       hudRetirosBolsaPersonalHoy: hudRetirosBolsaPersonalHoy ?? this.hudRetirosBolsaPersonalHoy,
       hudGastosBolsaPersonalTotal: hudGastosBolsaPersonalTotal ?? this.hudGastosBolsaPersonalTotal,
+      hudPagosDesdeBolsilloTotal: hudPagosDesdeBolsilloTotal ?? this.hudPagosDesdeBolsilloTotal,
       hudGastosBolsaPersonalEfectivo: hudGastosBolsaPersonalEfectivo ?? this.hudGastosBolsaPersonalEfectivo,
       hudGastosBolsaPersonalTransferencia: hudGastosBolsaPersonalTransferencia ?? this.hudGastosBolsaPersonalTransferencia,
       hudGastosBolsaPersonalHoy: hudGastosBolsaPersonalHoy ?? this.hudGastosBolsaPersonalHoy,
@@ -543,6 +550,29 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
     final hudGastosBolsaPersonalTotal =
         hudGastosBolsaPersonalEfectivo + hudGastosBolsaPersonalTransferencia;
 
+    // Pagos del negocio hechos con plata del bolsillo (cuentas pendientes con
+    // una persona). Van en un recorrido aparte porque su categoría es `Personal`
+    // y el bucle de arriba los saltea.
+    //
+    // Bajan el bolsillo —por eso suman a `hudGastosPendiente*`— pero NO entran
+    // en `hudGastosBolsaPersonal*`, que es "gastado a título personal". Pagarle
+    // a un operador con plata propia no es un gasto del dueño en él mismo, y
+    // mezclarlo haría que el panel MI BOLSILLO mienta.
+    var hudPagosDesdeBolsilloEfectivo = 0.0;
+    var hudPagosDesdeBolsilloTransferencia = 0.0;
+    for (final e in egresosFull) {
+      if (!e.salioDelBolsillo) continue;
+      if (finanzasEsMedioTransferencia(e.medioPago)) {
+        hudPagosDesdeBolsilloTransferencia += e.monto;
+        hudGastosPendienteTransferencia += e.monto;
+      } else {
+        hudPagosDesdeBolsilloEfectivo += e.monto;
+        hudGastosPendienteEfectivo += e.monto;
+      }
+    }
+    final hudPagosDesdeBolsilloTotal =
+        hudPagosDesdeBolsilloEfectivo + hudPagosDesdeBolsilloTransferencia;
+
     final hudSaldoBolsaPersonalEfectivo =
         (hudRetirosBolsaPersonalEfectivo - hudGastosPendienteEfectivo).clamp(0.0, double.infinity);
     final hudSaldoBolsaPersonalTransferencia =
@@ -609,6 +639,7 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
       hudRetirosBolsaPersonalTransferencia: hudRetirosBolsaPersonalTransferencia,
       hudRetirosBolsaPersonalHoy: hudRetirosBolsaPersonalHoy,
       hudGastosBolsaPersonalTotal: hudGastosBolsaPersonalTotal,
+      hudPagosDesdeBolsilloTotal: hudPagosDesdeBolsilloTotal,
       hudGastosBolsaPersonalEfectivo: hudGastosBolsaPersonalEfectivo,
       hudGastosBolsaPersonalTransferencia: hudGastosBolsaPersonalTransferencia,
       hudGastosBolsaPersonalHoy: hudGastosBolsaPersonalHoy,

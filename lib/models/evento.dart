@@ -23,6 +23,15 @@ class Evento {
   /// Porcentaje de bonificación acordado sobre el presupuesto total (persistido en eventos).
   final double? bonificacionGlobalPct;
 
+  /// Presupuesto del que salió este evento al confirmarse.
+  ///
+  /// Antes el vínculo era un subproducto: las líneas del evento heredan el id de
+  /// la línea del presupuesto, así que se podía rastrear cruzando por ahí. Eso
+  /// se cae justo cuando hace falta —un evento creado sin ítems no tiene ninguna
+  /// fila de la que colgarse—, que es el caso a reparar. Declararlo en el evento
+  /// lo hace sobrevivir aunque esté vacío.
+  final String? presupuestoId;
+
   // To hold joined properties when queried
   final Cliente? cliente;
   final List<EventosServicios>? presupuesto;
@@ -45,6 +54,7 @@ class Evento {
     this.nombreFestejado,
     this.encabezadoEvento,
     this.bonificacionGlobalPct,
+    this.presupuestoId,
     this.cliente,
     this.presupuesto,
     this.presupuestoTotal,
@@ -81,7 +91,8 @@ class Evento {
       bonificacionGlobalPct: json['bonificacion_global_pct'] != null
           ? double.tryParse(json['bonificacion_global_pct'].toString())
           : null,
-      
+      presupuestoId: json['presupuesto_id'] as String?,
+
       // Attempt to parse joined Vistas/Tables if they exist in the JSON response
       cliente: json['clientes'] != null ? Cliente.fromJson(json['clientes']) : null,
       presupuestoTotal: json['vista_saldos_eventos']?['presupuesto_total'] != null 
@@ -117,6 +128,7 @@ class Evento {
       if (nombreFestejado != null) 'nombre_festejado': nombreFestejado,
       if (encabezadoEvento != null) 'encabezado_evento': encabezadoEvento,
       if (bonificacionGlobalPct != null) 'bonificacion_global_pct': bonificacionGlobalPct,
+      if (presupuestoId != null) 'presupuesto_id': presupuestoId,
     };
   }
 

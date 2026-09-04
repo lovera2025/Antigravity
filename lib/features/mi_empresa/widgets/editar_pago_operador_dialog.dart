@@ -9,6 +9,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
 import '../../../models/evento.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../providers/compromisos_personal_provider.dart';
 
 /// Diálogo para editar un pago a personal (egreso categoría Personal).
 class EditarPagoOperadorDialog extends ConsumerStatefulWidget {
@@ -227,6 +228,61 @@ class _EditarPagoOperadorDialogState
     );
   }
 
+  /// Banda de aviso cuando el egreso está aplicado a una cuenta pendiente.
+  /// Vacío —sin ocupar lugar— para los pagos sueltos, que son la mayoría.
+  Widget _avisoCuentaPendiente(bool isDark) {
+    final compromisoId = (widget.egreso.compromisoId ?? '').trim();
+    if (compromisoId.isEmpty) return const SizedBox.shrink();
+
+    final cuentas = ref.watch(compromisosPersonalProvider).value ?? const [];
+    final cuenta = cuentas
+        .where((c) => c.compromiso.id == compromisoId)
+        .map((c) => c.compromiso)
+        .firstOrNull;
+    if (cuenta == null) return const SizedBox.shrink();
+
+    final detalle = cuenta.concepto?.isNotEmpty == true
+        ? '${cuenta.tipo} · ${cuenta.concepto}'
+        : cuenta.tipo;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: _gold.withValues(alpha: isDark ? 0.12 : 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _gold.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.link_rounded, size: 15, color: _gold),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Aplicado a: $detalle',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
+            ),
+            if (widget.egreso.salioDelBolsillo)
+              Text(
+                'de mi bolsillo',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.white38 : Colors.black45,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -262,6 +318,10 @@ class _EditarPagoOperadorDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Si el pago descuenta de una cuenta pendiente, conviene saberlo
+              // antes de cambiarle el monto: el saldo de esa cuenta se recalcula
+              // solo con lo que se guarde acá.
+              _avisoCuentaPendiente(isDark),
               _buildLabel('EVENTO', Icons.event_note_outlined),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(

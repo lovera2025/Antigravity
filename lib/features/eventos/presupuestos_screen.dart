@@ -738,6 +738,24 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
             }
           });
         }
+      } on PresupuestoSinItemsException {
+        // Un snackbar que se va solo no alcanza: si esto pasa desapercibido, el
+        // evento queda sin monto y nadie se entera hasta que alguien lo abre.
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: const Icon(Icons.cloud_off_rounded, color: Color(0xFFE74C3C), size: 32),
+            title: const Text('Faltan datos para confirmar'),
+            content: const Text(PresupuestoSinItemsException.mensaje),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('ENTENDIDO'),
+              ),
+            ],
+          ),
+        );
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
       }

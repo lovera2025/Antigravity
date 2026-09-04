@@ -15,6 +15,19 @@ class Egreso {
   final String? medioPago;
   final String? sesionCajaId;
 
+  /// Cuenta pendiente a la que se aplica este pago, si va contra una.
+  /// El saldo de la cuenta se deriva sumando los egresos que la apuntan.
+  final String? compromisoId;
+
+  /// De qué bolsa salió: `'negocio'` o `'bolsillo'`.
+  ///
+  /// Separa el rubro (qué se pagó) de la bolsa (de dónde salió), que hasta ahora
+  /// convivían en `categoria` — la única forma de decir "salió de mi bolsillo"
+  /// era guardarlo como `Gasto personal`, y entonces dejaba de ser un pago a
+  /// personal. `null` en todo lo histórico y se comporta como `negocio`, así que
+  /// ningún saldo viejo se mueve.
+  final String? origenFondos;
+
   Egreso({
     required this.id,
     required this.eventoId,
@@ -25,6 +38,8 @@ class Egreso {
     this.createdBy,
     this.medioPago,
     this.sesionCajaId,
+    this.compromisoId,
+    this.origenFondos,
   });
 
   /// Concepto tal como lo tiene que leer una persona, sin el prefijo técnico.
@@ -68,6 +83,8 @@ class Egreso {
       createdBy: json['created_by'],
       medioPago: json['medio_pago'],
       sesionCajaId: json['sesion_caja_id']?.toString(),
+      compromisoId: json['compromiso_id']?.toString(),
+      origenFondos: (json['origen_fondos'] as String?)?.trim(),
     );
   }
 
@@ -81,6 +98,12 @@ class Egreso {
       'fecha': fecha?.toIso8601String(),
       'medio_pago': medioPago,
       'sesion_caja_id': sesionCajaId,
+      'compromiso_id': compromisoId,
+      'origen_fondos': origenFondos,
     };
   }
+
+  /// Salió del bolsillo del dueño, no de la caja del negocio.
+  bool get salioDelBolsillo =>
+      (origenFondos ?? '').trim() == 'bolsillo';
 }

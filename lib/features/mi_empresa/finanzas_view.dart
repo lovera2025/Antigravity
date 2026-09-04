@@ -35,6 +35,11 @@ import '../egresos/services/egreso_concepto_sugerencias.dart';
 import '../eventos/eventos_screen.dart';
 import '../eventos/presupuestos_screen.dart';
 import 'repositories/finanzas_repository.dart';
+import 'models/compromiso_personal.dart';
+import 'providers/compromisos_personal_provider.dart';
+import 'repositories/compromisos_personal_repository.dart';
+import 'widgets/nuevo_compromiso_dialog.dart';
+import 'widgets/registrar_pago_compromiso_dialog.dart';
 import '../rentabilidad/repositories/rentabilidad_repository.dart';
 import '../../models/calculo_rentabilidad.dart';
 import '../../models/obligacion_pago.dart';
@@ -2097,6 +2102,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         _desgloseSalidas(s, isDark, gold, red, amber),
         const SizedBox(height: 10),
         _liquidacionPorOperador(context, s, isDark, gold),
+        const SizedBox(height: 10),
+        _cuentasPendientes(isDark),
         const SizedBox(height: 6),
         TextButton.icon(
           onPressed: () => _abrirDetalleCobrosHistoricos(context, s, isDark, gold),
@@ -3626,6 +3633,36 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
               ),
             ),
+            // Lo que todavía se le debe, al lado de lo que ya se le pagó. Es el
+            // motivo de que CUENTAS PENDIENTES viva en este panel: mirando el
+            // historial de Juan se ve lo que falta, sin ir a buscarlo.
+            Consumer(
+              builder: (context, ref, _) {
+                final deuda = ref.watch(deudaPorPersonaProvider);
+                final debe = deuda[nombre.trim().toLowerCase()] ?? 0;
+                if (debe <= 0.01) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE74C3C)
+                          .withValues(alpha: isDark ? 0.18 : 0.1),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Text(
+                      'debe ${debe.toCurrency()}',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFFE74C3C),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
             Text(
               total.toCurrency(),
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: azul),
@@ -3667,6 +3704,490 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         ],
       ),
     );
+  }
+
+  /// Lo que el negocio le debe a cada persona por un trabajo o un producto.
+  ///
+  /// Va acá, pegado a LIQUIDACIÓN POR OPERADOR, para que el historial de pagos
+  /// de alguien y lo que le falta cobrar se lean de un vistazo, sin navegar.
+  ///
+  /// El saldo no está guardado: sale de restarle al total los egresos que llevan
+  /// ese `compromiso_id`, así que editar o borrar un pago lo recalcula solo.
+  Widget _cuentasPendientes(bool isDark) {
+    const rojo = Color(0xFFE74C3C);
+    const ambar = Color(0xFFFFB74D);
+
+    return Consumer(
+      builder: (context, ref, _) {
+        final cuentas = ref.watch(compromisosPersonalProvider).value ?? const [];
+        final abiertas = cuentas.where((c) => c.sigueAbierto).toList();
+        final personas = abiertas.map((c) => c.compromiso.persona).toSet().length;
+        final totalDebo = abiertas.fold<double>(0, (s, c) => s + c.saldo);
+
+        Future<void> nueva() async {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (_) => const NuevoCompromisoDialog(),
+          );
+          if (ok == true) {
+            await ref.read(compromisosPersonalProvider.notifier).refresh();
+          }
+        }
+
+        return Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.black.withValues(alpha: 0.02),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.black12),
+            ),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+              childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              title: Text(
+                'CUENTAS PENDIENTES',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  color: isDark ? Colors.white38 : Colors.black45,
+                ),
+              ),
+              subtitle: Text(
+                abiertas.isEmpty
+                    ? (cuentas.isEmpty
+                        ? 'No le debés nada a nadie'
+                        : 'Todo saldado')
+                    : 'Debo ${totalDebo.toCurrency()} a $personas '
+                        '${personas == 1 ? "persona" : "personas"}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: abiertas.isEmpty ? const Color(0xFF00B894) : rojo,
+                ),
+              ),
+              trailing: TextButton.icon(
+                onPressed: nueva,
+                icon: const Icon(Icons.add_rounded, size: 16, color: ambar),
+                label: const Text(
+                  'NUEVA',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1,
+                    color: ambar,
+                  ),
+                ),
+              ),
+              children: [
+                if (cuentas.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      'Anotá acá lo que le debas a alguien por un trabajo o un '
+                      'producto, y descontá a medida que le pagues.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white38 : Colors.black45,
+                      ),
+                    ),
+                  ),
+                for (final c in cuentas) _filaCuentaPendiente(c, isDark),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Una cuenta: cuánto falta arriba en rojo, cuánto se lleva pagado abajo en
+  /// gris. Dos renglones a propósito — no compiten.
+  Widget _filaCuentaPendiente(CompromisoConSaldo c, bool isDark) {
+    const rojo = Color(0xFFE74C3C);
+    const verde = Color(0xFF00B894);
+    const ambar = Color(0xFFFFB74D);
+
+    final saldado = c.estaSaldado;
+    final cancelado = c.compromiso.estaCancelado;
+    final apagado = saldado || cancelado;
+
+    return Opacity(
+      opacity: apagado ? 0.72 : 1,
+      child: InkWell(
+        onTap: () => _abrirDetalleCuenta(c, isDark),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.compromiso.persona,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (cancelado)
+                    _chipCuenta('CANCELADO', Colors.grey)
+                  else if (saldado)
+                    _chipCuenta(c.compromiso.etiquetaSaldado, verde)
+                  else
+                    Text(
+                      'Falta ${c.saldo.toCurrency()}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: rojo,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                c.compromiso.concepto?.isNotEmpty == true
+                    ? '${c.compromiso.tipo} · ${c.compromiso.concepto}'
+                    : c.compromiso.tipo,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.white38 : Colors.black45,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: c.progreso,
+                  minHeight: 5,
+                  backgroundColor:
+                      isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06),
+                  valueColor: AlwaysStoppedAnimation(saldado ? verde : ambar),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Pagué ${c.pagado.toCurrency()} de '
+                '${c.compromiso.montoTotal.toCurrency()} · '
+                '${c.pagos.length} ${c.pagos.length == 1 ? "pago" : "pagos"}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.white30 : Colors.black38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chipCuenta(String texto, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        texto,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  /// Detalle de una cuenta: qué falta, qué se pagó y cuándo.
+  void _abrirDetalleCuenta(CompromisoConSaldo inicial, bool isDark) {
+    const rojo = Color(0xFFE74C3C);
+    const verde = Color(0xFF00B894);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF141416) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) {
+          // Se re-lee del provider para que el saldo se actualice al registrar
+          // un pago sin cerrar y volver a abrir.
+          final cuentas = ref.watch(compromisosPersonalProvider).value ?? const [];
+          final c = cuentas.firstWhere(
+            (x) => x.compromiso.id == inicial.compromiso.id,
+            orElse: () => inicial,
+          );
+          final saldado = c.estaSaldado;
+          final cancelado = c.compromiso.estaCancelado;
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${c.compromiso.persona.toUpperCase()}'
+                    '${c.compromiso.concepto?.isNotEmpty == true ? " · ${c.compromiso.concepto!.toUpperCase()}" : ""}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                      color: isDark ? Colors.white38 : Colors.black45,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  if (cancelado)
+                    _chipCuenta('CANCELADO', Colors.grey)
+                  else if (saldado)
+                    _chipCuenta(c.compromiso.etiquetaSaldado, verde)
+                  else
+                    Text(
+                      'Falta ${c.saldo.toCurrency()}',
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: rojo,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${c.compromiso.tipo} · de ${c.compromiso.montoTotal.toCurrency()} '
+                    '· pagué ${c.pagado.toCurrency()}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white38 : Colors.black45,
+                    ),
+                  ),
+                  if (c.compromiso.nota?.isNotEmpty == true) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      c.compromiso.nota!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: isDark ? Colors.white54 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      if (!saldado && !cancelado)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (_) =>
+                                    RegistrarPagoCompromisoDialog(cuenta: c),
+                              );
+                              if (ok == true) {
+                                await ref
+                                    .read(finanzasProvider.notifier)
+                                    .recargar();
+                              }
+                            },
+                            icon: const Icon(Icons.payments_rounded, size: 16),
+                            label: const Text(
+                              'REGISTRAR PAGO',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: verde,
+                              side: BorderSide(
+                                color: verde.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!saldado && !cancelado) const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              _accionSecundariaCuenta(ctx, ref, c, cancelado),
+                          icon: Icon(
+                            cancelado
+                                ? Icons.restart_alt_rounded
+                                : Icons.block_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            cancelado ? 'REABRIR' : 'CANCELAR CUENTA',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor:
+                                isDark ? Colors.white54 : Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'PAGOS APLICADOS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                      color: isDark ? Colors.white38 : Colors.black45,
+                    ),
+                  ),
+                  if (c.pagos.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Todavía no le pagaste nada de esta cuenta.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.white38 : Colors.black45,
+                        ),
+                      ),
+                    ),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final p in c.pagos)
+                          ListTile(
+                            dense: true,
+                            visualDensity: VisualDensity.compact,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              p.fecha != null
+                                  ? ArTime.formatFechaCorta(p.fecha!)
+                                  : 'Sin fecha',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              p.salioDelBolsillo
+                                  ? '${p.medioPago ?? "—"} · de mi bolsillo'
+                                  : (p.medioPago ?? '—'),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? Colors.white38 : Colors.black45,
+                              ),
+                            ),
+                            trailing: Text(
+                              '−${p.monto.toCurrency()}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: rojo,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Cada pago aparece también en el flujo del mes y en la '
+                    'liquidación de ${c.compromiso.persona}.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? Colors.white30 : Colors.black38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// Cancelar / reabrir, y borrar solo si la cuenta nunca recibió un pago.
+  Future<void> _accionSecundariaCuenta(
+    BuildContext ctx,
+    WidgetRef ref,
+    CompromisoConSaldo c,
+    bool cancelado,
+  ) async {
+    final notifier = ref.read(compromisosPersonalProvider.notifier);
+    if (cancelado) {
+      await notifier.reabrir(c.compromiso.id);
+      return;
+    }
+
+    // Sin pagos se puede borrar de verdad; con pagos solo cancelar, porque esos
+    // egresos quedarían apuntando a la nada y la plata salió igual.
+    final puedeBorrar = c.pagos.isEmpty;
+    final accion = await showDialog<String>(
+      context: ctx,
+      builder: (d) => AlertDialog(
+        title: const Text('Cerrar esta cuenta'),
+        content: Text(
+          puedeBorrar
+              ? 'No tiene pagos registrados. Podés cancelarla (queda en la '
+                  'lista) o borrarla del todo.'
+              : 'Ya tiene ${c.pagos.length} pago(s) registrados, así que no se '
+                  'puede borrar. Cancelarla la deja en la lista como terminada, '
+                  'sin tocar los pagos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(d),
+            child: const Text('VOLVER'),
+          ),
+          if (puedeBorrar)
+            TextButton(
+              onPressed: () => Navigator.pop(d, 'borrar'),
+              child: const Text(
+                'BORRAR',
+                style: TextStyle(color: Color(0xFFE74C3C)),
+              ),
+            ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(d, 'cancelar'),
+            child: const Text('CANCELAR CUENTA'),
+          ),
+        ],
+      ),
+    );
+
+    if (accion == 'cancelar') {
+      await notifier.cancelar(c.compromiso.id);
+    } else if (accion == 'borrar') {
+      try {
+        await notifier.eliminar(c.compromiso.id);
+        if (ctx.mounted) Navigator.pop(ctx);
+      } on CompromisoConPagosException {
+        if (ctx.mounted) {
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(content: Text(CompromisoConPagosException.mensaje)),
+          );
+        }
+      }
+    }
   }
 
   /// Un bloque de la deuda (escuelas o particulares) con su propio subtotal.

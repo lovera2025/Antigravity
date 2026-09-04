@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 68;
+  static const int _version = 70;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -120,6 +120,7 @@ class LocalDatabase {
         nombre_festejado TEXT,
         encabezado_evento TEXT,
         bonificacion_global_pct REAL,
+        presupuesto_id TEXT,
         created_at TEXT,
         updated_at TEXT,
         FOREIGN KEY (cliente_id) REFERENCES clientes(id)
@@ -193,6 +194,8 @@ class LocalDatabase {
         created_by TEXT,
         medio_pago TEXT,
         sesion_caja_id TEXT,
+        compromiso_id TEXT,
+        origen_fondos TEXT,
         updated_at TEXT,
         FOREIGN KEY (evento_id) REFERENCES eventos(id)
       )
@@ -502,6 +505,25 @@ class LocalDatabase {
       )
     ''');
 
+    // ── Cuentas pendientes con una persona (trabajos, productos) ─────────────
+    // Lo que el negocio le debe a alguien por un trabajo que hizo o un producto.
+    // El saldo NO se guarda: se deriva de los egresos con este `compromiso_id`,
+    // así no puede quedar mintiendo si después se edita o se borra un pago.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS compromisos_personal (
+        id TEXT PRIMARY KEY,
+        persona TEXT NOT NULL,
+        tipo TEXT NOT NULL DEFAULT 'Trabajo',
+        concepto TEXT,
+        monto_total REAL NOT NULL,
+        fecha_inicio TEXT NOT NULL,
+        estado TEXT NOT NULL DEFAULT 'activo',
+        nota TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      )
+    ''');
+
     // ── Caja fuerte (cupos declarados por el dueño; local-only, sin sync) ────
     await db.execute('''
       CREATE TABLE IF NOT EXISTS caja_fuerte_movimientos (
@@ -589,6 +611,15 @@ class LocalDatabase {
     // Índices para performance
     await db.execute('CREATE INDEX idx_eventos_cliente ON eventos(cliente_id)');
     await db.execute('CREATE INDEX idx_eventos_estado ON eventos(estado)');
+    await db.execute(
+      'CREATE INDEX idx_eventos_presupuesto ON eventos(presupuesto_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_compromisos_persona ON compromisos_personal(persona)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_egresos_compromiso ON egresos(compromiso_id)',
+    );
     await db.execute(
       'CREATE INDEX idx_transacciones_evento ON transacciones(evento_id)',
     );
@@ -2674,6 +2705,116 @@ class LocalDatabase {
         debugPrint('✅ Migración v68 completada');
       } catch (e) {
         debugPrint('  ⚠️ mora_tracked_ajuste ya existía: $e');
+      }
+    }
+
+    if (oldVersion < 69) {
+      debugPrint('  🔧 v69: eventos.presupuesto_id + reinicio de marcadores');
+      try {
+        try {
+          await db.execute('ALTER TABLE eventos ADD COLUMN presupuesto_id TEXT');
+        } catch (e) {
+          debugPrint('  ⚠️ eventos.presupuesto_id ya existía: $e');
+        }
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_eventos_presupuesto '
+          'ON eventos(presupuesto_id)',
+        );
+
+        // Rellenar el vínculo hacia atrás. Al confirmar, `confirmarPresupuesto`
+        // usa el id de la línea del presupuesto como id de la línea del evento
+        // (`for (var s in p.servicios) s.id: {...}`), así que los eventos que
+        // convirtieron bien se pueden rastrear cruzando por ahí. Sin adivinar.
+        await db.execute('''
+          UPDATE eventos SET presupuesto_id = (
+            SELECT ps.presupuesto_id
+            FROM eventos_servicios es
+            JOIN presupuesto_servicios ps ON ps.id = es.id
+            WHERE es.evento_id = eventos.id
+            LIMIT 1
+          )
+          WHERE presupuesto_id IS NULL
+        ''');
+
+        // Los eventos que se crearon VACÍOS no tienen filas de las que colgarse,
+        // que es justo el caso a reparar. Para esos se cruza por cliente y fecha,
+        // y solo cuando hay un único presupuesto candidato: con dos, adivinar
+        // sería peor que no vincular.
+        await db.execute('''
+          UPDATE eventos SET presupuesto_id = (
+            SELECT p.id FROM presupuestos p
+            WHERE p.cliente_id = eventos.cliente_id
+              AND date(p.fecha_evento) = date(eventos.fecha_evento)
+          )
+          WHERE presupuesto_id IS NULL
+            AND (SELECT COUNT(*) FROM eventos_servicios es
+                 WHERE es.evento_id = eventos.id) = 0
+            AND (SELECT COUNT(*) FROM presupuestos p
+                 WHERE p.cliente_id = eventos.cliente_id
+                   AND date(p.fecha_evento) = date(eventos.fecha_evento)) = 1
+        ''');
+
+        final filas = await db.rawQuery(
+          'SELECT COUNT(*) AS n FROM eventos WHERE presupuesto_id IS NOT NULL',
+        );
+        final vinculados = (filas.first['n'] as num?)?.toInt() ?? 0;
+        debugPrint('  🔗 v69: $vinculados evento(s) vinculados a su presupuesto');
+
+        // Reinicio de marcadores: fuerza un pull completo en la próxima
+        // sincronización, igual que la v45. Hace falta porque el marcador podía
+        // avanzar por encima de filas salteadas y dejarlas del otro lado del
+        // filtro para siempre — así quedó `presupuesto_servicios` con 18 de 203
+        // filas en una PC, y de ahí salió un evento confirmado sin un solo ítem.
+        // El bug está arreglado en `_pullTable`, pero lo ya perdido solo vuelve
+        // pidiendo todo de nuevo.
+        await db.delete('_sync_meta');
+        debugPrint('  🔄 v69: _sync_meta reseteado — el próximo pull baja todo');
+
+        debugPrint('✅ Migración v69 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v69: $e');
+      }
+    }
+
+    if (oldVersion < 70) {
+      debugPrint('  🔧 v70: cuentas pendientes por persona (trabajos y productos)');
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS compromisos_personal (
+            id TEXT PRIMARY KEY,
+            persona TEXT NOT NULL,
+            tipo TEXT NOT NULL DEFAULT 'Trabajo',
+            concepto TEXT,
+            monto_total REAL NOT NULL,
+            fecha_inicio TEXT NOT NULL,
+            estado TEXT NOT NULL DEFAULT 'activo',
+            nota TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+          )
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_compromisos_persona '
+          'ON compromisos_personal(persona)',
+        );
+
+        // `origen_fondos` nace NULL en todo lo histórico y NULL se comporta
+        // igual que hoy, así que ningún saldo se mueve al migrar.
+        for (final col in ['compromiso_id TEXT', 'origen_fondos TEXT']) {
+          try {
+            await db.execute('ALTER TABLE egresos ADD COLUMN $col');
+          } catch (e) {
+            debugPrint('  ⚠️ egresos.$col ya existía: $e');
+          }
+        }
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_egresos_compromiso '
+          'ON egresos(compromiso_id)',
+        );
+
+        debugPrint('✅ Migración v70 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v70: $e');
       }
     }
   }
