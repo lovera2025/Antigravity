@@ -11,6 +11,7 @@ import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 import 'dart:convert';
 
+import 'core/services/instalacion_id.dart';
 import 'features/auth/login_screen.dart';
 import 'features/caja_sesiones/providers/app_role_provider.dart';
 import 'features/caja_sesiones/widgets/role_gate_screen.dart';
@@ -93,6 +94,16 @@ void main(List<String> args) async {
     await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   } catch (e) {
     debugPrint('Error init Supabase: $e');
+  }
+
+  // Quién es esta PC. Antes se resolvía perezosamente y solo al abrir caja, así
+  // que en una máquina usada nada más que como jefe podía no existir nunca — y
+  // el pulso de sincronización lo necesita desde el arranque para no reaccionar
+  // a sus propios avisos. Si falla, la app sigue: el pulso baja de más.
+  try {
+    await InstalacionId.inicializar();
+  } catch (e) {
+    debugPrint('Error init id de instalación: $e');
   }
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {

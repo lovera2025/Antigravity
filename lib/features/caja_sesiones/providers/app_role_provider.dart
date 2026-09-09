@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/services/instalacion_id.dart';
 import '../../common/providers/admin_provider.dart';
 import '../models/modo_jefe_caja.dart';
 import '../models/operador_caja.dart';
@@ -111,7 +111,6 @@ class AppRoleState {
 }
 
 class AppRoleNotifier extends Notifier<AppRoleState> {
-  static const _deviceKey = 'caja_device_id';
   Timer? _heartbeatTimer;
 
   @override
@@ -120,15 +119,11 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     return const AppRoleState();
   }
 
-  Future<String> _deviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    var id = prefs.getString(_deviceKey);
-    if (id == null || id.isEmpty) {
-      id = 'pc-${DateTime.now().millisecondsSinceEpoch}';
-      await prefs.setString(_deviceKey, id);
-    }
-    return id;
-  }
+  /// El id de esta PC. Vive en [InstalacionId] desde que también lo necesita el
+  /// pulso de sincronización: la caja y el pulso tienen que ver la misma
+  /// máquina, o `sesiones_caja.device_id` y el filtro de origen dejarían de
+  /// hablar de lo mismo.
+  Future<String> _deviceId() => InstalacionId.inicializar();
 
   /// PIN maestro → modo jefe (reutiliza adminAuthProvider).
   Future<bool> loginJefe(String pin) async {

@@ -9,6 +9,7 @@ import '../database/local_database.dart';
 import '../database/sync_queue.dart';
 import '../utils/uuid_utils.dart';
 import 'connectivity_service.dart';
+import 'instalacion_id.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
 import '../../features/mi_empresa/repositories/finanzas_repository.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
@@ -86,6 +87,70 @@ String? marcaDeLoBajado(
     if (maxima == null || fecha.isAfter(maxima)) maxima = fecha;
   }
   return maxima?.toIso8601String();
+}
+
+/// Lo que hay que hacer cuando llega un pulso.
+class TrabajoDelPulso {
+  /// Tablas a bajar. Solo las conocidas por el motor.
+  final Set<String> tablas;
+
+  /// Ids a borrar, por tabla. Vienen de un borrado que hizo una persona.
+  final Map<String, Set<String>> borrados;
+
+  const TrabajoDelPulso({required this.tablas, required this.borrados});
+
+  static const vacio = TrabajoDelPulso(tablas: {}, borrados: {});
+
+  bool get estaVacio => tablas.isEmpty && borrados.isEmpty;
+}
+
+/// Lee un pulso y decide qué hacer con él.
+///
+/// El payload cruzó la red y lo escribió otro proceso, así que se trata como
+/// dato y no como instrucción: solo se aceptan tablas que el motor ya conoce
+/// —[tablasConocidas]— e ids con forma de UUID. Un mensaje raro produce trabajo
+/// vacío, nunca una consulta a una tabla inventada.
+///
+/// [yo] es el id de esta instalación, para descartar el eco: un broadcast le
+/// vuelve también a quien lo mandó, y sin esto cada PC saldría a bajar lo que
+/// acaba de subir. Cuando es `null` —el id todavía no se resolvió— **no se
+/// descarta nada**: bajar de más es inocuo; tomar un aviso ajeno por propio
+/// sería perderse el cambio.
+TrabajoDelPulso trabajoDelPulso(
+  Object? datos, {
+  required String? yo,
+  required Set<String> tablasConocidas,
+}) {
+  if (datos is! Map) return TrabajoDelPulso.vacio;
+  if (yo != null && datos['origen'] == yo) return TrabajoDelPulso.vacio;
+
+  // `is List` y no `as List?`: un campo con otra forma —un string donde se
+  // esperaba una lista— tiene que dar trabajo vacío, no una excepción adentro
+  // del callback del socket, donde nadie la atrapa.
+  final tablas = <String>{};
+  final crudasTablas = datos['tablas'];
+  for (final t in crudasTablas is List ? crudasTablas : const []) {
+    final tabla = t?.toString() ?? '';
+    if (tablasConocidas.contains(tabla)) tablas.add(tabla);
+  }
+
+  final borrados = <String, Set<String>>{};
+  final crudos = datos['borrados'];
+  if (crudos is Map) {
+    for (final e in crudos.entries) {
+      final tabla = e.key.toString();
+      if (!tablasConocidas.contains(tabla)) continue;
+      final ids = e.value;
+      for (final id in ids is List ? ids : const []) {
+        final s = id?.toString() ?? '';
+        // Mismo blindaje que el resto del motor: un id que no es UUID le saca
+        // un 22P02 a Supabase, y acá además apuntaría a un `delete` local.
+        if (s.length == 36) (borrados[tabla] ??= <String>{}).add(s);
+      }
+    }
+  }
+
+  return TrabajoDelPulso(tablas: tablas, borrados: borrados);
 }
 
 /// Qué filas locales se pueden borrar después de una bajada.
@@ -244,6 +309,11 @@ class SyncEngine {
 
     unawaited(refreshPendingCount());
     _remoteProbeController.add(_remoteProbe);
+
+    // El pulso vive acá y no en un widget a propósito: no depende del rol
+    // elegido ni de que haya una pantalla abierta. Una PC de Asesor tiene que
+    // enterarse igual.
+    _escucharElPulso();
   }
 
   /// Espera entre el último encolado y la subida automática.
@@ -317,6 +387,9 @@ class SyncEngine {
       _lastUploadTime = DateTime.now();
       _updateStatus(SyncStatus.idle);
       debugPrint('✅ Subida completada ($_pendingCount pendientes restantes)');
+
+      // Recién acá, con todo arriba: avisarle a la otra PC qué mirar.
+      await _emitirPulso();
     } catch (e) {
       debugPrint('❌ Error flushPending: $e');
       _lastError = e.toString();
@@ -365,6 +438,224 @@ class SyncEngine {
     } finally {
       await refreshPendingCount();
     }
+  }
+
+  // ── El pulso ───────────────────────────────────────────────────────────────
+  //
+  // Un canal de **broadcast** por el que las PCs se avisan qué acaban de
+  // cambiar, para no depender del reloj: la que sube manda "toqué presupuestos
+  // y sus líneas" y la otra baja **solo esas dos tablas**, en vez de esperar
+  // hasta un minuto a que le toque el turno.
+  //
+  // Broadcast y no `postgres_changes`: los mensajes son WebSocket puro, no
+  // consultan el slot de replicación ni disparan `realtime.apply_rls`, que fue
+  // lo que agotó el Disk IO del proyecto en septiembre de 2026. **No se agrega
+  // ninguna tabla a la publicación de Realtime** — sigue solo `invitados`, que
+  // es el tótem. Ver docs/CONTEXTO_v4.9.4_2026-09-02.md.
+  //
+  // El pulso es un **acelerador, no un transporte**: lo único que hace es
+  // adelantar un pull que igual iba a pasar. Si el socket está caído, o el
+  // mensaje se pierde, o la PC estaba apagada, el ciclo de siempre lo cubre. Por
+  // eso no hay reintentos ni acuses: un aviso perdido cuesta segundos, no datos.
+
+  static const String _nombreCanalPulso = 'sync_pulse';
+  static const String _eventoPulso = 'cambios';
+
+  /// Cuánto se espera antes de reaccionar a un pulso.
+  ///
+  /// Una subida manda un solo mensaje, pero dos PCs trabajando a la vez pueden
+  /// encadenarlos. Agruparlos evita salir a pedir las mismas tablas tres veces
+  /// seguidas, y medio segundo no lo nota nadie.
+  static const _esperaTrasPulso = Duration(milliseconds: 400);
+
+  RealtimeChannel? _canalPulso;
+  Timer? _debouncePulso;
+
+  /// Lo que esta PC subió y todavía no anunció. Se vacía al emitir.
+  final Set<String> _tablasSubidas = {};
+  final Map<String, Set<String>> _borradosSubidos = {};
+
+  /// Lo que anunciaron las otras y todavía no se aplicó.
+  final Set<String> _tablasDelPulso = {};
+  final Map<String, Set<String>> _borradosDelPulso = {};
+
+  /// Qué se lleva puesto el borrado de un padre.
+  ///
+  /// Espeja los `ON DELETE CASCADE` que ya tiene Supabase (verificados sobre el
+  /// proyecto). Hace falta escribirlos acá porque **en SQLite local no está
+  /// `PRAGMA foreign_keys = ON`**: los `CASCADE` declarados en el esquema local
+  /// son decorativos y no borran nada.
+  ///
+  /// Es lo mismo que hace `PresupuestosRepository.eliminar()` a mano — borra las
+  /// líneas y después el presupuesto, y encola solo el padre porque de la nube
+  /// se encarga el cascade.
+  ///
+  /// `presupuesto_servicios → servicios` NO está: en la nube es `NO ACTION`.
+  static const Map<String, List<(String, String)>> _hijasEnCascada = {
+    'clientes': [('eventos', 'cliente_id')],
+    'eventos': [
+      ('eventos_servicios', 'evento_id'),
+      ('contratos_alumnos', 'evento_id'),
+    ],
+    'contratos_alumnos': [('pagos_contrato_alumno', 'contrato_alumno_id')],
+    'presupuestos': [('presupuesto_servicios', 'presupuesto_id')],
+    'servicios': [('eventos_servicios', 'servicio_id')],
+  };
+
+  void _anotarParaElPulso(SyncQueueEntry entry) {
+    if (!_incrementalColumns.containsKey(entry.tabla)) return;
+    _tablasSubidas.add(entry.tabla);
+    if (entry.operacion == SyncOperation.delete) {
+      (_borradosSubidos[entry.tabla] ??= <String>{}).add(entry.registroId);
+    }
+  }
+
+  /// Le avisa a la otra PC qué acaba de cambiar.
+  Future<void> _emitirPulso() async {
+    if (_tablasSubidas.isEmpty) return;
+
+    final origen = InstalacionId.valor;
+    final tablas = _tablasSubidas.toList();
+    final borrados = {
+      for (final e in _borradosSubidos.entries) e.key: e.value.toList(),
+    };
+    _tablasSubidas.clear();
+    _borradosSubidos.clear();
+
+    try {
+      final canal = _canalPulso ??= _supabase.channel(_nombreCanalPulso);
+      await canal.sendBroadcastMessage(
+        event: _eventoPulso,
+        payload: {'origen': origen, 'tablas': tablas, 'borrados': borrados},
+      );
+      debugPrint('  📣 Pulso: ${tablas.join(", ")}');
+    } catch (e) {
+      // Que no llegue el aviso no rompe nada: el ciclo de siempre lo cubre.
+      debugPrint('  ⚠️ El pulso no salió: $e');
+    }
+  }
+
+  void _escucharElPulso() {
+    // En web no: no hay base local que actualizar —esa rama va directo a
+    // Supabase— y suscribir un canal por cada visitante del catálogo o del tótem
+    // sería pagar sockets para no hacer nada con ellos.
+    if (kIsWeb) return;
+
+    _canalPulso ??= _supabase.channel(_nombreCanalPulso);
+    _canalPulso!
+      ..onBroadcast(event: _eventoPulso, callback: _alRecibirPulso)
+      ..subscribe();
+  }
+
+  void _alRecibirPulso(Map<String, dynamic> mensaje) {
+    final trabajo = trabajoDelPulso(
+      mensaje['payload'],
+      yo: InstalacionId.valor,
+      tablasConocidas: _incrementalColumns.keys.toSet(),
+    );
+    if (trabajo.estaVacio) return;
+
+    _tablasDelPulso.addAll(trabajo.tablas);
+    for (final e in trabajo.borrados.entries) {
+      (_borradosDelPulso[e.key] ??= <String>{}).addAll(e.value);
+    }
+
+    _debouncePulso?.cancel();
+    _debouncePulso = Timer(_esperaTrasPulso, () => unawaited(_atenderElPulso()));
+  }
+
+  Future<void> _atenderElPulso() async {
+    if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
+      // Se pierde el aviso a propósito: el ciclo de siempre lo cubre, y
+      // reencolarlo acá es cómo se arma una tormenta de reintentos.
+      _tablasDelPulso.clear();
+      _borradosDelPulso.clear();
+      return;
+    }
+
+    final tablas = _tablasDelPulso.toList();
+    final borrados = Map<String, Set<String>>.from(_borradosDelPulso);
+    _tablasDelPulso.clear();
+    _borradosDelPulso.clear();
+
+    try {
+      final db = await LocalDatabase.instance;
+
+      // Los borrados primero: si además bajan filas de esas tablas, que no
+      // vuelvan a entrar las que alguien acaba de eliminar.
+      for (final e in borrados.entries) {
+        await _aplicarBorrados(db, e.key, e.value);
+      }
+
+      if (tablas.isNotEmpty) {
+        _tablasConFalloPull.clear();
+        await Future.wait([
+          for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
+        ]);
+        _lastPullTime = DateTime.now();
+        debugPrint('  ⚡ Pulso atendido: ${tablas.join(", ")}');
+      }
+    } catch (e) {
+      debugPrint('  ⚠️ Error atendiendo el pulso: $e');
+    }
+  }
+
+  /// Borra local una lista **explícita** de ids, con su cascada.
+  ///
+  /// Esto cumple la primera mitad de la regla: el borrado viene con nombre y
+  /// apellido, o sea que alguien apretó eliminar. No hay comparación de
+  /// conjuntos y por lo tanto no hay forma de que se exceda — es el camino
+  /// seguro, al lado del que compara contra la nube entera, que necesita foto
+  /// completa (ver `filasAPodar`).
+  ///
+  /// No se encola nada: en la nube ya está borrado, y encolarlo sería mandarle
+  /// de vuelta un DELETE por algo que no pasó acá.
+  Future<void> _aplicarBorrados(
+    Database db,
+    String tabla,
+    Set<String> ids, {
+    int profundidad = 0,
+  }) async {
+    if (ids.isEmpty || profundidad > 4) return;
+
+    // Lo que está esperando subir no se toca, igual que en el podado: puede ser
+    // trabajo local que la nube todavía no vio.
+    final pendientes = (await db.query(
+      '_sync_queue',
+      columns: ['registro_id'],
+      where: 'tabla = ?',
+      whereArgs: [tabla],
+    )).map((r) => r['registro_id'] as String).toSet();
+
+    final aBorrar = ids.difference(pendientes);
+    if (aBorrar.isEmpty) return;
+
+    // Primero las hijas, que en SQLite no caen solas.
+    final hijas = _hijasEnCascada[tabla] ?? const <(String, String)>[];
+    for (final (hija, columna) in hijas) {
+      final huerfanas = <String>{};
+      for (final id in aBorrar) {
+        final filas = await db.query(
+          hija,
+          columns: ['id'],
+          where: '$columna = ?',
+          whereArgs: [id],
+        );
+        huerfanas.addAll(filas.map((r) => (r['id'] as String?) ?? ''));
+      }
+      huerfanas.remove('');
+      await _aplicarBorrados(
+        db,
+        hija,
+        huerfanas,
+        profundidad: profundidad + 1,
+      );
+    }
+
+    for (final id in aBorrar) {
+      await db.delete(tabla, where: 'id = ?', whereArgs: [id]);
+    }
+    debugPrint('  🗑️ $tabla: ${aBorrar.length} borrado(s) por pulso');
   }
 
   /// Lo que se mueve durante un cobro. Baja en cada ciclo.
@@ -781,6 +1072,7 @@ class SyncEngine {
           '  √ ${entry.operacion.name} ${entry.tabla}/${entry.registroId}',
         );
         anySuccess = true;
+        _anotarParaElPulso(entry);
 
         // ACELERACIÓN TURBO: Si acabamos de subir un "padre", notificamos al loop
         // para que re-intente procesar hijos pausados en esta misma vuelta si es posible.
@@ -1950,6 +2242,8 @@ class SyncEngine {
   void dispose() {
     SyncQueue.onChanged = null;
     _timerSubida?.cancel();
+    _debouncePulso?.cancel();
+    unawaited(_canalPulso?.unsubscribe() ?? Future.value());
     _connectivitySub?.cancel();
     _statusController.close();
     _pendingController.close();

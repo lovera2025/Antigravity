@@ -1,7 +1,22 @@
 # Que los borrados crucen solos
 
-**Estado:** pendiente
+**Estado:** a medias — falta la red de seguridad
 **Postergado el:** 2026-09-08
+**Primera mitad hecha el:** 2026-09-08
+
+## Dónde está parado
+
+El **camino rápido (a) está hecho**: el pulso lleva los ids borrados y la otra PC
+los aplica con su cascada. Con las dos máquinas prendidas, un borrado cruza en
+2-4 segundos.
+
+Falta la **red de seguridad (b)**: la PC que estaba apagada cuando se borró
+sigue mostrando el registro hasta que alguien sincronice a mano. Es el caso menos
+frecuente y el único que necesita comparar conjuntos — o sea el único que puede
+borrar de más si se hace mal.
+
+Se dejó afuera a propósito para no meterlo en el mismo instalador que el resto:
+si aparece un problema, que se sepa cuál de las dos cosas fue.
 
 ## Por qué se postergó
 
@@ -35,22 +50,27 @@ escribió.
 
 Dos caminos, y hacen falta los dos.
 
-### a) El camino rápido: el borrado viaja con nombre y apellido
+### a) El camino rápido: el borrado viaja con nombre y apellido — HECHO
 
 Cuando la cola sube un `SyncOperation.delete`, el pulso de broadcast lleva esos
-ids y el receptor borra **exactamente esos**. Determinístico: no puede excederse,
-porque la lista la escribió una persona apretando eliminar.
+ids y el receptor borra **exactamente esos** (`_aplicarBorrados` en
+`sync_engine.dart`). Determinístico: no puede excederse, porque la lista la
+escribió una persona apretando eliminar.
 
-El receptor tiene que borrar **los hijos primero y el padre después, a mano**. En
-la nube hay `ON DELETE CASCADE` de `presupuestos` → `presupuesto_servicios` y de
-`eventos` → `eventos_servicios` / `contratos_alumnos`, pero en SQLite local **no
-hay `PRAGMA foreign_keys = ON`**, así que ahí el `CASCADE` del esquema es
-decorativo. Es lo que ya hace `eliminar()`
-(`presupuestos_repository.dart:253-260`): borra las líneas, borra el presupuesto,
-y encola **solo el padre** porque de la nube se encarga el cascade. Copiar ese
-orden.
+Borra **los hijos primero y el padre después, a mano**, según el mapa
+`_hijasEnCascada`, que espeja los `ON DELETE CASCADE` verificados contra
+Supabase. Hace falta escribirlos porque en SQLite local **no está
+`PRAGMA foreign_keys = ON`**: los `CASCADE` del esquema local son decorativos.
+Es el mismo orden que ya usaba `eliminar()`
+(`presupuestos_repository.dart:253-260`).
 
-### b) La red de seguridad: reconciliación por foto completa
+Lo que salió distinto de lo previsto: hizo falta extraer `trabajoDelPulso` como
+función pura para poder testear el filtrado del mensaje, y **el test encontró un
+bug antes de que saliera**: un payload con `tablas` como texto en vez de lista
+reventaba el cast adentro del callback del socket, donde nadie lo atrapa. Ahora
+un mensaje con cualquier forma produce trabajo vacío.
+
+### b) La red de seguridad: reconciliación por foto completa — LO QUE FALTA
 
 Para la PC que estaba apagada cuando pasó el borrado. Encender
 `_reconcileDeletes` — pero **blindarlo antes**.
@@ -85,12 +105,10 @@ ids.
 
 ## Cuidado con
 
-- El pulso necesita un **id de instalación** para ignorar sus propios mensajes, y
-  hoy no hay uno usable: `_deviceId()` (`app_role_provider.dart:114-131`) es
-  privado, perezoso, se crea recién al abrir caja —o sea que en una PC que solo
-  se usa como jefe puede no existir nunca— y se regenera si se borran las
-  `SharedPreferences`. Hay que promoverlo a un servicio inicializado en el
-  arranque antes de poder filtrar el origen.
+- ~~El id de instalación~~ — resuelto: vive en `core/services/instalacion_id.dart`
+  y se inicializa en el arranque, reusando la misma clave `caja_device_id` que ya
+  usaba la caja para que una PC no tenga dos nombres. `_deviceId()` de
+  `app_role_provider` ahora delega ahí.
 - Broadcast, no `postgres_changes`. No agregar ninguna tabla a la publicación de
   Realtime: eso es lo que quemó el Disk IO en septiembre de 2026, y está contado
   en `docs/CONTEXTO_v4.9.4_2026-09-02.md`. El broadcast no consulta el WAL.
