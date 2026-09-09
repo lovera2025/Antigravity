@@ -112,6 +112,20 @@ begin
       continue;
     end if;
 
+    -- El nombre viejo, sin el `upd_`. La tanda manual no fue consistente: unas
+    -- tablas quedaron con `set_updated_at_<tabla>` y otras ya con
+    -- `set_updated_at_upd_<tabla>`. Sin este drop, estandarizar el nombre no
+    -- reemplaza al anterior: lo deja al lado, y la tabla termina con dos
+    -- triggers `before update` haciendo exactamente lo mismo.
+    --
+    -- Pasó de verdad: la primera versión de este archivo no lo tenía y dejó 20
+    -- tablas con el par duplicado. Inocuo —los dos sellan la misma fecha y son
+    -- idempotentes— pero es basura, y en `invitados` no da lo mismo: es la única
+    -- tabla que quedó en la publicación de Realtime, o sea la única cuyos UPDATE
+    -- escriben WAL que después lee `realtime.apply_rls`.
+    execute format(
+      'drop trigger if exists set_updated_at_%1$I on public.%1$I', t);
+
     execute format(
       'drop trigger if exists set_updated_at_ins_%1$I on public.%1$I', t);
     execute format(
@@ -143,8 +157,12 @@ drop trigger if exists trigger_update_invitados_timestamp on public.invitados;
 
 -- ── 4. Verificación ─────────────────────────────────────────────────────────
 --
--- Después de correr esto, ninguna tabla sincronizada debería quedar sin sus dos
--- triggers. Esta consulta tiene que devolver CERO filas:
+-- Cada tabla sincronizada tiene que quedar con EXACTAMENTE un trigger de insert
+-- y uno de update. El `<> 1` no es capricho: la primera versión de este archivo
+-- chequeaba `= 0` —solo los que faltaban— y por eso no vio que estaba dejando
+-- veinte tablas con el trigger de update duplicado.
+--
+-- Esta consulta tiene que devolver CERO filas:
 --
 --   with sincronizadas(tabla) as (values
 --     ('clientes'),('servicios'),('eventos'),('eventos_servicios'),
@@ -165,5 +183,5 @@ drop trigger if exists trigger_update_invitados_timestamp on public.invitados;
 --                         and c.relnamespace = 'public'::regnamespace
 --   left join pg_trigger t on t.tgrelid = c.oid and not t.tgisinternal
 --   group by s.tabla
---   having count(*) filter (where t.tgtype & 4  > 0) = 0
---       or count(*) filter (where t.tgtype & 16 > 0) = 0;
+--   having count(*) filter (where t.tgtype & 4  > 0) <> 1
+--       or count(*) filter (where t.tgtype & 16 > 0) <> 1;
