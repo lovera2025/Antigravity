@@ -118,6 +118,30 @@ void main() {
       expect(aPodar, isEmpty);
     });
 
+    test('una nube vacía contra una base con filas no es una foto creíble', () {
+      // El agujero que dejaba abierto contar y comparar: si la sesión vence o
+      // RLS niega la tabla, PostgREST no tira error — devuelve cero filas, y el
+      // `count` también da cero. Los dos números coinciden, el chequeo canta
+      // "foto completa", y entonces sobra TODO lo local.
+      //
+      // Se descubrió corriendo la prueba de humo contra Supabase con la clave
+      // anónima sin sesión: leyó 0 filas de tres tablas que tienen cientos.
+      expect(
+        fotoDeLaNubeEsCreible(enLaNube: 0, local: 225),
+        isFalse,
+        reason: 'eso es sesión o permisos, no que alguien borró 225 renglones',
+      );
+
+      // Y lo que sí es legítimo sigue pasando.
+      expect(fotoDeLaNubeEsCreible(enLaNube: 0, local: 0), isTrue);
+      expect(fotoDeLaNubeEsCreible(enLaNube: 225, local: 225), isTrue);
+      expect(
+        fotoDeLaNubeEsCreible(enLaNube: 224, local: 225),
+        isTrue,
+        reason: 'un borrado de verdad tiene que poder cruzar',
+      );
+    });
+
     test('una foto que llegó truncada no autoriza a borrar', () {
       // El caso que blinda la reconciliación de borrados: quien trae la lista de
       // ids de la nube tiene que verificar que trajo todo. PostgREST corta en

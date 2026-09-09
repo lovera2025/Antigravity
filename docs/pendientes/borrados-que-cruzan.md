@@ -1,22 +1,40 @@
 # Que los borrados crucen solos
 
-**Estado:** a medias — falta la red de seguridad
+**Estado:** hecho
 **Postergado el:** 2026-09-08
-**Primera mitad hecha el:** 2026-09-08
+**Resuelto el:** 2026-09-08
 
-## Dónde está parado
+## Cómo se resolvió
 
-El **camino rápido (a) está hecho**: el pulso lleva los ids borrados y la otra PC
-los aplica con su cascada. Con las dos máquinas prendidas, un borrado cruza en
-2-4 segundos.
+Los dos caminos, en la v4.9.8. Ver
+[CONTEXTO_v4.9.8](../CONTEXTO_v4.9.8_2026-09-08.md).
 
-Falta la **red de seguridad (b)**: la PC que estaba apagada cuando se borró
-sigue mostrando el registro hasta que alguien sincronice a mano. Es el caso menos
-frecuente y el único que necesita comparar conjuntos — o sea el único que puede
-borrar de más si se hace mal.
+Se había planeado dejar la parte (b) para otra versión, porque es la única que
+compara conjuntos y por lo tanto la única que puede borrar de más. Entró igual, a
+pedido, con la condición de que el blindaje estuviera completo antes.
 
-Se dejó afuera a propósito para no meterlo en el mismo instalador que el resto:
-si aparece un problema, que se sepa cuál de las dos cosas fue.
+**Y menos mal que se escribió el blindaje con cuidado**, porque el previsto no
+alcanzaba. La idea era paginar y contrastar contra un `count` exacto, lo que
+tapa el corte de las 1000 filas de PostgREST. Pero corriendo la prueba de humo
+contra Supabase apareció el caso que ese chequeo no ve:
+
+> Sin sesión, PostgREST **no tira error**: devuelve cero filas, y el `count`
+> también da cero.
+
+Los dos números coinciden, el chequeo canta "foto completa", y comparar eso
+contra la base local dice que sobra todo. **El blindaje contra la truncación
+convertía una sesión vencida en un borrado total.** Es la misma trampa que vació
+los presupuestos —confundir "no vino" con "no existe"— una capa más adentro.
+
+Por eso hay una tercera condición, `fotoDeLaNubeEsCreible`: si la nube dice cero
+y acá hay filas, no se toca nada. Medido con la clave anónima sin sesión, que es
+lo que se parece a una sesión vencida: `eventos` (25 filas reales) → 0,
+`contratos_alumnos` (643) → 0. Sin ese freno, las habría borrado las dos.
+
+La otra sorpresa fue de cadencia: la reconciliación se salteaba si `_isBusy`, y
+con el pull cada 10 segundos eso es buena parte del tiempo. En la primera prueba
+real **no llegó a correr ni una vez**. Ahora reintenta a los 30 s en vez de
+esperar los diez minutos completos.
 
 ## Por qué se postergó
 

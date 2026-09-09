@@ -153,6 +153,26 @@ TrabajoDelPulso trabajoDelPulso(
   return TrabajoDelPulso(tablas: tablas, borrados: borrados);
 }
 
+/// ¿Es creíble que la nube esté vacía?
+///
+/// Contar lo que bajó y contrastarlo contra un `count` del servidor detecta una
+/// página truncada, pero **no detecta el caso en que no se pudo leer nada**: si
+/// la sesión venció, o RLS niega la tabla, PostgREST no tira error — devuelve
+/// cero filas, y el `count` también da cero. Los dos números coinciden, el
+/// chequeo canta "foto completa", y comparar eso contra la base local dice que
+/// sobra **todo**.
+///
+/// O sea que la protección de contar, sola, convierte un problema de permisos en
+/// un borrado total. Es la misma trampa que vació los presupuestos —creer que
+/// "no vino" significa "no existe"— una capa más adentro.
+///
+/// Por eso: si la nube dice cero y acá hay filas, no se toca nada. Vaciar una
+/// tabla entera a propósito existe, pero es raro y se resuelve con un pull
+/// manual; no vale la pena hacerle lugar automático al mismo camino por el que
+/// se pierde todo.
+bool fotoDeLaNubeEsCreible({required int enLaNube, required int local}) =>
+    !(enLaNube == 0 && local > 0);
+
 /// Qué filas locales se pueden borrar después de una bajada.
 ///
 /// **Nada se borra de la base local, salvo que alguien lo haya borrado a mano.**
@@ -314,6 +334,54 @@ class SyncEngine {
     // elegido ni de que haya una pantalla abierta. Una PC de Asesor tiene que
     // enterarse igual.
     _escucharElPulso();
+    _arrancarReconciliacion();
+  }
+
+  /// Cada cuánto se revisa si en la nube desapareció algo.
+  ///
+  /// Diez minutos y no diez segundos: el pulso ya cubre los borrados en vivo, y
+  /// esto es solo para la PC que estaba apagada cuando pasaron. Son 6 requests
+  /// de ids más 6 `count`, y no tiene sentido pagarlos seguido.
+  static const _cadaCuantoSeReconcilia = Duration(minutes: 10);
+  Timer? _timerReconciliacion;
+
+  Timer? _reintentoReconciliacion;
+
+  void _arrancarReconciliacion() {
+    if (kIsWeb) return;
+
+    // Sin esto la reconciliación se muere de hambre. El pull corre cada 10
+    // segundos, así que `_isBusy` está en true buena parte del tiempo: un
+    // intento que cae justo ahí se salteaba y se iba a esperar los diez minutos
+    // completos, y el siguiente podía caer igual. En la prueba real no llegó a
+    // correr ni una vez.
+    //
+    // Reintentar a los 30 s cuesta nada y le da al turno una ventana libre.
+    Future<void> correr() async {
+      if (_connectivity.currentStatus == AppConnectivity.offline) return;
+      if (_isBusy) {
+        _reintentoReconciliacion?.cancel();
+        _reintentoReconciliacion = Timer(
+          const Duration(seconds: 30),
+          () => unawaited(correr()),
+        );
+        return;
+      }
+      try {
+        await _reconcileDeletes();
+      } catch (e) {
+        debugPrint('⚠️ Reconciliación de borrados: $e');
+      }
+    }
+
+    // La primera, apenas arranca: es justo el momento en que esta PC puede venir
+    // de estar apagada mientras la otra borraba cosas. Con una espera corta para
+    // no pelearse con el pull inicial.
+    Timer(const Duration(seconds: 20), () => unawaited(correr()));
+    _timerReconciliacion = Timer.periodic(
+      _cadaCuantoSeReconcilia,
+      (_) => unawaited(correr()),
+    );
   }
 
   /// Espera entre el último encolado y la subida automática.
@@ -2160,34 +2228,94 @@ class SyncEngine {
     return clean;
   }
 
-  /// Reconcilia eliminaciones remotas comparando IDs cloud vs local.
-  /// Solo aplica a tablas padre para limitar el número de queries.
+  /// Tablas padre que se reconcilian. Las hijas caen por cascada.
+  static const List<String> _tablasAReconciliar = [
+    'clientes',
+    'eventos',
+    'presupuestos',
+    'contratos_alumnos',
+    'prestamos_alquiler',
+    'servicios',
+  ];
+
+  /// Trae **todos** los ids de una tabla de la nube, o `null` si no pudo.
+  ///
+  /// Devolver `null` en vez de una lista incompleta es el punto entero de esta
+  /// función. La versión anterior hacía `select('id')` sin paginar: PostgREST
+  /// corta en 1000 filas por defecto y devuelve las primeras mil **sin avisar**.
+  /// El llamador las tomaba por "todo lo que hay en la nube" y borraba el resto
+  /// de la base local. `contratos_alumnos` iba en 643 filas y sube con cada
+  /// alumno: era una bomba con fecha.
+  ///
+  /// Por eso se pagina y además se contrasta contra un `count` exacto. Si los
+  /// números no cierran —una fila que entró entre la primera página y la
+  /// última, un error de red a mitad de camino—, no hay foto completa y no se
+  /// borra nada. La próxima pasada lo intenta de nuevo, diez minutos después.
+  Future<Set<String>?> _idsCompletosDeLaNube(String tabla) async {
+    const tamanioPagina = 1000;
+    try {
+      final ids = <String>{};
+      var desde = 0;
+      while (true) {
+        final pagina = await _supabase
+            .from(tabla)
+            .select('id')
+            .range(desde, desde + tamanioPagina - 1);
+        final filas = (pagina as List).cast<Map<String, dynamic>>();
+        for (final f in filas) {
+          final id = (f['id'] as String?)?.trim() ?? '';
+          if (id.isNotEmpty) ids.add(id);
+        }
+        if (filas.length < tamanioPagina) break;
+        desde += tamanioPagina;
+      }
+
+      // El contraste. `CountOption.exact` cuesta un scan, pero esto corre una
+      // vez cada diez minutos sobre seis tablas y es lo único que separa "la
+      // nube no tiene esta fila" de "no llegué a leerla".
+      final conteo = await _supabase
+          .from(tabla)
+          .count(CountOption.exact);
+
+      if (ids.length != conteo) {
+        debugPrint(
+          '  ⏸️ $tabla: traje ${ids.length} ids y la nube dice $conteo — '
+          'no es una foto completa, no se borra nada',
+        );
+        return null;
+      }
+      return ids;
+    } catch (e) {
+      debugPrint('  ⏸️ $tabla: no pude leer la nube ($e) — no se borra nada');
+      return null;
+    }
+  }
+
+  /// Propaga a esta PC los borrados que se hicieron en la otra.
+  ///
+  /// Es la red de seguridad del pulso: cubre a la máquina que estaba **apagada**
+  /// cuando alguien borró algo, que es el único caso que un aviso en vivo no
+  /// puede alcanzar.
+  ///
+  /// Cumple la segunda mitad de la regla —comparar contra una foto completa **y
+  /// contada**—, y por eso todo el cuidado está en [_idsCompletosDeLaNube]: sin
+  /// esa certeza, `filasAPodar` recibe `fotoCompleta: false` y no borra nada.
   Future<void> _reconcileDeletes() async {
     final db = await LocalDatabase.instance;
 
-    const reconcileTables = [
-      'clientes',
-      'eventos',
-      'presupuestos',
-      'contratos_alumnos',
-      'prestamos_alquiler',
-      'servicios',
-    ];
+    debugPrint('🔄 Reconciliación de borrados remotos...');
 
-    debugPrint('🔄 Reconciliación periódica de deletes remotos...');
-
-    for (final table in reconcileTables) {
+    for (final table in _tablasAReconciliar) {
       try {
-        // Obtener todos los IDs del cloud
-        final cloudData = await _supabase.from(table).select('id');
-        final cloudIds = (cloudData as List)
-            .map((r) => (r as Map<String, dynamic>)['id'] as String)
+        final cloudIds = await _idsCompletosDeLaNube(table);
+
+        final localRows = await db.query(table, columns: ['id']);
+        final localIds = localRows
+            .map((r) => (r['id'] as String?) ?? '')
+            .where((id) => id.isNotEmpty)
             .toSet();
 
-        // Obtener IDs locales
-        final localRows = await db.query(table, columns: ['id']);
-
-        // Excluir IDs pendientes en la cola de sync (no eliminar lo que aún no subió)
+        // Lo que todavía no subió no está de más: la nube no lo vio nunca.
         final pendingRows = await db.query(
           '_sync_queue',
           columns: ['registro_id'],
@@ -2198,20 +2326,34 @@ class SyncEngine {
             .map((r) => r['registro_id'] as String)
             .toSet();
 
-        int removed = 0;
-        for (final row in localRows) {
-          final localId = row['id'] as String;
-          if (!cloudIds.contains(localId) && !pendingIds.contains(localId)) {
-            await db.delete(table, where: 'id = ?', whereArgs: [localId]);
-            removed++;
-          }
-        }
-
-        if (removed > 0) {
+        // Una nube vacía contra una base local con filas no es un borrado
+        // masivo: es una lectura que no funcionó. Ver `fotoDeLaNubeEsCreible`.
+        final creible =
+            cloudIds != null &&
+            fotoDeLaNubeEsCreible(
+              enLaNube: cloudIds.length,
+              local: localIds.length,
+            );
+        if (cloudIds != null && !creible) {
           debugPrint(
-            '  🗑️ $table: $removed registros eliminados (no existen en cloud)',
+            '  ⏸️ $table: la nube dice 0 filas y acá hay ${localIds.length} — '
+            'eso es sesión o permisos, no un borrado. No se toca nada.',
           );
         }
+
+        // La misma función que usa el podado del pull. Un solo lugar decide qué
+        // se borra, y un solo test lo cubre.
+        final aBorrar = filasAPodar(
+          fotoCompleta: creible,
+          idsLocales: localIds,
+          idsEnLaNube: cloudIds ?? const {},
+          idsPendientes: pendingIds,
+        );
+        if (aBorrar.isEmpty) continue;
+
+        // Por el mismo camino que los borrados del pulso, así se llevan sus
+        // hijas: en SQLite local el CASCADE del esquema no borra nada.
+        await _aplicarBorrados(db, table, aBorrar);
       } catch (e) {
         debugPrint('  ⚠️ Error reconciliando $table: $e');
       }
@@ -2242,6 +2384,8 @@ class SyncEngine {
   void dispose() {
     SyncQueue.onChanged = null;
     _timerSubida?.cancel();
+    _timerReconciliacion?.cancel();
+    _reintentoReconciliacion?.cancel();
     _debouncePulso?.cancel();
     unawaited(_canalPulso?.unsubscribe() ?? Future.value());
     _connectivitySub?.cancel();
