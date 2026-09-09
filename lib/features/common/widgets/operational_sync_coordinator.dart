@@ -20,7 +20,10 @@ class OperationalSyncRevision extends Notifier<int> {
 final operationalSyncRevisionProvider =
     NotifierProvider<OperationalSyncRevision, int>(OperationalSyncRevision.new);
 
-/// Sincronización corta caja ↔ jefe. Solo actúa con un rol operativo elegido.
+/// Sincronización corta entre las PCs.
+///
+/// Baja siempre, en cualquier sesión abierta y también con la ventana atrás o
+/// minimizada. Sube solo con un rol operativo elegido (jefe o caja).
 class OperationalSyncCoordinator extends ConsumerStatefulWidget {
   final Widget child;
 
@@ -36,9 +39,16 @@ class _OperationalSyncCoordinatorState
     with WidgetsBindingObserver, WindowListener {
   Timer? _timer;
   bool _appResumed = true;
-  bool _windowFocused = true;
   bool _running = false;
   DateTime? _ultimoAutocierre;
+
+  /// Ciclos de pull efectivamente corridos, para la cadencia por niveles.
+  ///
+  /// Cuenta bajadas, no invocaciones: los ticks que salen temprano —sin foco en
+  /// móvil, o con otro ciclo todavía corriendo— no suman. Y **nunca se
+  /// reinicia**: si se pusiera en cero con cada vuelta a la ventana, un rato de
+  /// alt-tab dejaría a las tablas de carga sin llegar nunca a su turno.
+  int _ciclos = 0;
 
   bool get _desktop =>
       !kIsWeb &&
@@ -46,7 +56,16 @@ class _OperationalSyncCoordinatorState
           defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS);
 
-  bool get _foreground => _appResumed && (!_desktop || _windowFocused);
+  /// En escritorio ya no se mira el foco de la ventana.
+  ///
+  /// Antes, con la app atrás de otra ventana o minimizada, [_tick] salía sin
+  /// hacer nada: la PC de la oficina, que pasa el día con el navegador adelante,
+  /// no sincronizaba. Y no era simétrico — la máquina que más miraba la pantalla
+  /// era la que más al día estaba, sin que nadie supiera por qué.
+  ///
+  /// En móvil el guard se queda: ahí "sin foco" significa que el sistema puede
+  /// congelar el proceso en cualquier momento, que es otra cosa.
+  bool get _foreground => _appResumed;
 
   @override
   void initState() {
@@ -71,23 +90,16 @@ class _OperationalSyncCoordinatorState
     if (_appResumed) unawaited(_tick());
   }
 
-  @override
-  void onWindowFocus() {
-    _windowFocused = true;
-    unawaited(_tick());
-  }
+  // Volver a la ventana ya no habilita nada —el ciclo corre igual de fondo—,
+  // pero sigue valiendo un tick inmediato: es el momento en que alguien va a
+  // mirar la pantalla, y conviene que lo que vea esté al día sin esperar al
+  // próximo turno del timer.
 
   @override
-  void onWindowBlur() => _windowFocused = false;
+  void onWindowFocus() => unawaited(_tick());
 
   @override
-  void onWindowMinimize() => _windowFocused = false;
-
-  @override
-  void onWindowRestore() {
-    _windowFocused = true;
-    unawaited(_tick());
-  }
+  void onWindowRestore() => unawaited(_tick());
 
   /// Cierre de cajas que quedaron abiertas de días anteriores.
   ///
@@ -112,24 +124,31 @@ class _OperationalSyncCoordinatorState
   Future<void> _tick() async {
     unawaited(_autocierreCajas());
     if (!mounted || !_foreground || _running) return;
-    final role = ref.read(appRoleProvider);
-    if (!role.esJefe && !role.esCaja) return;
 
     _running = true;
     try {
       final engine = ref.read(syncEngineProvider);
-      // El jefe también sube solo mientras haya una caja abierta: es la misma
-      // regla que ya usa CajaAutoSyncService.afterMassiveMutation para subir
-      // el cobro recién registrado. Sin esto, si esa subida fallaba nadie la
-      // reintentaba y el cobro quedaba parado hasta que alguien apretara
-      // "Subir pendientes" o cerrara la caja. Con la caja cerrada el jefe
-      // sigue subiendo a mano, como siempre.
-      final puedeSubirSolo =
-          role.esCaja ||
-          (role.esJefe &&
-              role.sesionActiva != null &&
-              role.sesionActiva!.estaAbierta);
+      final role = ref.read(appRoleProvider);
 
+      // Subir pide un rol operativo elegido; bajar no.
+      //
+      // Antes el tick entero salía si el rol era `none`, y un usuario Asesor
+      // nunca elige rol —va derecho a su menú sin pasar por la pantalla de
+      // roles, que es solo para Admin—. O sea que una PC de operario no
+      // sincronizaba sola nunca, ni para un lado ni para el otro, y quedaba
+      // mirando datos de la última vez que alguien apretó sincronizar.
+      //
+      // Bajar no compromete nada: escribe filas de la nube en la base local.
+      final puedeSubirSolo = role.esJefe || role.esCaja;
+
+      // Al jefe ya no se le pide caja abierta.
+      //
+      // Entrar como jefe no abre caja —se abre recién al cobrar—, así que un
+      // cambio hecho antes del primer cobro del día se quedaba parado en la
+      // cola sin que nadie lo reintentara. Y es justo cuando se cargan los
+      // presupuestos. Subir la cola no cobra nada ni abre ninguna sesión: manda
+      // lo que alguien ya guardó.
+      //
       // Se pregunta por trabajo real, no por el contador de pendientes: ese
       // cuenta también los trabados, y con un registro imposible de subir esto
       // despertaría la sincronización cada 10 segundos y el indicador viviría
@@ -137,7 +156,15 @@ class _OperationalSyncCoordinatorState
       if (puedeSubirSolo && await engine.hayTrabajoDeSubida) {
         await engine.flushPending();
       }
-      final changed = await engine.pullOperationalUpdates();
+      // El primer ciclo baja todo (0 % 6 == 0): al abrir la app conviene la
+      // foto completa, no solo lo del cobro.
+      final incluirTablasDeCarga =
+          _ciclos % SyncEngine.ciclosEntrePullsLentos == 0;
+      _ciclos++;
+
+      final changed = await engine.pullOperationalUpdates(
+        incluirTablasDeCarga: incluirTablasDeCarga,
+      );
       if (!changed || !mounted) return;
       ref.invalidate(dashboardStatsProvider);
       ref.read(contratosMutationTickProvider.notifier).bump();

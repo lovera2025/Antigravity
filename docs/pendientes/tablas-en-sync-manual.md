@@ -1,7 +1,32 @@
 # Tablas que quedaron en sync manual
 
-**Estado:** pendiente
+**Estado:** hecho
 **Postergado el:** 2026-09-02
+**Resuelto el:** 2026-09-08
+
+## Cómo se resolvió
+
+Las siete pasaron al pull automático, en `_tablasDeCarga` (`sync_engine.dart`).
+El pull operativo va de 16 a 24 tablas y queda igualado al manual salvo
+`invitados`, que —como decía este documento— se queda con su camino de Realtime
+porque es el tótem.
+
+No costó lo que se temía: entraron en el **nivel lento** de la cadencia por
+niveles, o sea un request por minuto cada una en vez de uno cada 10 segundos. Es
+menos de lo que costaba cualquiera de ellas cuando alguien apretaba sincronizar y
+se bajaban enteras.
+
+Se sumó además `compromisos_personal`, que no existía cuando se escribió esto
+(migración del 4 de septiembre) y había quedado en el mismo lugar: en el pull
+manual y sin trigger de `updated_at`, o sea que sus ediciones no cruzaban ni a
+mano. El trigger entró en
+`supabase/migrations/20260908120000_updated_at_trigger.sql`.
+
+Ver `docs/CONTEXTO_v4.9.7_2026-09-08.md`.
+
+---
+
+## El planteo original
 
 ## Por qué se postergó
 

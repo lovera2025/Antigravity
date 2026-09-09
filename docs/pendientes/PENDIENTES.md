@@ -22,17 +22,22 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 
 ## Los pendientes
 
-- [Cadencia del pull por niveles](pull-cadencia-por-niveles.md) — hoy las 16
-  tablas bajan cada 10 s; separarlas en 10/30/60 s según cuánto se mueven.
 - [Que el pull diga cuántas filas bajó](pull-devolver-cambios-reales.md) — sin
   eso, el caché de la proyección financiera se anula cada 10 segundos aunque no
   haya cambiado nada.
 - [Chequeo de salud de saldos](chequeo-salud-saldos.md) — auditar saldos contra
   Supabase en vez de la base local. Incluye cuál es la herramienta buena
   (`tool/recalcular_contrato.dart --dry-run`) y cuál es una trampa.
-- [Watermark del reloj del servidor](watermark-reloj-del-servidor.md) — el pull
-  incremental confía en la hora de cada PC, y una PC atrasada rebaja siempre lo
-  mismo.
-- [Tablas que quedaron en sync manual](tablas-en-sync-manual.md) — alquileres,
-  rentabilidad, obligaciones, caja fuerte e invitados siguen cruzando solo a
-  mano.
+- [Que los borrados crucen solos](borrados-que-cruzan.md) — hoy un presupuesto
+  borrado en una PC sigue apareciendo en la otra para siempre. El código que lo
+  resolvería existe y está apagado, y encenderlo tal cual está sería reintroducir
+  el bug que acabamos de arreglar.
+
+## Hechos
+
+- [Cadencia del pull por niveles](pull-cadencia-por-niveles.md) — hecho el
+  2026-09-08, con dos niveles en vez de tres.
+- [Watermark del reloj del servidor](watermark-reloj-del-servidor.md) — hecho el
+  2026-09-08, por la opción del `updated_at` más alto recibido.
+- [Tablas que quedaron en sync manual](tablas-en-sync-manual.md) — hecho el
+  2026-09-08; el pull automático pasó de 16 a 24 tablas.

@@ -1,7 +1,34 @@
 # El watermark del pull sale del reloj de la PC, no del servidor
 
-**Estado:** pendiente
+**Estado:** hecho
 **Postergado el:** 2026-09-02
+**Resuelto el:** 2026-09-08
+
+## Cómo se resolvió
+
+Por la **opción 1** —el `updated_at` más alto de lo que se acaba de bajar—, que
+es la que este mismo documento recomendaba. Sin RPC y sin tráfico extra. Vive en
+`marcaDeLoBajado` (`sync_engine.dart`), función pura con su test en
+`test/marca_de_lo_bajado_test.dart`.
+
+El "cuidado con" de más abajo era el punto: cuando la página vuelve vacía **ya no
+se escribe nada** y el marcador se queda donde estaba. Antes se lo empujaba a
+`now()`, que es justamente el caso en que no hay ninguna promesa nueva que hacer.
+Tampoco cuesta requests de más: la próxima pasada pide el mismo rango y vuelve a
+venir vacía.
+
+Lo que salió distinto de lo previsto: el documento decía que `updated_at` "lo
+escribe Postgres". Es cierto —hay un trigger por tabla—, pero eso **no se podía
+saber leyendo el repo**, porque los triggers estaban aplicados a mano y sin
+versionar. Quedaron versionados en
+`supabase/migrations/20260908120000_updated_at_trigger.sql` el mismo día.
+
+Entró junto con el arreglo del prune de `_pullTable`, que es lo que de verdad
+estaba vaciando los presupuestos. Ver `docs/CONTEXTO_v4.9.7_2026-09-08.md`.
+
+---
+
+## El planteo original
 
 ## Por qué se postergó
 

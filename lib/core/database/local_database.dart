@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 70;
+  static const int _version = 71;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -2815,6 +2815,32 @@ class LocalDatabase {
         debugPrint('✅ Migración v70 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v70: $e');
+      }
+    }
+
+    if (oldVersion < 71) {
+      debugPrint('  🔧 v71: reinicio de marcadores — recuperar las líneas podadas');
+      try {
+        // Tercera vez que hace falta esto, después de la v45 y la v69, y por la
+        // misma razón de fondo: filas que quedaron del otro lado del filtro
+        // incremental y no se vuelven a pedir solas.
+        //
+        // Acá el que las sacó fue el prune de `_pullTable`. Corría en cada
+        // bajada, también en la incremental, y comparaba el delta —las pocas
+        // líneas que alguien acababa de tocar en la otra PC— contra TODAS las
+        // filas locales de la tabla, borrando el resto. Como el monto del
+        // presupuesto es la suma de sus líneas, los presupuestos aparecían en
+        // $0. La nube nunca se tocó; se rompía solo la copia local.
+        //
+        // El prune ya está arreglado (ver `filasAPodar` en sync_engine.dart),
+        // pero lo ya borrado solo vuelve pidiendo todo de nuevo. Esto le ahorra
+        // al usuario tener que acordarse del "pull completo forzado".
+        await db.delete('_sync_meta');
+        debugPrint('  🔄 v71: _sync_meta reseteado — el próximo pull baja todo');
+
+        debugPrint('✅ Migración v71 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v71: $e');
       }
     }
   }

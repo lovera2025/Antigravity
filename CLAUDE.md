@@ -105,6 +105,41 @@ históricos y la pantalla se ve como siempre.
 
 ## Trampas conocidas
 
+- **Nada se borra de la base local salvo que alguien lo haya borrado a mano.**
+  Un `DELETE` local solo es legítimo si viene con nombre y apellido —una lista
+  explícita de ids que una persona eliminó— o si sale de comparar contra una
+  foto **completa y contada** de la nube, del mismo alcance que se va a
+  recorrer. Un lote incremental, una página que cortó en las 1000 filas de
+  PostgREST, o una consulta que falló a medias: ninguna autoriza a borrar nada.
+
+  Es la misma clase de trampa que la de `REPLICA IDENTITY` de acá abajo: parece
+  gratis y rompe en silencio. El prune de `_pullTable` comparaba el delta
+  incremental —las pocas líneas que alguien acababa de tocar en la otra PC—
+  contra **todas** las filas locales de `presupuesto_servicios`, y borraba el
+  resto. Como el monto del presupuesto no existe como columna, es la suma de sus
+  líneas, los presupuestos aparecían en **$0**: sin excepción, sin log, y solo
+  en la PC que más sincronizaba. La nube nunca se tocó —los `delete` a Supabase
+  salen solo de la cola— y por eso el pull forzado devolvía todo.
+
+  Hoy la decisión vive en `filasAPodar` (`sync_engine.dart`), con su test en
+  `test/filas_a_podar_test.dart`. **Cualquier camino nuevo que borre tiene que
+  pasar por ahí**, no reimplementar la comparación al lado.
+
+- **El `updated_at` de Supabase lo mantiene un trigger, no los repos.** Hay un
+  `before insert or update` sobre cada tabla sincronizada que corre
+  `public.update_updated_at_column()`. Estuvo aplicado a mano y sin versionar
+  desde 2026 hasta que se versionó en
+  `supabase/migrations/20260908120000_updated_at_trigger.sql` — leyendo solo el
+  repo la conclusión razonable era que no existía, y eso ya mandó a un plan a
+  "arreglar" algo que funcionaba. Si agregás una tabla al sync, **agregale el
+  trigger**: sin él sus ediciones no cruzan nunca, porque el motor no rellena
+  `updated_at` y varios repos tampoco.
+
+- **El marcador del pull sale del servidor, no de la PC.** `marcaDeLoBajado`
+  toma el `updated_at` más alto de lo que bajó. No volver a usar `DateTime.now()`
+  para eso: se compara contra el reloj de Postgres, y la diferencia entre los
+  dos relojes entra directo en el filtro.
+
 - **`REPLICA IDENTITY` y los DELETE.** Cualquier suscripción de Realtime
   **filtrada por una columna** —sea `.stream().eq(...)` o un
   `PostgresChangeFilter`— **descarta los DELETE** si la tabla está en

@@ -1,7 +1,34 @@
 # Cadencia del pull por niveles
 
-**Estado:** pendiente
+**Estado:** hecho
 **Postergado el:** 2026-09-02
+**Resuelto el:** 2026-09-08
+
+## Cómo se resolvió
+
+Con **dos niveles**, no tres: `_tablasDelCobro` (8, cada ciclo) y
+`_tablasDeCarga` (16, cada 6 ciclos = 1 minuto) en `sync_engine.dart`. El
+contador de ticks vive en `OperationalSyncCoordinator` como estaba previsto, y
+—como avisaba el "cuidado con"— **no se reinicia** con los ticks de foco de
+ventana: cuenta bajadas efectivamente corridas y nunca vuelve a cero.
+
+El nivel intermedio de 30 s no se justificó: `eventos`, `clientes`,
+`eventos_servicios` y `transacciones` cambian cuando alguien se sienta a cargar
+algo, no en el mostrador, y con el pulso por broadcast la latencia real no la
+marca el timer. Dos niveles son menos superficie para el mismo resultado.
+
+Lo que salió distinto: esto entró **como parte de un arreglo, no como
+optimización**. En la misma versión se sacó el freno de foco de ventana —la PC
+de la oficina, con la app atrás del navegador, no sincronizaba— y se empezó a
+bajar también en las PCs sin rol operativo. Las dos cosas suben el tráfico; la
+cadencia por niveles es lo que las paga. Por PC: de ~96 requests/min con foco (y
+0 sin foco) a ~64, siempre, cubriendo 24 tablas en vez de 16.
+
+Ver `docs/CONTEXTO_v4.9.7_2026-09-08.md`.
+
+---
+
+## El planteo original
 
 ## Por qué se postergó
 

@@ -56,6 +56,65 @@ String marcadorPullSeguro({
       .toIso8601String();
 }
 
+/// Hasta dónde llegó de verdad una bajada, según el reloj del servidor.
+///
+/// El marcador se compara contra `updated_at`, que lo sella Postgres con su
+/// propio `now()`. Sacarlo del reloj de la PC —`DateTime.now()`— mete la
+/// diferencia entre los dos relojes adentro del filtro: una PC adelantada
+/// guarda un marcador del futuro y se saltea, para siempre y sin un solo error
+/// en el log, las filas que se escriban en esa ventana. Una atrasada re-baja lo
+/// mismo indefinidamente.
+///
+/// La marca correcta es el `updated_at` más alto de lo que se acaba de bajar:
+/// sale del mismo reloj contra el que se va a comparar, no cuesta un request
+/// extra, y siempre queda por detrás de "ahora" — o sea que en la duda re-pide,
+/// nunca saltea.
+///
+/// Devuelve `null` si ninguna fila trajo una fecha legible. En ese caso el
+/// llamador tiene que **dejar el marcador donde estaba**: no hay de dónde
+/// sacarlo, y inventarlo es exactamente cómo se pierden filas.
+String? marcaDeLoBajado(
+  Iterable<Map<String, dynamic>> filas,
+  String columnaFecha,
+) {
+  DateTime? maxima;
+  for (final fila in filas) {
+    final crudo = fila[columnaFecha];
+    if (crudo == null) continue;
+    final fecha = DateTime.tryParse(crudo.toString())?.toUtc();
+    if (fecha == null) continue;
+    if (maxima == null || fecha.isAfter(maxima)) maxima = fecha;
+  }
+  return maxima?.toIso8601String();
+}
+
+/// Qué filas locales se pueden borrar después de una bajada.
+///
+/// **Nada se borra de la base local, salvo que alguien lo haya borrado a mano.**
+/// Un `DELETE` local solo es legítimo si viene con nombre y apellido —una lista
+/// explícita de ids que una persona eliminó— o si sale de comparar contra una
+/// foto **completa** de la nube, del mismo alcance que se va a recorrer.
+///
+/// Contra un lote incremental no vale: lo que no vino no está de más, es lo que
+/// simplemente no cambió. Así se vaciaron los presupuestos. El pull bajaba las
+/// 22 líneas que alguien acababa de tocar en la otra PC, y el prune borraba las
+/// otras 203 de la tabla. Como el monto del presupuesto es la suma de sus líneas
+/// —no hay columna de total—, todos los demás presupuestos quedaban en $0 sin
+/// que nadie avisara.
+///
+/// Una página que cortó en el límite del servidor tampoco es una foto completa:
+/// quien la traiga tiene que verificar que trajo todo antes de pasar
+/// `fotoCompleta: true`.
+Set<String> filasAPodar({
+  required bool fotoCompleta,
+  required Set<String> idsLocales,
+  required Set<String> idsEnLaNube,
+  required Set<String> idsPendientes,
+}) {
+  if (!fotoCompleta) return const <String>{};
+  return idsLocales.difference(idsEnLaNube).difference(idsPendientes);
+}
+
 /// Motor de sincronización — local-first, nube manual.
 class SyncEngine {
   final ConnectivityService _connectivity;
@@ -166,6 +225,7 @@ class SyncEngine {
 
     SyncQueue.onChanged = () {
       unawaited(refreshPendingCount());
+      _programarSubida();
     };
 
     _connectivitySub = _connectivity.stream.listen((status) {
@@ -184,6 +244,34 @@ class SyncEngine {
 
     unawaited(refreshPendingCount());
     _remoteProbeController.add(_remoteProbe);
+  }
+
+  /// Espera entre el último encolado y la subida automática.
+  ///
+  /// Corta pero no cero: un cobro masivo encola decenas de filas seguidas y no
+  /// tiene sentido salir a subir con cada una. El timer se reinicia en cada
+  /// encolado, así que sube una sola vez, dos segundos después de la última.
+  static const _esperaAntesDeSubir = Duration(seconds: 2);
+  Timer? _timerSubida;
+
+  /// Vacía la cola poco después de que alguien guarde algo.
+  ///
+  /// Antes lo único que movía la cola sola era el ciclo de 10 segundos del
+  /// coordinador —y solo con un rol operativo— o el latido de la sesión de
+  /// caja. Un cambio hecho sin caja abierta podía quedarse parado un rato
+  /// largo, o hasta que alguien apretara "Subir pendientes".
+  ///
+  /// No fuerza nada: si no hay red, o el motor está ocupado, `flushPending`
+  /// sale solo y el ciclo de siempre lo reintenta.
+  void _programarSubida() {
+    _timerSubida?.cancel();
+    _timerSubida = Timer(_esperaAntesDeSubir, () async {
+      if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
+        return;
+      }
+      if (!await hayTrabajoDeSubida) return;
+      await flushPending();
+    });
   }
 
   bool get _isBusy =>
@@ -279,9 +367,68 @@ class SyncEngine {
     }
   }
 
+  /// Lo que se mueve durante un cobro. Baja en cada ciclo.
+  ///
+  /// Acá llegar tarde se ve: dos personas cobrando a la vez sobre el mismo
+  /// evento, un cierre de caja que tiene que cuadrar contra lo que hizo la otra
+  /// PC. Diez segundos es la cadencia que ya tenía y no se toca.
+  static const List<String> _tablasDelCobro = [
+    'operadores_caja',
+    'sesiones_caja',
+    'contratos_alumnos',
+    'pagos_contrato_alumno',
+    'notas_operativas_contrato',
+    'egresos',
+    'cierre_caja_guia_movimientos',
+    'cierre_caja_anotaciones',
+  ];
+
+  /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
+  ///
+  /// Son datos que cambian cuando alguien se sienta a cargar algo, no en el
+  /// mostrador: un presupuesto, un evento, el catálogo de servicios, un
+  /// alquiler. Un minuto de latencia no molesta a nadie — y con el pulso por
+  /// broadcast ni siquiera se espera ese minuto: esto es la red de seguridad
+  /// para cuando el pulso no llegó.
+  ///
+  /// Las últimas ocho cruzaban **solo a mano** hasta ahora: se habían dejado
+  /// afuera en septiembre de 2026 porque ninguna estaba en la ruta del cobro y
+  /// todas tenían entre 0 y 3 filas. Sumarlas acá cuesta un request por minuto
+  /// cada una, que es menos de lo que costaba cualquiera de ellas cuando se
+  /// bajaba la tabla entera al apretar sincronizar.
+  ///
+  /// `invitados` no está: se queda con su camino de Realtime, que es el tótem —
+  /// el único lugar donde alguien está parado en la puerta esperando.
+  static const List<String> _tablasDeCarga = [
+    'eventos',
+    'clientes',
+    'eventos_servicios',
+    'transacciones',
+    'servicios',
+    'presupuestos',
+    'presupuesto_servicios',
+    'solicitudes_cotizacion',
+    'prestamos_alquiler',
+    'prestamo_alquiler_lineas',
+    'pagos_prestamo_alquiler',
+    'calculos_rentabilidad',
+    'obligaciones_pago',
+    'caja_fuerte_movimientos',
+    'rentabilidad_config',
+    'compromisos_personal',
+  ];
+
+  /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
+  static const int ciclosEntrePullsLentos = 6;
+
   /// Pull corto para la operación simultánea de cajas. Nunca sube la cola
   /// local: el jefe conserva sus pendientes manuales.
-  Future<bool> pullOperationalUpdates() async {
+  ///
+  /// Con [incluirTablasDeCarga] en false baja solo las ocho de [_tablasDelCobro].
+  /// El llamador lleva la cuenta de los ciclos; ver `OperationalSyncCoordinator`.
+  Future<bool> pullOperationalUpdates({
+    bool incluirTablasDeCarga = true,
+  }) async {
     if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
       return false;
     }
@@ -296,36 +443,19 @@ class SyncEngine {
       _lastError = null;
       final db = await LocalDatabase.instance;
       _tablasConFalloPull.clear();
+
+      // `eventos` y `clientes` viven en las tablas de carga, pero son las que
+      // sostienen el desplegable de Cobros masivos (`eventos LEFT JOIN
+      // clientes`). Hasta septiembre de 2026 `eventos` no bajaba sola nunca: sus
+      // contratos y cobros sí, pero colgados de un evento_id que localmente no
+      // existía. Por eso el ciclo lento no puede saltearse — es red de
+      // seguridad, no un extra.
+      final tablas = [
+        ..._tablasDelCobro,
+        if (incluirTablasDeCarga) ..._tablasDeCarga,
+      ];
       await Future.wait([
-        // Lo que se mueve durante un cobro.
-        _pullTable(db, 'operadores_caja', 'updated_at'),
-        _pullTable(db, 'sesiones_caja', 'updated_at'),
-        _pullTable(db, 'contratos_alumnos', 'updated_at'),
-        _pullTable(db, 'pagos_contrato_alumno', 'updated_at'),
-        _pullTable(db, 'notas_operativas_contrato', 'updated_at'),
-        _pullTable(db, 'egresos', 'updated_at'),
-        _pullTable(db, 'cierre_caja_guia_movimientos', 'updated_at'),
-        _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
-
-        // Eventos y su contexto. Sin esto, un evento nuevo —masivo o
-        // particular— no llegaba nunca a la otra PC: `eventos` no estaba acá ni
-        // en la publicación de Realtime, así que el canal de eventos_repository
-        // escuchaba una tabla que no publicaba nada y nunca disparó. Los
-        // contratos y sus cobros sí bajaban, pero colgados de un evento_id que
-        // localmente no existía, y el desplegable de Cobros masivos —que sale
-        // de `eventos LEFT JOIN clientes`— no tenía de dónde mostrarlos.
-        _pullTable(db, 'eventos', 'updated_at'),
-        _pullTable(db, 'clientes', 'updated_at'),
-        _pullTable(db, 'eventos_servicios', 'updated_at', primaryKey: 'id'),
-        _pullTable(db, 'transacciones', 'updated_at'),
-
-        // Catálogo y presupuestos: el detalle de evento particular los necesita
-        // para armar la grilla (`eventos_servicios LEFT JOIN servicios`), y
-        // hasta ahora se apoyaba en dos canales de Realtime que ya no existen.
-        _pullTable(db, 'servicios', 'updated_at'),
-        _pullTable(db, 'presupuestos', 'updated_at'),
-        _pullTable(db, 'presupuesto_servicios', 'updated_at', primaryKey: 'id'),
-        _pullTable(db, 'solicitudes_cotizacion', 'updated_at'),
+        for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
       ]);
       FinanzasRepository.invalidateProyeccionCache();
       _lastPullTime = DateTime.now();
@@ -920,8 +1050,9 @@ class SyncEngine {
       final String? dateColumn = _incrementalColumns[table];
       dynamic query = _supabase.from(table).select();
 
-      // Guardar la marca de tiempo de inicio para esta sincronización (UTC)
-      final String currentSyncStr = DateTime.now().toUtc().toIso8601String();
+      // El reloj de la PC ya no participa del marcador: la marca sale del
+      // `updated_at` más alto que devuelva esta consulta (ver `marcaDeLoBajado`,
+      // más abajo). Por eso acá no se toma ninguna hora local.
 
       if (lastSyncStr != null && dateColumn != null) {
         // Pull Incremental: traer solo lo nuevo/modificado
@@ -959,13 +1090,12 @@ class SyncEngine {
       final rows = allData;
 
       if (rows.isEmpty) {
-        // Aunque no haya nuevos registros, actualizamos el timestamp del último pull
-        if (dateColumn != null) {
-          await db.insert('_sync_meta', {
-            'clave': claveMeta,
-            'valor': currentSyncStr,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
+        // El marcador se queda donde estaba. Antes se lo empujaba a "ahora" con
+        // el reloj de la PC, que es justo lo que no hay que hacer: no bajó nada,
+        // así que no hay nada nuevo que prometer, y adelantarlo puede dejar del
+        // otro lado del filtro a las filas escritas en la diferencia entre los
+        // dos relojes. No mover nada no cuesta un request de más: la próxima
+        // pasada pide el mismo rango y vuelve a venir vacía.
         return;
       }
 
@@ -1229,31 +1359,49 @@ class SyncEngine {
 
       // Guardar última marca de tiempo de sincronización exitosa.
       //
-      // Si algo quedó sin escribirse por tener un cambio local sin subir, el
+      // Sale del `updated_at` más alto que trajo esta bajada, no del reloj de la
+      // PC: es el mismo reloj contra el que después se compara. Si ninguna fila
+      // trajo fecha legible, el marcador no se toca.
+      //
+      // Y si algo quedó sin escribirse por tener un cambio local sin subir, el
       // marcador se queda un milisegundo antes de esa fila: el próximo pull la
       // vuelve a pedir en vez de saltearla para siempre. Cuesta re-bajar unas
       // pocas filas por ciclo y paga no perder ninguna.
       if (dateColumn != null) {
-        final marca = marcadorPullSeguro(
-          ahora: currentSyncStr,
-          pendienteMasVieja: marcaPendienteMasVieja,
-        );
-        if (marcaPendienteMasVieja != null) {
+        final marcaDelServidor = marcaDeLoBajado(rows, dateColumn);
+        if (marcaDelServidor == null) {
           debugPrint(
-            '  ⏸️ $table: marcador retenido en $marca — $skipped fila(s) con cambios locales sin subir',
+            '  ⏸️ $table: ninguna fila trajo $dateColumn legible — marcador sin mover',
           );
+        } else {
+          final marca = marcadorPullSeguro(
+            ahora: marcaDelServidor,
+            pendienteMasVieja: marcaPendienteMasVieja,
+          );
+          if (marcaPendienteMasVieja != null) {
+            debugPrint(
+              '  ⏸️ $table: marcador retenido en $marca — $skipped fila(s) con cambios locales sin subir',
+            );
+          }
+          await db.insert('_sync_meta', {
+            'clave': claveMeta,
+            'valor': marca,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
-        await db.insert('_sync_meta', {
-          'clave': claveMeta,
-          'valor': marca,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
 
-      // Prune orphan rows for line-item tables (eventos_servicios / presupuesto_servicios).
-      // Migration v35 reassigned local UUIDs, so cloud rows arrive with their original UUIDs
-      // and coexist with the locally-generated ones → duplicates.  Prune removes any local
-      // row whose id is NOT in the cloud set and NOT pending in the sync queue.
-      if (table == 'eventos_servicios' || table == 'presupuesto_servicios') {
+      // Podar duplicados en las tablas de líneas (eventos_servicios /
+      // presupuesto_servicios). La migración v35 reasignó UUIDs locales, así que
+      // las filas de la nube llegan con su UUID original y conviven con las que
+      // se generaron acá → duplicados.
+      //
+      // Solo se poda cuando la bajada fue COMPLETA, que es cuando `rows` es toda
+      // la tabla y "lo que no vino" de verdad no existe. `filasAPodar` es la
+      // autoridad sobre eso; el `fotoCompleta` de este `if` solo evita hacer dos
+      // consultas al pedo en cada ciclo incremental.
+      final fotoCompleta = lastSyncStr == null;
+      if (fotoCompleta &&
+          (table == 'eventos_servicios' || table == 'presupuesto_servicios')) {
         final cloudIds = <String>{};
         for (var i = 0; i < rows.length; i++) {
           final rawId = (rows[i]['id'] as String?)?.trim() ?? '';
@@ -1283,19 +1431,23 @@ class SyncEngine {
             .toSet();
 
         final localRows = await db.query(table, columns: ['id']);
-        int pruned = 0;
-        for (final r in localRows) {
-          final localId = (r['id'] as String?) ?? '';
-          if (localId.isNotEmpty &&
-              !cloudIds.contains(localId) &&
-              !pendingIds.contains(localId)) {
-            await db.delete(table, where: 'id = ?', whereArgs: [localId]);
-            pruned++;
-          }
+        final localIds = localRows
+            .map((r) => (r['id'] as String?) ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet();
+
+        final aPodar = filasAPodar(
+          fotoCompleta: fotoCompleta,
+          idsLocales: localIds,
+          idsEnLaNube: cloudIds,
+          idsPendientes: pendingIds,
+        );
+        for (final id in aPodar) {
+          await db.delete(table, where: 'id = ?', whereArgs: [id]);
         }
-        if (pruned > 0) {
+        if (aPodar.isNotEmpty) {
           debugPrint(
-            '  🧹 $table: $pruned filas huérfanas eliminadas (dedup post-migración)',
+            '  🧹 $table: ${aPodar.length} filas huérfanas eliminadas (dedup post-migración)',
           );
         }
       }
@@ -1797,6 +1949,7 @@ class SyncEngine {
 
   void dispose() {
     SyncQueue.onChanged = null;
+    _timerSubida?.cancel();
     _connectivitySub?.cancel();
     _statusController.close();
     _pendingController.close();
