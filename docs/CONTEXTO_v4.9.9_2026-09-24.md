@@ -1,20 +1,32 @@
-# Contexto — v4.9.9 EN CURSO (23 de septiembre de 2026)
+# v4.9.9 — Sorteo de mesas, caja al instante, anular varios y la mesa en la puerta
 
-> **Referencia:** `CONTEXTO_v4.9.9-wip` · `sorteo de mesas` · `sillas extra` · `caja: anular varios` · `Disk IO`
-> **Para retomar en un chat nuevo:** "leé `docs/CONTEXTO_v4.9.9-wip_2026-09-23.md` y seguimos el plan".
-> Plan completo aprobado (más largo, con todo el razonamiento):
-> `C:\Users\lover\.claude\plans\necesito-verifcar-que-todo-prancy-meerkat.md`
+**Fecha:** 2026-09-24
+**Rama:** `feature/v4.6-cierre-por-sesiones`
+**Sin migración de base.** Ni local ni en Supabase.
 
-**Estado (actualizado el 24-sep):**
-- **Sorteo de mesas:** hecho, probado, con commit y push (`9ce58a0`).
-- **Datos de los 7 alumnos:** aplicados el 24-sep a las 06:08, con el OK del usuario, y verificados en local y
-  en Supabase (ver PENDIENTE 1).
-- **Caja:** hecha en el código, con tests (ver PENDIENTE 2).
-- **Detalle por mesa en JSON:** la tarea aparte quedó resuelta (ver al final).
-- Falta, en orden:
-  1. el tótem;
-  2. armar la versión.
-- **No hay versión nueva todavía:** el `pubspec.yaml` sigue en 4.9.8+54. En las dos PCs está instalada la 4.9.8.
+> **Referencia:** `CONTEXTO_v4.9.9` · `sorteo de mesas` · `sillas extra` · `caja: anular varios` ·
+> `lista de la puerta` · `Disk IO`
+> Plan aprobado, con todo el razonamiento: `C:\Users\lover\.claude\plans\necesito-verifcar-que-todo-prancy-meerkat.md`
+
+**Estado:**
+- **Lista, sin publicar.** `pubspec.yaml` 4.9.9+55 y el `.iss` coinciden. El instalador se compiló el 24-sep
+  (`installer/dist/Setup Junior Eventos v4.9.9.exe`), pero **no se publicó ni se instaló**: las dos PCs siguen
+  con la 4.9.8, hasta que el usuario diga.
+- **Commits:**
+  - sorteo: `9ce58a0`;
+  - script de los 7 alumnos: `f7e1724`;
+  - caja y JSON de mesas: `eb359f6`;
+  - tótem y puerta: `926fa56`;
+  - versión: el commit de este documento.
+- **Datos de los 7 alumnos:** aplicados el 24-sep a las 06:08 y verificados. No dependen de instalar nada.
+- **Tests:** `flutter test` completo, 605 pasan.
+
+**Para publicar, cuando el usuario lo diga:**
+1. `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile <notas>` (sube el Setup ya compilado).
+2. Instalar en las dos PCs **antes de noviembre**, que es cuando se sortea.
+3. Prueba sin sortear, en cada PC: en un evento masivo, ⋮ → Sortear mesas, mirar las listas de extras y el aviso
+   ámbar, y **cancelar**; después ⋮ → Planilla de cursos.
+4. No probar anulando cobros reales: es producción. La primera anulación de verdad sirve de prueba.
 
 ---
 
@@ -252,31 +264,56 @@ una sola vez y una transacción.
 **Tests:** todo o nada; recálculo una vez por contrato; el refresco se dispara solo con las tablas que importan; no
 pisa lo tipeado.
 
-## PENDIENTE 3 — Tótem (hacer un plan propio cuando se llegue)
+## HECHO 3 — Tótem: la mesa en la puerta y el ahorro de Disk IO (24-sep)
 
-- **Mesa en la puerta:** el sorteo guarda la mesa en `contratos_alumnos.numero_mesa`, pero el tótem, la lista del
-  QR, la búsqueda por DNI y el operador leen **`invitados.numero_mesa`** (hoy solo 6 filas). Hay que planear que el
-  día de la fiesta la puerta muestre la mesa sorteada.
-- **Ahorro de Disk IO.** El usuario confirmó que tótem y Recepción no tienen datos delicados y alcanza con la PC que
-  se use. Tiene que quedar sin que se note nada:
-  - **Tótem escondido** (`KioskLauncher.close()` solo hace `hide()`, `kiosk_launcher.dart:129-136`): mientras está
-    escondido, cortar `streamInvitados`, `streamAccesos`, el stream de `totem_config`, el canal broadcast y la
-    relectura de 60 s (`totem_display.dart:514`). Al mostrarse, retomar y recargar.
-  - **Recepción:** cortar `subscribeToChanges` (`invitados_repository.dart:627`) al salir de la pantalla.
-  - **`invitados`:** sacarla del ciclo de 10 s (`sync_engine.dart`, pull de `invitados`). Bajarla al entrar a
-    Recepción o al tótem y cada 5 min mientras estén en uso. Lo cargado se sigue subiendo al instante
-    (`_syncImmediately`).
-  - **Latido de caja** (cada 60 s): una subida que solo trae el latido no manda pulso. Los cobros siguen en segundos
-    y el ciclo de 10 s no se toca.
+**La mesa en la puerta.** Decisión del usuario (24-sep): en la lista de la puerta va el **alumno y su familia**.
+Sobre la búsqueda no eligió, así que queda la recomendada: en las fiestas de alumnos se busca **por nombre**
+(los alumnos no tienen DNI), y el DNI sigue igual en los particulares.
+- **Lo que se encontró:**
+  - `invitados` es una lista aparte, sin relación con los alumnos: al 24-sep tenía 7 filas de prueba;
+  - los contratos no tienen DNI;
+  - ningún alumno tiene acompañantes cargados.
+- El tótem y Recepción **no distinguen particular de masivo**: trabajan por evento, y cada evento tiene su lista.
+  Lo que cambia es cómo se carga: los particulares a mano o por CSV (con DNI), los masivos ahora desde los
+  alumnos.
+- **⋮ → "Pasar a la lista de la puerta"** (`detalle_evento_masivo_screen.dart`, `_pasarListaPuerta`):
+  - lleva cada alumno activo y cada acompañante con nombre a `invitados`, con la mesa sorteada
+    (`SalonMesas.textoMesasPuerta`: "12", "12-14", "12-13 y 40");
+  - los ids son fijos por alumno y lugar (`idInvitadoPuerta`, `lista_puerta.dart`): se puede repetir y actualiza
+    las mismas filas;
+  - a las filas existentes solo les cambia nombre y mesa: **el ingreso no se toca**;
+  - lo que sube de una fila nueva no lleva `estado_ingreso`, así un upsert no pisa un ingreso hecho en la otra PC;
+  - **no borra nada**: lo que quedó de una pasada anterior (baja, acompañante quitado) se informa como sobrante;
+  - no toca filas cargadas a mano o por CSV, ni la lista de otros eventos;
+  - antes de comparar, baja la lista de la nube para ver lo que cargó la otra PC.
+- **Trampa corregida:** `InvitadosRepository._pullByEvento` borraba de la base local todo lo que no venía en una
+  consulta de **una sola página** (PostgREST corta en 1000). Ahora pagina y poda solo con la foto completa, por
+  `filasAPodar`.
+- **Pendiente:** las pantallas web y el tótem leen hasta 1000 invitados por evento; ver
+  `docs/pendientes/invitados-mas-de-1000-en-web.md`. Hoy no se llega ni cerca.
 
-## PENDIENTE 4 — Versión 4.9.9 (solo al final, con todo)
+**Ahorro de Disk IO** (sin que se note nada):
+- **Tótem escondido:**
+  - `KioskLauncher.close()` y el botón de salir del tótem mandan `pausar`;
+  - pausado, suelta el stream de invitados, el canal de avisos (`removeChannel`), la relectura de 60 s y la
+    config (deja de mirarla y el provider autoDispose cierra su stream);
+  - `launch`/`focus` mandan `reanudar`: retoma y recarga en silencio, sin bienvenidas atrasadas.
+- **Recepción:** `watchByEvento` era un `async*` parado en un `await for`, y al salir de la pantalla el canal
+  seguía abierto hasta el próximo cambio. Ahora es un `StreamController` que suelta el canal en `onCancel`
+  (test: `recepcion_suelta_canal_test.dart`).
+- **`invitados` en el ciclo de 10 s:** ya no estaba. Solo baja en el pull manual y por Recepción/tótem. No hubo
+  que tocar nada.
+- **Latido de caja:**
+  - sube solo `{id, last_heartbeat, updated_at}`: antes subía la fila entera y podía reabrir en la nube una
+    sesión que la otra PC acababa de cerrar;
+  - `esSoloLatido` evita el pulso por un latido, y la otra PC lo recibe por el ciclo de 10 s como antes;
+  - si hay un cambio real pendiente, la cola lo fusiona y sí va con pulso.
 
-1. `pubspec.yaml` 4.9.9+55 y `installer/junior_eventos_setup.iss`, que tienen que coincidir.
-2. El instalador.
-3. `docs/CONTEXTO_v4.9.9_<fecha>.md`, que reemplaza a este.
-4. Commit y push.
-5. **Publicar e instalar en las dos PCs solo cuando el usuario lo diga.**
-6. Prueba sin sortear: abrir el diálogo y cancelar, y generar la Planilla.
+## HECHO 4 — Versión 4.9.9 (24-sep)
+
+- `pubspec.yaml` 4.9.9+55 e `installer/junior_eventos_setup.iss` 4.9.9.
+- `flutter build windows --release` e Inno Setup: `installer/dist/Setup Junior Eventos v4.9.9.exe`.
+- **Publicar e instalar: solo cuando el usuario lo diga** (ver arriba).
 
 ---
 
@@ -300,6 +337,13 @@ pisa lo tipeado.
   - operativo: cerrar la app entera al terminar el día, porque cerrar solo el tótem no alcanza.
 - Si la medición muestra consumo diario en horario de trabajo, se puede ofrecer adelantar solo el arreglo del
   tótem y Recepción.
+- **Medición del 24-sep, 09:38 UTC** (misma consulta, solo lectura):
+  - lecturas de WAL de Realtime **10.179.536**, igual que el punto de partida: desde entonces nadie escuchó
+    cambios de la base;
+  - consultas totales 12.638.954 (+1.357, la noche);
+  - `wal_lsn` 59/92000000, +224 MB, justo en un borde de segmento de 16 MB: huele a rotación de WAL del propio
+    Supabase, no a la app;
+  - falta mirar el gráfico por hora del mail. "Reset report" sigue sin tocarse.
 
 ## Tarea aparte — RESUELTA (24-sep)
 

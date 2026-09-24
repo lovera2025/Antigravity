@@ -22,6 +22,10 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 
 ## Los pendientes
 
+- [La puerta con más de 1000 personas en web y tótem](invitados-mas-de-1000-en-web.md)
+  — el QR y el tótem leen hasta 1000 invitados por evento. Hoy no llega ni cerca;
+  importa si se cargan las familias enteras. Se resuelve subiendo "Max rows" en
+  Supabase.
 - [Que el pull diga cuántas filas bajó](pull-devolver-cambios-reales.md) — sin
   eso, el caché de la proyección financiera se anula cada 10 segundos aunque no
   haya cambiado nada.
