@@ -9,9 +9,21 @@ class SorteoMesasDialogResult {
   /// Alumno → cuántas de sus mesas van sueltas, lejos de su bloque.
   final Map<String, int> separaciones;
 
+  /// "Solo a lo que tiene algo pagado" (true) o "a todo lo cargado" (false).
+  final bool soloPagado;
+
+  /// Casillas "sortear igual" de los que no pagaron nada de la base.
+  final Set<String> incluirBase;
+
+  /// Casillas "sortear igual" de los que no pagaron nada de sus mesas extra.
+  final Set<String> incluirExtras;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
+    this.soloPagado = false,
+    this.incluirBase = const {},
+    this.incluirExtras = const {},
   });
 }
 

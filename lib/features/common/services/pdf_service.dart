@@ -29,6 +29,7 @@ import '../../eventos/services/cobro_abono_acumulado.dart';
 import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
+import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../../eventos/services/mora_concepto_rotulo.dart';
 // `MoraPendientePreviaDetalle` llega reexportado por mora_concepto_rotulo.
@@ -4163,15 +4164,36 @@ class PdfService {
 
   /// Texto de la columna MESA en papel: lo mismo que la grilla, con "(!)" en
   /// vez de ⚠, que la fuente del PDF no tiene.
-  static String _mesaPlanilla(ContratoAlumno a) {
+  ///
+  /// Con [pago], marca lo que el sorteo deja afuera por no tener nada pagado:
+  /// "sin mesa (sin pagar)" y "le falta 1 mesa (sin pagar)".
+  static String _mesaPlanilla(ContratoAlumno a, [PagoAlumno? pago]) {
     final texto = SalonMesas.textoMesas(a);
     final mesas = SalonMesas.mesas(a);
     final base = texto != '-'
         ? texto
+        : pago != null && !pago.pagoBase
+        ? 'sin mesa (sin pagar)'
         : (mesas == 1 ? '-' : '$mesas mesas · sin asignar');
-    final aviso = SalonMesas.avisoMesas(a);
+    var aviso = SalonMesas.avisoMesas(a);
+    if (aviso != null &&
+        pago != null &&
+        !pago.pagoMesas &&
+        aviso.startsWith('le falta')) {
+      aviso = '$aviso (sin pagar)';
+    }
     return aviso == null ? base : '$base\n(!) $aviso';
   }
+
+  /// Sillas extra con "(sin pagar)" si no tienen nada pagado.
+  static String _sillasPlanilla(
+    String texto,
+    ContratoAlumno a,
+    PagoAlumno? pago,
+  ) =>
+      pago != null && SalonMesas.sillasExtra(a) > 0 && !pago.pagoSillas
+          ? '$texto (sin pagar)'
+          : texto;
 
   /// Planilla de cursos: arma el PDF y devuelve los bytes, sin mostrarlo. La
   /// usa [generarPlanillaCursos] y la muestra de `tool/`.
@@ -4180,10 +4202,14 @@ class PdfService {
   /// (mesas, sillas de a 8 por mesa y sillas extra) y la lista de quienes
   /// tienen mesas o sillas extra, con sus números, si van juntas o separadas y
   /// en qué mesa van las sillas. Después, un curso por hoja como siempre.
+  ///
+  /// Con [pagos] (lo pagado de cada alumno), marca lo que no tiene nada pagado y
+  /// lo cuenta aparte en los totales.
   static Future<Uint8List> construirPlanillaCursosPdf(
     Evento evento,
-    List<ContratoAlumno> alumnos,
-  ) async {
+    List<ContratoAlumno> alumnos, {
+    Map<String, PagoAlumno>? pagos,
+  }) async {
     final fontRegular = await PdfGoogleFonts.outfitRegular();
     final fontBold = await PdfGoogleFonts.outfitBold();
 
@@ -4242,6 +4268,14 @@ class PdfService {
     );
     final totalSillasExtra =
         activos.fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a));
+    final sillasSinPagar = pagos == null
+        ? 0
+        : activos
+              .where((a) => !(pagos[a.id]?.pagoSillas ?? false))
+              .fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a));
+    final sinNadaPagado = pagos == null
+        ? 0
+        : activos.where((a) => !(pagos[a.id]?.pagoBase ?? false)).length;
     final conExtras = activos
         .where(
           (a) => SalonMesas.mesasExtra(a) > 0 || SalonMesas.sillasExtra(a) > 0,
@@ -4273,13 +4307,22 @@ class PdfService {
                   '${asignadas < totalMesas ? ' ($asignadas asignadas)' : ''}'
                   '   ·   ${SalonMesas.sillasPorMesa * totalMesas} sillas '
                   '(${SalonMesas.sillasPorMesa} por mesa)'
-                  '   ·   $totalSillasExtra sillas extra',
+                  '   ·   ${totalSillasExtra - sillasSinPagar} sillas extra'
+                  '${sillasSinPagar > 0 ? ' (+$sillasSinPagar sin pagar)' : ''}',
                   style: pw.TextStyle(
                     fontSize: 12,
                     fontWeight: pw.FontWeight.bold,
                     color: _darkText,
                   ),
                 ),
+                if (sinNadaPagado > 0) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    '$sinNadaPagado alumno(s) sin nada pagado de la cuota base: '
+                    'su mesa se sortea cuando paguen.',
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                ],
               ],
             ),
           ),
@@ -4326,8 +4369,12 @@ class PdfService {
                     a.cursoDivision?.trim().isNotEmpty == true
                         ? a.cursoDivision!.trim()
                         : '-',
-                    _mesaPlanilla(a),
-                    SalonMesas.textoRepartoSillas(a),
+                    _mesaPlanilla(a, pagos?[a.id]),
+                    _sillasPlanilla(
+                      SalonMesas.textoRepartoSillas(a),
+                      a,
+                      pagos?[a.id],
+                    ),
                     if (conPersonas)
                       () {
                         final oc = SalonMesas.ocupacion(a);
@@ -4401,8 +4448,8 @@ class PdfService {
                   return [
                     a.nombreAlumno,
                     telefono,
-                    _mesaPlanilla(a),
-                    SalonMesas.textoSillas(a),
+                    _mesaPlanilla(a, pagos?[a.id]),
+                    _sillasPlanilla(SalonMesas.textoSillas(a), a, pagos?[a.id]),
                     musica,
                     acompanantes,
                   ];
@@ -4419,9 +4466,14 @@ class PdfService {
 
   static Future<void> generarPlanillaCursos(
     Evento evento,
-    List<ContratoAlumno> alumnos,
-  ) async {
-    final bytes = await construirPlanillaCursosPdf(evento, alumnos);
+    List<ContratoAlumno> alumnos, {
+    Map<String, PagoAlumno>? pagos,
+  }) async {
+    final bytes = await construirPlanillaCursosPdf(
+      evento,
+      alumnos,
+      pagos: pagos,
+    );
 
     // Normalizar titulo archivo
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(

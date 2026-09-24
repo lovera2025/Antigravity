@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/contrato_alumno.dart';
+import '../../common/utils/currency_extensions.dart';
 import '../services/mesas_extra_utils.dart';
+import '../services/pago_para_sorteo.dart';
 import '../services/salon_mesas.dart';
 import '../services/sorteo_mesas_motor.dart';
 
-/// Diálogo previo al sorteo: qué se va a sortear, quién tiene mesas y sillas
-/// extra, qué conviene revisar y con qué capacidad.
+/// Diálogo previo al sorteo: a quién se le sortea según lo pagado, qué se va a
+/// sortear, quién tiene mesas y sillas extra, qué conviene revisar y con qué
+/// capacidad.
 ///
 /// La capacidad que propone es la mínima con la que todo entra
 /// ([SorteoMesasMotor.capacidadMinima]), y SORTEAR solo se habilita si la que
@@ -18,6 +21,7 @@ Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
   required String tituloInstitucion,
   required List<ContratoAlumno> alumnos,
   required List<AvisoSalon> avisos,
+  required Map<String, PagoAlumno> pagos,
   SorteoMesasDialogResult? inicial,
   String? novedad,
 }) {
@@ -27,6 +31,7 @@ Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
       tituloInstitucion: tituloInstitucion,
       alumnos: alumnos,
       avisos: avisos,
+      pagos: pagos,
       inicial: inicial,
       novedad: novedad,
     ),
@@ -37,6 +42,7 @@ class _SorteoMesasDialog extends StatefulWidget {
   final String tituloInstitucion;
   final List<ContratoAlumno> alumnos;
   final List<AvisoSalon> avisos;
+  final Map<String, PagoAlumno> pagos;
   final SorteoMesasDialogResult? inicial;
   final String? novedad;
 
@@ -44,6 +50,7 @@ class _SorteoMesasDialog extends StatefulWidget {
     required this.tituloInstitucion,
     required this.alumnos,
     required this.avisos,
+    required this.pagos,
     this.inicial,
     this.novedad,
   });
@@ -56,24 +63,50 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
   late final TextEditingController _capacidadCtrl;
   late final Map<String, int> _separaciones;
   late final Set<int> _ocupadas;
+  late final CandidatosPorPago _candidatos;
+
+  /// "Solo a lo que tiene algo pagado". Arranca elegido: es para lo que existe.
+  late bool _soloPagado;
+
+  /// Casillas "sortear igual" (ver [exclusionSorteo]).
+  late final Set<String> _incluirBase;
+  late final Set<String> _incluirExtras;
   bool _revisado = false;
 
   List<ContratoAlumno> get _activos =>
       widget.alumnos.where((a) => !a.esBajaTemporal).toList();
 
-  List<PedidoSorteo> get _pedidos => SorteoMesasMotor.pedidos(
-        widget.alumnos,
-        separaciones: _separaciones,
+  ExclusionSorteo get _exclusion => exclusionSorteo(
+        candidatos: _candidatos,
+        soloPagado: _soloPagado,
+        incluirBase: _incluirBase,
+        incluirExtras: _incluirExtras,
       );
+
+  List<PedidoSorteo> get _pedidos {
+    final ex = _exclusion;
+    return SorteoMesasMotor.pedidos(
+      widget.alumnos,
+      separaciones: _separaciones,
+      sinMesa: ex.sinMesa,
+      soloBase: ex.soloBase,
+    );
+  }
 
   int _minima(List<PedidoSorteo> pedidos) =>
       SorteoMesasMotor.capacidadMinima(pedidos: pedidos, ocupadas: _ocupadas);
+
+  PagoAlumno _pago(ContratoAlumno a) => widget.pagos[a.id] ?? PagoAlumno.nada;
 
   @override
   void initState() {
     super.initState();
     _ocupadas = SorteoMesasMotor.ocupadas(widget.alumnos);
     _separaciones = Map<String, int>.from(widget.inicial?.separaciones ?? {});
+    _candidatos = candidatosPorPago(widget.alumnos, widget.pagos);
+    _soloPagado = widget.inicial?.soloPagado ?? true;
+    _incluirBase = {...?widget.inicial?.incluirBase};
+    _incluirExtras = {...?widget.inicial?.incluirExtras};
     final minima = _minima(_pedidos);
     final inicial = widget.inicial?.capacidadSalon ?? minima;
     _capacidadCtrl = TextEditingController(
@@ -87,22 +120,33 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
     super.dispose();
   }
 
-  /// Si separar sube el mínimo, la capacidad escrita sube con él.
-  void _cambiarSeparacion(String alumnoId, int? cantidad) {
+  /// Aplica un cambio que mueve el mínimo. Si la capacidad escrita era la
+  /// sugerida, sigue a la sugerida (sube o baja); si alguien la escribió a mano,
+  /// solo sube cuando ya no alcanza.
+  void _cambiar(VoidCallback cambio) {
+    final antes = _minima(_pedidos);
     setState(() {
-      if (cantidad == null || cantidad < 1) {
-        _separaciones.remove(alumnoId);
-      } else {
-        _separaciones[alumnoId] = cantidad;
-      }
+      cambio();
       final minima = _minima(_pedidos);
       final actual = int.tryParse(_capacidadCtrl.text.trim()) ?? 0;
-      if (actual < minima) _capacidadCtrl.text = '$minima';
+      if (actual == antes || actual < minima) _capacidadCtrl.text = '$minima';
     });
   }
 
+  void _cambiarSeparacion(String alumnoId, int? cantidad) => _cambiar(() {
+        if (cantidad == null || cantidad < 1) {
+          _separaciones.remove(alumnoId);
+        } else {
+          _separaciones[alumnoId] = cantidad;
+        }
+      });
+
+  void _alternar(Set<String> conjunto, String id, bool incluir) =>
+      _cambiar(() => incluir ? conjunto.add(id) : conjunto.remove(id));
+
   @override
   Widget build(BuildContext context) {
+    final exclusion = _exclusion;
     final pedidos = _pedidos;
     final demanda = SorteoMesasMotor.demanda(pedidos);
     final minima = _minima(pedidos);
@@ -161,6 +205,10 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                   child: Text(widget.novedad!),
                 ),
               ],
+              if (!_candidatos.vacio) ...[
+                const SizedBox(height: 12),
+                _preguntaPorPago(),
+              ],
               const SizedBox(height: 12),
               _Recuadro(
                 color: Colors.indigo,
@@ -169,7 +217,7 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                   children: [
                     Text(
                       demanda.vacia
-                          ? 'Todos los alumnos ya tienen su mesa'
+                          ? 'No queda nadie por sortear'
                           : 'Se van a sortear ${demanda.total} mesas',
                       style: const TextStyle(
                         fontSize: 18,
@@ -189,6 +237,16 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                         '· ${demanda.mesasACompletar} mesa(s) para completar a '
                         '${demanda.alumnosACompletar} alumno(s), sin mover las '
                         'que ya tienen',
+                      ),
+                    if (exclusion.sinMesa.isNotEmpty)
+                      Text(
+                        '· ${exclusion.sinMesa.length} alumno(s) sin nada '
+                        'pagado: no se les sortea mesa',
+                      ),
+                    if (exclusion.soloBase.isNotEmpty)
+                      Text(
+                        '· ${exclusion.soloBase.length} con mesas extra sin '
+                        'pagar: solo la mesa base',
                       ),
                     if (conMesa > 0)
                       Text('· $conMesa alumno(s) ya tienen mesa: se respetan'),
@@ -276,7 +334,14 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                 for (final a in conMesasExtra)
                   _FilaMesasExtra(
                     alumno: a,
-                    sortea: nuevosIds.contains(a.id),
+                    pagoMesas: _pago(a).mesas,
+                    bloqueo: exclusion.sinMesa.contains(a.id)
+                        ? 'no se sortea: sin nada pagado de la cuota base'
+                        : exclusion.soloBase.contains(a.id)
+                        ? 'solo mesa base: mesas extra sin pagar'
+                        : nuevosIds.contains(a.id)
+                        ? null
+                        : 'ya tiene ${SalonMesas.textoMesas(a)}',
                     separadas: _separaciones[a.id],
                     onCambiar: (v) => _cambiarSeparacion(a.id, v),
                   ),
@@ -298,10 +363,14 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                           ),
                         ),
                         Text(
-                          SalonMesas.textoRepartoSillas(a),
-                          style: const TextStyle(
+                          '${SalonMesas.textoRepartoSillas(a)}'
+                          '${_pago(a).pagoSillas ? '' : ' · sin pagar'}',
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
+                            color: _pago(a).pagoSillas
+                                ? null
+                                : Colors.red.shade700,
                           ),
                         ),
                       ],
@@ -324,6 +393,9 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                     SorteoMesasDialogResult(
                       capacidadSalon: capacidad,
                       separaciones: Map<String, int>.from(_separaciones),
+                      soloPagado: _soloPagado,
+                      incluirBase: Set<String>.from(_incluirBase),
+                      incluirExtras: Set<String>.from(_incluirExtras),
                     ),
                   )
               : null,
@@ -332,19 +404,159 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
       ],
     );
   }
+
+  /// "¿A quién se le sortea?": lo pagado, o todo lo cargado como antes. Con lo
+  /// pagado, las dos listas de quienes quedan afuera, cada uno con su casilla
+  /// para sortearlo igual.
+  Widget _preguntaPorPago() {
+    final sinBase = _candidatos.sinPagoBase;
+    final sinExtras = _candidatos.sinPagoMesasExtra;
+    return _Recuadro(
+      color: Colors.teal,
+      icono: Icons.payments_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '¿A quién se le sortea?',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              ChoiceChip(
+                label: const Text('Solo a lo que tiene algo pagado'),
+                selected: _soloPagado,
+                onSelected: (_) => _cambiar(() => _soloPagado = true),
+              ),
+              ChoiceChip(
+                label: const Text('A todo lo cargado'),
+                selected: !_soloPagado,
+                onSelected: (_) => _cambiar(() => _soloPagado = false),
+              ),
+            ],
+          ),
+          if (_soloPagado) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Lo cargado sigue en la cuenta de cada uno. Tildá a quien quieras '
+              'sortear igual (por ejemplo, pagó y todavía no se cargó). Si pagan '
+              'después, "Sortear" de nuevo les da la mesa sin mover a nadie.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+            if (sinBase.isNotEmpty)
+              _ListaPorPago(
+                titulo: 'Sin nada pagado de la cuota base '
+                    '(${sinBase.length}): no se les sortea mesa',
+                alumnos: sinBase,
+                detalle: (a) {
+                  final base = (a.montoTotalPactado -
+                          a.mesaExtraPrecio -
+                          a.sillasExtraPrecioTotal)
+                      .clamp(0.0, double.infinity);
+                  final conExtras =
+                      _candidatos.sinPagoBaseConExtras.contains(a.id);
+                  return '\$0 de ${base.toCurrency()}'
+                      '${conExtras ? ' · mesa extra sin pagar: va solo con la base' : ''}';
+                },
+                incluidos: _incluirBase,
+                onCambiar: (id, v) => _alternar(_incluirBase, id, v),
+              ),
+            if (sinExtras.isNotEmpty)
+              _ListaPorPago(
+                titulo: 'Con mesas extra sin nada pagado '
+                    '(${sinExtras.length}): solo mesa base',
+                alumnos: sinExtras,
+                detalle: (a) {
+                  final n = SalonMesas.mesasExtra(a);
+                  return '${n == 1 ? '1 mesa extra' : '$n mesas extra'} · '
+                      '\$0 de ${a.mesaExtraPrecio.toCurrency()}';
+                },
+                incluidos: _incluirExtras,
+                onCambiar: (id, v) => _alternar(_incluirExtras, id, v),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Lista desplegable de los que quedan afuera por no tener nada pagado. La
+/// casilla tildada es "sortear igual".
+class _ListaPorPago extends StatelessWidget {
+  final String titulo;
+  final List<ContratoAlumno> alumnos;
+  final String Function(ContratoAlumno) detalle;
+  final Set<String> incluidos;
+  final void Function(String id, bool incluir) onCambiar;
+
+  const _ListaPorPago({
+    required this.titulo,
+    required this.alumnos,
+    required this.detalle,
+    required this.incluidos,
+    required this.onCambiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final igual = alumnos.where((a) => incluidos.contains(a.id)).length;
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(
+        titulo,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+      ),
+      subtitle: igual > 0
+          ? Text(
+              '$igual tildado(s) para sortear igual',
+              style: const TextStyle(fontSize: 12),
+            )
+          : null,
+      children: [
+        for (final a in alumnos)
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(a.nombreAlumno, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              detalle(a),
+              style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+            ),
+            secondary: incluidos.contains(a.id)
+                ? const Text(
+                    'se sortea igual',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                  )
+                : null,
+            value: incluidos.contains(a.id),
+            onChanged: (v) => onCambiar(a.id, v == true),
+          ),
+      ],
+    );
+  }
 }
 
 class _FilaMesasExtra extends StatelessWidget {
   final ContratoAlumno alumno;
+  final double pagoMesas;
 
-  /// false si ya tiene sus mesas: se muestra, pero no se sortea.
-  final bool sortea;
+  /// Por qué a este alumno no se le sortean las mesas extra ahora (ya las tiene,
+  /// o no pagó). `null` si se sortean: ahí se puede pedir separarlas.
+  final String? bloqueo;
   final int? separadas;
   final ValueChanged<int?> onCambiar;
 
   const _FilaMesasExtra({
     required this.alumno,
-    required this.sortea,
+    required this.pagoMesas,
+    required this.bloqueo,
     required this.separadas,
     required this.onCambiar,
   });
@@ -354,10 +566,16 @@ class _FilaMesasExtra extends StatelessWidget {
     final mesas = SalonMesas.mesas(alumno);
     final extras = mesas - 1;
     final sillas = SalonMesas.sillasExtra(alumno);
+    final sortea = bloqueo == null;
+    final pagadas = pagoMesas >= alumno.mesaExtraPrecio - 0.01;
     final detalle = [
       '$extras extra · $mesas en total',
       if (sillas > 0) '$sillas silla(s) extra',
-      if (!sortea) 'ya tiene ${SalonMesas.textoMesas(alumno)}',
+      pagadas
+          ? 'pagadas'
+          : 'pagó ${pagoMesas.toCurrency()} de '
+              '${alumno.mesaExtraPrecio.toCurrency()}',
+      ?bloqueo,
     ].join(' · ');
     final marcado = separadas != null;
 
@@ -377,15 +595,15 @@ class _FilaMesasExtra extends StatelessWidget {
                 detalle,
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
-              value: marcado,
+              value: sortea && marcado,
               onChanged: sortea
                   ? (v) => onCambiar(v == true ? 1 : null)
                   : null,
               secondary: sortea
                   ? null
-                  : const Tooltip(
-                      message: 'Ya tiene sus mesas: el sorteo no las mueve',
-                      child: Icon(Icons.lock_outline, size: 18),
+                  : Tooltip(
+                      message: bloqueo!,
+                      child: const Icon(Icons.lock_outline, size: 18),
                     ),
             ),
             if (sortea && marcado)

@@ -9,7 +9,9 @@
 //     con sus números, juntas o separadas, y en qué mesa van las sillas;
 //   • en cada curso, la columna MESA (con "(!)" si no coincide con la cuenta) y
 //     SILLAS EXTRA;
-//   • que los de baja no aparezcan.
+//   • que los de baja no aparezcan;
+//   • lo que no tiene nada pagado (v5.0.0): MEDINA sin mesa, NÚÑEZ solo con la
+//     base, y las sillas de LEDESMA "(sin pagar)".
 //
 // No vive en test/ a propósito: guarda un PDF, y eso no tiene que pasar en cada
 // corrida de la suite.
@@ -21,6 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -92,10 +95,27 @@ void main() {
       _alumno('ROMERO, ABRIL', '5° B'),
     ];
 
-    // Se sortea con el motor real; BARRIOS separa una mesa.
+    // Lo pagado: todos pagaron algo de todo, salvo MEDINA (nada), NÚÑEZ ($0 de
+    // su mesa extra) y LEDESMA ($0 de sus sillas).
+    final pagos = <String, PagoAlumno>{
+      for (final a in base)
+        a.id: const PagoAlumno(base: 30000, mesas: 10000, sillas: 8000),
+      'MEDINA, BRUNO': PagoAlumno.nada,
+      'NÚÑEZ, CATALINA': const PagoAlumno(base: 30000, sillas: 16000),
+      'LEDESMA, AGUSTINA': const PagoAlumno(base: 30000),
+      'VALLEJOS, RAMIRO': const PagoAlumno(base: 30000, mesas: 10000),
+    };
+    final exclusion = exclusionSorteo(
+      candidatos: candidatosPorPago(base, pagos),
+      soloPagado: true,
+    );
+
+    // Se sortea con el motor real, "solo lo pagado"; BARRIOS separa una mesa.
     final pedidos = SorteoMesasMotor.pedidos(
       base,
       separaciones: const {'BARRIOS, MARTINA': 1},
+      sinMesa: exclusion.sinMesa,
+      soloBase: exclusion.soloBase,
     );
     final ocupadas = SorteoMesasMotor.ocupadas(base);
     final capacidad =
@@ -145,12 +165,17 @@ void main() {
       cliente: Cliente(id: 'c', nombreCompleto: 'COLEGIO DE MUESTRA'),
     );
 
-    final bytes = await PdfService.construirPlanillaCursosPdf(evento, alumnos);
+    final bytes = await PdfService.construirPlanillaCursosPdf(
+      evento,
+      alumnos,
+      pagos: pagos,
+    );
     final archivo = File(
       '$destino${Platform.pathSeparator}Planilla_Cursos_MUESTRA.pdf',
     )..writeAsBytesSync(bytes);
 
     stdout.writeln('── capacidad sorteada: $capacidad');
+    stdout.writeln('   sin mesa: ${exclusion.sinMesa} · solo base: ${exclusion.soloBase}');
     for (final a in sorteados.where((a) => a.numeroMesa != null)) {
       stdout.writeln('   ${a.nombreAlumno}: ${a.numeroMesa}');
     }

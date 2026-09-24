@@ -11,6 +11,9 @@ void main() {
     test('4.7.4 es más nueva que 4.7.3', () {
       expect(AppUpdateChecker.compareSemver('4.7.4', '4.7.3'), greaterThan(0));
       expect(AppUpdateChecker.compareSemver('4.7.3', '4.7.4'), lessThan(0));
+      // El salto de número mayor de la 5.0.0 tiene que avisarse como nueva.
+      expect(AppUpdateChecker.compareSemver('5.0.0', '4.9.9'), greaterThan(0));
+      expect(AppUpdateChecker.compareSemver('v5.0.0', '4.9.10'), greaterThan(0));
     });
 
     test('ignora build +37 y prefijo v', () {

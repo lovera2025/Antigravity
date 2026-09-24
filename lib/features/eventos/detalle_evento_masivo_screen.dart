@@ -33,6 +33,7 @@ import 'services/cobro_abono_acumulado.dart';
 import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
+import 'services/pago_para_sorteo.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
 import 'services/sorteo_mesas_motor.dart';
@@ -1043,9 +1044,7 @@ class _DetalleEventoMasivoScreenState
                   if (!_modoSeleccionContratos) _idsSeleccionContratos.clear();
                 });
               case 'planilla':
-                if (_alumnos.isNotEmpty) {
-                  PdfService.generarPlanillaCursos(widget.evento, _alumnos);
-                }
+                if (_alumnos.isNotEmpty) _generarPlanillaCursos();
               case 'mora':
                 _exportarPlanillaMora(moraPorAlumno);
               case 'sortear':
@@ -3191,20 +3190,42 @@ class _DetalleEventoMasivoScreenState
 
   /// Pagos de quienes tienen mesa extra, para avisar si alguno pagó una mesa
   /// que no figura en su cantidad. Solo lectura.
-  Future<Map<String, List<Map<String, dynamic>>>> _pagosDeMesaExtra(
+  /// Pagos de todos los alumnos, agrupados por contrato. Los usan los avisos del
+  /// sorteo, lo pagado de cada uno ([pagosPorAlumno]) y la Planilla.
+  Future<Map<String, List<Map<String, dynamic>>>> _pagosPorContrato(
     ContratosRepository repo,
     List<ContratoAlumno> alumnos,
   ) async {
-    final ids = [
-      for (final a in alumnos)
-        if (a.mesaExtraPrecio > 0.01) a.id,
-    ];
+    final ids = [for (final a in alumnos) a.id];
     final out = <String, List<Map<String, dynamic>>>{};
     for (final p in await repo.getPagosForContratoIds(ids)) {
       final id = p['contrato_alumno_id'] as String?;
       if (id != null) out.putIfAbsent(id, () => []).add(p);
     }
     return out;
+  }
+
+  /// La Planilla de cursos, con lo pagado de cada uno para marcar lo que todavía
+  /// no tiene nada pagado.
+  Future<void> _generarPlanillaCursos() async {
+    final repo = ref.read(contratosRepositoryProvider);
+    final alumnos = List<ContratoAlumno>.from(_alumnos);
+    try {
+      final pagos = pagosPorAlumno(
+        alumnos,
+        await _pagosPorContrato(repo, alumnos),
+      );
+      await PdfService.generarPlanillaCursos(
+        widget.evento,
+        alumnos,
+        pagos: pagos,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo generar la planilla: $e')),
+      );
+    }
   }
 
   Future<void> _avisarSorteo(String titulo, String mensaje) {
@@ -3285,9 +3306,11 @@ class _DetalleEventoMasivoScreenState
     String? novedad;
     while (mounted) {
       final alumnos = await repo.getByEvento(eventoId);
+      final pagosCrudos = await _pagosPorContrato(repo, alumnos);
+      final pagos = pagosPorAlumno(alumnos, pagosCrudos);
       final avisos = SalonMesas.avisos(
         alumnos,
-        pagosPorContrato: await _pagosDeMesaExtra(repo, alumnos),
+        pagosPorContrato: pagosCrudos,
       );
       if (!mounted) return;
       final config = await mostrarSorteoMesasDialog(
@@ -3295,20 +3318,28 @@ class _DetalleEventoMasivoScreenState
         tituloInstitucion: titulo,
         alumnos: alumnos,
         avisos: avisos,
+        pagos: pagos,
         inicial: elegido,
         novedad: novedad,
       );
       if (config == null || !mounted) return;
 
+      // Lo que decide el sorteo es la lista **y** lo pagado: un cobro que
+      // entró con el diálogo abierto también obliga a volver a mirar.
       final frescos = await repo.getByEvento(eventoId);
-      if (SorteoMesasMotor.firma(frescos) != SorteoMesasMotor.firma(alumnos)) {
+      final pagosFrescos = pagosPorAlumno(
+        frescos,
+        await _pagosPorContrato(repo, frescos),
+      );
+      if (SorteoMesasMotor.firma(frescos) != SorteoMesasMotor.firma(alumnos) ||
+          firmaPagos(frescos, pagosFrescos) != firmaPagos(alumnos, pagos)) {
         elegido = config;
         novedad = 'La lista cambió mientras el sorteo estaba abierto (por '
-            'ejemplo, la otra PC cargó o editó un alumno). Estos son los datos '
-            'actualizados: revisalos y volvé a tocar SORTEAR.';
+            'ejemplo, la otra PC cargó un alumno o un cobro). Estos son los '
+            'datos actualizados: revisalos y volvé a tocar SORTEAR.';
         continue;
       }
-      await _ejecutarSorteo(frescos, config);
+      await _ejecutarSorteo(frescos, config, pagosFrescos);
       return;
     }
   }
@@ -3316,14 +3347,24 @@ class _DetalleEventoMasivoScreenState
   Future<void> _ejecutarSorteo(
     List<ContratoAlumno> alumnos,
     SorteoMesasDialogResult config,
+    Map<String, PagoAlumno> pagos,
   ) async {
     final repo = ref.read(contratosRepositoryProvider);
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
+      // Lo mismo que mostró el diálogo, con los datos recién leídos.
+      final exclusion = exclusionSorteo(
+        candidatos: candidatosPorPago(alumnos, pagos),
+        soloPagado: config.soloPagado,
+        incluirBase: config.incluirBase,
+        incluirExtras: config.incluirExtras,
+      );
       final pedidos = SorteoMesasMotor.pedidos(
         alumnos,
         separaciones: config.separaciones,
+        sinMesa: exclusion.sinMesa,
+        soloBase: exclusion.soloBase,
       );
       final ocupadas = SorteoMesasMotor.ocupadas(alumnos);
       final asignaciones = SorteoMesasMotor.sortear(
@@ -3372,13 +3413,17 @@ class _DetalleEventoMasivoScreenState
                   SalonMesas.sillasExtra(a) > 0,
             )
             .length;
+        final sinMesa = exclusion.sinMesa.length;
+        final soloBase = exclusion.soloBase.length;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            duration: const Duration(seconds: 6),
+            duration: const Duration(seconds: 8),
             content: Text(
               'Sorteo listo: ${asignaciones.length} alumno(s) con mesa'
               '${separadas > 0 ? ' · $separadas con mesas separadas' : ''}'
-              '${conSillas > 0 ? ' · $conSillas con sillas extra' : ''}.',
+              '${conSillas > 0 ? ' · $conSillas con sillas extra' : ''}'
+              '${sinMesa > 0 ? ' · $sinMesa sin mesa por no tener nada pagado' : ''}'
+              '${soloBase > 0 ? ' · $soloBase con mesas extra sin pagar: solo mesa base' : ''}.',
             ),
           ),
         );

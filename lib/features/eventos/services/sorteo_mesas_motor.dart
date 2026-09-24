@@ -81,14 +81,23 @@ class SorteoMesasMotor {
   ///   sin mover las que ya tienen.
   /// - Alumnos con un número cargado que no se entiende (letras, por ejemplo):
   ///   **no se tocan**, para no pisar algo escrito a mano.
+  ///
+  /// [sinMesa] y [soloBase] salen de lo pagado (`exclusionSorteo`): a los de
+  /// [sinMesa] no se les sortea nada y a los de [soloBase] solo la mesa base. Lo
+  /// que ya tienen asignado no se toca nunca.
   static List<PedidoSorteo> pedidos(
     Iterable<ContratoAlumno> alumnos, {
     Map<String, int> separaciones = const {},
+    Set<String> sinMesa = const {},
+    Set<String> soloBase = const {},
   }) {
     final out = <PedidoSorteo>[];
     for (final a in alumnos) {
       if (a.esBajaTemporal) continue;
-      final mesas = MesasExtraUtils.cantidadMesasFisicasSorteo(a);
+      if (sinMesa.contains(a.id)) continue;
+      final mesas = soloBase.contains(a.id)
+          ? 1
+          : MesasExtraUtils.cantidadMesasFisicasSorteo(a);
       final texto = a.numeroMesa?.trim() ?? '';
       final actuales =
           MesasExtraUtils.numerosMesaDesdeTexto(texto).toList()..sort();

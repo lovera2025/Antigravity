@@ -12,7 +12,7 @@ con check-in por QR y un tótem que se proyecta en el salón.
 ## Antes de tocar nada: la rama
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
-rama está ~90 commits adelante y va por la v4.9.9; `main` quedó en la 2.2.0.
+rama está ~95 commits adelante y va por la v5.0.0; `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 ## Documentación del proyecto
