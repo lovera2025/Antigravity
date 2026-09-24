@@ -8,8 +8,12 @@
 > Anterior: [v4.9.9](CONTEXTO_v4.9.9_2026-09-24.md) (sorteo, caja, lista de la puerta).
 > Plan aprobado: `C:\Users\lover\.claude\plans\con-ese-termino-me-lucky-panda.md`
 
-**Estado:** lista, **sin publicar**. `pubspec.yaml` 5.0.0+56 y el `.iss` coinciden. Se publica solo cuando el
-usuario lo diga, y se instala primero en el operario y después en el jefe. Convive sin problema con la 4.9.9:
+**Estado:** **publicada el 24-sep**, con el OK del usuario:
+- release: https://github.com/lovera2025/Antigravity/releases/tag/v5.0.0;
+- tag `v5.0.0` sobre `36e8958`;
+- `pubspec.yaml` 5.0.0+56 y el `.iss` coinciden.
+
+Se instala primero en el operario (antes de abrir caja) y después en el jefe. Convive sin problema con la 4.9.9:
 solo cambian el sorteo y la Planilla.
 
 ---
