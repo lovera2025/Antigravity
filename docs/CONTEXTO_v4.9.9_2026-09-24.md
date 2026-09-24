@@ -9,24 +9,32 @@
 > Plan aprobado, con todo el razonamiento: `C:\Users\lover\.claude\plans\necesito-verifcar-que-todo-prancy-meerkat.md`
 
 **Estado:**
-- **Lista, sin publicar.** `pubspec.yaml` 4.9.9+55 y el `.iss` coinciden. El instalador se compiló el 24-sep
-  (`installer/dist/Setup Junior Eventos v4.9.9.exe`), pero **no se publicó ni se instaló**: las dos PCs siguen
-  con la 4.9.8, hasta que el usuario diga.
+- **Publicada el 24-sep**, con el OK del usuario:
+  - release: https://github.com/lovera2025/Antigravity/releases/tag/v4.9.9;
+  - tag `v4.9.9` sobre `c205654`;
+  - `pubspec.yaml` 4.9.9+55 y el `.iss` coinciden.
+- **Falta instalarla en las PCs.** Les aparece el aviso de actualización; 4.9.8 y 4.9.9 conviven sin problema.
 - **Commits:**
   - sorteo: `9ce58a0`;
   - script de los 7 alumnos: `f7e1724`;
   - caja y JSON de mesas: `eb359f6`;
   - tótem y puerta: `926fa56`;
-  - versión: el commit de este documento.
+  - versión: `c205654`.
 - **Datos de los 7 alumnos:** aplicados el 24-sep a las 06:08 y verificados. No dependen de instalar nada.
 - **Tests:** `flutter test` completo, 605 pasan.
 
-**Para publicar, cuando el usuario lo diga:**
-1. `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile <notas>` (sube el Setup ya compilado).
-2. Instalar en las dos PCs **antes de noviembre**, que es cuando se sortea.
-3. Prueba sin sortear, en cada PC: en un evento masivo, ⋮ → Sortear mesas, mirar las listas de extras y el aviso
-   ámbar, y **cancelar**; después ⋮ → Planilla de cursos.
-4. No probar anulando cobros reales: es producción. La primera anulación de verdad sirve de prueba.
+**Instalación** (orden acordado el 24-sep). Todas las PCs, **antes del sorteo de noviembre**:
+1. **La PC de desarrollo**, como prueba.
+2. **La oficina del jefe.**
+3. **El operario:** antes de abrir caja o al cierre.
+
+En cada PC, antes de instalar: caja cerrada y "Subir pendientes" en 0. Después, la prueba sin sortear:
+- en un evento masivo, ⋮ → Sortear mesas: mirar las listas de extras y el aviso ámbar, y **cancelar**;
+- ⋮ → Planilla de cursos.
+
+No se prueba anulando cobros reales, porque es producción: la primera anulación de verdad sirve de prueba.
+
+Se publicó con `tool/publish_windows_release.ps1 -SoloNotas -NotesFile <notas>`.
 
 ---
 

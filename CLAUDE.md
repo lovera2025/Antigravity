@@ -12,7 +12,7 @@ con check-in por QR y un tótem que se proyecta en el salón.
 ## Antes de tocar nada: la rama
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
-rama está ~74 commits adelante y va por la v4.9.4; `main` quedó en la 2.2.0.
+rama está ~90 commits adelante y va por la v4.9.9; `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 ## Documentación del proyecto
@@ -34,7 +34,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 38) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 71) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -85,6 +85,23 @@ de sesión (`main.dart:567-576`), así que un permiso recién asignado no se ve
 hasta re-loguear.
 
 ## El tótem
+
+**La lista de la puerta es por evento**, y el tótem no distingue particular de masivo: lo que cambia es cómo se
+carga.
+- **Particulares:** a mano o por CSV, con DNI.
+- **Masivos (fiestas de alumnos):** desde los alumnos, con ⋮ → "Pasar a la lista de la puerta" (v4.9.9,
+  `lista_puerta.dart`). Lleva cada alumno y sus acompañantes con nombre, con la mesa del sorteo.
+  - Los ids son fijos por alumno y lugar, así que se puede repetir.
+  - Nunca toca `estado_ingreso` ni borra nada.
+  - El sorteo guarda la mesa en `contratos_alumnos`; el tótem la lee de `invitados`. Si se vuelve a sortear, hay que
+    volver a pasar la lista.
+
+**Escondido, el tótem se pausa.** `KioskLauncher.close()` manda `pausar` antes de esconder la ventana: suelta
+streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
+nube tiene que cortarse en `_pausar()`.
+
+Las pantallas web y el tótem leen hasta 1000 invitados por evento (el "Max rows" de PostgREST). Ver
+`docs/pendientes/invitados-mas-de-1000-en-web.md`.
 
 Hay **dos implementaciones casi idénticas** que no comparten código (~800 líneas
 duplicadas). Cualquier cambio visual hay que hacerlo dos veces:
@@ -154,6 +171,10 @@ históricos y la pantalla se ve como siempre.
   tótem. Agregar un filtro a una suscripción es gratis en apariencia y rompe
   los DELETE en silencio. Si una lista filtrada no se actualiza al borrar,
   empezar por acá.
+- **Un `async*` con `await for` no suelta nada al cancelarlo.** Sigue parado hasta el próximo evento del
+  stream de adentro, y su `finally` corre recién ahí. `InvitadosRepository.watchByEvento` era así: al salir de
+  Recepción, el canal de Realtime quedaba abierto hasta el próximo cambio del evento. Si un stream tiene que
+  liberar un recurso al cancelarse, usar `StreamController` con `onCancel`.
 - **Realtime no cubre todas las tablas.** Verificar con `pg_publication_tables`
   antes de suscribirse: varias tablas no están en la publicación
   `supabase_realtime`.
