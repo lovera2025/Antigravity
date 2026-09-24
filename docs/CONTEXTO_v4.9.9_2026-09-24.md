@@ -23,10 +23,13 @@
 - **Datos de los 7 alumnos:** aplicados el 24-sep a las 06:08 y verificados. No dependen de instalar nada.
 - **Tests:** `flutter test` completo, 605 pasan.
 
-**Instalación** (orden acordado el 24-sep). Todas las PCs, **antes del sorteo de noviembre**:
-1. **La PC de desarrollo**, como prueba.
-2. **La oficina del jefe.**
-3. **El operario:** antes de abrir caja o al cierre.
+**Instalación.** Todas las PCs, **antes del sorteo de noviembre**. El orden es fijo, porque el jefe llega tarde:
+1. **La PC de desarrollo:** instalada el 24-sep a la mañana.
+2. **El operario:** antes de abrir caja.
+3. **La oficina del jefe:** cuando llega.
+
+Mientras tanto conviven la 4.9.9 y la 4.9.8, y no pasa nada: una anulación hecha desde la 4.9.8 igual se ve al
+instante en el cierre de la 4.9.9.
 
 En cada PC, antes de instalar: caja cerrada y "Subir pendientes" en 0. Después, la prueba sin sortear:
 - en un evento masivo, ⋮ → Sortear mesas: mirar las listas de extras y el aviso ámbar, y **cancelar**;
