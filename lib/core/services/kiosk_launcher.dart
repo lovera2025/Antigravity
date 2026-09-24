@@ -49,8 +49,10 @@ class KioskLauncher {
       if (activeIds.contains(_totemWindowId)) {
         // La ventana sigue viva. Antes acá se hacía `show()` y nada más, así que
         // el salón seguía proyectando el evento anterior para siempre.
+        final id = _totemWindowId!;
         await setEvento(eventoId);
-        WindowController.fromWindowId(_totemWindowId!).show();
+        await WindowController.fromWindowId(id).show();
+        await _invocar('reanudar');
         return;
       } else {
         // Ventana fue cerrada manualmente pero el ID quedó guardado
@@ -126,11 +128,16 @@ class KioskLauncher {
     await _invocar('set_evento', eventoId, 3);
   }
 
+  /// Esconde el tótem, no lo destruye: vuelve al instante y en el mismo lugar.
+  /// Antes de esconderlo le pide que se pause, así escondido no sigue
+  /// consultando la nube (ver `_pausado` en `totem_display.dart`).
   static Future<void> close() async {
-    if (_totemWindowId != null) {
+    final id = _totemWindowId;
+    if (id != null) {
       final activeIds = await DesktopMultiWindow.getAllSubWindowIds();
-      if (activeIds.contains(_totemWindowId)) {
-        await WindowController.fromWindowId(_totemWindowId!).hide();
+      if (activeIds.contains(id)) {
+        await _invocar('pausar');
+        await WindowController.fromWindowId(id).hide();
       }
     }
   }
@@ -155,8 +162,10 @@ class KioskLauncher {
   static Future<void> focus() async {
     if (_totemWindowId != null) {
       final activeIds = await DesktopMultiWindow.getAllSubWindowIds();
-      if (activeIds.contains(_totemWindowId)) {
-        WindowController.fromWindowId(_totemWindowId!).show();
+      final id = _totemWindowId;
+      if (id != null && activeIds.contains(id)) {
+        await WindowController.fromWindowId(id).show();
+        await _invocar('reanudar');
       } else {
         _totemWindowId = null;
         _totemEventoId = null;

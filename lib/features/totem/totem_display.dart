@@ -111,6 +111,14 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   /// timer vuelve a leer la verdad cada minuto.
   Timer? _reconciliarTimer;
 
+  /// La ventana del tótem está escondida (se "cerró" desde Recepción o con su
+  /// propio botón). `KioskLauncher.close()` solo la esconde, para que vuelva al
+  /// instante y en el mismo lugar; pero escondida no tiene por qué seguir
+  /// hablando con la nube. Pausada no escucha invitados ni configuración, no
+  /// tiene canal de avisos y no relee cada minuto: fue parte del consumo de
+  /// Disk IO de Supabase del 23-sep. Al volver a mostrarse retoma y recarga.
+  bool _pausado = false;
+
   // ── Reconexión ────────────────────────────────────────────────────────────
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
@@ -223,14 +231,20 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   void _setupInterWindowChannel() {
     DesktopMultiWindow.setMethodHandler((call, fromWindowId) async {
       switch (call.method) {
+        case 'pausar':
+          _pausar();
+          return null;
+        case 'reanudar':
+          _reanudar();
+          return null;
         case 'refresh':
-          _connect(); // Forzar reconexión del stream
+          if (!_pausado) _connect(); // Forzar reconexión del stream
           return null;
         case 'list_reset':
           _handleListReset();
           return null;
         case 'guest_checkin':
-          if (call.arguments != null) {
+          if (call.arguments != null && !_pausado) {
             final data = jsonDecode(call.arguments as String);
             final guest = Invitado.fromJson(data);
             _handleManualIncoming(guest);
@@ -298,8 +312,46 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
       _cfg = TotemConfig.defaults(nuevo);
     });
 
-    _connect();
     _cargarOrientacion();
+    // Escondido, se conecta recién al volver a mostrarse.
+    if (!_pausado) _connect();
+  }
+
+  /// Corta todo lo que habla con la nube. Ver [_pausado].
+  void _pausar() {
+    if (_pausado || !mounted) return;
+    _sub?.cancel();
+    _sub = null;
+    _reconciliarTimer?.cancel();
+    _reconnectTimer?.cancel();
+    _displayTimer?.cancel();
+    // `removeChannel` y no solo `unsubscribe`: sin canales, el cliente suelta
+    // el socket de Realtime.
+    final canal = _broadcastChannel;
+    _broadcastChannel = null;
+    if (canal != null) unawaited(svc.client.removeChannel(canal));
+    _entryCtrl.reset();
+    setState(() {
+      _pausado = true;
+      _queue.clear();
+      _current = null;
+    });
+  }
+
+  /// Vuelve a conectarse y recarga la lista, en silencio: quien ingresó
+  /// mientras estaba escondido aparece en la lista sin bienvenida atrasada.
+  void _reanudar() {
+    if (!_pausado || !mounted) return;
+    setState(() {
+      _pausado = false;
+      _initialized = false;
+      _processedIds.clear();
+      _ingresados.clear();
+      _recentIds.clear();
+      _reconnectAttempts = 0;
+      _isConnected = true;
+    });
+    _connect();
   }
 
   /// Aplica una config recién guardada desde el editor.
@@ -694,6 +746,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    // Escondido: sin mirar la config, así su stream de Supabase se suelta
+    // (el provider es autoDispose). Nadie ve esta pantalla.
+    if (_pausado) {
+      return const Scaffold(backgroundColor: Colors.black);
+    }
+
     // La config del evento entra por acá y se propaga a todos los _build*.
     // Si el evento no tiene fila, son los valores de siempre.
     _cfg = ref.watch(totemConfigValueProvider(_eventoId));
@@ -866,6 +924,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
                             SystemChrome.setEnabledSystemUIMode(
                                 SystemUiMode.edgeToEdge);
                             if (widget.windowId != null) {
+                              _pausar();
                               await WindowController.fromWindowId(
                                       widget.windowId!)
                                   .hide();

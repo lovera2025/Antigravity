@@ -172,6 +172,19 @@ class SalonMesas {
     return extra > 0 ? '$base ($extra extra)' : base;
   }
 
+  /// Lo que se ve en la puerta: "12", "12-14", "12-13 y 40". Sin las notas de la
+  /// planilla ("2 extra", "separada"), que a la familia no le dicen nada.
+  /// `null` si todavía no tiene mesa.
+  static String? textoMesasPuerta(ContratoAlumno a) {
+    final texto = a.numeroMesa?.trim() ?? '';
+    if (texto.isEmpty) return null;
+    final ts = tramos(a);
+    if (ts.isEmpty) return texto;
+    final partes = ts.map(_textoTramo).toList();
+    if (partes.length == 1) return partes.single;
+    return '${partes.sublist(0, partes.length - 1).join(', ')} y ${partes.last}';
+  }
+
   /// "le falta 1 mesa" / "le sobran 2 mesas", o null si coincide con la
   /// cuenta (o si todavía no tiene números). Sin ícono: la pantalla le pone ⚠
   /// y el PDF "(!)", porque la fuente de los PDF no tiene ese símbolo.

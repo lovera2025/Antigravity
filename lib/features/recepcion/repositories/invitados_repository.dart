@@ -9,8 +9,10 @@ import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/kiosk_launcher.dart';
+import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../../models/invitado.dart';
+import '../services/lista_puerta.dart';
 
 
 
@@ -207,6 +209,81 @@ class InvitadosRepository {
 
     _notifyChanges(eventoId);
     return count;
+  }
+
+  /// Invitados de un evento tal como están en esta PC, sin ir a la nube.
+  Future<List<Invitado>> getLocalesByEvento(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'invitados',
+      where: 'evento_id = ?',
+      whereArgs: [eventoId],
+    );
+    return rows.map(Invitado.fromJson).toList();
+  }
+
+  /// Escribe la lista de la puerta armada desde los alumnos ([planListaPuerta]).
+  ///
+  /// Una transacción. A las filas nuevas se les pone todo; a las existentes,
+  /// **solo nombre y mesa**: el ingreso y los intentos no se tocan nunca, así
+  /// que volver a pasar la lista con la fiesta empezada no deja a nadie afuera.
+  /// Por la misma razón, lo que sube a la nube de una fila nueva no lleva
+  /// `estado_ingreso`: si la otra PC ya la había creado y marcado, el upsert no
+  /// la pisa (la columna tiene su default en Supabase). No borra nada.
+  Future<void> aplicarListaPuerta(String eventoId, PlanListaPuerta plan) async {
+    if (!plan.hayCambios) return;
+    final db = await LocalDatabase.instance;
+    final now = DateTime.now().toUtc().toIso8601String();
+    await db.transaction((txn) async {
+      for (final f in plan.nuevas) {
+        final nube = {
+          'id': f.id,
+          'evento_id': eventoId,
+          'nombre_completo': f.nombre,
+          'numero_mesa': f.mesa,
+          'updated_at': now,
+        };
+        await txn.insert(
+          'invitados',
+          {
+            ...nube,
+            'dni': '',
+            'estado_ingreso': 'pendiente',
+            'intentos_fallidos': 0,
+            'created_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'invitados',
+          operacion: SyncOperation.insert,
+          registroId: f.id,
+          payload: nube,
+        );
+      }
+      for (final f in plan.aActualizar) {
+        final cambios = {
+          'nombre_completo': f.nombre,
+          'numero_mesa': f.mesa,
+          'updated_at': now,
+        };
+        await txn.update(
+          'invitados',
+          cambios,
+          where: 'id = ?',
+          whereArgs: [f.id],
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'invitados',
+          operacion: SyncOperation.update,
+          registroId: f.id,
+          payload: {'id': f.id, ...cambios},
+        );
+      }
+    });
+    _notifyChanges(eventoId);
   }
 
   /// Elimina un invitado.
@@ -558,22 +635,37 @@ class InvitadosRepository {
       return;
     }
     try {
-      final response = await _supabase.from('invitados')
-          .select()
-          .eq('evento_id', eventoId)
-          .order('nombre_completo');
+      // Paginado: PostgREST corta en 1000 filas, y una fiesta con las familias
+      // cargadas puede pasarlas. Con una sola página, lo que quedaba afuera
+      // parecía "borrado en la nube" y se borraba acá.
+      const pagina = 1000;
+      final response = <Map<String, dynamic>>[];
+      var fotoCompleta = false;
+      for (var desde = 0; ; desde += pagina) {
+        final List<dynamic> filas = await _supabase
+            .from('invitados')
+            .select()
+            .eq('evento_id', eventoId)
+            .order('id')
+            .range(desde, desde + pagina - 1);
+        response.addAll(filas.cast<Map<String, dynamic>>());
+        if (filas.length < pagina) {
+          fotoCompleta = true;
+          break;
+        }
+      }
 
       final baseLocalIds = await db.query('invitados', columns: ['id'], where: 'evento_id = ?', whereArgs: [eventoId]);
       final localIds = baseLocalIds.map((r) => r['id'] as String).toSet();
-      
+
       // Bloquear registros que tienen modificaciones locales pendientes
       final syncOps = await db.query('_sync_queue', columns: ['registro_id'], where: "tabla = 'invitados'");
       final lockedIds = syncOps.map((r) => r['registro_id'] as String).toSet();
-      
+
       final remoteIds = <String>{};
 
       final batch = db.batch();
-      for (final row in (response as List)) {
+      for (final row in response) {
         final id = row['id'] as String;
         remoteIds.add(id);
 
@@ -595,8 +687,15 @@ class InvitadosRepository {
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       
-      // Borrar registros locales que ya no existen en Supabase (ej. eliminados desde otro equipo)
-      final toDelete = localIds.difference(remoteIds).difference(lockedIds);
+      // Borrar registros locales que ya no existen en Supabase (ej. eliminados
+      // desde otro equipo). Solo con la foto completa del evento, por el mismo
+      // lugar que decide todos los borrados (ver CLAUDE.md, "Nada se borra").
+      final toDelete = filasAPodar(
+        fotoCompleta: fotoCompleta,
+        idsLocales: localIds,
+        idsEnLaNube: remoteIds,
+        idsPendientes: lockedIds,
+      );
       for (final id in toDelete) {
         batch.delete('invitados', where: 'id = ?', whereArgs: [id]);
       }
@@ -693,42 +792,70 @@ class InvitadosRepository {
   }
 
 
-  /// Observa los invitados de un evento, emitiendo una nueva lista cuando hay cambios locales o remotos.
-  /// Gestiona el ciclo de vida del canal Realtime: lo crea al iniciar y lo cierra al cancelar si no quedan listeners.
-  Stream<List<Invitado>> watchByEvento(String eventoId) async* {
+  /// Observa los invitados de un evento, emitiendo una nueva lista cuando hay
+  /// cambios locales o remotos.
+  ///
+  /// El canal de Realtime vive mientras alguien escucha y se suelta **en el
+  /// momento** en que el último deja de escuchar (se sale de Recepción, se cierra
+  /// el panel del tótem). Antes era un `async*` parado en un `await for`: al
+  /// cancelarlo no terminaba hasta el próximo cambio de ese evento, y hasta
+  /// entonces el canal seguía abierto y Supabase seguía evaluando el WAL para
+  /// una pantalla que nadie miraba — parte del consumo de Disk IO del 23-sep.
+  Stream<List<Invitado>> watchByEvento(String eventoId) {
+    late final StreamController<List<Invitado>> controller;
+    StreamSubscription<String>? cambios;
+    // Las lecturas se encadenan para que nunca llegue una lista vieja después
+    // de una nueva.
+    var cadena = Future<void>.value();
+
+    void emitir() {
+      cadena = cadena.then((_) async {
+        if (controller.isClosed) return;
+        try {
+          final lista = await getByEvento(eventoId);
+          if (!controller.isClosed) controller.add(lista);
+        } catch (e, st) {
+          if (!controller.isClosed) controller.addError(e, st);
+        }
+      });
+    }
+
+    controller = StreamController<List<Invitado>>(
+      onListen: () {
+        _tomarCanal(eventoId);
+        cambios = _changesController.stream
+            .where((id) => id == eventoId)
+            .listen((_) => emitir());
+        emitir();
+      },
+      onCancel: () async {
+        await cambios?.cancel();
+        await _soltarCanal(eventoId);
+      },
+    );
+    return controller.stream;
+  }
+
+  void _tomarCanal(String eventoId) {
     if (!_activeChannels.containsKey(eventoId)) {
-      final channel = subscribeToChanges(eventoId, () {
+      _activeChannels[eventoId] = subscribeToChanges(eventoId, () {
         _notifyChanges(eventoId);
       });
-      _activeChannels[eventoId] = channel;
       _channelSubscribers[eventoId] = 0;
     }
-    
     _channelSubscribers[eventoId] = (_channelSubscribers[eventoId] ?? 0) + 1;
+  }
 
-    try {
-      // Emitir la lista inicial
-      yield await getByEvento(eventoId);
-
-      // Escuchar el controlador de cambios locales
-      await for (final id in _changesController.stream) {
-        if (id == eventoId) {
-          yield await getByEvento(eventoId);
-        }
-      }
-    } finally {
-      // Limpiar el canal cuando el stream es cancelado (dispose del widget)
-      if (_channelSubscribers.containsKey(eventoId)) {
-        _channelSubscribers[eventoId] = (_channelSubscribers[eventoId]! - 1);
-        if (_channelSubscribers[eventoId]! <= 0) {
-          if (_activeChannels.containsKey(eventoId)) {
-            await _supabase.removeChannel(_activeChannels[eventoId]!);
-            _activeChannels.remove(eventoId);
-          }
-          _channelSubscribers.remove(eventoId);
-        }
-      }
+  Future<void> _soltarCanal(String eventoId) async {
+    final quedan = (_channelSubscribers[eventoId] ?? 1) - 1;
+    if (quedan > 0) {
+      _channelSubscribers[eventoId] = quedan;
+      return;
     }
+    _channelSubscribers.remove(eventoId);
+    _realtimeDebounceTimers.remove(eventoId)?.cancel();
+    final canal = _activeChannels.remove(eventoId);
+    if (canal != null) await _supabase.removeChannel(canal);
   }
 
   void _notifyChanges(String eventoId) {

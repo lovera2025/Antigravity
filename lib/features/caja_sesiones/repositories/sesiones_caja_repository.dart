@@ -362,11 +362,20 @@ class SesionesCajaRepository {
       where: 'id = ?',
       whereArgs: [sesionId],
     );
+    // Solo lo del latido. Con la fila entera, un latido podía volver a mandar
+    // `cerrada_at: null` sobre una sesión que la otra PC acababa de cerrar; y
+    // el motor no tenía cómo saber que era "solo el latido" para no despertar
+    // a la otra PC cada minuto (ver `esSoloLatido` en sync_engine.dart). Si
+    // había un cambio real pendiente, la cola lo fusiona y sube completo.
     await SyncQueue.enqueue(
       tabla: 'sesiones_caja',
       operacion: SyncOperation.update,
       registroId: sesionId,
-      payload: updated.toSyncPayload(),
+      payload: {
+        'id': sesionId,
+        'last_heartbeat': updated.lastHeartbeat!.toUtc().toIso8601String(),
+        'updated_at': updated.updatedAt.toUtc().toIso8601String(),
+      },
     );
   }
 

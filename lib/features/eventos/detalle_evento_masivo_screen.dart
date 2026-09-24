@@ -36,6 +36,9 @@ import 'services/mesas_extra_utils.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
 import 'services/sorteo_mesas_motor.dart';
+import '../../core/services/connectivity_service.dart';
+import '../recepcion/repositories/invitados_repository.dart';
+import '../recepcion/services/lista_puerta.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
@@ -1051,6 +1054,8 @@ class _DetalleEventoMasivoScreenState
                 _deshacerSorteoMesas();
               case 'restaurar':
                 _restaurarSorteoAnterior();
+              case 'puerta':
+                _pasarListaPuerta();
             }
           },
           itemBuilder: (context) => [
@@ -1143,6 +1148,17 @@ class _DetalleEventoMasivoScreenState
                   subtitle: Text('La copia guardada al deshacer'),
                 ),
               ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'puerta',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.door_front_door_outlined, color: Colors.teal),
+                title: Text('Pasar a la lista de la puerta'),
+                subtitle: Text('Alumnos y familias con su mesa, para el tótem'),
+              ),
+            ),
           ],
           child: Container(
             padding: EdgeInsets.symmetric(
@@ -3488,6 +3504,118 @@ class _DetalleEventoMasivoScreenState
 
   /// Devuelve los números de la copia guardada al deshacer, solo a quienes
   /// siguen sin mesa y sin pisar ningún número que hoy esté ocupado.
+  /// Lleva los alumnos —y sus acompañantes con nombre— a la lista de la puerta
+  /// (`invitados`) con la mesa sorteada, para que el tótem, el QR y la búsqueda
+  /// digan dónde sentarse. Se puede repetir: actualiza las mismas filas, no
+  /// toca a quien ya ingresó y no borra nada.
+  Future<void> _pasarListaPuerta() async {
+    final eventoId = widget.evento.id;
+    final invitadosRepo = ref.read(invitadosRepositoryProvider);
+    final online = ref.read(connectivityServiceProvider).currentStatus ==
+        AppConnectivity.online;
+    setState(() => _isLoading = true);
+    PlanListaPuerta plan;
+    try {
+      // Primero lo que cargó la otra PC, para comparar contra la lista real.
+      if (online) await invitadosRepo.forceRefresh(eventoId);
+      final alumnos = await ref.read(contratosRepositoryProvider).getByEvento(eventoId);
+      plan = planListaPuerta(
+        alumnos: alumnos,
+        existentes: await invitadosRepo.getLocalesByEvento(eventoId),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo armar la lista: $e')),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    final sinMesa = [...plan.nuevas, ...plan.aActualizar]
+        .where((f) => f.esAlumno && f.mesa == null)
+        .length;
+    final lineas = <String>[
+      if (plan.nuevas.isNotEmpty) '• ${plan.nuevas.length} persona(s) nuevas en la lista.',
+      if (plan.aActualizar.isNotEmpty)
+        '• ${plan.aActualizar.length} ya estaban: se actualiza su nombre o su mesa.',
+      if (plan.iguales > 0) '• ${plan.iguales} ya estaban al día.',
+      if (plan.yaIngresados > 0)
+        '• ${plan.yaIngresados} ya ingresaron: su ingreso no cambia.',
+      if (sinMesa > 0) '• $sinMesa alumno(s) todavía sin mesa sorteada.',
+      if (plan.sobrantes.isNotEmpty)
+        '• ${plan.sobrantes.length} de una pasada anterior ya no corresponden '
+            '(baja o acompañante quitado). No se borran: sacalos desde Recepción '
+            'si hace falta.',
+      if (!online)
+        '• Sin conexión: no se pudo mirar lo que cargó la otra PC.',
+    ];
+
+    if (!plan.hayCambios) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('La lista de la puerta ya está al día'),
+          content: Text(lineas.isEmpty ? 'No hay alumnos para pasar.' : lineas.join('\n')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pasar a la lista de la puerta'),
+        content: SizedBox(
+          width: 440,
+          child: Text(
+            'El tótem, el QR y la búsqueda de ${widget.evento.tipo} van a mostrar '
+            'a cada alumno y sus acompañantes con la mesa sorteada.\n\n'
+            '${lineas.join('\n')}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('PASAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    try {
+      await invitadosRepo.aplicarListaPuerta(eventoId, plan);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Lista de la puerta al día: '
+            '${plan.nuevas.length + plan.aActualizar.length + plan.iguales} persona(s).',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo pasar la lista: $e')),
+      );
+    }
+  }
+
   Future<void> _restaurarSorteoAnterior() async {
     final repo = ref.read(contratosRepositoryProvider);
     final eventoId = widget.evento.id;

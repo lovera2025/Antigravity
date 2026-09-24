@@ -2,6 +2,7 @@
 // —sobre todo de un cobro que el jefe anuló— sin refrescar por nada.
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:arguello_events/core/database/sync_queue.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
 import 'package:arguello_events/features/cierre_caja/services/aviso_cambios_caja.dart';
 import 'package:arguello_events/features/cierre_caja/services/cobro_agrupado.dart';
@@ -179,6 +180,37 @@ void main() {
         ),
         isTrue,
       );
+    });
+  });
+
+  group('el latido de la caja no despierta a la otra PC', () {
+    test('solo latido: sin pulso', () {
+      expect(
+        esSoloLatido('sesiones_caja', SyncOperation.update, {
+          'id': 's1',
+          'last_heartbeat': '2026-09-24T12:00:00Z',
+          'updated_at': '2026-09-24T12:00:00Z',
+        }),
+        isTrue,
+      );
+    });
+
+    test('latido fusionado con un cierre: con pulso', () {
+      expect(
+        esSoloLatido('sesiones_caja', SyncOperation.update, {
+          'id': 's1',
+          'last_heartbeat': '2026-09-24T12:00:00Z',
+          'cerrada_at': '2026-09-24T12:00:00Z',
+          'arqueo_cierre': 150000,
+        }),
+        isFalse,
+      );
+    });
+
+    test('otra tabla u otra operación: con pulso', () {
+      final p = {'id': 's1', 'last_heartbeat': 'x'};
+      expect(esSoloLatido('pagos_contrato_alumno', SyncOperation.update, p), isFalse);
+      expect(esSoloLatido('sesiones_caja', SyncOperation.insert, p), isFalse);
     });
   });
 }

@@ -112,6 +112,24 @@ bool filaEsNovedad({
   return !local.isAtSameMomentAs(nube);
 }
 
+/// Si lo que se sube es solo el latido de una sesión de caja y nada más.
+///
+/// El latido encola `{id, last_heartbeat, updated_at}`. Si en la cola había un
+/// cambio real de esa sesión (apertura, cierre, arqueo), la cola fusiona los dos
+/// y el payload trae más columnas: eso sí es novedad y sí lleva pulso.
+bool esSoloLatido(
+  String tabla,
+  SyncOperation operacion,
+  Map<String, dynamic> payload,
+) {
+  if (tabla != 'sesiones_caja' || operacion != SyncOperation.update) {
+    return false;
+  }
+  const delLatido = {'id', 'last_heartbeat', 'updated_at'};
+  return payload.containsKey('last_heartbeat') &&
+      payload.keys.every(delLatido.contains);
+}
+
 /// Cómo se guarda en SQLite un valor que bajó de la nube.
 ///
 /// Las columnas `jsonb` (el detalle por mesa, los acompañantes) llegan como
@@ -640,6 +658,11 @@ class SyncEngine {
 
   void _anotarParaElPulso(SyncQueueEntry entry) {
     if (!_incrementalColumns.containsKey(entry.tabla)) return;
+    // El latido de la caja sube cada minuto: con pulso, la otra PC bajaba datos
+    // una vez por minuto todo el día. Le llega igual por el ciclo de 10 s, que
+    // es como llegaba antes del pulso y le sobra al margen de 90 s del
+    // indicador "caja abierta en otra PC".
+    if (esSoloLatido(entry.tabla, entry.operacion, entry.payload)) return;
     _tablasSubidas.add(entry.tabla);
     if (entry.operacion == SyncOperation.delete) {
       (_borradosSubidos[entry.tabla] ??= <String>{}).add(entry.registroId);
