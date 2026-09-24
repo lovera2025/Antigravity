@@ -769,40 +769,13 @@ class ContratosRepository {
           )
         : pagos;
 
-    final cant = MesasExtraUtils.inferirCantidadMesasExtraContrato(
-      contrato,
+    final estado = MesasExtraUtils.estadoMesasReconciliado(
+      contrato: contrato,
       pagos: pagosFrescos,
     );
-    final unit = cant > 0
-        ? double.parse((contrato.mesaExtraPrecio / cant).toStringAsFixed(2))
-        : contrato.mesaExtraPrecio;
-
-    List<MesaExtraItem> mesas;
-    final tienePagosMesaNumerados = pagosFrescos.any((p) {
-      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
-      return MesasExtraUtils.pagoConceptoTieneMesaNumeradaExplicita(
-        p['concepto'] as String?,
-      );
-    });
-
-    final pagadoMesaHistorial = _grossPagadoMesaDesdePagos(pagosFrescos);
-
-    if (tienePagosMesaNumerados) {
-      mesas = MesasExtraUtils.reconciliarDesdePagos(
-        cantidad: cant,
-        precioUnitario: unit,
-        cuotasPlan: contrato.mesaExtraCuotas,
-        pagos: pagosFrescos,
-      );
-    } else {
-      mesas = MesasExtraUtils.repartirPagadoFifo(
-        cantidad: cant,
-        precioUnitario: unit,
-        cuotasPlan: contrato.mesaExtraCuotas,
-        pagadoTotal: pagadoMesaHistorial,
-        cuotasPagadasLegacy: 0,
-      );
-    }
+    if (estado == null) return;
+    final cant = estado.cantidad;
+    final mesas = estado.mesas;
 
     final pagadoTotal = MesasExtraUtils.totalPagado(mesas);
     final cuotasMax = MesasExtraUtils.maxCuotasPagadas(mesas);
@@ -1122,21 +1095,6 @@ class ContratosRepository {
 
   ContratoAlumno _fromLocalRow(Map<String, dynamic> row) {
     return ContratoAlumno.fromJson(row);
-  }
-
-  /// Suma bruta de pagos activos cuyo concepto corresponde a mesa extra.
-  double _grossPagadoMesaDesdePagos(List<Map<String, dynamic>> pagos) {
-    var total = 0.0;
-    for (final p in pagos) {
-      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
-      final concepto = (p['concepto'] as String? ?? '').toLowerCase();
-      if (!concepto.contains('mesa')) continue;
-      final gross = (p['monto_gross'] as num?)?.toDouble() ??
-          (p['monto'] as num?)?.toDouble() ??
-          0.0;
-      total += gross;
-    }
-    return double.parse(total.toStringAsFixed(2));
   }
 
   Map<String, dynamic> _toLocalRow(ContratoAlumno contrato) {

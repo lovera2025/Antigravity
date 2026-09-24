@@ -552,4 +552,98 @@ void main() {
     expect(next[1].liquidada, false);
     expect(next[0].pagado, 70000);
   });
+
+  group('estadoMesasReconciliado', () {
+    Map<String, dynamic> pago(String concepto, double monto, String fecha) => {
+          'concepto': concepto,
+          'monto': monto,
+          'monto_gross': monto,
+          'fecha_pago': fecha,
+          'anulado': 0,
+        };
+
+    ContratoAlumno contrato({
+      required double precio,
+      required int cantidad,
+      required int cuotas,
+    }) =>
+        ContratoAlumno(
+          id: 'c',
+          eventoId: 'e',
+          nombreAlumno: 'Alumno',
+          cantidadAcompanantes: 0,
+          montoTotalPactado: 400000,
+          saldoDeudor: 0,
+          mesaExtraPrecio: precio,
+          mesaExtraCantidad: cantidad,
+          mesaExtraCuotas: cuotas,
+        );
+
+    test('sin precio de mesa no hay nada que reconciliar', () {
+      final c = contrato(precio: 0, cantidad: 0, cuotas: 1);
+      expect(MesasExtraUtils.estadoMesasReconciliado(contrato: c, pagos: []),
+          isNull);
+    });
+
+    test('caso Ponce: 140.000 pasa a 2 mesas; lo pagado va a la Mesa 1', () {
+      final pagos = [
+        pago('Mesa Extra (1/7)', 20000, '2026-04-20T14:09:26Z'),
+        pago('Mesa Extra (2/7)', 20000, '2026-06-03T20:11:39Z'),
+        pago('Mesa Extra (3/7)', 20000, '2026-06-22T14:35:45Z'),
+        pago('Cuota Base (1/9)', 30000, '2026-04-20T14:09:26Z'),
+      ];
+      final antes = MesasExtraUtils.estadoMesasReconciliado(
+        contrato: contrato(precio: 140000, cantidad: 1, cuotas: 7),
+        pagos: pagos,
+      )!;
+      expect(antes.cantidad, 1);
+      expect(antes.mesas.single.pagado, 60000);
+
+      final despues = MesasExtraUtils.estadoMesasReconciliado(
+        contrato: contrato(precio: 140000, cantidad: 2, cuotas: 7),
+        pagos: pagos,
+      )!;
+      expect(despues.cantidad, 2);
+      expect(despues.mesas.map((m) => m.precio), [70000, 70000]);
+      expect(despues.mesas.map((m) => m.pagado), [60000, 0]);
+      expect(despues.mesas.map((m) => m.cuotasPagadas), [6, 0]);
+      expect(MesasExtraUtils.totalPagado(despues.mesas), 60000);
+    });
+
+    test('caso Silvero: lo que pasa de una mesa sigue en la siguiente', () {
+      final pagos = [
+        for (var i = 1; i <= 5; i++)
+          pago('Mesa Extra ($i/8)', 17500, '2026-0${i + 3}-01T12:00:00Z'),
+      ];
+      final r = MesasExtraUtils.estadoMesasReconciliado(
+        contrato: contrato(precio: 140000, cantidad: 2, cuotas: 8),
+        pagos: pagos,
+      )!;
+      expect(r.mesas.map((m) => m.pagado), [70000, 17500]);
+      expect(r.mesas.first.liquidada, isTrue);
+      expect(MesasExtraUtils.maxCuotasPagadas(r.mesas), 8);
+    });
+
+    test('pagos con número de mesa van a su mesa, no por orden', () {
+      final pagos = [
+        pago('Mesa Extra 2 (1/7)', 10000, '2026-04-01T12:00:00Z'),
+        pago('Mesa Extra 1 (1/7)', 10000, '2026-05-01T12:00:00Z'),
+        pago('Mesa Extra 2 (2/7)', 10000, '2026-06-01T12:00:00Z'),
+      ];
+      final r = MesasExtraUtils.estadoMesasReconciliado(
+        contrato: contrato(precio: 140000, cantidad: 2, cuotas: 7),
+        pagos: pagos,
+      )!;
+      expect(r.mesas.map((m) => m.pagado), [10000, 20000]);
+    });
+
+    test('la cantidad nunca baja de lo que dicen los pagos numerados', () {
+      final pagos = [pago('Mesa Extra 3 (1/7)', 10000, '2026-04-01T12:00:00Z')];
+      final r = MesasExtraUtils.estadoMesasReconciliado(
+        contrato: contrato(precio: 210000, cantidad: 2, cuotas: 7),
+        pagos: pagos,
+      )!;
+      expect(r.cantidad, 3);
+    });
+  });
 }

@@ -704,6 +704,58 @@ class MesasExtraUtils {
     });
   }
 
+  /// Cuántas mesas extra tiene el contrato y cuánto lleva pagado cada una,
+  /// según sus pagos. Es la cuenta que guarda
+  /// `ContratosRepository.reconciliarMesasEstadoContrato`, sin tocar la base:
+  /// así un script de corrección calcula exactamente lo mismo que la app.
+  ///
+  /// [pagos] tienen que venir ya con los rótulos corregidos, si
+  /// [inferirEntregasMesasColapsadas] pidió renombrar alguno.
+  /// Sin precio de mesa extra devuelve `null`: no hay nada que reconciliar.
+  static ({int cantidad, List<MesaExtraItem> mesas})? estadoMesasReconciliado({
+    required ContratoAlumno contrato,
+    required List<Map<String, dynamic>> pagos,
+  }) {
+    if (contrato.mesaExtraPrecio <= 0.01) return null;
+
+    final cant = inferirCantidadMesasExtraContrato(contrato, pagos: pagos);
+    final unit = cant > 0
+        ? double.parse((contrato.mesaExtraPrecio / cant).toStringAsFixed(2))
+        : contrato.mesaExtraPrecio;
+
+    final tienePagosMesaNumerados = pagos.any((p) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) return false;
+      return pagoConceptoTieneMesaNumeradaExplicita(p['concepto'] as String?);
+    });
+
+    final mesas = tienePagosMesaNumerados
+        ? reconciliarDesdePagos(
+            cantidad: cant,
+            precioUnitario: unit,
+            cuotasPlan: contrato.mesaExtraCuotas,
+            pagos: pagos,
+          )
+        : repartirPagadoFifo(
+            cantidad: cant,
+            precioUnitario: unit,
+            cuotasPlan: contrato.mesaExtraCuotas,
+            pagadoTotal: _grossPagadoMesa(pagos),
+            cuotasPagadasLegacy: 0,
+          );
+    return (cantidad: cant, mesas: mesas);
+  }
+
+  static double _grossPagadoMesa(Iterable<Map<String, dynamic>> pagos) {
+    var total = 0.0;
+    for (final p in pagos) {
+      if (((p['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+      final concepto = (p['concepto'] as String? ?? '').toLowerCase();
+      if (!concepto.contains('mesa')) continue;
+      total += _grossPago(p);
+    }
+    return double.parse(total.toStringAsFixed(2));
+  }
+
   static double totalPagado(List<MesaExtraItem> mesas) =>
       mesas.fold(0.0, (s, m) => s + m.pagado);
 
