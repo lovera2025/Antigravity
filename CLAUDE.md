@@ -175,6 +175,11 @@ históricos y la pantalla se ve como siempre.
   stream de adentro, y su `finally` corre recién ahí. `InvitadosRepository.watchByEvento` era así: al salir de
   Recepción, el canal de Realtime quedaba abierto hasta el próximo cambio del evento. Si un stream tiene que
   liberar un recurso al cancelarse, usar `StreamController` con `onCancel`.
+- **Para decidir con lo pagado, leer los pagos, no los campos del contrato.** `saldo_deudor`,
+  `mesa_extra_pagado` y `sillas_extra_pagado` son derivados y pueden no coincidir con los pagos. En sep-2026
+  ARGUELLO, TOMAS daba $30.000 de base pagados según el contrato y no tenía ningún pago. Lo que manda es
+  `grossHistoricoClaseCobro(pagos, clase)` (`cobro_abono_acumulado.dart`), lo mismo que usa el recálculo del saldo.
+  El sorteo de la v5.0.0 decide así (`pago_para_sorteo.dart`).
 - **Realtime no cubre todas las tablas.** Verificar con `pg_publication_tables`
   antes de suscribirse: varias tablas no están en la publicación
   `supabase_realtime`.
