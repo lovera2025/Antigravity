@@ -1585,6 +1585,202 @@ class PdfService {
     }
   }
 
+  /// Un solo comprobante para varios cobros anulados juntos.
+  ///
+  /// Con uno solo sale el comprobante de siempre ([compartirComprobanteAnulacionCobro]).
+  /// Con varios, una tabla compacta —pagador, concepto, fecha, medio, monto—, el
+  /// total y el motivo una vez: una hoja en vez de una por cobro.
+  static Future<void> compartirComprobanteAnulacionCobros({
+    required List<({
+      String nombrePagador,
+      String referenciaEvento,
+      String fuenteLabel,
+      double monto,
+      String? concepto,
+      DateTime? fechaCobroOriginalUtc,
+      String? medioPago,
+      String idRegistro,
+    })> cobros,
+    required String motivoAnulacion,
+    required DateTime fechaAnulacionUtc,
+  }) async {
+    if (cobros.isEmpty) return;
+    if (cobros.length == 1) {
+      final c = cobros.first;
+      return compartirComprobanteAnulacionCobro(
+        nombrePagador: c.nombrePagador,
+        referenciaEvento: c.referenciaEvento,
+        fuenteLabel: c.fuenteLabel,
+        monto: c.monto,
+        concepto: c.concepto,
+        fechaCobroOriginalUtc: c.fechaCobroOriginalUtc,
+        motivoAnulacion: motivoAnulacion,
+        fechaAnulacionUtc: fechaAnulacionUtc,
+        idRegistro: c.idRegistro,
+      );
+    }
+
+    pw.Font? fontRegular;
+    pw.Font? fontBold;
+    try {
+      fontRegular = await PdfGoogleFonts.outfitRegular();
+      fontBold = await PdfGoogleFonts.outfitBold();
+    } catch (_) {}
+
+    final pdf = pw.Document(
+      theme: fontRegular != null && fontBold != null
+          ? pw.ThemeData.withFont(base: fontRegular, bold: fontBold)
+          : null,
+    );
+
+    final total = cobros.fold<double>(0, (s, c) => s + c.monto);
+    final pagadores = cobros.map((c) => c.nombrePagador.trim()).toSet();
+    final fechaAnulTxt = ArTime.formatFechaHora(fechaAnulacionUtc.toUtc());
+    const celda = pw.TextStyle(fontSize: 8.5);
+    final cabecera = pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold);
+
+    pw.Widget cuerpo() => pw.Padding(
+      padding: const pw.EdgeInsets.all(36),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'COMPROBANTE DE ANULACIÓN DE COBROS',
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: _darkText,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            pagadores.length == 1
+                ? 'Junior Eventos · Comunicación al cliente · ${pagadores.first}'
+                : 'Junior Eventos · ${cobros.length} cobros de ${pagadores.length} pagadores',
+            style: const pw.TextStyle(fontSize: 9.5, color: _greyText),
+          ),
+          pw.SizedBox(height: 14),
+          pw.Table(
+            border: pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: _greyLight, width: 0.5),
+              bottom: pw.BorderSide(color: _greyLight, width: 0.5),
+            ),
+            columnWidths: const {
+              0: pw.FlexColumnWidth(2.4),
+              1: pw.FlexColumnWidth(2.6),
+              2: pw.FlexColumnWidth(1.5),
+              3: pw.FlexColumnWidth(1.2),
+              4: pw.FlexColumnWidth(1.2),
+            },
+            children: [
+              pw.TableRow(
+                children: [
+                  for (final t in ['Pagador / alumno', 'Concepto', 'Cobrado', 'Medio', 'Monto'])
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 3),
+                      child: pw.Text(t, style: cabecera),
+                    ),
+                ],
+              ),
+              for (final c in cobros)
+                pw.TableRow(
+                  children: [
+                    pw.Text(
+                      '${c.nombrePagador.trim().isEmpty ? 'Cliente' : c.nombrePagador.trim()}\n'
+                      '${c.fuenteLabel} · ${c.referenciaEvento}',
+                      style: celda,
+                    ),
+                    pw.Text(
+                      c.concepto?.trim().isNotEmpty == true ? c.concepto!.trim() : '—',
+                      style: celda,
+                    ),
+                    pw.Text(
+                      c.fechaCobroOriginalUtc != null
+                          ? ArTime.formatFechaHora(c.fechaCobroOriginalUtc!.toUtc())
+                          : '—',
+                      style: celda,
+                    ),
+                    pw.Text(c.medioPago?.trim().isNotEmpty == true ? c.medioPago!.trim() : '—', style: celda),
+                    pw.Align(
+                      alignment: pw.Alignment.centerRight,
+                      child: pw.Text(c.monto.toCurrency(), style: celda),
+                    ),
+                  ].map((w) => pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 3),
+                        child: w,
+                      )).toList(),
+                ),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text(
+              'Total anulado: ${total.toCurrency()}',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromInt(0xFFFFF5F5),
+              borderRadius: pw.BorderRadius.circular(6),
+              border: pw.Border.all(color: _redAccent, width: 0.6),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Motivo de la anulación',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _redAccent,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(motivoAnulacion.trim(), style: const pw.TextStyle(fontSize: 9.5)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Text(
+            'Registrados como anulados el $fechaAnulTxt. '
+            'Los cobros no se borraron: quedan marcados como anulados y los saldos '
+            'se recalcularon sin esos importes.',
+            style: const pw.TextStyle(fontSize: 8.5, color: _greyText, lineSpacing: 1.3),
+          ),
+        ],
+      ),
+    );
+
+    // Alto libre: la tabla crece con los cobros y entra entera en una hoja
+    // continua, sin cortar filas entre páginas.
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat(PdfPageFormat.a4.width, double.infinity),
+        margin: const pw.EdgeInsets.all(0),
+        build: (_) => cuerpo(),
+      ),
+    );
+
+    final bytes = await pdf.save();
+    final stamp = ArTime.nowAr()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .split('.')
+        .first;
+    final fname = 'Anulacion_${cobros.length}_cobros_$stamp.pdf';
+
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, fname);
+    } else {
+      await Printing.sharePdf(bytes: bytes, filename: fname);
+    }
+  }
+
   // ── Recibo Unibloque Alumno (Ahorro de Papel) ─────────────────────────────
   static List<pw.Widget> _bloqueDescuentoLiquidacionPdf({
     required double porcentajeDescuento,

@@ -21,6 +21,7 @@ import 'models/medio_pago_caja.dart';
 import 'models/resumen_sesion_pdf.dart';
 import 'models/turno_caja.dart';
 import 'providers/cierre_caja_provider.dart';
+import 'services/aviso_cambios_caja.dart';
 import 'services/cobro_agrupado.dart';
 import 'services/datos_cierre_sesion.dart';
 import 'widgets/anotacion_pdf_section.dart';
@@ -353,9 +354,11 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         ref.read(cierreCajaProvider.notifier).refrescarManual();
       }
     });
+    // Lo dispara el ciclo de sincronización, no una persona: en silencio, para
+    // que la pantalla no parpadee cada 10 segundos.
     ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
       if (prev != next) {
-        ref.read(cierreCajaProvider.notifier).refrescarManual();
+        ref.read(cierreCajaProvider.notifier).refrescarEnSilencio();
       }
     });
 
@@ -450,6 +453,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                           const SizedBox(height: 10),
                           const NotaCierreSesionSection(),
                         ],
+                      ],
+                      if (state.anuladasSinVer.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        _avisoAnulados(state),
                       ],
                       if (state.error != null) ...[
                         const SizedBox(height: 8),
@@ -1020,23 +1027,102 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   }
 
   Widget _resumenLine(CierreCajaState state, Color muted) {
-    return Row(
+    final post = state.anuladoPostCierre;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.account_balance_wallet_outlined, size: 14, color: muted),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            'TOTAL NETO · ${state.alcanceLabel.toUpperCase()}: '
-            '${state.totalNeto.toCurrency()}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1,
-              color: muted,
+        Row(
+          children: [
+            Icon(Icons.account_balance_wallet_outlined, size: 14, color: muted),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'TOTAL NETO · ${state.alcanceLabel.toUpperCase()}: '
+                '${state.totalNeto.toCurrency()}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                  color: muted,
+                ),
+              ),
+            ),
+          ],
+        ),
+        // El arqueo se guardó con lo que se contó ese día, anulado incluido.
+        // Esta línea explica la diferencia sin tocar lo que se contó.
+        if (post.hayAlgo) ...[
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.remove_circle_outline,
+                size: 14,
+                color: Colors.orangeAccent,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Anulado después del cierre: ${post.total.toCurrency()}'
+                  '${post.efectivo > 0.004 && post.transferencia > 0.004 ? ' (efectivo ${post.efectivo.toCurrency()} · transferencia ${post.transferencia.toCurrency()})' : post.transferencia > 0.004 ? ' (transferencia)' : ' (efectivo)'}'
+                  '. El arqueo guardado lo incluye.',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.orangeAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// "El jefe anuló 1 cobro de esta sesión: …", hasta que alguien lo cierra.
+  Widget _avisoAnulados(CierreCajaState state) {
+    final texto = textoAvisoAnulados(
+      state.anuladasSinVer,
+      delDia: state.consolidado,
+    );
+    if (texto == null) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.orangeAccent.withValues(alpha: 0.12),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: Colors.orangeAccent,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$texto. Los totales ya no lo cuentan.',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Entendido',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: () => ref
+                .read(cierreCajaProvider.notifier)
+                .descartarAvisoAnulados(),
+          ),
+        ],
+      ),
     );
   }
 

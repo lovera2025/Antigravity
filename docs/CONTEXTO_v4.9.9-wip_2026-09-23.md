@@ -5,13 +5,15 @@
 > Plan completo aprobado (más largo, con todo el razonamiento):
 > `C:\Users\lover\.claude\plans\necesito-verifcar-que-todo-prancy-meerkat.md`
 
-**Estado:**
-- La parte del **sorteo de mesas** ya está hecha, probada, con commit y push (`9ce58a0`).
+**Estado (actualizado el 24-sep):**
+- **Sorteo de mesas:** hecho, probado, con commit y push (`9ce58a0`).
+- **Datos de los 7 alumnos:** aplicados el 24-sep a las 06:08, con el OK del usuario, y verificados en local y
+  en Supabase (ver PENDIENTE 1).
+- **Caja:** hecha en el código, con tests (ver PENDIENTE 2).
+- **Detalle por mesa en JSON:** la tarea aparte quedó resuelta (ver al final).
 - Falta, en orden:
-  1. corregir los datos de 7 alumnos;
-  2. la parte de caja;
-  3. el tótem;
-  4. armar la versión.
+  1. el tótem;
+  2. armar la versión.
 - **No hay versión nueva todavía:** el `pubspec.yaml` sigue en 4.9.8+54. En las dos PCs está instalada la 4.9.8.
 
 ---
@@ -120,9 +122,18 @@ Buena Vista 54, Rotonda 53, Gregoria 41, Puerto Viejo 31.
 
 ---
 
-## PENDIENTE 1 — Corregir los datos de 7 alumnos (script, después de las 20 hs)
+## HECHO 1 — Corregir los datos de 7 alumnos
 
-**Nada escrito todavía.** Script a crear: `tool/corregir_extras_alumnos_test.dart`.
+**Aplicado el 24-sep a las 06:08** (commit del script: `f7e1724`), sin cobros en curso y con la app cerrada.
+- Copia previa: `Documents\Junior Eventos\data.db.bak.extras.2026-09-24T06-08-25`.
+- **Local:** cambiaron solo los 6 contratos y los pagos de Esmay (1 partido y 1 nuevo); no se borró nada.
+- **Supabase**, después de "Subir pendientes":
+  - los otros 637 contratos y 3463 pagos quedaron con el mismo hash que antes;
+  - los 6 dan exactamente lo acordado;
+  - el 25-jun de Esmay suma $57.000 igual que antes.
+- El pago nuevo de Esmay se rotuló como la app: "Entrega parcial — Cuota Base (7/9)", misma fecha y medio.
+
+Lo que sigue es cómo se armó el script, para referencia.
 - Sigue el patrón de `tool/aplicar_fix_mora_5_test.dart`: sqflite ffi sobre `Documents\Junior Eventos\data.db`,
   DRY-RUN por defecto y `--dart-define=APPLY=1` para escribir.
 - Trabaja **solo sobre una lista cerrada de ids**, sin recorrer eventos.
@@ -162,7 +173,40 @@ Buena Vista 54, Rotonda 53, Gregoria 41, Puerto Viejo 31.
 - **Cómo queda el detalle por mesa:** lo pagado va primero a la Mesa 1. La mora no cambia, porque se calcula solo
   sobre la base.
 
-## PENDIENTE 2 — Caja (sin empezar en el código)
+## HECHO 2 — Caja (24-sep)
+
+**Lo que se encontró al hacerlo:**
+- La pantalla de cierre **ya** se refrescaba con el ciclo de 10 s (`operationalSyncRevisionProvider`), pero no con el
+  pulso. Por eso tardaba hasta 10 s, y además parpadeaba con cada ciclo.
+- El diálogo "Cerrar caja" del operario cargaba los totales **una sola vez**: si el jefe anulaba algo con el
+  diálogo abierto, el operario arqueaba contra un total viejo.
+
+**Lo que se hizo:**
+- **Motor:** `SyncEngine.cambiosBajadosStream` avisa en qué tablas bajó algo **distinto** de lo que había
+  (`filaEsNovedad`: compara `updated_at`, así no avisa por las filas que vuelven a bajar con el marcador
+  retenido). Sale del pull, del pulso y de los borrados.
+- **Cierre:**
+  - `CierreCajaNotifier` escucha ese aviso y refresca en silencio si tocó alguna tabla de `kTablasDelCierre`;
+  - el ciclo de 10 s también pasó a ser silencioso;
+  - un contador de generación evita que un refresco viejo pise uno nuevo;
+  - aviso "El jefe anuló N cobro(s) de esta sesión: ALUMNO · $X", armado por cobro con `agruparIngresosPorCobro`;
+  - en sesiones cerradas, la línea "Anulado después del cierre: $X. El arqueo guardado lo incluye.";
+  - en la PC del jefe, el cierre se refresca después de anular.
+- **Diálogo "Cerrar caja":** se rehace con el aviso y muestra el mismo mensaje.
+- **Anular varios:**
+  - `SelectorCobros` (compartido) con casillas que se mantienen entre búsquedas;
+  - "Tildar todo el cobro", con `lineasDelMismoCobro` y `esDelMismoCobro`: mismo contrato, sesión y 10 s;
+  - un motivo, confirmación "Vas a anular N cobros por $X";
+  - `anularPagosConMotivo` en **una transacción**, que recalcula cada contrato una vez;
+  - un solo PDF (`compartirComprobanteAnulacionCobros`); con uno solo sale el de siempre.
+- **Corregir medio de varios:** mismo selector, `corregirMedioPagoVarios` en una transacción. La fecha se
+  cambia solo con uno tildado. De paso se arregló que al cambiar la fecha el cobro quedaba **corrido tres
+  horas**: se usaba la hora UTC como si fuera local.
+- La anulación y la corrección de a uno pasan por los mismos métodos, con los mismos mensajes.
+- **Tests:** `test/anular_varios_cobros_test.dart` (base temporal: todo o nada, mora, líneas del mismo cobro) y
+  `test/aviso_cambios_caja_test.dart`.
+
+Lo que sigue es el plan original, para referencia.
 
 El usuario pidió dos cosas:
 - que cuando el jefe anula un cobro, **desaparezca en el momento** del cierre de caja del operario;
@@ -257,8 +301,12 @@ pisa lo tipeado.
 - Si la medición muestra consumo diario en horario de trabajo, se puede ofrecer adelantar solo el arreglo del
   tótem y Recepción.
 
-## Tarea aparte (ya registrada)
+## Tarea aparte — RESUELTA (24-sep)
 
-- `mesas_extra_estado` se guarda como `toString()` de Dart en vez de JSON (`sync_engine.dart:2207`, `value.toString()`
-  en la limpieza del pull), en local y en la nube. No afecta al sorteo, que usa la cantidad. Conviene que entre en
-  la 4.9.9.
+- `mesas_extra_estado` se guardaba como `toString()` de Dart en vez de JSON, en la limpieza del pull. Ahora
+  `valorParaSqlite` (`sync_engine.dart`) guarda las listas y mapas de la nube como JSON. Tiene test en
+  `test/valor_para_sqlite_test.dart`.
+- **Los datos viejos no se tocaron.** Quedan en formato Dart hasta que esa fila se vuelva a escribir. Mientras
+  tanto, la app los sigue leyendo como hasta ahora: con la cantidad de mesas del contrato.
+- Se vio justo después de corregir a los 7: la nube recibió JSON y, al volver a bajar, la PC lo guardó otra vez
+  como texto de Dart.

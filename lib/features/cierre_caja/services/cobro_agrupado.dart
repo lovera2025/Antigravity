@@ -17,6 +17,29 @@ import '../models/medio_pago_caja.dart';
 /// quedar como una fila aparte.
 const Duration kVentanaCobro = Duration(seconds: 10);
 
+/// Si dos filas de `pagos_contrato_alumno` son parte del mismo cobro.
+///
+/// Mismo contrato, misma sesión de caja (o las dos sin sesión) y a menos de
+/// [ventana] una de otra. Es lo que usa "anular todo el cobro": tildar una línea
+/// ofrece las demás para que no quede anulada solo la cuota y viva la mora.
+bool esDelMismoCobro(
+  Map<String, dynamic> a,
+  Map<String, dynamic> b, {
+  Duration ventana = kVentanaCobro,
+}) {
+  final ca = a['contrato_alumno_id']?.toString();
+  final cb = b['contrato_alumno_id']?.toString();
+  if (ca != null && cb != null && ca != cb) return false;
+  if ((a['sesion_caja_id']?.toString() ?? '') !=
+      (b['sesion_caja_id']?.toString() ?? '')) {
+    return false;
+  }
+  final fa = DateTime.tryParse(a['fecha_pago']?.toString() ?? '');
+  final fb = DateTime.tryParse(b['fecha_pago']?.toString() ?? '');
+  if (fa == null || fb == null) return false;
+  return fa.difference(fb).abs() <= ventana;
+}
+
 /// Las líneas de un mismo cobro, agrupadas en una fila.
 ///
 /// Un cobro con plan + mora escribe 4-5 filas en `pagos_contrato_alumno`, todas

@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/ar_time.dart';
-import '../../common/utils/currency_extensions.dart';
+import '../../cierre_caja/providers/cierre_caja_provider.dart';
 import '../providers/finanzas_provider.dart';
 import '../repositories/finanzas_repository.dart';
+import 'selector_cobros.dart';
 
-/// Diálogo admin: buscar cobro por nombre/concepto y corregir solo [medio_pago] (efectivo ↔ transferencia).
+/// Diálogo admin: buscar cobros por nombre/concepto y corregir su [medio_pago]
+/// (efectivo ↔ transferencia), de uno o de varios a la vez. Con un solo cobro
+/// también se puede corregir la fecha.
 class CorregirMedioPagoDialog extends ConsumerStatefulWidget {
   const CorregirMedioPagoDialog({super.key});
 
@@ -15,120 +18,84 @@ class CorregirMedioPagoDialog extends ConsumerStatefulWidget {
 }
 
 class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialog> {
-  final _searchCtrl = TextEditingController();
-  bool _searching = false;
   bool _submitting = false;
-  List<Map<String, dynamic>> _resultados = [];
-  Map<String, dynamic>? _seleccion;
+  List<Map<String, dynamic>> _seleccion = [];
   String _nuevoMedio = 'efectivo';
   DateTime? _nuevaFecha;
 
-  static String _etf(String tabla) {
-    switch (tabla) {
-      case 'pagos_contrato_alumno':
-        return 'Masivo';
-      case 'transacciones':
-        return 'Particular';
-      case 'pagos_prestamo_alquiler':
-        return 'Alquiler ítems';
-      default:
-        return tabla;
-    }
-  }
+  static String _medioNorm(dynamic raw) =>
+      raw == null ? '' : raw.toString().toLowerCase().trim();
 
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _buscar() async {
-    final q = _searchCtrl.text.trim();
-    if (q.length < 2) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ingresá al menos 2 caracteres para buscar.')),
-        );
-      }
-      return;
-    }
-
+  void _alCambiarSeleccion(List<Map<String, dynamic>> lista) {
     setState(() {
-      _searching = true;
-      _seleccion = null;
-      _resultados = [];
+      final antes = _seleccion.length;
+      _seleccion = lista;
+      // Al tildar el primero, el medio arranca en el que ya tiene: hay que
+      // cambiarlo a propósito para poder aplicar.
+      if (antes == 0 && lista.isNotEmpty) {
+        final mp = _medioNorm(lista.first['medio_pago']);
+        _nuevoMedio = (mp == 'transferencia' || mp == 'efectivo') ? mp : 'efectivo';
+      }
+      if (lista.length != 1) _nuevaFecha = null;
     });
-
-    try {
-      final repo = ref.read(finanzasRepositoryProvider);
-      final list = await repo.buscarPagosParaCorregirMedio(q);
-      if (!mounted) return;
-      setState(() {
-        _resultados = list;
-        _searching = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _searching = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al buscar: $e')),
-      );
-    }
   }
+
+  /// Los tildados a los que de verdad les cambia el medio.
+  List<Map<String, dynamic>> get _aCambiarMedio => [
+    for (final r in _seleccion)
+      if (_medioNorm(r['medio_pago']) != _nuevoMedio) r,
+  ];
+
+  bool _puedeAplicar() =>
+      _seleccion.isNotEmpty &&
+      !_submitting &&
+      (_aCambiarMedio.isNotEmpty || _nuevaFecha != null);
 
   Future<void> _aplicar() async {
-    final sel = _seleccion;
-    if (sel == null || !_puedeAplicar()) return;
-
-    final tabla = sel['tabla']?.toString();
-    final id = sel['id']?.toString();
-    if (tabla == null || id == null || id.isEmpty) return;
-
-    final nuevoMedio = _nuevoMedio.toLowerCase().trim();
-    final raw = sel['medio_pago'];
-    final actNorm = raw == null || raw.toString().trim().isEmpty
-        ? ''
-        : raw.toString().toLowerCase().trim();
-    
-    final bool medioCambio = actNorm != nuevoMedio;
-    final bool fechaCambio = _nuevaFecha != null;
-
-    if (!medioCambio && !fechaCambio) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Elegí un medio o fecha distinto al actual.')),
-        );
-      }
+    if (!_puedeAplicar()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Elegí un medio o fecha distinto al actual.')),
+      );
       return;
     }
-
     setState(() => _submitting = true);
 
     try {
       final repo = ref.read(finanzasRepositoryProvider);
-      
-      if (medioCambio) {
-        await repo.actualizarMedioPagoRegistro(
-          tabla: tabla,
-          id: id,
-          medioPago: nuevoMedio,
+      final cambiar = _aCambiarMedio;
+      if (cambiar.isNotEmpty) {
+        await repo.corregirMedioPagoVarios(
+          [
+            for (final r in cambiar)
+              (tabla: r['tabla'].toString(), id: r['id'].toString()),
+          ],
+          _nuevoMedio,
         );
       }
-      
-      if (fechaCambio) {
+      final fecha = _nuevaFecha;
+      if (fecha != null && _seleccion.length == 1) {
+        final r = _seleccion.first;
         await repo.actualizarFechaPagoRegistro(
-          tabla: tabla,
-          id: id,
-          nuevaFecha: _nuevaFecha!,
+          tabla: r['tabla'].toString(),
+          id: r['id'].toString(),
+          nuevaFecha: fecha,
         );
       }
-      
+
       await ref.read(finanzasProvider.notifier).recargar();
+      if (ref.exists(cierreCajaProvider)) {
+        await ref.read(cierreCajaProvider.notifier).refrescarTrasAnular();
+      }
 
       if (!mounted) return;
+      final n = _seleccion.length;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registro actualizado correctamente.')),
+        SnackBar(
+          content: Text(
+            n == 1 ? 'Registro actualizado correctamente.' : '$n registros actualizados correctamente.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -139,31 +106,42 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
     }
   }
 
-  String _lblMedio(dynamic raw) {
-    final mp = raw?.toString().toLowerCase().trim();
-    if (mp == null || mp.isEmpty) return '(Sin medio registrado)';
-    if (mp == 'transferencia') return 'Transferencia';
-    if (mp == 'efectivo') return 'Efectivo';
-    return raw.toString();
-  }
-
-  bool _puedeAplicar() {
-    final sel = _seleccion;
-    if (sel == null || _searching || _submitting) return false;
-    final nuevoMedio = _nuevoMedio.toLowerCase().trim();
-    final raw = sel['medio_pago'];
-    final actNorm = raw == null || raw.toString().trim().isEmpty
-        ? ''
-        : raw.toString().toLowerCase().trim();
-    
-    final bool medioCambio = actNorm != nuevoMedio;
-    final bool fechaCambio = _nuevaFecha != null;
-    return medioCambio || fechaCambio;
+  Future<void> _elegirFecha() async {
+    final base = DateTime.tryParse(_seleccion.first['fecha_pago']?.toString() ?? '') ??
+        ArTime.nowUtc();
+    // El día se elige en calendario argentino y se conserva la hora argentina
+    // del cobro. Antes se armaba con la hora UTC como si fuera local, y el cobro
+    // quedaba corrido tres horas.
+    final baseAr = ArTime.toAr(base);
+    final inicialAr = _nuevaFecha != null ? ArTime.toAr(_nuevaFecha!) : baseAr;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(inicialAr.year, inicialAr.month, inicialAr.day),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _nuevaFecha = ArTime.arToUtc(
+        DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          baseAr.hour,
+          baseAr.minute,
+          baseAr.second,
+          baseAr.millisecond,
+        ),
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final n = _seleccion.length;
+    final grey = Colors.grey.shade700;
+    final cambian = _aCambiarMedio.length;
 
     return AlertDialog(
       title: Row(
@@ -179,132 +157,34 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
         ],
       ),
       content: SizedBox(
-        width: 420,
+        width: 440,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Buscá por nombre de cliente/alumno o por texto del concepto. '
-                'Podrás cambiar la fecha o el medio de pago; no borra registros.',
+                'Buscá por nombre de cliente/alumno o por texto del concepto y '
+                'tildá uno o varios. Podés cambiar el medio de pago (y la fecha, '
+                'si es uno solo); no borra registros.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.35),
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Buscar',
-                        hintText: 'Ej. MONZON, cuota…',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        isDense: true,
-                      ),
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: (_) => _buscar(),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton(
-                    onPressed: (_searching || _submitting) ? null : _buscar,
-                    child: _searching
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Buscar'),
-                  ),
-                ],
+              SelectorCobros(
+                habilitado: !_submitting,
+                hintBusqueda: 'Ej. MONZON, cuota…',
+                onCambio: _alCambiarSeleccion,
               ),
-              const SizedBox(height: 12),
-              if (_resultados.isEmpty && !_searching && _searchCtrl.text.trim().length >= 2)
-                Text('Sin coincidencias.', style: TextStyle(color: Colors.grey.shade600, fontSize: 13))
-              else if (_resultados.isNotEmpty)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 260),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _resultados.length,
-                    itemBuilder: (ctx, i) {
-                      final r = _resultados[i];
-                      final fechaRaw = r['fecha_pago']?.toString();
-                      final fecha = DateTime.tryParse(fechaRaw ?? '');
-                      final fechaTxt = fecha != null ? ArTime.formatFechaHora(fecha) : '';
-                      final selected = _seleccion?['tabla'] == r['tabla'] && _seleccion?['id'] == r['id'];
-                      final titulo = r['titulo'] ?? '';
-                      final monto = (r['monto'] as num?)?.toDouble() ?? 0;
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () {
-                          final mpLow = r['medio_pago']?.toString().toLowerCase().trim();
-                          final String def = (mpLow == 'transferencia' || mpLow == 'efectivo') ? mpLow! : 'efectivo';
-                          setState(() {
-                            _seleccion = Map<String, dynamic>.from(r);
-                            _nuevoMedio = def;
-                            _nuevaFecha = null;
-                          });
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            color: selected ? const Color(0xFFD4AF37).withValues(alpha: 0.08) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: selected ? const Color(0xFFD4AF37).withValues(alpha: 0.3) : Colors.transparent,
-                              width: 1,
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                                size: 20,
-                                color: selected ? const Color(0xFFD4AF37) : Colors.grey,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      titulo.toString(),
-                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                                    ),
-                                    Text(
-                                      '${_etf(r['tabla']?.toString() ?? '')} · ${r['subtitulo'] ?? ''}',
-                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '$fechaTxt · ${_lblMedio(r['medio_pago'])} · ${monto.toCurrency()}',
-                                      style: const TextStyle(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              if (_seleccion != null) ...[
+              if (n > 0) ...[
                 const SizedBox(height: 16),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
                 Text(
-                  'Nuevo medio:',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700),
+                  n == 1 ? 'Nuevo medio:' : 'Nuevo medio (para los $n):',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: grey),
                 ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  key: ValueKey('medio_pago_${_seleccion?['tabla']}_${_seleccion?['id']}'),
                   initialValue: _nuevoMedio,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -315,70 +195,62 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
                     DropdownMenuItem(value: 'efectivo', child: Text('Efectivo')),
                     DropdownMenuItem(value: 'transferencia', child: Text('Transferencia')),
                   ],
-                  onChanged: (_submitting)
+                  onChanged: _submitting
                       ? null
                       : (v) {
                           if (v != null) setState(() => _nuevoMedio = v);
                         },
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Nueva fecha de pago (opcional):',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.grey.shade700),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: (_submitting) ? null : () async {
-                          final DateTime baseDate = DateTime.tryParse(_seleccion?['fecha_pago']?.toString() ?? '') ?? DateTime.now();
-                          final DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _nuevaFecha ?? baseDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
-                          );
-                          if (picked != null) {
-                            setState(() {
-                               _nuevaFecha = DateTime(
-                                 picked.year,
-                                 picked.month,
-                                 picked.day,
-                                 baseDate.hour,
-                                 baseDate.minute,
-                                 baseDate.second,
-                               );
-                            });
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          ),
-                          child: Text(
-                            _nuevaFecha != null ? ArTime.formatFechaCorta(_nuevaFecha!) : 'Mantener fecha original',
+                if (n > 1) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    cambian == 0
+                        ? 'Todos ya están en ${etiquetaMedioCobro(_nuevoMedio)}.'
+                        : cambian == n
+                        ? 'Cambian los $n.'
+                        : 'Cambian $cambian de $n (los demás ya están en '
+                              '${etiquetaMedioCobro(_nuevoMedio)}).',
+                    style: TextStyle(fontSize: 12, color: grey),
+                  ),
+                ],
+                if (n == 1) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Nueva fecha de pago (opcional):',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: _submitting ? null : _elegirFecha,
+                          borderRadius: BorderRadius.circular(10),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                            child: Text(
+                              _nuevaFecha != null
+                                  ? ArTime.formatFechaCorta(_nuevaFecha!)
+                                  : 'Mantener fecha original',
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (_nuevaFecha != null && !_submitting) ...[
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.undo, color: Colors.redAccent),
-                        tooltip: 'Restablecer fecha original',
-                        onPressed: () {
-                          setState(() {
-                            _nuevaFecha = null;
-                          });
-                        },
-                      ),
+                      if (_nuevaFecha != null && !_submitting) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.undo, color: Colors.redAccent),
+                          tooltip: 'Restablecer fecha original',
+                          onPressed: () => setState(() => _nuevaFecha = null),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                ],
               ],
             ],
           ),
@@ -386,16 +258,14 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
       ),
       actions: [
         TextButton(
-          onPressed: (_submitting) ? null : () => Navigator.of(context).pop(),
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
           child: const Text('Cerrar'),
         ),
         FilledButton(
-          onPressed: (_puedeAplicar() && !_submitting)
-              ? _aplicar
-              : null,
+          onPressed: _puedeAplicar() ? _aplicar : null,
           child: _submitting
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Aplicar cambio'),
+              : Text(n <= 1 ? 'Aplicar cambio' : 'Aplicar a ${cambian == 0 ? n : cambian}'),
         ),
       ],
     );

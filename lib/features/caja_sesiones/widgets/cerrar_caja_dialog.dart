@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/sync_engine.dart';
 import '../../cierre_caja/repositories/cierre_caja_repository.dart';
+import '../../cierre_caja/services/aviso_cambios_caja.dart';
 import '../../cierre_caja/services/datos_cierre_sesion.dart';
 import '../../cierre_caja/services/papeles_cierre_sesion.dart';
 import '../../common/utils/currency_extensions.dart';
@@ -48,6 +52,11 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
   bool _totalesFallaron = false;
   double? _totalCobrado;
 
+  /// "El jefe anuló…": los totales de arriba cambiaron mientras el diálogo
+  /// estaba abierto, y el operario tiene que saber por qué.
+  String? _avisoAnulados;
+  StreamSubscription<Set<String>>? _cambiosSub;
+
   /// Solo el operario recibe el aviso previo y el papel automático.
   bool get _esOperario => ref.read(appRoleProvider).esCaja;
 
@@ -61,6 +70,53 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
     // El diálogo se dibuja enseguida y los números aterrizan cuando llegan: así
     // no hay ningún await antes de mostrarlo.
     WidgetsBinding.instance.addPostFrameCallback((_) => _cargar());
+    // Si el jefe anula un cobro mientras el operario está por cerrar, los
+    // totales se rehacen en el momento: el arqueo se cuenta contra lo que vale.
+    _cambiosSub = ref
+        .read(syncEngineProvider)
+        .cambiosBajadosStream
+        .listen((tablas) {
+          if (cambiosTocanElCierre(tablas)) unawaited(_recargar());
+        });
+  }
+
+  Future<void> _recargar() async {
+    if (!mounted || _saving) return;
+    final sesion = ref.read(appRoleProvider).sesionActiva;
+    if (sesion == null) return;
+    try {
+      final antes = _datos;
+      if (antes != null) {
+        final datos = await cargarDatosCierreSesion(
+          sesionIds: {sesion.id},
+          finanzasRepo: ref.read(finanzasRepositoryProvider),
+          egresosRepo: ref.read(egresosRepositoryProvider),
+        );
+        final seFueron = lineasQueSeFueron(antes.ingresos, datos.ingresos);
+        final anulados = seFueron.isEmpty
+            ? const <String>{}
+            : await ref
+                  .read(finanzasRepositoryProvider)
+                  .idsDePagosAnulados(seFueron.map((i) => i.id));
+        final aviso = textoAvisoAnulados(
+          seFueron.where((i) => anulados.contains(i.id)).toList(),
+          delDia: false,
+        );
+        if (!mounted || _saving) return;
+        setState(() {
+          _datos = datos;
+          if (aviso != null) _avisoAnulados = aviso;
+        });
+      }
+      if (_totalCobrado != null) {
+        final total = await ref
+            .read(sesionesCajaRepositoryProvider)
+            .totalCobradoSesion(sesion.id);
+        if (mounted && !_saving) setState(() => _totalCobrado = total);
+      }
+    } catch (_) {
+      // Quedan los números de antes: el próximo aviso lo vuelve a intentar.
+    }
   }
 
   Future<void> _cargar() async {
@@ -87,6 +143,7 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
 
   @override
   void dispose() {
+    _cambiosSub?.cancel();
     _arqueoCtrl.dispose();
     _notaCtrl.dispose();
     super.dispose();
@@ -218,6 +275,10 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
       children: [
         const Text('Revisá los totales antes de confirmar.'),
         const SizedBox(height: 16),
+        if (_avisoAnulados != null) ...[
+          _avisoAnuladosWidget(),
+          const SizedBox(height: 14),
+        ],
         if (_totalesFallaron)
           const Text(
             'No se pudieron calcular los totales.',
@@ -314,6 +375,19 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
     );
   }
 
+  Widget _avisoAnuladosWidget() => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(10),
+      color: Colors.orangeAccent.withValues(alpha: 0.12),
+      border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.6)),
+    ),
+    child: Text(
+      '$_avisoAnulados. Los totales ya se actualizaron.',
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    ),
+  );
+
   List<Widget> _accionesAviso() => [
     TextButton(
       onPressed: () => Navigator.pop(context, false),
@@ -339,6 +413,10 @@ class _CerrarCajaDialogState extends ConsumerState<CerrarCajaDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_avisoAnulados != null) ...[
+          _avisoAnuladosWidget(),
+          const SizedBox(height: 12),
+        ],
         if (datos != null && sesion != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),

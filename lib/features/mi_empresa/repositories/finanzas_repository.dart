@@ -11,6 +11,7 @@ import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/transaccion.dart';
 import '../../eventos/services/mora_tracked_recovery.dart';
+import '../../cierre_caja/services/cobro_agrupado.dart';
 import '../models/ingreso_detallado.dart';
 
 class FinanzasRepository {
@@ -246,6 +247,48 @@ class FinanzasRepository {
     }).toList();
     out.sort((a, b) => a.compareTo(b));
     return out;
+  }
+
+  /// De estos ids de `pagos_contrato_alumno`, los que hoy están anulados.
+  ///
+  /// Distingue un cobro que el jefe anuló de uno que salió de la vista por otro
+  /// motivo, antes de decirle al operario "el jefe anuló".
+  Future<Set<String>> idsDePagosAnulados(Iterable<String> ids) async {
+    final lista = ids.toSet().toList();
+    if (lista.isEmpty) return {};
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'pagos_contrato_alumno',
+      columns: ['id'],
+      where:
+          'COALESCE(anulado, 0) <> 0 '
+          'AND id IN (${List.filled(lista.length, '?').join(',')})',
+      whereArgs: lista,
+    );
+    return {for (final r in rows) r['id'].toString()};
+  }
+
+  /// Cobros anulados de estas sesiones de caja, con lo necesario para
+  /// `anuladoDespuesDelCierre`.
+  Future<List<Map<String, dynamic>>> pagosAnuladosDeSesiones(
+    Set<String> sesionIds,
+  ) async {
+    if (sesionIds.isEmpty) return [];
+    final db = await LocalDatabase.instance;
+    return db.query(
+      'pagos_contrato_alumno',
+      columns: [
+        'monto',
+        'medio_pago',
+        'sesion_caja_id',
+        'anulado',
+        'fecha_anulacion',
+      ],
+      where:
+          'COALESCE(anulado, 0) <> 0 '
+          'AND sesion_caja_id IN (${List.filled(sesionIds.length, '?').join(',')})',
+      whereArgs: sesionIds.toList(),
+    );
   }
 
   /// Caché de RPC compartida por todas las instancias (proyección cloud).
@@ -673,41 +716,71 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     required String tabla,
     required String id,
     required String medioPago,
-  }) async {
-    if (!_tablasMedioPagoCorregible.contains(tabla)) {
-      throw ArgumentError('Tabla no permitida: $tabla');
-    }
+  }) =>
+      corregirMedioPagoVarios([(tabla: tabla, id: id)], medioPago);
+
+  /// Cambia el medio de pago de varios cobros: todos o ninguno.
+  ///
+  /// Cada fila hace lo mismo que la corrección de a uno —solo `medio_pago`, sin
+  /// tocar montos ni fechas— pero en una transacción: si uno está anulado o no
+  /// existe, no se cambia ninguno.
+  Future<void> corregirMedioPagoVarios(
+    List<({String tabla, String id})> cobros,
+    String medioPago,
+  ) async {
     final medio = medioPago.toLowerCase().trim();
     if (medio != 'efectivo' && medio != 'transferencia') {
       throw ArgumentError('medio_pago debe ser efectivo o transferencia');
     }
+    final unicos = _cobrosUnicos(cobros);
+    if (unicos.isEmpty) return;
     final db = await LocalDatabase.instance;
-    final rows = await db.query(
-      tabla,
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (rows.isEmpty) {
-      throw StateError('No existe el registro en la base local');
+    await db.transaction((txn) async {
+      for (final c in unicos) {
+        final rows = await txn.query(
+          c.tabla,
+          where: 'id = ?',
+          whereArgs: [c.id],
+          limit: 1,
+        );
+        if (rows.isEmpty) {
+          throw StateError('No existe el registro en la base local');
+        }
+        if (((rows.first['anulado'] as num?)?.toInt() ?? 0) != 0) {
+          throw StateError(
+            unicos.length == 1
+                ? 'El cobro está anulado; no se puede cambiar el medio de pago.'
+                : 'Uno de los cobros está anulado '
+                      '(${rows.first['concepto'] ?? c.id}). No se cambió ninguno.',
+          );
+        }
+        await txn.update(
+          c.tabla,
+          {'medio_pago': medio},
+          where: 'id = ?',
+          whereArgs: [c.id],
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: c.tabla,
+          operacion: SyncOperation.update,
+          registroId: c.id,
+          payload: {'id': c.id, 'medio_pago': medio},
+        );
+      }
+    });
+  }
+
+  /// Sin repetidos y solo de las tablas que se pueden corregir.
+  List<({String tabla, String id})> _cobrosUnicos(
+    List<({String tabla, String id})> cobros,
+  ) {
+    for (final c in cobros) {
+      if (!_tablasMedioPagoCorregible.contains(c.tabla)) {
+        throw ArgumentError('Tabla no permitida: ${c.tabla}');
+      }
     }
-    if (((rows.first['anulado'] as num?)?.toInt() ?? 0) != 0) {
-      throw StateError(
-        'El cobro está anulado; no se puede cambiar el medio de pago.',
-      );
-    }
-    await db.update(
-      tabla,
-      {'medio_pago': medio},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    await SyncQueue.enqueue(
-      tabla: tabla,
-      operacion: SyncOperation.update,
-      registroId: id,
-      payload: {'id': id, 'medio_pago': medio},
-    );
+    return {for (final c in cobros) '${c.tabla}|${c.id}': c}.values.toList();
   }
 
   /// Actualiza solo [fecha_pago] en SQLite y encola sync.
@@ -756,92 +829,163 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     required String id,
     required String motivo,
   }) async {
-    if (!_tablasMedioPagoCorregible.contains(tabla)) {
-      throw ArgumentError('Tabla no permitida: $tabla');
-    }
+    final contratos =
+        await anularPagosConMotivo([(tabla: tabla, id: id)], motivo);
+    return contratos.isEmpty ? null : contratos.first;
+  }
+
+  /// Anula varios cobros de una vez: todos o ninguno.
+  ///
+  /// Cada fila hace exactamente lo que hacía la anulación de a uno —`anulado`,
+  /// motivo y fecha, más su encolado; nada se borra— y el `tracked` de mora se
+  /// recalcula una vez por contrato, cuando entre lo anulado hay interés de mora.
+  /// Si un cobro ya estaba anulado o no existe, no se anula ninguno.
+  ///
+  /// Devuelve los contratos de alumnos tocados, para que el llamador los
+  /// recalcule con `ContratosRepository.recalcularProgresoContrato` una sola vez
+  /// cada uno.
+  Future<Set<String>> anularPagosConMotivo(
+    List<({String tabla, String id})> cobros,
+    String motivo,
+  ) async {
     final m = motivo.trim();
     if (m.length < 8) {
       throw ArgumentError('Describí el motivo con al menos 8 caracteres.');
     }
+    final unicos = _cobrosUnicos(cobros);
+    if (unicos.isEmpty) return {};
     final db = await LocalDatabase.instance;
-    final rows = await db.query(
-      tabla,
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (rows.isEmpty) {
-      throw StateError('No existe el registro en la base local');
-    }
-    final row = rows.first;
-    if (((row['anulado'] as num?)?.toInt() ?? 0) != 0) {
-      throw StateError('Este cobro ya fue anulado.');
-    }
-    final now = ArTime.nowUtcIso();
-    final updates = <String, dynamic>{
-      'anulado': 1,
-      'motivo_anulacion': m,
-      'fecha_anulacion': now,
-    };
-    await db.update(tabla, updates, where: 'id = ?', whereArgs: [id]);
-    await SyncQueue.enqueue(
-      tabla: tabla,
-      operacion: SyncOperation.update,
-      registroId: id,
-      payload: {'id': id, ...updates},
-    );
-    if (tabla == 'pagos_contrato_alumno') {
-      final lk = (row['line_kind'] as String?)?.trim();
-      final concepto = row['concepto'] as String? ?? '';
-      final esInteres =
-          lk == kLineKindInteresMora || esPagoInteresMoraPorConcepto(concepto);
-      if (esInteres) {
-        final cid = row['contrato_alumno_id']?.toString();
-        if (cid != null && cid.isNotEmpty) {
-          final cRows = await db.query(
-            'contratos_alumnos',
-            where: 'id = ?',
-            whereArgs: [cid],
-            limit: 1,
+    final contratos = <String>{};
+    final contratosConMora = <String>{};
+
+    await db.transaction((txn) async {
+      final now = ArTime.nowUtcIso();
+      for (final c in unicos) {
+        final rows = await txn.query(
+          c.tabla,
+          where: 'id = ?',
+          whereArgs: [c.id],
+          limit: 1,
+        );
+        if (rows.isEmpty) {
+          throw StateError('No existe el registro en la base local');
+        }
+        final row = rows.first;
+        if (((row['anulado'] as num?)?.toInt() ?? 0) != 0) {
+          throw StateError(
+            unicos.length == 1
+                ? 'Este cobro ya fue anulado.'
+                : 'Uno de los cobros ya estaba anulado '
+                      '(${row['concepto'] ?? c.id}). No se anuló ninguno.',
           );
-          if (cRows.isNotEmpty) {
-            final contrato = ContratoAlumno.fromJson(cRows.first);
-            final pagos = await db.query(
-              'pagos_contrato_alumno',
-              where: 'contrato_alumno_id = ?',
-              whereArgs: [cid],
-            );
-            final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
-              contrato: contrato,
-              pagos: pagos,
-            );
-            final nowUtc = ArTime.nowUtcIso();
-            await db.update(
-              'contratos_alumnos',
-              {
-                'mora_pendiente_tracked': objetivo.tracked,
-                'mora_cobrada_offset': objetivo.offset,
-                'updated_at': nowUtc,
-              },
-              where: 'id = ?',
-              whereArgs: [cid],
-            );
-            await SyncQueue.enqueue(
-              tabla: 'contratos_alumnos',
-              operacion: SyncOperation.update,
-              registroId: cid,
-              payload: {
-                'id': cid,
-                'mora_pendiente_tracked': objetivo.tracked,
-                'mora_cobrada_offset': objetivo.offset,
-              },
-            );
-          }
+        }
+        final updates = <String, dynamic>{
+          'anulado': 1,
+          'motivo_anulacion': m,
+          'fecha_anulacion': now,
+        };
+        await txn.update(c.tabla, updates, where: 'id = ?', whereArgs: [c.id]);
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: c.tabla,
+          operacion: SyncOperation.update,
+          registroId: c.id,
+          payload: {'id': c.id, ...updates},
+        );
+        if (c.tabla != 'pagos_contrato_alumno') continue;
+        final cid = row['contrato_alumno_id']?.toString();
+        if (cid == null || cid.isEmpty) continue;
+        contratos.add(cid);
+        final lk = (row['line_kind'] as String?)?.trim();
+        final concepto = row['concepto'] as String? ?? '';
+        if (lk == kLineKindInteresMora ||
+            esPagoInteresMoraPorConcepto(concepto)) {
+          contratosConMora.add(cid);
         }
       }
-      return row['contrato_alumno_id']?.toString();
-    }
-    return null;
+
+      // Con todo lo de este lote ya anulado: el tracked sale del historial que
+      // queda, igual que en la anulación de a uno.
+      for (final cid in contratosConMora) {
+        final cRows = await txn.query(
+          'contratos_alumnos',
+          where: 'id = ?',
+          whereArgs: [cid],
+          limit: 1,
+        );
+        if (cRows.isEmpty) continue;
+        final contrato = ContratoAlumno.fromJson(cRows.first);
+        final pagos = await txn.query(
+          'pagos_contrato_alumno',
+          where: 'contrato_alumno_id = ?',
+          whereArgs: [cid],
+        );
+        final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+          contrato: contrato,
+          pagos: pagos,
+        );
+        await txn.update(
+          'contratos_alumnos',
+          {
+            'mora_pendiente_tracked': objetivo.tracked,
+            'mora_cobrada_offset': objetivo.offset,
+            'updated_at': ArTime.nowUtcIso(),
+          },
+          where: 'id = ?',
+          whereArgs: [cid],
+        );
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'contratos_alumnos',
+          operacion: SyncOperation.update,
+          registroId: cid,
+          payload: {
+            'id': cid,
+            'mora_pendiente_tracked': objetivo.tracked,
+            'mora_cobrada_offset': objetivo.offset,
+          },
+        );
+      }
+    });
+    return contratos;
+  }
+
+  /// Las otras líneas del mismo cobro que [pagoId]: un cobro de plan con mora
+  /// guarda 4 o 5 filas, y anular solo una deja el cobro a medias.
+  ///
+  /// Mismo contrato, misma sesión de caja y dentro de `kVentanaCobro` (ver
+  /// [esDelMismoCobro]): la misma idea de "un cobro" que usan la caja y la
+  /// reimpresión de recibos. Devuelve filas con la forma de
+  /// [buscarPagosParaCorregirMedio], sin [pagoId] ni lo ya anulado.
+  Future<List<Map<String, dynamic>>> lineasDelMismoCobro(String pagoId) async {
+    final db = await LocalDatabase.instance;
+    final base = await db.query(
+      'pagos_contrato_alumno',
+      columns: ['id', 'contrato_alumno_id', 'sesion_caja_id', 'fecha_pago'],
+      where: 'id = ?',
+      whereArgs: [pagoId],
+      limit: 1,
+    );
+    if (base.isEmpty) return [];
+    final cid = base.first['contrato_alumno_id']?.toString();
+    if (cid == null || cid.isEmpty) return [];
+    final candidatas = await db.rawQuery(
+      '''
+SELECT 'pagos_contrato_alumno' AS tabla, p.id AS id,
+  p.monto AS monto, p.medio_pago AS medio_pago, p.fecha_pago AS fecha_pago, p.concepto AS concepto,
+  p.sesion_caja_id AS sesion_caja_id,
+  ca.nombre_alumno AS titulo, ev.tipo AS subtitulo
+FROM pagos_contrato_alumno p
+INNER JOIN contratos_alumnos ca ON ca.id = p.contrato_alumno_id
+INNER JOIN eventos ev ON ev.id = ca.evento_id
+WHERE p.contrato_alumno_id = ? AND p.id <> ? AND COALESCE(p.anulado, 0) = 0
+''',
+      [cid, pagoId],
+    );
+    return [
+      for (final r in candidatas)
+        if (esDelMismoCobro(base.first, r)) Map<String, dynamic>.from(r),
+    ];
   }
 }
 

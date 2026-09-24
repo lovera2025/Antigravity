@@ -89,6 +89,42 @@ String? marcaDeLoBajado(
   return maxima?.toIso8601String();
 }
 
+/// Si una fila que bajó de la nube trae algo que acá no estaba.
+///
+/// Decide si vale la pena avisarles a las pantallas (ver `cambiosBajadosStream`).
+/// No alcanza con "bajaron filas": con el marcador retenido por un cambio local
+/// sin subir (`marcadorPullSeguro`), cada ciclo vuelve a bajar las mismas filas,
+/// y avisar por eso sería refrescar pantallas cada 10 segundos por nada.
+///
+/// [existeLocal] en `false` es fila nueva. Las fechas se comparan como instante:
+/// la base local y Postgres no escriben el mismo texto para la misma hora.
+bool filaEsNovedad({
+  required bool existeLocal,
+  required Object? versionLocal,
+  required Object? versionNube,
+}) {
+  if (!existeLocal) return true;
+  final local = DateTime.tryParse(versionLocal?.toString() ?? '')?.toUtc();
+  final nube = DateTime.tryParse(versionNube?.toString() ?? '')?.toUtc();
+  if (local == null || nube == null) {
+    return versionLocal?.toString() != versionNube?.toString();
+  }
+  return !local.isAtSameMomentAs(nube);
+}
+
+/// Cómo se guarda en SQLite un valor que bajó de la nube.
+///
+/// Las columnas `jsonb` (el detalle por mesa, los acompañantes) llegan como
+/// lista o mapa y se guardan como **JSON**. Antes se guardaban con `toString()`
+/// —`[{n: 1, precio: 70000.0, …}]`—, que no es JSON: `MesaExtraItem.listFromJson`
+/// no lo podía leer, el detalle por mesa quedaba vacío en la PC que lo bajaba, y
+/// al volver a subir la fila ese texto roto viajaba a la nube.
+dynamic valorParaSqlite(dynamic value) {
+  if (value is List || value is Map) return jsonEncode(value);
+  if (value is bool) return value ? 1 : 0;
+  return value;
+}
+
 /// Lo que hay que hacer cuando llega un pulso.
 class TrabajoDelPulso {
   /// Tablas a bajar. Solo las conocidas por el motor.
@@ -295,6 +331,38 @@ class SyncEngine {
   final _remoteProbeController = StreamController<RemoteProbeInfo>.broadcast();
   Stream<RemoteProbeInfo> get remoteProbeStream =>
       _remoteProbeController.stream;
+
+  // ── Aviso de lo que bajó ──────────────────────────────────────────────────
+  //
+  // Las tablas en las que acaba de bajar algo distinto de lo que había acá.
+  //
+  // Existe por el cierre de caja: el jefe anulaba un cobro, la anulación
+  // llegaba a la PC del operario en segundos por el pulso, y la pantalla seguía
+  // mostrando la foto vieja hasta el próximo ciclo de 10 s —o, en el diálogo de
+  // cerrar caja, hasta volver a abrirlo—. El dato estaba; nadie le avisaba a la
+  // pantalla. Solo avisa: no cambia qué ni cómo se sincroniza.
+  final _cambiosBajadosController = StreamController<Set<String>>.broadcast();
+  Stream<Set<String>> get cambiosBajadosStream =>
+      _cambiosBajadosController.stream;
+
+  final Set<String> _tablasConCambios = {};
+  Timer? _timerAvisoCambios;
+
+  /// Un pull baja varias tablas en paralelo: se juntan en un solo aviso.
+  static const _esperaAvisoCambios = Duration(milliseconds: 300);
+
+  void _anotarCambioBajado(String tabla) {
+    _tablasConCambios.add(tabla);
+    _timerAvisoCambios?.cancel();
+    _timerAvisoCambios = Timer(_esperaAvisoCambios, _avisarCambiosBajados);
+  }
+
+  void _avisarCambiosBajados() {
+    if (_tablasConCambios.isEmpty || _cambiosBajadosController.isClosed) return;
+    final tablas = Set<String>.unmodifiable(_tablasConCambios);
+    _tablasConCambios.clear();
+    _cambiosBajadosController.add(tablas);
+  }
 
   StreamSubscription<AppConnectivity>? _connectivitySub;
 
@@ -723,6 +791,7 @@ class SyncEngine {
     for (final id in aBorrar) {
       await db.delete(tabla, where: 'id = ?', whereArgs: [id]);
     }
+    _anotarCambioBajado(tabla);
     debugPrint('  🗑️ $tabla: ${aBorrar.length} borrado(s) por pulso');
   }
 
@@ -1388,6 +1457,45 @@ class SyncEngine {
     }
   }
 
+  /// `id → updated_at` local de las filas que acaban de bajar.
+  ///
+  /// Solo sirve para decidir si avisar (ver [filaEsNovedad]); por eso nunca
+  /// lanza: si la consulta falla devuelve `null` y todo cuenta como novedad, que
+  /// en el peor caso es un refresco de pantalla de más, no un pull caído.
+  Future<Map<String, Object?>?> _versionesLocales(
+    Database db,
+    String table,
+    String dateColumn,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    try {
+      final ids = [
+        for (final r in rows)
+          if (r['id'] is String) r['id'] as String,
+      ];
+      final out = <String, Object?>{};
+      const lote = 500;
+      for (var i = 0; i < ids.length; i += lote) {
+        final parte = ids.sublist(
+          i,
+          i + lote > ids.length ? ids.length : i + lote,
+        );
+        final filas = await db.query(
+          table,
+          columns: ['id', dateColumn],
+          where: 'id IN (${List.filled(parte.length, '?').join(',')})',
+          whereArgs: parte,
+        );
+        for (final f in filas) {
+          out[f['id'] as String] = f[dateColumn];
+        }
+      }
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Descarga y upsert de una tabla. Soporta pull incremental mediante _sync_meta.
   Future<void> _pullTable(
     Database db,
@@ -1469,6 +1577,12 @@ class SyncEngine {
       final pendingIds = pendingRows
           .map((r) => r['registro_id'] as String)
           .toSet();
+
+      // Qué versión de cada fila hay acá, para avisar solo si algo cambió.
+      final versionesLocales = dateColumn == null
+          ? null
+          : await _versionesLocales(db, table, dateColumn, rows);
+      var novedades = 0;
 
       const fkFields = [
         'evento_id',
@@ -1610,6 +1724,15 @@ class SyncEngine {
         }
         if (hasBadFk) continue;
 
+        if (versionesLocales == null ||
+            filaEsNovedad(
+              existeLocal: id != null && versionesLocales.containsKey(id),
+              versionLocal: versionesLocales[id],
+              versionNube: row[dateColumn],
+            )) {
+          novedades++;
+        }
+
         var cleanRow = _cleanForSqlite(table, row);
         if (table == 'eventos_servicios' || table == 'presupuesto_servicios') {
           final insertMap = Map<String, dynamic>.from(cleanRow);
@@ -1716,6 +1839,7 @@ class SyncEngine {
         }
       }
       await batch.commit(noResult: true);
+      if (novedades > 0) _anotarCambioBajado(table);
 
       // Guardar última marca de tiempo de sincronización exitosa.
       //
@@ -2202,14 +2326,7 @@ class SyncEngine {
     final clean = <String, dynamic>{};
     for (final col in validCols) {
       if (row.containsKey(col)) {
-        var value = row[col];
-        if (value is List || value is Map) {
-          value = value.toString();
-        }
-        if (value is bool) {
-          value = value ? 1 : 0;
-        }
-        clean[col] = value;
+        clean[col] = valorParaSqlite(row[col]);
       }
     }
 
@@ -2387,11 +2504,13 @@ class SyncEngine {
     _timerReconciliacion?.cancel();
     _reintentoReconciliacion?.cancel();
     _debouncePulso?.cancel();
+    _timerAvisoCambios?.cancel();
     unawaited(_canalPulso?.unsubscribe() ?? Future.value());
     _connectivitySub?.cancel();
     _statusController.close();
     _pendingController.close();
     _remoteProbeController.close();
+    _cambiosBajadosController.close();
   }
 }
 

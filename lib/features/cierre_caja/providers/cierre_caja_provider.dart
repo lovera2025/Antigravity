@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../models/egreso.dart';
 import '../../common/providers/admin_provider.dart';
@@ -14,6 +17,7 @@ import '../../mi_empresa/repositories/finanzas_repository.dart';
 import '../models/guia_cambio_movimiento.dart';
 import '../models/turno_caja.dart';
 import '../repositories/cierre_caja_repository.dart';
+import '../services/aviso_cambios_caja.dart';
 import '../services/datos_cierre_sesion.dart';
 
 class CierreCajaState {
@@ -52,6 +56,14 @@ class CierreCajaState {
   final double guiaTotalReposiciones;
   final double guiaTotalUsos;
 
+  /// Cobros de esta vista que se anularon desde la otra PC y que todavía nadie
+  /// vio. Se muestran con `textoAvisoAnulados` hasta que se cierra el aviso.
+  final List<IngresoDetallado> anuladasSinVer;
+
+  /// Lo que se anuló después de cerrar las sesiones que se están mirando: los
+  /// totales ya no lo cuentan, el arqueo guardado sí.
+  final AnuladoPostCierre anuladoPostCierre;
+
   final bool cargando;
   final Object? error;
 
@@ -82,6 +94,8 @@ class CierreCajaState {
     this.guiaCantUsos = 0,
     this.guiaTotalReposiciones = 0,
     this.guiaTotalUsos = 0,
+    this.anuladasSinVer = const [],
+    this.anuladoPostCierre = AnuladoPostCierre.cero,
     this.cargando = false,
     this.error,
   });
@@ -114,6 +128,8 @@ class CierreCajaState {
     int? guiaCantUsos,
     double? guiaTotalReposiciones,
     double? guiaTotalUsos,
+    List<IngresoDetallado>? anuladasSinVer,
+    AnuladoPostCierre? anuladoPostCierre,
     bool? cargando,
     Object? error,
     bool clearError = false,
@@ -149,6 +165,8 @@ class CierreCajaState {
       guiaTotalReposiciones:
           guiaTotalReposiciones ?? this.guiaTotalReposiciones,
       guiaTotalUsos: guiaTotalUsos ?? this.guiaTotalUsos,
+      anuladasSinVer: anuladasSinVer ?? this.anuladasSinVer,
+      anuladoPostCierre: anuladoPostCierre ?? this.anuladoPostCierre,
       cargando: cargando ?? this.cargando,
       error: clearError ? null : (error ?? this.error),
     );
@@ -180,6 +198,17 @@ class CierreCajaState {
 
 class CierreCajaNotifier extends Notifier<CierreCajaState> {
   bool _registrandoRetiro = false;
+
+  /// Cada refresco lleva un número; solo el último escribe el estado. Un
+  /// refresco silencioso que tarda no puede pisar uno más nuevo que el operario
+  /// pidió después.
+  int _generacionRefresco = 0;
+
+  Timer? _timerCambiosBajados;
+
+  /// Espera tras un aviso de la otra PC: un cobro anulado baja el pago y su
+  /// contrato por separado, y conviene rehacer el cierre una sola vez.
+  static const _esperaCambiosBajados = Duration(seconds: 1);
 
   static const _kPrefsDiaKey = 'cierre_caja_vista_dia_ar';
   static const _kPrefsTurnoKey = 'cierre_caja_vista_turno_slug';
@@ -263,6 +292,16 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       } else if (prev.modoJefe != next.modoJefe) {
         Future.microtask(_refrescar);
       }
+    });
+    // Lo que llega de la otra PC —el jefe anuló un cobro, el operario cerró su
+    // sesión— se ve acá en el momento, sin esperar el ciclo de 10 s.
+    final sub = ref
+        .read(syncEngineProvider)
+        .cambiosBajadosStream
+        .listen(_alBajarCambios);
+    ref.onDispose(() {
+      sub.cancel();
+      _timerCambiosBajados?.cancel();
     });
     Future.microtask(_bootstrap);
     return CierreCajaState(
@@ -386,6 +425,35 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
   }
 
   Future<void> refrescarManual() => _refrescar();
+
+  /// Refresco que dispara la sincronización, no una persona: no muestra el
+  /// indicador de carga (la pantalla no parpadea cada 10 s) y avisa si
+  /// desapareció un cobro porque lo anularon.
+  Future<void> refrescarEnSilencio() =>
+      _refrescar(silencioso: true, detectarAnulados: true);
+
+  /// Después de anular desde esta misma PC: los números al día, sin avisarle
+  /// al jefe lo que acaba de hacer él.
+  Future<void> refrescarTrasAnular() => _refrescar(silencioso: true);
+
+  void descartarAvisoAnulados() {
+    state = state.copyWith(anuladasSinVer: const []);
+  }
+
+  void _alBajarCambios(Set<String> tablas) {
+    if (!cambiosTocanElCierre(tablas)) return;
+    _timerCambiosBajados?.cancel();
+    _timerCambiosBajados = Timer(
+      _esperaCambiosBajados,
+      () => unawaited(refrescarEnSilencio()),
+    );
+  }
+
+  /// Qué se está mirando. Si cambió durante un refresco, lo que desapareció no
+  /// se anuló: se cambió de vista.
+  static String _alcance(CierreCajaState s) =>
+      '${s.dia.toIso8601String()}|${s.turno.slug}|${s.sesionSeleccionadaId}|'
+      '${s.consolidado}|${s.sinSesiones}';
 
   String _sesionEditableId() {
     final id = state.sesionSeleccionadaId;
@@ -511,8 +579,16 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
     }
   }
 
-  Future<void> _refrescar() async {
-    state = state.copyWith(cargando: true, clearError: true);
+  Future<void> _refrescar({
+    bool silencioso = false,
+    bool detectarAnulados = false,
+  }) async {
+    final generacion = ++_generacionRefresco;
+    final alcanceAntes = _alcance(state);
+    final ingresosAntes = state.ingresosTurno;
+    if (!silencioso) {
+      state = state.copyWith(cargando: true, clearError: true);
+    }
     try {
       final finanzasRepo = ref.read(finanzasRepositoryProvider);
       final egresosRepo = ref.read(egresosRepositoryProvider);
@@ -584,6 +660,39 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       final datos = results[0] as DatosCierreSesion;
       final guia = results[1] as GuiaCambioResumen;
 
+      // Sesiones ya cerradas: lo anulado después del cierre va en una línea
+      // aparte, porque el arqueo guardado lo sigue contando.
+      final cierrePorSesion = <String, DateTime>{
+        for (final s in sesiones)
+          if (ids.contains(s.id) && s.cerradaAt != null) s.id: s.cerradaAt!,
+      };
+      final anuladoPostCierre = cierrePorSesion.isEmpty
+          ? AnuladoPostCierre.cero
+          : anuladoDespuesDelCierre(
+              pagosAnulados: await finanzasRepo.pagosAnuladosDeSesiones(
+                cierrePorSesion.keys.toSet(),
+              ),
+              cierrePorSesion: cierrePorSesion,
+            );
+
+      // Lo que desapareció de la misma vista y hoy figura anulado.
+      var anuladasSinVer = state.anuladasSinVer;
+      final mismaVista = alcanceAntes == _alcance(state);
+      if (!mismaVista) {
+        anuladasSinVer = const [];
+      } else if (detectarAnulados) {
+        final seFueron = lineasQueSeFueron(ingresosAntes, datos.ingresos);
+        if (seFueron.isNotEmpty) {
+          final anulados = await finanzasRepo.idsDePagosAnulados(
+            seFueron.map((i) => i.id),
+          );
+          final nuevas = seFueron.where((i) => anulados.contains(i.id));
+          anuladasSinVer = [...anuladasSinVer, ...nuevas];
+        }
+      }
+
+      if (generacion != _generacionRefresco) return;
+
       final ingresosTurno = datos.ingresos;
       final egresosTurno = datos.egresos;
       final retirosTurno = datos.retiros;
@@ -624,10 +733,13 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
         guiaCantUsos: guia.cantUsos,
         guiaTotalReposiciones: guia.totalReposiciones,
         guiaTotalUsos: guia.totalUsos,
+        anuladasSinVer: anuladasSinVer,
+        anuladoPostCierre: anuladoPostCierre,
         cargando: false,
         clearError: true,
       );
     } catch (e) {
+      if (generacion != _generacionRefresco) return;
       state = state.copyWith(cargando: false, error: e);
     }
   }
