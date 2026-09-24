@@ -33,7 +33,11 @@ import 'services/cobro_abono_acumulado.dart';
 import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
+import 'services/respaldo_sorteo.dart';
+import 'services/salon_mesas.dart';
+import 'services/sorteo_mesas_motor.dart';
 import '../../models/mesa_extra_item.dart';
+import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
 import 'widgets/dialogo_seleccion_cuotas_plan.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
@@ -93,6 +97,10 @@ class _DetalleEventoMasivoScreenState
   final Set<String> _idsSeleccionContratos = {};
   RealtimeChannel? _realtimeChannel;
 
+  /// Hay una copia de los números de mesa guardada al deshacer: el menú ofrece
+  /// restaurarla.
+  bool _hayRespaldoSorteo = false;
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +117,7 @@ class _DetalleEventoMasivoScreenState
     _fechaEventoActual = widget.evento.fechaEvento;
     _cargarPreferenciaOcultarMontos();
     _fetchDatos();
+    _cargarRespaldoSorteo();
     _setupRealtime();
   }
 
@@ -1040,6 +1049,8 @@ class _DetalleEventoMasivoScreenState
                 _sortearMesas();
               case 'deshacer':
                 _deshacerSorteoMesas();
+              case 'restaurar':
+                _restaurarSorteoAnterior();
             }
           },
           itemBuilder: (context) => [
@@ -1121,6 +1132,17 @@ class _DetalleEventoMasivoScreenState
                 title: Text('Deshacer sorteo de mesas'),
               ),
             ),
+            if (_hayRespaldoSorteo)
+              const PopupMenuItem<String>(
+                value: 'restaurar',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.restore_rounded, color: Colors.teal),
+                  title: Text('Restaurar sorteo anterior'),
+                  subtitle: Text('La copia guardada al deshacer'),
+                ),
+              ),
           ],
           child: Container(
             padding: EdgeInsets.symmetric(
@@ -1978,19 +2000,9 @@ class _DetalleEventoMasivoScreenState
                                 width: colMesa,
                                 child: Opacity(
                                   opacity: esBajaTemporal ? 0.55 : 1,
-                                  child: Text(
-                                    a.numeroMesa?.isNotEmpty == true
-                                        ? a.numeroMesa!
-                                        : '-',
-                                    style: TextStyle(
-                                      fontSize: layoutCompact ? 11 : 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: a.numeroMesa?.isNotEmpty == true
-                                          ? Colors.indigo
-                                          : Colors.grey.shade500,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 2,
+                                  child: CeldaMesaAlumno(
+                                    alumno: a,
+                                    compacto: layoutCompact,
                                   ),
                                 ),
                               ),
@@ -3161,96 +3173,196 @@ class _DetalleEventoMasivoScreenState
     );
   }
 
+  /// Pagos de quienes tienen mesa extra, para avisar si alguno pagó una mesa
+  /// que no figura en su cantidad. Solo lectura.
+  Future<Map<String, List<Map<String, dynamic>>>> _pagosDeMesaExtra(
+    ContratosRepository repo,
+    List<ContratoAlumno> alumnos,
+  ) async {
+    final ids = [
+      for (final a in alumnos)
+        if (a.mesaExtraPrecio > 0.01) a.id,
+    ];
+    final out = <String, List<Map<String, dynamic>>>{};
+    for (final p in await repo.getPagosForContratoIds(ids)) {
+      final id = p['contrato_alumno_id'] as String?;
+      if (id != null) out.putIfAbsent(id, () => []).add(p);
+    }
+    return out;
+  }
+
+  Future<void> _avisarSorteo(String titulo, String mensaje) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: Text(mensaje),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _cargarRespaldoSorteo() async {
+    final r = await RespaldoSorteo.leer(widget.evento.id);
+    if (mounted) setState(() => _hayRespaldoSorteo = r != null);
+  }
+
+  /// Sorteo de mesas, pensado para no fallar (ver [SorteoMesasMotor]):
+  ///
+  /// 1. Si otra PC ya asignó mesas que todavía no llegaron, no sortea: sería
+  ///    repartir dos veces los mismos números.
+  /// 2. El diálogo propone la capacidad con la que todo entra y no deja
+  ///    sortear con menos.
+  /// 3. Al confirmar se relee la base; si la lista cambió mientras el diálogo
+  ///    estaba abierto, se vuelve a mostrar con los datos nuevos.
+  /// 4. Se valida el resultado entero y se guarda en una sola transacción.
+  ///
+  /// Escribe **solo** `numero_mesa`: no toca cuentas ni pagos.
   Future<void> _sortearMesas() async {
-    final autoSyncCheckpoint = DateTime.now().toUtc();
+    final repo = ref.read(contratosRepositoryProvider);
+    final eventoId = widget.evento.id;
+    final titulo = widget.evento.cliente?.nombreCompleto ?? 'Evento masivo';
+
     setState(() => _isLoading = true);
-    try {
-      final repo = ref.read(contratosRepositoryProvider);
-      await repo.reconciliarMesasExtrasEvento(widget.evento.id);
-      await _refreshAlumnos();
-
-      final alumnosSinMesa = _alumnos
-          .where(
-            (a) =>
-                !a.nombreAlumno.startsWith('[BAJA]') &&
-                (a.numeroMesa == null || a.numeroMesa!.isEmpty),
-          )
-          .toList();
-
-      if (alumnosSinMesa.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Todos los alumnos ya tienen mesa asignada.'),
+    final distintos = await repo.mesasDeOtraPcSinBajar(eventoId);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (distintos != null && distintos > 0) {
+      await _avisarSorteo(
+        'La otra PC tiene mesas sin bajar',
+        'En la nube hay números de mesa de $distintos alumno(s) que todavía no '
+            'llegaron a esta PC. Esperá unos segundos a que sincronice y volvé '
+            'a abrir el sorteo, para no repartir dos veces los mismos números.',
+      );
+      return;
+    }
+    if (distintos == null) {
+      final seguir = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Sin conexión'),
+          content: const Text(
+            'No se puede verificar si la otra PC ya sorteó mesas en esta '
+            'institución. Seguí solo si el sorteo se hace únicamente en esta PC.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('CANCELAR'),
             ),
-          );
-        }
-        return;
-      }
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('SEGUIR'),
+            ),
+          ],
+        ),
+      );
+      if (seguir != true || !mounted) return;
+    }
 
-      final demanda = MesasExtraUtils.calcularDemandaSorteo(_alumnos);
-      final titulo = widget.evento.cliente?.nombreCompleto ?? 'Evento masivo';
-
+    SorteoMesasDialogResult? elegido;
+    String? novedad;
+    while (mounted) {
+      final alumnos = await repo.getByEvento(eventoId);
+      final avisos = SalonMesas.avisos(
+        alumnos,
+        pagosPorContrato: await _pagosDeMesaExtra(repo, alumnos),
+      );
       if (!mounted) return;
-      setState(() => _isLoading = false);
-
       final config = await mostrarSorteoMesasDialog(
         context: context,
         tituloInstitucion: titulo,
-        alumnosSinMesa: alumnosSinMesa,
-        demanda: demanda,
+        alumnos: alumnos,
+        avisos: avisos,
+        inicial: elegido,
+        novedad: novedad,
       );
-      if (config == null) return;
+      if (config == null || !mounted) return;
 
-      setState(() => _isLoading = true);
-
-      final ocupadas = <int>{};
-      for (final c in _alumnos) {
-        ocupadas.addAll(MesasExtraUtils.numerosMesaDesdeTexto(c.numeroMesa));
+      final frescos = await repo.getByEvento(eventoId);
+      if (SorteoMesasMotor.firma(frescos) != SorteoMesasMotor.firma(alumnos)) {
+        elegido = config;
+        novedad = 'La lista cambió mientras el sorteo estaba abierto (por '
+            'ejemplo, la otra PC cargó o editó un alumno). Estos son los datos '
+            'actualizados: revisalos y volvé a tocar SORTEAR.';
+        continue;
       }
+      await _ejecutarSorteo(frescos, config);
+      return;
+    }
+  }
 
-      final asignaciones = MesasExtraUtils.asignarMesasSorteo(
-        alumnos: _alumnos,
-        capacidadSalon: config.capacidadSalon,
-        ocupadasIniciales: ocupadas,
+  Future<void> _ejecutarSorteo(
+    List<ContratoAlumno> alumnos,
+    SorteoMesasDialogResult config,
+  ) async {
+    final repo = ref.read(contratosRepositoryProvider);
+    final autoSyncCheckpoint = DateTime.now().toUtc();
+    setState(() => _isLoading = true);
+    try {
+      final pedidos = SorteoMesasMotor.pedidos(
+        alumnos,
         separaciones: config.separaciones,
       );
-
-      if (asignaciones == null) {
+      final ocupadas = SorteoMesasMotor.ocupadas(alumnos);
+      final asignaciones = SorteoMesasMotor.sortear(
+        pedidos: pedidos,
+        ocupadas: ocupadas,
+        capacidad: config.capacidadSalon,
+      );
+      // Red de seguridad: no debería encontrar nada nunca. Si encuentra algo,
+      // no se guarda ni un número.
+      final problema = SorteoMesasMotor.validar(
+        pedidos: pedidos,
+        ocupadas: ocupadas,
+        capacidad: config.capacidadSalon,
+        asignaciones: asignaciones,
+      );
+      if (problema != null) {
+        debugPrint('Sorteo frenado por la validación final: $problema');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No hay mesas libres suficientes en el rango del salón. '
-                'Subí la capacidad e intentá de nuevo.',
-              ),
-            ),
+          await _avisarSorteo(
+            'No se guardó nada',
+            'El control final encontró un problema y el sorteo no se guardó: '
+                '$problema',
           );
         }
         return;
       }
 
-      for (final entry in asignaciones.entries) {
-        final asignacion = MesasExtraUtils.formatearAsignacionMesas(
-          entry.value,
-        );
-        await repo.actualizarContrato(entry.key, {'numero_mesa': asignacion});
-      }
+      await repo.asignarNumerosMesa({
+        for (final e in asignaciones.entries)
+          e.key: MesasExtraUtils.formatearAsignacionMesas(e.value),
+      });
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
             startedAt: autoSyncCheckpoint,
             isPayment: false,
           );
+      await _fetchDatos(cargaSilenciosa: true);
 
       if (mounted) {
-        final sepTxt = config.separaciones.isEmpty
-            ? ''
-            : ' · ${config.separaciones.length} alumno(s) con mesa(s) alejada(s)';
+        final separadas = pedidos.where((p) => p.separadas > 0).length;
+        final conSillas = alumnos
+            .where(
+              (a) =>
+                  asignaciones.containsKey(a.id) &&
+                  SalonMesas.sillasExtra(a) > 0,
+            )
+            .length;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            duration: const Duration(seconds: 6),
             content: Text(
-              'Sorteo listo: ${asignaciones.length} alumno(s) con mesa asignada$sepTxt.',
+              'Sorteo listo: ${asignaciones.length} alumno(s) con mesa'
+              '${separadas > 0 ? ' · $separadas con mesas separadas' : ''}'
+              '${conSillas > 0 ? ' · $conSillas con sillas extra' : ''}.',
             ),
           ),
         );
@@ -3258,26 +3370,162 @@ class _DetalleEventoMasivoScreenState
     } catch (e) {
       debugPrint('Error en sorteo: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se guardó nada. Error: $e')),
+        );
       }
     } finally {
-      if (mounted) {
-        _fetchDatos(cargaSilenciosa: true);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  /// Deshacer el sorteo: saca el número de mesa a **todos** los alumnos del
+  /// evento, también a los de baja. Pide confirmación con tilde y antes guarda
+  /// una copia local ([RespaldoSorteo]) para poder restaurarlo.
   Future<void> _deshacerSorteoMesas() async {
+    final repo = ref.read(contratosRepositoryProvider);
+    final eventoId = widget.evento.id;
+    final alumnos = await repo.getByEvento(eventoId);
+    final conMesa = alumnos
+        .where((a) => a.numeroMesa?.trim().isNotEmpty ?? false)
+        .toList();
+    if (!mounted) return;
+    if (conMesa.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay alumnos con mesa asignada para deshacer.'),
+        ),
+      );
+      return;
+    }
+
+    var entendido = false;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Deshacer sorteo de mesas'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Se van a borrar los números de mesa de ${conMesa.length} '
+                'alumno(s) de esta institución, incluidas las asignaciones a '
+                'mano y las de alumnos de baja.\n\n'
+                'Antes se guarda una copia: si fue un error, se vuelve atrás '
+                'desde el menú ⋮ → "Restaurar sorteo anterior".',
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Entiendo que se borran los números sorteados',
+                ),
+                value: entendido,
+                onChanged: (v) => setLocal(() => entendido = v == true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: entendido ? () => Navigator.pop(context, true) : null,
+              child: const Text('DESHACER MESAS'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    final autoSyncCheckpoint = DateTime.now().toUtc();
+    setState(() => _isLoading = true);
+    try {
+      // La copia primero: sin copia a salvo no se borra nada.
+      await RespaldoSorteo.guardar(eventoId, {
+        for (final a in conMesa) a.id: a.numeroMesa!.trim(),
+      });
+      await repo.asignarNumerosMesa({for (final a in conMesa) a.id: null});
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(
+            startedAt: autoSyncCheckpoint,
+            isPayment: false,
+          );
+      await _fetchDatos(cargaSilenciosa: true);
+      if (mounted) {
+        setState(() => _hayRespaldoSorteo = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            content: Text(
+              'Mesas desasignadas (${conMesa.length}). Si fue un error: menú '
+              '⋮ → Restaurar sorteo anterior.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error al deshacer mesas: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se deshizo nada. Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Devuelve los números de la copia guardada al deshacer, solo a quienes
+  /// siguen sin mesa y sin pisar ningún número que hoy esté ocupado.
+  Future<void> _restaurarSorteoAnterior() async {
+    final repo = ref.read(contratosRepositoryProvider);
+    final eventoId = widget.evento.id;
+    final respaldo = await RespaldoSorteo.leer(eventoId);
+    if (!mounted) return;
+    if (respaldo == null) {
+      setState(() => _hayRespaldoSorteo = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay una copia guardada para restaurar.'),
+        ),
+      );
+      return;
+    }
+    final alumnos = await repo.getByEvento(eventoId);
+    final plan = RespaldoSorteo.planRestauracion(respaldo, alumnos);
+    if (!mounted) return;
+    if (plan.aRestaurar.isEmpty) {
+      await _avisarSorteo(
+        'Nada para restaurar',
+        'Los ${respaldo.numeros.length} alumno(s) de la copia ya tienen mesa o '
+            'su número está ocupado. No se cambió nada.',
+      );
+      return;
+    }
+
+    final omitidos = plan.omitidos > 0
+        ? '\n\n${plan.omitidos} no se restauran porque ya tienen mesa o su '
+            'número está ocupado.'
+        : '';
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Deshacer Asignación de Mesas'),
-        content: const Text(
-          'Se eliminarán los números de mesa de TODOS los alumnos de este evento, '
-          'incluidas las asignaciones manuales.\n\n'
-          'Podés sortear de nuevo cuando quieras.',
+        title: const Text('Restaurar sorteo anterior'),
+        content: Text(
+          'Se van a devolver los números de mesa de '
+          '${plan.aRestaurar.length} alumno(s), tal como estaban el '
+          '${ArTime.formatFechaHora(respaldo.fecha)}.$omitidos',
         ),
         actions: [
           TextButton(
@@ -3285,74 +3533,44 @@ class _DetalleEventoMasivoScreenState
             child: const Text('CANCELAR'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('DESHACER MESAS'),
+            child: const Text('RESTAURAR'),
           ),
         ],
       ),
     );
-
-    if (confirmar != true) return;
+    if (confirmar != true || !mounted) return;
 
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
-      final repo = ref.read(contratosRepositoryProvider);
-
-      final alumnosConMesa = _alumnos
-          .where(
-            (a) =>
-                !a.nombreAlumno.startsWith('[BAJA]') &&
-                a.numeroMesa != null &&
-                a.numeroMesa!.isNotEmpty,
-          )
-          .toList();
-
-      if (alumnosConMesa.isEmpty) {
-        if (mounted)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No hay alumnos con mesa asignada para deshacer.'),
-            ),
-          );
-        return;
-      }
-
-      int actualizados = 0;
-      for (final alumno in alumnosConMesa) {
-        await repo.actualizarContrato(alumno.id, {'numero_mesa': null});
-        actualizados++;
-      }
+      await repo.asignarNumerosMesa(plan.aRestaurar);
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
             startedAt: autoSyncCheckpoint,
             isPayment: false,
           );
-
+      await _fetchDatos(cargaSilenciosa: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Mesas desasignadas ($actualizados). Podés sortear de nuevo.',
+              'Sorteo restaurado: ${plan.aRestaurar.length} alumno(s) con su '
+              'mesa de antes.',
             ),
           ),
         );
       }
     } catch (e) {
-      debugPrint('Error al deshacer mesas: $e');
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
+      debugPrint('Error al restaurar mesas: $e');
       if (mounted) {
-        _fetchDatos(cargaSilenciosa: true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se restauró nada. Error: $e')),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -3554,7 +3772,10 @@ class _DetalleEventoMasivoScreenState
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => ModalAlumnoPremium(evento: widget.evento),
+      builder: (context) => ModalAlumnoPremium(
+        evento: widget.evento,
+        precios: PreciosHabituales.de(_alumnos),
+      ),
     );
     if (mounted && result == true) {
       _refreshAlumnos();
@@ -3565,8 +3786,11 @@ class _DetalleEventoMasivoScreenState
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          ModalAlumnoPremium(evento: widget.evento, alumno: alumno),
+      builder: (context) => ModalAlumnoPremium(
+        evento: widget.evento,
+        alumno: alumno,
+        precios: PreciosHabituales.de(_alumnos),
+      ),
     );
     if (mounted && result == true) await _refreshAlumnos();
   }

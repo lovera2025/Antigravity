@@ -3,33 +3,49 @@ import 'package:flutter/services.dart';
 
 import '../../../models/contrato_alumno.dart';
 import '../services/mesas_extra_utils.dart';
+import '../services/salon_mesas.dart';
+import '../services/sorteo_mesas_motor.dart';
 
-/// Diálogo previo al sorteo: demanda + alumnos con extras a separar.
+/// Diálogo previo al sorteo: qué se va a sortear, quién tiene mesas y sillas
+/// extra, qué conviene revisar y con qué capacidad.
+///
+/// La capacidad que propone es la mínima con la que todo entra
+/// ([SorteoMesasMotor.capacidadMinima]), y SORTEAR solo se habilita si la que
+/// quedó escrita pasa [SorteoMesasMotor.esFactible]: el mismo chequeo con el
+/// que arranca el sorteo. Así "no entra" no puede pasar al tocar el botón.
 Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
   required BuildContext context,
   required String tituloInstitucion,
-  required List<ContratoAlumno> alumnosSinMesa,
-  required DemandaSorteoMesas demanda,
+  required List<ContratoAlumno> alumnos,
+  required List<AvisoSalon> avisos,
+  SorteoMesasDialogResult? inicial,
+  String? novedad,
 }) {
   return showDialog<SorteoMesasDialogResult>(
     context: context,
     builder: (context) => _SorteoMesasDialog(
       tituloInstitucion: tituloInstitucion,
-      alumnosSinMesa: alumnosSinMesa,
-      demanda: demanda,
+      alumnos: alumnos,
+      avisos: avisos,
+      inicial: inicial,
+      novedad: novedad,
     ),
   );
 }
 
 class _SorteoMesasDialog extends StatefulWidget {
   final String tituloInstitucion;
-  final List<ContratoAlumno> alumnosSinMesa;
-  final DemandaSorteoMesas demanda;
+  final List<ContratoAlumno> alumnos;
+  final List<AvisoSalon> avisos;
+  final SorteoMesasDialogResult? inicial;
+  final String? novedad;
 
   const _SorteoMesasDialog({
     required this.tituloInstitucion,
-    required this.alumnosSinMesa,
-    required this.demanda,
+    required this.alumnos,
+    required this.avisos,
+    this.inicial,
+    this.novedad,
   });
 
   @override
@@ -38,37 +54,30 @@ class _SorteoMesasDialog extends StatefulWidget {
 
 class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
   late final TextEditingController _capacidadCtrl;
-  bool _separarExtras = false;
+  late final Map<String, int> _separaciones;
+  late final Set<int> _ocupadas;
+  bool _revisado = false;
 
-  /// alumnoId → cantidad de mesas alejadas pedidas.
-  final Map<String, int> _alejadasPorId = {};
+  List<ContratoAlumno> get _activos =>
+      widget.alumnos.where((a) => !a.esBajaTemporal).toList();
 
-  List<ContratoAlumno> get _alumnosConExtras => widget.alumnosSinMesa
-      .where((a) => MesasExtraUtils.cantidadMesasFisicasSorteo(a) > 1)
-      .toList();
-
-  int get _totalAlejadas {
-    if (!_separarExtras) return 0;
-    var sum = 0;
-    for (final a in _alumnosConExtras) {
-      final pedidas = _alejadasPorId[a.id];
-      if (pedidas == null) continue;
-      final fisicas = MesasExtraUtils.cantidadMesasFisicasSorteo(a);
-      sum += MesasExtraUtils.cantidadAlejadasEfectivas(fisicas, pedidas);
-    }
-    return sum;
-  }
-
-  int get _minCapacidad => MesasExtraUtils.capacidadMinimaSorteo(
-        demanda: widget.demanda,
-        totalAlejadas: _totalAlejadas,
+  List<PedidoSorteo> get _pedidos => SorteoMesasMotor.pedidos(
+        widget.alumnos,
+        separaciones: _separaciones,
       );
+
+  int _minima(List<PedidoSorteo> pedidos) =>
+      SorteoMesasMotor.capacidadMinima(pedidos: pedidos, ocupadas: _ocupadas);
 
   @override
   void initState() {
     super.initState();
+    _ocupadas = SorteoMesasMotor.ocupadas(widget.alumnos);
+    _separaciones = Map<String, int>.from(widget.inicial?.separaciones ?? {});
+    final minima = _minima(_pedidos);
+    final inicial = widget.inicial?.capacidadSalon ?? minima;
     _capacidadCtrl = TextEditingController(
-      text: widget.demanda.total.toString(),
+      text: '${inicial < minima ? minima : inicial}',
     );
   }
 
@@ -78,88 +87,63 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
     super.dispose();
   }
 
-  void _sincronizarCapacidadMinima() {
-    final min = _minCapacidad;
-    final actual = int.tryParse(_capacidadCtrl.text.trim()) ?? 0;
-    if (actual < min) {
-      _capacidadCtrl.text = '$min';
-    }
-  }
-
-  void _toggleAlumno(ContratoAlumno a, bool? checked) {
+  /// Si separar sube el mínimo, la capacidad escrita sube con él.
+  void _cambiarSeparacion(String alumnoId, int? cantidad) {
     setState(() {
-      if (checked == true) {
-        _alejadasPorId[a.id] = 1;
+      if (cantidad == null || cantidad < 1) {
+        _separaciones.remove(alumnoId);
       } else {
-        _alejadasPorId.remove(a.id);
+        _separaciones[alumnoId] = cantidad;
       }
-      _sincronizarCapacidadMinima();
+      final minima = _minima(_pedidos);
+      final actual = int.tryParse(_capacidadCtrl.text.trim()) ?? 0;
+      if (actual < minima) _capacidadCtrl.text = '$minima';
     });
-  }
-
-  void _setAlejadas(ContratoAlumno a, int value) {
-    final fisicas = MesasExtraUtils.cantidadMesasFisicasSorteo(a);
-    final maxAlej = fisicas - 1;
-    setState(() {
-      _alejadasPorId[a.id] = value < 1 ? 1 : (value > maxAlej ? maxAlej : value);
-      _sincronizarCapacidadMinima();
-    });
-  }
-
-  void _confirmar() {
-    _sincronizarCapacidadMinima();
-    final capacidad = int.tryParse(_capacidadCtrl.text.trim());
-    if (capacidad == null || capacidad < _minCapacidad) return;
-
-    final separaciones = <AlumnoMesasSeparadas>[];
-    if (_separarExtras) {
-      for (final a in _alumnosConExtras) {
-        final pedidas = _alejadasPorId[a.id];
-        if (pedidas == null) continue;
-        final fisicas = MesasExtraUtils.cantidadMesasFisicasSorteo(a);
-        final efectivas =
-            MesasExtraUtils.cantidadAlejadasEfectivas(fisicas, pedidas);
-        if (efectivas < 1) continue;
-        separaciones.add(
-          AlumnoMesasSeparadas(
-            alumnoId: a.id,
-            cantidadAlejadas: efectivas,
-          ),
-        );
-      }
-    }
-
-    Navigator.pop(
-      context,
-      SorteoMesasDialogResult(
-        capacidadSalon: capacidad,
-        separaciones: separaciones,
-      ),
-    );
-  }
-
-  String _resumenSeparacion(int fisicas, int alejadas) {
-    final juntas = fisicas - alejadas;
-    if (juntas <= 1 && alejadas == 1) {
-      return '1 + 1 lejos';
-    }
-    if (juntas == 1) {
-      return '1 + $alejadas lejos';
-    }
-    return '$juntas juntas + $alejadas lejos';
   }
 
   @override
   Widget build(BuildContext context) {
+    final pedidos = _pedidos;
+    final demanda = SorteoMesasMotor.demanda(pedidos);
+    final minima = _minima(pedidos);
     final capacidad = int.tryParse(_capacidadCtrl.text.trim());
-    final min = _minCapacidad;
-    final capacidadValida = capacidad != null && capacidad >= min;
-    final conExtras = _alumnosConExtras;
+    final factible = capacidad != null &&
+        SorteoMesasMotor.esFactible(
+          pedidos: pedidos,
+          ocupadas: _ocupadas,
+          capacidad: capacidad,
+        );
+    final hayAvisos = widget.avisos.isNotEmpty;
+    final puedeSortear =
+        !demanda.vacia && factible && (!hayAvisos || _revisado);
+
+    final activos = _activos;
+    final conMesa = activos
+        .where((a) =>
+            MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isNotEmpty)
+        .length;
+    final reservadosBaja = widget.alumnos
+        .where((a) => a.esBajaTemporal)
+        .fold<int>(
+          0,
+          (s, a) =>
+              s + MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).length,
+        );
+    final conMesasExtra =
+        activos.where((a) => SalonMesas.mesasExtra(a) > 0).toList();
+    final conSillasExtra =
+        activos.where((a) => SalonMesas.sillasExtra(a) > 0).toList();
+    final totalSillasExtra =
+        conSillasExtra.fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a));
+    final nuevosIds = {
+      for (final p in pedidos)
+        if (p.esNuevo) p.alumnoId,
+    };
 
     return AlertDialog(
       title: const Text('Sorteo de mesas'),
       content: SizedBox(
-        width: 520,
+        width: 600,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -169,27 +153,24 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                 widget.tituloInstitucion,
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 12),
-              Text(
-                '${widget.demanda.alumnos} alumno(s) sin mesa asignada',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.indigo.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: Colors.indigo.withValues(alpha: 0.2),
-                  ),
+              if (widget.novedad != null) ...[
+                const SizedBox(height: 10),
+                _Recuadro(
+                  color: Colors.blue,
+                  icono: Icons.sync_rounded,
+                  child: Text(widget.novedad!),
                 ),
+              ],
+              const SizedBox(height: 12),
+              _Recuadro(
+                color: Colors.indigo,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Necesitarás ${widget.demanda.total} mesas',
+                      demanda.vacia
+                          ? 'Todos los alumnos ya tienen su mesa'
+                          : 'Se van a sortear ${demanda.total} mesas',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -197,20 +178,77 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text('· ${widget.demanda.mesasBase} mesas base (contrato)'),
-                    Text('· ${widget.demanda.mesasExtras} mesas extra'),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Por defecto extras juntas (ej. 40, 41, 42). '
-                      'Si separás, elegís cuántas quedan lejos del bloque.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade700,
+                    if (demanda.alumnosNuevos > 0)
+                      Text(
+                        '· ${demanda.mesasBase} mesas base y '
+                        '${demanda.mesasExtras} extra para '
+                        '${demanda.alumnosNuevos} alumno(s) sin mesa',
                       ),
-                    ),
+                    if (demanda.alumnosACompletar > 0)
+                      Text(
+                        '· ${demanda.mesasACompletar} mesa(s) para completar a '
+                        '${demanda.alumnosACompletar} alumno(s), sin mover las '
+                        'que ya tienen',
+                      ),
+                    if (conMesa > 0)
+                      Text('· $conMesa alumno(s) ya tienen mesa: se respetan'),
+                    if (reservadosBaja > 0)
+                      Text(
+                        '· $reservadosBaja número(s) reservado(s) por alumnos '
+                        'de baja',
+                      ),
+                    if (totalSillasExtra > 0)
+                      Text(
+                        '· $totalSillasExtra sillas extra '
+                        '(${conSillasExtra.length} alumno(s)): van a la mesa '
+                        'de su familia',
+                      ),
                   ],
                 ),
               ),
+              if (hayAvisos) ...[
+                const SizedBox(height: 12),
+                _Recuadro(
+                  color: Colors.amber.shade800,
+                  icono: Icons.warning_amber_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Revisar antes de sortear',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 6),
+                      for (final a in widget.avisos)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${a.alumno}: ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                TextSpan(text: a.detalle),
+                              ],
+                            ),
+                            style: const TextStyle(fontSize: 12.5),
+                          ),
+                        ),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: const Text('Ya revisé estos casos'),
+                        value: _revisado,
+                        onChanged: (v) => setState(() => _revisado = v == true),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               TextField(
                 controller: _capacidadCtrl,
@@ -218,111 +256,57 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
                   labelText: 'Capacidad del salón (mesas numeradas)',
-                  helperText: _totalAlejadas > 0
-                      ? 'Mínimo $min (demanda + huecos para alejadas).'
-                      : 'Mínimo $min.',
+                  helperText: 'Mínimo $minima para que entre todo.',
                   border: const OutlineInputBorder(),
-                  errorText:
-                      capacidadValida ? null : 'Debe ser al menos $min',
+                  errorText: demanda.vacia || factible
+                      ? null
+                      : 'Con esta capacidad no entran: mínimo $minima',
                 ),
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Separar mesas extras'),
-                subtitle: Text(
-                  conExtras.isEmpty
-                      ? 'No hay alumnos con mesas extras en este sorteo.'
-                      : 'Tildá alumnos con extras y elegí cuántas mesas '
-                          'querés alejadas del bloque principal.',
+              if (conMesasExtra.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _Titulo('Con mesas extra (${conMesasExtra.length})'),
+                Text(
+                  'Van todas juntas. Si alguien pidió separarlas, tildalo y '
+                  'elegí cuántas quedan lejos de su bloque.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
-                value: _separarExtras,
-                onChanged: conExtras.isEmpty
-                    ? null
-                    : (v) => setState(() {
-                          _separarExtras = v;
-                          if (!v) _alejadasPorId.clear();
-                          _sincronizarCapacidadMinima();
-                        }),
-              ),
-              if (_separarExtras && conExtras.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                ...conExtras.map((a) {
-                  final fisicas =
-                      MesasExtraUtils.cantidadMesasFisicasSorteo(a);
-                  final extras = fisicas - 1;
-                  final marcado = _alejadasPorId.containsKey(a.id);
-                  final alejadas = _alejadasPorId[a.id] ?? 1;
-                  final maxAlej = fisicas - 1;
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            title: Text(
-                              a.nombreAlumno,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              '$extras mesa(s) extra · $fisicas físicas',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                            value: marcado,
-                            onChanged: (v) => _toggleAlumno(a, v),
+                const SizedBox(height: 6),
+                for (final a in conMesasExtra)
+                  _FilaMesasExtra(
+                    alumno: a,
+                    sortea: nuevosIds.contains(a.id),
+                    separadas: _separaciones[a.id],
+                    onCambiar: (v) => _cambiarSeparacion(a.id, v),
+                  ),
+              ],
+              if (conSillasExtra.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _Titulo('Con sillas extra (${conSillasExtra.length})'),
+                for (final a in conSillasExtra)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.chair_alt_outlined, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            a.nombreAlumno,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          if (marcado) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(left: 12),
-                              child: Row(
-                                children: [
-                                  const Text('Mesas alejadas:'),
-                                  const SizedBox(width: 12),
-                                  DropdownButton<int>(
-                                    value: alejadas.clamp(1, maxAlej),
-                                    items: [
-                                      for (var k = 1; k <= maxAlej; k++)
-                                        DropdownMenuItem(
-                                          value: k,
-                                          child: Text('$k'),
-                                        ),
-                                    ],
-                                    onChanged: (v) {
-                                      if (v != null) _setAlejadas(a, v);
-                                    },
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _resumenSeparacion(
-                                        fisicas,
-                                        alejadas.clamp(1, maxAlej),
-                                      ),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                        Text(
+                          SalonMesas.textoRepartoSillas(a),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                }),
+                  ),
               ],
             ],
           ),
@@ -334,10 +318,158 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
           child: const Text('CANCELAR'),
         ),
         ElevatedButton(
-          onPressed: capacidadValida ? _confirmar : null,
+          onPressed: puedeSortear
+              ? () => Navigator.pop(
+                    context,
+                    SorteoMesasDialogResult(
+                      capacidadSalon: capacidad,
+                      separaciones: Map<String, int>.from(_separaciones),
+                    ),
+                  )
+              : null,
           child: const Text('SORTEAR'),
         ),
       ],
     );
   }
+}
+
+class _FilaMesasExtra extends StatelessWidget {
+  final ContratoAlumno alumno;
+
+  /// false si ya tiene sus mesas: se muestra, pero no se sortea.
+  final bool sortea;
+  final int? separadas;
+  final ValueChanged<int?> onCambiar;
+
+  const _FilaMesasExtra({
+    required this.alumno,
+    required this.sortea,
+    required this.separadas,
+    required this.onCambiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final mesas = SalonMesas.mesas(alumno);
+    final extras = mesas - 1;
+    final sillas = SalonMesas.sillasExtra(alumno);
+    final detalle = [
+      '$extras extra · $mesas en total',
+      if (sillas > 0) '$sillas silla(s) extra',
+      if (!sortea) 'ya tiene ${SalonMesas.textoMesas(alumno)}',
+    ].join(' · ');
+    final marcado = separadas != null;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 2, 8, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(alumno.nombreAlumno, overflow: TextOverflow.ellipsis),
+              subtitle: Text(
+                detalle,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+              value: marcado,
+              onChanged: sortea
+                  ? (v) => onCambiar(v == true ? 1 : null)
+                  : null,
+              secondary: sortea
+                  ? null
+                  : const Tooltip(
+                      message: 'Ya tiene sus mesas: el sorteo no las mueve',
+                      child: Icon(Icons.lock_outline, size: 18),
+                    ),
+            ),
+            if (sortea && marcado)
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(
+                  children: [
+                    const Text('Separadas:'),
+                    const SizedBox(width: 12),
+                    DropdownButton<int>(
+                      value: separadas!.clamp(1, extras),
+                      items: [
+                        for (var k = 1; k <= extras; k++)
+                          DropdownMenuItem(value: k, child: Text('$k')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) onCambiar(v);
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _resumen(mesas, separadas!.clamp(1, extras)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _resumen(int mesas, int separadas) {
+    final juntas = mesas - separadas;
+    final lejos = separadas == 1 ? '1 lejos' : '$separadas lejos, sin tocarse';
+    return juntas == 1 ? '1 + $lejos' : '$juntas juntas + $lejos';
+  }
+}
+
+class _Titulo extends StatelessWidget {
+  final String texto;
+  const _Titulo(this.texto);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text(
+          texto,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+      );
+}
+
+class _Recuadro extends StatelessWidget {
+  final Color color;
+  final IconData? icono;
+  final Widget child;
+
+  const _Recuadro({required this.color, required this.child, this.icono});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: icono == null
+            ? child
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icono, color: color, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: child),
+                ],
+              ),
+      );
 }

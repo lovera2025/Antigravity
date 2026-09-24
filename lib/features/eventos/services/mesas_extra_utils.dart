@@ -1,43 +1,17 @@
-import 'dart:math';
-
 import '../../../models/contrato_alumno.dart';
 import '../../../models/mesa_extra_item.dart';
 import '../../common/utils/currency_extensions.dart';
 
-/// Demanda de mesas físicas para el sorteo de un evento.
-class DemandaSorteoMesas {
-  final int alumnos;
-  final int mesasBase;
-  final int mesasExtras;
-  final int total;
-
-  const DemandaSorteoMesas({
-    required this.alumnos,
-    required this.mesasBase,
-    required this.mesasExtras,
-    required this.total,
-  });
-}
-
-/// Alumno con mesas extras cuyas mesas se parten: bloque + N alejadas.
-class AlumnoMesasSeparadas {
-  final String alumnoId;
-  final int cantidadAlejadas;
-
-  const AlumnoMesasSeparadas({
-    required this.alumnoId,
-    required this.cantidadAlejadas,
-  });
-}
-
 /// Resultado del diálogo de sorteo.
 class SorteoMesasDialogResult {
   final int capacidadSalon;
-  final List<AlumnoMesasSeparadas> separaciones;
+
+  /// Alumno → cuántas de sus mesas van sueltas, lejos de su bloque.
+  final Map<String, int> separaciones;
 
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
-    this.separaciones = const [],
+    this.separaciones = const {},
   });
 }
 
@@ -416,37 +390,41 @@ class MesasExtraUtils {
     return cant;
   }
 
+  /// Rangos como "40-42" o "40 al 42": como mucho esta cantidad de mesas, para
+  /// que un número mal tipeado ("4-400") no se convierta en cientos de mesas.
+  static const int _maxMesasPorRango = 20;
+
+  /// Números de mesa de un texto, como los guarda el sorteo ("12, 13, 14") o
+  /// como alguien los cargó a mano: "40-42", "40 al 42", "40 y 41", "40/41".
+  ///
+  /// Lo que está entre paréntesis no se lee: "12-14 (2 extra)" es 12, 13 y 14,
+  /// no también la mesa 2.
   static Set<int> numerosMesaDesdeTexto(String? numeroMesa) {
     if (numeroMesa == null || numeroMesa.trim().isEmpty) return {};
+    var texto = numeroMesa.toLowerCase().replaceAll(RegExp(r'\([^)]*\)'), ' ');
     final numeros = <int>{};
-    for (final parte in numeroMesa.split(',')) {
-      final n = int.tryParse(parte.trim());
-      if (n != null) numeros.add(n);
-    }
-    return numeros;
-  }
-
-  /// Alumnos activos sin mesa y demanda de mesas físicas.
-  static DemandaSorteoMesas calcularDemandaSorteo(
-    List<ContratoAlumno> alumnos,
-  ) {
-    var mesasBase = 0;
-    var mesasExtras = 0;
-    var count = 0;
-    for (final a in alumnos) {
-      if (a.nombreAlumno.startsWith('[BAJA]')) continue;
-      if (a.numeroMesa != null && a.numeroMesa!.isNotEmpty) continue;
-      count++;
-      final fisicas = cantidadMesasFisicasSorteo(a);
-      mesasBase++;
-      mesasExtras += fisicas - 1;
-    }
-    return DemandaSorteoMesas(
-      alumnos: count,
-      mesasBase: mesasBase,
-      mesasExtras: mesasExtras,
-      total: mesasBase + mesasExtras,
+    texto = texto.replaceAllMapped(
+      RegExp(r'(\d+)\s*(?:-|–|—|\bal\b|\ba\b)\s*(\d+)'),
+      (m) {
+        final a = int.parse(m.group(1)!);
+        final b = int.parse(m.group(2)!);
+        if (b >= a && b - a < _maxMesasPorRango) {
+          for (var n = a; n <= b; n++) {
+            numeros.add(n);
+          }
+        } else {
+          numeros
+            ..add(a)
+            ..add(b);
+        }
+        return ' ';
+      },
     );
+    for (final m in RegExp(r'\d+').allMatches(texto)) {
+      numeros.add(int.parse(m.group(0)!));
+    }
+    numeros.remove(0);
+    return numeros;
   }
 
   /// Resuelve ítem de mesa desde clave de cobro; nunca asume mesa 1 si hay una sola activa distinta.
@@ -805,363 +783,11 @@ class MesasExtraUtils {
     return 1 + cantidadMesasContrato(c, mesas);
   }
 
-  static bool numerosSonVecinos(int a, int b) => (a - b).abs() == 1;
-
-  static bool bloquesSonVecinos(List<int> a, List<int> b) {
-    for (final x in a) {
-      for (final y in b) {
-        if (numerosSonVecinos(x, y)) return true;
-      }
-    }
-    return false;
-  }
-
-  static bool bloqueEsConsecutivo(List<int> nums) {
-    if (nums.isEmpty) return false;
-    if (nums.length == 1) return true;
-    final sorted = List<int>.from(nums)..sort();
-    for (var i = 1; i < sorted.length; i++) {
-      if (sorted[i] != sorted[i - 1] + 1) return false;
-    }
-    return true;
-  }
-
-  static int distanciaMinimaBloque(List<int> bloque, Set<int> referencia) {
-    if (referencia.isEmpty) return 1 << 20;
-    var min = 1 << 20;
-    for (final n in bloque) {
-      for (final r in referencia) {
-        final d = (n - r).abs();
-        if (d < min) min = d;
-      }
-    }
-    return min;
-  }
-
   /// Alejadas pedidas clampadas a `1..(fisicas-1)`; 0 si no aplica.
   static int cantidadAlejadasEfectivas(int fisicas, int pedidas) {
     if (fisicas < 2 || pedidas < 1) return 0;
     final max = fisicas - 1;
     return pedidas > max ? max : pedidas;
-  }
-
-  static Map<String, int> mapaAlejadasPorAlumno(
-    List<AlumnoMesasSeparadas> separaciones,
-  ) {
-    final map = <String, int>{};
-    for (final s in separaciones) {
-      if (s.cantidadAlejadas < 1) continue;
-      map[s.alumnoId] = s.cantidadAlejadas;
-    }
-    return map;
-  }
-
-  /// Asigna bloque consecutivo de [juntas] + [alejadas] singles lejos del bloque
-  /// y entre sí (no vecinos). Mutates [disponibles]. Devuelve null si no cabe
-  /// (restaura [disponibles] ante fallo parcial).
-  static List<int>? tomarAsignacionConAlejadas(
-    List<int> disponibles, {
-    required int cantFisicas,
-    required int cantidadAlejadas,
-    Random? random,
-    bool forzarLejania = true,
-  }) {
-    if (cantFisicas < 1) return null;
-    final alejadas = cantidadAlejadasEfectivas(cantFisicas, cantidadAlejadas);
-    final juntas = cantFisicas - alejadas;
-    final rng = random ?? Random();
-    final snapshot = List<int>.from(disponibles);
-
-    void restaurar() {
-      disponibles
-        ..clear()
-        ..addAll(snapshot);
-    }
-
-    final bloque = tomarMesasDisponibles(
-      disponibles,
-      juntas,
-      random: rng,
-    );
-    if (bloque == null || bloque.isEmpty) {
-      restaurar();
-      return null;
-    }
-
-    final asignadas = List<int>.from(bloque);
-    final refs = <int>{...bloque};
-
-    for (var i = 0; i < alejadas; i++) {
-      List<int>? single = tomarMesasDisponibles(
-        disponibles,
-        1,
-        random: rng,
-        preferirLejosDe: refs,
-        validar: (candidato) =>
-            !bloquesSonVecinos(candidato, refs.toList()),
-      );
-      if (single == null && !forzarLejania) {
-        single = tomarMesasDisponibles(
-          disponibles,
-          1,
-          random: rng,
-          preferirLejosDe: refs,
-        );
-      }
-      if (single == null || single.isEmpty) {
-        restaurar();
-        return null;
-      }
-      asignadas.addAll(single);
-      refs.addAll(single);
-    }
-
-    return asignadas..sort();
-  }
-
-  /// Lista bloques consecutivos (o singles) libres de tamaño [cantidad].
-  static List<List<int>> listarBloquesConsecutivos(
-    List<int> disponibles,
-    int cantidad,
-  ) {
-    if (cantidad < 1 || disponibles.length < cantidad) return const [];
-    if (cantidad == 1) {
-      return [for (final n in disponibles) [n]];
-    }
-    final ordenados = List<int>.from(disponibles)..sort();
-    final bloques = <List<int>>[];
-    for (var i = 0; i <= ordenados.length - cantidad; i++) {
-      var ok = true;
-      for (var j = 0; j < cantidad - 1; j++) {
-        if (ordenados[i + j + 1] != ordenados[i + j] + 1) {
-          ok = false;
-          break;
-        }
-      }
-      if (!ok) continue;
-      bloques.add([for (var j = 0; j < cantidad; j++) ordenados[i + j]]);
-    }
-    return bloques;
-  }
-
-  /// Quita de [disponibles] un bloque **siempre consecutivo** (sin fallback suelto).
-  ///
-  /// Si [preferirLejosDe] no está vacío, elige entre candidatos válidos el de
-  /// mayor distancia mínima (mesa/bloque lejano).
-  static List<int>? tomarMesasDisponibles(
-    List<int> disponibles,
-    int cantidad, {
-    bool Function(List<int> candidato)? validar,
-    Set<int> preferirLejosDe = const {},
-    Random? random,
-  }) {
-    if (cantidad < 1 || disponibles.length < cantidad) return null;
-    final rng = random ?? Random();
-
-    bool acepta(List<int> candidato) =>
-        validar == null || validar(candidato);
-
-    final candidatos = listarBloquesConsecutivos(disponibles, cantidad)
-        .where(acepta)
-        .toList();
-    if (candidatos.isEmpty) return null;
-
-    List<int> picked;
-    if (preferirLejosDe.isEmpty) {
-      picked = candidatos[rng.nextInt(candidatos.length)];
-    } else {
-      var mejorDist = -1;
-      final mejores = <List<int>>[];
-      for (final b in candidatos) {
-        final d = distanciaMinimaBloque(b, preferirLejosDe);
-        if (d > mejorDist) {
-          mejorDist = d;
-          mejores
-            ..clear()
-            ..add(b);
-        } else if (d == mejorDist) {
-          mejores.add(b);
-        }
-      }
-      picked = mejores[rng.nextInt(mejores.length)];
-    }
-
-    for (final p in picked) {
-      disponibles.remove(p);
-    }
-    return List<int>.from(picked)..sort();
-  }
-
-  /// Ejecuta asignación de mesas (solo lógica; sin persistir).
-  ///
-  /// Por defecto extras en bloque consecutivo. Si [separaciones] indica
-  /// alejadas para un alumno: bloque de (N-K) + K singles lejos del bloque
-  /// y entre sí. Con cupo suficiente intenta al azar y luego empaque
-  /// garantizado.
-  static Map<String, List<int>>? asignarMesasSorteo({
-    required List<ContratoAlumno> alumnos,
-    required int capacidadSalon,
-    required Set<int> ocupadasIniciales,
-    List<AlumnoMesasSeparadas> separaciones = const [],
-    Random? random,
-  }) {
-    final rng = random ?? Random();
-    final alejadasPorId = mapaAlejadasPorAlumno(separaciones);
-    final demanda = calcularDemandaSorteo(alumnos);
-    if (demanda.alumnos == 0) return {};
-
-    final libres = capacidadSalon -
-        ocupadasIniciales.where((n) => n >= 1 && n <= capacidadSalon).length;
-    if (demanda.total > libres) return null;
-
-    final candidatos = alumnos
-        .where(
-          (a) =>
-              !a.nombreAlumno.startsWith('[BAJA]') &&
-              (a.numeroMesa == null || a.numeroMesa!.isEmpty),
-        )
-        .toList();
-
-    List<ContratoAlumno> ordenarPorTamano(List<ContratoAlumno> lista) {
-      final grupos = <int, List<ContratoAlumno>>{};
-      for (final a in lista) {
-        final n = cantidadMesasFisicasSorteo(a);
-        grupos.putIfAbsent(n, () => []).add(a);
-      }
-      final keys = grupos.keys.toList()..sort((a, b) => b.compareTo(a));
-      final out = <ContratoAlumno>[];
-      for (final k in keys) {
-        final g = grupos[k]!..shuffle(rng);
-        out.addAll(g);
-      }
-      return out;
-    }
-
-    Map<String, List<int>>? intentarAleatorio() {
-      for (var intento = 0; intento < 80; intento++) {
-        final disponibles = <int>[];
-        for (var i = 1; i <= capacidadSalon; i++) {
-          if (!ocupadasIniciales.contains(i)) disponibles.add(i);
-        }
-        final asignados = <String, List<int>>{};
-        final orden = ordenarPorTamano(candidatos);
-        var ok = true;
-
-        for (final alumno in orden) {
-          final cantFisicas = cantidadMesasFisicasSorteo(alumno);
-          final pedidas = alejadasPorId[alumno.id] ?? 0;
-          final picked = tomarAsignacionConAlejadas(
-            disponibles,
-            cantFisicas: cantFisicas,
-            cantidadAlejadas: pedidas,
-            random: rng,
-          );
-          if (picked == null || picked.isEmpty) {
-            ok = false;
-            break;
-          }
-          asignados[alumno.id] = picked;
-        }
-
-        if (ok && asignados.length == candidatos.length) {
-          return asignados;
-        }
-      }
-      return null;
-    }
-
-    final alAzar = intentarAleatorio();
-    if (alAzar != null) return alAzar;
-
-    return _empaqueGarantizadoConAlejadas(
-      candidatos: candidatos,
-      capacidadSalon: capacidadSalon,
-      ocupadasIniciales: ocupadasIniciales,
-      alejadasPorId: alejadasPorId,
-      random: rng,
-    );
-  }
-
-  /// Empaque: primero alumnos con alejadas (bloque + singles lejanos),
-  /// luego el resto en bloques consecutivos first-fit.
-  static Map<String, List<int>>? _empaqueGarantizadoConAlejadas({
-    required List<ContratoAlumno> candidatos,
-    required int capacidadSalon,
-    required Set<int> ocupadasIniciales,
-    required Map<String, int> alejadasPorId,
-    Random? random,
-  }) {
-    final rng = random ?? Random();
-    final disponibles = <int>[];
-    for (var i = 1; i <= capacidadSalon; i++) {
-      if (!ocupadasIniciales.contains(i)) disponibles.add(i);
-    }
-
-    final asignados = <String, List<int>>{};
-    final conSep = <ContratoAlumno>[];
-    final sinSep = <ContratoAlumno>[];
-    for (final a in candidatos) {
-      final fisicas = cantidadMesasFisicasSorteo(a);
-      final alej = cantidadAlejadasEfectivas(
-        fisicas,
-        alejadasPorId[a.id] ?? 0,
-      );
-      if (alej > 0) {
-        conSep.add(a);
-      } else {
-        sinSep.add(a);
-      }
-    }
-
-    conSep.sort((x, y) {
-      final dx = cantidadMesasFisicasSorteo(y)
-          .compareTo(cantidadMesasFisicasSorteo(x));
-      if (dx != 0) return dx;
-      return rng.nextBool() ? 1 : -1;
-    });
-    sinSep.sort((x, y) {
-      final dx = cantidadMesasFisicasSorteo(y)
-          .compareTo(cantidadMesasFisicasSorteo(x));
-      if (dx != 0) return dx;
-      return rng.nextBool() ? 1 : -1;
-    });
-
-    for (final alumno in [...conSep, ...sinSep]) {
-      final cantFisicas = cantidadMesasFisicasSorteo(alumno);
-      final pedidas = alejadasPorId[alumno.id] ?? 0;
-      var picked = tomarAsignacionConAlejadas(
-        disponibles,
-        cantFisicas: cantFisicas,
-        cantidadAlejadas: pedidas,
-        random: rng,
-        forzarLejania: true,
-      );
-      if (picked == null) {
-        // Reintentar sin exigir no-vecinos (solo maximizar distancia).
-        picked = tomarAsignacionConAlejadas(
-          disponibles,
-          cantFisicas: cantFisicas,
-          cantidadAlejadas: pedidas,
-          random: rng,
-          forzarLejania: false,
-        );
-      }
-      if (picked == null || picked.isEmpty) return null;
-      asignados[alumno.id] = picked;
-    }
-
-    if (asignados.length != candidatos.length) return null;
-    return asignados;
-  }
-
-  /// Capacidad mínima: demanda + 1 hueco por mesa alejada pedida.
-  static int capacidadMinimaSorteo({
-    required DemandaSorteoMesas demanda,
-    required int totalAlejadas,
-  }) {
-    if (demanda.total < 1) return 1;
-    if (totalAlejadas < 1) return demanda.total;
-    return demanda.total + totalAlejadas;
   }
 
   static String formatearAsignacionMesas(List<int> numeros) =>

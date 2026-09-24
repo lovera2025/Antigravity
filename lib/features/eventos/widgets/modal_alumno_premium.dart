@@ -9,15 +9,45 @@ import '../../common/utils/currency_input_formatter.dart';
 import '../../../models/mesa_extra_item.dart';
 import '../repositories/contratos_repository.dart';
 import '../services/mesas_extra_utils.dart';
+import '../services/salon_mesas.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
 import '../../caja_sesiones/services/caja_auto_sync_service.dart';
+
+/// Lo que se guarda al editar un alumno.
+///
+/// El número de mesa viaja **solo si alguien lo cambió a mano**. Si se mandara
+/// siempre, una PC que todavía no bajó el sorteo pisaría los números con lo que
+/// tenía (vacío o viejo) al editar cualquier otra cosa del alumno. Vaciarlo a
+/// propósito lo libera (`null`).
+Map<String, dynamic> datosEdicionAlumno({
+  required ContratoAlumno antes,
+  required ContratoAlumno editado,
+  required String numeroMesaEscrito,
+}) {
+  final datos = editado.toJson()..remove('numero_mesa');
+  final mesaAntes = antes.numeroMesa?.trim() ?? '';
+  final mesaAhora = numeroMesaEscrito.trim();
+  if (mesaAhora != mesaAntes) {
+    datos['numero_mesa'] = mesaAhora.isEmpty ? null : mesaAhora;
+  }
+  return datos;
+}
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
   final Evento evento;
   final ContratoAlumno? alumno;
 
-  const ModalAlumnoPremium({super.key, required this.evento, this.alumno});
+  /// Precios de mesa y silla extra más comunes del evento, para avisar si se
+  /// carga uno distinto. Solo avisa; null = no avisar.
+  final PreciosHabituales? precios;
+
+  const ModalAlumnoPremium({
+    super.key,
+    required this.evento,
+    this.alumno,
+    this.precios,
+  });
 
   @override
   ConsumerState<ModalAlumnoPremium> createState() => _ModalAlumnoPremiumState();
@@ -183,6 +213,64 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     return _montoBase + _montoMesa + _montoSillas;
   }
 
+  /// Mesas del alumno con lo que está cargado ahora: la base más las extra.
+  int get _mesasTotales => 1 + _mesasExtraCant;
+
+  /// Cada mesa admite hasta 2 sillas extra.
+  int get _maxSillas => SalonMesas.maxSillasExtraPara(_mesasTotales);
+
+  /// Personas y lugares con lo cargado ahora. Las sillas sin precio no cuentan,
+  /// igual que en su estado de cuenta.
+  OcupacionAsientos get _ocupacion => OcupacionAsientos(
+        personas: 1 + _acompanantes.length,
+        mesas: _mesasTotales,
+        sillasExtra: CurrencyInputFormatter.parse(_sillasPrecioUnitCtrl.text) > 0
+            ? _sillasExtraCant
+            : 0,
+      );
+
+  /// Línea de aviso bajo un precio unitario: distinto al habitual del evento,
+  /// o cantidad cargada sin precio. null = nada que avisar.
+  String? _avisoPrecio({
+    required int cantidad,
+    required double unitario,
+    required double? habitual,
+    required String que,
+  }) {
+    if (cantidad <= 0) return null;
+    if (unitario <= 0.01) {
+      return '$que sin precio: no van a figurar en su cuenta';
+    }
+    if (habitual != null && (unitario - habitual).abs() > 0.5) {
+      return 'En este evento lo habitual es ${habitual.toCurrency()} c/u';
+    }
+    return null;
+  }
+
+  Widget _lineaAviso(String texto) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Row(
+          children: [
+            Icon(
+              Icons.warning_amber_rounded,
+              size: 16,
+              color: Colors.amber.shade800,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                texto,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.amber.shade800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
   /// Institución del colegio: viene del cliente del evento masivo (sin campo redundante en el formulario).
   String? _institucionParaPersistir() {
     final n = widget.evento.cliente?.nombreCompleto.trim();
@@ -204,6 +292,19 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('El monto base es requerido'),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    if (_sillasExtraCant > _maxSillas) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Con $_mesasTotales mesa(s) entran hasta $_maxSillas sillas extra '
+            '(2 por mesa). Bajá las sillas o sumá una mesa extra.',
+          ),
           backgroundColor: Colors.orangeAccent,
         ),
       );
@@ -301,7 +402,14 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           sillasExtraCuotas: sillasExtraCuotas,
         );
 
-        await repo.actualizarContrato(al.id, alumnoEditado.toJson());
+        await repo.actualizarContrato(
+          al.id,
+          datosEdicionAlumno(
+            antes: al,
+            editado: alumnoEditado,
+            numeroMesaEscrito: _numeroMesaCtrl.text,
+          ),
+        );
         await repo.recalcularProgresoContrato(al.id);
         await repo.reconciliarMesasEstadoContrato(al.id);
       } else {
@@ -605,6 +713,24 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 color: gold,
                               ),
                             ),
+                            if (_ocupacion.entran)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  '${_ocupacion.texto} (8 por mesa más las '
+                                  'sillas extra)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              )
+                            else
+                              _lineaAviso(
+                                '${_ocupacion.personas} personas para '
+                                '${_ocupacion.asientos} lugares: '
+                                '${_ocupacion.sugerencia}',
+                              ),
                           ],
                         ],
                       ),
@@ -691,6 +817,24 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                           )
                                         : <MesaExtraItem>[];
                                     final next = _mesasExtraCant - 1;
+                                    final maxConMenos =
+                                        SalonMesas.maxSillasExtraPara(1 + next);
+                                    if (next >= 0 &&
+                                        _sillasExtraCant > maxConMenos) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Primero bajá las sillas extra: con '
+                                            '${1 + next} mesa(s) entran hasta '
+                                            '$maxConMenos (2 por mesa).',
+                                          ),
+                                          backgroundColor: Colors.orangeAccent,
+                                        ),
+                                      );
+                                      return;
+                                    }
                                     if (next >= 0 &&
                                         !MesasExtraUtils.puedeReducirCantidad(
                                           prev,
@@ -741,6 +885,16 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               ),
                             ],
                           ),
+                          if (_avisoPrecio(
+                                cantidad: _mesasExtraCant,
+                                unitario: CurrencyInputFormatter.parse(
+                                  _mesaPrecioCtrl.text,
+                                ),
+                                habitual: widget.precios?.mesaExtra,
+                                que: 'Mesas extra',
+                              )
+                              case final aviso?)
+                            _lineaAviso(aviso),
                           if (_mesasExtraCant > 0) ...[
                             const SizedBox(height: 16),
                             Container(
@@ -843,7 +997,23 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 gold,
                                 _sillasExtraCant,
                                 () => setState(() => _sillasExtraCant--),
-                                () => setState(() => _sillasExtraCant++),
+                                () {
+                                  if (_sillasExtraCant >= _maxSillas) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Con $_mesasTotales mesa(s) entran '
+                                          'hasta $_maxSillas sillas extra (2 '
+                                          'por mesa). Para más, sumá una mesa '
+                                          'extra.',
+                                        ),
+                                        backgroundColor: Colors.orangeAccent,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  setState(() => _sillasExtraCant++);
+                                },
                               ),
                               const SizedBox(width: 24),
                               Expanded(
@@ -870,6 +1040,27 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 ),
                               ),
                             ],
+                          ),
+                          if (_avisoPrecio(
+                                cantidad: _sillasExtraCant,
+                                unitario: CurrencyInputFormatter.parse(
+                                  _sillasPrecioUnitCtrl.text,
+                                ),
+                                habitual: widget.precios?.sillaExtra,
+                                que: 'Sillas extra',
+                              )
+                              case final aviso?)
+                            _lineaAviso(aviso),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Hasta $_maxSillas sillas extra con '
+                              '$_mesasTotales mesa(s): 2 por mesa.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                           ),
                           if (_sillasExtraCant > 0) ...[
                             const SizedBox(height: 16),

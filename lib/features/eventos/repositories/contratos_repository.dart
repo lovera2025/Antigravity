@@ -221,6 +221,68 @@ class ContratosRepository {
     });
   }
 
+  /// Escribe el número de mesa de muchos alumnos en **una sola transacción**:
+  /// o queda el salón entero, o nada. Solo toca `numero_mesa` (null = sin
+  /// mesa), con el mismo encolado de sync que [actualizarContrato]. Lo usan el
+  /// sorteo, el deshacer y restaurar.
+  Future<void> asignarNumerosMesa(Map<String, String?> numeroPorContrato) async {
+    if (numeroPorContrato.isEmpty) return;
+    final db = await LocalDatabase.instance;
+    await db.transaction((txn) async {
+      for (final e in numeroPorContrato.entries) {
+        await _actualizarContratoEn(txn, e.key, {'numero_mesa': e.value});
+      }
+    });
+  }
+
+  /// Cuántos alumnos del evento tienen en la nube un número de mesa distinto
+  /// del de esta PC, sin que acá haya un cambio propio esperando subir. Si da
+  /// más de cero, otra PC sorteó (o cambió mesas) y todavía no llegó: sortear
+  /// acá encima sería repartir dos veces los mismos números.
+  ///
+  /// `null` si no se pudo consultar (sin conexión). Solo lectura.
+  Future<int?> mesasDeOtraPcSinBajar(String eventoId) async {
+    if (eventoId.length != 36) return null;
+    if (_connectivity.currentStatus == AppConnectivity.offline) return null;
+    try {
+      final rows = await _supabase
+          .from('contratos_alumnos')
+          .select('id, numero_mesa')
+          .eq('evento_id', eventoId)
+          .timeout(const Duration(seconds: 8));
+      final db = await LocalDatabase.instance;
+      final locales = {
+        for (final r in await db.query(
+          'contratos_alumnos',
+          columns: ['id', 'numero_mesa'],
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+        ))
+          r['id'] as String: ((r['numero_mesa'] as String?) ?? '').trim(),
+      };
+      final pendientes = {
+        for (final r in await db.query(
+          '_sync_queue',
+          columns: ['registro_id'],
+          where: 'tabla = ?',
+          whereArgs: ['contratos_alumnos'],
+        ))
+          r['registro_id'] as String,
+      };
+      var distintos = 0;
+      for (final r in rows as List) {
+        final id = r['id'] as String;
+        if (pendientes.contains(id) || !locales.containsKey(id)) continue;
+        final nube = ((r['numero_mesa'] as String?) ?? '').trim();
+        if (nube != locales[id]) distintos++;
+      }
+      return distintos;
+    } catch (e) {
+      debugPrint('⚠️ No se pudo comparar las mesas con la nube: $e');
+      return null;
+    }
+  }
+
   /// Elimina un contrato definitivamente de la DB local y encola su eliminación en la nube.
   Future<void> eliminarContratoPermanente(String id) async {
     final db = await LocalDatabase.instance;
