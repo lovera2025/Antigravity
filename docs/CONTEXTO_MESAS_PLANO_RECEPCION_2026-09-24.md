@@ -349,7 +349,7 @@ Lo que **no** va:
 
 | Orden | Qué | Para |
 |---|---|---|
-| 1 | Muestra en PDF de la planilla del sorteo, para aprobar el estilo | noviembre |
+| 1 | ~~Planilla del sorteo nueva~~ **hecha el 24-sep** (`08fb774`, ver abajo) | noviembre |
 | 2 | **Fase 2, modelo y reglas:** acompañantes VIP con fecha de nacimiento y excepción; reparto de sillas por mesa con historial; marca `avisar`; plantilla del predio; auditoría del sorteo con semilla y generador propio; modelo del retiro de entradas; RLS de `invitados` | noviembre |
 | 3 | **Fase 3, plano, sorteo y planilla:** geometría única, sorteo por bloques o entero, personalización y planilla nueva | noviembre |
 | 4 | **Fase 6, entrega de entradas:** bloqueo por deuda, quién retira, VIP y rango, un retiro activo, planilla | noviembre |
@@ -379,6 +379,73 @@ Si el sorteo cae a principios de noviembre, la entrega de entradas es la que pue
 - **En la Fase 6:** D4, D13 y D14.
 - **Antes de Recepción y tótem:** D9, D12 y el reparto de la puerta.
 - **En la planilla:** D11, la fila roja (va con la hipótesis de "sin mesa").
+
+## Estado al 24-sep a la noche y cómo seguir
+
+**Regla del usuario: no se publica nada hasta terminar el plan completo.** Commit y push a la rama sí; release,
+instalador y web, no.
+
+### Hecho en esta sesión
+
+- **`5c6bbfd`:** este documento y los cinco pendientes del tótem.
+- **`08fb774`:** la planilla del sorteo nueva, en la app.
+  - Lógica pura en `lib/features/eventos/services/planilla_sorteo.dart` (`PlanillaSorteo.fila`, `porDivision` y
+    `resumen`), con 23 tests en `test/planilla_sorteo_test.dart`.
+  - Estilo común de las planillas nuevas: `lib/features/common/services/planilla_tema.dart`. Color o blanco y negro;
+    cada marca lleva su palabra.
+  - El papel: `lib/features/common/services/planilla_sorteo_pdf.dart`. Hoja de resumen y una hoja A4 acostada por
+    división, numerada por sección ("5° A · hoja 1 de 2"), armada en dos pasadas porque `pagesCount` no sirve con
+    varias secciones.
+  - `PdfService.construirPlanillaSorteoPdf` y `generarPlanillaSorteo` reemplazan a los de la "Planilla de cursos",
+    con las fuentes desde `assets/` (`_fuentesOutfit`).
+  - En la pantalla del evento masivo:
+    - el menú dice "Planilla del sorteo";
+    - un diálogo pregunta la versión (Interna o Para repartir) y la impresión (Color o Blanco y negro);
+    - el aviso de "Sorteo listo" ofrece "PLANILLA".
+  - La muestra se genera con
+    `flutter test tool/planilla_sorteo_muestra_test.dart --dart-define=salida=C:\carpeta`. Salen 4 PDF con datos
+    inventados.
+  - La suite tiene 649 tests en verde. `flutter analyze` no marca nada nuevo: 313 avisos, contra 314 antes, todos de
+    código viejo.
+
+### Lo que la planilla deduce hasta que exista en la base (Fase 2)
+
+- **El reparto de sillas** figura siempre "Pendiente", con el reparto de siempre: de a 2 por mesa, la principal
+  primero.
+- **"Avisar"** es la nota operativa sin resolver.
+- **La semilla del sorteo** no va en el encabezado hasta que el sorteo la guarde.
+- **Los números de cada división** salen salpicados, porque hoy se sortea la institución entera. Con el sorteo por
+  bloques (Fase 3) quedan en uno o dos tramos. Mientras tanto, el resumen dice "en N tramos".
+- **"Para repartir" saca también los teléfonos**, no solo las observaciones, porque son datos de otras familias. Si
+  el jefe los quiere, es una línea en `PlanillaSorteoPdf.columnas`.
+
+### Lo que falta, en orden
+
+1. **Fase 2, modelo y reglas.** Primero el plan, y frenar. Las migraciones v72+ llevan su `ROLLBACK` comentado y van
+   después de las 20 hs, con OK:
+   - acompañantes VIP con fecha de nacimiento y excepción (D6 queda parametrizable);
+   - confirmación del reparto de sillas por familia, con historial. Pasa la planilla de "Pendiente" a "Confirmado";
+   - marca "avisar" explícita en `notas_operativas_contrato`;
+   - plantilla del predio, en JSON versionado;
+   - auditoría del sorteo: semilla, generador propio con test de reproducibilidad, quién y cuándo;
+   - modelo del retiro de entradas, con D5, D7, D15 y D16;
+   - RLS de `invitados`, antes de pasar la lista de la puerta, con RPC para `/lista` y `?buscar`. Requiere desplegar
+     la web, con OK.
+2. **Fase 3:** plano, sorteo por bloques (Normal) o entero (Técnica) y personalización del plano. La planilla suma la
+   semilla y los bloques. Antes hacen falta las respuestas del jefe (preguntas de arriba).
+3. **Fase 6:** entrega de entradas.
+4. **Para diciembre:** los cinco pendientes de tótem y Recepción.
+
+### Para seguir en otro chat, pegar
+
+```text
+Seguimos con el plan de mesas, plano y entradas de los masivos. Leé primero
+docs/CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md (sección "Estado al 24-sep a la
+noche y cómo seguir") y la memoria del proyecto. La planilla del sorteo ya está
+hecha (08fb774). Seguimos por la Fase 2: presentame el plan (archivos,
+migraciones v72+ con su ROLLBACK, riesgos) y frená. No se publica nada hasta
+terminar el plan completo.
+```
 
 ## Las fotos del jefe
 
