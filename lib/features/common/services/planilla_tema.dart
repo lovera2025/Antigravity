@@ -9,8 +9,8 @@ import 'package:pdf/widgets.dart' as pw;
 ///
 /// Dos reglas mandan:
 /// - **El color es acento y nunca el único dato.** Cada marca de color lleva su
-///   palabra ("AVISAR", "sin mesa", "Pendiente"), así que [blancoYNegro] solo
-///   saca los rellenos: la planilla se lee igual.
+///   palabra ("sin mesa", "A confirmar", "Debe: no entregar"), así que
+///   [blancoYNegro] solo saca los rellenos: la planilla se lee igual.
 /// - **Cuerpo de [cuerpo] pt como mínimo**, porque también se manda por WhatsApp
 ///   y se lee en el celular.
 class PlanillaTema {

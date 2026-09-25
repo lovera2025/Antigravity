@@ -58,6 +58,7 @@ import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
 import 'widgets/perdonar_mora_alumno_dialog.dart';
 import 'widgets/reparto_sillas_dialog.dart';
+import 'retiro_entradas_screen.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 
 /// Evita dispose de controllers mientras el route del diálogo aún se desmonta.
@@ -1134,6 +1135,8 @@ class _DetalleEventoMasivoScreenState
                 _restaurarSorteoAnterior();
               case 'puerta':
                 _pasarListaPuerta();
+              case 'retiro':
+                _abrirRetiroEntradas();
             }
           },
           itemBuilder: (context) => [
@@ -1178,6 +1181,19 @@ class _DetalleEventoMasivoScreenState
                 leading: Icon(Icons.print_rounded),
                 title: Text('Planilla del sorteo'),
                 subtitle: Text('Una hoja por división, para imprimir o repartir'),
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'retiro',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.confirmation_number_outlined,
+                  color: Colors.green,
+                ),
+                title: Text('Retiro de entradas'),
+                subtitle: Text('Quién retiró, quién falta y la planilla en papel'),
               ),
             ),
             PopupMenuItem<String>(
@@ -4229,6 +4245,21 @@ class _DetalleEventoMasivoScreenState
         );
       }
     }
+  }
+
+  /// La sección Retiro de entradas. Cobrar y editar al alumno se hacen con las
+  /// pantallas de siempre, que viven acá.
+  Future<void> _abrirRetiroEntradas() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RetiroEntradasScreen(
+          evento: widget.evento,
+          onCobrar: _mostrarModalPagoAlumno,
+          onEditarAlumno: _mostrarModalEditarAlumno,
+        ),
+      ),
+    );
+    if (mounted) await _refreshAlumnos();
   }
 
   Future<void> _mostrarModalRegistrarAlumno() async {

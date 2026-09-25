@@ -14,6 +14,7 @@ import '../../../models/transaccion.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../../models/entradas_retiro.dart';
 import '../../../models/presupuesto.dart';
 import '../../../models/prestamo_alquiler.dart';
 import '../../../models/calculo_rentabilidad.dart';
@@ -33,6 +34,7 @@ import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
+import '../../eventos/services/retiro_entradas.dart';
 import '../../eventos/services/mora_concepto_rotulo.dart';
 // `MoraPendientePreviaDetalle` llega reexportado por mora_concepto_rotulo.
 import '../../eventos/services/mora_cuota_calculator.dart';
@@ -40,6 +42,7 @@ import '../../eventos/utils/evento_presentacion.dart';
 import '../../eventos/utils/presupuesto_desde_evento.dart';
 import '../utils/currency_extensions.dart';
 import 'ajuste_pdf.dart';
+import 'planilla_entrega_pdf.dart';
 import 'planilla_sorteo_pdf.dart';
 import 'presupuesto_pdf_sections.dart';
 import 'presupuesto_redaccion_llm_service.dart';
@@ -4196,6 +4199,57 @@ class PdfService {
       negrita: fuentes?.$2,
       generada: generada,
     );
+  }
+
+  /// Planilla de entrega de entradas: arma el PDF y devuelve los bytes. La usa
+  /// [generarPlanillaEntrega] y la muestra de `tool/`. Fuentes de los assets,
+  /// igual que la del sorteo: se imprime también sin red.
+  static Future<Uint8List> construirPlanillaEntregaPdf(
+    Evento evento,
+    List<ContratoAlumno> alumnos, {
+    required Map<String, EntradasRetiro> retiros,
+    required Map<String, DeudaAlumno> deudas,
+    bool blancoYNegro = false,
+    DateTime? generada,
+  }) async {
+    final fuentes = await _fuentesOutfit();
+    return PlanillaEntregaPdf.construir(
+      evento: evento,
+      alumnos: alumnos,
+      retiros: retiros,
+      deudas: deudas,
+      blancoYNegro: blancoYNegro,
+      regular: fuentes?.$1,
+      negrita: fuentes?.$2,
+      generada: generada,
+    );
+  }
+
+  static Future<void> generarPlanillaEntrega(
+    Evento evento,
+    List<ContratoAlumno> alumnos, {
+    required Map<String, EntradasRetiro> retiros,
+    required Map<String, DeudaAlumno> deudas,
+    bool blancoYNegro = false,
+  }) async {
+    final bytes = await construirPlanillaEntregaPdf(
+      evento,
+      alumnos,
+      retiros: retiros,
+      deudas: deudas,
+      blancoYNegro: blancoYNegro,
+    );
+    final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
+      RegExp(r'[^a-zA-Z0-9_\-\.]'),
+      '_',
+    );
+    final nombre =
+        'Planilla_Entrega_$safeName${blancoYNegro ? '_BN' : ''}.pdf';
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, nombre);
+    } else {
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: nombre);
+    }
   }
 
   static Future<void> generarPlanillaSorteo(
