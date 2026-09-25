@@ -835,9 +835,12 @@ class SyncEngine {
     'egresos',
     'cierre_caja_guia_movimientos',
     'cierre_caja_anotaciones',
-    // La entrega de entradas también es de mostrador: si las dos PCs atienden
-    // a la vez, cada una tiene que ver en segundos lo que entregó la otra.
+    // La entrega de entradas y el reparto de sillas también son de mostrador:
+    // si las dos PCs atienden a la vez, cada una tiene que ver en segundos lo
+    // que hizo la otra. El pulso los trae en menos de un segundo; esto es la red
+    // de seguridad si el aviso no llega.
     'entradas_retiro',
+    'sillas_reparto',
   ];
 
   /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
@@ -873,7 +876,6 @@ class SyncEngine {
     'caja_fuerte_movimientos',
     'rentabilidad_config',
     'compromisos_personal',
-    'sillas_reparto',
     'sorteos_mesas',
   ];
 

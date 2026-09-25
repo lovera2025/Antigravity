@@ -5,14 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/sync_engine.dart';
 import '../../core/utils/ar_time.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/entradas_retiro.dart';
 import '../../models/evento.dart';
-import '../caja_sesiones/services/caja_auto_sync_service.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/quien_opera.dart';
+import '../common/utils/subir_ya.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
 import 'services/planilla_sorteo.dart';
@@ -55,14 +56,31 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   bool _ocupado = false;
   final _busqueda = TextEditingController();
   Timer? _refresco;
+  StreamSubscription<Set<String>>? _cambiosSub;
+
+  /// Lo que, si baja de la otra PC, cambia lo que se ve acá: una entrega, la
+  /// cuenta del alumno o un cobro.
+  static const _tablasQueMiro = {
+    'entradas_retiro',
+    'contratos_alumnos',
+    'pagos_contrato_alumno',
+  };
 
   @override
   void initState() {
     super.initState();
     _cargarPreferencias();
     _cargar();
-    // Lo que entrega la otra PC baja cada 10 s; releer lo local cada 15 s lo
-    // muestra acá sin que nadie tenga que apretar nada.
+    // En tiempo real: cuando la otra PC entrega, sube al instante y avisa por el
+    // pulso; esta PC lo baja en menos de un segundo, y acá se relee apenas llega.
+    _cambiosSub = ref.read(syncEngineProvider).cambiosBajadosStream.listen((
+      tablas,
+    ) {
+      if (!_ocupado && tablas.any(_tablasQueMiro.contains)) {
+        _cargar(silencioso: true);
+      }
+    });
+    // Red de seguridad por si el aviso no llega: releer lo local cada 15 s.
     _refresco = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!_ocupado) _cargar(silencioso: true);
     });
@@ -70,6 +88,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
 
   @override
   void dispose() {
+    _cambiosSub?.cancel();
     _refresco?.cancel();
     _busqueda.dispose();
     super.dispose();
@@ -358,10 +377,25 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
       );
       await repo.guardar(retiro);
       await _cargar();
-      await ref
-          .read(cajaAutoSyncServiceProvider)
-          .afterMassiveMutation(startedAt: checkpoint, isPayment: false);
+      // Arriba ya, no en el próximo ciclo: mientras no sube, la otra PC no la ve
+      // y podría entregarle de nuevo a la misma familia.
+      final subio = await subirYa(
+        ref.read(syncEngineProvider),
+        tabla: 'entradas_retiro',
+        registroId: retiro.id,
+        desde: checkpoint,
+      );
       if (!mounted) return;
+      if (!subio) {
+        await _avisar(
+          'Entregado, pero todavía no subió',
+          'La entrega quedó guardada en esta PC, pero no llegó a la nube (¿sin '
+              'internet?). Hasta que suba, la otra PC no la ve: no le entreguen '
+              'a esta familia desde la otra PC. Sube sola cuando vuelva la '
+              'conexión.',
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.green.shade700,
@@ -396,12 +430,22 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
             ),
           );
       await _cargar();
-      await ref
-          .read(cajaAutoSyncServiceProvider)
-          .afterMassiveMutation(startedAt: checkpoint, isPayment: false);
+      final subio = await subirYa(
+        ref.read(syncEngineProvider),
+        tabla: 'entradas_retiro',
+        registroId: r.id,
+        desde: checkpoint,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Entrega de ${a.nombreAlumno} anulada.')),
+        SnackBar(
+          content: Text(
+            subio
+                ? 'Entrega de ${a.nombreAlumno} anulada.'
+                : 'Entrega de ${a.nombreAlumno} anulada en esta PC; sube a la '
+                    'nube cuando vuelva la conexión.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;

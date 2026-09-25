@@ -95,8 +95,27 @@ demás PDF, el algoritmo del sorteo y la lista de la puerta.
 - **Sync:**
   - las tres tablas están en `_incrementalColumns`, `_pullFromCloud`, `_cleanForSqlite` (todas sus columnas),
     `getPriority` y las relaciones de `sync_queue.dart`;
-  - `entradas_retiro` baja cada 10 s (es de mostrador); las otras dos, cada minuto y con el pulso;
   - ninguna entra en la limpieza de huérfanos ni en Realtime.
+
+### En tiempo real entre las dos PCs
+
+- **Subida.** Al guardar una entrega, una anulación o un reparto, `subirYa` (`common/utils/subir_ya.dart`) lo sube en
+  el momento, con cualquier rol, y reintenta si el motor está ocupado.
+  - Antes de esto, la subida dependía del ciclo: hasta 10 s en la PC del jefe (`afterMassiveMutation` solo sube
+    cobros), y una sesión sin rol elegido (Asesor) podía no subir sola.
+  - Si no pudo subir (sin internet), la app lo dice. En una entrega avisa que la otra PC todavía no la ve.
+- **Aviso.** Al subir, el motor manda el pulso. La otra PC baja esas tablas en menos de un segundo.
+- **Pantallas.** La de Retiro de entradas y la columna Mesa escuchan `cambiosBajadosStream` y se releen apenas baja
+  algo. La de Retiro además relee cada 15 s.
+- **Red de seguridad si el pulso no llega:** `entradas_retiro` y `sillas_reparto` bajan cada 10 s (lista de mostrador);
+  `sorteos_mesas`, cada minuto.
+- **Contra las entregas dobles:**
+  - antes de guardar, la app le pregunta a la nube por la fila de ese alumno;
+  - con todo recién leído, si mientras el diálogo estaba abierto cambió algo —otra PC entregó, un cobro, esos números
+    del talonario—, no guarda y lo dice.
+- **Lo que queda posible:** que las dos PCs confirmen la misma familia en el mismo par de segundos. Gana la última,
+  porque es una sola fila. En el mostrador no pasa: la familia está en un solo lugar.
+- **Lo nuevo no puede pisar un cobro:** no escribe en la cuenta ni en los pagos.
 - **Nube:** `supabase/migrations/20260925120000_sillas_retiro_sorteos.sql`.
   - Contiene las tablas, FK con `ON DELETE CASCADE`, RLS "authenticated", disparadores de `updated_at` y el
     `ROLLBACK` de cada sentencia.

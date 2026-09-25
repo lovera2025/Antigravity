@@ -19,6 +19,8 @@ import '../../models/sorteo_mesas_registro.dart';
 import '../../core/utils/uuid_utils.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
+import '../common/utils/subir_ya.dart';
+import '../../core/services/sync_engine.dart';
 import 'repositories/notas_operativas_contrato_repository.dart';
 import 'repositories/sillas_reparto_repository.dart';
 import 'repositories/sorteos_mesas_repository.dart';
@@ -106,6 +108,10 @@ class _DetalleEventoMasivoScreenState
   /// Filtro "Sillas a confirmar": solo los que tienen que elegir.
   bool _soloSillasAConfirmar = false;
 
+  /// Aviso del motor cuando baja algo de la otra PC: el reparto de sillas que
+  /// eligió la otra PC aparece al instante, sin esperar el ciclo de 10 s.
+  StreamSubscription<Set<String>>? _cambiosSub;
+
   /// Arrastre de mora abierto por cuota, reconstruido del historial de pagos.
   /// El tracked es un solo número en la ficha; esto dice de qué cuotas salió.
   /// Se calcula una vez por carga (no en cada rebuild de la grilla).
@@ -140,6 +146,11 @@ class _DetalleEventoMasivoScreenState
     _fetchDatos();
     _cargarRespaldoSorteo();
     _setupRealtime();
+    _cambiosSub = ref.read(syncEngineProvider).cambiosBajadosStream.listen((
+      tablas,
+    ) {
+      if (tablas.contains('sillas_reparto')) unawaited(_cargarRepartosSillas());
+    });
   }
 
   void _setupRealtime() {
@@ -148,6 +159,7 @@ class _DetalleEventoMasivoScreenState
 
   @override
   void dispose() {
+    _cambiosSub?.cancel();
     _realtimeChannel?.unsubscribe();
     super.dispose();
   }
@@ -357,7 +369,7 @@ class _DetalleEventoMasivoScreenState
     if (elegida == null || !mounted) return;
     try {
       final checkpoint = DateTime.now().toUtc();
-      await ref.read(sillasRepartoRepositoryProvider).guardar(
+      final guardado = await ref.read(sillasRepartoRepositoryProvider).guardar(
             contratoAlumnoId: alumno.id,
             sillasPrincipal: elegida.principal,
             sillasExtra: SalonMesas.sillasExtra(alumno),
@@ -365,14 +377,19 @@ class _DetalleEventoMasivoScreenState
             hechoPor: quienOpera(ref),
           );
       await _cargarRepartosSillas();
-      await ref
-          .read(cajaAutoSyncServiceProvider)
-          .afterMassiveMutation(startedAt: checkpoint, isPayment: false);
+      // Arriba ya: así la otra PC lo ve en segundos, sin esperar su ciclo.
+      final subio = await subirYa(
+        ref.read(syncEngineProvider),
+        tabla: 'sillas_reparto',
+        registroId: guardado.id,
+        desde: checkpoint,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Sillas de ${alumno.nombreAlumno}: ${elegida.texto}',
+            'Sillas de ${alumno.nombreAlumno}: ${elegida.texto}'
+            '${subio ? '' : ' (guardado en esta PC; sube cuando vuelva la conexión)'}',
           ),
         ),
       );
