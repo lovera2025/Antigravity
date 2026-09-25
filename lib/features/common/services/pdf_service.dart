@@ -12,6 +12,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../models/evento.dart';
 import '../../../models/transaccion.dart';
 import '../../../models/contrato_alumno.dart';
+import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/presupuesto.dart';
 import '../../../models/prestamo_alquiler.dart';
 import '../../../models/calculo_rentabilidad.dart';
@@ -30,7 +31,7 @@ import '../../eventos/services/cobro_masivo_conceptos_pdf.dart';
 import '../../eventos/services/concepto_pago_display.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
-import '../../eventos/services/salon_mesas.dart';
+import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/mora_concepto_rotulo.dart';
 // `MoraPendientePreviaDetalle` llega reexportado por mora_concepto_rotulo.
 import '../../eventos/services/mora_cuota_calculator.dart';
@@ -38,6 +39,7 @@ import '../../eventos/utils/evento_presentacion.dart';
 import '../../eventos/utils/presupuesto_desde_evento.dart';
 import '../utils/currency_extensions.dart';
 import 'ajuste_pdf.dart';
+import 'planilla_sorteo_pdf.dart';
 import 'presupuesto_pdf_sections.dart';
 import 'presupuesto_redaccion_llm_service.dart';
 
@@ -4162,332 +4164,65 @@ class PdfService {
     }
   }
 
-  /// Texto de la columna MESA en papel: lo mismo que la grilla, con "(!)" en
-  /// vez de ⚠, que la fuente del PDF no tiene.
+  /// Planilla del sorteo: arma el PDF y devuelve los bytes, sin mostrarlo. La
+  /// usa [generarPlanillaSorteo] y la muestra de `tool/`.
   ///
-  /// Con [pago], marca lo que el sorteo deja afuera por no tener nada pagado:
-  /// "sin mesa (sin pagar)" y "le falta 1 mesa (sin pagar)".
-  static String _mesaPlanilla(ContratoAlumno a, [PagoAlumno? pago]) {
-    final texto = SalonMesas.textoMesas(a);
-    final mesas = SalonMesas.mesas(a);
-    final base = texto != '-'
-        ? texto
-        : pago != null && !pago.pagoBase
-        ? 'sin mesa (sin pagar)'
-        : (mesas == 1 ? '-' : '$mesas mesas · sin asignar');
-    var aviso = SalonMesas.avisoMesas(a);
-    if (aviso != null &&
-        pago != null &&
-        !pago.pagoMesas &&
-        aviso.startsWith('le falta')) {
-      aviso = '$aviso (sin pagar)';
-    }
-    return aviso == null ? base : '$base\n(!) $aviso';
-  }
-
-  /// Sillas extra con "(sin pagar)" si no tienen nada pagado.
-  static String _sillasPlanilla(
-    String texto,
-    ContratoAlumno a,
-    PagoAlumno? pago,
-  ) =>
-      pago != null && SalonMesas.sillasExtra(a) > 0 && !pago.pagoSillas
-          ? '$texto (sin pagar)'
-          : texto;
-
-  /// Planilla de cursos: arma el PDF y devuelve los bytes, sin mostrarlo. La
-  /// usa [generarPlanillaCursos] y la muestra de `tool/`.
-  ///
-  /// La primera hoja es el resumen del salón: totales para armar la noche
-  /// (mesas, sillas de a 8 por mesa y sillas extra) y la lista de quienes
-  /// tienen mesas o sillas extra, con sus números, si van juntas o separadas y
-  /// en qué mesa van las sillas. Después, un curso por hoja como siempre.
-  ///
-  /// Con [pagos] (lo pagado de cada alumno), marca lo que no tiene nada pagado y
-  /// lo cuenta aparte en los totales.
-  static Future<Uint8List> construirPlanillaCursosPdf(
+  /// El papel lo dibuja [PlanillaSorteoPdf] con las filas de [PlanillaSorteo].
+  /// Las fuentes salen de los assets de la app ([_fuentesOutfit]), nunca de
+  /// internet: la planilla se imprime también en el predio, donde no hay red.
+  static Future<Uint8List> construirPlanillaSorteoPdf(
     Evento evento,
     List<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
+    Map<String, NotaOperativaContrato> notas = const {},
+    VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
+    bool blancoYNegro = false,
+    DateTime? generada,
   }) async {
-    final fontRegular = await PdfGoogleFonts.outfitRegular();
-    final fontBold = await PdfGoogleFonts.outfitBold();
-
-    final pdf = pw.Document(
-      theme: pw.ThemeData.withFont(base: fontRegular, bold: fontBold),
+    final fuentes = await _fuentesOutfit();
+    return PlanillaSorteoPdf.construir(
+      evento: evento,
+      alumnos: alumnos,
+      pagos: pagos,
+      notas: notas,
+      version: version,
+      blancoYNegro: blancoYNegro,
+      regular: fuentes?.$1,
+      negrita: fuentes?.$2,
+      generada: generada,
     );
-    final institucion = evento.cliente?.nombreCompleto ?? 'EVENTO';
-
-    // Los de baja no van: ni al salón ni a la planilla.
-    final activos = alumnos
-        .where((a) => !a.nombreAlumno.startsWith('[BAJA]'))
-        .toList();
-
-    pw.Widget encabezado(String subtitulo, [String? control]) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              'PLANILLA DE INGRESO - $institucion',
-              style: pw.TextStyle(
-                fontSize: 18,
-                fontWeight: pw.FontWeight.bold,
-                color: _gold,
-              ),
-            ),
-            pw.SizedBox(height: 4),
-            pw.Text(
-              subtitulo,
-              style: pw.TextStyle(
-                fontSize: 14,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.black,
-              ),
-            ),
-            if (control != null) ...[
-              pw.SizedBox(height: 2),
-              pw.Text(control, style: const pw.TextStyle(fontSize: 10)),
-            ],
-            pw.Divider(color: _gold),
-            pw.SizedBox(height: 10),
-          ],
-        );
-
-    String control(List<ContratoAlumno> lista) {
-      final mesas = lista.fold<int>(0, (s, a) => s + SalonMesas.mesas(a));
-      final sillas =
-          lista.fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a));
-      return '${lista.length} alumnos · $mesas mesas · $sillas sillas extra';
-    }
-
-    // ── Hoja 1: resumen del salón ─────────────────────────────────────────
-    final totalMesas =
-        activos.fold<int>(0, (s, a) => s + SalonMesas.mesas(a));
-    final asignadas = activos.fold<int>(
-      0,
-      (s, a) => s + MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).length,
-    );
-    final totalSillasExtra =
-        activos.fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a));
-    final sillasSinPagar = pagos == null
-        ? 0
-        : activos
-              .where((a) => !(pagos[a.id]?.pagoSillas ?? false))
-              .fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a));
-    final sinNadaPagado = pagos == null
-        ? 0
-        : activos.where((a) => !(pagos[a.id]?.pagoBase ?? false)).length;
-    final conExtras = activos
-        .where(
-          (a) => SalonMesas.mesasExtra(a) > 0 || SalonMesas.sillasExtra(a) > 0,
-        )
-        .toList()
-      ..sort((a, b) => a.nombreAlumno.compareTo(b.nombreAlumno));
-    // La columna de personas solo si alguien de la lista tiene acompañantes
-    // cargados: si no, sería una columna de "1".
-    final conPersonas =
-        conExtras.any((a) => SalonMesas.ocupacion(a).personas > 1);
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        header: (context) => encabezado('RESUMEN DEL SALÓN'),
-        build: (context) => [
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: _greyLight),
-              color: _headerBg,
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  '${activos.length} alumnos   ·   $totalMesas mesas'
-                  '${asignadas < totalMesas ? ' ($asignadas asignadas)' : ''}'
-                  '   ·   ${SalonMesas.sillasPorMesa * totalMesas} sillas '
-                  '(${SalonMesas.sillasPorMesa} por mesa)'
-                  '   ·   ${totalSillasExtra - sillasSinPagar} sillas extra'
-                  '${sillasSinPagar > 0 ? ' (+$sillasSinPagar sin pagar)' : ''}',
-                  style: pw.TextStyle(
-                    fontSize: 12,
-                    fontWeight: pw.FontWeight.bold,
-                    color: _darkText,
-                  ),
-                ),
-                if (sinNadaPagado > 0) ...[
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    '$sinNadaPagado alumno(s) sin nada pagado de la cuota base: '
-                    'su mesa se sortea cuando paguen.',
-                    style: const pw.TextStyle(fontSize: 10),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 14),
-          pw.Text(
-            'Con mesas o sillas extra (${conExtras.length})',
-            style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 6),
-          if (conExtras.isEmpty)
-            pw.Text(
-              'Nadie tiene mesas ni sillas extra.',
-              style: const pw.TextStyle(fontSize: 10),
-            )
-          else
-            pw.TableHelper.fromTextArray(
-              border: pw.TableBorder.all(color: _greyLight),
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: _darkText,
-                fontSize: 10,
-              ),
-              headerDecoration: const pw.BoxDecoration(color: _headerBg),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.all(5),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2.4),
-                1: const pw.FlexColumnWidth(1),
-                2: const pw.FlexColumnWidth(2),
-                3: const pw.FlexColumnWidth(2),
-                if (conPersonas) 4: const pw.FlexColumnWidth(1.4),
-              },
-              data: <List<String>>[
-                [
-                  'ALUMNO',
-                  'CURSO',
-                  'MESAS',
-                  'SILLAS EXTRA (por mesa)',
-                  if (conPersonas) 'PERSONAS',
-                ],
-                for (final a in conExtras)
-                  [
-                    a.nombreAlumno,
-                    a.cursoDivision?.trim().isNotEmpty == true
-                        ? a.cursoDivision!.trim()
-                        : '-',
-                    _mesaPlanilla(a, pagos?[a.id]),
-                    _sillasPlanilla(
-                      SalonMesas.textoRepartoSillas(a),
-                      a,
-                      pagos?[a.id],
-                    ),
-                    if (conPersonas)
-                      () {
-                        final oc = SalonMesas.ocupacion(a);
-                        return oc.entran ? oc.texto : '(!) ${oc.texto}';
-                      }(),
-                  ],
-              ],
-            ),
-        ],
-      ),
-    );
-
-    // ── Una hoja por curso ────────────────────────────────────────────────
-    final alumnosPorCurso = <String, List<ContratoAlumno>>{};
-    for (final alumno in activos) {
-      final curso = alumno.cursoDivision?.trim().isNotEmpty == true
-          ? alumno.cursoDivision!.trim()
-          : 'Sin Curso Asignado';
-      alumnosPorCurso.putIfAbsent(curso, () => []).add(alumno);
-    }
-    final cursos = alumnosPorCurso.keys.toList()..sort();
-
-    for (final curso in cursos) {
-      final alumnosDelCurso = alumnosPorCurso[curso]!
-        ..sort((a, b) => a.nombreAlumno.compareTo(b.nombreAlumno));
-
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
-          header: (context) => encabezado(
-            'CURSO / DIVISIÓN: $curso',
-            control(alumnosDelCurso),
-          ),
-          build: (context) => [
-            pw.TableHelper.fromTextArray(
-              border: pw.TableBorder.all(color: _greyLight),
-              headerStyle: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-                color: _darkText,
-                fontSize: 10,
-              ),
-              headerDecoration: const pw.BoxDecoration(color: _headerBg),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              cellPadding: const pw.EdgeInsets.all(6),
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2),
-                1: const pw.FlexColumnWidth(1.5),
-                2: const pw.FlexColumnWidth(1.3),
-                3: const pw.FlexColumnWidth(0.9),
-                4: const pw.FlexColumnWidth(2),
-                5: const pw.FlexColumnWidth(2.3),
-              },
-              data: <List<String>>[
-                <String>[
-                  'ALUMNO',
-                  'TELÉFONO',
-                  'MESA',
-                  'SILLAS EXTRA',
-                  'MÚSICA ELEGIDA',
-                  'ACOMPAÑANTES',
-                ],
-                ...alumnosDelCurso.map((a) {
-                  final acompanantes = a.nombresAcompanantes.join(', ');
-                  final musica = a.musicaElegida?.isNotEmpty == true
-                      ? a.musicaElegida!
-                      : '-';
-                  final telefono = a.telefono?.isNotEmpty == true
-                      ? a.telefono!
-                      : '-';
-                  return [
-                    a.nombreAlumno,
-                    telefono,
-                    _mesaPlanilla(a, pagos?[a.id]),
-                    _sillasPlanilla(SalonMesas.textoSillas(a), a, pagos?[a.id]),
-                    musica,
-                    acompanantes,
-                  ];
-                }),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    return pdf.save();
   }
 
-  static Future<void> generarPlanillaCursos(
+  static Future<void> generarPlanillaSorteo(
     Evento evento,
     List<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
+    Map<String, NotaOperativaContrato> notas = const {},
+    VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
+    bool blancoYNegro = false,
   }) async {
-    final bytes = await construirPlanillaCursosPdf(
+    final bytes = await construirPlanillaSorteoPdf(
       evento,
       alumnos,
       pagos: pagos,
+      notas: notas,
+      version: version,
+      blancoYNegro: blancoYNegro,
     );
 
-    // Normalizar titulo archivo
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
       RegExp(r'[^a-zA-Z0-9_\-\.]'),
       '_',
     );
+    final sufijo =
+        version == VersionPlanillaSorteo.interna ? 'interna' : 'para_repartir';
+    final nombre =
+        'Planilla_Sorteo_${safeName}_$sufijo${blancoYNegro ? '_BN' : ''}.pdf';
 
     if (!kIsWeb && Platform.isWindows) {
-      await _entregarPdfEnWindows(bytes, 'Planilla_Cursos_$safeName.pdf');
+      await _entregarPdfEnWindows(bytes, nombre);
     } else {
-      await Printing.layoutPdf(
-        onLayout: (_) async => bytes,
-        name: 'Planilla_Cursos_$safeName.pdf',
-      );
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: nombre);
     }
   }
 

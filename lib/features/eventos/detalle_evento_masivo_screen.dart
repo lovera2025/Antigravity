@@ -34,6 +34,7 @@ import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
 import 'services/pago_para_sorteo.dart';
+import 'services/planilla_sorteo.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
 import 'services/sorteo_mesas_motor.dart';
@@ -1044,7 +1045,7 @@ class _DetalleEventoMasivoScreenState
                   if (!_modoSeleccionContratos) _idsSeleccionContratos.clear();
                 });
               case 'planilla':
-                if (_alumnos.isNotEmpty) _generarPlanillaCursos();
+                if (_alumnos.isNotEmpty) _generarPlanillaSorteo();
               case 'mora':
                 _exportarPlanillaMora(moraPorAlumno);
               case 'sortear':
@@ -1097,8 +1098,8 @@ class _DetalleEventoMasivoScreenState
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.print_rounded),
-                title: Text('Planilla de cursos'),
-                subtitle: Text('PDF con el listado por curso'),
+                title: Text('Planilla del sorteo'),
+                subtitle: Text('Una hoja por división, para imprimir o repartir'),
               ),
             ),
             PopupMenuItem<String>(
@@ -3205,9 +3206,17 @@ class _DetalleEventoMasivoScreenState
     return out;
   }
 
-  /// La Planilla de cursos, con lo pagado de cada uno para marcar lo que todavía
-  /// no tiene nada pagado.
-  Future<void> _generarPlanillaCursos() async {
+  /// La planilla del sorteo: una hoja por división, con lo pagado de cada uno
+  /// (para marcar lo que no tiene nada pagado) y las notas operativas (las
+  /// observaciones de la versión interna).
+  ///
+  /// Antes pregunta qué versión y cómo se imprime. Se ofrece también al
+  /// terminar el sorteo.
+  Future<void> _generarPlanillaSorteo() async {
+    if (_alumnos.isEmpty) return;
+    final opciones = await _elegirOpcionesPlanilla();
+    if (opciones == null || !mounted) return;
+
     final repo = ref.read(contratosRepositoryProvider);
     final alumnos = List<ContratoAlumno>.from(_alumnos);
     try {
@@ -3215,10 +3224,13 @@ class _DetalleEventoMasivoScreenState
         alumnos,
         await _pagosPorContrato(repo, alumnos),
       );
-      await PdfService.generarPlanillaCursos(
+      await PdfService.generarPlanillaSorteo(
         widget.evento,
         alumnos,
         pagos: pagos,
+        notas: _notasOperativasPorContrato,
+        version: opciones.version,
+        blancoYNegro: opciones.blancoYNegro,
       );
     } catch (e) {
       if (!mounted) return;
@@ -3226,6 +3238,88 @@ class _DetalleEventoMasivoScreenState
         SnackBar(content: Text('No se pudo generar la planilla: $e')),
       );
     }
+  }
+
+  /// Qué planilla se imprime: la interna (con teléfonos y observaciones) o la
+  /// de repartir, y en color o en blanco y negro. `null` si se cancela.
+  Future<({VersionPlanillaSorteo version, bool blancoYNegro})?>
+      _elegirOpcionesPlanilla() {
+    var version = VersionPlanillaSorteo.interna;
+    var blancoYNegro = false;
+    return showDialog<({VersionPlanillaSorteo version, bool blancoYNegro})>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('Planilla del sorteo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Versión'),
+              const SizedBox(height: 8),
+              SegmentedButton<VersionPlanillaSorteo>(
+                segments: const [
+                  ButtonSegment(
+                    value: VersionPlanillaSorteo.interna,
+                    icon: Icon(Icons.lock_outline_rounded),
+                    label: Text('Interna'),
+                  ),
+                  ButtonSegment(
+                    value: VersionPlanillaSorteo.paraRepartir,
+                    icon: Icon(Icons.groups_rounded),
+                    label: Text('Para repartir'),
+                  ),
+                ],
+                selected: {version},
+                onSelectionChanged: (s) => setDialog(() => version = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                version == VersionPlanillaSorteo.interna
+                    ? 'Con teléfonos, observaciones y a quién llamar por el '
+                        'reparto de sillas.'
+                    : 'Sin teléfonos ni observaciones: son datos de otras '
+                        'familias.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              const Text('Impresión'),
+              const SizedBox(height: 8),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.palette_outlined),
+                    label: Text('Color'),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.contrast_rounded),
+                    label: Text('Blanco y negro'),
+                  ),
+                ],
+                selected: {blancoYNegro},
+                onSelectionChanged: (s) =>
+                    setDialog(() => blancoYNegro = s.first),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCELAR'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(
+                context,
+                (version: version, blancoYNegro: blancoYNegro),
+              ),
+              child: const Text('GENERAR'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _avisarSorteo(String titulo, String mensaje) {
@@ -3417,7 +3511,11 @@ class _DetalleEventoMasivoScreenState
         final soloBase = exclusion.soloBase.length;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            duration: const Duration(seconds: 8),
+            duration: const Duration(seconds: 12),
+            action: SnackBarAction(
+              label: 'PLANILLA',
+              onPressed: _generarPlanillaSorteo,
+            ),
             content: Text(
               'Sorteo listo: ${asignaciones.length} alumno(s) con mesa'
               '${separadas > 0 ? ' · $separadas con mesas separadas' : ''}'
