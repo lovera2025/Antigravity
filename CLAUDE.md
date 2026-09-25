@@ -34,7 +34,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 71) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 72) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -95,6 +95,12 @@ carga.
   - Nunca toca `estado_ingreso` ni borra nada.
   - El sorteo guarda la mesa en `contratos_alumnos`; el tótem la lee de `invitados`. Si se vuelve a sortear, hay que
     volver a pasar la lista.
+  - **Hasta cerrar la RLS de `invitados` no se pasa la lista de ninguna fiesta.** Hoy cualquiera con la clave
+    pública la lee y la cambia, DNI incluido. Se cierra en diciembre con el tótem, porque el tótem lee como
+    anónimo ([docs/pendientes/rls-invitados.md](docs/pendientes/rls-invitados.md)).
+
+**El retiro de entradas** (v72, `retiro_entradas_screen.dart`) es otra cosa: la entrega de entradas y pulseras en la
+oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados`.
 
 **Escondido, el tótem se pausa.** `KioskLauncher.close()` manda `pausar` antes de esconder la ventana: suelta
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
@@ -121,6 +127,20 @@ saludo, color). Sin fila, `TotemConfig.defaults()` devuelve los literales
 históricos y la pantalla se ve como siempre.
 
 ## Trampas conocidas
+
+- **No agregar columnas a `contratos_alumnos`: un dato nuevo del alumno va en una
+  tabla aparte.** Esa fila se reescribe entera en tres lugares:
+  - Editar alumno manda `toJson()` completo (`datosEdicionAlumno`);
+  - `_pullByEvento` la rearma desde el modelo con INSERT OR REPLACE;
+  - `_pullTable` la rearma con la lista de `_cleanForSqlite`.
+
+  Una columna que falte en cualquiera de los tres se pisa o vuelve a su default en silencio. Así se perdía el perdón
+  de mora. El patrón probado es el de `notas_operativas_contrato`: tabla propia, una fila por alumno con id fijo
+  (`UuidUtils`), como `sillas_reparto` y `entradas_retiro` (v72). El usuario le tiene miedo a las migraciones con
+  razón:
+  - solo tablas nuevas, con `CREATE ... IF NOT EXISTS`;
+  - copia antes de migrar (`LocalDatabase.copiaAntesDeMigrar`);
+  - probar sobre una copia de la base real (`tool/verificar_migracion_v72_test.dart` como modelo).
 
 - **Nada se borra de la base local salvo que alguien lo haya borrado a mano.**
   Un `DELETE` local solo es legítimo si viene con nombre y apellido —una lista

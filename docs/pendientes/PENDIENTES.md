@@ -56,6 +56,10 @@ priorizó el sorteo de noviembre. El contexto está en
 - [Tótems vinculados a recepcionistas](totems-vinculados.md) — cada tótem da la
   bienvenida a los de su puerta, para que dos recepciones no se pisen con mucha
   gente.
+- [Cerrar la lista de la puerta a los anónimos](rls-invitados.md) — hoy
+  cualquiera con la clave pública lee y cambia `invitados`, DNI incluido. Se
+  cierra con el tótem, porque el tótem lee como anónimo. **Hasta entonces no se
+  pasa la lista de la puerta de ninguna fiesta.**
 
 ## Hechos
 

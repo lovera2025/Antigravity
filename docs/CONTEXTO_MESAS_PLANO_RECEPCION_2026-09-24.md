@@ -9,6 +9,11 @@ producción) más todo lo que se decidió el 24-sep a la noche.
 > Spec: `C:\Users\lover\Desktop\COSAS\Desarrollo\PLANES JRe\PROMPT_mesas_plano_recepcion_totem_v1.md` (fuera del repo).
 > Anterior: [v5.0.0](CONTEXTO_v5.0.0_2026-09-24.md) (sorteo según lo pagado).
 
+> **Actualizado el 25-sep:** la Fase 2 se revisó con el usuario y está hecha en la rama, sin publicar. Lo vigente está
+> en [CONTEXTO_FASE2_SILLAS_ENTRADAS_2026-09-25](CONTEXTO_FASE2_SILLAS_ENTRADAS_2026-09-25.md): sacó "avisar", el
+> código del sorteo y la ficha "Familia", sumó la sección Retiro de entradas y pasó la RLS a diciembre. Lo de abajo
+> sobre la Fase 2 quedó como historia.
+
 **Estado:**
 - La Fase 0 está hecha.
 - El orden de trabajo lo eligió el usuario: **primero noviembre**, es decir el sorteo, la planilla y el plano.
