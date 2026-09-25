@@ -15,10 +15,13 @@ import '../../models/evento.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/nota_operativa_contrato.dart';
 import '../../models/sillas_reparto.dart';
+import '../../models/sorteo_mesas_registro.dart';
+import '../../core/utils/uuid_utils.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
 import 'repositories/notas_operativas_contrato_repository.dart';
 import 'repositories/sillas_reparto_repository.dart';
+import 'repositories/sorteos_mesas_repository.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/currency_input_formatter.dart';
 import 'repositories/eventos_repository.dart';
@@ -38,6 +41,7 @@ import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
 import 'services/pago_para_sorteo.dart';
 import 'services/planilla_sorteo.dart';
+import 'services/registro_sorteo.dart';
 import 'services/reparto_de_sillas.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
@@ -3377,12 +3381,21 @@ class _DetalleEventoMasivoScreenState
         alumnos,
         await _pagosPorContrato(repo, alumnos),
       );
+      // Quién sorteó y cuándo, y si después se cambió algo a mano: va arriba de
+      // cada hoja, para poder responder una queja con el papel en la mano.
+      final registros = await ref
+          .read(sorteosMesasRepositoryProvider)
+          .delEvento(widget.evento.id);
+      final lineaSorteo = RegistroSorteo.lineaParaPlanilla(
+        RegistroSorteo.resumir(registros, alumnos),
+      );
       await PdfService.generarPlanillaSorteo(
         widget.evento,
         alumnos,
         pagos: pagos,
         notas: _notasOperativasPorContrato,
         repartos: _repartosPorContrato,
+        lineaSorteo: lineaSorteo,
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,
       );
@@ -3640,10 +3653,14 @@ class _DetalleEventoMasivoScreenState
         return;
       }
 
-      await repo.asignarNumerosMesa({
+      final numeros = {
         for (final e in asignaciones.entries)
           e.key: MesasExtraUtils.formatearAsignacionMesas(e.value),
-      });
+      };
+      await repo.asignarNumerosMesa(
+        numeros,
+        registro: _registroSorteo(TipoRegistroSorteo.sorteo, numeros),
+      );
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
@@ -3764,10 +3781,13 @@ class _DetalleEventoMasivoScreenState
     setState(() => _isLoading = true);
     try {
       // La copia primero: sin copia a salvo no se borra nada.
-      await RespaldoSorteo.guardar(eventoId, {
-        for (final a in conMesa) a.id: a.numeroMesa!.trim(),
-      });
-      await repo.asignarNumerosMesa({for (final a in conMesa) a.id: null});
+      final antes = {for (final a in conMesa) a.id: a.numeroMesa!.trim()};
+      await RespaldoSorteo.guardar(eventoId, antes);
+      // El registro guarda lo que había: queda en la nube quién deshizo, y qué.
+      await repo.asignarNumerosMesa(
+        {for (final a in conMesa) a.id: null},
+        registro: _registroSorteo(TipoRegistroSorteo.deshacer, antes),
+      );
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
@@ -3913,6 +3933,21 @@ class _DetalleEventoMasivoScreenState
     }
   }
 
+  /// El renglón de `sorteos_mesas` para un sorteo, un deshacer o una
+  /// restauración: qué quedó (o qué se sacó), quién y cuándo.
+  SorteoMesasRegistro _registroSorteo(
+    TipoRegistroSorteo tipo,
+    Map<String, String> numeros,
+  ) =>
+      SorteoMesasRegistro(
+        id: UuidUtils.generate(),
+        eventoId: widget.evento.id,
+        tipo: tipo,
+        resultado: numeros,
+        hechoPor: quienOpera(ref),
+        createdAt: ArTime.nowUtc(),
+      );
+
   Future<void> _restaurarSorteoAnterior() async {
     final repo = ref.read(contratosRepositoryProvider);
     final eventoId = widget.evento.id;
@@ -3969,7 +4004,10 @@ class _DetalleEventoMasivoScreenState
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
-      await repo.asignarNumerosMesa(plan.aRestaurar);
+      await repo.asignarNumerosMesa(
+        plan.aRestaurar,
+        registro: _registroSorteo(TipoRegistroSorteo.restaurar, plan.aRestaurar),
+      );
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(

@@ -75,12 +75,15 @@ class PlanillaTema {
       );
 
   /// Encabezado de cada hoja: barra de acento, título, institución, y a la
-  /// derecha la versión y cuándo se generó. [control] es la línea de totales.
+  /// derecha la versión y cuándo se generó. [extra] va debajo, a la derecha (en
+  /// la planilla del sorteo: quién sorteó y cuándo). [control] es la línea de
+  /// totales.
   pw.Widget encabezado({
     required String titulo,
     required String institucion,
     required String version,
     required String generada,
+    String? extra,
     String? control,
   }) {
     return pw.Column(
@@ -126,6 +129,13 @@ class PlanillaTema {
                   generada,
                   style: estilo(size: secundario, color: textoSuave),
                 ),
+                if (extra != null) ...[
+                  pw.SizedBox(height: 1),
+                  pw.Text(
+                    extra,
+                    style: estilo(size: secundario, color: textoSuave),
+                  ),
+                ],
               ],
             ),
           ],

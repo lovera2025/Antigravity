@@ -76,6 +76,7 @@ class PlanillaSorteoPdf {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    String? lineaSorteo,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     pw.Font? regular,
@@ -122,6 +123,7 @@ class PlanillaSorteoPdf {
               institucion: institucion,
               version: textoVersion,
               generada: textoGenerada,
+              extra: lineaSorteo,
             ),
         contenido: () => _resumen(tema, resumen, interna),
       ),
@@ -133,6 +135,7 @@ class PlanillaSorteoPdf {
                 institucion: institucion,
                 version: textoVersion,
                 generada: textoGenerada,
+                extra: lineaSorteo,
                 control: _control(
                   resumen.divisiones.firstWhere((d) => d.division == entrada.key),
                 ),

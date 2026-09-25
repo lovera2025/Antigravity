@@ -4177,6 +4177,7 @@ class PdfService {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    String? lineaSorteo,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     DateTime? generada,
@@ -4188,6 +4189,7 @@ class PdfService {
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      lineaSorteo: lineaSorteo,
       version: version,
       blancoYNegro: blancoYNegro,
       regular: fuentes?.$1,
@@ -4202,6 +4204,7 @@ class PdfService {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    String? lineaSorteo,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
   }) async {
@@ -4211,6 +4214,7 @@ class PdfService {
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      lineaSorteo: lineaSorteo,
       version: version,
       blancoYNegro: blancoYNegro,
     );

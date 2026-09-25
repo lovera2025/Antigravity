@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../main.dart';
 import '../../../models/contrato_alumno.dart';
+import '../../../models/sorteo_mesas_registro.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
@@ -20,6 +21,7 @@ import '../services/cobro_abono_acumulado.dart';
 import '../services/mora_cuota_calculator.dart';
 import '../services/mora_tracked_recovery.dart';
 import '../../../models/mesa_extra_item.dart';
+import 'sorteos_mesas_repository.dart';
 
 /// Repositorio de Contratos de Alumnos (Eventos Masivos) ÔÇö Offline-First.
 /// Una línea de un cobro, tal como la arma el modal de cobro masivo.
@@ -225,12 +227,22 @@ class ContratosRepository {
   /// o queda el salón entero, o nada. Solo toca `numero_mesa` (null = sin
   /// mesa), con el mismo encolado de sync que [actualizarContrato]. Lo usan el
   /// sorteo, el deshacer y restaurar.
-  Future<void> asignarNumerosMesa(Map<String, String?> numeroPorContrato) async {
+  ///
+  /// [registro] es el renglón de `sorteos_mesas` que deja constancia de quién
+  /// y cuándo: va en la misma transacción, así que no pueden quedar números sin
+  /// su registro ni un registro sin sus números.
+  Future<void> asignarNumerosMesa(
+    Map<String, String?> numeroPorContrato, {
+    SorteoMesasRegistro? registro,
+  }) async {
     if (numeroPorContrato.isEmpty) return;
     final db = await LocalDatabase.instance;
     await db.transaction((txn) async {
       for (final e in numeroPorContrato.entries) {
         await _actualizarContratoEn(txn, e.key, {'numero_mesa': e.value});
+      }
+      if (registro != null) {
+        await SorteosMesasRepository.registrarEn(txn, registro);
       }
     });
   }
