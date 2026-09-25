@@ -2,8 +2,8 @@
 
 **Fecha:** 2026-09-25
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la 5.0.0)
-**Estado:** hecho en la rama, **sin publicar**. Falta correr el SQL en la nube y probar la migración sobre una copia
-de la base real (ver "Lo que falta"). Al cerrar el 25-sep, el usuario todavía no había dado ninguno de los dos OK.
+**Estado:** hecho en la rama, **sin publicar**. El 25-sep se probó la migración sobre una copia de la base real y no
+cambió ningún dato. Falta correr el SQL en la nube, que se hace cuando el usuario avise (ver "Lo que falta").
 
 > **Referencia:** `Fase 2` · `retiro de entradas` · `sillas_reparto` · `entradas_retiro` · `sorteos_mesas` · `v72`
 > Anterior: [CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24](CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md), con la spec,
@@ -146,18 +146,29 @@ demás PDF, el algoritmo del sorteo y la lista de la puerta.
 - **Muestras en PDF** con datos inventados:
   - `tool/planilla_sorteo_muestra_test.dart`;
   - `tool/planilla_entrega_muestra_test.dart`.
+- **La migración sobre una copia de la base real** (25-sep, con el OK del usuario), con
+  `tool/verificar_migracion_v72_test.dart`:
+  - la base real estaba en v71, y la copia quedó en v72;
+  - las 28 tablas que ya existían quedaron iguales fila por fila (643 contratos, 3552 pagos, 54 notas; `_sync_queue`
+    vacía);
+  - aparecieron solo `entradas_retiro`, `sillas_reparto` y `sorteos_mesas`, las tres vacías;
+  - la base real quedó idéntica, con el mismo tamaño, la misma fecha y el mismo SHA-256 antes y después;
+  - la copia se borró.
 
 ## Lo que falta, en orden
 
-1. **Probar la migración sobre una copia de la base real** (pedir OK). `tool/verificar_migracion_v72_test.dart`:
-   - abre la base **solo lectura**;
-   - la copia con `VACUUM INTO` a una carpeta temporal;
-   - migra la copia y compara todas las tablas;
-   - borra la copia al terminar.
-2. **Correr el SQL en la nube** después de las 20 hs, con OK: conteos antes, el archivo, las consultas de verificación.
+1. **Hecho el 25-sep:** la migración sobre una copia de la base real no cambió ningún dato (ver "Verificación hecha").
+2. **Correr el SQL en la nube** cuando el usuario avise, después de las 20 hs: primero los conteos, después el archivo y
+   al final las consultas de verificación. El 25-sep se le ofreció dejarlo programado y prefirió avisar.
 3. **Que el usuario mire las planillas de muestra** y pruebe la sección en la versión nueva.
    - Las muestras se generan con `flutter test tool/planilla_entrega_muestra_test.dart` y
      `tool/planilla_sorteo_muestra_test.dart`, con `--dart-define=salida=<carpeta>`.
+   - Se le mandaron el 25-sep, y falta su opinión. Al revisarlas se vieron tres detalles, que se deciden con el usuario:
+     - en la planilla de entrega, el título de la última columna se corta en dos renglones: "RETIR / Ó";
+     - en la versión interna de la planilla del sorteo, la columna Reparto corta la palabra: "Confirmadc", "A
+       confirmai". En la versión para repartir entra bien;
+     - a la planilla de entrega le entran unos 23 renglones por hoja: una división de 26 ocupa dos hojas, y la segunda
+       lleva 3 renglones. El renglón es alto para que se pueda escribir a mano; achicarlo ahorra papel.
    - **Para probar la versión nueva en una PC, antes tiene que estar el paso 2.** Sin las tablas en la nube, lo que se
      cargue en ellas (un reparto, una entrega) queda trabado en la cola de subida y marca error.
    - Probarla abre la base real de esa PC y la migra a v72. Es seguro —solo agrega tablas y antes saca la copia—, pero
@@ -179,8 +190,8 @@ demás PDF, el algoritmo del sorteo y la lista de la puerta.
 
 ## Lo que tiene que traer el usuario
 
-- **Los dos OK:** probar la migración sobre la copia (paso 1) y correr el SQL (paso 2).
-- **Qué le parecieron las dos muestras** en PDF.
+- **El aviso para correr el SQL** (paso 2). El OK para la prueba sobre la copia lo dio el 25-sep.
+- **Qué le parecieron las dos muestras** en PDF, que se le mandaron el 25-sep.
 - **Para la Fase 3:**
   - el Canva del predio exportado, guardado en `PLANES JRe`;
   - las respuestas del jefe (abajo).
@@ -208,8 +219,8 @@ Seguimos con el plan de mesas de los masivos. Leé primero
 docs/CONTEXTO_FASE2_SILLAS_ENTRADAS_2026-09-25.md (secciones "Lo que falta" y
 "Lo que tiene que traer el usuario") y la memoria del proyecto. La Fase 2
 (sillas, retiro de entradas, registro del sorteo) está hecha en la rama y sin
-publicar. Si todavía no se hizo, empezá por probar la migración v72 sobre una
-copia de la base (pedime OK antes) y después el SQL de la nube (después de las
-20 hs, con OK). Después, Fase 3: mostrame 2-3 diseños del plano lado a lado
-antes de programar. No se publica nada hasta terminar la versión A.
+publicar, y la migración v72 ya se probó sobre una copia de la base. Falta el
+SQL de la nube: se corre cuando yo avise, después de las 20 hs. Después, Fase 3:
+mostrame 2-3 diseños del plano lado a lado antes de programar. No se publica
+nada hasta que yo lo diga.
 ```
