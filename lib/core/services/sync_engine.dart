@@ -287,6 +287,9 @@ class SyncEngine {
     'operadores_caja': 'updated_at',
     'sesiones_caja': 'updated_at',
     'compromisos_personal': 'updated_at',
+    'sillas_reparto': 'updated_at',
+    'entradas_retiro': 'updated_at',
+    'sorteos_mesas': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -832,6 +835,9 @@ class SyncEngine {
     'egresos',
     'cierre_caja_guia_movimientos',
     'cierre_caja_anotaciones',
+    // La entrega de entradas también es de mostrador: si las dos PCs atienden
+    // a la vez, cada una tiene que ver en segundos lo que entregó la otra.
+    'entradas_retiro',
   ];
 
   /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
@@ -867,6 +873,8 @@ class SyncEngine {
     'caja_fuerte_movimientos',
     'rentabilidad_config',
     'compromisos_personal',
+    'sillas_reparto',
+    'sorteos_mesas',
   ];
 
   /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
@@ -875,7 +883,7 @@ class SyncEngine {
   /// Pull corto para la operación simultánea de cajas. Nunca sube la cola
   /// local: el jefe conserva sus pendientes manuales.
   ///
-  /// Con [incluirTablasDeCarga] en false baja solo las ocho de [_tablasDelCobro].
+  /// Con [incluirTablasDeCarga] en false baja solo las de [_tablasDelCobro].
   /// El llamador lleva la cuenta de los ciclos; ver `OperationalSyncCoordinator`.
   Future<bool> pullOperationalUpdates({
     bool incluirTablasDeCarga = true,
@@ -1117,6 +1125,10 @@ class SyncEngine {
           table == 'pagos_prestamo_alquiler')
         return 4;
       if (table == 'notas_operativas_contrato') return 4;
+      // Cuelgan del alumno, igual que las notas: el contrato tiene que estar
+      // arriba antes, o la FK de la nube rechaza la fila.
+      if (table == 'sillas_reparto' || table == 'entradas_retiro') return 4;
+      if (table == 'sorteos_mesas') return 2;
       if (table == 'eventos_servicios' ||
           table == 'presupuesto_servicios' ||
           table == 'prestamo_alquiler_lineas') {
@@ -1448,6 +1460,9 @@ class SyncEngine {
       _pullTable(db, 'cierre_caja_anotaciones', 'updated_at'),
       _pullTable(db, 'operadores_caja', 'updated_at'),
       _pullTable(db, 'sesiones_caja', 'updated_at'),
+      _pullTable(db, 'sillas_reparto', 'updated_at'),
+      _pullTable(db, 'entradas_retiro', 'updated_at'),
+      _pullTable(db, 'sorteos_mesas', 'updated_at'),
     ]);
 
     try {
@@ -2340,6 +2355,50 @@ class SyncEngine {
         'eventos_estimados_mes',
         'updated_at',
         'updated_by',
+      ],
+      // Las tres de la v72. Todas sus columnas tienen que estar acá: la bajada
+      // escribe con INSERT OR REPLACE, y una que falte vuelve a su default en
+      // silencio en cada pull (ver el comentario de `egresos`).
+      'sillas_reparto': [
+        'id',
+        'contrato_alumno_id',
+        'sillas_principal',
+        'sillas_extra',
+        'mesas',
+        'hecho_por',
+        'created_at',
+        'updated_at',
+      ],
+      'entradas_retiro': [
+        'id',
+        'contrato_alumno_id',
+        'estado',
+        'vip',
+        'generales',
+        'tramos',
+        'menores_10',
+        'parentesco',
+        'retiro_nombre',
+        'otra_persona_motivo',
+        'autorizacion_firmada',
+        'escribio_en_planilla',
+        'entregado_por',
+        'entregado_at',
+        'anulado_por',
+        'anulado_at',
+        'anulado_motivo',
+        'created_at',
+        'updated_at',
+      ],
+      'sorteos_mesas': [
+        'id',
+        'evento_id',
+        'tipo',
+        'resultado',
+        'alumnos',
+        'hecho_por',
+        'created_at',
+        'updated_at',
       ],
     };
 

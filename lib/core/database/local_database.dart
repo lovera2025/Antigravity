@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 71;
+  static const int _version = 72;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -69,10 +69,19 @@ class LocalDatabase {
     debugPrint('📦 SQLite DB path: $path');
 
     // Escritorio: FFI. Android/iOS: plugin nativo `sqflite` (misma API que en PC).
+    final Database db;
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqflite_ffi.sqfliteFfiInit();
       databaseFactory = sqflite_ffi.databaseFactoryFfi;
-      return sqflite_ffi.openDatabase(
+      await copiaAntesDeMigrar(path, factory: sqflite_ffi.databaseFactoryFfi);
+      db = await sqflite_ffi.openDatabase(
+        path,
+        version: _version,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    } else {
+      db = await sqflite_mobile.openDatabase(
         path,
         version: _version,
         onCreate: _onCreate,
@@ -80,12 +89,14 @@ class LocalDatabase {
       );
     }
 
-    return sqflite_mobile.openDatabase(
-      path,
-      version: _version,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    // Red por si la migración v72 no pudo crear sus tablas: es idempotente, así
+    // que en una base sana no hace nada.
+    try {
+      await crearTablasV72(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v72 sin crear: $e');
+    }
+    return db;
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -664,7 +675,82 @@ class LocalDatabase {
       'CREATE INDEX idx_notas_operativas_contrato ON notas_operativas_contrato(contrato_alumno_id)',
     );
 
+    await crearTablasV72(db);
+
     debugPrint('✅ Esquema SQLite creado exitosamente');
+  }
+
+  /// Las tres tablas de la v72: reparto de sillas, retiro de entradas y
+  /// registro del sorteo.
+  ///
+  /// Son **aparte** a propósito. Podrían haber sido columnas de
+  /// `contratos_alumnos`, pero esa es la fila de la plata: Editar alumno la manda
+  /// entera y dos caminos de bajada la rearman con INSERT OR REPLACE, así que un
+  /// dato nuevo ahí se pisa o se borra en silencio (pasó con el perdón de mora).
+  /// Una tabla nueva no toca ni una fila de lo que ya existe.
+  ///
+  /// Solo `CREATE ... IF NOT EXISTS`: correrlo dos veces no hace nada. Por eso lo
+  /// usan igual la base nueva, la migración y el arranque (ver [_initDb]).
+  static Future<void> crearTablasV72(DatabaseExecutor db) async {
+    // Una fila por alumno, con id fijo (`UuidUtils.sillasRepartoId`). Guarda
+    // cuántas sillas van a la mesa principal y para qué cuenta se eligió: si
+    // después cambian las sillas o las mesas, la elección deja de valer sola.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sillas_reparto (
+        id TEXT PRIMARY KEY,
+        contrato_alumno_id TEXT NOT NULL UNIQUE,
+        sillas_principal INTEGER NOT NULL,
+        sillas_extra INTEGER NOT NULL,
+        mesas INTEGER NOT NULL,
+        hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    // Una fila por alumno, con id fijo (`UuidUtils.entradasRetiroId`): un
+    // egresado no puede tener dos retiros. Anular no borra la fila.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS entradas_retiro (
+        id TEXT PRIMARY KEY,
+        contrato_alumno_id TEXT NOT NULL UNIQUE,
+        estado TEXT NOT NULL,
+        vip INTEGER NOT NULL DEFAULT 0,
+        generales INTEGER NOT NULL DEFAULT 0,
+        tramos TEXT,
+        menores_10 INTEGER NOT NULL DEFAULT 0,
+        parentesco TEXT,
+        retiro_nombre TEXT,
+        otra_persona_motivo TEXT,
+        autorizacion_firmada INTEGER NOT NULL DEFAULT 0,
+        escribio_en_planilla INTEGER NOT NULL DEFAULT 0,
+        entregado_por TEXT,
+        entregado_at TEXT,
+        anulado_por TEXT,
+        anulado_at TEXT,
+        anulado_motivo TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    // Solo se agregan renglones: cada sorteo, deshacer o restaurar deja uno.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sorteos_mesas (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        resultado TEXT NOT NULL,
+        alumnos INTEGER NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sorteos_mesas_evento '
+      'ON sorteos_mesas(evento_id, created_at)',
+    );
   }
 
   static Future<void> _onUpgrade(
@@ -2842,6 +2928,73 @@ class LocalDatabase {
       } catch (e) {
         debugPrint('  ❌ Error migración v71: $e');
       }
+    }
+
+    if (oldVersion < 72) {
+      debugPrint('  🔧 v72: tablas de sillas, retiro de entradas y sorteos');
+      // Solo crea tablas nuevas. No toca ninguna existente, no reescribe datos
+      // y no reinicia marcadores: las tablas nuevas no tienen marcador, así que
+      // su primera bajada ya es completa.
+      //
+      // Si fallara, la app abre igual —nunca se traba la caja por esto— y
+      // [_initDb] vuelve a intentarlo en cada arranque.
+      try {
+        await crearTablasV72(db);
+        debugPrint('✅ Migración v72 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v72: $e');
+      }
+    }
+  }
+
+  /// El mismo `onUpgrade` que usa la app, para probar la migración sin tocar la
+  /// base real: lo usan `test/migracion_v72_test.dart` y
+  /// `tool/verificar_migracion_v72_test.dart` (este último, sobre una copia).
+  static Future<void> Function(Database, int, int) get onUpgradeParaTest =>
+      _onUpgrade;
+
+  /// Copia completa de la base **antes** de migrarla, una sola vez por salto.
+  ///
+  /// Abre la base sin pedir versión —así sqflite no corre ninguna migración—,
+  /// mira en qué versión está y, si es anterior a [_version], hace un
+  /// `VACUUM INTO` a `backups/antes_de_v<N>.db`. Es la misma técnica de la copia
+  /// semanal ([BackupService]): copiar el archivo `.db` a mano puede dejar una
+  /// copia cortada a la mitad de una escritura.
+  ///
+  /// Nunca tira. Si la copia no sale, la app sigue abriendo: trabar la caja
+  /// sería peor, y la copia semanal existe igual.
+  @visibleForTesting
+  static Future<File?> copiaAntesDeMigrar(
+    String path, {
+    required DatabaseFactory factory,
+    int versionNueva = _version,
+  }) async {
+    try {
+      if (!await File(path).exists()) return null;
+      final db = await factory.openDatabase(path);
+      try {
+        final actual = await db.getVersion();
+        if (actual <= 0 || actual >= versionNueva) return null;
+        final dir = Directory(
+          '${File(path).parent.path}${Platform.pathSeparator}backups',
+        );
+        if (!await dir.exists()) await dir.create(recursive: true);
+        final destino = File(
+          '${dir.path}${Platform.pathSeparator}antes_de_v$versionNueva.db',
+        );
+        // Si ya hay una, es de un arranque anterior que no terminó de migrar:
+        // esa es la buena, la de antes de cualquier intento.
+        if (await destino.exists()) return destino;
+        final ruta = destino.path.replaceAll("'", "''");
+        await db.execute("VACUUM INTO '$ruta'");
+        debugPrint('🛟 Copia antes de migrar a v$versionNueva: ${destino.path}');
+        return destino;
+      } finally {
+        await db.close();
+      }
+    } catch (e) {
+      debugPrint('⚠️ No se pudo copiar la base antes de migrar: $e');
+      return null;
     }
   }
 

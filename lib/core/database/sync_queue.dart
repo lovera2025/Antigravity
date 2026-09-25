@@ -289,6 +289,7 @@ class SyncQueue {
         'invitados': 'evento_id',
         'eventos_servicios': 'evento_id',
         'calculos_rentabilidad': 'evento_id',
+        'sorteos_mesas': 'evento_id',
       },
       'presupuestos': {
         'presupuesto_servicios': 'presupuesto_id',
@@ -297,6 +298,8 @@ class SyncQueue {
       'contratos_alumnos': {
         'pagos_contrato_alumno': 'contrato_alumno_id',
         'notas_operativas_contrato': 'contrato_alumno_id',
+        'sillas_reparto': 'contrato_alumno_id',
+        'entradas_retiro': 'contrato_alumno_id',
       },
       'prestamos_alquiler': {
         'prestamo_alquiler_lineas': 'prestamo_id',
