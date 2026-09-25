@@ -7,6 +7,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/evento.dart';
 import '../../../models/nota_operativa_contrato.dart';
+import '../../../models/sillas_reparto.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
@@ -32,8 +33,11 @@ typedef _Seccion = ({
 ///
 /// Respeta la planilla que ya usa el jefe: primero sus columnas y en su orden
 /// (egresado, acompañante, mesa principal, adicional, sillas), la mesa principal
-/// en verde, la fila amarilla cuando hay que avisar y la roja cuando no tiene
-/// mesa. Cada color lleva su palabra, así que en blanco y negro se lee igual.
+/// en verde y la fila roja cuando no tiene mesa. Cada color lleva su palabra,
+/// así que en blanco y negro se lee igual.
+///
+/// No hay fila amarilla: se pintaba con cualquier nota sin resolver, que suelen
+/// ser de cobro y no de la fiesta. La nota sigue en Observaciones (interna).
 class PlanillaSorteoPdf {
   PlanillaSorteoPdf._();
 
@@ -71,6 +75,7 @@ class PlanillaSorteoPdf {
     required List<ContratoAlumno> alumnos,
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
+    Map<String, SillasReparto> repartos = const {},
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     pw.Font? regular,
@@ -91,15 +96,23 @@ class PlanillaSorteoPdf {
     final leyenda = <(PdfColor?, String)>[
       if (!blancoYNegro) ...[
         (tema.verdeMesa, 'Mesa principal'),
-        if (interna) (tema.amarilloAvisar, 'Hay que avisar'),
         (tema.rojoSinMesa, 'Sin mesa'),
       ],
       (null, 'Sillas: P en la principal, A en la adicional'),
     ];
 
-    final resumen = PlanillaSorteo.resumen(alumnos, pagos: pagos, notas: notas);
-    final divisiones =
-        PlanillaSorteo.porDivision(alumnos, pagos: pagos, notas: notas);
+    final resumen = PlanillaSorteo.resumen(
+      alumnos,
+      pagos: pagos,
+      notas: notas,
+      repartos: repartos,
+    );
+    final divisiones = PlanillaSorteo.porDivision(
+      alumnos,
+      pagos: pagos,
+      notas: notas,
+      repartos: repartos,
+    );
 
     final secciones = <_Seccion>[
       (
@@ -232,11 +245,10 @@ class PlanillaSorteoPdf {
       t.tarjeta('Con cena', '${r.conCena}', detalle: 'egresados y acompañantes'),
       t.tarjeta('Sin mesa', '${r.sinMesa}', detalle: 'sin pagar la cuota base'),
       t.tarjeta(
-        'Reparto pendiente',
+        'Sillas a confirmar',
         '${r.repartosPendientes}',
-        detalle: 'sillas extra por elegir',
+        detalle: 'la familia tiene que elegir',
       ),
-      if (interna) t.tarjeta('Para avisar', '${r.paraAvisar}'),
     ];
 
     return [
@@ -486,11 +498,9 @@ class PlanillaSorteoPdf {
   ) {
     final fondo = f.sinMesa
         ? t.rojoSinMesa
-        : interna && f.avisar
-            ? t.amarilloAvisar
-            : indice.isOdd
-                ? t.filaAlterna
-                : null;
+        : indice.isOdd
+            ? t.filaAlterna
+            : null;
 
     pw.Widget celda(
       pw.Widget child, {
@@ -506,7 +516,7 @@ class PlanillaSorteoPdf {
 
     final reparto = switch (f.reparto) {
       RepartoSillas.noAplica => pw.Text('-', style: t.estilo(color: t.textoSuave)),
-      RepartoSillas.pendiente => _marca(t, 'Pendiente', t.naranja),
+      RepartoSillas.pendiente => _marca(t, 'A confirmar', t.naranja),
       RepartoSillas.confirmado => _marca(t, 'Confirmado', t.verde),
     };
 
@@ -564,22 +574,8 @@ class PlanillaSorteoPdf {
         celda(pw.Text(f.musica, style: t.estilo())),
         if (interna)
           celda(
-            f.avisar
-                ? pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'AVISAR',
-                        style: t.estilo(
-                          size: PlanillaTema.secundario,
-                          negrita: true,
-                          color: t.naranja,
-                          espaciado: 0.8,
-                        ),
-                      ),
-                      pw.Text(f.observaciones, style: t.estilo()),
-                    ],
-                  )
+            f.observaciones.isNotEmpty
+                ? pw.Text(f.observaciones, style: t.estilo())
                 : pw.Text('-', style: t.estilo(color: t.textoSuave)),
           ),
       ],

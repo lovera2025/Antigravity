@@ -14,8 +14,9 @@
 //     verde, con "N con cena · M generales"), adicional, sillas ("2P · 1A");
 //   • que una división larga siga en la hoja siguiente con los títulos
 //     repetidos;
-//   • la fila roja de quien no tiene mesa (no pagó la cuota base) y la amarilla
-//     de quien tiene algo para avisar (solo en la interna);
+//   • la fila roja de quien no tiene mesa (no pagó la cuota base);
+//   • el reparto de sillas: "Confirmado" en quien eligió o tiene una sola forma,
+//     "A confirmar" en quien tiene que elegir;
 //   • que la versión para repartir no tenga teléfonos ni observaciones;
 //   • que en blanco y negro se lea todo igual.
 //
@@ -32,11 +33,14 @@ import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/planilla_sorteo.dart';
+import 'package:arguello_events/features/eventos/services/reparto_de_sillas.dart';
+import 'package:arguello_events/features/eventos/services/salon_mesas.dart';
 import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/nota_operativa_contrato.dart';
+import 'package:arguello_events/models/sillas_reparto.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
@@ -131,7 +135,7 @@ void main() {
                 : const PagoAlumno(base: 30000, mesas: 10000, sillas: 8000),
     };
 
-    // Notas operativas: dos para avisar y una ya resuelta, que no aparece.
+    // Notas operativas: dos sin resolver y una ya resuelta, que no aparece.
     final ahora = DateTime(2026, 11, 10);
     NotaOperativaContrato nota(String id, String texto, {bool resuelto = false}) =>
         NotaOperativaContrato(
@@ -186,6 +190,26 @@ void main() {
             : a,
     ];
 
+    // Dos familias que ya eligieron dónde van sus sillas (la opción que menos
+    // carga la principal, para que se note); las demás que pueden elegir
+    // quedan "a confirmar".
+    final repartos = <String, SillasReparto>{};
+    for (final a in sorteados) {
+      if (repartos.length >= 2) break;
+      final ops = RepartoDeSillas.opcionesDe(a);
+      if (ops.length < 2) continue;
+      repartos[a.id] = SillasReparto(
+        id: 'r${a.id}',
+        contratoAlumnoId: a.id,
+        sillasPrincipal: ops.last.principal,
+        sillasExtra: SalonMesas.sillasExtra(a),
+        mesas: SalonMesas.mesas(a),
+        hechoPor: 'Operador',
+        createdAt: ahora,
+        updatedAt: ahora,
+      );
+    }
+
     final evento = Evento(
       id: 'muestra',
       clienteId: 'c',
@@ -203,6 +227,7 @@ void main() {
           sorteados,
           pagos: pagos,
           notas: notas,
+          repartos: repartos,
           version: version,
           blancoYNegro: bn,
           generada: DateTime(2026, 11, 12, 21, 30),

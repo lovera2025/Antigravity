@@ -2,8 +2,10 @@ import 'dart:math';
 
 import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
+import '../../../models/sillas_reparto.dart';
 import 'mesas_extra_utils.dart';
 import 'pago_para_sorteo.dart';
+import 'reparto_de_sillas.dart';
 import 'salon_mesas.dart';
 import 'sorteo_mesas_motor.dart';
 
@@ -17,17 +19,17 @@ enum VersionPlanillaSorteo {
   paraRepartir,
 }
 
-/// Cómo reparte la familia sus sillas extra entre sus mesas.
+/// Cómo figura en la planilla el reparto de las sillas extra.
 enum RepartoSillas {
   /// No tiene sillas extra: no hay nada que repartir.
   noAplica,
 
-  /// Tiene sillas extra y todavía no confirmó cómo las reparte. Hasta que
-  /// exista la confirmación (Fase 2), todo reparto está pendiente y la
-  /// planilla muestra el de siempre: de a 2 por mesa, la principal primero.
+  /// Hay que llamar a la familia para que elija, o revisar su cuenta (tiene
+  /// más sillas de las que entran). Mientras tanto la planilla muestra el
+  /// reparto de siempre: de a 2 por mesa, la principal primero.
   pendiente,
 
-  /// La familia confirmó el reparto.
+  /// La familia eligió, o había una sola forma de repartirlas.
   confirmado,
 }
 
@@ -72,11 +74,8 @@ class FilaPlanillaSorteo {
   final String telefono;
   final String musica;
 
-  /// La nota operativa sin resolver, o vacío.
+  /// La nota operativa sin resolver, o vacío. Solo en la versión interna.
   final String observaciones;
-
-  /// Hay algo que avisar esa noche: la fila va en amarillo.
-  final bool avisar;
 
   /// No tiene mesa porque no pagó nada de la cuota base: la fila va en rojo.
   final bool sinMesa;
@@ -98,7 +97,6 @@ class FilaPlanillaSorteo {
     required this.telefono,
     required this.musica,
     required this.observaciones,
-    required this.avisar,
     required this.sinMesa,
     required this.conCena,
   });
@@ -140,7 +138,6 @@ class ResumenPlanillaSorteo {
   final int conCena;
   final int sinMesa;
   final int repartosPendientes;
-  final int paraAvisar;
   final List<ResumenDivision> divisiones;
 
   /// A quién llamar para que elija cómo reparte sus sillas extra.
@@ -155,18 +152,17 @@ class ResumenPlanillaSorteo {
     required this.conCena,
     required this.sinMesa,
     required this.repartosPendientes,
-    required this.paraAvisar,
     required this.divisiones,
     required this.aLlamar,
   });
 }
 
-/// Arma la planilla del sorteo a partir de las cuentas, lo pagado y las notas.
+/// Arma la planilla del sorteo a partir de las cuentas, lo pagado, las notas y
+/// el reparto de sillas que eligió cada familia.
 ///
 /// Todo sale de lo que ya está guardado ([SalonMesas], `numero_mesa`, los
-/// pagos y las notas operativas): la planilla no guarda nada ni inventa
-/// datos. Lo que todavía no existe en la base (la confirmación del reparto, la
-/// marca de avisar) se deduce de lo que sí hay y queda dicho acá.
+/// pagos, las notas operativas y `sillas_reparto`): la planilla no guarda nada
+/// ni inventa datos.
 class PlanillaSorteo {
   PlanillaSorteo._();
 
@@ -197,12 +193,13 @@ class PlanillaSorteo {
   ///
   /// La **mesa principal** es la primera de su tramo más largo; el resto de ese
   /// tramo y los tramos separados son la **adicional** (sus mesas extra). Las
-  /// sillas extra se reparten como en [SalonMesas.repartoSillas]: de a 2 por
-  /// mesa, la principal primero.
+  /// sillas extra se reparten como eligió la familia ([RepartoDeSillas]); si
+  /// todavía no eligió, como siempre: de a 2 por mesa, la principal primero.
   static FilaPlanillaSorteo fila(
     ContratoAlumno a, {
     PagoAlumno? pago,
     NotaOperativaContrato? nota,
+    SillasReparto? repartoElegido,
   }) {
     final tramos = SalonMesas.tramos(a);
     final crudo = a.numeroMesa?.trim() ?? '';
@@ -251,7 +248,12 @@ class PlanillaSorteo {
     // ── Con cena y generales en la principal ──────────────────────────────
     final ocupacion = SalonMesas.ocupacion(a);
     final conCena = ocupacion.personas;
-    final reparto = SalonMesas.repartoSillas(a);
+    final vigente = RepartoDeSillas.vigente(a, repartoElegido);
+    final estadoReparto = RepartoDeSillas.estado(a, repartoElegido);
+    final reparto = SalonMesas.repartoSillas(
+      a,
+      sillasPrincipal: vigente?.principal,
+    );
     final sillasPrincipal = principal == null
         ? 0
         : reparto
@@ -275,7 +277,10 @@ class PlanillaSorteo {
     if (sillasExtra == 0) {
       sillas = '-';
     } else if (reparto.isEmpty) {
-      sillas = '$sillasExtra';
+      // Todavía sin mesa: si la familia ya eligió, se dice cómo ("2P · 1A").
+      sillas = estadoReparto == EstadoRepartoSillas.elegido && vigente != null
+          ? vigente.texto
+          : '$sillasExtra';
     } else {
       final enAdicional = reparto
           .where((e) => e.$1 != principal)
@@ -317,12 +322,18 @@ class PlanillaSorteo {
       adicional: adicional,
       alertaMesas: alerta == null ? null : '(!) $alerta',
       sillas: sillas,
-      reparto:
-          sillasExtra > 0 ? RepartoSillas.pendiente : RepartoSillas.noAplica,
+      reparto: switch (estadoReparto) {
+        EstadoRepartoSillas.noAplica => RepartoSillas.noAplica,
+        EstadoRepartoSillas.unicaOpcion ||
+        EstadoRepartoSillas.elegido =>
+          RepartoSillas.confirmado,
+        EstadoRepartoSillas.aConfirmar ||
+        EstadoRepartoSillas.revisar =>
+          RepartoSillas.pendiente,
+      },
       telefono: oGuion(a.telefono),
       musica: oGuion(a.musicaElegida),
       observaciones: pendiente,
-      avisar: pendiente.isNotEmpty,
       sinMesa: sinMesa,
       conCena: conCena,
     );
@@ -334,6 +345,7 @@ class PlanillaSorteo {
     Iterable<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
+    Map<String, SillasReparto> repartos = const {},
   }) {
     final grupos = <String, List<ContratoAlumno>>{};
     for (final a in activos(alumnos)) {
@@ -348,7 +360,14 @@ class PlanillaSorteo {
     return {
       for (final d in claves)
         d: (grupos[d]!..sort((x, y) => x.nombreAlumno.compareTo(y.nombreAlumno)))
-            .map((a) => fila(a, pago: pagos?[a.id], nota: notas[a.id]))
+            .map(
+              (a) => fila(
+                a,
+                pago: pagos?[a.id],
+                nota: notas[a.id],
+                repartoElegido: repartos[a.id],
+              ),
+            )
             .toList(),
     };
   }
@@ -358,9 +377,15 @@ class PlanillaSorteo {
     Iterable<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
+    Map<String, SillasReparto> repartos = const {},
   }) {
     final lista = activos(alumnos);
-    final porDiv = porDivision(lista, pagos: pagos, notas: notas);
+    final porDiv = porDivision(
+      lista,
+      pagos: pagos,
+      notas: notas,
+      repartos: repartos,
+    );
     final porId = {for (final a in lista) a.id: a};
 
     final divisiones = <ResumenDivision>[];
@@ -410,7 +435,6 @@ class PlanillaSorteo {
       sinMesa: todas.where((f) => f.sinMesa).length,
       repartosPendientes:
           todas.where((f) => f.reparto == RepartoSillas.pendiente).length,
-      paraAvisar: todas.where((f) => f.avisar).length,
       divisiones: divisiones,
       aLlamar: aLlamar,
     );

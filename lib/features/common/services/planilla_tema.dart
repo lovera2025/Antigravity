@@ -48,10 +48,6 @@ class PlanillaTema {
   PdfColor? get verdeMesa =>
       blancoYNegro ? null : const PdfColor.fromInt(0xFFDDF2E3);
 
-  /// Hay que avisar algo esa noche.
-  PdfColor? get amarilloAvisar =>
-      blancoYNegro ? null : const PdfColor.fromInt(0xFFFFF3C4);
-
   /// No tiene mesa.
   PdfColor? get rojoSinMesa =>
       blancoYNegro ? null : const PdfColor.fromInt(0xFFFBE1E1);

@@ -13,6 +13,7 @@ import '../../../models/evento.dart';
 import '../../../models/transaccion.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
+import '../../../models/sillas_reparto.dart';
 import '../../../models/presupuesto.dart';
 import '../../../models/prestamo_alquiler.dart';
 import '../../../models/calculo_rentabilidad.dart';
@@ -4175,6 +4176,7 @@ class PdfService {
     List<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
+    Map<String, SillasReparto> repartos = const {},
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     DateTime? generada,
@@ -4185,6 +4187,7 @@ class PdfService {
       alumnos: alumnos,
       pagos: pagos,
       notas: notas,
+      repartos: repartos,
       version: version,
       blancoYNegro: blancoYNegro,
       regular: fuentes?.$1,
@@ -4198,6 +4201,7 @@ class PdfService {
     List<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
+    Map<String, SillasReparto> repartos = const {},
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
   }) async {
@@ -4206,6 +4210,7 @@ class PdfService {
       alumnos,
       pagos: pagos,
       notas: notas,
+      repartos: repartos,
       version: version,
       blancoYNegro: blancoYNegro,
     );

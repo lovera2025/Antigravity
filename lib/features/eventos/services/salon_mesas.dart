@@ -200,16 +200,27 @@ class SalonMesas {
         : 'le sobra${n == 1 ? '' : 'n'} $n mesa$plural';
   }
 
-  /// Sillas extra repartidas de a 2 por mesa: primero su bloque, después las
+  /// Sillas extra repartidas por mesa: primero su bloque, después las
   /// separadas. Si tiene más de las que entran, las de más no aparecen acá
   /// (lo marca [avisos]).
-  static List<(int mesa, int sillas)> repartoSillas(ContratoAlumno a) {
+  ///
+  /// [sillasPrincipal] es lo que eligió la familia para la mesa principal (ver
+  /// `RepartoDeSillas`); el resto va a las adicionales, de a 2 por mesa. Sin
+  /// elección, el reparto de siempre: de a 2 por mesa, la principal primero.
+  static List<(int mesa, int sillas)> repartoSillas(
+    ContratoAlumno a, {
+    int? sillasPrincipal,
+  }) {
     var resto = sillasExtra(a);
     final out = <(int, int)>[];
-    for (final n in [for (final t in tramos(a)) ...t]) {
+    final numeros = [for (final t in tramos(a)) ...t];
+    for (var i = 0; i < numeros.length; i++) {
       if (resto <= 0) break;
-      final k = min(maxSillasExtraPorMesa, resto);
-      out.add((n, k));
+      final tope = i == 0 && sillasPrincipal != null
+          ? min(sillasPrincipal, maxSillasExtraPorMesa)
+          : maxSillasExtraPorMesa;
+      final k = min(tope, resto);
+      if (k > 0) out.add((numeros[i], k));
       resto -= k;
     }
     return out;
@@ -222,10 +233,10 @@ class SalonMesas {
   }
 
   /// "12 (+2) · 13 (+1)", o "3 sillas extra" si todavía no tiene mesa.
-  static String textoRepartoSillas(ContratoAlumno a) {
+  static String textoRepartoSillas(ContratoAlumno a, {int? sillasPrincipal}) {
     final s = sillasExtra(a);
     if (s == 0) return '-';
-    final reparto = repartoSillas(a);
+    final reparto = repartoSillas(a, sillasPrincipal: sillasPrincipal);
     if (reparto.isEmpty) return s == 1 ? '1 silla extra' : '$s sillas extra';
     return reparto.map((e) => '${e.$1} (+${e.$2})').join(' · ');
   }

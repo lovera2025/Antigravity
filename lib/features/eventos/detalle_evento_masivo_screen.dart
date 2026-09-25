@@ -14,8 +14,11 @@ import '../../core/config/app_config.dart';
 import '../../models/evento.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/nota_operativa_contrato.dart';
+import '../../models/sillas_reparto.dart';
 import '../common/services/pdf_service.dart';
+import '../common/utils/quien_opera.dart';
 import 'repositories/notas_operativas_contrato_repository.dart';
+import 'repositories/sillas_reparto_repository.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/currency_input_formatter.dart';
 import 'repositories/eventos_repository.dart';
@@ -35,6 +38,7 @@ import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
 import 'services/pago_para_sorteo.dart';
 import 'services/planilla_sorteo.dart';
+import 'services/reparto_de_sillas.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
 import 'services/sorteo_mesas_motor.dart';
@@ -49,6 +53,7 @@ import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
 import 'widgets/perdonar_mora_alumno_dialog.dart';
+import 'widgets/reparto_sillas_dialog.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
 
 /// Evita dispose de controllers mientras el route del diálogo aún se desmonta.
@@ -89,6 +94,12 @@ class _DetalleEventoMasivoScreenState
 
   /// Notas operativas locales por contrato (no sincronizan; no contables).
   Map<String, NotaOperativaContrato> _notasOperativasPorContrato = {};
+
+  /// Dónde eligió cada familia sus sillas extra (`sillas_reparto`).
+  Map<String, SillasReparto> _repartosPorContrato = {};
+
+  /// Filtro "Sillas a confirmar": solo los que tienen que elegir.
+  bool _soloSillasAConfirmar = false;
 
   /// Arrastre de mora abierto por cuota, reconstruido del historial de pagos.
   /// El tracked es un solo número en la ficha; esto dice de qué cuotas salió.
@@ -316,6 +327,56 @@ class _DetalleEventoMasivoScreenState
         : await repo.obtenerPorContratoIds(ids);
     if (!mounted) return;
     setState(() => _notasOperativasPorContrato = map);
+    await _cargarRepartosSillas();
+  }
+
+  Future<void> _cargarRepartosSillas() async {
+    if (!mounted) return;
+    final ids = _alumnos.map((e) => e.id).toList();
+    final map = ids.isEmpty
+        ? <String, SillasReparto>{}
+        : await ref.read(sillasRepartoRepositoryProvider).obtenerPorContratoIds(ids);
+    if (!mounted) return;
+    setState(() => _repartosPorContrato = map);
+  }
+
+  /// El selector de la columna Mesa: dónde van las sillas extra de un alumno.
+  /// Solo escribe `sillas_reparto`; la cuenta del alumno no se toca.
+  Future<void> _elegirSillas(ContratoAlumno alumno) async {
+    final guardado = _repartosPorContrato[alumno.id];
+    final elegida = await mostrarRepartoSillasDialog(
+      context: context,
+      alumno: alumno,
+      guardado: guardado,
+    );
+    if (elegida == null || !mounted) return;
+    try {
+      final checkpoint = DateTime.now().toUtc();
+      await ref.read(sillasRepartoRepositoryProvider).guardar(
+            contratoAlumnoId: alumno.id,
+            sillasPrincipal: elegida.principal,
+            sillasExtra: SalonMesas.sillasExtra(alumno),
+            mesas: SalonMesas.mesas(alumno),
+            hechoPor: quienOpera(ref),
+          );
+      await _cargarRepartosSillas();
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .afterMassiveMutation(startedAt: checkpoint, isPayment: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Sillas de ${alumno.nombreAlumno}: ${elegida.texto}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se guardó el reparto de sillas: $e')),
+      );
+    }
   }
 
   void _mostrarNotificacionDeuda(ContratoAlumno alumno) {
@@ -946,7 +1007,20 @@ class _DetalleEventoMasivoScreenState
     final alumnosFiltrados = _alumnos
         .where(_pasaCursoYBusqueda)
         .where((a) => cumpleFiltroMora(a, moraPorAlumno, _filtroMora))
+        .where(
+          (a) =>
+              !_soloSillasAConfirmar ||
+              RepartoDeSillas.faltaElegir(a, _repartosPorContrato[a.id]),
+        )
         .toList();
+
+    // Cuántos tienen que elegir dónde van sus sillas: el chip los cuenta con el
+    // curso y la búsqueda puestos, igual que el de mora.
+    final sillasAConfirmar = _alumnos
+        .where((a) => !a.esBajaTemporal)
+        .where(_pasaCursoYBusqueda)
+        .where((a) => RepartoDeSillas.faltaElegir(a, _repartosPorContrato[a.id]))
+        .length;
 
     if (_ordenAlfabetico) {
       alumnosFiltrados.sort(
@@ -1274,6 +1348,13 @@ class _DetalleEventoMasivoScreenState
               layoutCompact: layoutCompact,
               onExportar: () => _exportarPlanillaMora(moraPorAlumno),
             ),
+            if (sillasAConfirmar > 0 || _soloSillasAConfirmar) ...[
+              SizedBox(width: layoutCompact ? 6 : 10),
+              _chipSillasAConfirmar(
+                cantidad: sillasAConfirmar,
+                layoutCompact: layoutCompact,
+              ),
+            ],
             SizedBox(width: layoutCompact ? 8 : 16),
             Tooltip(
               message: 'Registrar nuevo alumno',
@@ -2019,6 +2100,10 @@ class _DetalleEventoMasivoScreenState
                                   child: CeldaMesaAlumno(
                                     alumno: a,
                                     compacto: layoutCompact,
+                                    reparto: _repartosPorContrato[a.id],
+                                    onElegirSillas: esBajaTemporal
+                                        ? null
+                                        : () => _elegirSillas(a),
                                   ),
                                 ),
                               ),
@@ -2731,6 +2816,74 @@ class _DetalleEventoMasivoScreenState
     );
   }
 
+  /// Chip "Sillas a confirmar": cuántas familias tienen que elegir dónde van sus
+  /// sillas extra. Tocarlo deja en la grilla solo a esas, para llamarlas.
+  Widget _chipSillasAConfirmar({
+    required int cantidad,
+    required bool layoutCompact,
+  }) {
+    final activo = _soloSillasAConfirmar;
+    final color = Colors.orange.shade800;
+    return Tooltip(
+      message: activo
+          ? 'Mostrando solo a quienes tienen que elegir. Tocá para ver a todos.'
+          : 'Familias que tienen que elegir dónde van sus sillas extra. '
+              'Tocá para verlas.',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+        onTap: () =>
+            setState(() => _soloSillasAConfirmar = !_soloSillasAConfirmar),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: layoutCompact ? 6 : 10,
+            vertical: layoutCompact ? 2 : 4,
+          ),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: activo ? 0.22 : 0.12),
+            borderRadius: BorderRadius.circular(layoutCompact ? 10 : 12),
+            border: Border.all(
+              color: color.withValues(alpha: activo ? 1 : 0.45),
+              width: activo ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.event_seat_outlined,
+                size: layoutCompact ? 13 : 14,
+                color: color,
+              ),
+              SizedBox(width: layoutCompact ? 4 : 6),
+              Text(
+                '$cantidad',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: layoutCompact ? 12 : 13,
+                  color: color,
+                ),
+              ),
+              SizedBox(width: layoutCompact ? 3 : 5),
+              Text(
+                'SILLAS A CONFIRMAR',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: layoutCompact ? 9 : 10,
+                  letterSpacing: 0.4,
+                  color: color,
+                ),
+              ),
+              if (activo) ...[
+                SizedBox(width: layoutCompact ? 2 : 4),
+                Icon(Icons.close, size: layoutCompact ? 13 : 15, color: color),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Un ícono de la columna ACCIONES.
   ///
   /// [habilitado] false lo deja a la vista pero muerto: en baja temporal las
@@ -3229,6 +3382,7 @@ class _DetalleEventoMasivoScreenState
         alumnos,
         pagos: pagos,
         notas: _notasOperativasPorContrato,
+        repartos: _repartosPorContrato,
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,
       );

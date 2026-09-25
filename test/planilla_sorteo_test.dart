@@ -5,10 +5,12 @@ import 'package:arguello_events/features/common/services/planilla_sorteo_pdf.dar
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/planilla_sorteo.dart';
+import 'package:arguello_events/features/eventos/services/salon_mesas.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/nota_operativa_contrato.dart';
+import 'package:arguello_events/models/sillas_reparto.dart';
 
 ContratoAlumno _alumno(
   String id, {
@@ -38,6 +40,17 @@ ContratoAlumno _alumno(
           mesas.isEmpty ? null : MesasExtraUtils.formatearAsignacionMesas(mesas),
       telefono: '370 4000000',
       musicaElegida: 'Cumbia',
+    );
+
+SillasReparto _elegido(ContratoAlumno a, {required int principal}) =>
+    SillasReparto(
+      id: 'r${a.id}',
+      contratoAlumnoId: a.id,
+      sillasPrincipal: principal,
+      sillasExtra: SalonMesas.sillasExtra(a),
+      mesas: SalonMesas.mesas(a),
+      createdAt: DateTime(2026, 10, 1),
+      updatedAt: DateTime(2026, 10, 1),
     );
 
 NotaOperativaContrato _nota(String contrato, String texto, {bool resuelto = false}) =>
@@ -162,6 +175,49 @@ void main() {
       );
       expect(f.sillas, '2P · (!) 1 sin lugar (sin pagar)');
     });
+
+    test('con el reparto que eligió la familia: 1P · 2A y confirmado', () {
+      final a = _alumno('a', mesas: [12, 13], extras: 1, sillas: 3);
+      final f = PlanillaSorteo.fila(a, repartoElegido: _elegido(a, principal: 1));
+      expect(f.sillas, '1P · 2A');
+      expect(f.reparto, RepartoSillas.confirmado);
+      // Con 1 silla en la principal: 9 lugares, 1 con cena, 8 generales.
+      expect(f.ocupacionPrincipal, '1 con cena · 8 generales');
+    });
+
+    test('si eligió para otra cuenta, vuelve a pendiente y al reparto de siempre',
+        () {
+      final antes = _alumno('a', mesas: [12, 13], extras: 1, sillas: 3);
+      final despues = _alumno('a', mesas: [12, 13], extras: 1, sillas: 4);
+      final f = PlanillaSorteo.fila(
+        despues,
+        repartoElegido: _elegido(antes, principal: 1),
+      );
+      // 4 sillas en 2 mesas tiene una sola forma: 2P · 2A, confirmado solo.
+      expect(f.sillas, '2P · 2A');
+      expect(f.reparto, RepartoSillas.confirmado);
+
+      final g = PlanillaSorteo.fila(
+        _alumno('a', mesas: [12, 13], extras: 1, sillas: 2),
+        repartoElegido: _elegido(antes, principal: 1),
+      );
+      expect(g.sillas, '2P');
+      expect(g.reparto, RepartoSillas.pendiente);
+    });
+
+    test('con una sola forma posible no hay que llamar a nadie', () {
+      final f = PlanillaSorteo.fila(_alumno('a', mesas: [7], sillas: 2));
+      expect(f.sillas, '2P');
+      expect(f.reparto, RepartoSillas.confirmado);
+    });
+
+    test('antes del sorteo, si ya eligió, dice cómo', () {
+      final a = _alumno('a', extras: 1, sillas: 3);
+      expect(
+        PlanillaSorteo.fila(a, repartoElegido: _elegido(a, principal: 1)).sillas,
+        '1P · 2A',
+      );
+    });
   });
 
   group('acompañantes y observaciones', () {
@@ -176,13 +232,15 @@ void main() {
       expect(PlanillaSorteo.fila(_alumno('a')).acompanantes, isEmpty);
     });
 
-    test('la nota sin resolver es la observación y pide avisar', () {
+    // "Avisar" (la fila amarilla) se sacó el 25-sep a pedido del usuario: se
+    // deducía de cualquier nota sin resolver, que suelen ser de cobro. La nota
+    // sigue saliendo en Observaciones.
+    test('la nota sin resolver es la observación', () {
       final f = PlanillaSorteo.fila(
         _alumno('a'),
         nota: _nota('a', ' Vianda sin sal '),
       );
       expect(f.observaciones, 'Vianda sin sal');
-      expect(f.avisar, isTrue);
     });
 
     test('la nota resuelta no aparece', () {
@@ -191,7 +249,6 @@ void main() {
         nota: _nota('a', 'Ya está', resuelto: true),
       );
       expect(f.observaciones, isEmpty);
-      expect(f.avisar, isFalse);
     });
   });
 
@@ -227,7 +284,6 @@ void main() {
       expect(r.mesasAsignadas, 4);
       expect(r.sinMesa, 1);
       expect(r.repartosPendientes, 1);
-      expect(r.paraAvisar, 1);
       expect(r.aLlamar.single.fila.egresado, 'LÓPEZ, IVÁN');
       expect(r.divisiones.first.numeros, '1-3');
       expect(r.divisiones.first.sinMesa, 1);
