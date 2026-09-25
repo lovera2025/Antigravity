@@ -228,6 +228,8 @@ void main() {
           pagos: pagos,
           notas: notas,
           repartos: repartos,
+          lineaSorteo:
+              'Sorteo del 12/11/2026 21:40 hs · Jefe · 1 cambio a mano después',
           version: version,
           blancoYNegro: bn,
           generada: DateTime(2026, 11, 12, 21, 30),
