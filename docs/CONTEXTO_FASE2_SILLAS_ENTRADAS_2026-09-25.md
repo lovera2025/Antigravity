@@ -198,9 +198,25 @@ demás PDF, el algoritmo del sorteo y la lista de la puerta.
 
 ## Queda para el jefe
 
-- ¿Los menores de 10 cenan? Solo cambia la cuenta de la cocina.
-- ¿La pulsera VIP es de otro color? No cambia lo que se anota.
-- Para la Fase 3: qué salón se arma este año y cómo se numeran las mesas del pasto.
+Juntas acá las preguntas abiertas de los dos CONTEXTO, ordenadas según lo que frenan (25-sep). El usuario las tiene
+para mandárselas.
+
+**Frenan la Fase 3:**
+1. Qué salón se arma este año: el de la página 3 del Canva (78 mesas numeradas), el de las páginas 4 a 6 (100 mesas con
+   pasarela), o si cambia según la fiesta.
+2. Las mesas grises del pasto: si se numeran después de las comunes (131 en adelante) y se usan solo si faltan lugares.
+3. Qué escuelas se sortean por división, con bloques de colores como la Normal, y cuáles enteras, como la Técnica.
+4. Si la fila roja de su Excel es alguien sin mesa. La planilla ya lo supone (D11).
+
+**No frenan nada (entrega de entradas):**
+5. Si los menores de 10 cenan. Solo cambia la cuenta de la cocina.
+6. Si la pulsera VIP es de otro color. No cambia lo que se anota.
+
+**Para diciembre (Recepción y tótem):**
+7. Si el ingreso se marca por familia o por persona (D9).
+8. Si los dos puestos de recepción van juntos o en lados opuestos del predio (D12).
+9. Cómo se reparte la gente entre los dos puestos: por letra, por división o sin reparto.
+10. Qué pantalla hay en el predio para el tótem: si tiene entrada HDMI y si va vertical u horizontal.
 
 ## Cómo seguir: Fase 3
 
