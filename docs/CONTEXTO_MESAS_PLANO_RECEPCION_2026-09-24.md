@@ -441,16 +441,10 @@ instalador y web, no.
 3. **Fase 6:** entrega de entradas.
 4. **Para diciembre:** los cinco pendientes de tótem y Recepción.
 
-### Para seguir en otro chat, pegar
+### Para seguir en otro chat
 
-```text
-Seguimos con el plan de mesas, plano y entradas de los masivos. Leé primero
-docs/CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md (sección "Estado al 24-sep a la
-noche y cómo seguir") y la memoria del proyecto. La planilla del sorteo ya está
-hecha (08fb774). Seguimos por la Fase 2: presentame el plan (archivos,
-migraciones v72+ con su ROLLBACK, riesgos) y frená. No se publica nada hasta
-terminar el plan completo.
-```
+**Ya no vale el texto que estaba acá** (mandaba a planificar la Fase 2, que se hizo el 25-sep). El texto vigente
+está al final de [CONTEXTO_FASE2_SILLAS_ENTRADAS_2026-09-25](CONTEXTO_FASE2_SILLAS_ENTRADAS_2026-09-25.md).
 
 ## Las fotos del jefe
 
