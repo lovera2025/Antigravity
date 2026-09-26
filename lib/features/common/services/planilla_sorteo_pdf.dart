@@ -63,9 +63,12 @@ class PlanillaSorteoPdf {
     ];
   }
 
+  /// Reparto necesita ~61 pt para "● Confirmado": con 1.05 la interna le daba
+  /// 53 y la tabla lo recortaba en "Confirmadc". Se lo saca a Observaciones,
+  /// así el total no cambia y las demás columnas quedan igual.
   static List<double> _anchos(VersionPlanillaSorteo version) =>
       version == VersionPlanillaSorteo.interna
-          ? const [2.2, 2.1, 1.45, 1.3, 0.85, 1.05, 1.2, 1.1, 2.1]
+          ? const [2.2, 2.1, 1.45, 1.3, 0.85, 1.2, 1.2, 1.1, 1.95]
           : const [2.6, 2.6, 1.55, 1.5, 1.0, 1.15, 1.6];
 
   static String _dos(int n) => n.toString().padLeft(2, '0');

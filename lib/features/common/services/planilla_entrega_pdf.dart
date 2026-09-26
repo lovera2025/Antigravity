@@ -14,7 +14,7 @@ import 'planilla_tema.dart';
 typedef _Seccion = ({
   String nombre,
   pw.Widget Function() encabezado,
-  List<pw.Widget> Function() contenido,
+  List<pw.Widget> Function(double altoRenglon) contenido,
 });
 
 /// La planilla de entrega de entradas: una hoja A4 acostada por división, para
@@ -44,10 +44,28 @@ class PlanillaEntregaPdf {
     'Retiró',
   ];
 
-  static const _anchos = [2.3, 0.75, 0.45, 0.5, 1.75, 0.75, 1.05, 3.1, 0.55];
+  /// Se le saca a la columna del nombre, que es la más ancha, para que no se
+  /// partan dos cosas:
+  /// - "RETIRÓ" necesita ~30 pt de ancho útil: con 0.55 tenía 29 y salía
+  ///   "RETIR / Ó";
+  /// - "Hermano/a mayor" necesita ~75 pt: con 1.05 iba en dos líneas, el
+  ///   renglón crecía y una división de 26 ya no entraba en una hoja.
+  static const _anchos = [2.3, 0.75, 0.45, 0.5, 1.75, 0.75, 1.25, 2.85, 0.6];
 
   /// Alto mínimo de cada renglón: tiene que entrar un nombre escrito a mano.
-  static const double _altoRenglon = 19;
+  static const double altoRenglon = 19;
+
+  /// El renglón justo, que se usa solo si con él la división ocupa una hoja
+  /// menos (ver [altoParaDivision]). Sigue alcanzando para escribir.
+  static const double altoRenglonJusto = 17;
+
+  /// Se ahorra papel sin quitarle lugar a la escritura cuando no hace falta: el
+  /// renglón se achica solo si así la división entra en menos hojas.
+  static double altoParaDivision({
+    required int hojasNormal,
+    required int hojasJusto,
+  }) =>
+      hojasJusto < hojasNormal ? altoRenglonJusto : altoRenglon;
 
   static String _dos(int n) => n.toString().padLeft(2, '0');
 
@@ -118,7 +136,7 @@ class PlanillaEntregaPdf {
                       '${retiraron > 0 ? ' · ya retiraron $retiraron' : ''}'
                       ' · Quien retira escribe su nombre y apellido: no se firma.',
                 ),
-            contenido: () => [_tabla(tema, filas)],
+            contenido: (alto) => [_tabla(tema, filas, alto)],
           );
         }(),
     ];
@@ -136,7 +154,12 @@ class PlanillaEntregaPdf {
       return vacio.save();
     }
 
-    pw.MultiPage pagina(_Seccion s, {required int inicio, int? total}) =>
+    pw.MultiPage pagina(
+      _Seccion s, {
+      required double alto,
+      required int inicio,
+      int? total,
+    }) =>
         pw.MultiPage(
           pageFormat: _formato,
           margin: const pw.EdgeInsets.all(PlanillaTema.margen),
@@ -147,17 +170,28 @@ class PlanillaEntregaPdf {
             paginacion: '${s.nombre} · hoja ${context.pageNumber - inicio + 1} '
                 'de ${total ?? '-'}',
           ),
-          build: (_) => s.contenido(),
+          build: (_) => s.contenido(alto),
         );
 
-    // Igual que la planilla del sorteo: primero se arma cada división sola para
-    // contar sus hojas, porque el contexto no sabe cuántas va a tener.
-    final hojas = <int>[];
-    for (final s in secciones) {
+    Future<int> contarHojas(_Seccion s, double alto) async {
       final prueba = pw.Document(theme: theme);
-      prueba.addPage(pagina(s, inicio: 1));
+      prueba.addPage(pagina(s, alto: alto, inicio: 1));
       await prueba.save();
-      hojas.add(prueba.document.pdfPageList.pages.length);
+      return prueba.document.pdfPageList.pages.length;
+    }
+
+    // Igual que la planilla del sorteo: primero se arma cada división sola para
+    // contar sus hojas, porque el contexto no sabe cuántas va a tener. De paso
+    // se elige el renglón: el justo solo si ahorra una hoja.
+    final hojas = <int>[];
+    final altos = <double>[];
+    for (final s in secciones) {
+      final normal = await contarHojas(s, altoRenglon);
+      final justo =
+          normal > 1 ? await contarHojas(s, altoRenglonJusto) : normal;
+      final alto = altoParaDivision(hojasNormal: normal, hojasJusto: justo);
+      altos.add(alto);
+      hojas.add(alto == altoRenglon ? normal : justo);
     }
 
     final doc = pw.Document(
@@ -167,13 +201,19 @@ class PlanillaEntregaPdf {
     );
     var inicio = 1;
     for (var i = 0; i < secciones.length; i++) {
-      doc.addPage(pagina(secciones[i], inicio: inicio, total: hojas[i]));
+      doc.addPage(
+        pagina(secciones[i], alto: altos[i], inicio: inicio, total: hojas[i]),
+      );
       inicio += hojas[i];
     }
     return doc.save();
   }
 
-  static pw.Widget _tabla(PlanillaTema t, List<FilaPlanillaEntrega> filas) {
+  static pw.Widget _tabla(
+    PlanillaTema t,
+    List<FilaPlanillaEntrega> filas,
+    double alto,
+  ) {
     return pw.Table(
       border: pw.TableBorder(
         top: pw.BorderSide(color: t.linea, width: 0.6),
@@ -197,12 +237,12 @@ class PlanillaEntregaPdf {
               ),
           ],
         ),
-        for (final f in filas) _fila(t, f),
+        for (final f in filas) _fila(t, f, alto),
       ],
     );
   }
 
-  static pw.TableRow _fila(PlanillaTema t, FilaPlanillaEntrega f) {
+  static pw.TableRow _fila(PlanillaTema t, FilaPlanillaEntrega f, double alto) {
     pw.Widget celda(
       String texto, {
       bool negrita = false,
@@ -210,7 +250,7 @@ class PlanillaEntregaPdf {
       PdfColor? color,
     }) =>
         pw.Container(
-          constraints: const pw.BoxConstraints(minHeight: _altoRenglon),
+          constraints: pw.BoxConstraints(minHeight: alto),
           alignment: centro ? pw.Alignment.center : pw.Alignment.centerLeft,
           padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           child: pw.Text(
@@ -221,7 +261,7 @@ class PlanillaEntregaPdf {
         );
 
     final casilla = pw.Container(
-      constraints: const pw.BoxConstraints(minHeight: _altoRenglon),
+      constraints: pw.BoxConstraints(minHeight: alto),
       alignment: pw.Alignment.center,
       child: f.entregado
           ? pw.Text('Sí', style: t.estilo(negrita: true, color: t.verde))

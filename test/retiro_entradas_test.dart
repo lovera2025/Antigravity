@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
+import 'package:arguello_events/features/common/services/planilla_entrega_pdf.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/models/cliente.dart';
@@ -468,6 +469,51 @@ void main() {
         );
         expect(bytes.length, greaterThan(1000), reason: 'bn=$bn');
       }
+    });
+
+    test('el renglón se achica solo si la división entra en menos hojas', () {
+      expect(
+        PlanillaEntregaPdf.altoParaDivision(hojasNormal: 2, hojasJusto: 1),
+        PlanillaEntregaPdf.altoRenglonJusto,
+      );
+      expect(
+        PlanillaEntregaPdf.altoParaDivision(hojasNormal: 2, hojasJusto: 2),
+        PlanillaEntregaPdf.altoRenglon,
+      );
+      expect(
+        PlanillaEntregaPdf.altoParaDivision(hojasNormal: 1, hojasJusto: 1),
+        PlanillaEntregaPdf.altoRenglon,
+      );
+    });
+
+    test('una división de 26 entra en una sola hoja', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+      final alumnos = [
+        for (var i = 0; i < 26; i++)
+          _alumno(id: 'a$i', nombre: 'ALUMNO $i', mesas: [i + 1])
+              .copyWith(cursoDivision: '5° A'),
+      ];
+      final bytes = await PdfService.construirPlanillaEntregaPdf(
+        evento,
+        alumnos,
+        retiros: const {},
+        deudas: {
+          for (final a in alumnos) a.id: _deuda(a, _pagosCompletos(a)),
+        },
+        generada: DateTime(2026, 11, 12, 21, 30),
+      );
+      final texto = String.fromCharCodes(bytes);
+      final hojas = RegExp(r'/Type\s*/Page(?![s\w])').allMatches(texto).length;
+      expect(hojas, 1);
     });
   });
 
