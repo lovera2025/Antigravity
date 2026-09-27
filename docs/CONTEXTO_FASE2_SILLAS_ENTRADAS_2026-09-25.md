@@ -9,6 +9,10 @@ cambió ningún dato. Falta correr el SQL en la nube, que se hace cuando el usua
 > Anterior: [CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24](CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md), con la spec,
 > la Fase 0 y el plan original de siete piezas.
 
+> **Actualizado el 26-sep:** la Fase 3 está en curso. Lo vigente, incluido el texto para seguir en otro chat, está en
+> [CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26](CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md). **El texto para pegar del
+> final de este documento ya no vale.**
+
 ## De dónde salió
 
 El plan de la Fase 2 tenía siete piezas. El 25-sep el usuario lo revisó y lo simplificó:
