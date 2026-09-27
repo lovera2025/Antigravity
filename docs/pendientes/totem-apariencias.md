@@ -113,6 +113,28 @@ Sale lo que se reemplaza:
 **El shader se carga al abrir el tótem.** Si una PC no puede compilarlo, se usa un degradé del mismo color: nunca una
 pantalla rota.
 
+## Lo que el plano de la Fase 3 todavía no tiene para el tótem
+
+Lo encontró la revisión del dibujo del plano el 2026-09-27
+([CONTEXTO de la Fase 3](../CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md)). Es cierto, pero es de diciembre: hoy nada
+de esto se usa. Hay que decidirlo al retomar el tótem.
+
+- **Estilos:** el plano tiene tres temas (Gala, Arquitecto y Neón) y el tótem cuatro apariencias. Cristal y Póster no
+  tienen tema de plano. Falta decidir qué tema usa cada apariencia y quién manda: `planos_evento.estilo` o
+  `totem_config.estilo`. Hoy un estilo desconocido "pide elegir", y en una TV no elige nadie.
+- **El color del evento:** `TemaPlano` no tiene `copyWith` ni `==`. Si el tótem arma un tema nuevo en cada `build`,
+  el salón entero se redibuja en cada cuadro del camino. Hace falta `copyWith` con `==`, o un tema por apariencia
+  guardado.
+- **El fondo:** `PintorPlano` pinta siempre un fondo opaco, y usa ese mismo color para recortar la joya y el
+  candado. Para ponerlo encima del fondo animado hace falta una opción sin fondo, con otro color para esos recortes.
+- **El encuadre:** siempre muestra la hoja entera, y se calcula por separado en `PintorPlano`, `PintorResaltado` y
+  `mesaEnPunto`. Para acercar la mesa y el camino en la TV vertical, un encuadre opcional que usen los tres.
+- **La lista de la puerta:** `EstadoPlano` marca conflicto cuando dos ocupantes tienen la misma mesa, y en
+  `invitados` cada acompañante es una fila con la misma mesa. Hay que armar un ocupante por familia o por mesa,
+  documentado y con test.
+- **Tests:** ninguno pasa `ruta` ni `progresoRuta`. Falta una prueba de cada estilo a 1080×1920 con el camino en 0,
+  0,5 y 1.
+
 ## Los shaders de la maqueta aprobada
 
 Son WebGL2 (GLSL ES 3.00), tal como se aprobaron el 24-sep.
