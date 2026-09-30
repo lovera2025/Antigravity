@@ -48,6 +48,8 @@ import 'widgets/avisos_view.dart';
 import 'widgets/pagar_aviso_dialog.dart';
 import 'widgets/cobro_masivos_tab.dart';
 import 'widgets/panel_movimientos_sheet.dart';
+import 'widgets/extracciones_negocio.dart';
+import 'extracciones.dart';
 import 'widgets/calendario_filtro_movimientos.dart';
 import 'widgets/retiro_bolsillo_personal_dialog.dart';
 import 'widgets/gasto_personal_dialog.dart';
@@ -1055,8 +1057,8 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
           accent: green,
           onTap: () => _abrirDetalleEmpresa(context, state, isDark, gold),
           chips: [
-            _medioChipMini('EF ${state.hudEfectivoNetoHistorico.toCurrency()}', green, isDark),
-            _medioChipMini('TR ${state.hudTransferenciaNetaHistorica.toCurrency()}', violet, isDark),
+            _medioChipMini('Disp. EF ${state.hudEfectivoNetoHistorico.toCurrency()}', green, isDark),
+            _medioChipMini('Disp. TR ${state.hudTransferenciaNetaHistorica.toCurrency()}', violet, isDark),
           ],
           trailing: Container(
             padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8, vertical: compact ? 3 : 4),
@@ -2058,7 +2060,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   void _abrirDetalleEmpresa(BuildContext context, FinanzasState state, bool isDark, Color gold) {
     const green = Color(0xFF00B894);
     const red = Color(0xFFE74C3C);
-    const amber = Color(0xFFFFB74D);
     const violet = Color(0xFF6C63FF);
     void refrescar() => ref.read(finanzasProvider.notifier).recargar();
 
@@ -2075,12 +2076,21 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       datos: (s) => PanelDatosMovimientos(
         monto: s.hudPlataDelNegocio,
         egresos: s.egresosHistoricosLista,
+        // Lo disponible en cada medio, a la vista y con su nombre. Antes eran
+        // dos chips que decían solo "Efectivo" y "Transferencia", y no se
+        // entendía que eso era lo que había.
+        lineasMonto: [
+          ChipResumen('Disponible en efectivo', s.hudEfectivoNetoHistorico, green),
+          ChipResumen(
+            'Disponible en transferencia',
+            s.hudTransferenciaNetaHistorica,
+            violet,
+          ),
+        ],
         // Sin chip "Salió del negocio": ese número ya aparecía dos veces más
         // abajo en la misma pantalla —abierto por rubro en "EN QUÉ SE FUE", y
         // otra vez como neto al pie del historial—. Tres veces la misma cifra.
         chips: [
-          ChipResumen('Efectivo', s.hudEfectivoNetoHistorico, green),
-          ChipResumen('Transferencia', s.hudTransferenciaNetaHistorica, violet),
           ChipResumen('Total cobrado', s.hudTotalIngresosHistoricoGlobal, gold),
         ],
       ),
@@ -2099,7 +2109,12 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       ],
       extras: (s) => [
         const SizedBox(height: 18),
-        _desgloseSalidas(s, isDark, gold, red, amber),
+        _desgloseSalidas(s, isDark, red),
+        const SizedBox(height: 10),
+        ExtraccionesNegocio(
+          resumen: resumenExtracciones(s.egresosHistoricosLista),
+          isDark: isDark,
+        ),
         const SizedBox(height: 10),
         _liquidacionPorOperador(context, s, isDark, gold),
         const SizedBox(height: 10),
@@ -2119,20 +2134,17 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
-  /// En qué se fue la plata, abierto por categoría.
+  /// En qué se fue la plata: los gastos del negocio, abiertos por categoría.
   ///
-  /// El total suelto de "gastos operativos" mezcla un pago a proveedor con un
-  /// `Retiro de caja`, que no compra nada: solo mueve plata del cajón del turno
-  /// a la oficina. Verlo separado es lo que permite decidir si eso tiene que
-  /// seguir restando del saldo.
-  Widget _desgloseSalidas(
-    FinanzasState state,
-    bool isDark,
-    Color gold,
-    Color red,
-    Color amber,
-  ) {
-    final porCategoria = state.hudGastosOperativosPorCategoria;
+  /// Las extracciones —lo apartado para el dueño, los retiros de caja y sus
+  /// gastos personales pagados con plata del negocio— van aparte, en su sección
+  /// cerrada (`ExtraccionesNegocio`): no son gastos, y "Aparté para mí" era el
+  /// renglón más grande de esta lista, a la vista de cualquiera.
+  Widget _desgloseSalidas(FinanzasState state, bool isDark, Color red) {
+    final porCategoria = {
+      for (final e in state.hudGastosOperativosPorCategoria.entries)
+        if (e.key.trim() != kCategoriaRetiroCaja) e.key: e.value,
+    };
 
     return Container(
       width: double.infinity,
@@ -2159,33 +2171,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
             _empresaDetalleLinea(
               e.key,
               e.value,
-              e.key.trim() == kCategoriaRetiroCaja ? amber : red,
-              isDark,
-              negativo: true,
-              nota: e.key.trim() == kCategoriaRetiroCaja
-                  ? 'Salió del cajón del turno, no se gastó. Hoy resta igual.'
-                  : null,
-            ),
-          if (state.hudGastosPersonalEmpresaTotal > 0.01)
-            _empresaDetalleLinea(
-              'Gastos personales tuyos',
-              state.hudGastosPersonalEmpresaTotal,
               red,
-              isDark,
-              negativo: true,
-              nota: 'Salieron directo del negocio, sin pasar por tu bolsillo.',
-            ),
-          if (state.hudRetirosBolsaPersonalTotal > 0.01)
-            // Es TODO lo apartado, no lo que quedó sin gastar: sale del negocio
-            // igual lo hayas gastado o no. Decía "Retiros sin gastar" mientras
-            // la tarjeta MI BOLSILLO mostraba otro número por lo mismo.
-            //
-            // Sin la nota de cuánto queda sin gastar: eso es estado del
-            // bolsillo y ya lo dice su propio panel.
-            _empresaDetalleLinea(
-              'Aparté para mí',
-              state.hudRetirosBolsaPersonalTotal,
-              amber,
               isDark,
               negativo: true,
             ),

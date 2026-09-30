@@ -37,7 +37,11 @@ class _RegistrarEgresoGlobalDialogState
       EgresoConceptoSugerencias.fromFilas(const []);
 
   String _categoriaSeleccionada = kCategoriaComboDefault;
-  String _medioPagoSeleccionado = 'Efectivo';
+
+  /// Sin medio de entrada: si venía en Efectivo y nadie lo cambiaba, el pago
+  /// restaba del efectivo aunque saliera del banco, y el efectivo del negocio
+  /// terminaba dando negativo.
+  String? _medioPagoSeleccionado;
   double? _tarifaSugerida;
 
   List<String> get _categoriasCombo {
@@ -172,8 +176,58 @@ class _RegistrarEgresoGlobalDialogState
     });
   }
 
+  /// Lo disponible en el medio elegido, según las cuentas del negocio.
+  double? _disponibleEnMedio(String medio) {
+    final s = ref.read(finanzasProvider).whenOrNull(data: (s) => s);
+    if (s == null) return null;
+    return medio == 'Transferencia'
+        ? s.hudTransferenciaNetaHistorica
+        : s.hudEfectivoNetoHistorico;
+  }
+
+  String? _textoDisponibles() {
+    final ef = _disponibleEnMedio('Efectivo');
+    final tr = _disponibleEnMedio('Transferencia');
+    if (ef == null || tr == null) return null;
+    return 'Disponible: efectivo ${ef.toCurrency()} · '
+        'transferencia ${tr.toCurrency()}';
+  }
+
+  /// Un pago que supera lo que figura en su medio no se frena —el pago es real
+  /// y la cuenta puede estar corrida—, pero se pregunta antes: casi siempre es
+  /// el medio mal elegido.
+  Future<bool> _confirmarSiNoAlcanza(double monto, String medio) async {
+    final enMedio = _disponibleEnMedio(medio);
+    if (enMedio == null || monto <= enMedio + 0.009) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('No alcanza en ese medio'),
+        content: Text(
+          'En ${medio.toLowerCase()} figuran ${enMedio.toCurrency()} y este pago '
+          'es de ${monto.toCurrency()}.\n\n'
+          '¿Sale igual en ${medio.toLowerCase()}? Si salió del otro medio, '
+          'volvé y cambialo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('VOLVER'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('SÍ, EN ${medio.toUpperCase()}'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final medio = _medioPagoSeleccionado;
+    if (medio == null) return;
 
     setState(() => _isSubmitting = true);
 
@@ -182,6 +236,10 @@ class _RegistrarEgresoGlobalDialogState
           .replaceAll('.', '')
           .replaceAll(',', '.');
       final monto = double.parse(cleanText);
+      if (!await _confirmarSiNoAlcanza(monto, medio)) {
+        if (mounted) setState(() => _isSubmitting = false);
+        return;
+      }
       final proveedor =
           _sugerencias.nombreCanonico(_proveedorController.text);
       final categoria = categoriaEgresoParaGuardar(_categoriaSeleccionada);
@@ -194,7 +252,7 @@ class _RegistrarEgresoGlobalDialogState
           monto: monto,
           proveedor: proveedor,
           categoria: categoria,
-          medioPago: _medioPagoSeleccionado,
+          medioPago: medio,
         );
       } else {
         await repo.registrarEgresoSinEvento(
@@ -202,7 +260,7 @@ class _RegistrarEgresoGlobalDialogState
           proveedor: proveedor,
           categoria: categoria,
           fecha: DateTime.now(),
-          medioPago: _medioPagoSeleccionado,
+          medioPago: medio,
         );
       }
 
@@ -503,9 +561,14 @@ class _RegistrarEgresoGlobalDialogState
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _medioPagoSeleccionado,
-                  decoration: const InputDecoration(
+                  hint: const Text('¿De dónde sale la plata?'),
+                  validator: (v) => v == null
+                      ? 'Elegí si sale en efectivo o por transferencia'
+                      : null,
+                  decoration: InputDecoration(
                     labelText: 'Medio de Pago',
-                    prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                    prefixIcon: const Icon(Icons.account_balance_wallet_rounded),
+                    helperText: _textoDisponibles(),
                   ),
                   items: const [
                     DropdownMenuItem(

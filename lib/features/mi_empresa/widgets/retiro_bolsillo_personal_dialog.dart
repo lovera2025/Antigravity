@@ -28,7 +28,11 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
   final _conceptoController = TextEditingController(text: 'Retiro bolsillo personal');
 
   bool _isSubmitting = false;
-  String _medioPago = 'Efectivo';
+
+  /// Sin medio elegido de entrada: venía en Efectivo, y el 21-sep se apartaron
+  /// $49M "en efectivo" cuando en efectivo había $28,7M. El total del negocio
+  /// alcanzaba, así que pasó, y desde ahí el efectivo del negocio dio negativo.
+  String? _medioPago;
 
   static const _gold = Color(0xFFD4AF37);
   static const _amber = Color(0xFFFFB74D);
@@ -51,14 +55,27 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  /// Lo disponible en [medio] ('Efectivo' o 'Transferencia'), nunca negativo.
+  static double _disponibleEnMedio(FinanzasState s, String medio) {
+    final v = medio == 'Transferencia'
+        ? s.hudTransferenciaNetaHistorica
+        : s.hudEfectivoNetoHistorico;
+    return v > 0 ? v : 0.0;
+  }
+
+  static String _otroMedio(String medio) =>
+      medio == 'Transferencia' ? 'Efectivo' : 'Transferencia';
+
+  static double _centavos(double v) => double.parse(v.toStringAsFixed(2));
+
+  /// Guarda uno o dos retiros (partido entre los dos medios) y cierra.
+  Future<void> _guardar(List<({double monto, String medio})> partes) async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSubmitting = true);
 
     try {
-      final cleanText = _montoController.text.replaceAll('.', '').replaceAll(',', '.');
-      final monto = double.parse(cleanText);
+      final monto = partes.fold<double>(0, (s, p) => s + p.monto);
       if (monto <= 0) {
         throw Exception('El monto debe ser mayor a cero');
       }
@@ -69,6 +86,13 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
         if (monto > dispClamped + _excedeTol) {
           throw Exception('El monto supera lo disponible en empresa (${dispClamped.toCurrency()})');
         }
+        for (final p in partes) {
+          final enMedio = _disponibleEnMedio(finState, p.medio);
+          if (p.monto > enMedio + _excedeTol) {
+            throw Exception('En ${p.medio.toLowerCase()} hay '
+                '${enMedio.toCurrency()}: no alcanza para ${p.monto.toCurrency()}');
+          }
+        }
       }
 
       final repo = ref.read(egresosRepositoryProvider);
@@ -76,13 +100,17 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
           ? 'Retiro bolsillo personal'
           : _conceptoController.text.trim();
 
-      await repo.registrarEgresoSinEvento(
-        monto: monto,
-        proveedor: conceptoBase,
-        categoria: kCategoriaRetiroDueno,
-        fecha: DateTime.now(),
-        medioPago: _medioPago,
-      );
+      final fecha = DateTime.now();
+      for (final p in partes) {
+        if (p.monto <= 0.009) continue;
+        await repo.registrarEgresoSinEvento(
+          monto: p.monto,
+          proveedor: conceptoBase,
+          categoria: kCategoriaRetiroDueno,
+          fecha: fecha,
+          medioPago: p.medio,
+        );
+      }
 
       await ref.read(finanzasProvider.notifier).recargar();
       if (!mounted) return;
@@ -131,6 +159,27 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
         montoIngresado > disponibleEmpresa + _excedeTol;
     final restaria =
         (disponibleEmpresa != null && montoIngresado != null) ? disponibleEmpresa - montoIngresado : null;
+
+    // Lo que hay en el medio elegido. Si no alcanza pero entre los dos sí, se
+    // ofrece partirlo: lo que haya en ese medio, y el resto del otro.
+    final finState = finanzasAsync.whenOrNull(data: (s) => s);
+    final medio = _medioPago;
+    final double? enMedio = (finState != null && medio != null)
+        ? _disponibleEnMedio(finState, medio)
+        : null;
+    final excedeMedio = enMedio != null &&
+        montoIngresado != null &&
+        montoIngresado > enMedio + _excedeTol;
+    final double? enOtro = (finState != null && medio != null)
+        ? _disponibleEnMedio(finState, _otroMedio(medio))
+        : null;
+    final puedePartir = enMedio != null &&
+        enOtro != null &&
+        montoIngresado != null &&
+        excedeMedio &&
+        !excedeDisponible &&
+        enMedio > 0.009 &&
+        montoIngresado <= enMedio + enOtro + _excedeTol;
 
     const accentColor = _amber;
 
@@ -277,6 +326,7 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   initialValue: _medioPago,
+                  hint: const Text('¿De dónde sale la plata?'),
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.swap_vert_rounded, size: 18),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -286,10 +336,30 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
                     DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo')),
                     DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia')),
                   ],
+                  validator: (v) => v == null ? 'Elegí si sale en efectivo o por transferencia' : null,
                   onChanged: (val) {
                     if (val != null) setState(() => _medioPago = val);
                   },
                 ),
+                if (excedeMedio && medio != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    puedePartir
+                        ? 'En ${medio.toLowerCase()} hay ${enMedio.toCurrency()}. '
+                            'Podés partirlo: ${enMedio.toCurrency()} en '
+                            '${medio.toLowerCase()} y el resto por '
+                            '${_otroMedio(medio).toLowerCase()}.'
+                        : 'En ${medio.toLowerCase()} hay ${enMedio.toCurrency()}: '
+                            'no alcanza. Elegí ${_otroMedio(medio).toLowerCase()} '
+                            'o un monto menor.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Text('CONCEPTO (OPCIONAL)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: _gold, letterSpacing: 1)),
                 const SizedBox(height: 6),
@@ -312,8 +382,31 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
           onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(false),
           child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
         ),
+        if (puedePartir)
+          OutlinedButton(
+            onPressed: _isSubmitting
+                ? null
+                : () => _guardar([
+                      (monto: _centavos(enMedio), medio: medio!),
+                      (
+                        monto: _centavos(montoIngresado - enMedio),
+                        medio: _otroMedio(medio),
+                      ),
+                    ]),
+            child: const Text(
+              'PARTIR EN LOS DOS',
+              style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.6),
+            ),
+          ),
         FilledButton.icon(
-          onPressed: (_isSubmitting || disponibleEmpresa == null || excedeDisponible) ? null : _submit,
+          onPressed: (_isSubmitting ||
+                  disponibleEmpresa == null ||
+                  excedeDisponible ||
+                  excedeMedio ||
+                  montoIngresado == null ||
+                  medio == null)
+              ? null
+              : () => _guardar([(monto: montoIngresado, medio: medio)]),
           style: FilledButton.styleFrom(backgroundColor: accentColor, foregroundColor: Colors.black),
           icon: _isSubmitting
               ? const SizedBox(
@@ -403,8 +496,9 @@ class _RetiroBolsilloPersonalDialogState extends ConsumerState<RetiroBolsilloPer
             ),
             const SizedBox(height: 8),
             Text(
-              'EF ${state.hudEfectivoNetoHistorico.toCurrency()} · TR ${state.hudTransferenciaNetaHistorica.toCurrency()}',
-              style: baseStyle.copyWith(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF00B894)),
+              'Disponible en efectivo ${state.hudEfectivoNetoHistorico.toCurrency()} · '
+              'en transferencia ${state.hudTransferenciaNetaHistorica.toCurrency()}',
+              style: baseStyle.copyWith(fontSize: 10.5, fontWeight: FontWeight.w800, color: const Color(0xFF00B894)),
             ),
             if (restaria != null && montoIngresado != null && montoIngresado > _excedeTol) ...[
               const SizedBox(height: 8),

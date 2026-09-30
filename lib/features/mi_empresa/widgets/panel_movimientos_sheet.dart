@@ -9,6 +9,7 @@ import '../../common/utils/currency_extensions.dart';
 import '../../common/utils/texto_busqueda.dart';
 import '../../egresos/services/egreso_concepto_sugerencias.dart';
 import '../bolsa_personal_helpers.dart';
+import '../extracciones.dart';
 import '../providers/finanzas_provider.dart';
 import 'calendario_filtro_movimientos.dart';
 import 'editar_movimiento_dialog.dart';
@@ -59,16 +60,31 @@ class PanelDatosMovimientos {
   final List<ChipResumen> chips;
   final String? notaRaya;
 
+  /// Renglones debajo del monto grande, siempre a la vista (el negocio: lo
+  /// disponible en efectivo y en transferencia).
+  final List<ChipResumen> lineasMonto;
+
   const PanelDatosMovimientos({
     required this.monto,
     required this.egresos,
     this.chips = const [],
     this.notaRaya,
+    this.lineasMonto = const [],
   });
 }
 
 /// Filtro por tipo de movimiento, además del calendario.
-enum _FiltroTipo { todos, efectivo, transferencia, entradas, salidas }
+enum _FiltroTipo {
+  todos,
+  efectivo,
+  transferencia,
+  entradas,
+  salidas,
+
+  /// Solo en el negocio: las extracciones no se mezclan con los gastos, se
+  /// ven con su propio chip.
+  extracciones,
+}
 
 /// Movimientos que le corresponden a cada ámbito.
 ///
@@ -220,8 +236,17 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
   List<Egreso> _delAmbito(PanelDatosMovimientos d) =>
       movimientosDelAmbito(d.egresos, widget.ambito);
 
+  /// En el negocio, las extracciones van solo con su chip; el resto de los
+  /// filtros (y el calendario) muestra los gastos.
+  List<Egreso> _delFiltroExtracciones(PanelDatosMovimientos d) {
+    final todos = _delAmbito(d);
+    if (widget.ambito != AmbitoPanel.negocio) return todos;
+    final soloExtracciones = _tipo == _FiltroTipo.extracciones;
+    return todos.where((e) => esExtraccion(e) == soloExtracciones).toList();
+  }
+
   List<Egreso> _visibles(PanelDatosMovimientos d) {
-    return _delAmbito(d).where((e) {
+    return _delFiltroExtracciones(d).where((e) {
       // Mientras se busca, el recorte de fechas queda en pausa: si el calendario
       // estaba en un día y lo buscado es de otro, el movimiento existe y no
       // aparecía. El rango no se borra, se ignora — al limpiar la búsqueda
@@ -239,6 +264,8 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
           return _esEntrada(e, widget.ambito);
         case _FiltroTipo.salidas:
           return !_esEntrada(e, widget.ambito);
+        case _FiltroTipo.extracciones:
+          return true;
       }
     }).toList();
   }
@@ -311,6 +338,10 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
             color: isDark ? Colors.white54 : Colors.black54,
           ),
         ),
+        if (d.lineasMonto.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          for (final l in d.lineasMonto) _lineaMonto(l, isDark),
+        ],
         if (d.notaRaya != null) ...[
           const SizedBox(height: 8),
           Container(
@@ -375,7 +406,7 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
         const SizedBox(height: 8),
         CalendarioFiltroMovimientos(
           fechas: [
-            for (final e in _delAmbito(d))
+            for (final e in _delFiltroExtracciones(d))
               if (e.fecha != null) e.fecha!,
           ],
           valor: _rango,
@@ -433,6 +464,7 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
       _FiltroTipo.transferencia => ' en Transferencia',
       _FiltroTipo.entradas => ' en Aparté',
       _FiltroTipo.salidas => ' en Gasté',
+      _FiltroTipo.extracciones => ' en Extracciones',
     };
     if (_buscando) {
       return 'No hay coincidencias con «$_query»$porTipo.';
@@ -492,6 +524,44 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
           borderSide: BorderSide(color: accent.withValues(alpha: 0.55)),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+    );
+  }
+
+  /// Un renglón debajo del monto: "Disponible en efectivo   $X". Negativo va en
+  /// rojo: no es plata que haya, es una cuenta que no cierra.
+  Widget _lineaMonto(ChipResumen l, bool isDark) {
+    const rojo = Color(0xFFE74C3C);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: l.color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            l.label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            l.monto.toCurrency(),
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w900,
+              color: l.monto < -0.01
+                  ? rojo
+                  : (isDark ? Colors.white : Colors.black87),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -599,6 +669,14 @@ class _PanelMovimientosState extends ConsumerState<_PanelMovimientos> {
             _chipTipo('Aparté', _FiltroTipo.entradas, const Color(0xFFFFB74D), isDark),
             const SizedBox(width: 6),
             _chipTipo('Gasté', _FiltroTipo.salidas, teal, isDark),
+          ] else ...[
+            const SizedBox(width: 6),
+            _chipTipo(
+              'Extracciones',
+              _FiltroTipo.extracciones,
+              const Color(0xFFFFB74D),
+              isDark,
+            ),
           ],
         ],
       ),
