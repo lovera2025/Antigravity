@@ -8000,71 +8000,15 @@ class _DetalleEventoMasivoScreenState
                                                         p['fecha_pago'] ?? '',
                                                       ) ??
                                                       DateTime.now();
-                                                  double sumPagosPlanHistorico =
-                                                      0;
-                                                  for (final rec
-                                                      in listaFinal) {
-                                                    final isMora =
-                                                        rec['line_kind'] ==
-                                                            'interes_mora' ||
-                                                        (rec['concepto']
-                                                                ?.toString()
-                                                                .toLowerCase()
-                                                                .contains(
-                                                                  'interés',
-                                                                ) ??
-                                                            false) ||
-                                                        (rec['concepto_detallado']
-                                                                ?.toString()
-                                                                .toLowerCase()
-                                                                .contains(
-                                                                  'interés',
-                                                                ) ??
-                                                            false);
-                                                    final conc = rec['concepto']
-                                                        ?.toString();
-                                                    final concDet =
-                                                        rec['concepto_detallado']
-                                                            ?.toString();
-                                                    final isCargo =
-                                                        rec['line_kind'] ==
-                                                            kLineKindCargoCanal ||
-                                                        esPagoCargoCanalPorConcepto(
-                                                          conc,
-                                                        ) ||
-                                                        esPagoCargoCanalPorConcepto(
-                                                          concDet,
-                                                        );
-                                                    final recDate =
-                                                        DateTime.tryParse(
-                                                          rec['fecha_pago'] ??
-                                                              '',
-                                                        ) ??
-                                                        DateTime.now();
-                                                    if (!isMora &&
-                                                        !isCargo &&
-                                                        recDate.compareTo(
-                                                              fechaOrig,
-                                                            ) <=
-                                                            0) {
-                                                      sumPagosPlanHistorico +=
-                                                          (rec['monto'] as num)
-                                                              .toDouble();
-                                                    }
-                                                  }
-                                                  final double historicoSaldo =
-                                                      (alumno.montoTotalPactado -
-                                                              sumPagosPlanHistorico)
-                                                          .clamp(
-                                                            0.0,
-                                                            double.infinity,
-                                                          );
-
+                                                  // El saldo y las cuotas de
+                                                  // aquel día los cuenta la
+                                                  // reimpresión desde los pagos.
+                                                  // Sumar `monto` acá daba una
+                                                  // cuota de menos a quien
+                                                  // liquidó con descuento.
                                                   _imprimirReciboAlumno(
                                                     alumno,
                                                     montoPagado: monto,
-                                                    saldoPendiente:
-                                                        historicoSaldo,
                                                     conceptosPagados:
                                                         <Map<String, dynamic>>[
                                                           {
@@ -8416,6 +8360,21 @@ class _DetalleEventoMasivoScreenState
       // recibo aunque el operador no la haya tildado. En reimpresiones se
       // omite: el papel reproduce un cobro pasado, no la deuda de hoy.
       final bool reimpresion = esReimpresion ?? (fechaManual != null);
+      // Una reimpresión muestra las cuotas y el saldo de aquel día, contados
+      // desde los pagos hasta esa fecha. El contrato ya avanzó, y deducirlos
+      // del saldo mezclaba la cuota base con mesas y sillas: GAUNA, GERALDINE
+      // tenía 6 cuotas pagadas y el recibo reimpreso decía 4/9.
+      int? cuotasAlDia;
+      final fechaRecibo = fechaManual;
+      if (reimpresion && fechaRecibo != null) {
+        final progreso = progresoAlDia(
+          contrato: alumnoParaPdf,
+          pagos: await repo.getHistorialPagosAlumno(alumnoParaPdf.id),
+          hasta: fechaRecibo,
+        );
+        cuotasAlDia = progreso.cuotasBase;
+        valSaldo = progreso.saldoDeudor;
+      }
       double? moraRestantePdf = moraPendientePost;
       String? moraOrigenPdf = moraPendienteOrigenPost;
       // En una reimpresión el número es el de HOY, no el del día del recibo, así
@@ -8490,6 +8449,7 @@ class _DetalleEventoMasivoScreenState
         moraPendienteArrastre: moraArrastrePdf,
         moraRestanteMedidaEl: moraMedidaEl,
         esReimpresion: reimpresion,
+        cuotasPagadasAlDia: cuotasAlDia,
         medioPago: medioPago,
         montoEfectivoDetalle: montoEfectivoDetalle,
         montoTransferenciaDetalle: montoTransferenciaDetalle,

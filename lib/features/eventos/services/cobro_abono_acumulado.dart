@@ -1,4 +1,5 @@
 import '../../../core/utils/pago_interes_mora.dart';
+import '../../../models/contrato_alumno.dart';
 
 import 'mesas_extra_utils.dart';
 
@@ -658,6 +659,43 @@ RecalculoContratoDesdePagos recalcularSaldoDesdePagos({
     cuotasMesa: cuotasMesa,
     cuotasSillas: cuotasSilla,
   );
+}
+
+/// Cuotas base y saldo como estaban en [hasta]: lo que dan los pagos con fecha
+/// hasta ese momento, con el mismo cálculo que el recálculo del saldo. Es lo que
+/// imprime un recibo reimpreso, que no puede mostrar las cuotas de hoy.
+///
+/// Sale de los pagos y no del saldo: el saldo mezcla la cuota base con las mesas
+/// y las sillas, y dividirlo por el total del contrato contaba mal. GAUNA,
+/// GERALDINE tenía 6 cuotas pagadas y 4 mesas extra; su recibo reimpreso decía
+/// 4 de 9.
+///
+/// Los 2 segundos de margen son los de la reimpresión desde Finanzas: las líneas
+/// de un mismo cobro se guardan con milisegundos de diferencia.
+({int cuotasBase, double saldoDeudor}) progresoAlDia({
+  required ContratoAlumno contrato,
+  required Iterable<Map<String, dynamic>> pagos,
+  required DateTime hasta,
+}) {
+  final limite = hasta.add(const Duration(seconds: 2));
+  final pagosHasta = pagos.where((p) {
+    final fecha = DateTime.tryParse(
+      (p['fecha_pago'] ?? p['created_at'])?.toString() ?? '',
+    );
+    return fecha != null && !fecha.isAfter(limite);
+  }).toList();
+  final r = recalcularSaldoDesdePagos(
+    montoTotalPactado: contrato.montoTotalPactado,
+    totalCuotas: contrato.totalCuotas,
+    mesaExtraPrecio: contrato.mesaExtraPrecio,
+    sillasExtraPrecioTotal: contrato.sillasExtraPrecioTotal,
+    precioUnitarioMesaExtra: contrato.precioUnitarioMesaExtra,
+    mesaExtraCuotas: contrato.mesaExtraCuotas,
+    mesaExtraCantidad: contrato.mesaExtraCantidad,
+    sillasExtraCuotas: contrato.sillasExtraCuotas,
+    pagos: pagosHasta,
+  );
+  return (cuotasBase: r.cuotasBase, saldoDeudor: r.saldoDeudor);
 }
 
 /// Cuántas cuotas **nuevas** liquida [grossActual] sumado al historial bruto.

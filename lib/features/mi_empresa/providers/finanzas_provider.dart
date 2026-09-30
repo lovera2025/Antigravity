@@ -10,6 +10,7 @@ import '../../../models/transaccion.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../common/services/pdf_service.dart';
 import '../../eventos/services/concepto_pago_display.dart';
+import '../../eventos/services/cobro_abono_acumulado.dart';
 import 'package:flutter/material.dart';
 import '../../../main.dart';
 import '../../../core/database/local_database.dart';
@@ -1028,6 +1029,13 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
           fechaManual: dtBase,
           // Reproduce un cobro que ya pasó: no puede afirmar la mora de hoy.
           esReimpresion: true,
+          // Las cuotas de aquel día, con el mismo cálculo que el saldo. El
+          // recuadro las deducía del saldo con mesas y sillas adentro.
+          cuotasPagadasAlDia: progresoAlDia(
+            contrato: contrato,
+            pagos: todosPagosRows,
+            hasta: dtBase,
+          ).cuotasBase,
           medioPago: medioPago,
           montoEfectivoDetalle: montoEfectivoDetalle,
           montoTransferenciaDetalle: montoTransferenciaDetalle,

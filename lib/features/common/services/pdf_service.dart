@@ -1912,6 +1912,11 @@ class PdfService {
     /// fecha (la del momento del cobro), así que sin este flag todo recibo
     /// original salía rotulado como reimpresión.
     bool? esReimpresion,
+
+    /// Cuotas base pagadas el día del recibo, contadas desde los pagos
+    /// ([progresoAlDia]). Las reimpresiones lo mandan: el contrato ya avanzó y
+    /// el saldo solo no alcanza para saberlo.
+    int? cuotasPagadasAlDia,
   }) async {
     // Fuente TrueType con soporte Unicode completo (elimina warnings de
     // Helvetica). El tema se guarda aparte: la medición tiene que usar
@@ -1952,20 +1957,29 @@ class PdfService {
     // contrato, que es exacto. En una reimpresión no puede salir de ahí: el
     // contrato ya avanzó y el papel terminaba diciendo las cuotas de hoy al
     // lado del abonado de aquel día (reimprimir la cuota 1 mostraba "5/9
-    // pagadas" junto a $30.000). Se deriva del mismo saldo histórico que se
-    // imprime al lado, así el recuadro cierra consigo mismo.
+    // pagadas" junto a $30.000). Lo manda quien reimprime, contado desde los
+    // pagos de ese día.
     final int cuotasPagadasRecibo = () {
-      if (!esReimpresionPdf || alumno.totalCuotas <= 0) {
-        return alumno.cuotasPagadas;
-      }
-      final cuotaPura = alumno.montoTotalPactado / alumno.totalCuotas;
+      if (alumno.totalCuotas <= 0) return alumno.cuotasPagadas;
+      final alDia = cuotasPagadasAlDia;
+      if (alDia != null) return alDia.clamp(0, alumno.totalCuotas);
+      if (!esReimpresionPdf) return alumno.cuotasPagadas;
+      // Red para una reimpresión que no lo mande. Dividir lo abonado por el
+      // total del contrato contaba mal: el total incluye mesas y sillas, y lo
+      // abonado también (GAUNA, GERALDINE: 6 cuotas pagadas, 4 mesas, y el
+      // recibo reimpreso decía 4/9). Se cuenta solo la parte de la cuota base.
+      final base = alumno.montoTotalPactado -
+          alumno.mesaExtraPrecio -
+          alumno.sillasExtraPrecioTotal;
+      final cuotaPura = base / alumno.totalCuotas;
       if (cuotaPura <= 0.01) return alumno.cuotasPagadas;
-      final abonado = (alumno.montoTotalPactado - valSaldo).clamp(
-        0.0,
-        double.infinity,
-      );
+      final abonadoBase = (alumno.montoTotalPactado -
+              valSaldo -
+              alumno.mesaExtraPagado -
+              alumno.sillasExtraPagado)
+          .clamp(0.0, double.infinity);
       return cuotasCompletasDesdeGrossAcumulado(
-        abonado,
+        abonadoBase,
         cuotaPura,
       ).clamp(0, alumno.totalCuotas);
     }();
