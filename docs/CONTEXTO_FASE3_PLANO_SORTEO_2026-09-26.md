@@ -1,6 +1,6 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-09-27
+**Fecha:** 2026-09-26, puesto al día el 2026-09-29
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
 **Estado:** en curso. Hay partes programadas y otras que faltan (ver la tabla). **Nada está publicado**: las PCs
 siguen con la 5.0.0.
@@ -330,6 +330,42 @@ Lo que está bien, según los revisores:
   `planoFresco` lee solo el de esta PC.
 - **Un `armado_json` roto** hace fallar `plano.armado` (es `late final`) al abrir el diálogo.
 
+## Qué pasó el 29-sep (fuera de la Fase 3)
+
+La Fase 3 no avanzó: M2, M3 y M5 siguen programados y sin commit, igual que el 27. Antes de seguir, el usuario
+pidió cuatro cosas. Quedaron hechas y subidas a la rama; **ninguna está instalada** (las PCs siguen con la 5.0.0).
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
+
+1. **El recibo reimpreso contaba mal las cuotas** (`0c679ad`).
+   - GAUNA, GERALDINE (Puerto Viejo) tenía 6 cuotas y el papel decía 4/9; SEGOVIA, PABLO daba 5 o 4.
+   - La causa: el recuadro dividía por el total del contrato, que incluye las mesas y sillas extra. Le pasaba a 42
+     alumnos.
+   - Ahora cuenta desde los pagos hasta esa fecha (`progresoAlDia`, en `cobro_abono_acumulado.dart`), por los dos
+     caminos: la ficha y Finanzas.
+   - Con `tool/recibo_reimpreso_muestra_test.dart` se revisaron 538 alumnos con los datos reales. Solo uno no
+     coincide: MONTENEGRO, FRANCISCO NAHUEL (Colegio Nacional). La ficha dice 6 cuotas, pero no existe el pago de la
+     cuota 4, ni en la base local ni en la nube. **Falta contárselo al usuario.**
+2. **Mi Empresa, panel SALDO DEL NEGOCIO** (`9faf522`):
+   - "Disponible en efectivo" y "Disponible en transferencia" debajo del total;
+   - "En qué se fue" muestra solo los gastos. Las extracciones van en una sección aparte que arranca cerrada, y en
+     el historial se ven con su propio chip (`lib/features/mi_empresa/extracciones.dart`);
+   - "Traer del negocio" y "Registrar pago" vienen sin medio elegido y controlan contra lo disponible en el medio.
+   - Las categorías mal cargadas (EXTRACCION, COMPRA BEAM y AUTO 408 dentro de "Operadores") **no se tocan**, por
+     decisión del usuario.
+3. **ESMAY, THIAGO**, aplicado en la base real con OK y copia (`tool/revertir_sillas_esmay_test.dart`):
+   - el pago de sillas del 25/06 volvió de $8.000 a $12.000;
+   - las sillas quedaron en $36.000, pagadas;
+   - el saldo sigue en $70.000 y las cuotas en 7.
+4. **El retiro de $49M del 21-sep**, aplicado con OK y copia (`tool/partir_retiro_21sep_test.dart`). Quedó en
+   $28.733.965,83 en efectivo y $20.266.034,17 por transferencia, así el efectivo del negocio deja de dar negativo.
+   El total apartado no cambió.
+
+Los dos cambios de datos se subieron con "Subir pendientes" y se verificaron en Supabase. La suite pasa: **869
+tests**.
+
+**Ojo:** no correr la app (`flutter run`) desde este working tree. La v73 (M3) todavía está ahí sin commit, y como
+usa la `data.db` real, la migraría.
+
 ## Lo que falta, en orden
 
 1. **Aplicar los 24 hallazgos de M2** ("Revisión de M2", arriba), con los tests que propone cada uno. Después:
@@ -380,13 +416,19 @@ Lo que está bien, según los revisores:
 ```text
 Seguimos con la Fase 3 del plan de mesas (plano en tres estilos, sorteo por
 bloques, personalización). Leé primero docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md
-(secciones "Estado de cada parte", "Qué pasó el 27-sep" y "Lo que falta, en
-orden"), el plan en C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md
-y la memoria del proyecto. M2, M3 y M5 están programados, con 854 tests en verde,
-pero sin commit. La revisión de M2 ya se hizo: aplicá sus 24 hallazgos, mandame
-las imágenes nuevas y commiteá M2. Después relanzá la revisión de M3 (faltan base,
-sync y tests; los arreglos del SQL ya están aplicados), aplicá y commiteá M3.
-Después revisá M5 con un workflow nuevo y commitealo. Los revisores solo leen:
-los tests, las imágenes y los diffs los preparás vos antes. Seguí con M4, M6, M7,
-M8 y M9, en ese orden. No se publica ni se corre SQL hasta que yo lo diga.
+(secciones "Estado de cada parte", "Qué pasó el 27-sep", "Qué pasó el 29-sep" y
+"Lo que falta, en orden"), el plan en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md y la memoria
+del proyecto. El 29-sep se hizo otra cosa (recibo reimpreso, Mi Empresa, Esmay
+y el retiro de $49M): está todo commiteado y la suite da 869 tests en verde.
+M2, M3 y M5 siguen programados pero sin commit. Primero contame lo de
+MONTENEGRO, FRANCISCO NAHUEL (le falta el pago de la cuota 4). Después aplicá
+los 24 hallazgos de la revisión de M2, mandame las imágenes nuevas y commiteá
+M2. Después relanzá la revisión de M3 (faltan base, sync y tests; los arreglos
+del SQL ya están aplicados), aplicá y commiteá M3. Después revisá M5 con un
+workflow nuevo y commitealo. Los revisores solo leen: los tests, las imágenes y
+los diffs los preparás vos antes. Seguí con M4, M6, M7, M8 y M9, en ese orden.
+No corras la app desde el working tree (la v73 migraría la base real). No se
+publica ni se corre SQL hasta que yo lo diga. Lo que toque la base real, después
+de las 20 hs.
 ```
