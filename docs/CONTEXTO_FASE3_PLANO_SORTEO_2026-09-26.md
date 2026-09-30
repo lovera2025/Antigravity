@@ -333,7 +333,8 @@ Lo que está bien, según los revisores:
 ## Qué pasó el 29-sep (fuera de la Fase 3)
 
 La Fase 3 no avanzó: M2, M3 y M5 siguen programados y sin commit, igual que el 27. Antes de seguir, el usuario
-pidió cuatro cosas. Quedaron hechas y subidas a la rama; **ninguna está instalada** (las PCs siguen con la 5.0.0).
+pidió otras cosas. El código quedó subido a la rama y **no está instalado** (las PCs siguen con la 5.0.0). Los
+cambios de datos (puntos 3 a 5) sí están aplicados en la base y en la nube.
 Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
 
 1. **El recibo reimpreso contaba mal las cuotas** (`0c679ad`).
@@ -352,6 +353,7 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
    - "Traer del negocio" y "Registrar pago" vienen sin medio elegido y controlan contra lo disponible en el medio.
    - Las categorías mal cargadas (EXTRACCION, COMPRA BEAM y AUTO 408 dentro de "Operadores") **no se tocan**, por
      decisión del usuario.
+   - La cuenta del recibo reimpreso marca a MONTENEGRO como único alumno que no coincide (ver abajo).
 3. **ESMAY, THIAGO**, aplicado en la base real con OK y copia (`tool/revertir_sillas_esmay_test.dart`):
    - el pago de sillas del 25/06 volvió de $8.000 a $12.000;
    - las sillas quedaron en $36.000, pagadas;
@@ -360,8 +362,32 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-stallman.md`.
    $28.733.965,83 en efectivo y $20.266.034,17 por transferencia, así el efectivo del negocio deja de dar negativo.
    El total apartado no cambió.
 
-Los dos cambios de datos se subieron con "Subir pendientes" y se verificaron en Supabase. La suite pasa: **869
-tests**.
+5. **MI BOLSILLO pasó de $0 a $20,3M después del punto 4.**
+   - El bolsillo se contaba por medio y sumaba solo el que daba positivo: en efectivo −$20,3M, en transferencia
+     +$20,3M.
+   - Arreglo en la base, con OK y copia (`tool/partir_gasto_personal_21sep_test.dart`): el gasto personal de $69M
+     del 21-sep se partió igual que el retiro, $48.733.965,83 en efectivo y $20.266.034,17 por transferencia. El
+     bolsillo volvió a $0 en los dos medios, verificado en Supabase; el negocio no cambió.
+   - Arreglo en el código (`0f4a799`): el total del bolsillo ahora es lo apartado menos lo gastado, y cada medio
+     queda entre cero y ese total (`saldoBolsillo`, en `bolsa_personal_helpers.dart`).
+
+Los tres cambios de datos (Esmay, el retiro y el gasto) se subieron con "Subir pendientes" y se verificaron en
+Supabase. Las copias de antes están en `Documents\Junior Eventos\data.db.bak.{esmay,retiro,gasto}.*`. La suite pasa:
+**873 tests**.
+
+**MONTENEGRO, FRANCISCO NAHUEL (Colegio Nacional): pendiente, lo revisa el usuario el 30-sep.**
+- Tiene 5 pagos de cuota, pero la ficha dice 6 cuotas y una deuda de $150.235. Contado desde los pagos serían 5 y
+  $180.235.
+- Los pagos del 19/09 se guardaron como "Cuota Base (5/9)" y "(6/9)". Los cobró otra PC (`pc-1786747234482`, Maxi,
+  turno Mañana), que al recalcular contó 6 pagos de cuota. O sea que esa PC tenía un pago de cuota 4 que no está ni
+  en esta PC (`pc-1784250399472`) ni en la nube. En las copias de esta PC, al 03-sep había 3 pagos y la ficha decía
+  3.
+- La cuota vence el 30-sep y la mora se ve desde el 1-oct.
+- El usuario va a buscar el comprobante: los pagos por transferencia se mandan por WhatsApp y él les pasa el PDF
+  del recibo.
+  - **Si la cuota 4 está pagada:** revisar en esa PC si el pago quedó sin subir ("Subir pendientes"). Si no aparece,
+    volver a cargarlo con la fecha y el monto del comprobante. La ficha queda en 6/9.
+  - **Si no está pagada:** corregir la ficha a 5/9 y $180.235 (DRY-RUN, OK, copia, después de las 20 hs).
 
 **Ojo:** no correr la app (`flutter run`) desde este working tree. La v73 (M3) todavía está ahí sin commit, y como
 usa la `data.db` real, la migraría.
@@ -419,10 +445,11 @@ bloques, personalización). Leé primero docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-0
 (secciones "Estado de cada parte", "Qué pasó el 27-sep", "Qué pasó el 29-sep" y
 "Lo que falta, en orden"), el plan en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md y la memoria
-del proyecto. El 29-sep se hizo otra cosa (recibo reimpreso, Mi Empresa, Esmay
-y el retiro de $49M): está todo commiteado y la suite da 869 tests en verde.
-M2, M3 y M5 siguen programados pero sin commit. Primero contame lo de
-MONTENEGRO, FRANCISCO NAHUEL (le falta el pago de la cuota 4). Después aplicá
+del proyecto. El 29-sep se hizo otra cosa (recibo reimpreso, Mi Empresa, Esmay,
+el retiro y el gasto de $49M/$69M, el bolsillo): está todo commiteado y la
+suite da 873 tests en verde. M2, M3 y M5 siguen programados pero sin commit.
+Primero preguntame qué encontré de MONTENEGRO, FRANCISCO NAHUEL (la cuota 4; ver
+"Qué pasó el 29-sep") y resolvelo según eso. Después aplicá
 los 24 hallazgos de la revisión de M2, mandame las imágenes nuevas y commiteá
 M2. Después relanzá la revisión de M3 (faltan base, sync y tests; los arreglos
 del SQL ya están aplicados), aplicá y commiteá M3. Después revisá M5 con un
