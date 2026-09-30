@@ -62,6 +62,35 @@ bool finanzasEgresoAfectaCajaEmpresa(Egreso e) {
   return true;
 }
 
+/// Lo que queda en el bolsillo del dueño, en total y por medio.
+///
+/// El total es lo apartado menos lo gastado, sin mirar el medio. Por medio es
+/// lo mismo, pero nunca menos de cero ni más que el total. Si se apartó del
+/// banco y se gastó en efectivo, un medio da negativo y el otro positivo. Antes
+/// el total era la suma de los dos después de llevar el negativo a cero, y eso
+/// inventaba plata: el 29-sep, al partir un retiro entre efectivo y banco, MI
+/// BOLSILLO pasó de $0 a $20,3M sin que nadie apartara nada.
+({double total, double efectivo, double transferencia}) saldoBolsillo({
+  required double apartadoEfectivo,
+  required double apartadoTransferencia,
+  required double gastadoEfectivo,
+  required double gastadoTransferencia,
+}) {
+  double entre0yTotal(double v, double total) =>
+      v < 0 ? 0 : (v > total ? total : v);
+  final total = (apartadoEfectivo +
+          apartadoTransferencia -
+          gastadoEfectivo -
+          gastadoTransferencia)
+      .clamp(0.0, double.infinity);
+  return (
+    total: total,
+    efectivo: entre0yTotal(apartadoEfectivo - gastadoEfectivo, total),
+    transferencia:
+        entre0yTotal(apartadoTransferencia - gastadoTransferencia, total),
+  );
+}
+
 /// Gastos personales que consumen retiro pendiente (no impactan empresa otra vez).
 bool finanzasGastoPersonalConsumePendiente(Egreso e) {
   if ((e.categoria ?? '').trim() != kCategoriaGastoPersonal) return false;

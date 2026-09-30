@@ -574,13 +574,15 @@ class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
     final hudPagosDesdeBolsilloTotal =
         hudPagosDesdeBolsilloEfectivo + hudPagosDesdeBolsilloTransferencia;
 
-    final hudSaldoBolsaPersonalEfectivo =
-        (hudRetirosBolsaPersonalEfectivo - hudGastosPendienteEfectivo).clamp(0.0, double.infinity);
-    final hudSaldoBolsaPersonalTransferencia =
-        (hudRetirosBolsaPersonalTransferencia - hudGastosPendienteTransferencia)
-            .clamp(0.0, double.infinity);
-    final hudSaldoBolsaPersonalTotal =
-        hudSaldoBolsaPersonalEfectivo + hudSaldoBolsaPersonalTransferencia;
+    final saldoBolsa = saldoBolsillo(
+      apartadoEfectivo: hudRetirosBolsaPersonalEfectivo,
+      apartadoTransferencia: hudRetirosBolsaPersonalTransferencia,
+      gastadoEfectivo: hudGastosPendienteEfectivo,
+      gastadoTransferencia: hudGastosPendienteTransferencia,
+    );
+    final hudSaldoBolsaPersonalEfectivo = saldoBolsa.efectivo;
+    final hudSaldoBolsaPersonalTransferencia = saldoBolsa.transferencia;
+    final hudSaldoBolsaPersonalTotal = saldoBolsa.total;
 
     final limite30 = hoyDia.subtract(const Duration(days: 30));
     final egresosParaOpexEmpresa = egresosFull.where(finanzasEgresoEsGastoOperativoNegocio).toList();
