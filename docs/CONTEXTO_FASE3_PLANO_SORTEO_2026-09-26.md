@@ -1,11 +1,11 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-09-30 (ver "Qué pasó el 30-sep": el plan de la 6.0.0)
+**Fecha:** 2026-09-26, puesto al día el 2026-10-01 (ver "Qué pasó el 1-oct": las medidas del playón)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 4 del plan de la 6.0.0 están hechas y subidas; faltan M4, M6, M7, M8 y M9 (ver
-la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 4 del plan de la 6.0.0 y la 4b (las medidas del salón) están hechas y subidas;
+faltan M4, M6, M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 30-sep" y "Lo que falta, en orden". El texto para pegar
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 1-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
@@ -38,14 +38,15 @@ la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
 | M3 | Base v73 y sincronización | Sí | Sí, `e335e00` (30-sep) | Hecha y **aplicada el 30-sep** (SQL, base, sync y tests) |
 | M5 | Sorteo por bloques o entero, diálogo y flujo | Sí | Sí, `aaa0034` (30-sep) | Hecha y **aplicada el 30-sep** |
 | — | Mesas y sillas de cada uno en la grilla, con su filtro (pedido del 30-sep) | Sí | Sí, `087e904` (30-sep) | No hacía falta |
+| 4b | Las medidas del salón: el plano en metros, cuántas mesas entran y "armar a medida" del playón (pedido del 1-oct) | Sí | Sí, `0f46110` (1-oct) | No hacía falta |
 | M4 | Selector de estilo y armado, pantalla del plano | No | — | — |
 | M6 | Fijar, dejar libres, cambiar o mover familias, historial | No | — | Workflow |
 | M7 | Plano impreso y planilla con bloques y pasto | No | — | — |
 | M8 | Botones a la vista y lista de la puerta trabada | No | — | — |
 | M9 | Acomodar el salón, colores y textos | No | — | Workflow |
 
-**Tests:** la suite entera pasa, **1.039 tests** el 30-sep a la noche (913 al cerrar M2, 984 con M3, 1.034 con M5;
-854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
+**Tests:** la suite entera pasa, **1.118 tests** el 1-oct, al cerrar la etapa 4b (1.039 el 30-sep a la noche; 913 al
+cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
 **Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M4, M6, M7,
@@ -496,21 +497,108 @@ su bloque, van las 3 después del último bloque); el modo forzado a entero deja
 - **`tool/grilla_mesas_muestra_test.dart`**: la imagen de muestra de la columna, con familias inventadas. El usuario
   ya la vio.
 
+## Qué pasó el 1-oct
+
+**Plan aprobado: las medidas reales del playón, dentro de la 6.0.0.** Está en
+`C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md`. Suma la etapa 4b y agrega cosas a M4
+y a M9. La base no cambia: sigue en la v73.
+
+### De dónde salió
+- El usuario trajo el dato de que el playón del predio tiene "900 m²".
+- **El predio es Costa Surubí (Goya), frente al Escenario Mayor Juan Melero.** Los 900 m² salen de una nota de
+  goyasurubi.com y son solo **la primera etapa** del playón, sin año y sin largo ni ancho.
+- **Medido el 1-oct sobre la foto satelital de Google Maps** (error estimado ±10 %): un trapecio que se abre desde el
+  escenario. 30 m contra el escenario, 46 m al fondo, 39 a 41 m de profundidad, unos **1.490 m²**.
+- **Coincide con el Canva del jefe a 2 m de centro a centro:** el escenario del Canva mide 29,3 m, y la hoja B tiene
+  más columnas que la A, como el trapecio.
+
+### Decisiones del usuario
+- **Los 2 m son de centro a centro** de mesa (105 unidades del Canva). La mesa sola queda de 1,45 m.
+- **La app mide, avisa y arma a medida.**
+- **En Personalizar:** ver las sillas reales, más lugar para la mesa con sillas extra, correr mesas con regla, y
+  separar o juntar un bloque.
+- **Todo lo nuevo tiene que ser intuitivo**, con el camino a cada cosa escrito en el plan y una maqueta para probar
+  antes de programar cada pantalla.
+- **Se trabaja por secciones:** cada etapa cierra sola. Con "actualizá el contexto" se frena, se anota y se sigue en
+  otro chat.
+
+### Etapa 4b hecha: las medidas del salón (`0f46110`)
+
+- **`armado_salon.dart`:**
+  - `kMetrosPorUnidadCanva = 2.0 / 105` y `ArmadoSalon.metrosPorUnidad` (clave `m_u` del JSON; si falta, la del
+    Canva);
+  - `distanciaPegadas` (clave `pegadas_u`): un armado con las mesas más separadas trae su propia distancia para
+    decidir qué mesas están pegadas. Sin ella vale la regla de siempre, 4,2 radios;
+  - `ContornoPlano` y `HojaPlano.contorno` (clave `borde`): el borde del hormigón;
+  - `aMetros`, `aUnidades`, `distanciaM`, `diametroMesaM` y `tieneBorde`;
+  - `problemas()` avisa "queda fuera del hormigón" (las del pasto no cuentan).
+- **`modelo/medidas_salon.dart`:**
+  - `PlayonReal` (frente, fondo, profundidad, `aproximado`), con `costaSurubi` = 30 / 46 / 39;
+  - `costadoM` y `PlayonReal.conCostado`: con cinta se miden los cuatro lados, no la profundidad;
+  - `MedidasPlano`: `lugarM(sillasExtra)` da 2,0, 2,15 y 2,3 m.
+- **`ConfigPlano.medidas`** (clave `medidas` de `config`). Las de fábrica no se guardan: si se corrige la medida del
+  playón en el programa, las fiestas que no la cambiaron la toman.
+- **`services/medir_salon.dart`** (`MedirSalon`, todo cuenta pura):
+  - `ocupa`, `apretadas`, `fueraDelHormigon`, `reglaPara` y `metros`;
+  - **`revisar(armado, medidas, sillasExtraDe)`** es la única entrada para la pantalla y el dibujo. Devuelve
+    `SinLugar`: los pares apretados y las mesas fuera del hormigón;
+  - de cada par apretado queda marcada la que pide más (la de las sillas extra), no su vecina.
+- **`services/armar_a_medida.dart`** (`ArmarAMedida`):
+  - `armar(OpcionesAMedida)`: filas desde el escenario, simétricas, con pasarela y 2,5 m libres a cada lado, como en
+    el Canva;
+  - la numeración es la serpentina del jefe. De los dos sentidos posibles queda el que corta menos;
+  - `capacidad` y `lugarMasHolgado` ("usar todo el playón");
+  - `partirEnFila` arma dos hojas. La clave del armado es `a_medida@1`.
+- **Dibujo** (`pintor_plano.dart`, `vista_plano.dart`, `estilo_plano.dart`):
+  - el piso y el borde del hormigón (`TemaPlano.hormigon` y `hormigonBorde`);
+  - `VistaPlano(mostrarRegla:, mostrarMedidas:, lugares:)`: la regla, la medida de cada lado y el círculo de lugar
+    de cada mesa, en rojo la que no lo tiene;
+  - Gala y Neón marcan las sillas extra con puntos a los costados;
+  - la grilla es de un metro. `lineasGrilla` va por índice: sumando un paso que no es entero se comía la última
+    línea.
+- **Las cuentas con el playón de hoy:**
+  - a 2 m entran hasta **284 mesas**; a 2,5 m, hasta **180**;
+  - las 132 de la escuela más grande entran hasta a **2,9 m**.
+- **Tests nuevos:** `test/medir_salon_test.dart` y `test/armar_a_medida_test.dart` (cinco playones, cinco distancias,
+  con y sin pasarela, en una y en dos hojas). Los dos armados a medida se sumaron al estrés del sorteo
+  (`sorteo_con_plano_invariantes_test.dart`).
+- **Muestras:** `tool/plano_muestra_test.dart` genera `Medida_*.png`. El usuario ya las vio.
+
+**Queda así a propósito:**
+- **Los armados del Canva no llevan el borde del hormigón.** Su geometría sale de fotos, y un "queda afuera" sobre
+  los dibujos del jefe sería falso. Tampoco avisan entre mesas comunes (el bloque derecho de la página 3 está
+  dibujado a menos de 2 m): solo por las que llevan sillas extra.
+- **El armado a medida no pone mesas en el pasto.** Si no entran, dice cuántas faltan.
+- **Con pasarela, el paso de la izquierda a la derecha es un corte**: quedan 5 m de pasillo en el medio.
+
 ## Lo que falta, en orden
 
-Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`). Cada
-etapa termina con la suite en verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
+Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
+que sumó el plan de las medidas (`donde-nos-quedamos-porque-piped-lightning.md`). Cada etapa termina con la suite en
+verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 
 1. ~~M2: los 24 hallazgos.~~ **Hecho** (`1b8afed`).
 2. ~~Revisión de M3.~~ **Hecho** (`e335e00`).
 3. ~~Revisión de M5.~~ **Hecho** (`aaa0034`).
 4. ~~Mesas y sillas en la grilla.~~ **Hecho** (`087e904`).
+   - 4b. ~~Las medidas del salón.~~ **Hecho** (`0f46110`).
 5. **M4:** `widgets/elegir_plano_sheet.dart` y `plano_evento_screen.dart`. El detalle está en el plan de la Fase 3
    (`donde-nos-quedamos-glittery-waffle.md`). Tener en cuenta lo que cambió el 30-sep:
    - `EstadoPlano.divisiones` va en claves, con `nombresDivision` para la leyenda y `haySinDivision`;
    - `fijadasFueraDelPlano` y `libresFueraDelPlano`, para avisar;
    - el armado se lee con `plano.armadoONull`;
    - `sillasExtraPorMesa` del plano sale de `SalonMesas.repartoSillas` con el reparto vigente.
+
+   **Lo que suma el plan de las medidas:**
+   - **antes de programar, mostrarle al usuario la maqueta** de la pantalla del plano y de los tres pasos del primer
+     ingreso (armado, estilo, sorteo), con todo ya completado;
+   - en el selector, cada armado dice "78 mesas · 33 × 23 m · entra / faltan N", y hay una quinta opción, "A medida
+     del playón" (cantidad, distancia y pasarela, con vista previa y "entran N"; `ArmarAMedida` y `lugarMasHolgado`);
+   - en la pantalla: la regla siempre, el encabezado con "Entran las 132" o "Faltan N", y los avisos de
+     `MedirSalon.revisar`, que se tocan y llevan a la mesa;
+   - la tarjeta de la familia dice las sillas de cada mesa;
+   - **de la grilla al plano:** en `celda_mesa_alumno.dart`, tocar los números de mesa abre el plano con la familia
+     resaltada.
 6. **M6:** fijar y dejar libres en `config`; cambiar y mover familias con motivo, deshacer y `mesas_movimientos`;
    `RegistroSorteo.resumir` con movimientos; `historial_sorteo_sheet.dart`. Lleva workflow.
    - Cada escritura del plano tiene que leerlo antes de la nube (`leerPlanoParaSortear` es el molde): gana la fila
@@ -520,7 +608,14 @@ etapa termina con la suite en verde, commit y push, y un aviso al usuario de qu�
 7. **M7:** `plano_pdf.dart` (sin `pw.Page` de alto fijo), y pasto y bloques en la planilla del sorteo.
 8. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`). El chip
    "Mesas y sillas" ya está en la barra, entre el de mora y el de sillas.
-9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow.
+9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow. Suma, por el plan
+   de las medidas:
+   - el panel Medidas (distancia por mesa, extra por silla y el playón, que se carga con el frente, el fondo y un
+     costado: `PlayonReal.conCostado`);
+   - correr mesas con ajuste de 0,25 m y la distancia a las tres vecinas;
+   - `separar`: estirar o juntar un bloque, con vista previa y APLICAR o CANCELAR;
+   - en un armado del Canva, una mesa que el usuario corrió sí tiene que avisar si queda apretada
+     (`MedirSalon.apretadas` sin `soloSiPideMasDe` para esas).
 10. **Verificación final:**
     - PNG y PDF de muestra para el usuario;
     - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
@@ -549,6 +644,9 @@ etapa termina con la suite en verde, commit y push, y un aviso al usuario de qu�
 - **La página 6 del Canva (Normal 2B), entera.** La Normal necesita 132 mesas: no alcanzan ni la página 3 (78) ni la
   4-5 (100).
 - **La fecha del sorteo.**
+- **Los cuatro lados del hormigón, con cinta.** Hasta entonces la app usa 30, 46 y 39 m, marcados como aproximados.
+- **Del jefe, por las medidas:** cuánto mide la mesa sola (se supone 1,45 m), si con el playón de hoy sigue haciendo
+  falta el pasto, y si quiere pasillos para los mozos entre filas.
 - **Las respuestas del jefe** (ver "Queda para el jefe" en el CONTEXTO de la Fase 2):
   - qué armado usa cada escuela;
   - si aprueba las numeraciones propuestas;
@@ -560,21 +658,26 @@ etapa termina con la suite en verde, commit y push, y un aviso al usuario de qu�
 
 ```text
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques, entradas
-y mesas y sillas en la grilla). Leé primero
+mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 30-sep" y "Lo que falta, en orden"), el plan aprobado en
-C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md, el detalle
-técnico de M4 a M9 en
+"Qué pasó el 1-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
+C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md, el de las
+medidas en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md, el
+detalle técnico de M4 a M9 en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
-memoria del proyecto. El 30-sep quedaron hechas y subidas las etapas 1 a 4: el
-plano en tres estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques
-(aaa0034) y las mesas y sillas en la grilla (087e904). La suite da 1.039 tests
-en verde y el working tree está limpio. Seguí por la etapa 5: M4 (la pantalla
-del plano y el selector de estilo y armado), y después M6, M7, M8 y M9, la
-verificación final, la documentación de la 6.0.0, la versión y el build, en ese
-orden. M6 y M9 llevan revisores de solo lectura: los tests, las imágenes y los
-diffs los preparás vos antes. Avisame cada tarea que termines y cómo quedó, con
-un commit y push por paso. Mandame las imágenes y los PDF de muestra de cada
+memoria del proyecto. Están hechas y subidas las etapas 1 a 4 y la 4b: el plano
+en tres estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques
+(aaa0034), las mesas y sillas en la grilla (087e904) y las medidas del salón
+(0f46110). La suite da 1.118 tests en verde y el working tree está limpio. Seguí
+por la etapa 5: M4 (la pantalla del plano y el selector de estilo y armado, con
+la opción "A medida del playón"), y después M6, M7, M8 y M9, la verificación
+final, la documentación de la 6.0.0, la versión y el build, en ese orden. Antes
+de programar cada pantalla mostrame la maqueta para probarla. M6 y M9 llevan
+revisores de solo lectura: los tests, las imágenes y los diffs los preparás vos
+antes. Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
+un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
+dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
 etapa. Todo va en una sola versión, la 6.0.0: no se instala nada antes. No
 corras la app desde el working tree (la v73 migraría la base real). Ya dije
 "publicalo", pero los dos SQL de la nube van después de las 20 hs y con mi OK en
