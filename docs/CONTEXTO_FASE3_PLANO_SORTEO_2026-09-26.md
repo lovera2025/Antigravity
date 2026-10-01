@@ -2,8 +2,8 @@
 
 **Fecha:** 2026-09-26, puesto al día el 2026-10-01 (ver "Qué pasó el 1-oct": las medidas del playón)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 4 del plan de la 6.0.0, la 4b (las medidas del salón) y la 5 (M4, la pantalla
-del plano) están hechas y subidas; faltan M6, M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 6 del plan de la 6.0.0 están hechas y subidas (la última, M6: los cambios de
+mesa y el Historial); faltan M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 1-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
@@ -40,18 +40,19 @@ del plano) están hechas y subidas; faltan M6, M7, M8 y M9 (ver la tabla). **Nad
 | — | Mesas y sillas de cada uno en la grilla, con su filtro (pedido del 30-sep) | Sí | Sí, `087e904` (30-sep) | No hacía falta |
 | 4b | Las medidas del salón: el plano en metros, cuántas mesas entran y "armar a medida" del playón (pedido del 1-oct) | Sí | Sí, `0f46110` (1-oct) | No hacía falta |
 | M4 | Selector de estilo y armado, pantalla del plano | Sí | Sí, `36cf78a` (1-oct) | No hacía falta |
-| M6 | Fijar, dejar libres, cambiar o mover familias, historial | No | — | Workflow |
+| M6 | Fijar, dejar libres, cambiar o mover familias, historial | Sí | Sí, `e56f2e9` (1-oct) | Hecha y **aplicada el 1-oct** (dos revisores) |
+| — | La cola de subida no pierde un cambio hecho mientras subía el anterior (lo encontró la revisión de M6) | Sí | Sí, `4fd931a` (1-oct) | — |
 | M7 | Plano impreso y planilla con bloques y pasto | No | — | — |
 | M8 | Botones a la vista y lista de la puerta trabada | No | — | — |
 | M9 | Acomodar el salón, colores y textos | No | — | Workflow |
 
-**Tests:** la suite entera pasa, **1.179 tests** el 1-oct, al cerrar M4 (1.118 con la etapa 4b; 1.039 el 30-sep a
-la noche; 913 al
+**Tests:** la suite entera pasa, **1.275 tests** el 1-oct, al cerrar M6 (1.179 con M4; 1.118 con la etapa 4b; 1.039
+el 30-sep a la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M6, M7, M8
-y M9 (ver "Lo que falta, en orden").
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M7, M8 y
+M9 (ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -621,6 +622,91 @@ en una sola hoja, con todo ya elegido**, y la pantalla como en las maquetas.
 - `PlanoEventoScreen` no tiene test propio (necesita la base y el motor): lo que decide está en funciones puras, con
   test.
 
+### Etapa 6 hecha: M6, los cambios de mesa y el Historial (`e56f2e9`)
+
+- **Cómo se llega:** PLANO → **PERSONALIZAR** prende el modo de tocar las mesas. Apagado, la pantalla solo muestra.
+  Con una mesa o una familia elegida, la tarjeta muestra lo que se le puede hacer. El **HISTORIAL** está en el plano
+  (con DESHACER) y en MÁS → "Historial de las mesas" (solo para leer).
+- **Antes del sorteo:**
+  - **fijar** a una familia todas sus mesas juntas, con motivo. Desde una mesa vacía se elige la familia; desde una
+    familia sin mesa se toca en el plano dónde empiezan;
+  - **dejar libre** una mesa vacía (el sorteo no la da), con motivo opcional, y volver a usarla.
+- **Después del sorteo:**
+  - **cambiar** dos familias de lugar (tienen que tener la misma cantidad de mesas);
+  - **mover** una familia a mesas libres seguidas: se toca la primera;
+  - siempre va la familia entera. Motivo obligatorio y, si ya retiró sus entradas, el tilde "Le aviso a la
+    familia".
+- **Deshacer:** desde el aviso o el Historial, mientras nada haya cambiado después. Es un renglón más.
+- **`services/cambios_de_mesa.dart`** (`CambiosDeMesa`, cuenta pura): `fijar`, `quitarFijadas`,
+  `quitarFijadaDeMesa`, `dejarLibre`, `volverAUsar`, `intercambiar`, `mover`, `deshacer` y `tramoDesde`.
+  - Devuelven `CambioDeConfig` o `CambioDeMesas` con `problema` en palabras si no se puede.
+  - `CambioDeMesas.movimiento(...)` arma el renglón; `renglones` y `textoHecho` arman lo que se muestra.
+  - **`esElMismoQue`:** la pantalla calcula dos veces (con lo que se ve, y después de releer). Si la segunda cuenta
+    no da lo que se mostró, **no guarda**.
+- **`services/historial_sorteo.dart`** (`HistorialSorteo.armar`): sorteos, cambios, fijadas, libres y "cambios sin
+  registro" (lo tocado a mano en Editar alumno).
+- **`registro_sorteo.dart`:** `esperado(registros, movimientos)` mezcla por fecha; `cambiosEnPie`; `seComparaA`;
+  `resumir(..., movimientos:)`. La planilla dice "N cambios con motivo · M a mano después".
+- **`widgets/cambio_de_mesa_dialogs.dart`:** `ConfirmarCambioDialog`, `FijarMesaDialog` y `HistorialSorteoDialog`.
+- **`PlanoEventoCuerpo`:** `AccionesPlano`, el modo Personalizar, la espera de un toque en el plano (mover, fijar,
+  cambiar) con su pista, y `ocupado` (la barra "Guardando…").
+- **`PlanoEventoScreen`:** `_cambiarConfig` y `_cambiarMesas`. Antes de escribir:
+  - controla que la otra PC no tenga mesas sin bajar (`mesasDeOtraPcSinBajar`);
+  - relee el plano de la nube; **si no pudo, pregunta** nombrando el riesgo (sube la fila entera);
+  - relee las familias y los movimientos, y recalcula;
+  - los números, el renglón y el plano van en una transacción (`asignarNumerosMesa(..., movimiento, plano)`).
+- **Tests nuevos:** `cambios_de_mesa_test`, `historial_sorteo_test`, `cambio_de_mesa_dialogs_test`, y más casos en
+  `plano_evento_cuerpo_test`, `plano_de_la_fiesta_test` y `registro_sorteo_test`.
+- **Muestras:** `Personalizar_*.png`, `Confirmar_cambio.png` e `Historial_mesas.png`. El usuario ya las vio.
+
+**Reglas que quedaron fijadas (mirarlas antes de tocar M9):**
+- **Una familia de baja conserva su mesa**, igual que para el sorteo (`sorteo_con_plano.dart`): el plano la muestra
+  ocupada, avisa para liberarla, y no se puede fijar ni mudar a nadie ahí.
+- **Las mesas fijadas siguen a la familia.** Si se la cambia o se la muda, sus fijadas pasan a las mesas nuevas con
+  el mismo motivo; si se deshace, vuelven. No se borran.
+- **Mientras se espera un toque, los avisos y el buscador solo llevan la vista.** El lugar se elige tocando la mesa.
+- **Un lugar que no sirve da la pista y se sigue esperando**: "elegí otra" es tocar otra.
+- Quitar las fijadas de una familia pide confirmar; volver a usar una libre, no.
+
+**Revisión del 1-oct (dos revisores de solo lectura).** Ninguno encontró un camino que cambie una mesa sin
+confirmación. Lo que encontraron y se aplicó:
+- lo guardado podía no ser lo confirmado si la otra PC movía a una de las familias (`esElMismoQue`);
+- `deshacer` no miraba las mesas libres ni las fijadas, ni los renglones ilegibles;
+- las bajas con mesa "no ocupaban" en M6 y para el sorteo sí;
+- mover o cambiar borraba las fijadas y deshacer no las devolvía;
+- fijar o dejar libre escribía el plano viejo sin avisar si no había podido leer la nube;
+- lo que bajaba de la otra PC mientras se guardaba se descartaba;
+- un aviso tocado durante una espera movía a la familia a esa mesa;
+- "N cambios con motivo" contaba cambios de un sorteo ya deshecho, y un solo cambio marcaba todo el salón como
+  "sin registro" en una fiesta sin sorteos registrados;
+- el diálogo de fijar no tenía scroll y podía fijar para una familia que el buscador había dejado afuera.
+
+### La cola de subida (`4fd931a`): un defecto que ya estaba en la 5.0.0
+
+`SyncQueue.enqueue` no agrega una segunda entrada para un registro que ya está en la cola: reescribe la que hay. Si
+eso pasaba **mientras la versión anterior estaba subiendo**, al terminar `markCompleted` borraba la entrada con el
+cambio nuevo adentro. La nube quedaba con el dato viejo, esta PC con el nuevo, y nada en la cola.
+
+- Es raro (dos cambios al mismo registro en lo que dura una subida), pero el DESHACER inmediato lo vuelve más
+  probable: podía dejar a dos familias con la misma mesa en la nube.
+- **Arreglo:** `markCompleted(id, leidaCon: entry.createdAt)` saca la entrada solo si sigue siendo la que se leyó.
+  Si cambió, queda y el próximo ciclo sube lo nuevo. Compara el momento y no el texto, por las fechas viejas escritas
+  en otro formato.
+- Test: `test/sync_queue_completar_test.dart`.
+- **Va a CLAUDE.md en la etapa 11**, en "Trampas conocidas".
+
+**Quedó anotado, sin hacer (lo vio la revisión; ninguno es de M6):**
+- **Una fijada en una mesa alta estira el sorteo entero.** En modo entero, con 60 familias y la 98 fijada, la
+  capacidad mínima pasa a 98 y las demás caen repartidas por todo el salón. Es del código de M5; hay que confirmarlo
+  con un test antes del sorteo.
+- **"Restaurar sorteo anterior" no mira** las libres ni las fijadas creadas entre el deshacer y el restaurar.
+- **Los relojes de las dos PCs:** `esperado` ordena por la hora de cada PC. Un sorteo y un cambio hechos en PCs
+  distintas dentro del desfase se aplican al revés y aparece un "cambio a mano" falso.
+- **Un cambio a mano queda blanqueado** si después se muda a esa familia con motivo.
+- **Quitar una fijada o volver a usar una libre no deja rastro** en el Historial (solo lista las vigentes).
+- **En la cola, alta y borrado seguidos** con el alta en vuelo dejan un registro huérfano en la nube.
+- **"Corregilas con cinta en Personalizar"** (el cartel de las medidas aproximadas): el panel Medidas llega con M9.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -633,15 +719,11 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 4. ~~Mesas y sillas en la grilla.~~ **Hecho** (`087e904`).
    - 4b. ~~Las medidas del salón.~~ **Hecho** (`0f46110`).
 5. ~~M4: la pantalla del plano y el selector.~~ **Hecho** (`36cf78a`).
-6. **M6:** fijar y dejar libres en `config`; cambiar y mover familias con motivo, deshacer y `mesas_movimientos`;
-   `RegistroSorteo.resumir` con movimientos; `historial_sorteo_sheet.dart`. Lleva workflow.
-   - Cada escritura del plano tiene que leerlo antes de la nube (`leerPlanoParaSortear` es el molde): gana la fila
-     entera del último que sube.
-   - `MesasMovimientosRepository.registrarEn` ya existe y tiene test; hoy nadie lo llama.
-   - **Antes de programar, mostrarle al usuario la maqueta** de Personalizar → Mesas (ya vio una del conjunto).
-   - PERSONALIZAR e HISTORIAL se enchufan pasando `onPersonalizar` y `onHistorial` a `PlanoEventoCuerpo`.
-   - El motivo de una mesa fijada o libre ya se ve en la tarjeta de la mesa.
+6. ~~M6: fijar, dejar libres, cambiar o mover familias, deshacer e Historial.~~ **Hecho** (`e56f2e9`, y la cola de
+   subida en `4fd931a`).
 7. **M7:** `plano_pdf.dart` (sin `pw.Page` de alto fijo), y pasto y bloques en la planilla del sorteo.
+   - IMPRIMIR se enchufa pasando `onImprimir` a `PlanoEventoCuerpo`. El plano impreso lleva la regla.
+   - La planilla ya dice "N cambios con motivo · M a mano después" (M6).
 8. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`). El chip
    "Mesas y sillas" ya está en la barra, entre el de mora y el de sillas.
 9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow. Suma, por el plan
@@ -651,7 +733,12 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
    - correr mesas con ajuste de 0,25 m y la distancia a las tres vecinas;
    - `separar`: estirar o juntar un bloque, con vista previa y APLICAR o CANCELAR;
    - en un armado del Canva, una mesa que el usuario corrió sí tiene que avisar si queda apretada
-     (`MedirSalon.apretadas` sin `soloSiPideMasDe` para esas).
+     (`MedirSalon.apretadas` sin `soloSiPideMasDe` para esas);
+   - **Personalizar hoy tiene un solo modo, "Mesas"** (M6). M9 suma Acomodar, Medidas y Colores y textos como
+     pestañas de la misma franja (`_franjaPersonalizar` en `plano_evento_cuerpo.dart`), y prende
+     `mostrarLugares` en Acomodar;
+   - después del sorteo una mesa con familia se corre en el dibujo pero no se saca; con las reglas de M6, una mesa
+     con una baja tampoco.
 10. **Verificación final:**
     - PNG y PDF de muestra para el usuario;
     - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
@@ -693,8 +780,8 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 ## Para seguir en otro chat, pegar
 
 ```text
-Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques, entradas
-mesas y sillas en la grilla y las medidas del playón). Leé primero
+Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
+entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
 "Qué pasó el 1-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
 C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md, el de las
@@ -702,17 +789,18 @@ medidas en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md, el
 detalle técnico de M4 a M9 en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
-memoria del proyecto. Están hechas y subidas las etapas 1 a 5: el plano en tres
+memoria del proyecto. Están hechas y subidas las etapas 1 a 6: el plano en tres
 estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques (aaa0034), las
-mesas y sillas en la grilla (087e904), las medidas del salón (0f46110) y la
-pantalla del plano con sus tres pasos (36cf78a). La suite da 1.179 tests en
-verde y el working tree está limpio. Seguí por la etapa 6: M6 (fijar mesas,
-dejarlas libres, cambiar o mover familias con motivo, deshacer e Historial), y
-después M7, M8 y M9, la verificación final, la documentación de la 6.0.0, la
-versión y el build, en ese orden. Antes de programar cada pantalla mostrame la
-maqueta para probarla; si te digo que elijas vos, elegí la más cómoda. M6 y M9 llevan
-revisores de solo lectura: los tests, las imágenes y los diffs los preparás vos
-antes. Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
+mesas y sillas en la grilla (087e904), las medidas del salón (0f46110), la
+pantalla del plano con sus tres pasos (36cf78a) y los cambios de mesa con su
+Historial (e56f2e9), más un arreglo de la cola de subida (4fd931a). La suite da
+1.275 tests en verde y el working tree está limpio. Seguí por la etapa 7: M7 (el
+plano impreso, y la planilla del sorteo con bloques y pasto), y después M8 y
+M9, la verificación final, la documentación de la 6.0.0, la versión y el build,
+en ese orden. Antes de programar cada pantalla mostrame la maqueta para
+probarla; si te digo que elijas vos, elegí la más cómoda. M9 lleva revisores de
+solo lectura: los tests, las imágenes y los diffs los preparás vos antes.
+Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
 etapa. Todo va en una sola versión, la 6.0.0: no se instala nada antes. No
