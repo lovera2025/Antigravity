@@ -1,0 +1,179 @@
+import 'package:flutter/material.dart';
+
+import '../dibujo/pintor_plano.dart';
+import '../estilos/estilo_plano.dart';
+import '../modelo/armado_salon.dart';
+import '../modelo/estado_plano.dart';
+
+/// Una hoja del plano, dibujada en un estilo, con las mesas tocables.
+///
+/// No sabe de base ni de Riverpod: recibe el armado, el estado y el tema. Así
+/// la misma vista sirve para la pantalla de la fiesta, la vista previa del
+/// selector de estilo y, en diciembre, el tótem.
+class VistaPlano extends StatefulWidget {
+  const VistaPlano({
+    super.key,
+    required this.armado,
+    required this.hoja,
+    required this.tema,
+    required this.estado,
+    this.resaltadas = const {},
+    this.seleccionada,
+    this.onTapMesa,
+    this.onHoverMesa,
+    this.ruta,
+    this.progresoRuta = 1,
+    this.animar = true,
+    this.pulsoFijo = 0.35,
+  });
+
+  final ArmadoSalon armado;
+  final String hoja;
+  final TemaPlano tema;
+  final EstadoPlano estado;
+  final Set<int> resaltadas;
+  final int? seleccionada;
+  final ValueChanged<int>? onTapMesa;
+  final ValueChanged<int?>? onHoverMesa;
+
+  /// Camino desde el ingreso, en coordenadas del plano (tótem, diciembre).
+  final List<Offset>? ruta;
+  final double progresoRuta;
+
+  /// Si es false, el pulso queda quieto en [pulsoFijo] (tests y muestras).
+  final bool animar;
+  final double pulsoFijo;
+
+  @override
+  State<VistaPlano> createState() => _VistaPlanoState();
+}
+
+class _VistaPlanoState extends State<VistaPlano>
+    with SingleTickerProviderStateMixin {
+  // Un solo controller para toda la vida del widget: el mixin admite un solo
+  // ticker, así que prender y apagar el pulso es `repeat()` y `stop()`.
+  late final AnimationController _pulso = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+  late Animation<double> _quieto = AlwaysStoppedAnimation(widget.pulsoFijo);
+  int? _bajoMouse;
+
+  @override
+  void initState() {
+    super.initState();
+    _ajustarAnimacion();
+  }
+
+  @override
+  void didUpdateWidget(VistaPlano old) {
+    super.didUpdateWidget(old);
+    if (old.pulsoFijo != widget.pulsoFijo) {
+      _quieto = AlwaysStoppedAnimation(widget.pulsoFijo);
+    }
+    _ajustarAnimacion();
+  }
+
+  /// Lo resaltado que está en esta hoja. Lo de la otra hoja no lleva pulso
+  /// acá.
+  Set<int> get _resaltadas => mesasEnHoja(widget.armado, widget.hoja, {
+        ...widget.resaltadas,
+        if (widget.seleccionada != null) widget.seleccionada!,
+      });
+
+  bool get _hayQueResaltar => _resaltadas.isNotEmpty || widget.ruta != null;
+
+  /// El pulso corre solo si hay algo que lo muestre: si no, la app nunca
+  /// queda quieta (y un `pumpAndSettle` no termina).
+  void _ajustarAnimacion() {
+    final mover = widget.animar && _hayQueResaltar;
+    if (mover && !_pulso.isAnimating) {
+      _pulso.repeat();
+    } else if (!mover && _pulso.isAnimating) {
+      _pulso.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulso.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        final tocable = widget.onTapMesa != null || widget.onHoverMesa != null;
+        Widget plano = Stack(
+          fit: StackFit.expand,
+          children: [
+            RepaintBoundary(
+              child: CustomPaint(
+                painter: PintorPlano(
+                  armado: widget.armado,
+                  hoja: widget.hoja,
+                  tema: widget.tema,
+                  estado: widget.estado,
+                  resaltadas: widget.resaltadas,
+                  seleccionada: widget.seleccionada,
+                ),
+              ),
+            ),
+            if (_hayQueResaltar)
+              // Su propia capa: el pulso repinta solo los anillos, no lo que
+              // haya alrededor del plano.
+              IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: PintorResaltado(
+                      armado: widget.armado,
+                      hoja: widget.hoja,
+                      tema: widget.tema,
+                      estado: widget.estado,
+                      resaltadas: _resaltadas,
+                      pulso: widget.animar ? _pulso : _quieto,
+                      ruta: widget.ruta,
+                      progresoRuta: widget.progresoRuta,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+        if (!tocable) return plano;
+        plano = MouseRegion(
+          cursor: _bajoMouse != null && widget.onTapMesa != null
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
+          onHover: (e) => _hover(size, e.localPosition),
+          onExit: (_) => _hover(size, null),
+          child: plano,
+        );
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (d) {
+            final n = mesaEnPunto(
+              widget.armado,
+              widget.hoja,
+              size,
+              d.localPosition,
+            );
+            if (n != null) widget.onTapMesa?.call(n);
+          },
+          child: plano,
+        );
+      },
+    );
+  }
+
+  void _hover(Size size, Offset? punto) {
+    final n = punto == null
+        ? null
+        : mesaEnPunto(widget.armado, widget.hoja, size, punto);
+    if (n == _bajoMouse) return;
+    setState(() => _bajoMouse = n);
+    widget.onHoverMesa?.call(n);
+  }
+}

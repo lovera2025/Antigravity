@@ -96,6 +96,23 @@ flutter:
     - assets/icons/
     - assets/google_fonts/
 
+  # Las letras del plano del salón, dentro de la app (sin internet el día de la
+  # fiesta). Las mismas familias se registran en los tests y en tool/ con
+  # `cargarFuentesPlano()`. Licencias OFL en assets/google_fonts/OFL-*.txt.
+  fonts:
+    - family: PlanoGala
+      fonts:
+        - asset: assets/google_fonts/CormorantGaramond-SemiBold.ttf
+          weight: 600
+    - family: PlanoNeon
+      fonts:
+        - asset: assets/google_fonts/TiltNeon-Regular.ttf
+    - family: PlanoLinea
+      fonts:
+        - asset: assets/google_fonts/Outfit-Regular.ttf
+        - asset: assets/google_fonts/Outfit-Bold.ttf
+          weight: 700
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
