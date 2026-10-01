@@ -37,6 +37,7 @@ import '../../core/utils/pago_interes_mora.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/cronograma_cuotas_utils.dart';
 import 'services/cobro_mora_resolver.dart';
+import 'services/filtro_mesas_sillas.dart';
 import 'services/filtro_mora_masivos.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/mora_concepto_rotulo.dart';
@@ -57,6 +58,7 @@ import '../recepcion/repositories/invitados_repository.dart';
 import '../recepcion/services/lista_puerta.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
+import 'widgets/chip_mesas_sillas.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
 import 'widgets/dialogo_seleccion_cuotas_plan.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
@@ -112,6 +114,18 @@ class _DetalleEventoMasivoScreenState
   /// Filtro "Sillas a confirmar": solo los que tienen que elegir.
   bool _soloSillasAConfirmar = false;
 
+  /// Las mesas y sillas de cada alumno con lo que pagó de cada cosa, leído de
+  /// sus pagos ([ExtrasSegunPago]). Es lo que muestra la columna Mesa antes del
+  /// sorteo y lo que filtra el chip "Mesas y sillas".
+  Map<String, ExtrasSegunPago> _extrasPorContrato = {};
+
+  /// Lo que `SalonMesas.avisos` marcó de cada alumno (precio distinto, sillas
+  /// de más, gente que no entra): el filtro "Para revisar".
+  Map<String, List<String>> _avisosPorContrato = {};
+
+  /// Filtro del chip "Mesas y sillas".
+  FiltroExtras _filtroExtras = FiltroExtras.todos;
+
   /// Aviso del motor cuando baja algo de la otra PC: el reparto de sillas que
   /// eligió la otra PC aparece al instante, sin esperar el ciclo de 10 s.
   StreamSubscription<Set<String>>? _cambiosSub;
@@ -154,6 +168,10 @@ class _DetalleEventoMasivoScreenState
       tablas,
     ) {
       if (tablas.contains('sillas_reparto')) unawaited(_cargarRepartosSillas());
+      // Un cobro que bajó de la otra PC cambia qué está pagado.
+      if (tablas.contains('pagos_contrato_alumno')) {
+        unawaited(_cargarPagosExtras());
+      }
     });
   }
 
@@ -349,6 +367,37 @@ class _DetalleEventoMasivoScreenState
     if (!mounted) return;
     setState(() => _notasOperativasPorContrato = map);
     await _cargarRepartosSillas();
+    await _cargarPagosExtras();
+  }
+
+  /// Lo cargado y lo pagado de mesas y sillas de cada alumno, y los avisos del
+  /// salón. Sale de los pagos, en la base de esta PC: no consulta la nube.
+  ///
+  /// Si falla, la grilla queda sin esos datos (la columna Mesa dice lo cargado,
+  /// sin pagos): no es motivo para no mostrar la lista.
+  Future<void> _cargarPagosExtras() async {
+    if (!mounted) return;
+    final alumnos = List<ContratoAlumno>.from(_alumnos);
+    try {
+      final crudos = alumnos.isEmpty
+          ? <String, List<Map<String, dynamic>>>{}
+          : await _pagosPorContrato(
+              ref.read(contratosRepositoryProvider),
+              alumnos,
+            );
+      final extras = extrasPorAlumno(alumnos, pagosPorAlumno(alumnos, crudos));
+      final avisos = <String, List<String>>{};
+      for (final a in SalonMesas.avisos(alumnos, pagosPorContrato: crudos)) {
+        (avisos[a.alumnoId] ??= []).add(a.detalle);
+      }
+      if (!mounted) return;
+      setState(() {
+        _extrasPorContrato = extras;
+        _avisosPorContrato = avisos;
+      });
+    } catch (e) {
+      debugPrint('⚠️ No se pudieron leer los pagos de mesas y sillas: $e');
+    }
   }
 
   Future<void> _cargarRepartosSillas() async {
@@ -1036,16 +1085,47 @@ class _DetalleEventoMasivoScreenState
         .where(
           (a) =>
               !_soloSillasAConfirmar ||
-              RepartoDeSillas.faltaElegir(a, _repartosPorContrato[a.id]),
+              RepartoDeSillas.faltaElegirConMesas(
+                a,
+                _repartosPorContrato[a.id],
+              ),
+        )
+        .where(
+          (a) => cumpleFiltroExtras(
+            a,
+            _extrasPorContrato[a.id],
+            _filtroExtras,
+            tieneAvisos: _avisosPorContrato.containsKey(a.id),
+          ),
         )
         .toList();
 
+    // El chip de mesas y sillas cuenta con el curso y la búsqueda puestos,
+    // igual que los otros dos.
+    final alumnosALaVista = _alumnos.where(_pasaCursoYBusqueda).toList();
+    final conAvisos = _avisosPorContrato.keys.toSet();
+    final pendientesDeExtras = alumnosALaVista
+        .where(
+          (a) => tieneAlgoPendienteDeExtras(
+            a,
+            _extrasPorContrato[a.id],
+            tieneAvisos: conAvisos.contains(a.id),
+          ),
+        )
+        .length;
+
     // Cuántos tienen que elegir dónde van sus sillas: el chip los cuenta con el
-    // curso y la búsqueda puestos, igual que el de mora.
+    // curso y la búsqueda puestos, igual que el de mora. Solo los que ya tienen
+    // sus mesas: el reparto se elige con las mesas sorteadas.
     final sillasAConfirmar = _alumnos
         .where((a) => !a.esBajaTemporal)
         .where(_pasaCursoYBusqueda)
-        .where((a) => RepartoDeSillas.faltaElegir(a, _repartosPorContrato[a.id]))
+        .where(
+          (a) => RepartoDeSillas.faltaElegirConMesas(
+            a,
+            _repartosPorContrato[a.id],
+          ),
+        )
         .length;
 
     if (_ordenAlfabetico) {
@@ -1389,6 +1469,21 @@ class _DetalleEventoMasivoScreenState
               layoutCompact: layoutCompact,
               onExportar: () => _exportarPlanillaMora(moraPorAlumno),
             ),
+            if (_alumnos.isNotEmpty) ...[
+              SizedBox(width: layoutCompact ? 6 : 10),
+              ChipMesasSillas(
+                filtro: _filtroExtras,
+                onFiltro: (f) => setState(() => _filtroExtras = f),
+                pendientes: pendientesDeExtras,
+                cuantos: contarPorFiltro(
+                  alumnosALaVista,
+                  _extrasPorContrato,
+                  conAvisos,
+                ),
+                totales: totalesDeExtras(alumnosALaVista, _extrasPorContrato),
+                compacto: layoutCompact,
+              ),
+            ],
             if (sillasAConfirmar > 0 || _soloSillasAConfirmar) ...[
               SizedBox(width: layoutCompact ? 6 : 10),
               _chipSillasAConfirmar(
@@ -2145,6 +2240,11 @@ class _DetalleEventoMasivoScreenState
                                     onElegirSillas: esBajaTemporal
                                         ? null
                                         : () => _elegirSillas(a),
+                                    extras: _extrasPorContrato[a.id],
+                                    marcarPago: _filtroExtras.activo,
+                                    ocultarMontos: _ocultarMontos,
+                                    avisos:
+                                        _avisosPorContrato[a.id] ?? const [],
                                   ),
                                 ),
                               ),

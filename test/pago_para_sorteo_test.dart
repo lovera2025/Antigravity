@@ -277,6 +277,144 @@ void main() {
     });
   });
 
+  group('las mesas y sillas de cada uno, según sus pagos', () {
+    test('solo la del contrato, con la base pagada: el sorteo le da su mesa', () {
+      final e = ExtrasSegunPago.de(alumno('a'), pagaBase);
+      expect(e.mesasCargadas, 1);
+      expect(e.mesas.estado, EstadoPagoExtra.sinCargar);
+      expect(e.sillas.estado, EstadoPagoExtra.sinCargar);
+      expect(e.mesasConElSorteoDeHoy, 1);
+      expect(e.recibeMenos, isFalse);
+    });
+
+    test(r'$0 de base: el sorteo no le da mesa, tenga lo que tenga', () {
+      final e = ExtrasSegunPago.de(
+        alumno('a', extras: 1),
+        const PagoAlumno(mesas: 10000),
+      );
+      expect(e.sinMesaPorBase, isTrue);
+      expect(e.mesasConElSorteoDeHoy, 0);
+      expect(e.recibeMenos, isTrue);
+    });
+
+    test('la mesa agregada sin pagar: solo la del contrato', () {
+      final e = ExtrasSegunPago.de(alumno('a', extras: 1), pagaBase);
+      expect(e.mesas.estado, EstadoPagoExtra.sinPagar);
+      expect(e.soloLaDelContrato, isTrue);
+      expect(e.mesasCargadas, 2);
+      expect(e.mesasConElSorteoDeHoy, 1);
+    });
+
+    test('la mesa agregada en cuotas entra al sorteo', () {
+      final e = ExtrasSegunPago.de(
+        alumno('a', extras: 1),
+        const PagoAlumno(base: 30000, mesas: 10000),
+      );
+      expect(e.mesas.estado, EstadoPagoExtra.enCuotas);
+      expect(e.mesas.precio, 70000);
+      expect(e.mesas.pagado, 10000);
+      expect(e.mesasConElSorteoDeHoy, 2);
+      expect(e.recibeMenos, isFalse);
+    });
+
+    test('la mesa agregada pagada entera', () {
+      final e = ExtrasSegunPago.de(
+        alumno('a', extras: 2),
+        const PagoAlumno(base: 30000, mesas: 140000),
+      );
+      expect(e.mesas.estado, EstadoPagoExtra.pagado);
+      expect(e.mesasCargadas, 3);
+      expect(e.mesasConElSorteoDeHoy, 3);
+    });
+
+    test('las sillas: sin pagar, en cuotas y pagadas', () {
+      EstadoPagoExtra sillas(double pagado) => ExtrasSegunPago.de(
+            alumno('a', sillas: 3),
+            PagoAlumno(base: 30000, sillas: pagado),
+          ).sillas.estado;
+      expect(sillas(0), EstadoPagoExtra.sinPagar);
+      expect(sillas(8000), EstadoPagoExtra.enCuotas);
+      expect(sillas(24000), EstadoPagoExtra.pagado);
+    });
+
+    test('lo cargado sin precio no cuenta', () {
+      // Decisión del usuario (30-sep-2026): una silla o una mesa extra existe
+      // cuando se guardó con su precio.
+      final a = ContratoAlumno(
+        id: 'sinprecio',
+        eventoId: 'e1',
+        nombreAlumno: 'sinprecio',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 300000,
+        saldoDeudor: 0,
+        mesaExtraCantidad: 1,
+        sillasExtraCantidad: 2,
+      );
+      final e = ExtrasSegunPago.de(a, pagaBase);
+      expect(e.mesas.cantidad, 0);
+      expect(e.sillas.cantidad, 0);
+      expect(e.mesasCargadas, 1);
+    });
+
+    test('el que ya tiene todas sus mesas no recibe menos', () {
+      final e = ExtrasSegunPago.de(
+        alumno('a', extras: 1, mesa: '12, 13'),
+        PagoAlumno.nada,
+      );
+      expect(e.asignadas, 2);
+      expect(e.sinMesaPorBase, isFalse);
+      expect(e.soloLaDelContrato, isFalse);
+      expect(e.mesasConElSorteoDeHoy, 2);
+    });
+
+    test('con la del contrato asignada y la agregada sin pagar: no se le suma',
+        () {
+      final e = ExtrasSegunPago.de(
+        alumno('a', extras: 1, mesa: '12'),
+        pagaBase,
+      );
+      expect(e.soloLaDelContrato, isTrue);
+      expect(e.mesasConElSorteoDeHoy, 1);
+    });
+
+    test('dice lo mismo que el sorteo, caso por caso', () {
+      final alumnos = [
+        alumno('nada'),
+        alumno('base'),
+        alumno('extraSinPago', extras: 1),
+        alumno('extraEnCuotas', extras: 1),
+        alumno('nadaConExtra', extras: 2),
+        alumno('yaTiene', extras: 1, mesa: '5, 6'),
+        alumno('leFalta', extras: 1, mesa: '5'),
+        alumno('baja', baja: true),
+      ];
+      final pagos = <String, PagoAlumno>{
+        'base': pagaBase,
+        'extraSinPago': pagaBase,
+        'extraEnCuotas': const PagoAlumno(base: 30000, mesas: 10000),
+        'leFalta': pagaBase,
+      };
+      final c = candidatosPorPago(alumnos, pagos);
+      final extras = extrasPorAlumno(alumnos, pagos);
+      for (final a in alumnos.where((a) => !a.esBajaTemporal)) {
+        final e = extras[a.id]!;
+        expect(
+          c.sinPagoBase.any((x) => x.id == a.id),
+          e.sinMesaPorBase,
+          reason: 'sin mesa: ${a.id}',
+        );
+        expect(
+          c.sinPagoMesasExtra.any((x) => x.id == a.id),
+          e.soloLaDelContrato,
+          reason: 'solo la del contrato: ${a.id}',
+        );
+      }
+      expect(c.sinPagoBase.map((a) => a.id), ['nada', 'nadaConExtra']);
+      expect(c.sinPagoMesasExtra.map((a) => a.id), ['extraSinPago', 'leFalta']);
+      expect(c.sinPagoBaseConExtras, {'nadaConExtra'});
+    });
+  });
+
   test('firmaPagos cambia si entra un pago con el diálogo abierto', () {
     final alumnos = [alumno('a'), alumno('b')];
     final antes = firmaPagos(alumnos, {});

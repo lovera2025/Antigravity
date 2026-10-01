@@ -118,4 +118,12 @@ class RepartoDeSillas {
   /// Si hay que llamar a la familia para que elija.
   static bool faltaElegir(ContratoAlumno a, SillasReparto? guardado) =>
       estado(a, guardado) == EstadoRepartoSillas.aConfirmar;
+
+  /// Lo mismo, pero solo cuando ya tiene sus mesas: el reparto se elige con
+  /// las mesas sorteadas ("dos a la principal y una a la adicional"). Antes
+  /// del sorteo no hay nada que elegir, y la grilla dice solo cuántas sillas
+  /// tiene. Es lo que usan la columna Mesa, el chip "Sillas a confirmar" y su
+  /// filtro.
+  static bool faltaElegirConMesas(ContratoAlumno a, SillasReparto? guardado) =>
+      SalonMesas.tieneNumeros(a) && faltaElegir(a, guardado);
 }

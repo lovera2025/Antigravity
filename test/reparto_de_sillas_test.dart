@@ -152,6 +152,59 @@ void main() {
     });
   });
 
+  group('el reparto se elige con las mesas ya sorteadas', () {
+    test('antes del sorteo no hay nada que elegir', () {
+      final a = _alumno(extras: 1, sillas: 3);
+      expect(RepartoDeSillas.faltaElegir(a, null), isTrue);
+      expect(RepartoDeSillas.faltaElegirConMesas(a, null), isFalse);
+    });
+
+    test('con sus mesas y varias formas: hay que elegir', () {
+      final a = _alumno(extras: 1, sillas: 3, mesas: [12, 13]);
+      expect(RepartoDeSillas.faltaElegirConMesas(a, null), isTrue);
+    });
+
+    test('con sus mesas y ya elegido: no', () {
+      final a = _alumno(extras: 1, sillas: 3, mesas: [12, 13]);
+      final g = _guardado(principal: 1, sillas: 3, mesas: 2);
+      expect(RepartoDeSillas.faltaElegirConMesas(a, g), isFalse);
+    });
+
+    test('con sus mesas y una sola forma: no', () {
+      final a = _alumno(sillas: 2, mesas: [12]);
+      expect(RepartoDeSillas.faltaElegirConMesas(a, null), isFalse);
+    });
+
+    test('lo elegido antes sigue valiendo si se deshace y se vuelve a sortear',
+        () {
+      // La elección depende de cuántas sillas y mesas tiene, no de los
+      // números: sin mesas no se muestra, y al volver a sortear reaparece.
+      final g = _guardado(principal: 1, sillas: 3, mesas: 2);
+      final sinMesas = _alumno(extras: 1, sillas: 3);
+      final otraVez = _alumno(extras: 1, sillas: 3, mesas: [40, 41]);
+      expect(RepartoDeSillas.faltaElegirConMesas(sinMesas, g), isFalse);
+      expect(RepartoDeSillas.estado(otraVez, g), EstadoRepartoSillas.elegido);
+      expect(RepartoDeSillas.vigente(otraVez, g), const OpcionReparto(1, 2));
+    });
+  });
+
+  group('antes del sorteo, cuántas mesas le corresponden', () {
+    test('solo la de su contrato', () {
+      expect(SalonMesas.textoMesasQueCorresponden(_alumno()), '1 mesa');
+    });
+
+    test('con agregadas, la extra aparte', () {
+      expect(
+        SalonMesas.textoMesasQueCorresponden(_alumno(extras: 1)),
+        '1 mesa +1 extra',
+      );
+      expect(
+        SalonMesas.textoMesasQueCorresponden(_alumno(extras: 2)),
+        '1 mesa +2 extra',
+      );
+    });
+  });
+
   group('en las mesas', () {
     test('sin elección, el reparto de siempre (no cambió nada)', () {
       final a = _alumno(extras: 1, sillas: 3, mesas: [12, 13]);

@@ -40,6 +40,117 @@ Map<String, PagoAlumno> pagosPorAlumno(
     a.id: PagoAlumno.desdePagos(pagosPorContrato[a.id] ?? const []),
 };
 
+/// Cómo está pagado algo extra de un alumno: sus mesas agregadas o sus sillas.
+enum EstadoPagoExtra {
+  /// No tiene ninguna cargada (o está cargada sin precio, que no cuenta).
+  sinCargar,
+
+  /// La tiene cargada y no pagó nada.
+  sinPagar,
+
+  /// Pagó una parte.
+  enCuotas,
+
+  /// La pagó entera.
+  pagado,
+}
+
+/// Lo cargado y lo pagado de un extra, para mostrarlo sin lugar a dudas.
+class ExtraPagado {
+  /// Cuántas tiene cargadas, con precio.
+  final int cantidad;
+
+  /// El precio total cargado.
+  final double precio;
+
+  /// Lo pagado según sus pagos (antes de descuentos, igual que el saldo).
+  final double pagado;
+
+  const ExtraPagado({this.cantidad = 0, this.precio = 0, this.pagado = 0});
+
+  EstadoPagoExtra get estado {
+    if (cantidad <= 0) return EstadoPagoExtra.sinCargar;
+    if (pagado <= 0.01) return EstadoPagoExtra.sinPagar;
+    return pagado >= precio - 0.01
+        ? EstadoPagoExtra.pagado
+        : EstadoPagoExtra.enCuotas;
+  }
+}
+
+/// Las mesas y sillas de un alumno, con lo que pagó de cada cosa y lo que le
+/// da hoy el sorteo.
+///
+/// Sale de los **pagos**, como todo lo que decide con plata. La grilla, su
+/// filtro y [candidatosPorPago] comen de acá, para no decir cosas distintas.
+class ExtrasSegunPago {
+  /// Pagó algo de la cuota base.
+  final bool pagoBase;
+
+  /// Las mesas agregadas (además de la del contrato).
+  final ExtraPagado mesas;
+  final ExtraPagado sillas;
+
+  /// Mesas que ya tiene con número.
+  final int asignadas;
+
+  const ExtrasSegunPago({
+    required this.pagoBase,
+    this.mesas = const ExtraPagado(),
+    this.sillas = const ExtraPagado(),
+    this.asignadas = 0,
+  });
+
+  factory ExtrasSegunPago.de(ContratoAlumno a, PagoAlumno pago) =>
+      ExtrasSegunPago(
+        pagoBase: pago.pagoBase,
+        mesas: ExtraPagado(
+          cantidad: SalonMesas.mesasExtra(a),
+          precio: a.mesaExtraPrecio,
+          pagado: pago.mesas,
+        ),
+        sillas: ExtraPagado(
+          cantidad: SalonMesas.sillasExtra(a),
+          precio: a.sillasExtraPrecioTotal,
+          pagado: pago.sillas,
+        ),
+        asignadas: MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).length,
+      );
+
+  /// La del contrato más las agregadas.
+  int get mesasCargadas => 1 + mesas.cantidad;
+
+  /// $0 de base y todavía sin mesa: el sorteo no le da ninguna.
+  bool get sinMesaPorBase => asignadas == 0 && !pagoBase;
+
+  /// Tiene mesas agregadas y no pagó nada de ellas.
+  bool get agregadasSinPago =>
+      mesas.cantidad > 0 && mesas.estado == EstadoPagoExtra.sinPagar;
+
+  /// Tiene (o va a tener) su mesa del contrato, pero las agregadas que le
+  /// faltan no las pagó: el sorteo le da solo la del contrato.
+  bool get soloLaDelContrato =>
+      !sinMesaPorBase && agregadasSinPago && asignadas < mesasCargadas;
+
+  /// Cuántas mesas tendría en total si se sorteara hoy, sin excepciones.
+  int get mesasConElSorteoDeHoy {
+    if (sinMesaPorBase) return 0;
+    if (soloLaDelContrato) return asignadas > 1 ? asignadas : 1;
+    return asignadas > mesasCargadas ? asignadas : mesasCargadas;
+  }
+
+  /// El sorteo de hoy le daría menos mesas de las que tiene cargadas.
+  bool get recibeMenos => mesasConElSorteoDeHoy < mesasCargadas;
+}
+
+/// Las mesas y sillas de cada alumno, a partir de lo que pagó cada uno.
+Map<String, ExtrasSegunPago> extrasPorAlumno(
+  Iterable<ContratoAlumno> alumnos,
+  Map<String, PagoAlumno> pagos,
+) => {
+  for (final a in alumnos)
+    a.id: ExtrasSegunPago.de(a, pagos[a.id] ?? PagoAlumno.nada),
+};
+
 /// Quiénes quedarían afuera del sorteo por no tener nada pagado.
 ///
 /// Solo se cuenta a quien el sorteo le haría algo: los de baja no entran, y al
@@ -74,17 +185,14 @@ CandidatosPorPago candidatosPorPago(
   final sinBaseConExtras = <String>{};
   for (final a in alumnos) {
     if (a.esBajaTemporal) continue;
-    final pago = pagos[a.id] ?? PagoAlumno.nada;
-    final asignadas =
-        MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).length;
-    final extrasSinPago = SalonMesas.mesasExtra(a) > 0 && !pago.pagoMesas;
-    if (asignadas == 0 && !pago.pagoBase) {
+    final extras = ExtrasSegunPago.de(a, pagos[a.id] ?? PagoAlumno.nada);
+    if (extras.sinMesaPorBase) {
       sinBase.add(a);
-      if (extrasSinPago) sinBaseConExtras.add(a.id);
+      if (extras.agregadasSinPago) sinBaseConExtras.add(a.id);
       continue;
     }
     // Tiene su base (asignada o por sortear) y le faltarían las extra.
-    if (extrasSinPago && asignadas < SalonMesas.mesas(a)) sinExtras.add(a);
+    if (extras.soloLaDelContrato) sinExtras.add(a);
   }
   int porNombre(ContratoAlumno x, ContratoAlumno y) =>
       x.nombreAlumno.compareTo(y.nombreAlumno);

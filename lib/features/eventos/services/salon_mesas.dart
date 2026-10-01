@@ -116,6 +116,17 @@ class SalonMesas {
 
   static int mesasExtra(ContratoAlumno a) => mesas(a) - 1;
 
+  /// Ya tiene al menos una mesa con número (se sorteó o se cargó a mano).
+  static bool tieneNumeros(ContratoAlumno a) =>
+      MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).isNotEmpty;
+
+  /// Antes del sorteo, cuántas mesas le corresponden: "1 mesa", o "1 mesa +2
+  /// extra" si tiene agregadas.
+  static String textoMesasQueCorresponden(ContratoAlumno a) {
+    final extra = mesasExtra(a);
+    return extra > 0 ? '1 mesa +$extra extra' : '1 mesa';
+  }
+
   /// Sillas extra que figuran en su cuenta. Sin precio no cuentan: es lo mismo
   /// que muestra el estado de cuenta (`pdf_service.dart`, sillas con precio).
   static int sillasExtra(ContratoAlumno a) =>
