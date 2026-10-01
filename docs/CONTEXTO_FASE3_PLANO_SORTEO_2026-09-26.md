@@ -2,8 +2,8 @@
 
 **Fecha:** 2026-09-26, puesto al día el 2026-10-01 (ver "Qué pasó el 1-oct": las medidas del playón)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 4 del plan de la 6.0.0 y la 4b (las medidas del salón) están hechas y subidas;
-faltan M4, M6, M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 4 del plan de la 6.0.0, la 4b (las medidas del salón) y la 5 (M4, la pantalla
+del plano) están hechas y subidas; faltan M6, M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 1-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
@@ -39,18 +39,19 @@ faltan M4, M6, M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs sig
 | M5 | Sorteo por bloques o entero, diálogo y flujo | Sí | Sí, `aaa0034` (30-sep) | Hecha y **aplicada el 30-sep** |
 | — | Mesas y sillas de cada uno en la grilla, con su filtro (pedido del 30-sep) | Sí | Sí, `087e904` (30-sep) | No hacía falta |
 | 4b | Las medidas del salón: el plano en metros, cuántas mesas entran y "armar a medida" del playón (pedido del 1-oct) | Sí | Sí, `0f46110` (1-oct) | No hacía falta |
-| M4 | Selector de estilo y armado, pantalla del plano | No | — | — |
+| M4 | Selector de estilo y armado, pantalla del plano | Sí | Sí, `36cf78a` (1-oct) | No hacía falta |
 | M6 | Fijar, dejar libres, cambiar o mover familias, historial | No | — | Workflow |
 | M7 | Plano impreso y planilla con bloques y pasto | No | — | — |
 | M8 | Botones a la vista y lista de la puerta trabada | No | — | — |
 | M9 | Acomodar el salón, colores y textos | No | — | Workflow |
 
-**Tests:** la suite entera pasa, **1.118 tests** el 1-oct, al cerrar la etapa 4b (1.039 el 30-sep a la noche; 913 al
+**Tests:** la suite entera pasa, **1.179 tests** el 1-oct, al cerrar M4 (1.118 con la etapa 4b; 1.039 el 30-sep a
+la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M4, M6, M7,
-M8 y M9 (ver "Lo que falta, en orden").
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M6, M7, M8
+y M9 (ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -571,6 +572,55 @@ y a M9. La base no cambia: sigue en la v73.
 - **El armado a medida no pone mesas en el pasto.** Si no entran, dice cuántas faltan.
 - **Con pasarela, el paso de la izquierda a la derecha es un corte**: quedan 5 m de pasillo en el medio.
 
+### Etapa 5 hecha: M4, la pantalla del plano (`36cf78a`)
+
+El usuario dejó la elección en mis manos ("decime cuál es la mejor y más cómoda y hacela"): quedaron **los tres pasos
+en una sola hoja, con todo ya elegido**, y la pantalla como en las maquetas.
+
+- **Cómo se llega:** MÁS → "Plano del salón" (`_abrirPlano` en `detalle_evento_masivo_screen.dart`). M8 lo pasa al
+  botón PLANO. En la grilla, con las mesas ya sorteadas y la fiesta con plano, **tocar el número de mesa** abre el
+  plano con esa familia resaltada (`CeldaMesaAlumno.onVerEnPlano`; `_fiestaTienePlano` se relee al volver y cuando
+  baja `planos_evento`).
+- **`lib/features/plano/plano_evento_screen.dart`** (`PlanoEventoScreen`): lee las fichas, el reparto de sillas y el
+  plano (la nube primero), se refresca con `cambiosBajadosStream` y solo escribe `planos_evento`.
+  - La primera vez, sin plano, abre sola los tres pasos. Si se cancela queda el botón "ARMAR EL PLANO".
+  - Un `armado_json` que no se lee: pide elegir el armado de nuevo y conserva lo demás.
+- **`widgets/elegir_plano_dialog.dart`** ("Estilo y armado"):
+  - paso 1, el armado: "A medida del playón" (cantidad, distancia, pasarela y "Usar todo el playón", con vista
+    previa) y los cuatro del jefe. Cada tarjeta dice las mesas, lo que ocupa y "Entra", "Entra con el pasto" o
+    "Faltan N mesas". Con plano ya armado, la primera tarjeta es "Como está ahora";
+  - paso 2, el estilo, con el dibujo de verdad en chico; paso 3, por división o toda la escuela junta;
+  - **lo que viene elegido la primera vez:** a medida del playón con las mesas de la fiesta, Arquitecto y por
+    división;
+  - con familias ya sentadas el armado queda gris, con el motivo escrito. El estilo se cambia siempre.
+- **`services/plano_de_la_fiesta.dart`** (`PlanoDeLaFiesta`, cuenta pura): lo que muestra la pantalla.
+  - `mesasQueNecesita`: las cargadas de cada familia, sin las bajas y **sin mirar lo pagado** (es para armar el
+    salón);
+  - `ocupantes` y `ocupanteDe`: las sillas extra de cada mesa salen de `SalonMesas.repartoSillas` con el reparto
+    vigente;
+  - `titular` ("Entran las 132", "Faltan 6 mesas", "Hay 2 cosas para revisar") y `detalle`;
+  - `avisos`, cada uno con su mesa: faltan mesas, dos familias en una mesa, números que el armado no tiene, fijadas
+    para una familia que ya no está, mesas fuera del hormigón, mesas apretadas (un aviso por mesa, no por vecina) y
+    divisiones parecidas. Los graves ponen el titular en naranja; una mesa apretada por sillas extra no.
+- **`services/aplicar_eleccion.dart`:** qué se guarda al tocar LISTO, a partir del plano que la nube tiene en ese
+  momento. Conserva fijadas, libres, colores y medidas, y **no cambia el armado si ya hay familias sentadas** (aunque
+  la otra PC haya armado el plano mientras el diálogo estaba abierto).
+- **`widgets/plano_evento_cuerpo.dart`** (`PlanoEventoCuerpo`, sin base ni Riverpod):
+  - el plano con `InteractiveViewer`; debajo, la regla (sigue al zoom), las hojas y −, + y AJUSTAR, para no tapar
+    mesas;
+  - a la derecha, el buscador (familia o número), la tarjeta de lo elegido (las sillas de cada mesa y "En la
+    principal: 4 con cena · 6 generales", como la planilla), las divisiones y los avisos;
+  - abajo, ESTILO Y ARMADO. PERSONALIZAR, IMPRIMIR e HISTORIAL aparecen cuando reciben su acción (M6, M7 y M9).
+- **Tests nuevos:** `plano_de_la_fiesta_test`, `aplicar_eleccion_test`, `elegir_plano_dialog_test`,
+  `plano_evento_cuerpo_test` y más casos en `celda_mesa_alumno_test`.
+- **Muestras:** `tool/plano_pantalla_muestra_test.dart` genera `Pantalla_plano_*.png` y `Pasos_plano*.png`. El
+  usuario ya las vio.
+
+**Queda así a propósito:**
+- La tarjeta de la familia no dice si retiró las entradas: eso está en ENTRADAS.
+- `PlanoEventoScreen` no tiene test propio (necesita la base y el motor): lo que decide está en funciones puras, con
+  test.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -582,29 +632,15 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 3. ~~Revisión de M5.~~ **Hecho** (`aaa0034`).
 4. ~~Mesas y sillas en la grilla.~~ **Hecho** (`087e904`).
    - 4b. ~~Las medidas del salón.~~ **Hecho** (`0f46110`).
-5. **M4:** `widgets/elegir_plano_sheet.dart` y `plano_evento_screen.dart`. El detalle está en el plan de la Fase 3
-   (`donde-nos-quedamos-glittery-waffle.md`). Tener en cuenta lo que cambió el 30-sep:
-   - `EstadoPlano.divisiones` va en claves, con `nombresDivision` para la leyenda y `haySinDivision`;
-   - `fijadasFueraDelPlano` y `libresFueraDelPlano`, para avisar;
-   - el armado se lee con `plano.armadoONull`;
-   - `sillasExtraPorMesa` del plano sale de `SalonMesas.repartoSillas` con el reparto vigente.
-
-   **Lo que suma el plan de las medidas:**
-   - **antes de programar, mostrarle al usuario la maqueta** de la pantalla del plano y de los tres pasos del primer
-     ingreso (armado, estilo, sorteo), con todo ya completado;
-   - en el selector, cada armado dice "78 mesas · 33 × 23 m · entra / faltan N", y hay una quinta opción, "A medida
-     del playón" (cantidad, distancia y pasarela, con vista previa y "entran N"; `ArmarAMedida` y `lugarMasHolgado`);
-   - en la pantalla: la regla siempre, el encabezado con "Entran las 132" o "Faltan N", y los avisos de
-     `MedirSalon.revisar`, que se tocan y llevan a la mesa;
-   - la tarjeta de la familia dice las sillas de cada mesa;
-   - **de la grilla al plano:** en `celda_mesa_alumno.dart`, tocar los números de mesa abre el plano con la familia
-     resaltada.
+5. ~~M4: la pantalla del plano y el selector.~~ **Hecho** (`36cf78a`).
 6. **M6:** fijar y dejar libres en `config`; cambiar y mover familias con motivo, deshacer y `mesas_movimientos`;
    `RegistroSorteo.resumir` con movimientos; `historial_sorteo_sheet.dart`. Lleva workflow.
    - Cada escritura del plano tiene que leerlo antes de la nube (`leerPlanoParaSortear` es el molde): gana la fila
      entera del último que sube.
-   - `MesasMovimientosRepository.registrarEn` y `PlanosEventoRepository.guardar` ya existen y tienen test; hoy nadie
-     los llama.
+   - `MesasMovimientosRepository.registrarEn` ya existe y tiene test; hoy nadie lo llama.
+   - **Antes de programar, mostrarle al usuario la maqueta** de Personalizar → Mesas (ya vio una del conjunto).
+   - PERSONALIZAR e HISTORIAL se enchufan pasando `onPersonalizar` y `onHistorial` a `PlanoEventoCuerpo`.
+   - El motivo de una mesa fijada o libre ya se ve en la tarjeta de la mesa.
 7. **M7:** `plano_pdf.dart` (sin `pw.Page` de alto fijo), y pasto y bloques en la planilla del sorteo.
 8. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`). El chip
    "Mesas y sillas" ya está en la barra, entre el de mora y el de sillas.
@@ -666,14 +702,15 @@ medidas en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md, el
 detalle técnico de M4 a M9 en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
-memoria del proyecto. Están hechas y subidas las etapas 1 a 4 y la 4b: el plano
-en tres estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques
-(aaa0034), las mesas y sillas en la grilla (087e904) y las medidas del salón
-(0f46110). La suite da 1.118 tests en verde y el working tree está limpio. Seguí
-por la etapa 5: M4 (la pantalla del plano y el selector de estilo y armado, con
-la opción "A medida del playón"), y después M6, M7, M8 y M9, la verificación
-final, la documentación de la 6.0.0, la versión y el build, en ese orden. Antes
-de programar cada pantalla mostrame la maqueta para probarla. M6 y M9 llevan
+memoria del proyecto. Están hechas y subidas las etapas 1 a 5: el plano en tres
+estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques (aaa0034), las
+mesas y sillas en la grilla (087e904), las medidas del salón (0f46110) y la
+pantalla del plano con sus tres pasos (36cf78a). La suite da 1.179 tests en
+verde y el working tree está limpio. Seguí por la etapa 6: M6 (fijar mesas,
+dejarlas libres, cambiar o mover familias con motivo, deshacer e Historial), y
+después M7, M8 y M9, la verificación final, la documentación de la 6.0.0, la
+versión y el build, en ese orden. Antes de programar cada pantalla mostrame la
+maqueta para probarla; si te digo que elijas vos, elegí la más cómoda. M6 y M9 llevan
 revisores de solo lectura: los tests, las imágenes y los diffs los preparás vos
 antes. Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
