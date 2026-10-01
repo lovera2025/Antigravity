@@ -1291,9 +1291,15 @@ class SyncEngine {
 
       try {
         await _executeSyncOperation(entry);
-        await SyncQueue.markCompleted(entry.id!);
+        final salio = await SyncQueue.markCompleted(
+          entry.id!,
+          leidaCon: entry.createdAt,
+        );
         debugPrint(
-          '  √ ${entry.operacion.name} ${entry.tabla}/${entry.registroId}',
+          salio
+              ? '  √ ${entry.operacion.name} ${entry.tabla}/${entry.registroId}'
+              : '  ↻ ${entry.tabla}/${entry.registroId} cambió mientras subía: '
+                  'queda en la cola para subir lo nuevo',
         );
         anySuccess = true;
         _anotarParaElPulso(entry);
@@ -1338,7 +1344,7 @@ class SyncEngine {
             '  = ${entry.tabla}/${entry.registroId} ya existía en la nube: '
             'se saca de la cola',
           );
-          await SyncQueue.markCompleted(entry.id!);
+          await SyncQueue.markCompleted(entry.id!, leidaCon: entry.createdAt);
         } else {
           await SyncQueue.markFailed(entry.id!, e.toString());
         }

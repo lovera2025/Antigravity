@@ -228,11 +228,54 @@ class SyncQueue {
     return rows.map(SyncQueueEntry.fromMap).toList();
   }
 
-  /// Elimina una entrada completada exitosamente.
-  static Future<void> markCompleted(int entryId) async {
-    final db = await LocalDatabase.instance;
-    await db.delete('_sync_queue', where: 'id = ?', whereArgs: [entryId]);
+  /// Saca de la cola una entrada que ya subió. Devuelve `false` si la dejó
+  /// porque cambió mientras subía.
+  ///
+  /// [leidaCon] es el `created_at` con el que se leyó la entrada para subirla.
+  /// [enqueue] no agrega una segunda entrada para un registro que ya está en la
+  /// cola: reescribe la que hay (con los datos nuevos) y le cambia el
+  /// `created_at`. Si eso pasa **mientras la versión anterior está subiendo**,
+  /// la entrada ya lleva un cambio que todavía no subió, y borrarla acá sería
+  /// perderlo: la nube quedaría con el dato viejo, esta PC con el nuevo, y
+  /// nada en la cola para emparejarlas. Pasaba con dos cambios seguidos sobre
+  /// el mismo registro (cambiar una mesa y deshacer enseguida).
+  ///
+  /// Por eso se saca solo si sigue siendo la que se leyó. Si cambió, queda: el
+  /// próximo ciclo sube lo nuevo.
+  static Future<bool> markCompleted(
+    int entryId, {
+    DateTime? leidaCon,
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await LocalDatabase.instance;
+    if (leidaCon == null) {
+      await db.delete('_sync_queue', where: 'id = ?', whereArgs: [entryId]);
+      onChanged?.call();
+      return true;
+    }
+    final rows = await db.query(
+      '_sync_queue',
+      columns: ['created_at'],
+      where: 'id = ?',
+      whereArgs: [entryId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return true;
+    final guardado = rows.first['created_at'] as String?;
+    // Se compara el momento y no el texto: una entrada vieja puede tener la
+    // fecha escrita en otro formato, y no por eso cambió.
+    final actual = DateTime.tryParse(guardado ?? '');
+    if (actual != null && !actual.isAtSameMomentAs(leidaCon)) return false;
+    // Con el texto recién leído en el WHERE, si justo se reescribió entre la
+    // lectura y este borrado, no borra nada.
+    final borradas = await db.delete(
+      '_sync_queue',
+      where: 'id = ? AND created_at IS ?',
+      whereArgs: [entryId, guardado],
+    );
+    if (borradas == 0) return false;
     onChanged?.call();
+    return true;
   }
 
   /// Marca un intento fallido con su error.
