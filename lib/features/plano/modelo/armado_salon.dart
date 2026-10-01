@@ -51,6 +51,80 @@ class RectPlano {
   int get hashCode => Object.hash(x, y, ancho, alto);
 }
 
+/// Cuántos metros es una unidad del plano en la escala del Canva del jefe: de
+/// centro a centro de mesa hay 105 unidades, que son 2 m (la mesa sola queda
+/// de 1,45 m).
+const double kMetrosPorUnidadCanva = 2.0 / 105;
+
+/// El borde del hormigón en una hoja: un polígono, en coordenadas del plano.
+///
+/// Solo lo llevan los armados hechos a medida del playón. Los del Canva no:
+/// su geometría sale de fotos, y un "queda fuera del hormigón" sobre los
+/// dibujos del jefe sería un aviso falso.
+class ContornoPlano {
+  final List<({double x, double y})> puntos;
+
+  const ContornoPlano(this.puntos);
+
+  /// Los lados, de punto a punto, cerrando con el primero.
+  Iterable<(({double x, double y}), ({double x, double y}))> get lados sync* {
+    for (var i = 0; i < puntos.length; i++) {
+      yield (puntos[i], puntos[(i + 1) % puntos.length]);
+    }
+  }
+
+  bool contiene(double x, double y) {
+    var adentro = false;
+    for (final (a, b) in lados) {
+      if ((a.y > y) != (b.y > y) &&
+          x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) {
+        adentro = !adentro;
+      }
+    }
+    return adentro;
+  }
+
+  /// La distancia del punto al lado más cercano.
+  double distanciaAlBorde(double x, double y) {
+    var mejor = double.infinity;
+    for (final (a, b) in lados) {
+      final dx = b.x - a.x;
+      final dy = b.y - a.y;
+      final largo2 = dx * dx + dy * dy;
+      final t = largo2 == 0
+          ? 0.0
+          : (((x - a.x) * dx + (y - a.y) * dy) / largo2).clamp(0.0, 1.0);
+      final px = a.x + dx * t;
+      final py = a.y + dy * t;
+      final d = math.sqrt((x - px) * (x - px) + (y - py) * (y - py));
+      if (d < mejor) mejor = d;
+    }
+    return mejor;
+  }
+
+  /// El círculo entra entero (se tolera un roce).
+  bool contieneCirculo(double x, double y, double r) =>
+      puntos.length >= 3 &&
+      contiene(x, y) &&
+      distanciaAlBorde(x, y) >= r - 0.01;
+
+  List<List<double>> toJson() => [
+        for (final p in puntos) [p.x, p.y],
+      ];
+
+  /// Null si no hay al menos tres puntos legibles.
+  static ContornoPlano? fromJson(Object? v) {
+    if (v is! List) return null;
+    final puntos = <({double x, double y})>[];
+    for (final p in v) {
+      if (p is List && p.length >= 2 && p[0] is num && p[1] is num) {
+        puntos.add((x: (p[0] as num).toDouble(), y: (p[1] as num).toDouble()));
+      }
+    }
+    return puntos.length >= 3 ? ContornoPlano(puntos) : null;
+  }
+}
+
 /// Una hoja del plano. El Canva parte algunos salones en dos (A arriba, B
 /// abajo); cada hoja tiene su propio dibujo y sus propias coordenadas.
 class HojaPlano {
@@ -58,15 +132,35 @@ class HojaPlano {
   final String titulo;
   final RectPlano caja;
 
-  const HojaPlano({required this.id, required this.titulo, required this.caja});
+  /// El borde del hormigón, si el armado se hizo a medida del playón.
+  final ContornoPlano? contorno;
 
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'titulo': titulo, 'caja': caja.toJson()};
+  const HojaPlano({
+    required this.id,
+    required this.titulo,
+    required this.caja,
+    this.contorno,
+  });
+
+  HojaPlano copyWith({RectPlano? caja, ContornoPlano? contorno}) => HojaPlano(
+        id: id,
+        titulo: titulo,
+        caja: caja ?? this.caja,
+        contorno: contorno ?? this.contorno,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'titulo': titulo,
+        'caja': caja.toJson(),
+        if (contorno != null) 'borde': contorno!.toJson(),
+      };
 
   static HojaPlano fromJson(Map<String, dynamic> m) => HojaPlano(
         id: m['id'] as String,
         titulo: (m['titulo'] as String?) ?? '',
         caja: RectPlano.fromJson(m['caja']),
+        contorno: ContornoPlano.fromJson(m['borde']),
       );
 }
 
@@ -175,6 +269,10 @@ class SectorPlano {
       );
 }
 
+/// Un número mayor que cero, o null si vino otra cosa.
+double? _positivo(Object? v) =>
+    v is num && v.isFinite && v > 0 ? v.toDouble() : null;
+
 /// Un punto en una hoja (el ingreso, de donde el tótem va a trazar el camino).
 class PuntoPlano {
   final String hoja;
@@ -212,6 +310,16 @@ class ArmadoSalon {
   final String nombre;
   final String descripcion;
   final double radio;
+
+  /// Cuántos metros es una unidad de este plano. Con esto el plano mide: la
+  /// regla, lo que ocupa y cuánto lugar tiene cada mesa.
+  final double metrosPorUnidad;
+
+  /// Hasta qué distancia de centro a centro (en unidades) dos mesas cuentan
+  /// como pegadas. Null: [pegadasHastaRadios] radios, como en el Canva. Un
+  /// armado a medida con las mesas más separadas trae la suya: si no, toda
+  /// diagonal de la serpentina sería un corte.
+  final double? distanciaPegadas;
   final List<HojaPlano> hojas;
   final List<MesaPlano> mesas;
   final List<SectorPlano> sectores;
@@ -222,6 +330,8 @@ class ArmadoSalon {
     required this.nombre,
     this.descripcion = '',
     this.radio = 38,
+    this.metrosPorUnidad = kMetrosPorUnidadCanva,
+    this.distanciaPegadas,
     required this.hojas,
     required List<MesaPlano> mesas,
     this.sectores = const [],
@@ -234,6 +344,26 @@ class ArmadoSalon {
   /// radios de centro a centro (alcanza para la diagonal de la serpentina y
   /// deja afuera lo que está del otro lado de una pasarela).
   static const double pegadasHastaRadios = 4.2;
+
+  double get _pegadasHasta => distanciaPegadas ?? pegadasHastaRadios * radio;
+
+  double aMetros(double unidades) => unidades * metrosPorUnidad;
+  double aUnidades(double metros) => metros / metrosPorUnidad;
+
+  /// Se armó a medida del playón: alguna hoja trae el borde del hormigón.
+  bool get tieneBorde => hojas.any((h) => h.contorno != null);
+
+  /// Lo que mide la mesa sola, sin las sillas.
+  double get diametroMesaM => aMetros(2 * radio);
+
+  /// De centro a centro, en metros. Null si alguna no existe o están en
+  /// hojas distintas (cada hoja tiene sus propias coordenadas).
+  double? distanciaM(int a, int b) {
+    final ma = _porNumero[a];
+    final mb = _porNumero[b];
+    if (ma == null || mb == null || ma.hoja != mb.hoja) return null;
+    return aMetros(ma.distanciaA(mb));
+  }
 
   late final Map<int, MesaPlano> _porNumero = {
     for (final m in mesas) m.numero: m,
@@ -271,7 +401,7 @@ class ArmadoSalon {
     final mb = _porNumero[b];
     if (ma == null || mb == null) return false;
     if (ma.hoja != mb.hoja) return false;
-    return ma.distanciaA(mb) <= pegadasHastaRadios * radio + 0.01;
+    return ma.distanciaA(mb) <= _pegadasHasta + 0.01;
   }
 
   /// Los n tales que n y n+1 existen pero no están pegadas.
@@ -294,6 +424,10 @@ class ArmadoSalon {
         p.add('La mesa ${m.numero} está en una hoja que no existe (${m.hoja}).');
       } else if (!h.caja.contieneCirculo(m.x, m.y, radio)) {
         p.add('La mesa ${m.numero} se sale de la hoja ${m.hoja}.');
+      } else if (!m.pasto &&
+          h.contorno != null &&
+          !h.contorno!.contieneCirculo(m.x, m.y, radio)) {
+        p.add('La mesa ${m.numero} queda fuera del hormigón.');
       }
     }
     for (var i = 0; i < mesas.length; i++) {
@@ -331,6 +465,8 @@ class ArmadoSalon {
         nombre: nombre,
         descripcion: descripcion,
         radio: radio,
+        metrosPorUnidad: metrosPorUnidad,
+        distanciaPegadas: distanciaPegadas,
         hojas: hojas ?? this.hojas,
         mesas: mesas ?? this.mesas,
         sectores: sectores ?? this.sectores,
@@ -343,6 +479,8 @@ class ArmadoSalon {
         'nombre': nombre,
         'descripcion': descripcion,
         'radio': radio,
+        'm_u': metrosPorUnidad,
+        if (distanciaPegadas != null) 'pegadas_u': distanciaPegadas,
         'hojas': [for (final h in hojas) h.toJson()],
         'mesas': [for (final m in mesas) m.toJson()],
         'sectores': [for (final s in sectores) s.toJson()],
@@ -354,6 +492,8 @@ class ArmadoSalon {
         nombre: (m['nombre'] as String?) ?? '',
         descripcion: (m['descripcion'] as String?) ?? '',
         radio: (m['radio'] as num?)?.toDouble() ?? 38,
+        metrosPorUnidad: _positivo(m['m_u']) ?? kMetrosPorUnidadCanva,
+        distanciaPegadas: _positivo(m['pegadas_u']),
         hojas: [
           for (final h in (m['hojas'] as List? ?? const []))
             HojaPlano.fromJson(Map<String, dynamic>.from(h as Map)),

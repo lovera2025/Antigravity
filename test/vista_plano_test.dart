@@ -11,6 +11,8 @@ import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/estado_plano.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 
 Widget _vista({
@@ -185,6 +187,18 @@ void main() {
   });
 
   group('la grilla', () {
+    test('con el paso de un metro, hay una línea por metro', () {
+      final paso = armado.aUnidades(1);
+      expect(paso, closeTo(52.5, 1e-9));
+      final l = lineasGrilla(const Rect.fromLTRB(0, 0, 210, 100), paso: paso);
+      // 210 unidades son 4 m: cinco líneas, con la del borde incluida.
+      expect(l.xs.length, 5);
+      for (final (i, x) in l.xs.indexed) {
+        expect(x, closeTo(i * 52.5, 1e-6));
+      }
+      expect(l.ys.length, 2);
+    });
+
     test('arranca en el múltiplo de 50 anterior y cubre todo lo visible', () {
       final l = lineasGrilla(const Rect.fromLTRB(-30, 120, 260, 310));
       expect(l.xs, [-50, 0, 50, 100, 150, 200, 250]);
@@ -382,6 +396,136 @@ void main() {
       }
     });
   }
+
+  group('el plano con medidas', () {
+    final hecho = ArmarAMedida.armar(
+      const OpcionesAMedida(
+        playon: PlayonReal.costaSurubi,
+        cantidad: 132,
+        partirEnFila: 6,
+      ),
+    ).armado;
+    final conFamilias = EstadoPlano.desde(
+      armado: hecho,
+      ocupantes: const [
+        OcupantePlano(
+          id: 'a',
+          nombre: 'GÓMEZ, SOFÍA',
+          numeros: [12, 13],
+          division: '5° A',
+          sillasExtraPorMesa: {12: 2, 13: 1},
+        ),
+        // Sin división: las sillas extra van en el color neutro.
+        OcupantePlano(
+          id: 'b',
+          nombre: 'SOSA, LUZ',
+          numeros: [40],
+          sillasExtraPorMesa: {40: 2},
+        ),
+      ],
+    );
+
+    for (final e in EstiloPlano.values) {
+      for (final tam in const [Size(1400, 1225), Size(900, 600), Size(160, 110)]) {
+        testWidgets(
+            '${e.name}: borde, regla, medidas y lugares en '
+            '${tam.width}×${tam.height}', (tester) async {
+          tester.view.physicalSize = tam;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          for (final hoja in const ['A', 'B']) {
+            await tester.pumpWidget(
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: VistaPlano(
+                  armado: hecho,
+                  hoja: hoja,
+                  tema: TemaPlano.de(e),
+                  estado: conFamilias,
+                  animar: false,
+                  mostrarRegla: true,
+                  mostrarMedidas: true,
+                  lugares: const MedidasPlano(),
+                ),
+              ),
+            );
+            expect(tester.takeException(), isNull, reason: 'hoja $hoja');
+          }
+        });
+      }
+    }
+
+    testWidgets('en un armado del Canva la regla y los lugares no rompen',
+        (tester) async {
+      for (final e in EstiloPlano.values) {
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: VistaPlano(
+              armado: armado,
+              hoja: 'A',
+              tema: TemaPlano.de(e),
+              estado: estado,
+              animar: false,
+              mostrarRegla: true,
+              // No tiene borde: no hay medidas que escribir.
+              mostrarMedidas: true,
+              lugares: const MedidasPlano(),
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull, reason: e.name);
+      }
+    });
+
+    testWidgets('todo va en el mismo dibujo: no suma capas', (tester) async {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: VistaPlano(
+            armado: hecho,
+            hoja: 'A',
+            tema: TemaPlano.arquitecto,
+            estado: EstadoPlano.vacio,
+            animar: false,
+            mostrarRegla: true,
+            mostrarMedidas: true,
+            lugares: const MedidasPlano(),
+          ),
+        ),
+      );
+      expect(find.byType(CustomPaint), findsOneWidget);
+    });
+
+    test('cambiar la regla, las medidas o los lugares vuelve a dibujar', () {
+      PintorPlano pintor({
+        bool regla = false,
+        bool cotas = false,
+        MedidasPlano? lugares,
+      }) =>
+          PintorPlano(
+            armado: hecho,
+            hoja: 'A',
+            tema: TemaPlano.gala,
+            estado: conFamilias,
+            regla: regla,
+            cotas: cotas,
+            lugares: lugares,
+          );
+      final base = pintor();
+      expect(pintor().shouldRepaint(base), isFalse);
+      expect(pintor(regla: true).shouldRepaint(base), isTrue);
+      expect(pintor(cotas: true).shouldRepaint(base), isTrue);
+      expect(pintor(lugares: const MedidasPlano()).shouldRepaint(base), isTrue);
+      // Las mismas medidas, en otro objeto, no.
+      expect(
+        pintor(lugares: const MedidasPlano(lugarMesaM: 2.2)).shouldRepaint(
+          pintor(lugares: const MedidasPlano(lugarMesaM: 2.2)),
+        ),
+        isFalse,
+      );
+    });
+  });
 
   testWidgets('una hoja que no existe dibuja solo el fondo', (tester) async {
     await tester.pumpWidget(

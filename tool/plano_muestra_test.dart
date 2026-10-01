@@ -7,7 +7,9 @@
 // Salen:
 //   • Plano_3_estilos.png: la página 3 en Gala, Arquitecto y Neón, lado a lado;
 //   • un PNG por estilo y armado (página 3, páginas 4-5, 2A+2B y Técnica);
-//   • con una familia resaltada, mesas libres, una fijada y el pasto.
+//   • con una familia resaltada, mesas libres, una fijada y el pasto;
+//   • Medida_*.png: el salón armado a medida del playón de Costa Surubí, con
+//     la regla, las medidas de los lados y el lugar que pide cada mesa.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
 
@@ -26,6 +28,9 @@ import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/estado_plano.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
+import 'package:arguello_events/features/plano/services/medir_salon.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
@@ -267,12 +272,114 @@ void main() {
               estado: caso.estado,
               resaltadas: caso.resaltadas,
               animar: false,
+              mostrarRegla: true,
             ),
             const Size(1400, 980),
             'Plano_${e.name}_${caso.nombre}_${h.id}.png',
           );
         }
       }
+    });
+  }
+
+  // ── A medida del playón ────────────────────────────────────────────────
+
+  /// 132 mesas sobre el playón de Costa Surubí, con tres divisiones, familias
+  /// de una y dos mesas y algunas con sillas extra.
+  ({ArmadoSalon armado, EstadoPlano estado, int capacidad}) aMedida(
+    double lugar,
+  ) {
+    final r = ArmarAMedida.armar(OpcionesAMedida(
+      playon: PlayonReal.costaSurubi,
+      cantidad: 132,
+      lugarM: lugar,
+    ));
+    print('── A ${MedirSalon.metros(lugar)}: ${r.puestas} mesas puestas, '
+        'entran hasta ${r.capacidad}, cortes ${r.armado.cortes}');
+    return (
+      armado: r.armado,
+      estado: EstadoPlano.desde(
+        armado: r.armado,
+        ocupantes: _familias(
+          [('5° A', 1, 44), ('5° B', 45, 88), ('5° C', 89, 132)],
+          semilla: 5,
+        ),
+      ),
+      capacidad: r.capacidad,
+    );
+  }
+
+  testWidgets('a medida: los tres estilos lado a lado, a 2 m', (tester) async {
+    final caso = aMedida(2.0);
+    await _guardar(
+      tester,
+      Container(
+        color: const Color(0xFF202124),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            for (final e in EstiloPlano.values) ...[
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: VistaPlano(
+                    armado: caso.armado,
+                    hoja: 'A',
+                    tema: TemaPlano.de(e),
+                    estado: caso.estado,
+                    animar: false,
+                    mostrarRegla: true,
+                    mostrarMedidas: true,
+                  ),
+                ),
+              ),
+              if (e != EstiloPlano.values.last) const SizedBox(width: 16),
+            ],
+          ],
+        ),
+      ),
+      const Size(2400, 720),
+      'Medida_3_estilos.png',
+    );
+  });
+
+  for (final e in EstiloPlano.values) {
+    testWidgets('${e.name}: a medida, a 2 m y a 2,5 m', (tester) async {
+      for (final lugar in const [2.0, 2.5]) {
+        final caso = aMedida(lugar);
+        final nombre = lugar == 2.0 ? '2m' : '2_5m';
+        await _guardar(
+          tester,
+          VistaPlano(
+            armado: caso.armado,
+            hoja: 'A',
+            tema: TemaPlano.de(e),
+            estado: caso.estado,
+            animar: false,
+            mostrarRegla: true,
+            mostrarMedidas: true,
+          ),
+          const Size(1400, 1225),
+          'Medida_${e.name}_$nombre.png',
+        );
+      }
+      // Para acomodar: el lugar que pide cada mesa, en rojo la que no lo tiene.
+      final caso = aMedida(2.0);
+      await _guardar(
+        tester,
+        VistaPlano(
+          armado: caso.armado,
+          hoja: 'A',
+          tema: TemaPlano.de(e),
+          estado: caso.estado,
+          animar: false,
+          mostrarRegla: true,
+          mostrarMedidas: true,
+          lugares: const MedidasPlano(),
+        ),
+        const Size(1400, 1225),
+        'Medida_${e.name}_lugares.png',
+      );
     });
   }
 }

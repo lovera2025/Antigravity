@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../core/utils/uuid_utils.dart';
 import '../features/plano/estilos/estilo_plano.dart';
 import '../features/plano/modelo/armado_salon.dart';
+import '../features/plano/modelo/medidas_salon.dart';
 
 /// Cómo se sortea la fiesta sobre su plano.
 enum ModoSorteo {
@@ -117,6 +118,11 @@ class ConfigPlano {
   final Map<String, int> colores;
   final String? titulo;
   final String? subtitulo;
+
+  /// Cuánto lugar pide cada mesa y cómo es el playón. Sin tocar, son las de
+  /// fábrica, y así no se guardan: si se corrige la medida del playón en el
+  /// programa, las fiestas que no la cambiaron la toman.
+  final MedidasPlano medidas;
   final Map<String, dynamic> otras;
 
   const ConfigPlano({
@@ -127,6 +133,7 @@ class ConfigPlano {
     this.colores = const {},
     this.titulo,
     this.subtitulo,
+    this.medidas = const MedidasPlano(),
     this.otras = const {},
   });
 
@@ -140,6 +147,7 @@ class ConfigPlano {
     'colores',
     'titulo',
     'subtitulo',
+    'medidas',
   };
 
   /// Las mesas fijadas, agrupadas por familia.
@@ -203,6 +211,7 @@ class ConfigPlano {
       colores: colores,
       titulo: _texto(m['titulo']),
       subtitulo: _texto(m['subtitulo']),
+      medidas: MedidasPlano.fromMap(m['medidas']),
       otras: {
         for (final e in m.entries)
           if (!_conocidas.contains(e.key)) e.key: e.value,
@@ -223,6 +232,7 @@ class ConfigPlano {
         'colores': colores,
         if (titulo != null) 'titulo': titulo,
         if (subtitulo != null) 'subtitulo': subtitulo,
+        if (medidas != const MedidasPlano()) 'medidas': medidas.toMap(),
       });
 
   ConfigPlano copyWith({
@@ -233,6 +243,7 @@ class ConfigPlano {
     Map<String, int>? colores,
     String? titulo,
     String? subtitulo,
+    MedidasPlano? medidas,
     bool borrarTitulo = false,
     bool borrarSubtitulo = false,
   }) =>
@@ -244,6 +255,7 @@ class ConfigPlano {
         colores: colores ?? this.colores,
         titulo: borrarTitulo ? null : (titulo ?? this.titulo),
         subtitulo: borrarSubtitulo ? null : (subtitulo ?? this.subtitulo),
+        medidas: medidas ?? this.medidas,
         otras: otras,
       );
 }

@@ -4,6 +4,7 @@ import '../dibujo/pintor_plano.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
+import '../modelo/medidas_salon.dart';
 
 /// Una hoja del plano, dibujada en un estilo, con las mesas tocables.
 ///
@@ -25,6 +26,9 @@ class VistaPlano extends StatefulWidget {
     this.progresoRuta = 1,
     this.animar = true,
     this.pulsoFijo = 0.35,
+    this.mostrarRegla = false,
+    this.mostrarMedidas = false,
+    this.lugares,
   });
 
   final ArmadoSalon armado;
@@ -43,6 +47,16 @@ class VistaPlano extends StatefulWidget {
   /// Si es false, el pulso queda quieto en [pulsoFijo] (tests y muestras).
   final bool animar;
   final double pulsoFijo;
+
+  /// La regla en metros, abajo a la izquierda.
+  final bool mostrarRegla;
+
+  /// Lo que mide cada lado del hormigón, en los armados a medida.
+  final bool mostrarMedidas;
+
+  /// Con las medidas de la fiesta, cada mesa lleva el círculo de lugar que
+  /// pide, en rojo si no lo tiene (para acomodar el salón).
+  final MedidasPlano? lugares;
 
   @override
   State<VistaPlano> createState() => _VistaPlanoState();
@@ -118,6 +132,9 @@ class _VistaPlanoState extends State<VistaPlano>
                   estado: widget.estado,
                   resaltadas: widget.resaltadas,
                   seleccionada: widget.seleccionada,
+                  regla: widget.mostrarRegla,
+                  cotas: widget.mostrarMedidas,
+                  lugares: widget.lugares,
                 ),
               ),
             ),

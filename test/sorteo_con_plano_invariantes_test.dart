@@ -10,6 +10,8 @@ import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/divisiones.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -177,6 +179,19 @@ void main() {
     'páginas 4-5': ArmadosPredefinidos.normal2aPaginas45(),
     '2A + 2B': ArmadosPredefinidos.normal2a2b(),
     'Técnica': ArmadosPredefinidos.tecnica1a1b(),
+    // A medida del playón: sin pasto, con el borde del hormigón y, a 2,5 m,
+    // con su propia distancia para decidir qué mesas están pegadas.
+    'a medida, 2 m': ArmarAMedida.armar(
+      const OpcionesAMedida(playon: PlayonReal.costaSurubi, cantidad: 150),
+    ).armado,
+    'a medida, 2,5 m, dos hojas': ArmarAMedida.armar(
+      const OpcionesAMedida(
+        playon: PlayonReal.costaSurubi,
+        cantidad: 150,
+        lugarM: 2.5,
+        partirEnFila: 6,
+      ),
+    ).armado,
   };
 
   group('mesas fijadas', () {

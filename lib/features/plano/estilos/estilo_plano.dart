@@ -47,6 +47,10 @@ class TemaPlano {
 
   /// Grilla de fondo (Arquitecto y Neón). Null: sin grilla.
   final Color? grilla;
+
+  /// El piso de hormigón del playón y su borde (armados a medida).
+  final Color hormigon;
+  final Color hormigonBorde;
   final Color sectorRelleno;
   final Color sectorBorde;
   final Color sectorTexto;
@@ -88,6 +92,8 @@ class TemaPlano {
     required this.estilo,
     required this.fondo,
     this.grilla,
+    required this.hormigon,
+    required this.hormigonBorde,
     required this.sectorRelleno,
     required this.sectorBorde,
     required this.sectorTexto,
@@ -132,6 +138,8 @@ class TemaPlano {
   static const gala = TemaPlano(
     estilo: EstiloPlano.gala,
     fondo: Color(0xFF0B0A0D),
+    hormigon: Color(0xFF131116),
+    hormigonBorde: Color(0xFF4F4026),
     sectorRelleno: Color(0xFF16130F),
     sectorBorde: Color(0xFF7A6238),
     sectorTexto: Color(0xFFC9AA6B),
@@ -171,6 +179,8 @@ class TemaPlano {
   static const arquitecto = TemaPlano(
     estilo: EstiloPlano.arquitecto,
     fondo: Color(0xFFF7F5F0),
+    hormigon: Color(0xFFFCFBF8),
+    hormigonBorde: Color(0xFF888780),
     grilla: Color(0xFFE6E3DA),
     sectorRelleno: Color(0xFFECE9E1),
     sectorBorde: Color(0xFFB4B2A9),
@@ -218,6 +228,8 @@ class TemaPlano {
   static const neon = TemaPlano(
     estilo: EstiloPlano.neon,
     fondo: Color(0xFF0A0F24),
+    hormigon: Color(0xFF0D1432),
+    hormigonBorde: Color(0xFF3A4585),
     grilla: Color(0xFF151C3D),
     sectorRelleno: Color(0xFF0E1433),
     sectorBorde: Color(0xFF5B52E0),

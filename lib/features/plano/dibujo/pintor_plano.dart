@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
+import '../modelo/medidas_salon.dart';
+import '../services/medir_salon.dart';
 
 /// Cómo se acomoda una hoja del plano en un rectángulo de pantalla: se escala
 /// para que entre entera y se centra.
@@ -111,8 +113,11 @@ OcupantePlano? familiaConApellido(InfoMesa info, NivelDetalle nivel) {
   Rect visible, {
   double paso = 50,
 }) {
+  // Por índice y no sumando el paso: con un paso que no es entero (un metro
+  // son 52,5 unidades) la suma arrastra el error y se come la última línea.
   List<double> eje(double desde, double hasta) => [
-        for (var v = (desde / paso).floor() * paso; v <= hasta; v += paso) v,
+        for (var i = (desde / paso).floor(); i * paso <= hasta + 1e-6; i++)
+          i * paso,
       ];
   return (
     xs: eje(visible.left, visible.right),
@@ -133,6 +138,9 @@ class PintorPlano extends CustomPainter {
     required this.estado,
     this.resaltadas = const {},
     this.seleccionada,
+    this.regla = false,
+    this.cotas = false,
+    this.lugares,
   });
 
   final ArmadoSalon armado;
@@ -142,7 +150,27 @@ class PintorPlano extends CustomPainter {
   final Set<int> resaltadas;
   final int? seleccionada;
 
+  /// La regla en metros, abajo a la izquierda.
+  final bool regla;
+
+  /// Lo que mide cada lado del hormigón (si la hoja trae su borde).
+  final bool cotas;
+
+  /// Con las medidas, cada mesa lleva dibujado el círculo de lugar que pide,
+  /// en rojo si no lo tiene. Null: no se dibujan.
+  final MedidasPlano? lugares;
+
   final Map<String, TextPainter> _textos = {};
+
+  /// Las mesas que no tienen el lugar que piden. Se calcula una sola vez por
+  /// pintor: el pintor se rehace cuando cambia el armado o el estado.
+  late final Set<int> _sinLugar = lugares == null
+      ? const {}
+      : MedirSalon.revisar(
+          armado,
+          lugares!,
+          (n) => estado.info(n).sillasExtra,
+        ).mesas;
 
   /// Lo que está en foco en esta hoja. Una familia resaltada en la otra hoja
   /// no apaga esta.
@@ -163,6 +191,9 @@ class PintorPlano extends CustomPainter {
 
     canvas.save();
     encuadre.aplicar(canvas);
+    final borde = h.contorno;
+    final piso = borde == null ? null : _camino(borde);
+    if (piso != null) canvas.drawPath(piso, Paint()..color = tema.hormigon);
     _grilla(
       canvas,
       Rect.fromPoints(
@@ -171,6 +202,7 @@ class PintorPlano extends CustomPainter {
       ),
       encuadre.escala,
     );
+    if (piso != null) _bordeHormigon(canvas, piso);
 
     final sectores = armado.sectoresDeHoja(hoja);
     final escena = [for (final s in sectores) if (_esEscena(s)) s];
@@ -185,6 +217,7 @@ class PintorPlano extends CustomPainter {
     }
 
     final mesas = armado.mesasDeHoja(hoja);
+    if (lugares != null && nivel.etiquetas) _lugares(canvas, mesas);
     if (_foco.isEmpty) {
       for (final m in mesas) {
         _mesa(canvas, m, nivel, h.caja);
@@ -212,7 +245,130 @@ class PintorPlano extends CustomPainter {
         if (_enFoco(m.numero)) _mesa(canvas, m, nivel, h.caja);
       }
     }
+    if (cotas && borde != null && nivel.etiquetas) {
+      _cotas(canvas, borde, sectores);
+    }
     canvas.restore();
+    if (regla) _regla(canvas, size, encuadre.escala);
+  }
+
+  // ── Medidas ─────────────────────────────────────────────────────────────
+
+  Path _camino(ContornoPlano borde) {
+    final camino = Path();
+    for (final (i, p) in borde.puntos.indexed) {
+      if (i == 0) {
+        camino.moveTo(p.x, p.y);
+      } else {
+        camino.lineTo(p.x, p.y);
+      }
+    }
+    return camino..close();
+  }
+
+  void _bordeHormigon(Canvas canvas, Path piso) {
+    if (tema.estilo == EstiloPlano.neon) {
+      _conBrillo(canvas, (p) => canvas.drawPath(piso, p),
+          color: tema.hormigonBorde, ancho: 2);
+    }
+    canvas.drawPath(
+      piso,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeJoin = StrokeJoin.round
+        ..color = tema.hormigonBorde,
+    );
+  }
+
+  /// El círculo que pide cada mesa (más grande si lleva sillas extra), en el
+  /// color del conflicto si no lo tiene.
+  void _lugares(Canvas canvas, List<MesaPlano> mesas) {
+    final medidas = lugares!;
+    for (final m in mesas) {
+      final mal = _sinLugar.contains(m.numero);
+      final r = armado
+          .aUnidades(medidas.lugarM(estado.info(m.numero).sillasExtra) / 2);
+      _circuloPunteado(
+        canvas,
+        Offset(m.x, m.y),
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = mal ? 3 : 1.4
+          ..strokeCap = StrokeCap.round
+          ..color = mal ? tema.conflicto : tema.mesaVacia,
+        segmentos: 28,
+      );
+    }
+  }
+
+  /// El largo de cada lado del hormigón, escrito del lado de afuera.
+  void _cotas(
+    Canvas canvas,
+    ContornoPlano borde,
+    List<SectorPlano> sectores,
+  ) {
+    var cx = 0.0, cy = 0.0;
+    for (final p in borde.puntos) {
+      cx += p.x / borde.puntos.length;
+      cy += p.y / borde.puntos.length;
+    }
+    for (final (a, b) in borde.lados) {
+      final dx = b.x - a.x;
+      final dy = b.y - a.y;
+      final largo = math.sqrt(dx * dx + dy * dy);
+      if (largo < 1) continue;
+      final medio = Offset((a.x + b.x) / 2, (a.y + b.y) / 2);
+      // La normal que apunta para afuera: la que se aleja del centro.
+      var normal = Offset(-dy / largo, dx / largo);
+      if ((medio.dx - cx) * normal.dx + (medio.dy - cy) * normal.dy < 0) {
+        normal = -normal;
+      }
+      final tp = _texto(
+        MedirSalon.metros(armado.aMetros(largo)),
+        26,
+        tema.sectorTexto,
+        peso: FontWeight.w600,
+      );
+      var centro = medio + normal * (20 + tp.height / 2);
+      if (normal.dx.abs() > 0.3) {
+        centro += Offset(normal.dx.sign * tp.width / 2, 0);
+      }
+      // Si cae sobre un sector (el escenario está pegado al frente), va del
+      // otro lado del sector.
+      for (final s in sectores) {
+        final r = _rect(s).inflate(4);
+        if (!r.contains(centro)) continue;
+        if (normal.dy < -0.9) {
+          centro = Offset(centro.dx, r.top - 6 - tp.height / 2);
+        } else if (normal.dy > 0.9) {
+          centro = Offset(centro.dx, r.bottom + 6 + tp.height / 2);
+        }
+      }
+      tp.paint(canvas, centro - Offset(tp.width / 2, tp.height / 2));
+    }
+  }
+
+  /// La regla, en píxeles de pantalla: mide lo mismo con cualquier zoom.
+  void _regla(Canvas canvas, Size size, double escala) {
+    // En una miniatura no entra.
+    if (size.width < 260 || size.height < 160) return;
+    final r = MedirSalon.reglaPara(escala, armado.metrosPorUnidad);
+    const margen = 16.0;
+    final y = size.height - margen;
+    final fin = margen + r.px;
+    final trazo = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.square
+      ..color = tema.titulo;
+    canvas.drawLine(Offset(margen, y), Offset(fin, y), trazo);
+    canvas.drawLine(Offset(margen, y - 6), Offset(margen, y), trazo);
+    canvas.drawLine(Offset(fin, y - 6), Offset(fin, y), trazo);
+    final tp = _texto(MedirSalon.metros(r.metros), 13, tema.titulo,
+        peso: FontWeight.w600);
+    tp.paint(canvas, Offset(fin + 8, y - tp.height + 3));
   }
 
   // ── Fondo y sectores ────────────────────────────────────────────────────
@@ -220,7 +376,8 @@ class PintorPlano extends CustomPainter {
   void _grilla(Canvas canvas, Rect visible, double escala) {
     final c = tema.grilla;
     if (c == null) return;
-    final lineas = lineasGrilla(visible);
+    // Un cuadro de la grilla es un metro.
+    final lineas = lineasGrilla(visible, paso: armado.aUnidades(1));
     // Una miniatura muy chica tendría cientos de líneas que no se distinguen.
     if (lineas.xs.length + lineas.ys.length > 600) return;
     final p = Paint()
@@ -356,6 +513,10 @@ class PintorPlano extends CustomPainter {
     final conSillas = tema.sillas && nivel.sillas;
 
     if (conSillas) _sillas(canvas, c, r, info, foco);
+    // Gala y Neón no dibujan las ocho sillas, pero las extra sí se marcan.
+    if (!tema.sillas && nivel.sillas && info.sillasExtra > 0) {
+      _sillasExtra(canvas, c, r, info);
+    }
 
     switch (tema.estilo) {
       case EstiloPlano.gala:
@@ -570,6 +731,17 @@ class PintorPlano extends CustomPainter {
     }
   }
 
+  /// Las sillas de más, como puntos a los costados de la mesa, en el color de
+  /// su división.
+  void _sillasExtra(Canvas canvas, Offset c, double r, InfoMesa info) {
+    final color = tema.colorDivision(info.division);
+    for (var i = 0; i < info.sillasExtra.clamp(0, 2); i++) {
+      final centro = c + Offset((i == 0 ? 1 : -1) * (r + 9), 0);
+      canvas.drawCircle(centro, 6, Paint()..color = tema.fondo);
+      canvas.drawCircle(centro, 4.5, Paint()..color = color);
+    }
+  }
+
   void _numero(
     Canvas canvas,
     MesaPlano m,
@@ -728,6 +900,9 @@ class PintorPlano extends CustomPainter {
       old.tema != tema ||
       old.estado != estado ||
       old.seleccionada != seleccionada ||
+      old.regla != regla ||
+      old.cotas != cotas ||
+      old.lugares != lugares ||
       !setEquals(old.resaltadas, resaltadas);
 }
 

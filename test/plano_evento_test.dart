@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
 
@@ -96,6 +97,45 @@ void main() {
       expect(c.libres.keys, {5});
       final vuelta = jsonDecode(c.toJson()) as Map;
       expect(vuelta['algo_de_diciembre'], {'ruta': [1, 2, 3]});
+    });
+
+    test('las medidas de fábrica no se guardan; las corregidas, sí', () {
+      expect(ConfigPlano.vacia.medidas, const MedidasPlano());
+      expect(ConfigPlano.vacia.medidas.playon, PlayonReal.costaSurubi);
+      expect(jsonDecode(ConfigPlano.vacia.toJson()) as Map,
+          isNot(contains('medidas')));
+
+      const corregidas = MedidasPlano(
+        lugarMesaM: 2.2,
+        extraPorSillaM: 0.2,
+        playon: PlayonReal(frenteM: 31.5, fondoM: 44, profundidadM: 40.2),
+      );
+      final c = ConfigPlano.vacia.copyWith(medidas: corregidas);
+      final vuelta = ConfigPlano.fromJson(c.toJson());
+      expect(vuelta.medidas, corregidas);
+      expect(vuelta.medidas.playon.aproximado, isFalse);
+      // Cambiar otra cosa no las pierde.
+      expect(vuelta.copyWith(titulo: 'x').medidas, corregidas);
+    });
+
+    test('unas medidas rotas o sin sentido quedan en las de fábrica', () {
+      for (final m in [
+        4,
+        'dos metros',
+        {'lugar': 'x', 'playon': 7},
+        {'lugar': 0.2, 'extra_silla': -1},
+        {'playon': {'frente': 30, 'fondo': 46}},
+        {'playon': {'frente': 30, 'fondo': 46, 'profundidad': 0}},
+      ]) {
+        final c = ConfigPlano.fromJson(jsonEncode({'medidas': m}));
+        expect(c.medidas, const MedidasPlano(), reason: '$m');
+      }
+      // Un dato malo no arrastra a los buenos.
+      final c = ConfigPlano.fromJson(jsonEncode({
+        'medidas': {'lugar': 2.4, 'playon': 'x'},
+      }));
+      expect(c.medidas.lugarMesaM, 2.4);
+      expect(c.medidas.playon, PlayonReal.costaSurubi);
     });
 
     test('un config roto o raro no rompe: queda vacío', () {

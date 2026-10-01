@@ -149,7 +149,135 @@ void main() {
       test('${a.clave}: la clave se encuentra', () {
         expect(ArmadosPredefinidos.porClave(a.clave)?.clave, a.clave);
       });
+
+      test('${a.clave}: mide en la escala del Canva y no lleva borde', () {
+        expect(a.metrosPorUnidad, kMetrosPorUnidadCanva);
+        expect(a.distanciaPegadas, isNull);
+        expect(a.diametroMesaM, closeTo(1.448, 0.001));
+        for (final h in a.hojas) {
+          expect(h.contorno, isNull, reason: 'hoja ${h.id}');
+        }
+      });
     }
+  });
+
+  group('las medidas del armado', () {
+    test('en el Canva, de centro a centro hay 2 m', () {
+      final a = ArmadosPredefinidos.normal2aPaginas45();
+      // 1 y 2 son vecinas de fila: 105 unidades.
+      expect(a.distanciaM(1, 2), closeTo(2.0, 1e-9));
+      expect(a.aMetros(105), closeTo(2.0, 1e-9));
+      expect(a.aUnidades(2.0), closeTo(105, 1e-9));
+    });
+
+    test('entre hojas distintas no hay distancia', () {
+      final a = ArmadosPredefinidos.normal2a2b();
+      expect(a.distanciaM(100, 101), isNull);
+      expect(a.distanciaM(1, 999), isNull);
+    });
+
+    test('un armado guardado sin escala se lee con la del Canva', () {
+      final json = ArmadosPredefinidos.normal2aPagina3().toJson()
+        ..remove('m_u');
+      final a = ArmadoSalon.fromJson(
+        jsonDecode(jsonEncode(json)) as Map<String, dynamic>,
+      );
+      expect(a.metrosPorUnidad, kMetrosPorUnidadCanva);
+      expect(a.cortes, isEmpty);
+    });
+
+    test('una escala o un borde mal escritos no rompen', () {
+      final json = ArmadosPredefinidos.normal2aPagina3().toJson()
+        ..['m_u'] = 'dos'
+        ..['pegadas_u'] = -4;
+      (json['hojas'] as List).first['borde'] = [
+        [1, 2],
+        'x',
+      ];
+      final a = ArmadoSalon.fromJson(
+        jsonDecode(jsonEncode(json)) as Map<String, dynamic>,
+      );
+      expect(a.metrosPorUnidad, kMetrosPorUnidadCanva);
+      expect(a.distanciaPegadas, isNull);
+      expect(a.hojas.first.contorno, isNull);
+    });
+
+    test('con su propia distancia de pegadas, los cortes salen de ahí', () {
+      ArmadoSalon armar(double? pegadas) => ArmadoSalon(
+            clave: 'x',
+            nombre: 'x',
+            distanciaPegadas: pegadas,
+            hojas: const [
+              HojaPlano(id: 'A', titulo: '', caja: RectPlano(0, 0, 900, 300)),
+            ],
+            mesas: const [
+              MesaPlano(numero: 1, hoja: 'A', x: 100, y: 100),
+              MesaPlano(numero: 2, hoja: 'A', x: 300, y: 100),
+            ],
+          );
+      // A 200 unidades: con la regla del Canva (4,2 radios = 159,6) hay corte.
+      expect(armar(null).cortes, {1});
+      expect(armar(210).cortes, isEmpty);
+    });
+  });
+
+  group('el borde del hormigón', () {
+    const borde = ContornoPlano([
+      (x: 100, y: 0),
+      (x: 300, y: 0),
+      (x: 400, y: 200),
+      (x: 0, y: 200),
+    ]);
+
+    test('sabe qué queda adentro', () {
+      expect(borde.contiene(200, 100), isTrue);
+      expect(borde.contiene(20, 20), isFalse);
+      expect(borde.contieneCirculo(200, 100, 38), isTrue);
+      // Adentro, pero el círculo cruza el costado inclinado.
+      expect(borde.contiene(70, 100), isTrue);
+      expect(borde.contieneCirculo(70, 100, 38), isFalse);
+      expect(borde.distanciaAlBorde(200, 30), closeTo(30, 1e-9));
+    });
+
+    test('ida y vuelta por JSON, con la hoja', () {
+      const h = HojaPlano(
+        id: 'A',
+        titulo: 'Playón',
+        caja: RectPlano(0, 0, 400, 200),
+        contorno: borde,
+      );
+      final vuelta = HojaPlano.fromJson(
+        jsonDecode(jsonEncode(h.toJson())) as Map<String, dynamic>,
+      );
+      expect(vuelta.contorno!.puntos, borde.puntos);
+    });
+
+    test('una mesa fuera del hormigón es un problema; la del pasto, no', () {
+      ArmadoSalon con(MesaPlano m) => ArmadoSalon(
+            clave: 'x',
+            nombre: 'x',
+            hojas: const [
+              HojaPlano(
+                id: 'A',
+                titulo: '',
+                caja: RectPlano(0, 0, 400, 200),
+                contorno: borde,
+              ),
+            ],
+            mesas: [m],
+          );
+      expect(con(const MesaPlano(numero: 1, hoja: 'A', x: 200, y: 100)).problemas(),
+          isEmpty);
+      expect(
+        con(const MesaPlano(numero: 1, hoja: 'A', x: 60, y: 60)).problemas().single,
+        contains('fuera del hormigón'),
+      );
+      expect(
+        con(const MesaPlano(numero: 1, hoja: 'A', x: 60, y: 60, pasto: true))
+            .problemas(),
+        isEmpty,
+      );
+    });
   });
 
   group('problemas()', () {
