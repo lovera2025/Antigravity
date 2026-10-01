@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 72;
+  static const int _version = 73;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -89,12 +89,18 @@ class LocalDatabase {
       );
     }
 
-    // Red por si la migración v72 no pudo crear sus tablas: es idempotente, así
-    // que en una base sana no hace nada.
+    // Red por si las migraciones v72 y v73 no pudieron crear sus tablas: son
+    // idempotentes, así que en una base sana no hacen nada. Cada una por su
+    // lado: si falla la de la v72, igual se intenta la de la v73.
     try {
       await crearTablasV72(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v72 sin crear: $e');
+    }
+    try {
+      await crearTablasV73(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v73 sin crear: $e');
     }
     return db;
   }
@@ -676,6 +682,7 @@ class LocalDatabase {
     );
 
     await crearTablasV72(db);
+    await crearTablasV73(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -750,6 +757,56 @@ class LocalDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sorteos_mesas_evento '
       'ON sorteos_mesas(evento_id, created_at)',
+    );
+  }
+
+  /// Las dos tablas de la v73: el plano de cada fiesta y los cambios de mesa.
+  ///
+  /// Mismo criterio que la v72: tablas **nuevas y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar ni una fila de lo que ya existe. El número de mesa
+  /// del alumno sigue en `contratos_alumnos.numero_mesa`, escrito por el mismo
+  /// camino de siempre; acá solo va lo que el plano agrega.
+  static Future<void> crearTablasV73(DatabaseExecutor db) async {
+    // Una fila por fiesta, con id fijo (`UuidUtils.planoEventoId`): las dos PCs
+    // escriben la misma. Lleva la copia del armado elegido (así un arreglo del
+    // armado de fábrica no le mueve las mesas a una fiesta ya sorteada), el
+    // estilo, cómo se sortea y, en `config`, las mesas fijas y libres, el orden
+    // de las divisiones, los bloques, los colores y los textos.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS planos_evento (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL UNIQUE,
+        armado TEXT NOT NULL,
+        armado_json TEXT NOT NULL,
+        estilo TEXT NOT NULL,
+        modo_sorteo TEXT NOT NULL,
+        config TEXT NOT NULL DEFAULT '{}',
+        hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    // Solo se agregan renglones: cada cambio o movida de familias deja uno, con
+    // cómo estaban, cómo quedaron y por qué. Deshacer agrega otro renglón.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mesas_movimientos (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        antes TEXT NOT NULL,
+        despues TEXT NOT NULL,
+        motivo TEXT NOT NULL,
+        deshace_id TEXT,
+        avisos TEXT,
+        hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_mesas_movimientos_evento '
+      'ON mesas_movimientos(evento_id, created_at)',
     );
   }
 
@@ -2945,21 +3002,47 @@ class LocalDatabase {
         debugPrint('  ❌ Error migración v72: $e');
       }
     }
+
+    // La guarda de `newVersion` no es decorativa: los tests y la herramienta de
+    // la v72 abren la base pidiendo la 72 con este mismo onUpgrade, y ahí no
+    // tienen que aparecer las tablas de la v73.
+    if (oldVersion < 73 && newVersion >= 73) {
+      debugPrint('  🔧 v73: el plano de cada fiesta y los cambios de mesa');
+      // Igual que la v72: solo tablas nuevas, sin tocar datos ni marcadores. Si
+      // fallara, la app abre igual y [_initDb] lo reintenta en cada arranque.
+      try {
+        await crearTablasV73(db);
+        debugPrint('✅ Migración v73 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v73: $e');
+      }
+    }
   }
 
   /// El mismo `onUpgrade` que usa la app, para probar la migración sin tocar la
-  /// base real: lo usan `test/migracion_v72_test.dart` y
-  /// `tool/verificar_migracion_v72_test.dart` (este último, sobre una copia).
+  /// base real: lo usan `test/migracion_v72_test.dart`,
+  /// `test/migracion_v73_test.dart` y las herramientas
+  /// `tool/verificar_migracion_v7X_test.dart` (estas, sobre una copia).
   static Future<void> Function(Database, int, int) get onUpgradeParaTest =>
       _onUpgrade;
 
-  /// Copia completa de la base **antes** de migrarla, una sola vez por salto.
+  /// Copia completa de la base **antes** de migrarla, cada vez que va a migrar.
   ///
   /// Abre la base sin pedir versión —así sqflite no corre ninguna migración—,
   /// mira en qué versión está y, si es anterior a [_version], hace un
   /// `VACUUM INTO` a `backups/antes_de_v<N>.db`. Es la misma técnica de la copia
   /// semanal ([BackupService]): copiar el archivo `.db` a mano puede dejar una
   /// copia cortada a la mitad de una escritura.
+  ///
+  /// **Una copia que ya existe no se pisa ni se da por buena.** Si la base
+  /// vuelve a estar en una versión anterior es porque se reinstaló la versión
+  /// vieja (y se siguió cobrando) o porque un arranque no terminó de migrar: en
+  /// los dos casos se saca otra, con la fecha y la hora en el nombre
+  /// (`antes_de_v<N>_2026-10-05_0930.db`). Así la copia más nueva tiene siempre
+  /// lo cobrado hasta el momento de migrar, y la primera queda como estaba.
+  ///
+  /// Se escribe a un `.tmp` y se renombra al terminar: si se corta la luz en el
+  /// medio, no queda una copia trunca con nombre de copia buena.
   ///
   /// Nunca tira. Si la copia no sale, la app sigue abriendo: trabar la caja
   /// sería peor, y la copia semanal existe igual.
@@ -2968,6 +3051,7 @@ class LocalDatabase {
     String path, {
     required DatabaseFactory factory,
     int versionNueva = _version,
+    DateTime? ahora,
   }) async {
     try {
       if (!await File(path).exists()) return null;
@@ -2979,14 +3063,23 @@ class LocalDatabase {
           '${File(path).parent.path}${Platform.pathSeparator}backups',
         );
         if (!await dir.exists()) await dir.create(recursive: true);
-        final destino = File(
-          '${dir.path}${Platform.pathSeparator}antes_de_v$versionNueva.db',
-        );
-        // Si ya hay una, es de un arranque anterior que no terminó de migrar:
-        // esa es la buena, la de antes de cualquier intento.
-        if (await destino.exists()) return destino;
-        final ruta = destino.path.replaceAll("'", "''");
+        final base = '${dir.path}${Platform.pathSeparator}antes_de_v$versionNueva';
+        var destino = File('$base.db');
+        if (await destino.exists()) {
+          final t = ahora ?? DateTime.now();
+          String dos(int n) => n.toString().padLeft(2, '0');
+          destino = File(
+            '${base}_${t.year}-${dos(t.month)}-${dos(t.day)}'
+            '_${dos(t.hour)}${dos(t.minute)}.db',
+          );
+          // Dos arranques en el mismo minuto: la de recién sirve.
+          if (await destino.exists()) return destino;
+        }
+        final tmp = File('${destino.path}.tmp');
+        if (await tmp.exists()) await tmp.delete();
+        final ruta = tmp.path.replaceAll("'", "''");
         await db.execute("VACUUM INTO '$ruta'");
+        await tmp.rename(destino.path);
         debugPrint('🛟 Copia antes de migrar a v$versionNueva: ${destino.path}');
         return destino;
       } finally {

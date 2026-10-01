@@ -143,6 +143,36 @@ dynamic valorParaSqlite(dynamic value) {
   return value;
 }
 
+/// Con cuántos intentos fallidos una entrada de la cola se considera trabada.
+const int intentosParaTrabado = 10;
+
+/// Qué entradas de la cola se intentan en esta pasada: las frescas siempre, y
+/// las trabadas solo cuando les toca el reintento, **todas juntas**.
+List<SyncQueueEntry> entradasDeEstaPasada(
+  Iterable<SyncQueueEntry> ordenadas, {
+  required bool tocaReintentarTrabados,
+}) =>
+    [
+      for (final e in ordenadas)
+        if (e.intentos < intentosParaTrabado || tocaReintentarTrabados) e,
+    ];
+
+/// Si una fila de `planos_evento` que bajó de la nube lleva el id fijo de su
+/// fiesta (`UuidUtils.planoEventoId`).
+///
+/// Las dos PCs escriben la misma fila porque el id sale de la fiesta. Una fila
+/// con otro id solo puede venir de una carga a mano en la nube: guardarla
+/// pisaría el plano de esta PC (la tabla local tiene `UNIQUE(evento_id)`) y
+/// después el sorteo no podría guardar el suyo.
+bool planoTraeIdFijo(Map<String, dynamic> fila) {
+  final id = fila['id'];
+  final evento = fila['evento_id'];
+  return id is String &&
+      evento is String &&
+      evento.isNotEmpty &&
+      id == UuidUtils.planoEventoId(evento);
+}
+
 /// Lo que hay que hacer cuando llega un pulso.
 class TrabajoDelPulso {
   /// Tablas a bajar. Solo las conocidas por el motor.
@@ -290,6 +320,8 @@ class SyncEngine {
     'sillas_reparto': 'updated_at',
     'entradas_retiro': 'updated_at',
     'sorteos_mesas': 'updated_at',
+    'planos_evento': 'updated_at',
+    'mesas_movimientos': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -877,6 +909,10 @@ class SyncEngine {
     'rentabilidad_config',
     'compromisos_personal',
     'sorteos_mesas',
+    // El plano de cada fiesta y los cambios de mesa: el pulso los trae en un
+    // segundo; esto es la red de seguridad si el aviso no llega.
+    'planos_evento',
+    'mesas_movimientos',
   ];
 
   /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
@@ -1131,6 +1167,8 @@ class SyncEngine {
       // arriba antes, o la FK de la nube rechaza la fila.
       if (table == 'sillas_reparto' || table == 'entradas_retiro') return 4;
       if (table == 'sorteos_mesas') return 2;
+      // Cuelgan del evento, como el registro del sorteo.
+      if (table == 'planos_evento' || table == 'mesas_movimientos') return 2;
       if (table == 'eventos_servicios' ||
           table == 'presupuesto_servicios' ||
           table == 'prestamo_alquiler_lineas') {
@@ -1172,14 +1210,26 @@ class SyncEngine {
     // Mantenemos un set de los IDs que están en esta cola para detectar dependencias pendientes
     final pendingIdsInQueue = pending.map((e) => e.registroId).toSet();
 
-    for (final entry in sortedPending) {
-      // Un registro que falló mucho NO se abandona: se reintenta espaciado.
-      // Antes se salteaba para siempre y, como el contador de pendientes
-      // tampoco lo mostraba, el cobro moría en el disco de esa PC sin que
-      // nadie se enterara (caso OSORIO 07/07, caso VALENTINA 18/04).
-      if (entry.intentos >= 10) {
-        if (!_tocaReintentarTrabados) continue;
-        _ultimoReintentoTrabados = DateTime.now();
+    // Un registro que falló mucho NO se abandona: se reintenta espaciado.
+    // Antes se salteaba para siempre y, como el contador de pendientes
+    // tampoco lo mostraba, el cobro moría en el disco de esa PC sin que
+    // nadie se enterara (caso OSORIO 07/07, caso VALENTINA 18/04).
+    //
+    // Si toca o no se decide **una vez por pasada**, antes de recorrer. Cuando
+    // se miraba adentro del bucle, el primer trabado sellaba la hora y los
+    // demás ya no entraban: se reintentaba uno solo cada cinco minutos, y como
+    // van por prioridad, uno que no puede subir nunca (una tabla que todavía no
+    // existe en la nube) le sacaba el turno para siempre a un pago trabado.
+    final aProcesar = entradasDeEstaPasada(
+      sortedPending,
+      tocaReintentarTrabados: _tocaReintentarTrabados,
+    );
+    if (aProcesar.any((e) => e.intentos >= intentosParaTrabado)) {
+      _ultimoReintentoTrabados = DateTime.now();
+    }
+
+    for (final entry in aProcesar) {
+      if (entry.intentos >= intentosParaTrabado) {
         debugPrint(
           '  ↻ Reintentando trabado: ${entry.tabla}/${entry.registroId} '
           '(${entry.intentos} intentos, último error: ${entry.ultimoError})',
@@ -1465,6 +1515,8 @@ class SyncEngine {
       _pullTable(db, 'sillas_reparto', 'updated_at'),
       _pullTable(db, 'entradas_retiro', 'updated_at'),
       _pullTable(db, 'sorteos_mesas', 'updated_at'),
+      _pullTable(db, 'planos_evento', 'updated_at'),
+      _pullTable(db, 'mesas_movimientos', 'updated_at'),
     ]);
 
     try {
@@ -1751,6 +1803,13 @@ class SyncEngine {
             skipped++;
             continue;
           }
+        }
+        // El plano de una fiesta lleva un id fijo. Uno con otro id (cargado a
+        // mano en la nube) pisaría el de esta PC por el UNIQUE de `evento_id`,
+        // y después el sorteo de esa fiesta no podría guardar: se saltea.
+        if (table == 'planos_evento' && !planoTraeIdFijo(row)) {
+          skipped++;
+          continue;
         }
 
         bool hasBadFk = false;
@@ -2398,6 +2457,32 @@ class SyncEngine {
         'tipo',
         'resultado',
         'alumnos',
+        'hecho_por',
+        'created_at',
+        'updated_at',
+      ],
+      // v73. Todas las columnas, por la misma razón que las de la v72.
+      'planos_evento': [
+        'id',
+        'evento_id',
+        'armado',
+        'armado_json',
+        'estilo',
+        'modo_sorteo',
+        'config',
+        'hecho_por',
+        'created_at',
+        'updated_at',
+      ],
+      'mesas_movimientos': [
+        'id',
+        'evento_id',
+        'tipo',
+        'antes',
+        'despues',
+        'motivo',
+        'deshace_id',
+        'avisos',
         'hecho_por',
         'created_at',
         'updated_at',

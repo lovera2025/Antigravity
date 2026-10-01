@@ -216,7 +216,8 @@ void main() {
     await db.close();
   });
 
-  test('antes de migrar queda una copia completa, una sola vez', () async {
+  test('antes de migrar queda una copia completa, y la primera no se pisa',
+      () async {
     await crearBaseV71();
     final original = await factory.openDatabase(path);
     final fotoOriginal = await foto(original);
@@ -239,15 +240,17 @@ void main() {
     expect(await abierta.getVersion(), 71);
     await abierta.close();
 
-    // La segunda vez no la pisa: la buena es la de antes de cualquier intento.
+    // La segunda vez no la pisa: saca otra aparte, con la fecha en el nombre
+    // (ver "la copia antes de migrar" en migracion_v73_test.dart).
     final modificada = copia.lastModifiedSync();
     final otraVez = await LocalDatabase.copiaAntesDeMigrar(
       path,
       factory: factory,
       versionNueva: 72,
+      ahora: DateTime(2026, 10, 7, 9, 30),
     );
-    expect(otraVez!.path, copia.path);
-    expect(otraVez.lastModifiedSync(), modificada);
+    expect(otraVez!.path, endsWith('antes_de_v72_2026-10-07_0930.db'));
+    expect(copia.lastModifiedSync(), modificada);
   });
 
   test('una base ya migrada no se copia', () async {

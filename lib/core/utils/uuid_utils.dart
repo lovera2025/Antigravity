@@ -75,6 +75,12 @@ class UuidUtils {
   static String entradasRetiroId(String contratoAlumnoId) =>
       _uuidDe('entradas_retiro_v1|$contratoAlumnoId');
 
+  /// PK estable para `planos_evento`: una fila por fiesta. Las dos PCs escriben
+  /// la misma fila; si fueran dos ids, la nube rechazaría la segunda por el
+  /// `unique (evento_id)` y la subida quedaría trabada.
+  static String planoEventoId(String eventoId) =>
+      _uuidDe('planos_evento_v1|$eventoId');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

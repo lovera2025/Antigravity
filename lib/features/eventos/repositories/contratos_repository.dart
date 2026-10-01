@@ -21,6 +21,10 @@ import '../services/cobro_abono_acumulado.dart';
 import '../services/mora_cuota_calculator.dart';
 import '../services/mora_tracked_recovery.dart';
 import '../../../models/mesa_extra_item.dart';
+import '../../../models/movimiento_mesas.dart';
+import '../../../models/plano_evento.dart';
+import '../../plano/repositories/mesas_movimientos_repository.dart';
+import '../../plano/repositories/planos_evento_repository.dart';
 import 'sorteos_mesas_repository.dart';
 
 /// Repositorio de Contratos de Alumnos (Eventos Masivos) ÔÇö Offline-First.
@@ -231,9 +235,16 @@ class ContratosRepository {
   /// [registro] es el renglón de `sorteos_mesas` que deja constancia de quién
   /// y cuándo: va en la misma transacción, así que no pueden quedar números sin
   /// su registro ni un registro sin sus números.
+  ///
+  /// Con el plano (v73) hay dos más, también en la misma transacción:
+  /// [movimiento] es el renglón de `mesas_movimientos` de un cambio de familias
+  /// (con su motivo), y [plano] es la fila del plano de la fiesta cuando el
+  /// sorteo guarda sus bloques.
   Future<void> asignarNumerosMesa(
     Map<String, String?> numeroPorContrato, {
     SorteoMesasRegistro? registro,
+    MovimientoMesas? movimiento,
+    PlanoEvento? plano,
   }) async {
     if (numeroPorContrato.isEmpty) return;
     final db = await LocalDatabase.instance;
@@ -243,6 +254,12 @@ class ContratosRepository {
       }
       if (registro != null) {
         await SorteosMesasRepository.registrarEn(txn, registro);
+      }
+      if (movimiento != null) {
+        await MesasMovimientosRepository.registrarEn(txn, movimiento);
+      }
+      if (plano != null) {
+        await PlanosEventoRepository.guardarEn(txn, plano);
       }
     });
   }

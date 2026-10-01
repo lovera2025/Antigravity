@@ -290,6 +290,8 @@ class SyncQueue {
         'eventos_servicios': 'evento_id',
         'calculos_rentabilidad': 'evento_id',
         'sorteos_mesas': 'evento_id',
+        'planos_evento': 'evento_id',
+        'mesas_movimientos': 'evento_id',
       },
       'presupuestos': {
         'presupuesto_servicios': 'presupuesto_id',
