@@ -17,6 +17,7 @@ import '../../models/nota_operativa_contrato.dart';
 import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
 import '../../models/plano_evento.dart';
+import '../plano/plano_evento_screen.dart';
 import '../plano/repositories/planos_evento_repository.dart';
 import '../plano/services/plano_para_sortear.dart';
 import '../plano/services/sorteo_con_plano.dart';
@@ -114,6 +115,10 @@ class _DetalleEventoMasivoScreenState
   /// Filtro "Sillas a confirmar": solo los que tienen que elegir.
   bool _soloSillasAConfirmar = false;
 
+  /// La fiesta ya tiene su plano: en la columna Mesa, los números se tocan y
+  /// lo abren con la familia resaltada.
+  bool _fiestaTienePlano = false;
+
   /// Las mesas y sillas de cada alumno con lo que pagó de cada cosa, leído de
   /// sus pagos ([ExtrasSegunPago]). Es lo que muestra la columna Mesa antes del
   /// sorteo y lo que filtra el chip "Mesas y sillas".
@@ -168,6 +173,7 @@ class _DetalleEventoMasivoScreenState
       tablas,
     ) {
       if (tablas.contains('sillas_reparto')) unawaited(_cargarRepartosSillas());
+      if (tablas.contains('planos_evento')) unawaited(_cargarSiHayPlano());
       // Un cobro que bajó de la otra PC cambia qué está pagado.
       if (tablas.contains('pagos_contrato_alumno')) {
         unawaited(_cargarPagosExtras());
@@ -368,6 +374,36 @@ class _DetalleEventoMasivoScreenState
     setState(() => _notasOperativasPorContrato = map);
     await _cargarRepartosSillas();
     await _cargarPagosExtras();
+    await _cargarSiHayPlano();
+  }
+
+  /// Si la fiesta tiene plano, según la base de esta PC. Si no se puede leer,
+  /// la grilla queda como siempre, sin el salto al plano.
+  Future<void> _cargarSiHayPlano() async {
+    if (!mounted) return;
+    try {
+      final plano = await ref
+          .read(planosEventoRepositoryProvider)
+          .obtener(widget.evento.id);
+      final tiene = plano?.armadoONull != null;
+      if (!mounted || tiene == _fiestaTienePlano) return;
+      setState(() => _fiestaTienePlano = tiene);
+    } catch (e) {
+      debugPrint('⚠️ No se pudo leer si la fiesta tiene plano: $e');
+    }
+  }
+
+  /// El plano del salón. Con [alumnoId], abre con esa familia resaltada.
+  Future<void> _abrirPlano({String? alumnoId}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlanoEventoScreen(
+          evento: widget.evento,
+          resaltarAlumnoId: alumnoId,
+        ),
+      ),
+    );
+    if (mounted) await _cargarSiHayPlano();
   }
 
   /// Lo cargado y lo pagado de mesas y sillas de cada alumno, y los avisos del
@@ -1224,6 +1260,8 @@ class _DetalleEventoMasivoScreenState
                   _modoSeleccionContratos = !_modoSeleccionContratos;
                   if (!_modoSeleccionContratos) _idsSeleccionContratos.clear();
                 });
+              case 'plano':
+                _abrirPlano();
               case 'planilla':
                 if (_alumnos.isNotEmpty) _generarPlanillaSorteo();
               case 'mora':
@@ -1274,6 +1312,16 @@ class _DetalleEventoMasivoScreenState
               ),
             ),
             const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'plano',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.table_restaurant_outlined, color: Colors.indigo),
+                title: Text('Plano del salón'),
+                subtitle: Text('El armado con sus medidas y cuántas mesas entran'),
+              ),
+            ),
             const PopupMenuItem<String>(
               value: 'planilla',
               child: ListTile(
@@ -2240,6 +2288,9 @@ class _DetalleEventoMasivoScreenState
                                     onElegirSillas: esBajaTemporal
                                         ? null
                                         : () => _elegirSillas(a),
+                                    onVerEnPlano: _fiestaTienePlano
+                                        ? () => _abrirPlano(alumnoId: a.id)
+                                        : null,
                                     extras: _extrasPorContrato[a.id],
                                     marcarPago: _filtroExtras.activo,
                                     ocultarMontos: _ocultarMontos,

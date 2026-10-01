@@ -13,7 +13,9 @@ import '../services/salon_mesas.dart';
 /// si no coinciden con la cuenta y sus sillas extra con su reparto
 /// ("2P · 1A"). Dice lo mismo que la Planilla, porque sale de [SalonMesas] y de
 /// [RepartoDeSillas]. Cuando hay más de una forma de repartir las sillas, el
-/// renglón de las sillas se toca y abre el selector ([onElegirSillas]).
+/// renglón de las sillas se toca y abre el selector ([onElegirSillas]). Si la
+/// fiesta tiene plano, los números se tocan y lo abren con la familia
+/// resaltada ([onVerEnPlano]).
 ///
 /// **Antes del sorteo:** cuántas mesas y sillas le corresponden. Todos tienen
 /// una mesa por contrato, así que lo que resalta es la agregada ("1 mesa
@@ -27,6 +29,10 @@ class CeldaMesaAlumno extends StatelessWidget {
   final bool compacto;
   final SillasReparto? reparto;
   final VoidCallback? onElegirSillas;
+
+  /// Abre el plano con esta familia resaltada. Null si la fiesta no tiene
+  /// plano: ahí los números no se tocan.
+  final VoidCallback? onVerEnPlano;
 
   /// Lo cargado y lo pagado, según sus pagos. Null mientras no se leyeron.
   final ExtrasSegunPago? extras;
@@ -48,6 +54,7 @@ class CeldaMesaAlumno extends StatelessWidget {
     this.compacto = false,
     this.reparto,
     this.onElegirSillas,
+    this.onVerEnPlano,
     this.extras,
     this.marcarPago = false,
     this.ocultarMontos = false,
@@ -122,9 +129,12 @@ class CeldaMesaAlumno extends StatelessWidget {
     final hayQueElegir =
         conNumeros && RepartoDeSillas.opcionesDe(alumno).length > 1;
     final e = extras;
+    // Con sus mesas sorteadas y la fiesta con plano, el número lleva al plano.
+    final verEnPlano = conNumeros && !baja ? onVerEnPlano : null;
 
     final detalle = [
       if (tieneMesa) 'Mesa: $texto' else 'Sin mesa asignada todavía.',
+      if (verEnPlano != null) 'Tocá el número para verla en el plano.',
       ?aviso,
       if (e != null && !baja) ..._detalleExtras(e),
       if (sillas > 0 && conNumeros)
@@ -213,6 +223,24 @@ class CeldaMesaAlumno extends StatelessWidget {
         children: [
           if (antesDelSorteo)
             ..._renglonesAntesDelSorteo(chico)
+          else if (verEnPlano != null)
+            InkWell(
+              key: const Key('ver_en_plano'),
+              onTap: verEnPlano,
+              borderRadius: BorderRadius.circular(6),
+              child: Text(
+                texto,
+                style: TextStyle(
+                  fontSize: compacto ? 11 : 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.indigo,
+                  decoration: TextDecoration.underline,
+                  decorationColor: Colors.indigo.shade200,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            )
           else
             Text(
               texto,

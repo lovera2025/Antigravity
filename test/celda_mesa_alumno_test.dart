@@ -36,6 +36,7 @@ Future<void> _mostrar(
   bool ocultarMontos = false,
   SillasReparto? reparto,
   VoidCallback? onElegirSillas,
+  VoidCallback? onVerEnPlano,
   List<String> avisos = const [],
   double ancho = 110,
 }) =>
@@ -49,6 +50,7 @@ Future<void> _mostrar(
                 alumno: a,
                 reparto: reparto,
                 onElegirSillas: onElegirSillas,
+                onVerEnPlano: onVerEnPlano,
                 extras: pago == null ? null : ExtrasSegunPago.de(a, pago),
                 marcarPago: marcarPago,
                 ocultarMontos: ocultarMontos,
@@ -293,6 +295,58 @@ void main() {
       );
       expect(_renglones(tester), ['12-13 (1 extra)', '+3 sillas: 2P · 1A']);
       expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    });
+  });
+
+  group('de la grilla al plano', () {
+    testWidgets('con plano y con mesas, el número se toca y lleva al plano',
+        (tester) async {
+      var veces = 0;
+      await _mostrar(
+        tester,
+        _alumno(extras: 1, mesas: [12, 13]),
+        onVerEnPlano: () => veces++,
+      );
+      expect(_renglones(tester).first, '12-13 (1 extra)');
+      await tester.tap(find.byKey(const Key('ver_en_plano')));
+      expect(veces, 1);
+      expect(_tooltip(tester), contains('verla en el plano'));
+    });
+
+    testWidgets('sin plano, el número no se toca', (tester) async {
+      await _mostrar(tester, _alumno(mesas: [12]));
+      expect(find.byKey(const Key('ver_en_plano')), findsNothing);
+      expect(_tooltip(tester), isNot(contains('en el plano')));
+    });
+
+    testWidgets('antes del sorteo no hay a dónde ir', (tester) async {
+      await _mostrar(tester, _alumno(extras: 1), onVerEnPlano: () {});
+      expect(find.byKey(const Key('ver_en_plano')), findsNothing);
+      expect(_renglones(tester).first, '1 mesa +1 extra');
+    });
+
+    testWidgets('una baja no lleva al plano', (tester) async {
+      await _mostrar(
+        tester,
+        _alumno(mesas: [12], baja: true),
+        onVerEnPlano: () {},
+      );
+      expect(find.byKey(const Key('ver_en_plano')), findsNothing);
+    });
+
+    testWidgets('tocar las sillas sigue abriendo el selector, no el plano',
+        (tester) async {
+      var plano = 0;
+      var sillas = 0;
+      await _mostrar(
+        tester,
+        _alumno(extras: 1, sillas: 3, mesas: [12, 13]),
+        onVerEnPlano: () => plano++,
+        onElegirSillas: () => sillas++,
+        ancho: 160,
+      );
+      await tester.tap(find.textContaining('a confirmar'));
+      expect((plano, sillas), (0, 1));
     });
   });
 
