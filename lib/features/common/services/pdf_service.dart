@@ -7924,6 +7924,10 @@ class PdfService {
   static Future<void> _verPdfEnWindows(Uint8List bytes, String filename) async {
     try {
       final path = await _guardarPdfEnDefault(bytes, filename);
+      // En `flutter test` el PDF se guarda pero no se abre: `Process.run` es
+      // de verdad también ahí, y cada test del recibo le abría al usuario una
+      // pestaña con un archivo temporal que el test borra al terminar.
+      if (Platform.environment.containsKey('FLUTTER_TEST')) return;
       await Process.run('cmd', ['/c', 'start', '', path]);
     } catch (e) {
       debugPrint('Error al abrir PDF en Windows: $e');
