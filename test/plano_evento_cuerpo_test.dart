@@ -54,19 +54,29 @@ ArmadoSalon _armado({int? partirEnFila}) => ArmarAMedida.armar(
       ),
     ).armado;
 
-PlanoDeLaFiesta _plano({ArmadoSalon? armado, ConfigPlano config = ConfigPlano.vacia}) =>
+/// Otra familia de dos mesas: con GÓMEZ sí puede cambiar de lugar.
+final _ruiz = _alumno('ruiz', 'RUIZ, TOMÁS',
+    extras: 1, mesas: [25, 26], division: '5° B');
+
+PlanoDeLaFiesta _plano({
+  ArmadoSalon? armado,
+  ConfigPlano config = ConfigPlano.vacia,
+  List<ContratoAlumno>? alumnos,
+}) =>
     PlanoDeLaFiesta.desde(
       armado: armado ?? _armado(),
       config: config,
-      alumnos: _alumnos,
+      alumnos: alumnos ?? _alumnos,
     );
 
 Future<void> _mostrar(
   WidgetTester tester, {
   PlanoDeLaFiesta? plano,
+  List<ContratoAlumno>? alumnos,
   String? resaltar,
+  bool ocupado = false,
   VoidCallback? onEstiloYArmado,
-  VoidCallback? onPersonalizar,
+  AccionesPlano? acciones,
   VoidCallback? onImprimir,
   VoidCallback? onHistorial,
 }) async {
@@ -78,12 +88,13 @@ Future<void> _mostrar(
       theme: ThemeData(fontFamily: FuentesPlano.linea, useMaterial3: true),
       home: Scaffold(
         body: PlanoEventoCuerpo(
-          plano: plano ?? _plano(),
+          plano: plano ?? _plano(alumnos: alumnos),
           estilo: EstiloPlano.arquitecto,
-          alumnos: _alumnos,
+          alumnos: alumnos ?? _alumnos,
           resaltarAlumnoId: resaltar,
+          ocupado: ocupado,
           onEstiloYArmado: onEstiloYArmado,
-          onPersonalizar: onPersonalizar,
+          acciones: acciones,
           onImprimir: onImprimir,
           onHistorial: onHistorial,
         ),
@@ -93,6 +104,18 @@ Future<void> _mostrar(
   await tester.pump();
   expect(tester.takeException(), isNull);
 }
+
+/// Las acciones de Personalizar, anotando en [tocados] lo que se pidió.
+AccionesPlano _acciones(List<String> tocados) => AccionesPlano(
+      onFijarEnMesa: (m) => tocados.add('fijar en $m'),
+      onFijar: (a, m) => tocados.add('fijar $a desde $m'),
+      onQuitarFijadas: (a) => tocados.add('quitar fijadas de $a'),
+      onQuitarFijadaDeMesa: (m) => tocados.add('quitar fijada de la $m'),
+      onDejarLibre: (m) => tocados.add('libre $m'),
+      onVolverAUsar: (m) => tocados.add('usar $m'),
+      onCambiar: (a, b) => tocados.add('cambiar $a con $b'),
+      onMover: (a, m) => tocados.add('mover $a a $m'),
+    );
 
 /// Los textos de la tarjeta de lo elegido.
 List<String> _elegido(WidgetTester tester) => [
@@ -370,6 +393,428 @@ void main() {
     });
   });
 
+  group('personalizar las mesas', () {
+    Future<void> prender(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+    }
+
+    String franja(WidgetTester tester) => tester
+        .widgetList<Text>(find.descendant(
+          of: find.byKey(const Key('franja_personalizar')),
+          matching: find.byType(Text),
+        ))
+        .first
+        .data!;
+
+    testWidgets('apagado, la pantalla solo muestra: no hay nada que tocar',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester, plano: _plano(armado: armado), acciones: _acciones([]));
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+      await _tocarMesa(tester, armado, 30);
+      expect(find.byKey(const Key('accion_dejar_libre')), findsNothing);
+      await _tocarMesa(tester, armado, 8);
+      expect(find.byKey(const Key('accion_mover')), findsNothing);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('sin acciones no hay botón PERSONALIZAR', (tester) async {
+      await _mostrar(tester, onEstiloYArmado: () {});
+      expect(find.byKey(const Key('personalizar')), findsNothing);
+    });
+
+    testWidgets('una mesa vacía se puede fijar o dejar libre', (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      expect(franja(tester),
+          'Personalizar las mesas: tocá una mesa o buscá una familia.');
+      await _tocarMesa(tester, armado, 30);
+      await tester.tap(find.byKey(const Key('accion_fijar_en_mesa')));
+      await tester.tap(find.byKey(const Key('accion_dejar_libre')));
+      expect(tocados, ['fijar en 30', 'libre 30']);
+      // De una mesa vacía no se mueve ni se cambia nada.
+      expect(find.byKey(const Key('accion_mover')), findsNothing);
+    });
+
+    testWidgets('mover: se elige la familia y después la mesa a donde va',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      expect(
+        franja(tester),
+        'Tocá la primera mesa para GÓMEZ: va a esa y a las que le siguen '
+        '(2 seguidas y libres).',
+      );
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, ['mover gomez a 30']);
+      // Ya no espera nada.
+      expect(franja(tester), startsWith('Personalizar las mesas'));
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('cambiar: hay que tocar una mesa de otra familia',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      final todos = [..._alumnos, _ruiz];
+      await _mostrar(tester,
+          plano: _plano(armado: armado, alumnos: todos),
+          alumnos: todos,
+          acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_cambiar')));
+      await tester.pump();
+      expect(franja(tester),
+          'Tocá una mesa de la familia con la que cambia GÓMEZ, o buscala.');
+
+      // Una vacía y la suya no sirven: lo dice y sigue esperando.
+      await _tocarMesa(tester, armado, 30);
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          'En esa mesa no hay ninguna familia. Para pasar a una mesa vacía '
+          'usá Mover.');
+      await _tocarMesa(tester, armado, 9);
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          contains('su propia mesa'));
+      // SOSA tiene una sola mesa: con ella no puede cambiar. Lo dice y sigue
+      // esperando.
+      await _tocarMesa(tester, armado, 20);
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          contains('tienen que tener la misma cantidad'));
+      expect(tocados, isEmpty);
+
+      await _tocarMesa(tester, armado, 25);
+      expect(tocados, ['cambiar gomez con ruiz']);
+      expect(find.byKey(const Key('pista')), findsNothing);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('cambiar: la otra familia también se puede buscar',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      final todos = [..._alumnos, _ruiz];
+      await _mostrar(tester,
+          plano: _plano(armado: armado, alumnos: todos),
+          alumnos: todos,
+          acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_cambiar')));
+      await tester.pump();
+      // Ella misma no sirve: lo dice.
+      await tester.enterText(find.byKey(const Key('buscar')), 'gomez');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_gomez')));
+      await tester.pump();
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          'Es la misma familia: elegí otra.');
+      await tester.enterText(find.byKey(const Key('buscar')), 'ruiz');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_ruiz')));
+      await tester.pump();
+      expect(tocados, ['cambiar gomez con ruiz']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('mover a un lugar que no sirve: dice por qué y sigue esperando',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      // La 19 y la 20: la 20 es de SOSA.
+      await _tocarMesa(tester, armado, 19);
+      expect(tocados, isEmpty);
+      expect(tester.widget<Text>(find.byKey(const Key('pista'))).data,
+          startsWith('La mesa 20 es de SOSA'));
+      expect(franja(tester), startsWith('Tocá la primera mesa para GÓMEZ'));
+      // "Elegí otra" es tocar otra, sin empezar de nuevo.
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, ['mover gomez a 30']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('mientras se espera, un aviso lleva a su mesa y no mueve a nadie',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 20);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      // El aviso de la mesa 8 (lleva diez sillas): se toca para ir a verla.
+      await tester.tap(find.byKey(const Key('aviso_0')));
+      await tester.pump();
+      expect(tocados, isEmpty);
+      expect(franja(tester), 'Tocá la mesa libre a donde va SOSA.');
+      expect(_elegido(tester).first, 'SOSA, LUZ');
+      expect(_zoom(tester), greaterThan(1.5));
+      // Lo mismo buscando una mesa por número.
+      await tester.enterText(find.byKey(const Key('buscar')), '30');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_mesa_30')));
+      await tester.pump();
+      expect(tocados, isEmpty);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('mientras se muda a una, buscar a otra no cambia a quién se muda',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('buscar')), 'sosa');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_sosa')));
+      await tester.pump();
+      // La tarjeta y la franja siguen hablando de GÓMEZ.
+      expect(_elegido(tester).first, 'GÓMEZ, SOFÍA');
+      expect(franja(tester), startsWith('Tocá la primera mesa para GÓMEZ'));
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, ['mover gomez a 30']);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('salir de Personalizar con algo a medias lo cancela',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      // El botón de abajo, que ahora dice SALIR DE PERSONALIZAR.
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, isEmpty);
+      expect(_elegido(tester).first, 'Mesa 30');
+    });
+
+    testWidgets('si la familia que se estaba mudando ya no está, deja de esperar',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      final acciones = _acciones(tocados);
+      await _mostrar(tester, plano: _plano(armado: armado), acciones: acciones);
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      expect(find.byKey(const Key('cancelar_espera')), findsOneWidget);
+
+      // Baja un cambio de la otra PC: GÓMEZ ya no está en la fiesta.
+      final sinGomez = [_alumnos[1], _alumnos[2]];
+      await _mostrar(
+        tester,
+        plano: _plano(armado: armado, alumnos: sinGomez),
+        alumnos: sinGomez,
+        acciones: acciones,
+      );
+      expect(find.byKey(const Key('cancelar_espera')), findsNothing);
+      expect(find.byKey(const Key('salir_personalizar')), findsOneWidget);
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, isEmpty);
+    });
+
+    testWidgets('mientras se guarda se ve, y no se puede empezar otro cambio',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      final acciones = _acciones(tocados);
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: acciones,
+          onEstiloYArmado: () => tocados.add('estilo'));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 30);
+      expect(find.byKey(const Key('guardando')), findsNothing);
+
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: acciones,
+          ocupado: true,
+          onEstiloYArmado: () => tocados.add('estilo'));
+      expect(find.byKey(const Key('guardando')), findsOneWidget);
+      // Los botones siguen en su lugar, apagados.
+      await tester.tap(find.byKey(const Key('accion_dejar_libre')),
+          warnIfMissed: false);
+      await tester.tap(find.byKey(const Key('estilo_y_armado')),
+          warnIfMissed: false);
+      expect(tocados, isEmpty);
+    });
+
+    testWidgets('una familia sin mesa dice cuáles tiene fijadas', (tester) async {
+      final armado = _armado();
+      await _mostrar(
+        tester,
+        plano: _plano(
+          armado: armado,
+          config: const ConfigPlano(fijadas: {
+            31: MesaFijada(alumnoId: 'vega'),
+            32: MesaFijada(alumnoId: 'vega'),
+          }),
+        ),
+        acciones: _acciones([]),
+      );
+      await prender(tester);
+      await tester.enterText(find.byKey(const Key('buscar')), 'vega');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_vega')));
+      await tester.pump();
+      expect(
+        tester.widget<Text>(find.byKey(const Key('fijadas_de_la_familia'))).data,
+        'Tiene fijadas la 31 y la 32.',
+      );
+      expect(find.text('Fijarle otras mesas'), findsOneWidget);
+      expect(find.text('Quitar sus mesas fijadas'), findsOneWidget);
+    });
+
+    testWidgets('una baja que conserva su mesa se ve, y no se la toca',
+        (tester) async {
+      final armado = _armado();
+      final conBaja = [
+        ..._alumnos,
+        _alumno('paz', '[BAJA] PAZ, IVÁN', mesas: [33]),
+      ];
+      await _mostrar(tester,
+          plano: _plano(armado: armado, alumnos: conBaja),
+          alumnos: conBaja,
+          acciones: _acciones([]));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 33);
+      expect(_elegido(tester).first, '[BAJA] PAZ, IVÁN');
+      expect(find.textContaining('Está de baja y conserva su mesa'), findsOneWidget);
+      expect(find.byKey(const Key('accion_mover')), findsNothing);
+      expect(find.byKey(const Key('accion_cambiar')), findsNothing);
+      await tester.tap(find.byKey(const Key('soltar')));
+      await tester.pump();
+    });
+
+    testWidgets('se puede cancelar lo que se estaba por hacer', (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await _tocarMesa(tester, armado, 8);
+      await tester.tap(find.byKey(const Key('accion_mover')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('cancelar_espera')));
+      await tester.pump();
+      // Ahora tocar una mesa la elige, no mueve a nadie.
+      await _tocarMesa(tester, armado, 30);
+      expect(tocados, isEmpty);
+      expect(_elegido(tester).first, 'Mesa 30');
+    });
+
+    testWidgets('a una familia sin mesa se le fijan desde donde se toca',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await tester.enterText(find.byKey(const Key('buscar')), 'vega');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('resultado_vega')));
+      await tester.pump();
+      // Sin mesa no hay qué mover ni qué cambiar.
+      expect(find.byKey(const Key('accion_mover')), findsNothing);
+      expect(find.byKey(const Key('accion_quitar_fijada')), findsNothing);
+      await tester.tap(find.byKey(const Key('accion_fijar')));
+      await tester.pump();
+      expect(franja(tester),
+          'Tocá la mesa donde empieza VEGA: se le fijan 2 mesas seguidas.');
+      await _tocarMesa(tester, armado, 31);
+      expect(tocados, ['fijar vega desde 31']);
+    });
+
+    testWidgets('una libre vuelve a usarse; una fijada se puede quitar',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(
+        tester,
+        plano: _plano(
+          armado: armado,
+          config: const ConfigPlano(
+            fijadas: {
+              31: MesaFijada(alumnoId: 'vega'),
+              32: MesaFijada(alumnoId: 'vega'),
+              // Para una familia que ya no está en la fiesta.
+              35: MesaFijada(alumnoId: 'fantasma'),
+            },
+            libres: {34: MesaLibre()},
+          ),
+        ),
+        acciones: _acciones(tocados),
+      );
+      await prender(tester);
+      await _tocarMesa(tester, armado, 34);
+      await tester.tap(find.byKey(const Key('accion_volver_a_usar')));
+      await _tocarMesa(tester, armado, 31);
+      await tester.tap(find.byKey(const Key('accion_quitar_fijada')));
+      await _tocarMesa(tester, armado, 35);
+      // No se dibuja como fijada, pero lo está: no se puede fijar ni dejar
+      // libre hasta quitarla.
+      expect(find.byKey(const Key('accion_dejar_libre')), findsNothing);
+      await tester.tap(find.byKey(const Key('accion_quitar_fijada')));
+      expect(tocados, [
+        'usar 34',
+        'quitar fijadas de vega',
+        'quitar fijada de la 35',
+      ]);
+    });
+
+    testWidgets('LISTO apaga Personalizar y lo que se estaba por hacer',
+        (tester) async {
+      final tocados = <String>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones(tocados));
+      await prender(tester);
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+      await _tocarMesa(tester, armado, 30);
+      expect(find.byKey(const Key('accion_dejar_libre')), findsNothing);
+      expect(tocados, isEmpty);
+    });
+  });
+
   group('los botones', () {
     testWidgets('solo aparecen los que tienen acción', (tester) async {
       var estilo = 0;
@@ -386,14 +831,15 @@ void main() {
       await _mostrar(
         tester,
         onEstiloYArmado: () => tocados.add('estilo'),
-        onPersonalizar: () => tocados.add('personalizar'),
+        acciones: _acciones(tocados),
         onImprimir: () => tocados.add('imprimir'),
         onHistorial: () => tocados.add('historial'),
       );
-      for (final k in ['estilo_y_armado', 'personalizar', 'imprimir', 'historial']) {
+      for (final k in ['estilo_y_armado', 'imprimir', 'historial']) {
         await tester.tap(find.byKey(Key(k)));
       }
-      expect(tocados, ['estilo', 'personalizar', 'imprimir', 'historial']);
+      expect(tocados, ['estilo', 'imprimir', 'historial']);
+      expect(find.byKey(const Key('personalizar')), findsOneWidget);
     });
   });
 
@@ -413,7 +859,7 @@ void main() {
               alumnos: _alumnos,
               mostrarLugares: true,
               onEstiloYArmado: () {},
-              onPersonalizar: () {},
+              acciones: _acciones([]),
               onImprimir: () {},
               onHistorial: () {},
             ),

@@ -69,15 +69,35 @@ void main() {
   });
 
   group('las familias en el plano', () {
-    test('solo las que ya tienen mesa, y nunca una baja', () {
+    test('las que ya tienen mesa, también una baja que la conserva', () {
       final o = PlanoDeLaFiesta.ocupantes([
         alumno('a', mesas: [3]),
         alumno('b'),
         alumno('c', mesas: [9], baja: true),
       ], const {});
-      expect(o.map((x) => x.id), ['a']);
-      expect(o.single.numeros, [3]);
-      expect(o.single.apellido, 'A');
+      // La baja conserva su lugar: el sorteo no da la 9 a nadie.
+      expect(o.map((x) => x.id), ['a', 'c']);
+      expect(o.first.numeros, [3]);
+      expect(o.first.apellido, 'A');
+    });
+
+    test('una baja con mesa se dibuja ocupada y se avisa para liberarla', () {
+      final p = PlanoDeLaFiesta.desde(
+        armado: pagina3,
+        config: ConfigPlano.vacia,
+        alumnos: [
+          alumno('a', mesas: [3]),
+          alumno('c', mesas: [9, 10], baja: true),
+        ],
+      );
+      expect(p.estado.info(9).estado, EstadoMesa.ocupada);
+      // No cuenta para las mesas que la fiesta necesita.
+      expect(p.mesasNecesarias, 1);
+      final a = p.avisos.single;
+      expect(a.texto,
+          'C, ALUMNO está de baja y conserva las mesas 9, 10: si no vuelve, '
+          'sacásela en Editar alumno.');
+      expect((a.mesa, a.grave), (9, false));
     });
 
     test('las sillas extra van a sus mesas según el reparto que rige hoy', () {

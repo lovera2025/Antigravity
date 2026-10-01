@@ -18,6 +18,9 @@ import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
 import '../../models/plano_evento.dart';
 import '../plano/plano_evento_screen.dart';
+import '../plano/repositories/mesas_movimientos_repository.dart';
+import '../plano/services/historial_sorteo.dart';
+import '../plano/widgets/cambio_de_mesa_dialogs.dart';
 import '../plano/repositories/planos_evento_repository.dart';
 import '../plano/services/plano_para_sortear.dart';
 import '../plano/services/sorteo_con_plano.dart';
@@ -390,6 +393,37 @@ class _DetalleEventoMasivoScreenState
       setState(() => _fiestaTienePlano = tiene);
     } catch (e) {
       debugPrint('⚠️ No se pudo leer si la fiesta tiene plano: $e');
+    }
+  }
+
+  /// El Historial de las mesas, para leer: los sorteos, los cambios con motivo,
+  /// las mesas fijas y libres, y lo que se tocó a mano. Para deshacer un cambio
+  /// hay que abrirlo desde el plano, que es donde se ve cómo queda.
+  Future<void> _abrirHistorialMesas() async {
+    try {
+      final eventoId = widget.evento.id;
+      final registros =
+          await ref.read(sorteosMesasRepositoryProvider).delEvento(eventoId);
+      final movimientos = await ref
+          .read(mesasMovimientosRepositoryProvider)
+          .delEvento(eventoId);
+      final plano =
+          await ref.read(planosEventoRepositoryProvider).obtener(eventoId);
+      if (!mounted) return;
+      await mostrarHistorialSorteo(
+        context: context,
+        historial: HistorialSorteo.armar(
+          registros: registros,
+          movimientos: movimientos,
+          config: plano?.config ?? ConfigPlano.vacia,
+          alumnos: _alumnos,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo abrir el historial: $e')),
+      );
     }
   }
 
@@ -1272,6 +1306,8 @@ class _DetalleEventoMasivoScreenState
                 _deshacerSorteoMesas();
               case 'restaurar':
                 _restaurarSorteoAnterior();
+              case 'historial':
+                _abrirHistorialMesas();
               case 'puerta':
                 _pasarListaPuerta();
               case 'retiro':
@@ -1391,6 +1427,16 @@ class _DetalleEventoMasivoScreenState
                   subtitle: Text('La copia guardada al deshacer'),
                 ),
               ),
+            const PopupMenuItem<String>(
+              value: 'historial',
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.history),
+                title: Text('Historial de las mesas'),
+                subtitle: Text('Quién sorteó o cambió una mesa, cuándo y por qué'),
+              ),
+            ),
             const PopupMenuDivider(),
             const PopupMenuItem<String>(
               value: 'puerta',
@@ -3574,8 +3620,13 @@ class _DetalleEventoMasivoScreenState
       final registros = await ref
           .read(sorteosMesasRepositoryProvider)
           .delEvento(widget.evento.id);
+      // Y los cambios de mesa hechos desde el plano, con su motivo: sin ellos
+      // contarían como "a mano".
+      final movimientos = await ref
+          .read(mesasMovimientosRepositoryProvider)
+          .delEvento(widget.evento.id);
       final lineaSorteo = RegistroSorteo.lineaParaPlanilla(
-        RegistroSorteo.resumir(registros, alumnos),
+        RegistroSorteo.resumir(registros, alumnos, movimientos: movimientos),
       );
       await PdfService.generarPlanillaSorteo(
         widget.evento,

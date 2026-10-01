@@ -137,15 +137,16 @@ class PlanoDeLaFiesta {
     );
   }
 
-  /// Las familias que ya tienen mesa. Las bajas no ocupan lugar.
+  /// Las familias que ya tienen mesa. **También las de baja**, que conservan
+  /// su lugar: el sorteo no da esa mesa a nadie, así que el plano tiene que
+  /// mostrarla ocupada (y avisa para que se libere si no vuelven).
   static List<OcupantePlano> ocupantes(
     Iterable<ContratoAlumno> alumnos,
     Map<String, SillasReparto> repartos,
   ) =>
       [
         for (final a in alumnos)
-          if (!a.esBajaTemporal && SalonMesas.tieneNumeros(a))
-            ocupanteDe(a, repartos[a.id]),
+          if (SalonMesas.tieneNumeros(a)) ocupanteDe(a, repartos[a.id]),
       ];
 
   factory PlanoDeLaFiesta.desde({
@@ -240,6 +241,18 @@ class PlanoDeLaFiesta {
     for (final n in estado.libresFueraDelPlano) {
       avisos.add(AvisoPlano(
         'La mesa $n está marcada como libre, pero este armado no la tiene.',
+      ));
+    }
+
+    for (final a in alumnos) {
+      if (!a.esBajaTemporal || !SalonMesas.tieneNumeros(a)) continue;
+      final mesas = MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa).toList()
+        ..sort();
+      avisos.add(AvisoPlano(
+        '${a.nombreAlumno.replaceFirst('[BAJA]', '').trim()} está de baja y '
+        'conserva ${mesas.length == 1 ? 'la mesa ${mesas.single}' : 'las mesas ${mesas.join(', ')}'}: '
+        'si no vuelve, sacásela en Editar alumno.',
+        mesa: armado.existe(mesas.first) ? mesas.first : null,
       ));
     }
 

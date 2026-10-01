@@ -8,7 +8,10 @@
 //   • Pantalla_plano_<estilo>.png: la pantalla con una familia elegida;
 //   • Pantalla_plano_faltan.png: un armado donde la fiesta no entra;
 //   • Pasos_plano.png: la primera vez, con todo ya elegido;
-//   • Pasos_plano_trabado.png: con familias ya sentadas.
+//   • Pasos_plano_trabado.png: con familias ya sentadas;
+//   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, y
+//     el momento de tocar a dónde se muda;
+//   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
 
@@ -30,11 +33,16 @@ import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
+import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
+import 'package:arguello_events/features/plano/services/historial_sorteo.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
+import 'package:arguello_events/features/plano/widgets/cambio_de_mesa_dialogs.dart';
 import 'package:arguello_events/features/plano/widgets/elegir_plano_dialog.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
@@ -91,8 +99,9 @@ Future<void> _guardar(
   WidgetTester tester,
   Widget pantalla,
   Size tam,
-  String archivo,
-) async {
+  String archivo, {
+  Future<void> Function()? antes,
+}) async {
   final clave = GlobalKey();
   tester.view.physicalSize = tam * 2;
   tester.view.devicePixelRatio = 2;
@@ -109,6 +118,11 @@ Future<void> _guardar(
     ),
   );
   await tester.pump();
+  // Lo que haya que tocar antes de la foto (prender Personalizar, elegir).
+  if (antes != null) {
+    await antes();
+    await tester.pump();
+  }
   expect(tester.takeException(), isNull);
   await tester.runAsync(() async {
     final boundary =
@@ -126,6 +140,7 @@ Widget _pantalla(
   List<ContratoAlumno> alumnos,
   EstiloPlano estilo, {
   String? resaltar,
+  AccionesPlano? acciones,
 }) =>
     Scaffold(
       appBar: AppBar(
@@ -154,8 +169,22 @@ Widget _pantalla(
         alumnos: alumnos,
         resaltarAlumnoId: resaltar,
         onEstiloYArmado: () {},
+        acciones: acciones,
+        onHistorial: () {},
       ),
     );
+
+/// Acciones que no hacen nada: la muestra solo dibuja.
+final _sinHacer = AccionesPlano(
+  onFijarEnMesa: (_) {},
+  onFijar: (_, _) {},
+  onQuitarFijadas: (_) {},
+  onQuitarFijadaDeMesa: (_) {},
+  onDejarLibre: (_) {},
+  onVolverAUsar: (_) {},
+  onCambiar: (_, _) {},
+  onMover: (_, _) {},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -220,6 +249,137 @@ void main() {
       ),
       const Size(1200, 1000),
       'Pasos_plano.png',
+    );
+  });
+
+  testWidgets('personalizar: una familia elegida y lo que se le puede hacer',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(
+        aMedida,
+        escuela,
+        EstiloPlano.arquitecto,
+        resaltar: elegida.id,
+        acciones: _sinHacer,
+      ),
+      const Size(1440, 900),
+      'Personalizar_familia.png',
+      antes: () => tester.tap(find.byKey(const Key('personalizar'))),
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: tocar a dónde se muda la familia', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(
+        aMedida,
+        escuela,
+        EstiloPlano.arquitecto,
+        resaltar: elegida.id,
+        acciones: _sinHacer,
+      ),
+      const Size(1440, 900),
+      'Personalizar_mover.png',
+      antes: () async {
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('accion_mover')));
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('el diálogo que confirma un cambio', (tester) async {
+    await _guardar(
+      tester,
+      const Scaffold(
+        backgroundColor: Color(0xFF5F6368),
+        body: ConfirmarCambioDialog(
+          titulo: 'ACOSTA y BENÍTEZ cambian de lugar',
+          renglones: [
+            'ACOSTA: 44, 45 → 12, 13',
+            'BENÍTEZ: 12, 13 → 44, 45',
+          ],
+          avisos: [
+            'Son de divisiones distintas: 5° B y 5° A.',
+            'BENÍTEZ ya retiró sus entradas: hay que avisarle y reimprimir la '
+                'planilla de entrega.',
+          ],
+          sugerencias: motivosParaCambiar,
+          hayQueAvisarALaFamilia: true,
+          textoConfirmar: 'CAMBIAR',
+        ),
+      ),
+      const Size(760, 620),
+      'Confirmar_cambio.png',
+    );
+  });
+
+  testWidgets('el Historial de las mesas', (tester) async {
+    final sorteo = DateTime.utc(2026, 11, 13, 0, 40);
+    final a = escuela[0];
+    final b = escuela[1];
+    final c = escuela[2];
+    final historial = HistorialSorteo.armar(
+      registros: [
+        SorteoMesasRegistro(
+          id: 's1',
+          eventoId: 'e',
+          tipo: TipoRegistroSorteo.sorteo,
+          resultado: {
+            for (final x in escuela)
+              x.id: x.id == a.id
+                  ? '90'
+                  : x.id == c.id
+                      ? '77'
+                      : (x.numeroMesa ?? ''),
+          },
+          hechoPor: 'Jefe',
+          createdAt: sorteo,
+        ),
+      ],
+      movimientos: [
+        MovimientoMesas(
+          id: 'm1',
+          eventoId: 'e',
+          tipo: TipoMovimientoMesas.mover,
+          antes: {a.id: '90'},
+          despues: {a.id: a.numeroMesa},
+          motivo: 'Movilidad reducida',
+          hechoPor: 'Operador',
+          createdAt: sorteo.add(const Duration(days: 2, hours: 14)),
+        ),
+      ],
+      config: ConfigPlano(
+        fijadas: {
+          for (final n in CambiosDeMesa.numerosDe(b))
+            n: MesaFijada(
+              alumnoId: b.id,
+              motivo: 'Cerca del ingreso',
+              por: 'Jefe',
+              cuando: sorteo.subtract(const Duration(days: 3)),
+            ),
+        },
+        libres: {
+          120: MesaLibre(
+            motivo: 'Columna',
+            por: 'Jefe',
+            cuando: sorteo.subtract(const Duration(days: 3, hours: 1)),
+          ),
+        },
+      ),
+      alumnos: escuela,
+    );
+    await _guardar(
+      tester,
+      Scaffold(
+        backgroundColor: const Color(0xFF5F6368),
+        body: HistorialSorteoDialog(historial: historial, onDeshacer: (_) {}),
+      ),
+      const Size(820, 760),
+      'Historial_mesas.png',
     );
   });
 

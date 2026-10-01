@@ -8,10 +8,43 @@ import '../../eventos/services/salon_mesas.dart';
 import '../dibujo/pintor_plano.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/estado_plano.dart';
+import '../services/cambios_de_mesa.dart';
 import '../services/divisiones.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
 import 'vista_plano.dart';
+
+/// Lo que se puede hacer con las mesas desde Personalizar. La pantalla avisa
+/// qué se tocó; quien la usa calcula, pide el motivo y guarda.
+class AccionesPlano {
+  /// Fijar desde una mesa vacía: falta elegir para qué familia.
+  final void Function(int mesa) onFijarEnMesa;
+
+  /// Fijarle a una familia sus mesas, desde la que se tocó en el plano.
+  final void Function(String alumnoId, int desdeMesa) onFijar;
+  final void Function(String alumnoId) onQuitarFijadas;
+
+  /// La fijada de una mesa cuya familia ya no está en la fiesta.
+  final void Function(int mesa) onQuitarFijadaDeMesa;
+  final void Function(int mesa) onDejarLibre;
+  final void Function(int mesa) onVolverAUsar;
+  final void Function(String alumnoId, String otroId) onCambiar;
+  final void Function(String alumnoId, int desdeMesa) onMover;
+
+  const AccionesPlano({
+    required this.onFijarEnMesa,
+    required this.onFijar,
+    required this.onQuitarFijadas,
+    required this.onQuitarFijadaDeMesa,
+    required this.onDejarLibre,
+    required this.onVolverAUsar,
+    required this.onCambiar,
+    required this.onMover,
+  });
+}
+
+/// Lo que Personalizar está esperando que se toque en el plano.
+enum _Espera { mover, fijar, cambiar }
 
 /// La pantalla del plano, sin base ni Riverpod: recibe el plano ya calculado
 /// ([PlanoDeLaFiesta]) y avisa lo que se toca. Así se prueba y se dibuja en
@@ -22,6 +55,9 @@ import 'vista_plano.dart';
 /// - A la derecha: el buscador, la familia o la mesa elegida, las divisiones y
 ///   los avisos. Cada aviso se toca y lleva a su mesa.
 /// - Abajo: los botones. El que no tiene acción no se muestra.
+///
+/// Con [acciones], PERSONALIZAR prende el modo de tocar las mesas: mientras
+/// está apagado la pantalla solo muestra, y nadie cambia una mesa sin querer.
 class PlanoEventoCuerpo extends StatefulWidget {
   final PlanoDeLaFiesta plano;
   final EstiloPlano estilo;
@@ -40,8 +76,13 @@ class PlanoEventoCuerpo extends StatefulWidget {
   /// Dibujar el círculo de lugar de cada mesa (para acomodar el salón).
   final bool mostrarLugares;
 
+  /// Se está guardando un cambio: se ve una barra y no se puede empezar otro.
+  final bool ocupado;
+
   final VoidCallback? onEstiloYArmado;
-  final VoidCallback? onPersonalizar;
+
+  /// Fijar, dejar libres, cambiar y mover. Null: no hay PERSONALIZAR.
+  final AccionesPlano? acciones;
   final VoidCallback? onImprimir;
   final VoidCallback? onHistorial;
 
@@ -53,8 +94,9 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.repartos = const {},
     this.resaltarAlumnoId,
     this.mostrarLugares = false,
+    this.ocupado = false,
     this.onEstiloYArmado,
-    this.onPersonalizar,
+    this.acciones,
     this.onImprimir,
     this.onHistorial,
   });
@@ -72,6 +114,16 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   String? _alumnoElegido;
   int? _mesaElegida;
   Size _tamPlano = Size.zero;
+
+  /// Personalizar está prendido: lo elegido muestra qué se puede hacer.
+  bool _personalizando = false;
+
+  /// Se eligió una acción que necesita un toque más en el plano (a dónde va la
+  /// familia, o con cuál cambia).
+  ({_Espera que, String alumnoId})? _esperando;
+
+  /// Lo que se le dice si tocó algo que no sirve para lo que se espera.
+  String? _pista;
 
   PlanoDeLaFiesta get _plano => widget.plano;
 
@@ -99,6 +151,21 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     }
     final mesa = _mesaElegida;
     if (mesa != null && !_plano.armado.existe(mesa)) _mesaElegida = null;
+    // Lo que se estaba por hacer puede haber dejado de tener sentido con lo
+    // que bajó de la otra PC: la familia ya no está, o ya no tiene (o ya
+    // tiene) mesa.
+    final espera = _esperando;
+    if (espera != null) {
+      final a = _alumno(espera.alumnoId);
+      final conMesa = a != null && CambiosDeMesa.numerosDe(a).isNotEmpty;
+      final sigue = a != null &&
+          !a.esBajaTemporal &&
+          (espera.que == _Espera.fijar ? !conMesa : conMesa);
+      if (!sigue) {
+        _esperando = null;
+        _pista = null;
+      }
+    }
   }
 
   @override
@@ -137,6 +204,72 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
 
   void _elegirMesa(int numero) {
     final info = _plano.estado.info(numero);
+    final espera = _esperando;
+    final acciones = widget.acciones;
+    if (espera != null && acciones != null) {
+      switch (espera.que) {
+        // Si ahí no se puede, se dice por qué y se sigue esperando: así
+        // "elegí otra" es tocar otra, sin empezar de nuevo.
+        case _Espera.mover:
+          final problema = CambiosDeMesa.mover(
+            armado: _plano.armado,
+            config: _plano.config,
+            alumnos: widget.alumnos,
+            alumnoId: espera.alumnoId,
+            desdeMesa: numero,
+          ).problema;
+          if (problema != null) {
+            setState(() => _pista = problema);
+            return;
+          }
+          _dejarDeEsperar();
+          acciones.onMover(espera.alumnoId, numero);
+        case _Espera.fijar:
+          final problema = CambiosDeMesa.fijar(
+            armado: _plano.armado,
+            config: _plano.config,
+            alumnos: widget.alumnos,
+            alumnoId: espera.alumnoId,
+            desdeMesa: numero,
+            // El motivo se pide después: acá solo se mira si el lugar sirve.
+            motivo: '-',
+            por: null,
+            ahora: DateTime.now(),
+          ).problema;
+          if (problema != null) {
+            setState(() => _pista = problema);
+            return;
+          }
+          _dejarDeEsperar();
+          acciones.onFijar(espera.alumnoId, numero);
+        case _Espera.cambiar:
+          final otro = info.ocupantes.isEmpty ? null : info.ocupantes.first.id;
+          if (otro == null) {
+            setState(() => _pista = 'En esa mesa no hay ninguna familia. '
+                'Para pasar a una mesa vacía usá Mover.');
+          } else if (otro == espera.alumnoId) {
+            setState(() => _pista = 'Esa es su propia mesa: tocá una de otra '
+                'familia.');
+          } else {
+            // Si con esa no se puede (tiene otra cantidad de mesas, está de
+            // baja), se dice y se sigue esperando.
+            final problema = CambiosDeMesa.intercambiar(
+              armado: _plano.armado,
+              config: _plano.config,
+              alumnos: widget.alumnos,
+              alumnoId: espera.alumnoId,
+              otroId: otro,
+            ).problema;
+            if (problema != null) {
+              setState(() => _pista = problema);
+              return;
+            }
+            _dejarDeEsperar();
+            acciones.onCambiar(espera.alumnoId, otro);
+          }
+      }
+      return;
+    }
     setState(() {
       if (info.ocupantes.isNotEmpty) {
         _alumnoElegido = info.ocupantes.first.id;
@@ -149,6 +282,45 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   }
 
   void _elegirFamilia(String id) {
+    final espera = _esperando;
+    final acciones = widget.acciones;
+    if (espera != null && acciones != null) {
+      if (espera.que != _Espera.cambiar) {
+        // Buscando a dónde mudar (o fijar) una familia: el buscador solo lleva
+        // la vista a la otra. Lo elegido sigue siendo la que se muda, y el
+        // lugar se toca en el plano.
+        setState(_busqueda.clear);
+        final mesa = _ocupante(id)?.principal;
+        if (mesa != null) _irA(mesa, elegir: false);
+        return;
+      }
+      // Buscando con quién cambia: la familia elegida en el buscador es esa.
+      if (id == espera.alumnoId) {
+        setState(() => _pista = 'Es la misma familia: elegí otra.');
+        return;
+      }
+      final problema = CambiosDeMesa.intercambiar(
+        armado: _plano.armado,
+        config: _plano.config,
+        alumnos: widget.alumnos,
+        alumnoId: espera.alumnoId,
+        otroId: id,
+      ).problema;
+      if (problema != null) {
+        setState(() {
+          _pista = problema;
+          _busqueda.clear();
+        });
+        return;
+      }
+      setState(() {
+        _esperando = null;
+        _pista = null;
+        _busqueda.clear();
+      });
+      acciones.onCambiar(espera.alumnoId, id);
+      return;
+    }
     setState(() {
       _alumnoElegido = id;
       _mesaElegida = null;
@@ -161,6 +333,24 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   void _soltar() => setState(() {
         _alumnoElegido = null;
         _mesaElegida = null;
+        _esperando = null;
+        _pista = null;
+      });
+
+  void _esperar(_Espera que, String alumnoId) => setState(() {
+        _esperando = (que: que, alumnoId: alumnoId);
+        _pista = null;
+      });
+
+  void _dejarDeEsperar() => setState(() {
+        _esperando = null;
+        _pista = null;
+      });
+
+  void _salirDePersonalizar() => setState(() {
+        _personalizando = false;
+        _esperando = null;
+        _pista = null;
       });
 
   // ── Zoom ────────────────────────────────────────────────────────────────
@@ -214,6 +404,23 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     return Column(
       children: [
         _encabezado(context),
+        if (widget.ocupado)
+          const Padding(
+            key: Key('guardando'),
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('Guardando…'),
+              ],
+            ),
+          ),
+        if (_personalizando) _franjaPersonalizar(context),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,6 +433,155 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         _botones(context),
       ],
     );
+  }
+
+  /// Qué se está haciendo en Personalizar y qué hay que tocar ahora.
+  Widget _franjaPersonalizar(BuildContext context) {
+    final tema = Theme.of(context);
+    final espera = _esperando;
+    final alumno = espera == null ? null : _alumno(espera.alumnoId);
+    final String texto;
+    if (espera == null || alumno == null) {
+      texto = 'Personalizar las mesas: tocá una mesa o buscá una familia.';
+    } else {
+      final quien = CambiosDeMesa.apellido(alumno);
+      texto = switch (espera.que) {
+        _Espera.mover => () {
+            final n = CambiosDeMesa.numerosDe(alumno).length;
+            return n == 1
+                ? 'Tocá la mesa libre a donde va $quien.'
+                : 'Tocá la primera mesa para $quien: va a esa y a las que le '
+                    'siguen ($n seguidas y libres).';
+          }(),
+        _Espera.fijar => () {
+            final n = SalonMesas.mesas(alumno);
+            return 'Tocá la mesa donde empieza $quien: se le '
+                '${n == 1 ? 'fija 1 mesa' : 'fijan $n mesas seguidas'}.';
+          }(),
+        _Espera.cambiar =>
+          'Tocá una mesa de la familia con la que cambia $quien, o buscala.',
+      };
+    }
+    return Container(
+      key: const Key('franja_personalizar'),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: tema.colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: tema.colorScheme.primary),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.tune, size: 18, color: tema.colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(texto, style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (_pista != null)
+                  Text(
+                    _pista!,
+                    key: const Key('pista'),
+                    style: TextStyle(color: Colors.orange.shade800),
+                  ),
+              ],
+            ),
+          ),
+          if (espera != null)
+            TextButton(
+              key: const Key('cancelar_espera'),
+              onPressed: () => setState(() {
+                _esperando = null;
+                _pista = null;
+              }),
+              child: const Text('CANCELAR'),
+            )
+          else
+            TextButton(
+              key: const Key('salir_personalizar'),
+              onPressed: _salirDePersonalizar,
+              child: const Text('LISTO'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Lo que se puede hacer con lo elegido, mientras Personalizar está
+  /// prendido.
+  List<Widget> _accionesDeLoElegido() {
+    final acciones = widget.acciones;
+    if (!_personalizando || acciones == null) return const [];
+    Widget boton(String clave, String texto, IconData icono, VoidCallback f) =>
+        OutlinedButton.icon(
+          key: Key(clave),
+          onPressed: widget.ocupado ? null : f,
+          icon: Icon(icono, size: 16),
+          label: Text(texto),
+          style: OutlinedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+          ),
+        );
+    final botones = <Widget>[];
+    final alumno = _alumno(_alumnoElegido);
+    final mesa = _mesaElegida;
+    if (alumno != null) {
+      if (alumno.esBajaTemporal) return const [];
+      final conMesa = CambiosDeMesa.numerosDe(alumno).isNotEmpty;
+      final fijadas =
+          _plano.config.fijadasPorAlumno[alumno.id] ?? const <int>[];
+      if (conMesa) {
+        botones.addAll([
+          boton('accion_cambiar', 'Cambiar con otra familia', Icons.swap_horiz,
+              () => _esperar(_Espera.cambiar, alumno.id)),
+          boton('accion_mover', 'Mover a otras mesas', Icons.open_with,
+              () => _esperar(_Espera.mover, alumno.id)),
+        ]);
+      } else {
+        botones.add(boton(
+          'accion_fijar',
+          fijadas.isEmpty ? 'Fijarle mesas' : 'Fijarle otras mesas',
+          Icons.lock_outline,
+          () => _esperar(_Espera.fijar, alumno.id),
+        ));
+        if (fijadas.isNotEmpty) {
+          botones.add(boton('accion_quitar_fijada', 'Quitar sus mesas fijadas',
+              Icons.lock_open, () => acciones.onQuitarFijadas(alumno.id)));
+        }
+      }
+    } else if (mesa != null) {
+      final info = _plano.estado.info(mesa);
+      final para = info.fijadaPara;
+      if (info.libre) {
+        botones.add(boton('accion_volver_a_usar', 'Volver a usarla',
+            Icons.check_circle_outline, () => acciones.onVolverAUsar(mesa)));
+      } else if (para != null) {
+        botones.add(boton(
+          'accion_quitar_fijada',
+          'Quitarle las fijadas a ${para.apellido}',
+          Icons.lock_open,
+          () => acciones.onQuitarFijadas(para.id),
+        ));
+      } else if (_plano.config.fijadas.containsKey(mesa)) {
+        // Fijada para una familia que ya no está: no se dibuja, pero existe.
+        botones.add(boton('accion_quitar_fijada', 'Quitar la fijada',
+            Icons.lock_open, () => acciones.onQuitarFijadaDeMesa(mesa)));
+      } else if (info.estado == EstadoMesa.vacia) {
+        botones.addAll([
+          boton('accion_fijar_en_mesa', 'Fijar para una familia',
+              Icons.lock_outline, () => acciones.onFijarEnMesa(mesa)),
+          boton('accion_dejar_libre', 'Dejar libre', Icons.block,
+              () => acciones.onDejarLibre(mesa)),
+        ]);
+      }
+    }
+    if (botones.isEmpty) return const [];
+    return [
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: botones),
+    ];
   }
 
   Widget _encabezado(BuildContext context) {
@@ -451,7 +807,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           subtitle: Text(_estadoDeMesa(numero)),
           onTap: () {
             setState(_busqueda.clear);
-            _irA(numero);
+            // Mientras se espera un toque en el plano, el buscador solo lleva
+            // la vista: el lugar se elige tocando la mesa.
+            _irA(numero, elegir: _esperando == null);
           },
         ),
       for (final a in familias.take(30))
@@ -510,12 +868,24 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           personas == 1 ? '1 persona' : '$personas personas',
         ].join(' · ')),
         const SizedBox(height: 6),
-        if (ocupante == null)
+        if (alumno.esBajaTemporal)
+          Text(
+            'Está de baja y conserva su mesa: el sorteo no se la da a nadie. '
+            'Si no vuelve, sacásela en Editar alumno.',
+            style: TextStyle(color: Colors.orange.shade800),
+          ),
+        if (ocupante == null) ...[
           Text(
             'Todavía sin mesa. Le '
             '${SalonMesas.mesas(alumno) == 1 ? 'corresponde 1' : 'corresponden ${SalonMesas.mesas(alumno)}'}.',
-          )
-        else
+          ),
+          if (_plano.config.fijadasPorAlumno[alumno.id] case final fijadas?)
+            Text(
+              'Tiene fijada${fijadas.length == 1 ? '' : 's'} '
+              '${CambiosDeMesa.textoMesas(fijadas)}.',
+              key: const Key('fijadas_de_la_familia'),
+            ),
+        ] else
           for (final n in ocupante.numeros)
             Text(
               'Mesa $n: '
@@ -579,6 +949,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               ],
             ),
             ...renglones,
+            ..._accionesDeLoElegido(),
           ],
         ),
       ),
@@ -639,7 +1010,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         InkWell(
           key: Key('aviso_$i'),
           borderRadius: BorderRadius.circular(8),
-          onTap: a.mesa == null ? null : () => _irA(a.mesa!),
+          onTap: a.mesa == null
+              ? null
+              : () => _irA(a.mesa!, elegir: _esperando == null),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
             child: Row(
@@ -673,16 +1046,18 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     }) =>
         Padding(
           padding: const EdgeInsets.only(right: 10),
+          // Mientras se guarda quedan a la vista, apagados: si desaparecieran,
+          // los demás se correrían de lugar en cada cambio.
           child: principal
               ? FilledButton.icon(
                   key: key,
-                  onPressed: accion,
+                  onPressed: widget.ocupado ? null : accion,
                   icon: Icon(icono, size: 18),
                   label: Text(texto),
                 )
               : OutlinedButton.icon(
                   key: key,
-                  onPressed: accion,
+                  onPressed: widget.ocupado ? null : accion,
                   icon: Icon(icono, size: 18),
                   label: Text(texto),
                 ),
@@ -699,12 +1074,14 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               widget.onEstiloYArmado!,
               principal: true,
             ),
-          if (widget.onPersonalizar != null)
+          if (widget.acciones != null)
             boton(
               const Key('personalizar'),
-              'PERSONALIZAR',
+              _personalizando ? 'SALIR DE PERSONALIZAR' : 'PERSONALIZAR',
               Icons.tune,
-              widget.onPersonalizar!,
+              () => _personalizando
+                  ? _salirDePersonalizar()
+                  : setState(() => _personalizando = true),
             ),
           if (widget.onImprimir != null)
             boton(
