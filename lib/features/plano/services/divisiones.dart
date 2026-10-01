@@ -15,14 +15,19 @@ class Divisiones {
     'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U', 'Ü': 'U', 'Ñ': 'N',
   };
 
-  /// La clave con la que se agrupan: mayúsculas, sin tildes, sin °, º ni
-  /// puntos, sin espacios. "5° a" → "5A". Vacía si no tiene división.
+  /// Lo que se escribe entre el número y la letra y no dice nada: "5° A",
+  /// "5ºA", "5.A", "5-A", "5ª A", "5 'A'".
+  static const _relleno = {'°', 'º', 'ª', '.', '-', '_', '/', "'", '"', '´', '`'};
+
+  /// La clave con la que se agrupan: mayúsculas, sin tildes, sin °, º, puntos,
+  /// guiones ni comillas, sin espacios. "5° a" → "5A". Vacía si no tiene
+  /// división.
   static String clave(String? division) {
     final t = (division ?? '').trim().toUpperCase();
     final b = StringBuffer();
     for (final r in t.runes) {
       final c = String.fromCharCode(r);
-      if (c == '°' || c == 'º' || c == '.' || c.trim().isEmpty) continue;
+      if (_relleno.contains(c) || c.trim().isEmpty) continue;
       b.write(_sinTilde[c] ?? c);
     }
     return b.toString();
@@ -91,6 +96,22 @@ class Divisiones {
         // división o con un sufijo de ordinal.
         const ordinales = {'', 'RA', 'RO', 'ERA', 'ERO', 'DA', 'DO', 'TA', 'TO'};
         if (ordinales.contains(restoA) && ordinales.contains(restoB)) {
+          out.add((a, b));
+          continue;
+        }
+        // "5TO A" y "5 A": el mismo número y la misma letra, uno con el
+        // ordinal escrito.
+        String sinOrdinal(String resto) {
+          for (final o in const ['ERA', 'ERO', 'RA', 'RO', 'DA', 'DO', 'TA', 'TO']) {
+            if (resto.length > o.length && resto.startsWith(o)) {
+              return resto.substring(o.length);
+            }
+          }
+          return resto;
+        }
+
+        if (restoA != restoB &&
+            (sinOrdinal(restoA) == restoB || sinOrdinal(restoB) == restoA)) {
           out.add((a, b));
           continue;
         }

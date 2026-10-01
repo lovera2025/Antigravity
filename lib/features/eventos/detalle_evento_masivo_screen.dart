@@ -16,6 +16,10 @@ import '../../models/contrato_alumno.dart';
 import '../../models/nota_operativa_contrato.dart';
 import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
+import '../../models/plano_evento.dart';
+import '../plano/repositories/planos_evento_repository.dart';
+import '../plano/services/plano_para_sortear.dart';
+import '../plano/services/sorteo_con_plano.dart';
 import '../../core/utils/uuid_utils.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
@@ -3561,6 +3565,12 @@ class _DetalleEventoMasivoScreenState
 
     setState(() => _isLoading = true);
     final distintos = await repo.mesasDeOtraPcSinBajar(eventoId);
+    // El plano de la fiesta, si tiene. Primero la nube, por si la otra PC lo
+    // cambió hace un momento; sin red, el de esta PC. Sin plano, el sorteo es
+    // el de siempre. Si recién se vio que no hay conexión, no se espera a la
+    // nube para nada.
+    final hayRed = distintos != null;
+    final lectura = await _leerPlano(eventoId, nube: hayRed);
     if (!mounted) return;
     setState(() => _isLoading = false);
     if (distintos != null && distintos > 0) {
@@ -3596,6 +3606,12 @@ class _DetalleEventoMasivoScreenState
       if (seguir != true || !mounted) return;
     }
 
+    if (!lectura.sePuedeSeguir) {
+      await _avisarSorteo('No se puede sortear todavía', lectura.problema!);
+      return;
+    }
+    var plano = lectura.plano;
+
     SorteoMesasDialogResult? elegido;
     String? novedad;
     while (mounted) {
@@ -3615,33 +3631,76 @@ class _DetalleEventoMasivoScreenState
         pagos: pagos,
         inicial: elegido,
         novedad: novedad,
+        plano: plano,
       );
       if (config == null || !mounted) return;
 
       // Lo que decide el sorteo es la lista **y** lo pagado: un cobro que
-      // entró con el diálogo abierto también obliga a volver a mirar.
+      // entró con el diálogo abierto también obliga a volver a mirar. Con
+      // plano, también las divisiones y el plano mismo (mesas fijas o libres).
+      setState(() => _isLoading = true);
       final frescos = await repo.getByEvento(eventoId);
       final pagosFrescos = pagosPorAlumno(
         frescos,
         await _pagosPorContrato(repo, frescos),
       );
+      // El plano se vuelve a pedir a la nube: si la otra PC fijó una mesa con
+      // el diálogo abierto, todavía puede no haber bajado, y sortear con el de
+      // esta PC le pisaría el cambio (el plano sube como una fila entera).
+      final lecturaFresca = await _leerPlano(eventoId, nube: hayRed);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      if (!lecturaFresca.sePuedeSeguir) {
+        await _avisarSorteo('No se sorteó nada', lecturaFresca.problema!);
+        return;
+      }
+      final planoFresco = lecturaFresca.plano;
+      // Sin plano, las divisiones no deciden nada: se mira lo de siempre.
+      final conPlano = plano != null || planoFresco != null;
+      final cambioElPlano = conPlano &&
+          (SorteoConPlano.firmaDivisiones(frescos) !=
+                  SorteoConPlano.firmaDivisiones(alumnos) ||
+              planoFresco?.huella != plano?.huella);
       if (SorteoMesasMotor.firma(frescos) != SorteoMesasMotor.firma(alumnos) ||
-          firmaPagos(frescos, pagosFrescos) != firmaPagos(alumnos, pagos)) {
+          firmaPagos(frescos, pagosFrescos) != firmaPagos(alumnos, pagos) ||
+          cambioElPlano) {
         elegido = config;
-        novedad = 'La lista cambió mientras el sorteo estaba abierto (por '
-            'ejemplo, la otra PC cargó un alumno o un cobro). Estos son los '
-            'datos actualizados: revisalos y volvé a tocar SORTEAR.';
+        plano = planoFresco;
+        novedad = conPlano
+            ? 'La lista cambió mientras el sorteo estaba abierto (por '
+                'ejemplo, la otra PC cargó un alumno, un cobro o tocó el '
+                'plano). Estos son los datos actualizados: revisalos y volvé '
+                'a tocar SORTEAR.'
+            : 'La lista cambió mientras el sorteo estaba abierto (por '
+                'ejemplo, la otra PC cargó un alumno o un cobro). Estos son '
+                'los datos actualizados: revisalos y volvé a tocar SORTEAR.';
         continue;
       }
-      await _ejecutarSorteo(frescos, config, pagosFrescos);
+      await _ejecutarSorteo(frescos, config, pagosFrescos, planoFresco);
       return;
     }
   }
+
+  /// El plano de la fiesta para sortear, deshacer o restaurar (ver
+  /// [leerPlanoParaSortear]): la nube primero y, sin red, el de esta PC.
+  Future<LecturaPlano> _leerPlano(String eventoId, {required bool nube}) {
+    final planos = ref.read(planosEventoRepositoryProvider);
+    return leerPlanoParaSortear(
+      deLaNube: () => planos.traerDeLaNube(eventoId),
+      deEstaPc: () => planos.obtener(eventoId),
+      consultarNube: nube,
+    );
+  }
+
+  bool get _hayConexion =>
+      ref.read(connectivityServiceProvider).currentStatus ==
+      AppConnectivity.online;
 
   Future<void> _ejecutarSorteo(
     List<ContratoAlumno> alumnos,
     SorteoMesasDialogResult config,
     Map<String, PagoAlumno> pagos,
+    PlanoEvento? plano,
   ) async {
     final repo = ref.read(contratosRepositoryProvider);
     final autoSyncCheckpoint = DateTime.now().toUtc();
@@ -3654,6 +3713,16 @@ class _DetalleEventoMasivoScreenState
         incluirBase: config.incluirBase,
         incluirExtras: config.incluirExtras,
       );
+      if (plano != null && config.modo != null) {
+        await _ejecutarSorteoConPlano(
+          alumnos,
+          config,
+          exclusion,
+          plano,
+          autoSyncCheckpoint,
+        );
+        return;
+      }
       final pedidos = SorteoMesasMotor.pedidos(
         alumnos,
         separaciones: config.separaciones,
@@ -3742,6 +3811,132 @@ class _DetalleEventoMasivoScreenState
     }
   }
 
+  /// El sorteo sobre el plano de la fiesta (por bloques o entero). El motor es
+  /// el mismo; [SorteoConPlano] le arma las entradas. Los números, el renglón
+  /// del registro y los bloques del plano van en **una sola transacción**, y
+  /// suben en el momento para que la otra PC los vea en segundos.
+  Future<void> _ejecutarSorteoConPlano(
+    List<ContratoAlumno> alumnos,
+    SorteoMesasDialogResult config,
+    ExclusionSorteo exclusion,
+    PlanoEvento plano,
+    DateTime checkpoint,
+  ) async {
+    final repo = ref.read(contratosRepositoryProvider);
+    final entrada = EntradaSorteoPlano(
+      armado: plano.armado,
+      config: plano.config,
+      alumnos: alumnos,
+      exclusion: exclusion,
+      separaciones: config.separaciones,
+      modo: config.modo!,
+      ordenDivisiones: config.ordenDivisiones,
+      usarPasto: config.usarPasto,
+      hastaMesa: config.hastaMesa,
+    );
+    final ResultadoSorteoPlano resultado;
+    try {
+      resultado = SorteoConPlano.sortear(entrada);
+    } on StateError catch (e) {
+      // El diálogo no deja llegar acá si no entra; si igual pasa, que se lea.
+      debugPrint('Sorteo con plano: no entra. ${e.message}');
+      if (mounted) {
+        await _avisarSorteo(
+          'No se guardó nada',
+          'No se pudo sortear sobre el plano: ${e.message} Volvé a abrir el '
+              'sorteo y revisá el salón.',
+        );
+      }
+      return;
+    }
+    if (resultado.asignaciones.isEmpty) {
+      // Sin esto se avisaba "Sorteo listo: 0 familias" sin haber guardado nada.
+      if (mounted) {
+        await _avisarSorteo(
+          'No había nada para sortear',
+          'Ninguna familia quedó para recibir mesa sobre el plano.'
+              '${resultado.avisos.isEmpty ? '' : '\n\n${resultado.avisos.join('\n')}'}',
+        );
+      }
+      return;
+    }
+    // Red de seguridad: no debería encontrar nada nunca. Si encuentra algo, no
+    // se guarda ni un número.
+    final problema = SorteoConPlano.validar(entrada, resultado);
+    if (problema != null) {
+      debugPrint('Sorteo con plano frenado por la validación final: $problema');
+      if (mounted) {
+        await _avisarSorteo(
+          'No se guardó nada',
+          'El control final encontró un problema y el sorteo no se guardó: '
+              '$problema',
+        );
+      }
+      return;
+    }
+
+    final numeros = {
+      for (final e in resultado.asignaciones.entries)
+        e.key: MesasExtraUtils.formatearAsignacionMesas(e.value),
+    };
+    final registro = _registroSorteo(TipoRegistroSorteo.sorteo, numeros);
+    final planoNuevo = plano.copyWith(
+      modoSorteo: config.modo,
+      config: plano.config.copyWith(
+        bloques: resultado.bloques.isNotEmpty
+            ? resultado.bloques
+            : plano.config.bloques,
+        ordenDivisiones: config.ordenDivisiones,
+      ),
+      hechoPor: quienOpera(ref),
+      ahora: ArTime.nowUtc(),
+    );
+    await repo.asignarNumerosMesa(
+      numeros,
+      registro: registro,
+      plano: planoNuevo,
+    );
+    // El aviso de "quedó en esta PC" mira todo lo del sorteo, no solo su
+    // renglón: los números y el plano también tienen que haber subido.
+    final subio = await subirYa(
+          ref.read(syncEngineProvider),
+          tabla: 'sorteos_mesas',
+          registroId: registro.id,
+          desde: checkpoint,
+        ) &&
+        !await quedaEnCola({
+          'planos_evento': [planoNuevo.id],
+          'contratos_alumnos': numeros.keys,
+        });
+    await _fetchDatos(cargaSilenciosa: true);
+    if (!mounted) return;
+
+    final bloques = resultado.bloques.isEmpty
+        ? ''
+        : ' · ${[
+            for (final b in resultado.bloques) '${b.desde}-${b.hasta}',
+          ].join(', ')}';
+    final sinMesa = exclusion.sinMesa.length;
+    final soloBase = exclusion.soloBase.length;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 12),
+        action: SnackBarAction(
+          label: 'PLANILLA',
+          onPressed: _generarPlanillaSorteo,
+        ),
+        content: Text(
+          'Sorteo listo: ${resultado.asignaciones.length} familia(s) con mesa'
+          '$bloques'
+          '${sinMesa > 0 ? ' · $sinMesa sin mesa por no tener nada pagado' : ''}'
+          '${soloBase > 0 ? ' · $soloBase con mesas extra sin pagar: solo mesa base' : ''}'
+          '${resultado.avisos.isEmpty ? '' : ' · ${resultado.avisos.length} aviso(s)'}'
+          '${subio ? '' : ' · guardado en esta PC; sube cuando vuelva la conexión'}.',
+        ),
+      ),
+    );
+  }
+
   /// Deshacer el sorteo: saca el número de mesa a **todos** los alumnos del
   /// evento, también a los de baja. Pide confirmación con tilde y antes guarda
   /// una copia local ([RespaldoSorteo]) para poder restaurarlo.
@@ -3813,13 +4008,32 @@ class _DetalleEventoMasivoScreenState
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
-      // La copia primero: sin copia a salvo no se borra nada.
+      // El plano, de la nube si hay red: se reescribe entero, y con el de esta
+      // PC se pisaría una mesa que la otra acaba de fijar. Si no se puede leer,
+      // el plano no se toca y los números se deshacen igual.
+      final plano = (await _leerPlano(eventoId, nube: _hayConexion)).plano;
+      // La copia primero: sin copia a salvo no se borra nada. Lleva también los
+      // bloques, para que Restaurar los devuelva.
       final antes = {for (final a in conMesa) a.id: a.numeroMesa!.trim()};
-      await RespaldoSorteo.guardar(eventoId, antes);
+      await RespaldoSorteo.guardar(
+        eventoId,
+        antes,
+        bloques: plano?.config.bloques ?? const [],
+      );
+      // Con plano, los bloques del sorteo deshecho dejan de valer: el próximo
+      // sorteo los vuelve a armar (en el orden que se elija ese día). Las mesas
+      // fijas y libres se conservan.
       // El registro guarda lo que había: queda en la nube quién deshizo, y qué.
       await repo.asignarNumerosMesa(
         {for (final a in conMesa) a.id: null},
         registro: _registroSorteo(TipoRegistroSorteo.deshacer, antes),
+        plano: plano == null || plano.config.bloques.isEmpty
+            ? null
+            : plano.copyWith(
+                config: plano.config.copyWith(bloques: const []),
+                hechoPor: quienOpera(ref),
+                ahora: ArTime.nowUtc(),
+              ),
       );
       await ref
           .read(cajaAutoSyncServiceProvider)
@@ -4037,9 +4251,20 @@ class _DetalleEventoMasivoScreenState
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
+      // Con plano, vuelven también los bloques del sorteo restaurado: sin
+      // ellos, los que llegan tarde ya no irían al bloque de su división.
+      final planoHoy = (await _leerPlano(eventoId, nube: _hayConexion)).plano;
+      final bloques = RespaldoSorteo.bloquesARestaurar(respaldo, planoHoy);
       await repo.asignarNumerosMesa(
         plan.aRestaurar,
         registro: _registroSorteo(TipoRegistroSorteo.restaurar, plan.aRestaurar),
+        plano: bloques == null
+            ? null
+            : planoHoy!.copyWith(
+                config: planoHoy.config.copyWith(bloques: bloques),
+                hechoPor: quienOpera(ref),
+                ahora: ArTime.nowUtc(),
+              ),
       );
       await ref
           .read(cajaAutoSyncServiceProvider)

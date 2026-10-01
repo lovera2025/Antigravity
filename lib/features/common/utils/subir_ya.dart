@@ -30,6 +30,30 @@ Future<bool> subirConReintentos({
   return !await pendiente();
 }
 
+/// Si alguno de estos registros (tabla → ids) sigue en la cola de subida.
+///
+/// [subirYa] espera a un solo registro; cuando una acción guarda varias cosas
+/// juntas (el sorteo: su renglón, los números y el plano), esto dice si quedó
+/// algo sin subir para poder avisar "quedó en esta PC".
+Future<bool> quedaEnCola(Map<String, Iterable<String>> registros) async {
+  final db = await LocalDatabase.instance;
+  for (final e in registros.entries) {
+    final ids = e.value.toList();
+    // De a 400: SQLite admite un máximo de variables por consulta.
+    for (var i = 0; i < ids.length; i += 400) {
+      final parte = ids.sublist(i, i + 400 > ids.length ? ids.length : i + 400);
+      final marcas = List.filled(parte.length, '?').join(',');
+      final rows = await db.rawQuery(
+        'SELECT 1 FROM _sync_queue WHERE tabla = ? '
+        'AND registro_id IN ($marcas) LIMIT 1',
+        [e.key, ...parte],
+      );
+      if (rows.isNotEmpty) return true;
+    }
+  }
+  return false;
+}
+
 /// Sube ya el registro [registroId] de [tabla] (y lo que se haya encolado desde
 /// [desde]), sin esperar el ciclo de 10 s y sin depender del rol elegido.
 ///

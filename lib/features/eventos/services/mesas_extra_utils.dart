@@ -1,5 +1,6 @@
 import '../../../models/contrato_alumno.dart';
 import '../../../models/mesa_extra_item.dart';
+import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
 
 /// Resultado del diálogo de sorteo.
@@ -18,12 +19,29 @@ class SorteoMesasDialogResult {
   /// Casillas "sortear igual" de los que no pagaron nada de sus mesas extra.
   final Set<String> incluirExtras;
 
+  /// Con plano (Fase 3): cómo se sortea. Null si la fiesta no tiene plano, y
+  /// entonces manda [capacidadSalon], como siempre.
+  final ModoSorteo? modo;
+
+  /// Con plano, por bloques: las claves de división en el orden elegido.
+  final List<String> ordenDivisiones;
+
+  /// Con plano: usar las mesas del pasto.
+  final bool usarPasto;
+
+  /// Con plano, entero: usar de la mesa 1 a esta.
+  final int? hastaMesa;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
     this.soloPagado = false,
     this.incluirBase = const {},
     this.incluirExtras = const {},
+    this.modo,
+    this.ordenDivisiones = const [],
+    this.usarPasto = false,
+    this.hastaMesa,
   });
 }
 

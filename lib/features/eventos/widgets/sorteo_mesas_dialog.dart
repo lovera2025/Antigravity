@@ -1,8 +1,13 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/contrato_alumno.dart';
+import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../../plano/services/divisiones.dart';
+import '../../plano/services/sorteo_con_plano.dart';
 import '../services/mesas_extra_utils.dart';
 import '../services/pago_para_sorteo.dart';
 import '../services/salon_mesas.dart';
@@ -16,6 +21,11 @@ import '../services/sorteo_mesas_motor.dart';
 /// ([SorteoMesasMotor.capacidadMinima]), y SORTEAR solo se habilita si la que
 /// quedó escrita pasa [SorteoMesasMotor.esFactible]: el mismo chequeo con el
 /// que arranca el sorteo. Así "no entra" no puede pasar al tocar el botón.
+///
+/// Si la fiesta tiene [plano], en vez de la capacidad se elige cómo se sortea
+/// sobre el salón: por bloques de división (en el orden que se elija) o entero
+/// ("de la mesa 1 a la N"). Lo que muestra sale de [SorteoConPlano.preparar],
+/// que es lo mismo que después hace el sorteo.
 Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
   required BuildContext context,
   required String tituloInstitucion,
@@ -24,46 +34,105 @@ Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
   required Map<String, PagoAlumno> pagos,
   SorteoMesasDialogResult? inicial,
   String? novedad,
+  PlanoEvento? plano,
 }) {
   return showDialog<SorteoMesasDialogResult>(
     context: context,
-    builder: (context) => _SorteoMesasDialog(
+    builder: (context) => SorteoMesasDialog(
       tituloInstitucion: tituloInstitucion,
       alumnos: alumnos,
       avisos: avisos,
       pagos: pagos,
       inicial: inicial,
       novedad: novedad,
+      plano: plano,
     ),
   );
 }
 
-class _SorteoMesasDialog extends StatefulWidget {
+@visibleForTesting
+class SorteoMesasDialog extends StatefulWidget {
   final String tituloInstitucion;
   final List<ContratoAlumno> alumnos;
   final List<AvisoSalon> avisos;
   final Map<String, PagoAlumno> pagos;
   final SorteoMesasDialogResult? inicial;
   final String? novedad;
+  final PlanoEvento? plano;
 
-  const _SorteoMesasDialog({
+  const SorteoMesasDialog({
+    super.key,
     required this.tituloInstitucion,
     required this.alumnos,
     required this.avisos,
     required this.pagos,
     this.inicial,
     this.novedad,
+    this.plano,
   });
 
   @override
-  State<_SorteoMesasDialog> createState() => _SorteoMesasDialogState();
+  State<SorteoMesasDialog> createState() => _SorteoMesasDialogState();
 }
 
-class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
+class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   late final TextEditingController _capacidadCtrl;
   late final Map<String, int> _separaciones;
   late final Set<int> _ocupadas;
   late final CandidatosPorPago _candidatos;
+
+  // ── Con plano ──
+  late ModoSorteo _modo;
+
+  /// Claves de división ([Divisiones.clave]) en el orden de los bloques.
+  late List<String> _orden;
+  bool _usarPasto = false;
+  late final TextEditingController _hastaCtrl;
+  String? _claveMemo;
+  PlanSorteo? _memo;
+
+  /// El plano sobre el que se sortea. Null si la fiesta no tiene, y también
+  /// si lo tiene pero no se puede leer ([_planoIlegible]): ahí no se sortea.
+  PlanoEvento? get _plano => _planoIlegible ? null : widget.plano;
+
+  /// La fiesta tiene plano pero su armado no se puede leer. Sortear como si
+  /// no tuviera ignoraría sus mesas fijas y libres: se avisa y no se sortea.
+  /// (La pantalla ya frena antes; esto es para que el diálogo nunca rompa.)
+  bool get _planoIlegible =>
+      widget.plano != null && widget.plano!.armadoONull == null;
+
+  EntradaSorteoPlano _entrada() => EntradaSorteoPlano(
+        armado: _plano!.armado,
+        config: _plano!.config,
+        alumnos: widget.alumnos,
+        exclusion: _exclusion,
+        separaciones: _separaciones,
+        modo: _modo,
+        ordenDivisiones: _orden,
+        usarPasto: _usarPasto,
+        hastaMesa: int.tryParse(_hastaCtrl.text.trim()),
+      );
+
+  /// Lo que va a hacer el sorteo sobre el plano. Se recalcula solo si cambió
+  /// algo que lo decide (tildar "ya revisé" no lo recalcula).
+  PlanSorteo _plan() {
+    final ex = _exclusion;
+    final clave = [
+      _modo.name,
+      _orden.join(','),
+      _usarPasto,
+      _hastaCtrl.text.trim(),
+      (ex.sinMesa.toList()..sort()).join(','),
+      (ex.soloBase.toList()..sort()).join(','),
+      (_separaciones.entries.map((e) => '${e.key}=${e.value}').toList()..sort())
+          .join(','),
+    ].join('|');
+    if (clave != _claveMemo || _memo == null) {
+      _memo = SorteoConPlano.preparar(_entrada());
+      _claveMemo = clave;
+    }
+    return _memo!;
+  }
 
   /// "Solo a lo que tiene algo pagado". Arranca elegido: es para lo que existe.
   late bool _soloPagado;
@@ -112,24 +181,62 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
     _capacidadCtrl = TextEditingController(
       text: '${inicial < minima ? minima : inicial}',
     );
+
+    final plano = _plano;
+    _hastaCtrl = TextEditingController(
+      text: widget.inicial?.hastaMesa?.toString() ?? '',
+    );
+    _modo = widget.inicial?.modo ?? plano?.modoSorteo ?? ModoSorteo.entera;
+    final claves = Divisiones.ordenNatural(
+      _activos.map((a) => Divisiones.clave(a.cursoDivision)),
+    );
+    final previo = widget.inicial?.ordenDivisiones.isNotEmpty == true
+        ? widget.inicial!.ordenDivisiones
+        : plano?.config.ordenDivisiones ?? const <String>[];
+    _orden = [
+      for (final k in previo)
+        if (claves.contains(k)) k,
+      for (final k in claves)
+        if (!previo.contains(k)) k,
+    ];
+    _usarPasto = widget.inicial?.usarPasto ?? false;
+    if (plano != null && _hastaCtrl.text.isEmpty) {
+      final min = _plan().hastaMesaMinima;
+      if (min != null) _hastaCtrl.text = '$min';
+    }
   }
 
   @override
   void dispose() {
     _capacidadCtrl.dispose();
+    _hastaCtrl.dispose();
     super.dispose();
   }
 
   /// Aplica un cambio que mueve el mínimo. Si la capacidad escrita era la
   /// sugerida, sigue a la sugerida (sube o baja); si alguien la escribió a mano,
-  /// solo sube cuando ya no alcanza.
+  /// solo sube cuando ya no alcanza. Con plano, lo mismo con "hasta la mesa".
   void _cambiar(VoidCallback cambio) {
     final antes = _minima(_pedidos);
+    final antesPlano = _plano == null ? null : _plan().hastaMesaMinima;
+    final avisosAntes = _plano == null ? '' : _plan().avisos.join('|');
     setState(() {
       cambio();
+      if (_plano != null && _plan().avisos.join('|') != avisosAntes) {
+        // Aparecieron avisos que nadie leyó (por ejemplo, al cambiar de modo):
+        // el tilde de antes no los cubre.
+        _revisado = false;
+      }
       final minima = _minima(_pedidos);
       final actual = int.tryParse(_capacidadCtrl.text.trim()) ?? 0;
       if (actual == antes || actual < minima) _capacidadCtrl.text = '$minima';
+      if (_plano != null) {
+        final hasta = int.tryParse(_hastaCtrl.text.trim()) ?? 0;
+        final nueva = _plan().hastaMesaMinima;
+        if (nueva != null && (hasta == antesPlano || hasta < nueva)) {
+          _hastaCtrl.text = '$nueva';
+        }
+      }
     });
   }
 
@@ -157,9 +264,27 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
           ocupadas: _ocupadas,
           capacidad: capacidad,
         );
-    final hayAvisos = widget.avisos.isNotEmpty;
-    final puedeSortear =
-        !demanda.vacia && factible && (!hayAvisos || _revisado);
+    final plano = _plano;
+    final plan = plano == null ? null : _plan();
+    final hastaEscrita = int.tryParse(_hastaCtrl.text.trim());
+    final hastaOk = plan == null ||
+        plan.modo != ModoSorteo.entera ||
+        (plan.hastaMesaMinima != null &&
+            hastaEscrita != null &&
+            hastaEscrita >= plan.hastaMesaMinima! &&
+            _problemaDeHasta(plano!, hastaEscrita) == null);
+    final avisosPlano = <String>[
+      ...?plan?.avisos,
+      if (plano != null)
+        for (final (a, b) in Divisiones.parecidas(_orden))
+          'Las divisiones "$a" y "$b" parecen la misma escrita distinto: '
+              'corregilo en Editar alumno para que vayan en el mismo bloque.',
+    ];
+    final hayAvisos = widget.avisos.isNotEmpty || avisosPlano.isNotEmpty;
+    final puedeSortear = !_planoIlegible &&
+        !demanda.vacia &&
+        (plan == null ? factible : plan.entra && hastaOk) &&
+        (!hayAvisos || _revisado);
 
     final activos = _activos;
     final conMesa = activos
@@ -295,6 +420,14 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                             style: const TextStyle(fontSize: 12.5),
                           ),
                         ),
+                      for (final a in avisosPlano)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            a,
+                            style: const TextStyle(fontSize: 12.5),
+                          ),
+                        ),
                       CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
@@ -308,20 +441,37 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
                 ),
               ],
               const SizedBox(height: 16),
-              TextField(
-                controller: _capacidadCtrl,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Capacidad del salón (mesas numeradas)',
-                  helperText: 'Mínimo $minima para que entre todo.',
-                  border: const OutlineInputBorder(),
-                  errorText: demanda.vacia || factible
-                      ? null
-                      : 'Con esta capacidad no entran: mínimo $minima',
+              if (plano != null && plan != null)
+                _seccionPlano(plano, plan, demanda.vacia)
+              else if (_planoIlegible)
+                _Recuadro(
+                  color: Colors.red,
+                  icono: Icons.error_outline_rounded,
+                  child: Text(
+                    'El plano de esta fiesta no se puede leer. Cerrá esta '
+                    'ventana, abrí PLANO y elegí el armado de nuevo antes de '
+                    'sortear.',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.red.shade800,
+                    ),
+                  ),
+                )
+              else
+                TextField(
+                  controller: _capacidadCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    labelText: 'Capacidad del salón (mesas numeradas)',
+                    helperText: 'Mínimo $minima para que entre todo.',
+                    border: const OutlineInputBorder(),
+                    errorText: demanda.vacia || factible
+                        ? null
+                        : 'Con esta capacidad no entran: mínimo $minima',
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
-                onChanged: (_) => setState(() {}),
-              ),
               if (conMesasExtra.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _Titulo('Con mesas extra (${conMesasExtra.length})'),
@@ -391,17 +541,247 @@ class _SorteoMesasDialogState extends State<_SorteoMesasDialog> {
               ? () => Navigator.pop(
                     context,
                     SorteoMesasDialogResult(
-                      capacidadSalon: capacidad,
+                      capacidadSalon: capacidad ?? 0,
                       separaciones: Map<String, int>.from(_separaciones),
                       soloPagado: _soloPagado,
                       incluirBase: Set<String>.from(_incluirBase),
                       incluirExtras: Set<String>.from(_incluirExtras),
+                      modo: plano == null ? null : _modo,
+                      ordenDivisiones: List<String>.from(_orden),
+                      usarPasto: _usarPasto,
+                      hastaMesa: plano == null ? null : hastaEscrita,
                     ),
                   )
               : null,
           child: const Text('SORTEAR'),
         ),
       ],
+    );
+  }
+
+  /// Por qué no vale la mesa escrita en "Usar de la mesa 1 a la". Null si
+  /// vale. Sin esto, una mesa que el salón no tiene se ignoraba en silencio y
+  /// el sorteo usaba la mínima.
+  String? _problemaDeHasta(PlanoEvento plano, int hasta) {
+    final armado = plano.armado;
+    if (!armado.existe(hasta)) return 'La mesa $hasta no está en este salón.';
+    if (!_usarPasto && armado.pasto.contains(hasta)) {
+      return 'La mesa $hasta es del pasto.';
+    }
+    return null;
+  }
+
+  /// Con plano: cómo se sortea sobre el salón.
+  ///
+  /// - Por división: cada una en un bloque de mesas seguidas, en el orden de la
+  ///   lista (se cambia con las flechas, A-Z o al azar).
+  /// - Toda la escuela junta: "de la mesa 1 a la N", con la N mínima propuesta.
+  /// - El pasto solo se ofrece si hace falta (o si ya se tildó).
+  Widget _seccionPlano(PlanoEvento plano, PlanSorteo plan, bool nadaQueSortear) {
+    final armado = plano.armado;
+    final pasto = armado.pasto.toList()..sort();
+    final porClave = {for (final f in plan.bloques) f.clave: f};
+    final bloquesGuardados = plano.config.bloques.isNotEmpty &&
+        plan.modo == ModoSorteo.bloques;
+    final hasta = int.tryParse(_hastaCtrl.text.trim());
+    final minima = plan.hastaMesaMinima;
+
+    Widget chip(String texto, ModoSorteo modo) => ChoiceChip(
+          label: Text(texto),
+          selected: _modo == modo,
+          onSelected: (_) => _cambiar(() => _modo = modo),
+        );
+
+    // Solo se dibujan las divisiones que tienen familias para sortear, así
+    // que las flechas saltan a la vecina que se ve: moviendo de a un lugar en
+    // la lista entera, "Subir" a veces no hacía nada a la vista.
+    final visibles = [
+      for (var i = 0; i < _orden.length; i++)
+        if (porClave.containsKey(_orden[i])) i,
+    ];
+    void mover(int i, int delta) => _cambiar(() {
+          final k = visibles.indexOf(i) + delta;
+          if (k < 0 || k >= visibles.length) return;
+          final j = visibles[k];
+          final x = _orden.removeAt(i);
+          _orden.insert(j, x);
+        });
+
+    return _Recuadro(
+      color: Colors.deepPurple,
+      icono: Icons.grid_view_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Salón: ${armado.nombre}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              chip('Por división, cada una junta', ModoSorteo.bloques),
+              chip('Toda la escuela junta', ModoSorteo.entera),
+            ],
+          ),
+          if (plan.modoForzado) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Ya hay mesas repartidas y el plano no tiene bloques guardados: '
+              'se completa entero, sin mover a nadie.',
+              style: TextStyle(fontSize: 12.5, color: Colors.orange.shade900),
+            ),
+          ],
+          if (plan.modo == ModoSorteo.bloques) ...[
+            const SizedBox(height: 10),
+            if (bloquesGuardados)
+              Text(
+                'El sorteo por bloques ya se hizo: los que faltan van a los '
+                'huecos de su bloque.',
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Orden de los bloques, desde la mesa 1:',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _cambiar(
+                      () => _orden = Divisiones.ordenNatural(_orden),
+                    ),
+                    child: const Text('A-Z'),
+                  ),
+                  TextButton(
+                    onPressed: () => _cambiar(
+                      () => _orden = [..._orden]..shuffle(Random.secure()),
+                    ),
+                    child: const Text('AL AZAR'),
+                  ),
+                ],
+              ),
+            for (var i = 0; i < _orden.length; i++)
+              if (porClave[_orden[i]] case final f?)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          f.nombre,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          '${f.familias} familia${f.familias == 1 ? '' : 's'} · '
+                          '${f.mesas} mesa${f.mesas == 1 ? '' : 's'}',
+                          style: const TextStyle(fontSize: 12.5),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          !f.entra
+                              ? 'no entra'
+                              : f.enReserva
+                                  ? 'fuera de su bloque'
+                                  : f.desde == null
+                                      ? ''
+                                      : 'mesas ${f.desde} a ${f.hasta}'
+                                          '${f.usaPasto ? ' (con pasto)' : ''}',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: !f.entra
+                                ? Colors.red.shade700
+                                : f.enReserva
+                                    ? Colors.orange.shade900
+                                    : Colors.deepPurple,
+                          ),
+                        ),
+                      ),
+                      if (!bloquesGuardados) ...[
+                        IconButton(
+                          tooltip: 'Subir',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                          onPressed:
+                              i == visibles.first ? null : () => mover(i, -1),
+                        ),
+                        IconButton(
+                          tooltip: 'Bajar',
+                          visualDensity: VisualDensity.compact,
+                          icon:
+                              const Icon(Icons.arrow_downward_rounded, size: 18),
+                          onPressed: i == visibles.last
+                              ? null
+                              : () => mover(i, 1),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+          ],
+          if (plan.modo == ModoSorteo.entera) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _hastaCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Usar de la mesa 1 a la',
+                helperText:
+                    minima == null ? null : 'Mínimo la $minima para que entre todo.',
+                border: const OutlineInputBorder(),
+                errorText: nadaQueSortear || minima == null
+                    ? null
+                    : hasta == null || hasta < minima
+                        ? 'Con esas mesas no entran: mínimo la $minima'
+                        : _problemaDeHasta(plano, hasta),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+          if (pasto.isNotEmpty && (plan.necesitaPasto || _usarPasto))
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(
+                'Usar las mesas del pasto (${pasto.first} a ${pasto.last})',
+              ),
+              subtitle: plan.necesitaPasto && !_usarPasto
+                  ? const Text('Sin el pasto no entran todas las familias.')
+                  : const Text('Solo las que hagan falta; hay que avisar a esas '
+                      'familias.'),
+              value: _usarPasto,
+              onChanged: (v) => _cambiar(() => _usarPasto = v == true),
+            ),
+          if (!plan.entra && !plan.necesitaPasto && !nadaQueSortear) ...[
+            const SizedBox(height: 8),
+            Text(
+              'No entran todas las familias en este salón. Elegí otro armado en '
+              'PLANO, o dejá menos mesas libres.',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Colors.red.shade700,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
