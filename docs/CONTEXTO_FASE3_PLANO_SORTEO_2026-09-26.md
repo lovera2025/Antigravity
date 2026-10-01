@@ -2,10 +2,10 @@
 
 **Fecha:** 2026-09-26, puesto al día el 2026-09-30 (ver "Qué pasó el 30-sep": el plan de la 6.0.0)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Hay partes programadas y otras que faltan (ver la tabla). **Nada está publicado**: las PCs
-siguen con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 4 del plan de la 6.0.0 están hechas y subidas; faltan M4, M6, M7, M8 y M9 (ver
+la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 27-sep" y "Lo que falta, en orden". El texto para pegar
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 30-sep" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
@@ -35,40 +35,21 @@ siguen con la 5.0.0.
 | M0 | Arreglos de planillas ("Confirmado", "RETIRÓ", renglón que se achica si ahorra una hoja) | Sí | Sí, `b49e87c` | No hacía falta |
 | M1 | Armados del Canva | Sí | Sí, `6f5b60f` | No hacía falta |
 | M2 | Los tres estilos (dibujo, vista, letras) | Sí | Sí, `1b8afed` (30-sep) | Hecha el 27-sep; **los 24 hallazgos aplicados el 30-sep** |
-| M3 | Base v73 y sincronización | Sí, tests en verde | **No** | SQL: hecha el 27-sep y **aplicada**. Base, sync y tests: **falta relanzarlas** |
-| M5 | Sorteo por bloques o entero, diálogo y flujo | Sí, tests en verde | **No** | **Falta lanzarla** |
+| M3 | Base v73 y sincronización | Sí | Sí, `e335e00` (30-sep) | Hecha y **aplicada el 30-sep** (SQL, base, sync y tests) |
+| M5 | Sorteo por bloques o entero, diálogo y flujo | Sí | Sí, `aaa0034` (30-sep) | Hecha y **aplicada el 30-sep** |
+| — | Mesas y sillas de cada uno en la grilla, con su filtro (pedido del 30-sep) | Sí | Sí, `087e904` (30-sep) | No hacía falta |
 | M4 | Selector de estilo y armado, pantalla del plano | No | — | — |
 | M6 | Fijar, dejar libres, cambiar o mover familias, historial | No | — | Workflow |
 | M7 | Plano impreso y planilla con bloques y pasto | No | — | — |
 | M8 | Botones a la vista y lista de la puerta trabada | No | — | — |
 | M9 | Acomodar el salón, colores y textos | No | — | Workflow |
 
-**Tests:** la suite entera pasa, **854 tests** el 27-sep (849 el 26, más 5 de los arreglos del SQL; 727 al cerrar la
-Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los archivos nuevos.
+**Tests:** la suite entera pasa, **1.039 tests** el 30-sep a la noche (913 al cerrar M2, 984 con M3, 1.034 con M5;
+854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
+archivos nuevos.
 
-**M2, M3 y M5 están sin commit a propósito:** el plan dice que se commitean después de la revisión y de aplicar lo
-confirmado. Van en tres commits separados, en ese orden, porque el modelo de la v73 usa el estilo del plano. `git add
--p` no anda en estas sesiones, así que cada commit se arma por rutas y ningún archivo es de dos partes:
-- **M2:**
-  - `assets/google_fonts/` (las dos `.ttf` nuevas y sus `OFL-*.txt`) y `pubspec.yaml`;
-  - `lib/features/plano/estilos/`, `dibujo/`, `widgets/vista_plano.dart`, `modelo/estado_plano.dart` y
-    `services/divisiones.dart` (pasa de M5 a M2 por el hallazgo 18);
-  - `test/estado_plano_test.dart`, `vista_plano_test.dart`, `pdf_assets_test.dart` y `divisiones_test.dart`;
-  - `tool/plano_muestra_test.dart`.
-- **M3:**
-  - `lib/core/database/local_database.dart` y `sync_queue.dart`, `lib/core/services/sync_engine.dart` y
-    `lib/core/utils/uuid_utils.dart`;
-  - `lib/features/eventos/repositories/contratos_repository.dart`, `lib/models/plano_evento.dart` y
-    `movimiento_mesas.dart`, y `lib/features/plano/repositories/`;
-  - `supabase/migrations/20260926120000_planos_y_cambios_de_mesa.sql`;
-  - `test/migracion_v73_test.dart`, `plano_evento_test.dart`, `planos_evento_repository_test.dart` y
-    `sql_v73_coherencia_test.dart`;
-  - `tool/verificar_migracion_v73_test.dart`.
-- **M5:**
-  - `lib/features/plano/services/sorteo_con_plano.dart`;
-  - `lib/features/eventos/widgets/sorteo_mesas_dialog.dart`, `services/mesas_extra_utils.dart` y
-    `detalle_evento_masivo_screen.dart`;
-  - `test/sorteo_con_plano_test.dart` y `sorteo_mesas_dialog_plano_test.dart`.
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M4, M6, M7,
+M8 y M9 (ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -92,7 +73,7 @@ confirmado. Van en tres commits separados, en ese orden, porque el modelo de la 
 - **Las numeraciones de las páginas 4-5 y de Técnica son propuestas**, a confirmar con el jefe. Una numeración
   publicada no se cambia: se hace `@2`.
 
-### M2 · Los tres estilos (sin commit)
+### M2 · Los tres estilos (commit `1b8afed`)
 - **Estilos** (`lib/features/plano/estilos/`):
   - `estilo_plano.dart`: `EstiloPlano`, `TemaPlano` con los tres temas y `NivelDetalle`, que da cuánto detalle
     entra según el tamaño de la mesa;
@@ -114,7 +95,7 @@ confirmado. Van en tres commits separados, en ese orden, porque el modelo de la 
 - **Muestras:** `flutter test tool/plano_muestra_test.dart --dart-define=salida=<carpeta>` genera PNG de los tres
   estilos lado a lado y de cada armado y hoja. El usuario ya vio la primera versión.
 
-### M3 · Base v73 (sin commit)
+### M3 · Base v73 (commit `e335e00`)
 - **`local_database.dart`:**
   - `_version = 73`;
   - `crearTablasV73`, con solo `CREATE ... IF NOT EXISTS`;
@@ -159,7 +140,7 @@ confirmado. Van en tres commits separados, en ese orden, porque el modelo de la 
 - **Herramienta:** `tool/verificar_migracion_v73_test.dart`, para correr sobre una copia de la base real. Espera las
   cinco tablas nuevas vacías. **Todavía no se corrió**: va en la verificación final.
 
-### M5 · Sorteo con plano (sin commit)
+### M5 · Sorteo con plano (commit `aaa0034`)
 - **`lib/features/plano/services/sorteo_con_plano.dart`: el motor del sorteo no se toca.**
   - **`CasillerosPlano`:** las mesas en fila para el motor, con un casillero fantasma ocupado en cada corte y el pasto
     al final.
@@ -439,30 +420,119 @@ sigue en 313. Lo que cambió respecto de lo anotado en "Revisión de M2":
 tests de `recibo_alto_test.dart`, y al usuario le quedaban pestañas en "no se ha podido acceder al archivo". En
 `flutter test` se guarda y no se abre; en la app no cambia nada.
 
+### Etapa 2 hecha: la base v73 revisada (`e335e00`)
+
+Tres revisores de solo lectura (migración, sync y tests). **Nada grave:** la v73 solo crea las dos tablas, y la 5.0.0
+abre una base ya migrada. Lo aplicado:
+- **La copia antes de migrar ya no da por buena una copia vieja.** Si existe `antes_de_v73.db`, saca otra con la
+  fecha y la hora (`antes_de_v73_2026-10-05_0930.db`), escrita a un `.tmp` y renombrada. Era el caso del camino de
+  vuelta atrás: reinstalar la 5.0.0, seguir cobrando y volver a instalar dejaba la copia del primer día.
+- **Lo trabado en la cola se reintenta todo junto** (`entradasDeEstaPasada`, en `sync_engine.dart`). Antes el primer
+  trabado sellaba la hora y los demás no entraban: uno por ventana de cinco minutos, y uno que no podía subir (una
+  tabla que todavía no existe en la nube) le sacaba el turno a un pago. **Este problema ya estaba en la 5.0.0.**
+- **Un plano de la nube con otro id no pisa el local** (`planoTraeIdFijo` en la bajada, y `traerDeLaNube`).
+- **El modelo aguanta datos mal escritos:** `PlanoEvento.armadoONull` (un `armado_json` roto o sin mesas da null en vez
+  de tirar) y `ConfigPlano.fromJson` sin casts duros.
+- **`huella` ya no lleva `updatedAt`:** la fecha la reescribe el trigger al subir y daba un "la lista cambió" falso.
+- **Tests nuevos:** `test/sync_tablas_v73_test.dart` (las dos tablas en todas las listas del motor, con todas sus
+  columnas, y en ninguna que borre: lee el texto de `sync_engine.dart`), el esquema de lo que ya existía igual antes y
+  después, la vuelta a la 5.0.0 con datos cargados, y el SQL sin los comentarios (solo crea las dos tablas).
+- **`tool/verificar_migracion_v73_test.dart`** ahora exige que la base esté en una versión anterior, que aparezcan las
+  dos tablas, que el esquema viejo no cambie, que la vuelta a la 5.0.0 conserve los datos y que la base real quede con
+  el mismo tamaño, fecha y SHA-256. **Todavía no se corrió sobre la base real**: va en la verificación final.
+
+**Queda así a propósito:** si la copia falla (disco lleno), se migra igual y solo queda en el log; `_aplicarBorrados`
+no limpia de la cola las hijas de un evento borrado (ya era así); un `modo_sorteo` desconocido se reescribe como
+`entera`.
+
+### Etapa 3 hecha: el sorteo por bloques revisado (`aaa0034`)
+
+Tres revisores (motor, diálogo con el guardado, y tests). Lo aplicado:
+- **Antes de sortear, de deshacer y de restaurar se lee el plano de la nube** (`leerPlanoParaSortear`, en
+  `lib/features/plano/services/plano_para_sortear.dart`). El plano sube como una fila entera: con el de esta PC se
+  pisaba una mesa que la otra acababa de fijar. Ante la duda no deja sortear: si no se puede saber si hay plano, o el
+  armado no se puede leer, avisa y corta. Si la nube dice que no hay plano, se sortea como siempre aunque la tabla
+  local no se pueda leer.
+- **"Restaurar sorteo anterior" devuelve los bloques** (`RespaldoSorteo.bloques` y `bloquesARestaurar`). Deshacer los
+  borra del plano; antes Restaurar devolvía solo los números.
+- **A quien ya tenía mesa y compró otra, se le da pegada.** En modo entero la capacidad mínima podía quedar por debajo
+  de la mesa más alta ya asignada, y la mesa nueva caía en un hueco del principio. Lo encontró el test de propiedades,
+  no los revisores (`_Base.masAltoAsignado`).
+- **La vista previa y el sorteo dicen lo mismo.** `SorteoConPlano.sortear` reintenta con azar de verdad y, como última
+  red, usa el reparto con el que se armó la vista previa; `preparar` prueba varios repartos antes de decir "no
+  entra". Solo importa para los que llegan tarde a un sorteo por bloques ya hecho.
+- **Mesas fijadas:** una que el plano no tiene, que ya es de otra familia, que también está libre o que es de una
+  familia de baja se avisa y no se usa. La de quien ya tiene mesa y compró otra, se le da.
+- **`validar`** mira solo lo que dio el sorteo: no frena por dos familias con el mismo número de antes, acepta la
+  fijada propia en el pasto y la separación pedida a los dos lados de un corte, y rechaza dar una mesa que ya era de
+  otra familia.
+- **Diálogo:** "usar hasta la mesa N" no acepta una mesa que el salón no tiene; un aviso nuevo destilda "ya revisé";
+  las flechas mueven entre las divisiones que se ven; un plano ilegible lo dice y apaga SORTEAR.
+- **Avisos del flujo:** "no había nada para sortear" en vez de "sorteo listo: 0 familias"; el "quedó en esta PC" mira
+  también los números y el plano (`quedaEnCola`, en `subir_ya.dart`).
+- **`Divisiones.clave`** también saca guiones, comillas y "ª" ("5-A" es "5A"), y `parecidas` avisa "5to A" con "5 A".
+- **Tests nuevos:** `test/sorteo_con_plano_invariantes_test.dart` (480 escuelas al azar sobre los cuatro armados, con
+  una segunda vuelta de los que llegan tarde, comprobando las reglas del salón sin usar `validar`),
+  `test/plano_para_sortear_test.dart`, y más casos en el diálogo, el respaldo y las divisiones.
+
+**Queda así a propósito:** la reserva es todo o nada por división (si 3 familias tardías no entran en los 2 huecos de
+su bloque, van las 3 después del último bloque); el modo forzado a entero deja guardado `modo_sorteo: bloques`.
+
+### Etapa 4 hecha: mesas y sillas de cada uno en la grilla (`087e904`)
+
+- **`ExtrasSegunPago`** (`pago_para_sorteo.dart`): lo cargado y lo pagado de las mesas agregadas y de las sillas, y
+  cuántas mesas le da hoy el sorteo. `candidatosPorPago` come de ahí.
+- **`CeldaMesaAlumno`:** antes del sorteo dice "1 mesa" o "1 mesa +1 extra" (la agregada resaltada) y "+3 sillas" sin
+  reparto. Con el filtro puesto, cómo está pagado cada extra. El tooltip trae el detalle, con o sin montos.
+- **`FiltroExtras`** (`filtro_mesas_sillas.dart`) y **`ChipMesasSillas`** (`widgets/chip_mesas_sillas.dart`): el chip
+  de la barra, con su menú en tres grupos.
+- **El reparto de sillas se elige con las mesas sorteadas:** `RepartoDeSillas.faltaElegirConMesas`. El chip "Sillas a
+  confirmar" cuenta solo a los ya sorteados.
+- **`tool/extras_muestra_test.dart`**: el control de solo lectura con los datos reales, por fiesta. Se corrió el
+  30-sep a las 23:19; es una foto del momento y hay que volver a correrlo cerca del sorteo. Lo que dio:
+  - 9 fiestas con alumnos, ninguna sorteada todavía;
+  - mesas agregadas sin pagar: 19 alumnos en total; sillas sin pagar: 5; sin pago de la base: 99;
+  - un solo aviso: ESMAY, THIAGO, 4 sillas a $9.000 (lo habitual es $8.000). Ya se sabía: es el redondeo del 29-sep.
+- **`tool/grilla_mesas_muestra_test.dart`**: la imagen de muestra de la columna, con familias inventadas. El usuario
+  ya la vio.
+
 ## Lo que falta, en orden
 
-Es el orden del plan de la 6.0.0. Cada etapa termina con la suite en verde, commit y push. Después de M5 y antes de
-M4 va **la etapa de las mesas y sillas en la grilla** (el pedido del 30-sep). Al final van la documentación de la
-6.0.0, la versión (`6.0.0+57` en `pubspec.yaml` y `6.0.0` en `installer/junior_eventos_setup.iss`), el build y la
-publicación.
+Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`). Cada
+etapa termina con la suite en verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 
-1. ~~Aplicar los 24 hallazgos de M2.~~ **Hecho el 30-sep** (`1b8afed`).
-2. **Relanzar la revisión de M3**, solo base, sync y tests (ver "Cómo se lanzan ahora"). Aplicar lo confirmado, suite
-   y commit de M3, "lugar propio para el plano y los cambios de mesa", que lleva también los arreglos del SQL.
-3. **Revisión de M5**, con un script nuevo y los "Puntos a mirar". Aplicar, suite y commit de M5, "sorteo por bloques
-   o entero".
-4. **M4:** `widgets/elegir_plano_sheet.dart` y `plano_evento_screen.dart`. El detalle está en el plan.
-5. **M6:** fijar y dejar libres en `config`; cambiar y mover familias con motivo, deshacer y `mesas_movimientos`;
+1. ~~M2: los 24 hallazgos.~~ **Hecho** (`1b8afed`).
+2. ~~Revisión de M3.~~ **Hecho** (`e335e00`).
+3. ~~Revisión de M5.~~ **Hecho** (`aaa0034`).
+4. ~~Mesas y sillas en la grilla.~~ **Hecho** (`087e904`).
+5. **M4:** `widgets/elegir_plano_sheet.dart` y `plano_evento_screen.dart`. El detalle está en el plan de la Fase 3
+   (`donde-nos-quedamos-glittery-waffle.md`). Tener en cuenta lo que cambió el 30-sep:
+   - `EstadoPlano.divisiones` va en claves, con `nombresDivision` para la leyenda y `haySinDivision`;
+   - `fijadasFueraDelPlano` y `libresFueraDelPlano`, para avisar;
+   - el armado se lee con `plano.armadoONull`;
+   - `sillasExtraPorMesa` del plano sale de `SalonMesas.repartoSillas` con el reparto vigente.
+6. **M6:** fijar y dejar libres en `config`; cambiar y mover familias con motivo, deshacer y `mesas_movimientos`;
    `RegistroSorteo.resumir` con movimientos; `historial_sorteo_sheet.dart`. Lleva workflow.
-6. **M7:** `plano_pdf.dart` (sin `pw.Page` de alto fijo), y pasto y bloques en la planilla del sorteo.
-7. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`).
-8. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow.
-9. **Verificación final:**
-   - PNG y PDF de muestra para el usuario;
-   - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, mostrándole la tabla de antes y
-     después. El OK ya está dado en el plan.
-10. **Documentación:** cerrar este CONTEXTO, poner CLAUDE.md al día (base v73, tablas nuevas, `lib/features/plano/`)
-    y la memoria.
+   - Cada escritura del plano tiene que leerlo antes de la nube (`leerPlanoParaSortear` es el molde): gana la fila
+     entera del último que sube.
+   - `MesasMovimientosRepository.registrarEn` y `PlanosEventoRepository.guardar` ya existen y tienen test; hoy nadie
+     los llama.
+7. **M7:** `plano_pdf.dart` (sin `pw.Page` de alto fijo), y pasto y bloques en la planilla del sorteo.
+8. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`). El chip
+   "Mesas y sillas" ya está en la barra, entre el de mora y el de sillas.
+9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow.
+10. **Verificación final:**
+    - PNG y PDF de muestra para el usuario;
+    - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
+      tabla de antes y después. El OK ya está dado en el plan;
+    - `tool/extras_muestra_test.dart` otra vez, para revisar con el usuario lo que marca.
+11. **Documentación:** `docs/CONTEXTO_v6.0.0_<fecha>.md`, CLAUDE.md al día (base v73, tablas nuevas,
+    `lib/features/plano/`, la copia con fecha, el reintento de trabados) y la memoria.
+12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
+    windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
+    texto de novedades antes de publicar.
+13. **Publicar** (abajo). El usuario ya dijo "publicalo" el 30-sep; igual, los dos SQL van después de las 20 hs y con
+    su OK en el momento.
 
 ## Al publicar (recién cuando el usuario diga)
 
@@ -489,25 +559,25 @@ publicación.
 ## Para seguir en otro chat, pegar
 
 ```text
-Seguimos con la Fase 3 del plan de mesas (plano en tres estilos, sorteo por
-bloques, personalización). Leé primero docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md
-(secciones "Estado de cada parte", "Qué pasó el 27-sep", "Qué pasó el 29-sep" y
-"Lo que falta, en orden"), el plan en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md y la memoria
-del proyecto. El 29-sep se hizo otra cosa (recibo reimpreso, Mi Empresa, Esmay,
-el retiro y el gasto de $49M/$69M, el bolsillo): está todo commiteado. El
-30-sep aprobé el plan de la 6.0.0
-(C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md): leé también
-"Qué pasó el 30-sep". M2 ya está commiteado con sus 24 arreglos (1b8afed) y la
-suite da 913 tests en verde. M3 y M5 siguen programados pero sin commit.
-Seguí por donde diga "Lo que falta, en orden": la revisión de M3 (faltan base,
-sync y tests; los arreglos del SQL ya están aplicados), aplicar y commitear M3;
-la revisión de M5 con un workflow nuevo y commitearlo; las mesas y sillas en la
-grilla (Parte B del plan); y después M4, M6, M7, M8 y M9, la verificación, la
-documentación, la versión 6.0.0 y el build. Los revisores solo leen: los tests,
-las imágenes y los diffs los preparás vos antes. Avisame cada tarea que
-termines y cómo quedó, con un commit y push por paso. No corras la app desde el
-working tree (la v73 migraría la base real). Los dos SQL de la nube van después
-de las 20 hs y con mi OK en el momento. Lo que toque la base real, después de
-las 20 hs.
+Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques, entradas
+y mesas y sillas en la grilla). Leé primero
+docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
+"Qué pasó el 30-sep" y "Lo que falta, en orden"), el plan aprobado en
+C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md, el detalle
+técnico de M4 a M9 en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
+memoria del proyecto. El 30-sep quedaron hechas y subidas las etapas 1 a 4: el
+plano en tres estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques
+(aaa0034) y las mesas y sillas en la grilla (087e904). La suite da 1.039 tests
+en verde y el working tree está limpio. Seguí por la etapa 5: M4 (la pantalla
+del plano y el selector de estilo y armado), y después M6, M7, M8 y M9, la
+verificación final, la documentación de la 6.0.0, la versión y el build, en ese
+orden. M6 y M9 llevan revisores de solo lectura: los tests, las imágenes y los
+diffs los preparás vos antes. Avisame cada tarea que termines y cómo quedó, con
+un commit y push por paso. Mandame las imágenes y los PDF de muestra de cada
+etapa. Todo va en una sola versión, la 6.0.0: no se instala nada antes. No
+corras la app desde el working tree (la v73 migraría la base real). Ya dije
+"publicalo", pero los dos SQL de la nube van después de las 20 hs y con mi OK en
+el momento: frená ahí y recordámelo. Lo que toque la base real, después de las
+20 hs. Para volver atrás en el código está el tag antes-de-6.0.0.
 ```

@@ -42,6 +42,8 @@ El plan de la Fase 2 tenía siete piezas. El 25-sep el usuario lo revisó y lo s
 ## Qué cambió en la app
 
 1. **Sillas extra (lista de alumnos, columna Mesa).**
+   - **Cambió el 30-sep (va en la 6.0.0): el reparto se elige recién con las mesas sorteadas.** Antes del sorteo el
+     renglón dice solo "+3 sillas" y no se toca; ver "Qué pasó el 30-sep" en el CONTEXTO de la Fase 3.
    - El renglón "+3 sillas" se toca y ofrece solo las formas posibles ("2P · 1A", "1P · 2A"): hasta 2 por mesa, que
      sumen lo comprado.
    - Si hay una sola forma posible, no pregunta.
