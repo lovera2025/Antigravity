@@ -1,6 +1,6 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-09-29
+**Fecha:** 2026-09-26, puesto al día el 2026-09-30 (ver "Qué pasó el 30-sep": el plan de la 6.0.0)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
 **Estado:** en curso. Hay partes programadas y otras que faltan (ver la tabla). **Nada está publicado**: las PCs
 siguen con la 5.0.0.
@@ -34,7 +34,7 @@ siguen con la 5.0.0.
 |---|---|---|---|---|
 | M0 | Arreglos de planillas ("Confirmado", "RETIRÓ", renglón que se achica si ahorra una hoja) | Sí | Sí, `b49e87c` | No hacía falta |
 | M1 | Armados del Canva | Sí | Sí, `6f5b60f` | No hacía falta |
-| M2 | Los tres estilos (dibujo, vista, letras) | Sí, tests en verde | **No** | **Hecha el 27-sep: 24 hallazgos confirmados, sin aplicar** |
+| M2 | Los tres estilos (dibujo, vista, letras) | Sí | Sí, `1b8afed` (30-sep) | Hecha el 27-sep; **los 24 hallazgos aplicados el 30-sep** |
 | M3 | Base v73 y sincronización | Sí, tests en verde | **No** | SQL: hecha el 27-sep y **aplicada**. Base, sync y tests: **falta relanzarlas** |
 | M5 | Sorteo por bloques o entero, diálogo y flujo | Sí, tests en verde | **No** | **Falta lanzarla** |
 | M4 | Selector de estilo y armado, pantalla del plano | No | — | — |
@@ -375,7 +375,8 @@ Los tres cambios de datos (Esmay, el retiro y el gasto) se subieron con "Subir p
 Supabase. Las copias de antes están en `Documents\Junior Eventos\data.db.bak.{esmay,retiro,gasto}.*`. La suite pasa:
 **873 tests**.
 
-**MONTENEGRO, FRANCISCO NAHUEL (Colegio Nacional): pendiente, lo revisa el usuario el 30-sep.**
+**MONTENEGRO, FRANCISCO NAHUEL (Colegio Nacional): quedó pendiente el 29 y lo resolvió el usuario el 30-sep** (ver
+"Qué pasó el 30-sep"). Lo de abajo es cómo estaba el 29.
 - Tiene 5 pagos de cuota, pero la ficha dice 6 cuotas y una deuda de $150.235. Contado desde los pagos serían 5 y
   $180.235.
 - Los pagos del 19/09 se guardaron como "Cuota Base (5/9)" y "(6/9)". Los cobró otra PC (`pc-1786747234482`, Maxi,
@@ -392,12 +393,60 @@ Supabase. Las copias de antes están en `Documents\Junior Eventos\data.db.bak.{e
 **Ojo:** no correr la app (`flutter run`) desde este working tree. La v73 (M3) todavía está ahí sin commit, y como
 usa la `data.db` real, la migraría.
 
+## Qué pasó el 30-sep
+
+**Plan aprobado: el camino hasta la 6.0.0.** Está en
+`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`. Decisiones del usuario:
+- **Todo va en una sola versión, la 6.0.0** (`6.0.0+57`): lo que ya está en la rama desde la 5.0.0 (lo del 29-sep, la
+  Fase 2, M0 y M1), el resto de la Fase 3 y el pedido nuevo de la grilla. Sin versiones intermedias.
+- **Build y publicación incluidos.** Los dos SQL de la nube siguen yendo después de las 20 hs y con su OK en el
+  momento.
+- **Los datos siguen al día:** la versión es solo el programa. La copia `antes_de_v73.db` es la última red y no el
+  camino para volver atrás, porque restaurarla dejaría afuera lo cobrado después de instalar.
+- Para volver atrás en el código quedó el tag `antes-de-6.0.0` sobre `af2970d`.
+
+**MONTENEGRO, FRANCISCO NAHUEL: resuelto por el usuario el 30-sep.** En la nube la ficha dice 5 cuotas y $180.235.
+Los dos cobros del 19/09 de las 13:36 (cuota 4, mora $39.300 y cargo $3.465), que estaban trabados en la otra PC,
+quedaron anulados; el de las 13:45 quedó como cuotas 4/9 y 5/9. No hay nada más que hacer.
+
+**CACERES, ANAEL** (Normal Mariano Iloza) tiene 2 sillas extra guardadas sin precio desde antes de agosto: figura así
+en todas las copias locales desde el 3-ago. Es el único caso de la base. **Decisión del usuario: lo que no tiene
+precio no cuenta ni se muestra**, igual que hoy. Se toma como un error de carga y no se avisa.
+
+**Pedido nuevo, para la 6.0.0: las mesas y sillas de cada uno en la grilla.** Es la etapa 4 del plan; va después del
+commit de M5 porque toca `detalle_evento_masivo_screen.dart`.
+- Antes del sorteo, la columna Mesa dice cuántas mesas tiene cada uno: "1 mesa" sin destacar, y la agregada
+  resaltada ("1 mesa +1 extra").
+- Al pasar el mouse, cuánto pagó de cada cosa, leído de los pagos, y cuántas mesas le da hoy el sorteo.
+- Un filtro "Mesas y sillas" como el de mora: pagadas del todo, en cuotas, sin pagar, y "Revisar" (los avisos de
+  `SalonMesas.avisos`).
+- **El reparto de sillas ("2P · 1A") se elige recién con las mesas sorteadas:** antes del sorteo el renglón dice solo
+  "+3 sillas" y no se toca.
+- Un control de solo lectura con los datos reales (`tool/extras_muestra_test.dart`), para revisarlo con el usuario
+  antes del sorteo.
+
+**Etapa 1 hecha: M2 con los 24 hallazgos aplicados** (`1b8afed`). La suite pasa, **913 tests**, y `flutter analyze`
+sigue en 313. Lo que cambió respecto de lo anotado en "Revisión de M2":
+- `EstadoPlano.divisiones` va en claves de `Divisiones.clave`, sin la vacía. "Sin división" se sabe por
+  `haySinDivision`, y su nombre está en `nombresDivision['']`.
+- `InfoMesa` lleva `libre` y `fijadaPara` siempre. El dibujo pone el candado y la raya por dato, no por estado.
+- `franjaApellido`, `familiaConApellido`, `mesasEnHoja` y `lineasGrilla` son funciones sueltas de
+  `pintor_plano.dart`, con test. `PintorResaltado` ahora recibe el `estado`.
+- En Gala, el rubí pasó a uno más magenta, porque el anterior quedaba pegado al rojo del conflicto, y entraron el
+  peridoto y el cuarzo rosa. En Neón, la 7.ª división es azul.
+
+**Correr los tests ya no abre pestañas** (`3944fbe`). `PdfService` abría con `cmd /c start` el recibo que generan los
+tests de `recibo_alto_test.dart`, y al usuario le quedaban pestañas en "no se ha podido acceder al archivo". En
+`flutter test` se guarda y no se abre; en la app no cambia nada.
+
 ## Lo que falta, en orden
 
-1. **Aplicar los 24 hallazgos de M2** ("Revisión de M2", arriba), con los tests que propone cada uno. Después:
-   - regenerar los PNG y **mandarle al usuario `Plano_3_estilos.png`** y alguno con una familia resaltada;
-   - suite completa y `flutter analyze` sin avisos nuevos;
-   - commit de M2, "el plano en tres estilos", con las rutas de arriba.
+Es el orden del plan de la 6.0.0. Cada etapa termina con la suite en verde, commit y push. Después de M5 y antes de
+M4 va **la etapa de las mesas y sillas en la grilla** (el pedido del 30-sep). Al final van la documentación de la
+6.0.0, la versión (`6.0.0+57` en `pubspec.yaml` y `6.0.0` en `installer/junior_eventos_setup.iss`), el build y la
+publicación.
+
+1. ~~Aplicar los 24 hallazgos de M2.~~ **Hecho el 30-sep** (`1b8afed`).
 2. **Relanzar la revisión de M3**, solo base, sync y tests (ver "Cómo se lanzan ahora"). Aplicar lo confirmado, suite
    y commit de M3, "lugar propio para el plano y los cambios de mesa", que lleva también los arreglos del SQL.
 3. **Revisión de M5**, con un script nuevo y los "Puntos a mirar". Aplicar, suite y commit de M5, "sorteo por bloques
@@ -446,16 +495,19 @@ bloques, personalización). Leé primero docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-0
 "Lo que falta, en orden"), el plan en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md y la memoria
 del proyecto. El 29-sep se hizo otra cosa (recibo reimpreso, Mi Empresa, Esmay,
-el retiro y el gasto de $49M/$69M, el bolsillo): está todo commiteado y la
-suite da 873 tests en verde. M2, M3 y M5 siguen programados pero sin commit.
-Primero preguntame qué encontré de MONTENEGRO, FRANCISCO NAHUEL (la cuota 4; ver
-"Qué pasó el 29-sep") y resolvelo según eso. Después aplicá
-los 24 hallazgos de la revisión de M2, mandame las imágenes nuevas y commiteá
-M2. Después relanzá la revisión de M3 (faltan base, sync y tests; los arreglos
-del SQL ya están aplicados), aplicá y commiteá M3. Después revisá M5 con un
-workflow nuevo y commitealo. Los revisores solo leen: los tests, las imágenes y
-los diffs los preparás vos antes. Seguí con M4, M6, M7, M8 y M9, en ese orden.
-No corras la app desde el working tree (la v73 migraría la base real). No se
-publica ni se corre SQL hasta que yo lo diga. Lo que toque la base real, después
-de las 20 hs.
+el retiro y el gasto de $49M/$69M, el bolsillo): está todo commiteado. El
+30-sep aprobé el plan de la 6.0.0
+(C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md): leé también
+"Qué pasó el 30-sep". M2 ya está commiteado con sus 24 arreglos (1b8afed) y la
+suite da 913 tests en verde. M3 y M5 siguen programados pero sin commit.
+Seguí por donde diga "Lo que falta, en orden": la revisión de M3 (faltan base,
+sync y tests; los arreglos del SQL ya están aplicados), aplicar y commitear M3;
+la revisión de M5 con un workflow nuevo y commitearlo; las mesas y sillas en la
+grilla (Parte B del plan); y después M4, M6, M7, M8 y M9, la verificación, la
+documentación, la versión 6.0.0 y el build. Los revisores solo leen: los tests,
+las imágenes y los diffs los preparás vos antes. Avisame cada tarea que
+termines y cómo quedó, con un commit y push por paso. No corras la app desde el
+working tree (la v73 migraría la base real). Los dos SQL de la nube van después
+de las 20 hs y con mi OK en el momento. Lo que toque la base real, después de
+las 20 hs.
 ```
