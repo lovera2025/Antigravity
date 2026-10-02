@@ -1,6 +1,47 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+/// Deja que su contenido mida a lo alto lo que necesite, sin el tope que le
+/// pasa quien lo contiene.
+///
+/// Va en las celdas de las tablas que tienen varios renglones apilados. El
+/// paquete arma cada fila dos veces: primero mide las celdas y después les da
+/// a todas el alto de la más alta. En esa segunda pasada, una columna de
+/// renglones recibe como tope **exactamente** lo que mide, y si la suma de sus
+/// renglones lo pasa por un redondeo (una cienmillonésima de punto), el
+/// paquete **no dibuja el último renglón**: lo guarda "para la hoja
+/// siguiente", que acá no existe. No tira error ni avisa.
+///
+/// Así se perdía el "PASTO · avisar" de la mesa principal, y con mala suerte
+/// se podía perder el último acompañante de una familia. Sin tope, la columna
+/// dibuja siempre todos sus renglones.
+class AltoLibre extends pw.SingleChildWidget {
+  AltoLibre({required pw.Widget child}) : super(child: child);
+
+  @override
+  void layout(
+    pw.Context context,
+    pw.BoxConstraints constraints, {
+    bool parentUsesSize = false,
+  }) {
+    child!.layout(
+      context,
+      pw.BoxConstraints(
+        minWidth: constraints.minWidth,
+        maxWidth: constraints.maxWidth,
+      ),
+      parentUsesSize: true,
+    );
+    box = child!.box;
+  }
+
+  @override
+  void paint(pw.Context context) {
+    super.paint(context);
+    paintChild(context);
+  }
+}
+
 /// Estilo común de las planillas nuevas: la del sorteo y las que vengan (plano
 /// A4, entrega de entradas, lista de emergencia de la puerta).
 ///

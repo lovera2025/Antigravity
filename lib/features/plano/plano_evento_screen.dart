@@ -12,12 +12,14 @@ import '../../models/movimiento_mesas.dart';
 import '../../models/plano_evento.dart';
 import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
+import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
 import '../common/utils/subir_ya.dart';
 import '../eventos/repositories/contratos_repository.dart';
 import '../eventos/repositories/entradas_retiro_repository.dart';
 import '../eventos/repositories/sillas_reparto_repository.dart';
 import '../eventos/repositories/sorteos_mesas_repository.dart';
+import '../eventos/services/registro_sorteo.dart';
 import '../eventos/services/salon_mesas.dart';
 import 'estilos/estilo_plano.dart';
 import 'modelo/medidas_salon.dart';
@@ -29,6 +31,7 @@ import 'services/historial_sorteo.dart';
 import 'services/plano_de_la_fiesta.dart';
 import 'widgets/cambio_de_mesa_dialogs.dart';
 import 'widgets/elegir_plano_dialog.dart';
+import 'widgets/imprimir_plano_dialog.dart';
 import 'widgets/plano_evento_cuerpo.dart';
 
 /// El plano del salón de una fiesta: el armado con sus medidas, las familias
@@ -36,6 +39,9 @@ import 'widgets/plano_evento_cuerpo.dart';
 ///
 /// Lee siempre los datos del momento (las fichas, el reparto de sillas y el
 /// plano), y se refresca sola cuando baja un cambio de la otra PC.
+///
+/// IMPRIMIR arma el plano en papel con lo mismo que se ve: no lee ni guarda
+/// nada.
 ///
 /// Escribe tres cosas, y antes de escribir relee de la nube:
 /// - `planos_evento`: el armado, el estilo, las mesas fijas y las libres;
@@ -795,6 +801,36 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         textoConfirmar: 'DESHACER',
       );
 
+  /// El plano en papel, con lo que la pantalla muestra en este momento. Lleva
+  /// arriba quién sorteó y cuándo, como la planilla del sorteo.
+  Future<void> _imprimir() async {
+    final plano = _plano;
+    final vista = _vista;
+    if (_ocupado || plano == null || vista == null) return;
+    final blancoYNegro = await elegirComoImprimirPlano(
+      context,
+      hojas: vista.armado.hojas.length,
+    );
+    if (blancoYNegro == null || !mounted) return;
+    try {
+      await PdfService.generarPlanoPdf(
+        widget.evento,
+        vista,
+        estilo: plano.estiloPlano ?? EstiloPlano.arquitecto,
+        lineaSorteo: RegistroSorteo.lineaParaPlanilla(
+          RegistroSorteo.resumir(
+            _registros,
+            _alumnos,
+            movimientos: _movimientos,
+          ),
+        ),
+        blancoYNegro: blancoYNegro,
+      );
+    } catch (e) {
+      _decir('No se pudo armar el plano para imprimir. ($e)');
+    }
+  }
+
   Future<void> _abrirHistorial() => mostrarHistorialSorteo(
         context: context,
         historial: HistorialSorteo.armar(
@@ -874,6 +910,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         onCambiar: _cambiar,
         onMover: _mover,
       ),
+      onImprimir: _imprimir,
       onHistorial: _abrirHistorial,
     );
   }

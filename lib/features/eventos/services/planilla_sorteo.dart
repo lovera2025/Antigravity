@@ -2,7 +2,9 @@ import 'dart:math';
 
 import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
+import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../plano/services/divisiones.dart';
 import 'mesas_extra_utils.dart';
 import 'pago_para_sorteo.dart';
 import 'reparto_de_sillas.dart';
@@ -59,9 +61,15 @@ class FilaPlanillaSorteo {
   /// entran. `null` si todavía no tiene mesa.
   final int? generalesPrincipal;
 
-  /// Las mesas extra: "13", "13-14", "13 · 40 (separada)", "1 sin asignar",
-  /// o "-".
+  /// Las mesas extra: "13", "13-14", "13 · 40 (separada)", "138 (pasto)",
+  /// "1 sin asignar", o "-".
   final String adicional;
+
+  /// La mesa principal es del pasto: hay que avisarle a la familia.
+  final bool principalEnPasto;
+
+  /// Cuántas de sus mesas son del pasto (la principal o las adicionales).
+  final int mesasEnPasto;
 
   /// "(!) le falta 1 mesa", si los números no coinciden con la cuenta.
   final String? alertaMesas;
@@ -91,6 +99,8 @@ class FilaPlanillaSorteo {
     required this.ocupacionPrincipal,
     required this.generalesPrincipal,
     required this.adicional,
+    this.principalEnPasto = false,
+    this.mesasEnPasto = 0,
     required this.alertaMesas,
     required this.sillas,
     required this.reparto,
@@ -100,6 +110,10 @@ class FilaPlanillaSorteo {
     required this.sinMesa,
     required this.conCena,
   });
+
+  /// Todas sus mesas en un renglón: "12 + 13-14".
+  String get todasLasMesas =>
+      adicional == '-' ? mesaPrincipal : '$mesaPrincipal + $adicional';
 }
 
 /// Una división en la hoja de resumen.
@@ -111,6 +125,10 @@ class ResumenDivision {
   /// Los números de la división de a tramos: "1-24", "1-10 · 15-20", o "-".
   final String numeros;
 
+  /// El bloque de mesas que le tocó en un sorteo por división: "1-24". Null
+  /// si la fiesta no se sorteó por bloques o esta división no tiene el suyo.
+  final String? bloque;
+
   final int sillasExtra;
   final int conCena;
   final int repartosPendientes;
@@ -121,6 +139,7 @@ class ResumenDivision {
     required this.egresados,
     required this.mesas,
     required this.numeros,
+    this.bloque,
     required this.sillasExtra,
     required this.conCena,
     required this.repartosPendientes,
@@ -143,6 +162,18 @@ class ResumenPlanillaSorteo {
   /// A quién llamar para que elija cómo reparte sus sillas extra.
   final List<({FilaPlanillaSorteo fila, String division})> aLlamar;
 
+  /// El salón tiene mesas en el pasto (se usen o no).
+  final bool hayPasto;
+
+  /// Cuántas mesas del pasto tienen familia.
+  final int mesasEnPasto;
+
+  /// A quién avisarle que le tocó una mesa en el pasto.
+  final List<({FilaPlanillaSorteo fila, String division})> aAvisarPasto;
+
+  /// Alguna división tiene su bloque de mesas.
+  bool get hayBloques => divisiones.any((d) => d.bloque != null);
+
   const ResumenPlanillaSorteo({
     required this.egresados,
     required this.mesas,
@@ -154,6 +185,9 @@ class ResumenPlanillaSorteo {
     required this.repartosPendientes,
     required this.divisiones,
     required this.aLlamar,
+    this.hayPasto = false,
+    this.mesasEnPasto = 0,
+    this.aAvisarPasto = const [],
   });
 }
 
@@ -182,6 +216,35 @@ class PlanillaSorteo {
   static String _tramo(List<int> t) =>
       t.length == 1 ? '${t.first}' : '${t.first}-${t.last}';
 
+  /// Un tramo de mesas extra, diciendo cuáles son del pasto y si está
+  /// separado de la principal: "13-14", "137-138 (pasto)", "40 (separada)",
+  /// "140 (separada, pasto)". Si solo una parte es del pasto, se parte:
+  /// "129-130 · 131 (pasto)".
+  static String _tramoExtra(
+    List<int> tramo,
+    Set<int> pasto, {
+    bool separada = false,
+  }) {
+    final partes = <String>[];
+    var desde = 0;
+    for (var i = 1; i <= tramo.length; i++) {
+      if (i < tramo.length &&
+          pasto.contains(tramo[i]) == pasto.contains(tramo[desde])) {
+        continue;
+      }
+      final notas = [
+        if (separada) 'separada',
+        if (pasto.contains(tramo[desde])) 'pasto',
+      ];
+      partes.add(
+        '${_tramo(tramo.sublist(desde, i))}'
+        '${notas.isEmpty ? '' : ' (${notas.join(', ')})'}',
+      );
+      desde = i;
+    }
+    return partes.join(' · ');
+  }
+
   /// Los números de a tramos, en orden: "1-3 · 7".
   static String numerosEnTramos(Iterable<int> numeros) {
     final lista = numeros.toSet().toList()..sort();
@@ -195,11 +258,15 @@ class PlanillaSorteo {
   /// tramo y los tramos separados son la **adicional** (sus mesas extra). Las
   /// sillas extra se reparten como eligió la familia ([RepartoDeSillas]); si
   /// todavía no eligió, como siempre: de a 2 por mesa, la principal primero.
+  ///
+  /// [pasto] son las mesas del pasto del plano de la fiesta: a quien le tocó
+  /// una hay que avisarle.
   static FilaPlanillaSorteo fila(
     ContratoAlumno a, {
     PagoAlumno? pago,
     NotaOperativaContrato? nota,
     SillasReparto? repartoElegido,
+    Set<int> pasto = const {},
   }) {
     final tramos = SalonMesas.tramos(a);
     final crudo = a.numeroMesa?.trim() ?? '';
@@ -225,8 +292,8 @@ class PlanillaSorteo {
     final extrasDelBloque =
         tramos.isEmpty ? const <int>[] : tramos.first.skip(1).toList();
     final partes = <String>[
-      if (extrasDelBloque.isNotEmpty) _tramo(extrasDelBloque),
-      for (final t in tramos.skip(1)) '${_tramo(t)} (separada)',
+      if (extrasDelBloque.isNotEmpty) _tramoExtra(extrasDelBloque, pasto),
+      for (final t in tramos.skip(1)) _tramoExtra(t, pasto, separada: true),
     ];
     final extras = SalonMesas.mesasExtra(a);
     final sinPagarMesas = pago != null && !pago.pagoMesas;
@@ -320,6 +387,8 @@ class PlanillaSorteo {
       ocupacionPrincipal: ocupacionPrincipal,
       generalesPrincipal: generales,
       adicional: adicional,
+      principalEnPasto: principal != null && pasto.contains(principal),
+      mesasEnPasto: tramos.expand((t) => t).where(pasto.contains).length,
       alertaMesas: alerta == null ? null : '(!) $alerta',
       sillas: sillas,
       reparto: switch (estadoReparto) {
@@ -346,6 +415,7 @@ class PlanillaSorteo {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    Set<int> pasto = const {},
   }) {
     final grupos = <String, List<ContratoAlumno>>{};
     for (final a in activos(alumnos)) {
@@ -366,6 +436,7 @@ class PlanillaSorteo {
                 pago: pagos?[a.id],
                 nota: notas[a.id],
                 repartoElegido: repartos[a.id],
+                pasto: pasto,
               ),
             )
             .toList(),
@@ -373,11 +444,16 @@ class PlanillaSorteo {
   }
 
   /// Los totales de la noche y el detalle por división.
+  ///
+  /// [pasto] y [bloques] salen del plano de la fiesta, si tiene: las mesas del
+  /// pasto y el bloque que le tocó a cada división en el sorteo.
   static ResumenPlanillaSorteo resumen(
     Iterable<ContratoAlumno> alumnos, {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    Set<int> pasto = const {},
+    List<BloqueDivision> bloques = const [],
   }) {
     final lista = activos(alumnos);
     final porDiv = porDivision(
@@ -385,11 +461,19 @@ class PlanillaSorteo {
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      pasto: pasto,
     );
     final porId = {for (final a in lista) a.id: a};
+    // Los bloques se guardan por la clave de la división ("5A"); la planilla
+    // la muestra como está escrita ("5° A").
+    final bloqueDe = {
+      for (final b in bloques)
+        b.division: b.desde == b.hasta ? '${b.desde}' : '${b.desde}-${b.hasta}',
+    };
 
     final divisiones = <ResumenDivision>[];
     final aLlamar = <({FilaPlanillaSorteo fila, String division})>[];
+    final aAvisarPasto = <({FilaPlanillaSorteo fila, String division})>[];
     for (final entrada in porDiv.entries) {
       final filas = entrada.value;
       final cuentas = [for (final f in filas) porId[f.alumnoId]!];
@@ -402,6 +486,9 @@ class PlanillaSorteo {
             for (final a in cuentas)
               ...MesasExtraUtils.numerosMesaDesdeTexto(a.numeroMesa),
           ]),
+          bloque: entrada.key == sinDivision
+              ? null
+              : bloqueDe[Divisiones.clave(entrada.key)],
           sillasExtra:
               cuentas.fold<int>(0, (s, a) => s + SalonMesas.sillasExtra(a)),
           conCena: filas.fold<int>(0, (s, f) => s + f.conCena),
@@ -413,6 +500,9 @@ class PlanillaSorteo {
       for (final f in filas) {
         if (f.reparto == RepartoSillas.pendiente) {
           aLlamar.add((fila: f, division: entrada.key));
+        }
+        if (f.mesasEnPasto > 0) {
+          aAvisarPasto.add((fila: f, division: entrada.key));
         }
       }
     }
@@ -437,6 +527,9 @@ class PlanillaSorteo {
           todas.where((f) => f.reparto == RepartoSillas.pendiente).length,
       divisiones: divisiones,
       aLlamar: aLlamar,
+      hayPasto: pasto.isNotEmpty,
+      mesasEnPasto: todas.fold<int>(0, (s, f) => s + f.mesasEnPasto),
+      aAvisarPasto: aAvisarPasto,
     );
   }
 }

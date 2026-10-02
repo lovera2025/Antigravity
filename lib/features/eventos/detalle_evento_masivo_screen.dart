@@ -3628,12 +3628,25 @@ class _DetalleEventoMasivoScreenState
       final lineaSorteo = RegistroSorteo.lineaParaPlanilla(
         RegistroSorteo.resumir(registros, alumnos, movimientos: movimientos),
       );
+      // Si la fiesta tiene plano, de ahí salen las mesas del pasto (a quién
+      // avisar) y el bloque de cada división. Si no se puede leer, la
+      // planilla sale como siempre.
+      PlanoEvento? plano;
+      try {
+        plano = await ref
+            .read(planosEventoRepositoryProvider)
+            .obtener(widget.evento.id);
+      } catch (e) {
+        debugPrint('⚠️ Planilla del sorteo sin el plano de la fiesta: $e');
+      }
       await PdfService.generarPlanillaSorteo(
         widget.evento,
         alumnos,
         pagos: pagos,
         notas: _notasOperativasPorContrato,
         repartos: _repartosPorContrato,
+        pasto: plano?.armadoONull?.pasto ?? const {},
+        bloques: plano?.config.bloques ?? const [],
         lineaSorteo: lineaSorteo,
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,

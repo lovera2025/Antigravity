@@ -7,6 +7,7 @@ import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/evento.dart';
 import '../../../models/nota_operativa_contrato.dart';
+import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
@@ -26,7 +27,8 @@ typedef _Seccion = ({
 /// Las filas las arma [PlanillaSorteo] (lógica pura, con tests). Acá solo se
 /// ponen en la hoja:
 /// - **primera hoja, el resumen del salón:** totales, divisiones con sus
-///   números y, en la interna, a quién llamar por el reparto de sillas;
+///   números (y su bloque, si se sorteó por división) y, en la interna, a
+///   quién llamar por el reparto de sillas y a quién avisar por el pasto;
 /// - **después, una hoja por división**, A4 acostada, para repartirlas por
 ///   separado. Si una división no entra, sigue en la hoja siguiente con los
 ///   títulos de las columnas repetidos, y el pie dice "5° A · hoja 2 de 2".
@@ -79,6 +81,11 @@ class PlanillaSorteoPdf {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+
+    /// Del plano de la fiesta, si tiene: las mesas del pasto y el bloque de
+    /// cada división. Sin plano, la planilla sale como siempre.
+    Set<int> pasto = const {},
+    List<BloqueDivision> bloques = const [],
     String? lineaSorteo,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
@@ -103,6 +110,7 @@ class PlanillaSorteoPdf {
         (tema.rojoSinMesa, 'Sin mesa'),
       ],
       (null, 'Sillas: P en la principal, A en la adicional'),
+      if (pasto.isNotEmpty) (null, 'Pasto: hay que avisarle a la familia'),
     ];
 
     final resumen = PlanillaSorteo.resumen(
@@ -110,12 +118,15 @@ class PlanillaSorteoPdf {
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      pasto: pasto,
+      bloques: bloques,
     );
     final divisiones = PlanillaSorteo.porDivision(
       alumnos,
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      pasto: pasto,
     );
 
     final secciones = <_Seccion>[
@@ -255,7 +266,19 @@ class PlanillaSorteoPdf {
         '${r.repartosPendientes}',
         detalle: 'la familia tiene que elegir',
       ),
+      if (r.hayPasto)
+        t.tarjeta(
+          'En el pasto',
+          '${r.mesasEnPasto}',
+          detalle: r.aAvisarPasto.isEmpty
+              ? 'ninguna familia'
+              : r.aAvisarPasto.length == 1
+                  ? '1 familia: avisarle'
+                  : '${r.aAvisarPasto.length} familias: avisarles',
+        ),
     ];
+    // Con bloques, la tabla de divisiones lleva una columna más.
+    final conBloque = r.hayBloques;
 
     return [
       pw.Row(
@@ -275,15 +298,19 @@ class PlanillaSorteoPdf {
       else
         pw.Table(
           border: t.bordeTabla,
-          columnWidths: const {
-            0: pw.FlexColumnWidth(2.2),
-            1: pw.FlexColumnWidth(1),
-            2: pw.FlexColumnWidth(0.9),
-            3: pw.FlexColumnWidth(2.6),
-            4: pw.FlexColumnWidth(1),
-            5: pw.FlexColumnWidth(1),
-            6: pw.FlexColumnWidth(1.2),
-            7: pw.FlexColumnWidth(0.9),
+          columnWidths: {
+            for (final (i, ancho) in [
+              2.2,
+              1.0,
+              0.9,
+              if (conBloque) 1.1,
+              conBloque ? 2.3 : 2.6,
+              1.0,
+              1.0,
+              1.2,
+              0.9,
+            ].indexed)
+              i: pw.FlexColumnWidth(ancho),
           },
           children: [
             pw.TableRow(
@@ -293,6 +320,7 @@ class PlanillaSorteoPdf {
                 t.celdaTitulo('División'),
                 t.celdaTitulo('Egresados', align: pw.TextAlign.right),
                 t.celdaTitulo('Mesas', align: pw.TextAlign.right),
+                if (conBloque) t.celdaTitulo('Bloque'),
                 t.celdaTitulo('Números'),
                 t.celdaTitulo('Sillas extra', align: pw.TextAlign.right),
                 t.celdaTitulo('Con cena', align: pw.TextAlign.right),
@@ -307,6 +335,7 @@ class PlanillaSorteoPdf {
                   _txt(t, r.divisiones[i].division, negrita: true),
                   _num(t, '${r.divisiones[i].egresados}'),
                   _num(t, '${r.divisiones[i].mesas}'),
+                  if (conBloque) _txt(t, r.divisiones[i].bloque ?? '-'),
                   _txt(t, _numerosCortos(r.divisiones[i].numeros)),
                   _num(t, '${r.divisiones[i].sillasExtra}'),
                   _num(t, '${r.divisiones[i].conCena}'),
@@ -350,7 +379,97 @@ class PlanillaSorteoPdf {
           _tablaLlamar(t, r.aLlamar),
         ],
       ],
+      if (interna && r.aAvisarPasto.isNotEmpty) ...[
+        pw.SizedBox(height: 14),
+        // Igual que arriba: en dos columnas va todo junto, para que el título
+        // no quede solo al pie de la hoja.
+        if (r.aAvisarPasto.length <= _maxLlamarEnDosColumnas)
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              ..._tituloPasto(t, r.aAvisarPasto.length),
+              () {
+                final mitad = (r.aAvisarPasto.length + 1) ~/ 2;
+                return pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(
+                      child: _tablaPasto(t, r.aAvisarPasto.sublist(0, mitad)),
+                    ),
+                    pw.SizedBox(width: 12),
+                    pw.Expanded(
+                      child: mitad < r.aAvisarPasto.length
+                          ? _tablaPasto(t, r.aAvisarPasto.sublist(mitad))
+                          : pw.SizedBox(),
+                    ),
+                  ],
+                );
+              }(),
+            ],
+          )
+        else ...[
+          ..._tituloPasto(t, r.aAvisarPasto.length),
+          _tablaPasto(t, r.aAvisarPasto),
+        ],
+      ],
     ];
+  }
+
+  static List<pw.Widget> _tituloPasto(PlanillaTema t, int cantidad) => [
+        pw.Text(
+          'A quién avisar por el pasto ($cantidad)',
+          style: t.estilo(size: 11, negrita: true),
+        ),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          'Les tocó una mesa en el pasto. Conviene avisarles antes de la '
+          'fiesta.',
+          style: t.estilo(color: t.textoSuave),
+        ),
+        pw.SizedBox(height: 5),
+      ];
+
+  static pw.Widget _tablaPasto(
+    PlanillaTema t,
+    List<({FilaPlanillaSorteo fila, String division})> filas,
+  ) {
+    return pw.Table(
+      border: t.bordeTabla,
+      columnWidths: const {
+        0: pw.FlexColumnWidth(2.2),
+        1: pw.FlexColumnWidth(0.7),
+        2: pw.FlexColumnWidth(2.2),
+        3: pw.FlexColumnWidth(1.3),
+      },
+      children: [
+        pw.TableRow(
+          repeat: true,
+          decoration: pw.BoxDecoration(color: t.fondoEncabezadoTabla),
+          children: [
+            t.celdaTitulo('Egresado'),
+            t.celdaTitulo('Div.'),
+            t.celdaTitulo('Mesas'),
+            t.celdaTitulo('Teléfono'),
+          ],
+        ),
+        for (var i = 0; i < filas.length; i++)
+          pw.TableRow(
+            decoration: _alterna(t, i),
+            children: [
+              _txt(t, filas[i].fila.egresado, negrita: true),
+              _txt(t, filas[i].division),
+              _txt(
+                t,
+                filas[i].fila.principalEnPasto
+                    ? '${filas[i].fila.mesaPrincipal} (pasto)'
+                        '${filas[i].fila.adicional == '-' ? '' : ' + ${filas[i].fila.adicional}'}'
+                    : filas[i].fila.todasLasMesas,
+              ),
+              _txt(t, filas[i].fila.telefono),
+            ],
+          ),
+      ],
+    );
   }
 
   static List<pw.Widget> _tituloLlamar(PlanillaTema t, int cantidad) => [
@@ -372,8 +491,7 @@ class PlanillaSorteoPdf {
     PlanillaTema t,
     List<({FilaPlanillaSorteo fila, String division})> filas,
   ) {
-    String mesas(FilaPlanillaSorteo f) =>
-        f.adicional == '-' ? f.mesaPrincipal : '${f.mesaPrincipal} + ${f.adicional}';
+    String mesas(FilaPlanillaSorteo f) => f.todasLasMesas;
     return pw.Table(
       border: t.bordeTabla,
       columnWidths: const {
@@ -489,7 +607,18 @@ class PlanillaSorteoPdf {
                   color: g >= 0 ? t.textoSuave : t.rojo,
                 ),
               ),
+              if (f.principalEnPasto)
+                pw.Text(
+                  'PASTO · avisar',
+                  style: t.estilo(size: 7.5, negrita: true, color: t.naranja),
+                ),
             ],
+          ),
+        ] else if (f.principalEnPasto) ...[
+          pw.SizedBox(width: 5),
+          pw.Text(
+            'PASTO · avisar',
+            style: t.estilo(size: 7.5, negrita: true, color: t.naranja),
           ),
         ],
       ],
@@ -517,7 +646,9 @@ class PlanillaSorteoPdf {
           color: color,
           alignment: alineacion,
           padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
-          child: child,
+          // Sin tope de alto: si no, el último renglón de una celda puede no
+          // dibujarse (ver [AltoLibre]).
+          child: AltoLibre(child: child),
         );
 
     final reparto = switch (f.reparto) {

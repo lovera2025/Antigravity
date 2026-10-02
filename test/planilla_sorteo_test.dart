@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/common/services/planilla_sorteo_pdf.dart';
+import 'package:arguello_events/features/common/services/planilla_tema.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/planilla_sorteo.dart';
@@ -10,7 +13,58 @@ import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/nota_operativa_contrato.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
+
+import 'helpers/leer_pdf.dart';
+
+/// Un renglón de 10 puntos de alto que avisa cuando lo dibujan.
+class _Renglon extends pw.Widget {
+  _Renglon(this.alDibujar);
+
+  final void Function() alDibujar;
+
+  @override
+  void layout(
+    pw.Context context,
+    pw.BoxConstraints constraints, {
+    bool parentUsesSize = false,
+  }) {
+    box = PdfRect.fromPoints(
+      PdfPoint.zero,
+      constraints.constrain(const PdfPoint(10, 10)),
+    );
+  }
+
+  @override
+  void paint(pw.Context context) {
+    super.paint(context);
+    alDibujar();
+  }
+}
+
+/// Cuántos de tres renglones apilados se dibujan cuando el alto disponible
+/// queda una millonésima por debajo de lo que miden.
+int _renglonesDibujados(pw.Widget Function(pw.Widget columna) envolver) {
+  var dibujados = 0;
+  final doc = pw.Document();
+  final pagina = PdfPage(doc.document);
+  final contexto = pw.Context(document: doc.document)
+      .copyWith(page: pagina, canvas: pagina.getGraphics());
+  final celda = envolver(
+    pw.Column(
+      mainAxisSize: pw.MainAxisSize.min,
+      children: [for (var i = 0; i < 3; i++) _Renglon(() => dibujados++)],
+    ),
+  );
+  celda
+    ..layout(
+      contexto,
+      const pw.BoxConstraints(maxWidth: 100, maxHeight: 29.999999),
+    )
+    ..paint(contexto);
+  return dibujados;
+}
 
 ContratoAlumno _alumno(
   String id, {
@@ -295,7 +349,157 @@ void main() {
     });
   });
 
+  group('el pasto y los bloques del plano', () {
+    test('la mesa principal en el pasto se marca para avisar', () {
+      final f = PlanillaSorteo.fila(_alumno('a', mesas: [131]), pasto: {131, 132});
+      expect(f.mesaPrincipal, '131');
+      expect(f.principalEnPasto, isTrue);
+      expect(f.mesasEnPasto, 1);
+      expect(f.adicional, '-');
+    });
+
+    test('la adicional dice cuáles de sus mesas son del pasto', () {
+      // Solo la última es del pasto: se parte el tramo.
+      final parte = PlanillaSorteo.fila(
+        _alumno('a', mesas: [129, 130, 131], extras: 2),
+        pasto: {131, 132},
+      );
+      expect(parte.mesaPrincipal, '129');
+      expect(parte.principalEnPasto, isFalse);
+      expect(parte.adicional, '130 · 131 (pasto)');
+      expect(parte.mesasEnPasto, 1);
+      expect(parte.todasLasMesas, '129 + 130 · 131 (pasto)');
+
+      // Todas en el pasto.
+      final todas = PlanillaSorteo.fila(
+        _alumno('a', mesas: [131, 132, 133], extras: 2),
+        pasto: {131, 132, 133},
+      );
+      expect(todas.principalEnPasto, isTrue);
+      expect(todas.adicional, '132-133 (pasto)');
+      expect(todas.mesasEnPasto, 3);
+
+      // Una separada y en el pasto.
+      final separada = PlanillaSorteo.fila(
+        _alumno('a', mesas: [12, 13, 140], extras: 2),
+        pasto: {140},
+      );
+      expect(separada.adicional, '13 · 140 (separada, pasto)');
+    });
+
+    test('sin plano, la fila dice lo mismo que antes', () {
+      final f = PlanillaSorteo.fila(_alumno('a', mesas: [12, 13, 40], extras: 2));
+      expect(f.adicional, '13 · 40 (separada)');
+      expect(f.principalEnPasto, isFalse);
+      expect(f.mesasEnPasto, 0);
+      expect(f.todasLasMesas, '12 + 13 · 40 (separada)');
+    });
+
+    final alumnos = [
+      _alumno('a1', nombre: 'ACOSTA, LUCÍA', mesas: [1]),
+      _alumno('a2', nombre: 'LÓPEZ, IVÁN', mesas: [2, 3], extras: 1),
+      _alumno('b1', nombre: 'ZARATE, EMMA', curso: '5° b', mesas: [131]),
+      _alumno('b2', nombre: 'VERA, DANTE', curso: '5° b', mesas: [20, 132], extras: 1),
+      _alumno('s1', nombre: 'RÍOS, BRUNO', curso: null, mesas: [40]),
+    ];
+    const bloques = [BloqueDivision('5A', 1, 10), BloqueDivision('5B', 11, 131)];
+
+    test('el resumen dice a quién avisar por el pasto', () {
+      final r = PlanillaSorteo.resumen(alumnos, pasto: {131, 132}, bloques: bloques);
+      expect(r.hayPasto, isTrue);
+      expect(r.mesasEnPasto, 2);
+      expect(
+        r.aAvisarPasto.map((x) => x.fila.egresado),
+        ['VERA, DANTE', 'ZARATE, EMMA'],
+      );
+      expect(r.aAvisarPasto.first.division, '5° b');
+    });
+
+    test('cada división lleva su bloque, se escriba como se escriba', () {
+      final r = PlanillaSorteo.resumen(alumnos, pasto: {131, 132}, bloques: bloques);
+      expect(r.hayBloques, isTrue);
+      expect(
+        {for (final d in r.divisiones) d.division: d.bloque},
+        {'5° A': '1-10', '5° b': '11-131', PlanillaSorteo.sinDivision: null},
+      );
+    });
+
+    test('sin plano, el resumen no habla de pasto ni de bloques', () {
+      final r = PlanillaSorteo.resumen(alumnos);
+      expect(r.hayPasto, isFalse);
+      expect(r.hayBloques, isFalse);
+      expect(r.mesasEnPasto, 0);
+      expect(r.aAvisarPasto, isEmpty);
+    });
+
+    test('un salón con pasto que nadie usa: cero, y nadie a quien avisar', () {
+      final r = PlanillaSorteo.resumen(alumnos, pasto: {200, 201});
+      expect(r.hayPasto, isTrue);
+      expect(r.mesasEnPasto, 0);
+      expect(r.aAvisarPasto, isEmpty);
+    });
+  });
+
   group('papel', () {
+    test('una celda dibuja todos sus renglones aunque el alto quede justo', () {
+      // El paquete deja afuera el último renglón de una columna si lo que
+      // mide pasa del tope por un redondeo: así se perdía "PASTO · avisar".
+      // Si esta línea falla es que el paquete lo arregló: [AltoLibre] deja de
+      // hacer falta, pero no molesta.
+      expect(_renglonesDibujados((columna) => columna), 2);
+      expect(_renglonesDibujados((columna) => AltoLibre(child: columna)), 3);
+    });
+
+    test('el aviso del pasto y todos los acompañantes salen escritos', () async {
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+      final alumnos = [
+        _alumno('a', nombre: 'ACOSTA, LUCÍA', mesas: [133]),
+        _alumno('b', nombre: 'LÓPEZ, IVÁN', mesas: [130, 131, 132], extras: 2),
+        _alumno(
+          'c',
+          nombre: 'MEDINA, SOFÍA',
+          mesas: [5],
+          acompanantes: ['PRIMERA', 'SEGUNDA', 'TERCERA', 'CUARTA', 'QUINTA'],
+        ),
+      ];
+      for (final version in VersionPlanillaSorteo.values) {
+        // Sin las letras de la app, para poder leer lo que escribió.
+        final bytes = await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: alumnos,
+          pasto: {131, 132, 133},
+          bloques: const [BloqueDivision('5A', 1, 132)],
+          version: version,
+          generada: DateTime(2026, 11, 12, 21, 30),
+        );
+        // El paquete escribe palabra por palabra, cada una entre paréntesis.
+        final texto = contenidoDelPdf(bytes);
+        for (final palabra in [
+          // "PASTO · avisar", en la mesa principal.
+          '(avisar)',
+          // "132 (pasto)", en la adicional.
+          r'[(\(pasto\))]',
+          '(BLOQUE)',
+          '(1-132)',
+          '(PRIMERA)',
+          '(SEGUNDA)',
+          '(TERCERA)',
+          '(CUARTA)',
+          '(QUINTA)',
+        ]) {
+          expect(texto.contains(palabra), isTrue, reason: '$version: $palabra');
+        }
+      }
+    });
+
     test('la versión para repartir no lleva teléfonos ni observaciones', () {
       expect(
         PlanillaSorteoPdf.columnas(VersionPlanillaSorteo.interna),

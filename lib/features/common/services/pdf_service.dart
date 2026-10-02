@@ -15,6 +15,7 @@ import '../../../models/contrato_alumno.dart';
 import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../../models/entradas_retiro.dart';
+import '../../../models/plano_evento.dart';
 import '../../../models/presupuesto.dart';
 import '../../../models/prestamo_alquiler.dart';
 import '../../../models/calculo_rentabilidad.dart';
@@ -40,10 +41,14 @@ import '../../eventos/services/mora_concepto_rotulo.dart';
 import '../../eventos/services/mora_cuota_calculator.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../../eventos/utils/presupuesto_desde_evento.dart';
+import '../../plano/estilos/estilo_plano.dart';
+import '../../plano/estilos/fuentes_plano.dart';
+import '../../plano/services/plano_de_la_fiesta.dart';
 import '../utils/currency_extensions.dart';
 import 'ajuste_pdf.dart';
 import 'planilla_entrega_pdf.dart';
 import 'planilla_sorteo_pdf.dart';
+import 'plano_pdf.dart';
 import 'presupuesto_pdf_sections.dart';
 import 'presupuesto_redaccion_llm_service.dart';
 
@@ -4194,6 +4199,8 @@ class PdfService {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    Set<int> pasto = const {},
+    List<BloqueDivision> bloques = const [],
     String? lineaSorteo,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
@@ -4206,6 +4213,8 @@ class PdfService {
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      pasto: pasto,
+      bloques: bloques,
       lineaSorteo: lineaSorteo,
       version: version,
       blancoYNegro: blancoYNegro,
@@ -4272,6 +4281,8 @@ class PdfService {
     Map<String, PagoAlumno>? pagos,
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
+    Set<int> pasto = const {},
+    List<BloqueDivision> bloques = const [],
     String? lineaSorteo,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
@@ -4282,6 +4293,8 @@ class PdfService {
       pagos: pagos,
       notas: notas,
       repartos: repartos,
+      pasto: pasto,
+      bloques: bloques,
       lineaSorteo: lineaSorteo,
       version: version,
       blancoYNegro: blancoYNegro,
@@ -4296,6 +4309,80 @@ class PdfService {
     final nombre =
         'Planilla_Sorteo_${safeName}_$sufijo${blancoYNegro ? '_BN' : ''}.pdf';
 
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, nombre);
+    } else {
+      await Printing.layoutPdf(onLayout: (_) async => bytes, name: nombre);
+    }
+  }
+
+  static final Map<EstiloPlano, pw.Font> _letrasPlano = {};
+
+  /// La letra de un estilo del plano (la serif de Gala, la de Neón), desde los
+  /// assets. Null si no se pudo leer: el plano sale con la de las planillas.
+  /// Arquitecto usa las Outfit, que ya están cargadas.
+  static Future<pw.Font?> _letraDelPlano(EstiloPlano estilo) async {
+    if (estilo == EstiloPlano.arquitecto) return null;
+    final guardada = _letrasPlano[estilo];
+    if (guardada != null) return guardada;
+    final archivo = archivosFuentesPlano[TemaPlano.de(estilo).fuente]?.first;
+    if (archivo == null) return null;
+    try {
+      final letra = pw.Font.ttf(await rootBundle.load(archivo));
+      _letrasPlano[estilo] = letra;
+      return letra;
+    } catch (e) {
+      debugPrint('⚠️ No se pudo leer la letra del plano ($archivo): $e');
+      return null;
+    }
+  }
+
+  /// El plano del salón en papel: arma el PDF y devuelve los bytes. Lo usan
+  /// [generarPlanoPdf] y la muestra de `tool/`.
+  ///
+  /// Lo dibuja [PlanoPdf] con lo que ya calculó [PlanoDeLaFiesta]: no lee ni
+  /// guarda nada. Las letras salen de los assets, nunca de internet.
+  static Future<Uint8List> construirPlanoPdf(
+    Evento evento,
+    PlanoDeLaFiesta plano, {
+    required EstiloPlano estilo,
+    String? lineaSorteo,
+    bool blancoYNegro = false,
+    DateTime? generada,
+  }) async {
+    final fuentes = await _fuentesOutfit();
+    return PlanoPdf.construir(
+      institucion: evento.cliente?.nombreCompleto ?? 'EVENTO',
+      plano: plano,
+      estilo: estilo,
+      lineaSorteo: lineaSorteo,
+      blancoYNegro: blancoYNegro,
+      regular: fuentes?.$1,
+      negrita: fuentes?.$2,
+      letraPlano: await _letraDelPlano(estilo),
+      generada: generada,
+    );
+  }
+
+  static Future<void> generarPlanoPdf(
+    Evento evento,
+    PlanoDeLaFiesta plano, {
+    required EstiloPlano estilo,
+    String? lineaSorteo,
+    bool blancoYNegro = false,
+  }) async {
+    final bytes = await construirPlanoPdf(
+      evento,
+      plano,
+      estilo: estilo,
+      lineaSorteo: lineaSorteo,
+      blancoYNegro: blancoYNegro,
+    );
+    final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
+      RegExp(r'[^a-zA-Z0-9_\-\.]'),
+      '_',
+    );
+    final nombre = 'Plano_$safeName${blancoYNegro ? '_BN' : ''}.pdf';
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, nombre);
     } else {

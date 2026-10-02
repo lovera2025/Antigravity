@@ -1,20 +1,23 @@
-// Arnés manual: sortea un evento inventado con el motor real y genera la
-// planilla del sorteo en sus cuatro versiones, para mirar el papel sin levantar
-// la app ni tocar la base.
+// Arnés manual: sortea un evento inventado con el sorteo real, sobre el plano
+// de Técnica y por división, y genera la planilla del sorteo en sus cuatro
+// versiones, para mirar el papel sin levantar la app ni tocar la base.
 //
 //   flutter test tool/planilla_sorteo_muestra_test.dart
 //   flutter test tool/planilla_sorteo_muestra_test.dart --dart-define=salida=C:\carpeta
 //
 // Salen cuatro PDF: interna y para repartir, cada una en color y en blanco y
 // negro. Lo que se mira:
-//   • la hoja de resumen: tarjetas con los totales, las divisiones con sus
-//     números y, en la interna, a quién llamar por el reparto de sillas;
+//   • la hoja de resumen: tarjetas con los totales (y "En el pasto"), las
+//     divisiones con su bloque y sus números y, en la interna, a quién llamar
+//     por el reparto de sillas y a quién avisar por el pasto;
 //   • una hoja acostada por división, con las columnas del Excel del jefe
 //     primero: egresado, acompañantes (uno por renglón), mesa principal (en
 //     verde, con "N con cena · M generales"), adicional, sillas ("2P · 1A");
 //   • que una división larga siga en la hoja siguiente con los títulos
 //     repetidos;
 //   • la fila roja de quien no tiene mesa (no pagó la cuota base);
+//   • "PASTO · avisar" en la mesa principal de quien cayó en el pasto, y
+//     "138 (pasto)" en la adicional;
 //   • el reparto de sillas: "Confirmado" en quien eligió o tiene una sola forma,
 //     "A confirmar" en quien tiene que elegir;
 //   • que la versión para repartir no tenga teléfonos ni observaciones;
@@ -35,11 +38,14 @@ import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart'
 import 'package:arguello_events/features/eventos/services/planilla_sorteo.dart';
 import 'package:arguello_events/features/eventos/services/reparto_de_sillas.dart';
 import 'package:arguello_events/features/eventos/services/salon_mesas.dart';
-import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/services/divisiones.dart';
+import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/nota_operativa_contrato.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
@@ -93,12 +99,12 @@ void main() {
       ? _salida
       : Directory.systemTemp.createTempSync('planilla_sorteo').path;
 
-  test('planilla del sorteo — tres divisiones del tamaño de la Normal', () async {
-    // Tres divisiones de unos 25 egresados; la A es larga a propósito para que
-    // pase de hoja.
+  test('planilla del sorteo — tres divisiones sobre el plano de Técnica', () async {
+    // Tres divisiones grandes: piden más mesas que las 130 del hormigón, así
+    // algunas familias caen en el pasto. La A pasa de hoja.
     final alumnos = <ContratoAlumno>[];
     var i = 0;
-    for (final (curso, cantidad) in [('5° A', 34), ('5° B', 24), ('5° C', 22)]) {
+    for (final (curso, cantidad) in [('5° A', 44), ('5° B', 38), ('5° C', 34)]) {
       for (var k = 0; k < cantidad; k++, i++) {
         final extras = i % 9 == 0 ? 1 : (i % 23 == 0 ? 2 : 0);
         final sillas = i % 7 == 0 ? 2 : (i % 11 == 0 ? 3 : 0);
@@ -156,30 +162,23 @@ void main() {
       candidatos: candidatosPorPago(alumnos, pagos),
       soloPagado: true,
     );
-    final pedidos = SorteoMesasMotor.pedidos(
-      alumnos,
+    // El sorteo de verdad, sobre el plano: cada división en su bloque, y el
+    // pasto para las que no entran en el hormigón.
+    final armado = ArmadosPredefinidos.tecnica1a1b();
+    final entrada = EntradaSorteoPlano(
+      armado: armado,
+      alumnos: alumnos,
+      exclusion: exclusion,
       separaciones: const {'a23': 1},
-      sinMesa: exclusion.sinMesa,
-      soloBase: exclusion.soloBase,
-    );
-    final ocupadas = SorteoMesasMotor.ocupadas(alumnos);
-    final capacidad =
-        SorteoMesasMotor.capacidadMinima(pedidos: pedidos, ocupadas: ocupadas);
-    final asignaciones = SorteoMesasMotor.sortear(
-      pedidos: pedidos,
-      ocupadas: ocupadas,
-      capacidad: capacidad,
-      random: Random(7),
-    );
-    expect(
-      SorteoMesasMotor.validar(
-        pedidos: pedidos,
-        ocupadas: ocupadas,
-        capacidad: capacidad,
-        asignaciones: asignaciones,
+      modo: ModoSorteo.bloques,
+      ordenDivisiones: Divisiones.ordenNatural(
+        alumnos.map((a) => Divisiones.clave(a.cursoDivision)),
       ),
-      isNull,
+      usarPasto: true,
     );
+    final sorteo = SorteoConPlano.sortear(entrada, random: Random(7));
+    expect(SorteoConPlano.validar(entrada, sorteo), isNull);
+    final asignaciones = sorteo.asignaciones;
     final sorteados = [
       for (final a in alumnos)
         asignaciones.containsKey(a.id)
@@ -228,6 +227,8 @@ void main() {
           pagos: pagos,
           notas: notas,
           repartos: repartos,
+          pasto: armado.pasto,
+          bloques: sorteo.bloques,
           lineaSorteo:
               'Sorteo del 12/11/2026 21:40 hs · Jefe · 1 cambio a mano después',
           version: version,
@@ -243,6 +244,10 @@ void main() {
         expect(archivo.lengthSync(), greaterThan(1000));
       }
     }
-    stdout.writeln('── capacidad sorteada: $capacidad');
+    stdout.writeln(
+      '── bloques: ${[
+        for (final b in sorteo.bloques) '${b.division} ${b.desde}-${b.hasta}',
+      ].join(', ')}',
+    );
   }, timeout: const Timeout(Duration(minutes: 3)));
 }
