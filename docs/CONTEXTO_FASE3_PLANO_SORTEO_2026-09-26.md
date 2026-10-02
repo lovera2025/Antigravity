@@ -1,12 +1,12 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-10-01 (ver "Qué pasó el 1-oct": las medidas del playón)
+**Fecha:** 2026-09-26, puesto al día el 2026-10-02 (ver "Qué pasó el 2-oct": los cuatro botones a la vista)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 7 del plan de la 6.0.0 están hechas y subidas (la última, M7: el plano impreso
-y la planilla del sorteo con pasto y bloques); faltan M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen
+**Estado:** en curso. Las etapas 1 a 8 del plan de la 6.0.0 están hechas y subidas (la última, M8: los cuatro
+botones a la vista y la lista de la puerta trabada); falta M9 (ver la tabla). **Nada está publicado**: las PCs siguen
 con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 1-oct" y "Lo que falta, en orden". El texto para pegar
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 2-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
@@ -44,15 +44,15 @@ con la 5.0.0.
 | M6 | Fijar, dejar libres, cambiar o mover familias, historial | Sí | Sí, `e56f2e9` (1-oct) | Hecha y **aplicada el 1-oct** (dos revisores) |
 | — | La cola de subida no pierde un cambio hecho mientras subía el anterior (lo encontró la revisión de M6) | Sí | Sí, `4fd931a` (1-oct) | — |
 | M7 | Plano impreso y planilla con bloques y pasto | Sí | Sí, `5fe73ec` (1-oct) | No hacía falta |
-| M8 | Botones a la vista y lista de la puerta trabada | No | — | — |
+| M8 | Botones a la vista y lista de la puerta trabada | Sí | Sí, `b508e8f` (2-oct) | No hacía falta |
 | M9 | Acomodar el salón, colores y textos | No | — | Workflow |
 
-**Tests:** la suite entera pasa, **1.319 tests** el 1-oct, al cerrar M7 (1.275 con M6; 1.179 con M4; 1.118 con la
-etapa 4b; 1.039 el 30-sep a la noche; 913 al
+**Tests:** la suite entera pasa, **1.335 tests** el 2-oct, al cerrar M8 (1.319 con M7; 1.275 con M6; 1.179 con M4;
+1.118 con la etapa 4b; 1.039 el 30-sep a la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M8 y M9
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M9
 (ver "Lo que falta, en orden").
 
 ## Qué hay programado
@@ -758,6 +758,60 @@ cambio nuevo adentro. La nube quedaba con el dato viejo, esta PC con el nuevo, y
 como imagen. No hay `pdftoppm` instalado: con `pages` falla. Un PDF de diez hojas cuesta mucho contexto; conviene
 armar una muestra chica.
 
+## Qué pasó el 2-oct
+
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-pillow.md`.
+
+**Pedido del usuario:** hacer todo lo que falta **ahora, sin dejarlo para más adelante**, para que si aparece algo
+que arreglar haya tiempo antes del sorteo. Se sigue **como veníamos: sesión por sesión**, cada etapa se guarda y se
+continúa en otro chat. No quiso que se hiciera todo de corrido en un solo chat.
+
+### Etapa 8 hecha: M8, los cuatro botones a la vista y la lista de la puerta trabada (`b508e8f`)
+
+Solo pantalla: no toca la base ni la sincronización.
+
+- **Cómo queda la barra de la fiesta:** `[contadores, chips, REGISTRAR, CONTRATOS] [PLANO] [SORTEO ▾] [PLANILLAS ▾]
+  [ENTRADAS] [MÁS]`.
+
+  | Botón | Qué abre |
+  |---|---|
+  | PLANO | La pantalla del plano |
+  | SORTEO ▾ | Sortear mesas · Deshacer sorteo de mesas · Restaurar sorteo anterior (solo si hay copia) · Historial de las mesas |
+  | PLANILLAS ▾ | Planilla del sorteo · Plano impreso · Planilla de entrega · Planilla de mora |
+  | ENTRADAS | Retiro de entradas |
+  | MÁS | Ordenar · Selección múltiple · Pasar a la lista de la puerta (apagado, con "Se habilita en diciembre, cuando se cierren los permisos de la lista") |
+
+- **`lib/features/eventos/widgets/grupo_fiesta_toolbar.dart`** (nuevo), dos widgets puros, sin base:
+  - `GrupoFiestaToolbar`: los cuatro botones. Recibe qué hacer con cada toque; lo que no se puede llega en null y
+    queda apagado con el motivo ("Todavía no hay plano: armalo en PLANO", "Todavía no hay alumnos", "Nadie debe
+    mora");
+  - `BotonMasFiesta`: el botón MÁS, que salió de la pantalla de la fiesta (eran 90 renglones adentro de
+    `detalle_evento_masivo_screen.dart`). Así se puede probar y dibujar en la muestra.
+- **Los nombres se muestran si entran.** No va por el ancho de la ventana sino por el lugar que sobra:
+  - la barra le da primero a los contadores y a REGISTRAR lo que piden (con un tope:
+    `anchoMaximoPrimarios`), y el grupo usa el resto;
+  - con menos de `GrupoFiestaToolbar.anchoConNombres` (440 px en barra chica, 540 en grande) quedan solo los
+    íconos, con el nombre al pasar el mouse;
+  - medido con la letra de la app: con nombres ocupa 418 y 500 px; solo íconos, 188. Un test cuida que las dos
+    medidas sigan alcanzando;
+  - en una notebook de 1366 entran los nombres; en una ventana de 1000, íconos.
+- **"Plano impreso" y "Planilla de entrega" abren su pantalla preguntando color o blanco y negro**
+  (`PlanoEventoScreen(imprimirAlAbrir: true)` y `RetiroEntradasScreen(imprimirAlAbrir: true)`), y usan el
+  `_imprimir` que cada pantalla ya tenía. No se duplicó cómo se arma cada papel.
+- **La lista de la puerta, trabada dos veces:**
+  - `kListaPuertaHabilitada = false` en `lib/features/recepcion/services/lista_puerta.dart`, con la leyenda en
+    `kListaPuertaTrabadaLeyenda`;
+  - el renglón de MÁS queda apagado, y `_pasarListaPuerta` corta al entrar con la explicación;
+  - `test/lista_puerta_test.dart` falla si alguien prende la bandera. Se prende recién con la RLS de `invitados`
+    cerrada (`docs/pendientes/rls-invitados.md`).
+- **Tests nuevos:** `test/grupo_fiesta_toolbar_test.dart` (16): los cuatro botones, cada renglón llama a lo suyo,
+  Restaurar solo con copia, lo apagado no hace nada, MÁS sin lo que se mudó, la lista trabada, y los anchos.
+- **Muestras:** `tool/barra_fiesta_muestra_test.dart` saca seis PNG (la barra en 1920, 1366 y 1000 px, y los tres
+  menús abiertos). La parte izquierda de la barra está copiada a mano de la pantalla, para ver el lugar que queda.
+  El usuario recibió las imágenes el 2-oct.
+- **No tienen test de pantalla** `imprimirAlAbrir` del plano ni el de Entradas: esas dos pantallas no tienen
+  tests de widget (leen de la base con Riverpod). Se prueban a mano al instalar.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -773,8 +827,7 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 6. ~~M6: fijar, dejar libres, cambiar o mover familias, deshacer e Historial.~~ **Hecho** (`e56f2e9`, y la cola de
    subida en `4fd931a`).
 7. ~~M7: el plano impreso, y pasto y bloques en la planilla del sorteo.~~ **Hecho** (`5fe73ec`).
-8. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`). El chip
-   "Mesas y sillas" ya está en la barra, entre el de mora y el de sillas.
+8. ~~M8: los cuatro botones a la vista y la lista de la puerta trabada.~~ **Hecho** (`b508e8f`).
 9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow. Suma, por el plan
    de las medidas:
    - el panel Medidas (distancia por mesa, extra por silla y el playón, que se carga con el frente, el fondo y un
@@ -789,13 +842,16 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
    - después del sorteo una mesa con familia se corre en el dibujo pero no se saca; con las reglas de M6, una mesa
      con una baja tampoco.
 10. **Verificación final:**
-    - PNG y PDF de muestra para el usuario (los del plano impreso y la planilla ya los tiene, de M7);
+    - PNG y PDF de muestra para el usuario (los del plano impreso y la planilla ya los tiene, de M7; los de la
+      barra, de M8);
+    - un test que confirme si una mesa fijada alta estira el sorteo entero (anotado en M6); si es cierto, se
+      arregla acá;
     - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
       tabla de antes y después. El OK ya está dado en el plan;
     - `tool/extras_muestra_test.dart` otra vez, para revisar con el usuario lo que marca.
 11. **Documentación:** `docs/CONTEXTO_v6.0.0_<fecha>.md`, CLAUDE.md al día (base v73, tablas nuevas,
-    `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre` y los
-    números de Gala en papel) y la memoria.
+    `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre`, los
+    números de Gala en papel, los cuatro botones y `kListaPuertaHabilitada`) y la memoria.
 12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
     windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
     texto de novedades antes de publicar.
@@ -839,18 +895,20 @@ medidas en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md, el
 detalle técnico de M4 a M9 en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
-memoria del proyecto. Están hechas y subidas las etapas 1 a 7: el plano en tres
+memoria del proyecto. Están hechas y subidas las etapas 1 a 8: el plano en tres
 estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques (aaa0034), las
 mesas y sillas en la grilla (087e904), las medidas del salón (0f46110), la
 pantalla del plano con sus tres pasos (36cf78a), los cambios de mesa con su
-Historial (e56f2e9), un arreglo de la cola de subida (4fd931a) y el plano
-impreso con la planilla del sorteo con pasto y bloques (5fe73ec). La suite da
-1.319 tests en verde y el working tree está limpio. Seguí por la etapa 8: M8
-(los cuatro botones a la vista y la lista de la puerta trabada), y después M9,
-la verificación final, la documentación de la 6.0.0, la versión y el build, en
-ese orden. Antes de programar cada pantalla mostrame la maqueta para
-probarla; si te digo que elijas vos, elegí la más cómoda. M9 lleva revisores de
-solo lectura: los tests, las imágenes y los diffs los preparás vos antes.
+Historial (e56f2e9), un arreglo de la cola de subida (4fd931a), el plano
+impreso con la planilla del sorteo con pasto y bloques (5fe73ec) y los cuatro
+botones a la vista con la lista de la puerta trabada (b508e8f). La suite da
+1.335 tests en verde y el working tree está limpio. Seguí por la etapa 9: M9
+(Personalizar con cuatro pestañas: Mesas, Acomodar, Medidas y Colores y
+textos), y después la verificación final, la documentación de la 6.0.0, la
+versión y el build, en ese orden, una etapa por chat. Antes de programar M9
+mostrame la maqueta de las cuatro pestañas para probarla; si te digo que
+elijas vos, elegí la más cómoda. M9 lleva revisores de solo lectura: los
+tests, las imágenes y los diffs los preparás vos antes.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada

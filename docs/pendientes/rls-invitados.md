@@ -13,8 +13,14 @@ vieja queda en blanco. El usuario eligió dejarlo para diciembre, junto con el
 tótem, el 25-sep.
 
 **Regla hasta que esté: no pasar la lista de la puerta de ninguna fiesta de
-egresados** (⋮ → "Pasar a la lista de la puerta"). Hoy la tabla tiene 7 filas
+egresados** (MÁS → "Pasar a la lista de la puerta"). Hoy la tabla tiene 7 filas
 de prueba; con la lista pasada serían los alumnos de toda la institución.
+
+**Desde la 6.0.0 la app lo traba sola:** `kListaPuertaHabilitada = false` en
+`lib/features/recepcion/services/lista_puerta.dart`. El renglón de MÁS queda
+apagado con "Se habilita en diciembre, cuando se cierren los permisos de la
+lista", y un test falla si alguien prende la bandera. **Al cerrar la RLS, el
+último paso es pasarla a `true`** (y ajustar ese test).
 
 ## Cómo está (verificado en la base el 25-sep)
 
