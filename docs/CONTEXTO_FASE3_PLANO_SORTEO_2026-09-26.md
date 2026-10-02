@@ -2,8 +2,9 @@
 
 **Fecha:** 2026-09-26, puesto al día el 2026-10-01 (ver "Qué pasó el 1-oct": las medidas del playón)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 6 del plan de la 6.0.0 están hechas y subidas (la última, M6: los cambios de
-mesa y el Historial); faltan M7, M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 7 del plan de la 6.0.0 están hechas y subidas (la última, M7: el plano impreso
+y la planilla del sorteo con pasto y bloques); faltan M8 y M9 (ver la tabla). **Nada está publicado**: las PCs siguen
+con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 1-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
@@ -42,17 +43,17 @@ mesa y el Historial); faltan M7, M8 y M9 (ver la tabla). **Nada está publicado*
 | M4 | Selector de estilo y armado, pantalla del plano | Sí | Sí, `36cf78a` (1-oct) | No hacía falta |
 | M6 | Fijar, dejar libres, cambiar o mover familias, historial | Sí | Sí, `e56f2e9` (1-oct) | Hecha y **aplicada el 1-oct** (dos revisores) |
 | — | La cola de subida no pierde un cambio hecho mientras subía el anterior (lo encontró la revisión de M6) | Sí | Sí, `4fd931a` (1-oct) | — |
-| M7 | Plano impreso y planilla con bloques y pasto | No | — | — |
+| M7 | Plano impreso y planilla con bloques y pasto | Sí | Sí, `5fe73ec` (1-oct) | No hacía falta |
 | M8 | Botones a la vista y lista de la puerta trabada | No | — | — |
 | M9 | Acomodar el salón, colores y textos | No | — | Workflow |
 
-**Tests:** la suite entera pasa, **1.275 tests** el 1-oct, al cerrar M6 (1.179 con M4; 1.118 con la etapa 4b; 1.039
-el 30-sep a la noche; 913 al
+**Tests:** la suite entera pasa, **1.319 tests** el 1-oct, al cerrar M7 (1.275 con M6; 1.179 con M4; 1.118 con la
+etapa 4b; 1.039 el 30-sep a la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M7, M8 y
-M9 (ver "Lo que falta, en orden").
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M8 y M9
+(ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -707,6 +708,56 @@ cambio nuevo adentro. La nube quedaba con el dato viejo, esta PC con el nuevo, y
 - **En la cola, alta y borrado seguidos** con el alta en vuelo dejan un registro huérfano en la nube.
 - **"Corregilas con cinta en Personalizar"** (el cartel de las medidas aproximadas): el panel Medidas llega con M9.
 
+### Etapa 7 hecha: M7, el plano impreso y la planilla con pasto y bloques (`5fe73ec`)
+
+- **Cómo se llega:** PLANO → **IMPRIMIR**. Pregunta una sola cosa, con dos botones: EN COLOR o BLANCO Y NEGRO. La
+  planilla del sorteo se saca de donde siempre; si la fiesta tiene plano, suma sola lo del pasto y los bloques.
+- **El plano en papel** (`lib/features/common/services/plano_pdf.dart`, `PlanoPdf`):
+  - una hoja A4 acostada por cada hoja del salón. Un `pw.MultiPage` por hoja, con el dibujo en un `SizedBox` del
+    alto que dejan el encabezado y el pie (se **miden** antes, no se suponen);
+  - **siempre sobre blanco**, con el lenguaje de cada estilo: Gala con anillo doble, Arquitecto con las sillas,
+    Neón con anillo grueso. En blanco y negro las divisiones van en gris alternado; en color, en los pasteles de
+    Arquitecto, sea cual sea el estilo;
+  - el número de cada mesa y, debajo de la principal de cada familia, el apellido. Una sola medida de letra por
+    hoja. **Si a ese tamaño no se leen (menos de 4,3 pt), no se escriben y el pie lo dice**;
+  - un salón **a medida se recorta** a donde hay mesas (si agranda el dibujo un 20 % o más): con las 132 mesas el
+    playón entero las dejaba de 7 pt de radio. El encabezado dice cuánto hormigón sigue y lo que mide el playón.
+    Los armados del Canva se ajustan siempre a lo dibujado;
+  - la leyenda del pie: cada división con sus mesas ("5° A: 1-43"; si están salpicadas, "5° A: 40 mesas"), el
+    pasto (rayado, "avisar a la familia"), las libres, las fijadas y las sillas extra. A la derecha, la regla;
+  - si el sorteo fue por división, el nombre de cada una va en una pastilla sobre su bloque, debajo de una mesa sin
+    apellido. **Van todas o ninguna**: si a una no le entra, la hoja sale sin pastillas (la leyenda alcanza).
+- **`lib/features/plano/services/plano_papel.dart`** (`PlanoPapel`, cuenta pura): `marco`, `hormigonFueraM`,
+  `divisiones`, `resumen`, `pasoVertical`, `pasoHorizontal`, `franjaApellido` y `etiquetas`.
+- **`PdfService.construirPlanoPdf` / `generarPlanoPdf`**, con `_letraDelPlano` (la serif de Gala y la de Neón, de
+  los assets).
+- **`widgets/imprimir_plano_dialog.dart`:** `elegirComoImprimirPlano`.
+- **La planilla del sorteo** (`planilla_sorteo.dart` y `planilla_sorteo_pdf.dart`) recibe `pasto` y `bloques`:
+  - "PASTO · avisar" debajo de la mesa principal, y "138 (pasto)" en la adicional;
+  - la tarjeta "En el pasto" y, en la interna, "A quién avisar por el pasto";
+  - la columna "Bloque" en el resumen de divisiones;
+  - `detalle_evento_masivo_screen.dart` lee el plano de esta PC al generarla. Sin plano sale igual que antes.
+- **Tests nuevos:** `plano_papel_test`, `plano_pdf_test`, `imprimir_plano_dialog_test` y más casos en
+  `planilla_sorteo_test`. `test/helpers/leer_pdf.dart` cuenta las hojas de un PDF y lee lo que escribió (solo si se
+  armó sin las letras de la app).
+- **Muestras:** `tool/plano_pdf_muestra_test.dart` (nueva) y `tool/planilla_sorteo_muestra_test.dart` (ahora sortea
+  sobre el plano de Técnica, por división y con pasto). El usuario recibió los PDF el 1-oct.
+
+**Dos cosas que aparecieron al mirar los PDF (van a CLAUDE.md en la etapa 11):**
+- **Una columna de renglones dentro de una celda de tabla puede perder el último, sin avisar.** El paquete arma
+  cada fila dos veces y, en la segunda, le da a la celda como tope exactamente lo que mide; si la suma de los
+  renglones lo pasa por un redondeo, deja el último "para la hoja siguiente" y no lo dibuja. Así no se veía el
+  "PASTO · avisar", y podía faltar el último acompañante de una familia. **Arreglo:** `AltoLibre`
+  (`planilla_tema.dart`), que envuelve el contenido de cada celda de la planilla del sorteo. La única tabla de la
+  app con `TableCellVerticalAlignment.full` es esa.
+- **Las cifras de la serif de Gala son de estilo antiguo:** un 1 se lee como una I ("101" parece "IOI"). En
+  pantalla se le piden las cifras alineadas; el PDF no sabe pedirlas, así que **en papel los números de Gala van
+  en Outfit** y la serif queda para los apellidos y los rótulos.
+
+**Para mirar los PDF sin abrir la app:** la herramienta de lectura de este entorno muestra un PDF de pocas hojas
+como imagen. No hay `pdftoppm` instalado: con `pages` falla. Un PDF de diez hojas cuesta mucho contexto; conviene
+armar una muestra chica.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -721,9 +772,7 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 5. ~~M4: la pantalla del plano y el selector.~~ **Hecho** (`36cf78a`).
 6. ~~M6: fijar, dejar libres, cambiar o mover familias, deshacer e Historial.~~ **Hecho** (`e56f2e9`, y la cola de
    subida en `4fd931a`).
-7. **M7:** `plano_pdf.dart` (sin `pw.Page` de alto fijo), y pasto y bloques en la planilla del sorteo.
-   - IMPRIMIR se enchufa pasando `onImprimir` a `PlanoEventoCuerpo`. El plano impreso lleva la regla.
-   - La planilla ya dice "N cambios con motivo · M a mano después" (M6).
+7. ~~M7: el plano impreso, y pasto y bloques en la planilla del sorteo.~~ **Hecho** (`5fe73ec`).
 8. **M8:** `grupo_fiesta_toolbar.dart` y la lista de la puerta trabada (`kListaPuertaHabilitada = false`). El chip
    "Mesas y sillas" ya está en la barra, entre el de mora y el de sillas.
 9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow. Suma, por el plan
@@ -740,12 +789,13 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
    - después del sorteo una mesa con familia se corre en el dibujo pero no se saca; con las reglas de M6, una mesa
      con una baja tampoco.
 10. **Verificación final:**
-    - PNG y PDF de muestra para el usuario;
+    - PNG y PDF de muestra para el usuario (los del plano impreso y la planilla ya los tiene, de M7);
     - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
       tabla de antes y después. El OK ya está dado en el plan;
     - `tool/extras_muestra_test.dart` otra vez, para revisar con el usuario lo que marca.
 11. **Documentación:** `docs/CONTEXTO_v6.0.0_<fecha>.md`, CLAUDE.md al día (base v73, tablas nuevas,
-    `lib/features/plano/`, la copia con fecha, el reintento de trabados) y la memoria.
+    `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre` y los
+    números de Gala en papel) y la memoria.
 12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
     windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
     texto de novedades antes de publicar.
@@ -789,15 +839,16 @@ medidas en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md, el
 detalle técnico de M4 a M9 en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
-memoria del proyecto. Están hechas y subidas las etapas 1 a 6: el plano en tres
+memoria del proyecto. Están hechas y subidas las etapas 1 a 7: el plano en tres
 estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques (aaa0034), las
 mesas y sillas en la grilla (087e904), las medidas del salón (0f46110), la
-pantalla del plano con sus tres pasos (36cf78a) y los cambios de mesa con su
-Historial (e56f2e9), más un arreglo de la cola de subida (4fd931a). La suite da
-1.275 tests en verde y el working tree está limpio. Seguí por la etapa 7: M7 (el
-plano impreso, y la planilla del sorteo con bloques y pasto), y después M8 y
-M9, la verificación final, la documentación de la 6.0.0, la versión y el build,
-en ese orden. Antes de programar cada pantalla mostrame la maqueta para
+pantalla del plano con sus tres pasos (36cf78a), los cambios de mesa con su
+Historial (e56f2e9), un arreglo de la cola de subida (4fd931a) y el plano
+impreso con la planilla del sorteo con pasto y bloques (5fe73ec). La suite da
+1.319 tests en verde y el working tree está limpio. Seguí por la etapa 8: M8
+(los cuatro botones a la vista y la lista de la puerta trabada), y después M9,
+la verificación final, la documentación de la 6.0.0, la versión y el build, en
+ese orden. Antes de programar cada pantalla mostrame la maqueta para
 probarla; si te digo que elijas vos, elegí la más cómoda. M9 lleva revisores de
 solo lectura: los tests, las imágenes y los diffs los preparás vos antes.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
