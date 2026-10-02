@@ -58,6 +58,18 @@ void main() {
     });
   });
 
+  test('pasar la lista sigue trabado hasta cerrar la RLS de invitados', () {
+    // Se prende recién con la RLS cerrada (docs/pendientes/rls-invitados.md):
+    // hasta entonces la lista se puede leer y cambiar con la clave pública.
+    expect(
+      kListaPuertaHabilitada,
+      isFalse,
+      reason: 'No habilitar la lista de la puerta sin cerrar antes la RLS de '
+          'invitados.',
+    );
+    expect(kListaPuertaTrabadaLeyenda, contains('diciembre'));
+  });
+
   group('filas desde los alumnos', () {
     test('alumno y acompañantes con nombre, con la mesa del alumno', () {
       final filas = filasPuertaDesdeAlumnos([

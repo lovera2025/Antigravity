@@ -63,6 +63,7 @@ import '../recepcion/services/lista_puerta.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/chip_mesas_sillas.dart';
+import 'widgets/grupo_fiesta_toolbar.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
 import 'widgets/dialogo_seleccion_cuotas_plan.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
@@ -427,13 +428,15 @@ class _DetalleEventoMasivoScreenState
     }
   }
 
-  /// El plano del salón. Con [alumnoId], abre con esa familia resaltada.
-  Future<void> _abrirPlano({String? alumnoId}) async {
+  /// El plano del salón. Con [alumnoId], abre con esa familia resaltada; con
+  /// [imprimir], abre preguntando cómo se imprime (PLANILLAS → Plano impreso).
+  Future<void> _abrirPlano({String? alumnoId, bool imprimir = false}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlanoEventoScreen(
           evento: widget.evento,
           resaltarAlumnoId: alumnoId,
+          imprimirAlAbrir: imprimir,
         ),
       ),
     );
@@ -1276,204 +1279,46 @@ class _DetalleEventoMasivoScreenState
           letterSpacing: 1,
         );
 
-        // Todo lo que no se usa en cada cobro vive en un solo menú. Antes eran
-        // cuatro botones anchos que no dejaban lugar para el chip de mora ni
-        // para que la columna de deuda se leyera entera.
-        final Widget secondaryAlumnosToolbarButtons = PopupMenuButton<String>(
-          tooltip: 'Más acciones',
-          position: PopupMenuPosition.under,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(tbRadius),
-          ),
-          onSelected: (v) {
-            switch (v) {
-              case 'orden':
-                setState(() => _ordenAlfabetico = !_ordenAlfabetico);
-              case 'seleccion':
-                setState(() {
-                  _modoSeleccionContratos = !_modoSeleccionContratos;
-                  if (!_modoSeleccionContratos) _idsSeleccionContratos.clear();
-                });
-              case 'plano':
-                _abrirPlano();
-              case 'planilla':
-                if (_alumnos.isNotEmpty) _generarPlanillaSorteo();
-              case 'mora':
-                _exportarPlanillaMora(moraPorAlumno);
-              case 'sortear':
-                _sortearMesas();
-              case 'deshacer':
-                _deshacerSorteoMesas();
-              case 'restaurar':
-                _restaurarSorteoAnterior();
-              case 'historial':
-                _abrirHistorialMesas();
-              case 'puerta':
-                _pasarListaPuerta();
-              case 'retiro':
-                _abrirRetiroEntradas();
-            }
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem<String>(
-              value: 'orden',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  _ordenAlfabetico ? Icons.sort_by_alpha : Icons.schedule,
-                ),
-                title: Text(_ordenAlfabetico ? 'Ordenar por fecha' : 'Ordenar A-Z'),
-                subtitle: Text(
-                  _ordenAlfabetico ? 'Ahora: alfabético' : 'Ahora: por alta',
-                ),
-              ),
-            ),
-            PopupMenuItem<String>(
-              value: 'seleccion',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  _modoSeleccionContratos
-                      ? Icons.close
-                      : Icons.checklist_rounded,
-                ),
-                title: Text(
-                  _modoSeleccionContratos
-                      ? 'Salir de selección'
-                      : 'Selección múltiple',
-                ),
-                subtitle: const Text('Marcar contratos de varios a la vez'),
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem<String>(
-              value: 'plano',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.table_restaurant_outlined, color: Colors.indigo),
-                title: Text('Plano del salón'),
-                subtitle: Text('El armado con sus medidas y cuántas mesas entran'),
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'planilla',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.print_rounded),
-                title: Text('Planilla del sorteo'),
-                subtitle: Text('Una hoja por división, para imprimir o repartir'),
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'retiro',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  Icons.confirmation_number_outlined,
-                  color: Colors.green,
-                ),
-                title: Text('Retiro de entradas'),
-                subtitle: Text('Quién retiró, quién falta y la planilla en papel'),
-              ),
-            ),
-            PopupMenuItem<String>(
-              value: 'mora',
-              enabled: alumnosConMora.isNotEmpty,
-              child: ListTile(
-                dense: true,
-                enabled: alumnosConMora.isNotEmpty,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.picture_as_pdf_outlined),
-                title: const Text('Planilla de mora'),
-                subtitle: Text(
-                  alumnosConMora.isEmpty
-                      ? 'Nadie debe mora'
-                      : '${alumnosConMora.length} alumno(s) para llamar',
-                ),
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem<String>(
-              value: 'sortear',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.casino, color: Colors.indigo),
-                title: Text('Sortear mesas'),
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'deshacer',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.undo, color: Colors.deepOrange),
-                title: Text('Deshacer sorteo de mesas'),
-              ),
-            ),
-            if (_hayRespaldoSorteo)
-              const PopupMenuItem<String>(
-                value: 'restaurar',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.restore_rounded, color: Colors.teal),
-                  title: Text('Restaurar sorteo anterior'),
-                  subtitle: Text('La copia guardada al deshacer'),
-                ),
-              ),
-            const PopupMenuItem<String>(
-              value: 'historial',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.history),
-                title: Text('Historial de las mesas'),
-                subtitle: Text('Quién sorteó o cambió una mesa, cuándo y por qué'),
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem<String>(
-              value: 'puerta',
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.door_front_door_outlined, color: Colors.teal),
-                title: Text('Pasar a la lista de la puerta'),
-                subtitle: Text('Alumnos y familias con su mesa, para el tótem'),
-              ),
-            ),
-          ],
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: layoutCompact ? 10 : 14,
-              vertical: layoutCompact ? 7 : 10,
-            ),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white12 : Colors.black12,
-              borderRadius: BorderRadius.circular(tbRadius),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.more_vert, size: tbIcon),
-                SizedBox(width: layoutCompact ? 2 : 4),
-                Text(
-                  'MÁS',
-                  style: TextStyle(
-                    fontSize: tbFs,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        // Las herramientas de la fiesta van a la vista, en su grupo (PLANO,
+        // SORTEO, PLANILLAS y ENTRADAS). En este menú queda lo que no es de la
+        // fiesta, y la lista de la puerta, trabada hasta diciembre.
+        final Widget secondaryAlumnosToolbarButtons = BotonMasFiesta(
+          compacto: layoutCompact,
+          ordenAlfabetico: _ordenAlfabetico,
+          modoSeleccion: _modoSeleccionContratos,
+          onOrden: () => setState(() => _ordenAlfabetico = !_ordenAlfabetico),
+          onSeleccion: () => setState(() {
+            _modoSeleccionContratos = !_modoSeleccionContratos;
+            if (!_modoSeleccionContratos) _idsSeleccionContratos.clear();
+          }),
+          onListaPuerta: _pasarListaPuerta,
+        );
+        final Widget grupoFiestaToolbar = GrupoFiestaToolbar(
+          compacto: layoutCompact,
+          onPlano: _abrirPlano,
+          onSortear: _sortearMesas,
+          onDeshacer: _deshacerSorteoMesas,
+          onRestaurar: _hayRespaldoSorteo ? _restaurarSorteoAnterior : null,
+          onHistorial: _abrirHistorialMesas,
+          onPlanillaSorteo: _alumnos.isEmpty ? null : _generarPlanillaSorteo,
+          onPlanoImpreso:
+              _fiestaTienePlano ? () => _abrirPlano(imprimir: true) : null,
+          onPlanillaEntrega: () => _abrirRetiroEntradas(imprimir: true),
+          onPlanillaMora: alumnosConMora.isEmpty
+              ? null
+              : () => _exportarPlanillaMora(moraPorAlumno),
+          alumnosConMora: alumnosConMora.length,
+          onEntradas: _abrirRetiroEntradas,
+        );
+        // Los contadores y REGISTRAR se llevan lo que piden; el grupo de la
+        // fiesta usa lo que sobra, y si no le alcanza para los nombres muestra
+        // solo los íconos. Se le reserva ese mínimo, y el lugar de MÁS.
+        final double anchoMaximoPrimarios = math.max(
+          160,
+          availableWidth -
+              (horizontalPad * 2) -
+              GrupoFiestaToolbar.anchoSoloIconos(compacto: layoutCompact) -
+              (layoutCompact ? 100 : 130),
         );
         final Widget primaryAlumnosToolbarButtons = Row(
           mainAxisSize: MainAxisSize.min,
@@ -1683,8 +1528,8 @@ class _DetalleEventoMasivoScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Izquierda: contadores + acciones principales; derecha: orden/planilla/sortear/deshacer
-                  // alineados al borde final (ancho del buscador / contenido).
+                  // Izquierda: contadores + acciones principales; derecha: las
+                  // herramientas de la fiesta y MÁS, alineadas al borde final.
                   Theme(
                     data: Theme.of(context).copyWith(
                       visualDensity: layoutCompact
@@ -1694,18 +1539,19 @@ class _DetalleEventoMasivoScreenState
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: anchoMaximoPrimarios,
+                          ),
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: primaryAlumnosToolbarButtons,
                           ),
                         ),
                         SizedBox(width: layoutCompact ? 8 : 12),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const ClampingScrollPhysics(),
-                          child: secondaryAlumnosToolbarButtons,
-                        ),
+                        Expanded(child: grupoFiestaToolbar),
+                        SizedBox(width: layoutCompact ? 6 : 8),
+                        secondaryAlumnosToolbarButtons,
                       ],
                     ),
                   ),
@@ -4288,6 +4134,31 @@ class _DetalleEventoMasivoScreenState
   /// digan dónde sentarse. Se puede repetir: actualiza las mismas filas, no
   /// toca a quien ya ingresó y no borra nada.
   Future<void> _pasarListaPuerta() async {
+    // Segunda traba, por si se llega acá sin pasar por el menú.
+    if (!kListaPuertaHabilitada) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('La lista de la puerta todavía no se pasa'),
+          content: const SizedBox(
+            width: 440,
+            child: Text(
+              '$kListaPuertaTrabadaLeyenda.\n\n'
+              'Hasta entonces la lista de la puerta se podría leer y cambiar '
+              'desde afuera, y lleva el nombre de cada alumno y de sus '
+              'acompañantes.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('ENTENDIDO'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     final eventoId = widget.evento.id;
     final invitadosRepo = ref.read(invitadosRepositoryProvider);
     final online = ref.read(connectivityServiceProvider).currentStatus ==
@@ -4705,14 +4576,16 @@ class _DetalleEventoMasivoScreenState
   }
 
   /// La sección Retiro de entradas. Cobrar y editar al alumno se hacen con las
-  /// pantallas de siempre, que viven acá.
-  Future<void> _abrirRetiroEntradas() async {
+  /// pantallas de siempre, que viven acá. Con [imprimir], abre preguntando
+  /// cómo se imprime la planilla de entrega (PLANILLAS → Planilla de entrega).
+  Future<void> _abrirRetiroEntradas({bool imprimir = false}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => RetiroEntradasScreen(
           evento: widget.evento,
           onCobrar: _mostrarModalPagoAlumno,
           onEditarAlumno: _mostrarModalEditarAlumno,
+          imprimirAlAbrir: imprimir,
         ),
       ),
     );

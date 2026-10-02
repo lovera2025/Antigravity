@@ -28,6 +28,19 @@ class FilaPuerta {
   });
 }
 
+/// Si se puede pasar la lista de la puerta de una fiesta de alumnos.
+///
+/// **Trabado hasta cerrar la RLS de `invitados`** (diciembre, con el tótem):
+/// hoy cualquiera con la clave pública lee y cambia esa tabla, y la lista
+/// lleva el nombre de cada alumno y de sus acompañantes. Ver
+/// `docs/pendientes/rls-invitados.md`. Se pasa a `true` recién con la RLS
+/// cerrada; un test cuida que no se prenda antes sin querer.
+const bool kListaPuertaHabilitada = false;
+
+/// Lo que dice el menú y el aviso mientras [kListaPuertaHabilitada] es false.
+const String kListaPuertaTrabadaLeyenda =
+    'Se habilita en diciembre, cuando se cierren los permisos de la lista';
+
 /// Hasta cuántos acompañantes por alumno se reconocen como "de la lista":
 /// alcanza de sobra (una familia son 10 lugares como mucho) y acota la
 /// búsqueda de filas que quedaron de más.

@@ -55,10 +55,15 @@ class PlanoEventoScreen extends ConsumerStatefulWidget {
   /// La familia que se abre resaltada, cuando se llega desde su renglón.
   final String? resaltarAlumnoId;
 
+  /// Se llegó desde PLANILLAS → "Plano impreso": apenas carga, pregunta cómo
+  /// se imprime. Si la fiesta no tiene plano no pregunta nada.
+  final bool imprimirAlAbrir;
+
   const PlanoEventoScreen({
     super.key,
     required this.evento,
     this.resaltarAlumnoId,
+    this.imprimirAlAbrir = false,
   });
 
   @override
@@ -109,7 +114,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   @override
   void initState() {
     super.initState();
-    _cargar(nube: true).then((_) => _ofrecerArmar());
+    _cargar(nube: true).then((_) {
+      _ofrecerArmar();
+      if (mounted && widget.imprimirAlAbrir) _imprimir();
+    });
     _cambiosSub = ref.read(syncEngineProvider).cambiosBajadosStream.listen((
       tablas,
     ) {

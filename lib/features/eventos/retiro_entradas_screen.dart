@@ -33,11 +33,16 @@ class RetiroEntradasScreen extends ConsumerStatefulWidget {
   final Future<void> Function(ContratoAlumno alumno) onCobrar;
   final Future<void> Function(ContratoAlumno alumno) onEditarAlumno;
 
+  /// Se llegó desde PLANILLAS → "Planilla de entrega": apenas carga, pregunta
+  /// si va en color o en blanco y negro.
+  final bool imprimirAlAbrir;
+
   const RetiroEntradasScreen({
     super.key,
     required this.evento,
     required this.onCobrar,
     required this.onEditarAlumno,
+    this.imprimirAlAbrir = false,
   });
 
   @override
@@ -70,7 +75,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   void initState() {
     super.initState();
     _cargarPreferencias();
-    _cargar();
+    _cargar().then((_) {
+      if (mounted && widget.imprimirAlAbrir) _preguntarComoImprimir();
+    });
     // En tiempo real: cuando la otra PC entrega, sube al instante y avisa por el
     // pulso; esta PC lo baja en menos de un segundo, y acá se relee apenas llega.
     _cambiosSub = ref.read(syncEngineProvider).cambiosBajadosStream.listen((
@@ -455,6 +462,46 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
+  }
+
+  /// La misma elección del menú de la impresora, como pregunta: para cuando se
+  /// llega desde PLANILLAS, donde todavía no se eligió.
+  Future<void> _preguntarComoImprimir() async {
+    if (_errorCarga != null) return;
+    final blancoYNegro = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Imprimir la planilla de entrega'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: const Text(
+            'Sale una hoja A4 acostada por división, con lo que retira cada '
+            'familia y el lugar para anotar quién se lo lleva.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('entrega_cancelar'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('CANCELAR'),
+          ),
+          OutlinedButton.icon(
+            key: const Key('entrega_bn'),
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.contrast, size: 18),
+            label: const Text('BLANCO Y NEGRO'),
+          ),
+          FilledButton.icon(
+            key: const Key('entrega_color'),
+            onPressed: () => Navigator.of(context).pop(false),
+            icon: const Icon(Icons.palette_outlined, size: 18),
+            label: const Text('EN COLOR'),
+          ),
+        ],
+      ),
+    );
+    if (blancoYNegro == null || !mounted) return;
+    await _imprimir(blancoYNegro: blancoYNegro);
   }
 
   Future<void> _imprimir({required bool blancoYNegro}) async {
