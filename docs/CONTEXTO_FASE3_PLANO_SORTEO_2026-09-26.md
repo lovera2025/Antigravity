@@ -1,12 +1,12 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-10-02 (ver "Qué pasó el 2-oct": los cuatro botones a la vista)
+**Fecha:** 2026-09-26, puesto al día el 2026-10-03 (ver "Qué pasó el 3-oct": Personalizar con cuatro pestañas)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 8 del plan de la 6.0.0 están hechas y subidas (la última, M8: los cuatro
-botones a la vista y la lista de la puerta trabada); falta M9 (ver la tabla). **Nada está publicado**: las PCs siguen
-con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 8 del plan de la 6.0.0 están hechas y subidas, y **M9 (etapa 9) está
+programada y subida en tres pasos; le falta su revisión** (paso 4 del plan del 3-oct). **Nada está publicado**: las
+PCs siguen con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 2-oct" y "Lo que falta, en orden". El texto para pegar
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 3-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
@@ -45,15 +45,15 @@ con la 5.0.0.
 | — | La cola de subida no pierde un cambio hecho mientras subía el anterior (lo encontró la revisión de M6) | Sí | Sí, `4fd931a` (1-oct) | — |
 | M7 | Plano impreso y planilla con bloques y pasto | Sí | Sí, `5fe73ec` (1-oct) | No hacía falta |
 | M8 | Botones a la vista y lista de la puerta trabada | Sí | Sí, `b508e8f` (2-oct) | No hacía falta |
-| M9 | Acomodar el salón, colores y textos | No | — | Workflow |
+| M9 | Personalizar con cuatro pestañas: Mesas, Acomodar, Medidas y Colores y textos | Sí | Sí, `18a89f6`, `4f12969` y `2c84a55` (3-oct) | **Falta**: revisores de solo lectura |
 
-**Tests:** la suite entera pasa, **1.335 tests** el 2-oct, al cerrar M8 (1.319 con M7; 1.275 con M6; 1.179 con M4;
+**Tests:** la suite entera pasa, **1.466 tests** el 3-oct, con M9 programada (1.335 el 2-oct, al cerrar M8; 1.319 con M7; 1.275 con M6; 1.179 con M4;
 1.118 con la etapa 4b; 1.039 el 30-sep a la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Lo que falta programar es M9
-(ver "Lo que falta, en orden").
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. De M9 falta la revisión; después
+viene la etapa 9b (ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -812,6 +812,102 @@ Solo pantalla: no toca la base ni la sincronización.
 - **No tienen test de pantalla** `imprimirAlAbrir` del plano ni el de Entradas: esas dos pantallas no tienen
   tests de widget (leen de la base con Riverpod). Se prueban a mano al instalar.
 
+## Qué pasó el 3-oct
+
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-calm-wall.md`. El usuario vio antes la maqueta de las cuatro
+pestañas (un widget en el chat) y aprobó.
+
+### Pedidos y decisiones del usuario
+
+- **Todo lo que se agregue tiene que servir después del sorteo, para darle mesa al que faltaba** (se sumó tarde,
+  terminó de pagar, compró otra mesa). **No es "otro sorteo"**: es el mismo botón SORTEO, los ya sorteados quedan
+  con su mesa y al que no tiene se le da un número si quedan lugares. Corrigió el nombre: decir "sortear a los que
+  faltan", no "segundo sorteo".
+- Revisado en el código ese día: el motor ya lo hace desde la 5.0.0 (el que no tiene mesa entra; al que compró
+  otra se le completa pegada; por división va a un hueco de su bloque, o después del último bloque). **Lo que no
+  acompaña**, y quedó como etapa 9b, a confirmar con él:
+  - "Deshacer sorteo" borra **todas** las mesas, las de los primeros también;
+  - la planilla del sorteo sale siempre con la escuela entera y nombra solo el último sorteo.
+- **"Corregir medio de pago" no ofrece Mixto y queda así.** Preguntó por qué: nunca lo ofreció (desde la 2.2.0). Un
+  cobro mixto son renglones en efectivo y renglones en transferencia; pasar uno a mixto exige partir el monto. Al
+  ver lo que implicaba, lo descartó por ahora. No proponerlo de nuevo sin que lo pida.
+- Sobre lo que tiene pendiente él, se le recomendó: pedir ya la fecha del sorteo; mirar los PDF de M7 y las imágenes
+  de M8 antes de la etapa 10; dejar de esperar la página 6 del Canva ("A medida del playón" arma las 132); medir el
+  hormigón cuando vaya al predio y cargarlo él en Medidas; y decidir las preguntas del jefe con la 6.0.0 instalada.
+
+### Etapa 9, paso 1: las pestañas y Medidas (`18a89f6`)
+
+- **`PlanoEventoCuerpo`**: `_personalizando` pasó a `ModoPersonalizar? _modo` (`mesas`, `acomodar`, `medidas`,
+  `colores`). La franja muestra las pestañas (`pestanas_personalizar`). **Una pestaña aparece solo si
+  `AccionesPlano` trae con qué guardarla** (`onGuardarArmado`, `onGuardarMedidas`, `onGuardarColoresYTextos`): con
+  las acciones de antes, la pantalla queda como estaba.
+- **Con cambios sin guardar no se sale ni se cambia de pestaña**: la franja dice qué falta (`_sinGuardar`).
+- **`widgets/personalizar/panel_medidas.dart`**: frente, fondo y un costado (`PlayonReal.conCostado`), distancia
+  entre mesas y extra por silla. Mientras se escribe, el plano dibuja el lugar de cada mesa con esas medidas
+  (`_medidasEnPrueba`) y dice cuántas entran. GUARDAR queda fijo abajo: en una notebook de 1366 × 768 entra todo.
+  - Si los casilleros del playón no se tocan, el playón guardado no cambia (el costado se muestra redondeado, y
+    recalcular con él lo movería y le sacaría el "aproximado").
+- **`ArmarAMedida`** suma `lugarDe`, `playonDe` y **`conPlayon`**: en un salón a medida, con otro playón se
+  redibuja el borde del hormigón. Las mesas no se mueven ni cambian de número; la que queda afuera, avisa.
+- **`CambioDeConfig` lleva un `armado` opcional**, y `_cambiarConfig` lo guarda. Así las tres pestañas nuevas
+  guardan por el mismo camino de M6 (relee la nube y las familias antes de escribir).
+- **La clave de `PlanoEventoCuerpo` pasó de `armadoJson.hashCode` a `armadoClave`**: acomodar el salón cambia el
+  contenido, y no tiene que sacar a nadie de Personalizar ni resetear la pantalla.
+
+### Etapa 9, paso 2: Colores y textos (`4f12969`)
+
+- **`config.colores` no se usaba al dibujar.** Ahora sí: `TemaPlano.conColores` y `PlanoDeLaFiesta.tema(estilo)` /
+  `.colores`. La pantalla, la leyenda y el plano impreso en color llevan el mismo color (`_Tinta` recibe
+  `plano.colores`). En blanco y negro el papel no cambia.
+- **`services/colores_y_textos.dart`** (`ColoresYTextos`): colores, título, subtítulo y textos de sectores, con
+  `aplicar` (cuenta pura). **Si un sector ya no está como se lo vio, no se guarda nada** (ni los colores).
+- **El título y el subtítulo se ven arriba de la pantalla** (`titulo_del_plano`); antes salían solo en el PDF.
+- La lista de divisiones para elegir color sale de los alumnos: primero las de la leyenda y después las que todavía
+  no tienen mesa (sin color marcado hasta elegirlo).
+
+### Etapa 9, paso 3: Acomodar (`2c84a55`)
+
+- **`services/editar_armado.dart` (`EditarArmado`), cuentas puras:** `mover` (de a 0,25 m **contando desde donde
+  estaba**, así sigue alineada y se puede volver justo a su lugar), `agregar`, `sacar`, `marcarPasto`, sectores
+  (mover, tamaño, agregar, sacar), `vecinas`, `pisadas`, `separar` con `VistaPreviaSeparar`, `alcances`,
+  `familiasPartidas`, `original`, `enUso` y **`paraGuardar`**.
+- **`services/sesion_acomodo.dart` (`SesionAcomodo`)**: la sesión en pantalla, con Deshacer. Un arrastre entero es
+  un solo paso. Nada se guarda hasta GUARDAR EL SALÓN.
+- **Reglas que quedaron:**
+  - **el número de una mesa no cambia nunca**; la mesa nueva lleva el que sigue al más alto (contando los que usa
+    alguna familia y los que se sacaron en la misma sesión);
+  - la mesa nueva aparece **al fondo del salón**, a continuación de la última fila, o al lado de la elegida;
+  - una mesa con familia, fijada o de una baja no se saca (`enUso`); se puede correr;
+  - con mesas encimadas no deja guardar (`bloqueos`); una familia separada, las apretadas y las de afuera del
+    hormigón son avisos;
+  - **separar** estira desde la fila de adelante y desde el medio hacia afuera; si se separan más, sube
+    `distanciaPegadas` para que las vecinas sigan pegadas (si no, aparecerían cortes y el sorteo sentaría menos);
+  - "Volver al armado original" solo sin familias con mesa; a medida, se arma de nuevo con las mesas que hay;
+  - al guardar: si el salón de la nube ya no es del que se partió, o una mesa sacada tiene familia, no guarda.
+- **En un armado del Canva, la mesa que se corrió a mano sí avisa si queda apretada**: `ArmadosPredefinidos.corridas`
+  compara contra el de fábrica y `MedirSalon.revisar` las mira siempre. No se guarda nada nuevo.
+- **`VistaPlano`** suma `onApretar`, `onArrastrar`, `onSoltar` (eventos crudos, para no competir con el zoom) y
+  `encima`. **`dibujo/pintor_acomodo.dart`** dibuja la regla; el panel repite las tres distancias en palabras.
+- **Tests:** `test/editar_armado_test.dart` (52), y en `test/sorteo_con_plano_test.dart` **"sortear a los que
+  faltan, después de acomodar el salón"**, por división y con toda la escuela: salón lleno, llegan tres familias,
+  no entran, se agregan cuatro mesas en Acomodar y se vuelve a sortear; los que ya tenían mesa no se mueven.
+- **Muestras:** `tool/plano_pantalla_muestra_test.dart` saca `Personalizar_medidas*.png`,
+  `Personalizar_colores_*.png`, `Personalizar_acomodar.png` y `Personalizar_separar.png`. El usuario las recibió el
+  3-oct; **todavía no opinó**.
+
+### Lo que quedó anotado, sin hacer
+
+- **La revisión de M9 no se lanzó** (el chat se llenó). Son tres miradas de solo lectura: las cuentas de
+  `editar_armado` con sus tests; el guardado con dos PCs (`_cambiarConfig`, `paraGuardar`, la sesión cuando cambia
+  el salón de la nube); y las pantallas contra las reglas de "intuitivo".
+- Los tres guardados de la pantalla (`_guardarSalon`, `_guardarMedidas`, `_guardarColoresYTextos`) no tienen test
+  de pantalla: `PlanoEventoScreen` lee de la base con Riverpod. Lo que calculan sí está probado.
+- Con las tres vecinas para el mismo lado, las medidas de la regla se pisan un poco en el plano; el panel las dice
+  en palabras.
+- En Gala, a zoom chico, el color de la división casi no se ve en el plano (ya era así desde M2).
+- La sesión de Acomodar no refresca qué mesas están en uso si baja algo de la otra PC mientras se acomoda; el
+  guardado lo vuelve a controlar con los datos frescos.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -828,19 +924,13 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
    subida en `4fd931a`).
 7. ~~M7: el plano impreso, y pasto y bloques en la planilla del sorteo.~~ **Hecho** (`5fe73ec`).
 8. ~~M8: los cuatro botones a la vista y la lista de la puerta trabada.~~ **Hecho** (`b508e8f`).
-9. **M9:** acomodar el salón (`services/editar_armado.dart`) y colores y textos. Lleva workflow. Suma, por el plan
-   de las medidas:
-   - el panel Medidas (distancia por mesa, extra por silla y el playón, que se carga con el frente, el fondo y un
-     costado: `PlayonReal.conCostado`);
-   - correr mesas con ajuste de 0,25 m y la distancia a las tres vecinas;
-   - `separar`: estirar o juntar un bloque, con vista previa y APLICAR o CANCELAR;
-   - en un armado del Canva, una mesa que el usuario corrió sí tiene que avisar si queda apretada
-     (`MedirSalon.apretadas` sin `soloSiPideMasDe` para esas);
-   - **Personalizar hoy tiene un solo modo, "Mesas"** (M6). M9 suma Acomodar, Medidas y Colores y textos como
-     pestañas de la misma franja (`_franjaPersonalizar` en `plano_evento_cuerpo.dart`), y prende
-     `mostrarLugares` en Acomodar;
-   - después del sorteo una mesa con familia se corre en el dibujo pero no se saca; con las reglas de M6, una mesa
-     con una baja tampoco.
+9. ~~M9: Personalizar con cuatro pestañas.~~ **Programado** (`18a89f6`, `4f12969`, `2c84a55`). **Falta su
+   revisión** con revisores de solo lectura y, si encuentran algo, el arreglo en su commit.
+   - 9b. **Los que faltan** (nueva, a confirmar con el usuario; se le recomendó hacer las dos cosas):
+     - en "Deshacer sorteo", elegir entre "solo los últimos sorteados" y "todo" (hoy borra la escuela entera). El
+       registro de sorteos tiene con qué: cada sorteo es un renglón con lo que tocó (`RegistroSorteo.esperado`);
+     - en la planilla del sorteo, la opción "solo los últimos sorteados", y arriba los dos sorteos nombrados;
+     - un test de punta a punta de la historia entera, con plano y sin plano.
 10. **Verificación final:**
     - PNG y PDF de muestra para el usuario (los del plano impreso y la planilla ya los tiene, de M7; los de la
       barra, de M8);
@@ -889,26 +979,20 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
 entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 1-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
-C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md, el de las
-medidas en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-porque-piped-lightning.md, el
-detalle técnico de M4 a M9 en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md, y la
-memoria del proyecto. Están hechas y subidas las etapas 1 a 8: el plano en tres
-estilos (1b8afed), la base v73 (e335e00), el sorteo por bloques (aaa0034), las
-mesas y sillas en la grilla (087e904), las medidas del salón (0f46110), la
-pantalla del plano con sus tres pasos (36cf78a), los cambios de mesa con su
-Historial (e56f2e9), un arreglo de la cola de subida (4fd931a), el plano
-impreso con la planilla del sorteo con pasto y bloques (5fe73ec) y los cuatro
-botones a la vista con la lista de la puerta trabada (b508e8f). La suite da
-1.335 tests en verde y el working tree está limpio. Seguí por la etapa 9: M9
-(Personalizar con cuatro pestañas: Mesas, Acomodar, Medidas y Colores y
-textos), y después la verificación final, la documentación de la 6.0.0, la
-versión y el build, en ese orden, una etapa por chat. Antes de programar M9
-mostrame la maqueta de las cuatro pestañas para probarla; si te digo que
-elijas vos, elegí la más cómoda. M9 lleva revisores de solo lectura: los
-tests, las imágenes y los diffs los preparás vos antes.
+"Qué pasó el 3-oct" y "Lo que falta, en orden"), el plan del 3-oct en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-calm-wall.md, el de la 6.0.0 en
+C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la
+memoria del proyecto. Están hechas y subidas las etapas 1 a 8, y M9 (etapa 9)
+está programada en tres pasos: las pestañas de Personalizar con Medidas
+(18a89f6), Colores y textos (4f12969) y Acomodar (2c84a55). La suite da 1.466
+tests en verde y el working tree está limpio. Falta la revisión de M9: lanzá
+los revisores de solo lectura, de a uno (las cuentas de editar_armado con sus
+tests; el guardado con dos PCs; las pantallas contra las reglas de
+"intuitivo"), con la suite, las imágenes y los diffs preparados por vos, y
+arreglá lo que encuentren en su commit. Después viene la etapa 9b, "los que
+faltan": preguntame antes si la quiero (deshacer solo los últimos sorteados, y
+la planilla solo de ellos). Después la verificación final, la documentación de
+la 6.0.0, la versión y el build, en ese orden, una etapa por chat.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
