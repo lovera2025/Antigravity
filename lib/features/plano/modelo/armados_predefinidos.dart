@@ -33,6 +33,27 @@ class ArmadosPredefinidos {
     return null;
   }
 
+  /// Las mesas de [armado] que no están donde las trae el armado de fábrica:
+  /// alguien las corrió o las agregó a mano en esa fiesta. Vacío si el armado
+  /// no es uno de los del Canva.
+  ///
+  /// Sirve para saber a cuáles avisarles si quedan apretadas: las que siguen
+  /// donde las puso el jefe no se discuten.
+  static Set<int> corridas(ArmadoSalon armado) {
+    final fabrica = porClave(armado.clave);
+    if (fabrica == null) return const {};
+    return {
+      for (final m in armado.mesas)
+        if (!_dondeEstaba(fabrica.mesa(m.numero), m)) m.numero,
+    };
+  }
+
+  static bool _dondeEstaba(MesaPlano? fabrica, MesaPlano hoy) =>
+      fabrica != null &&
+      fabrica.hoja == hoy.hoja &&
+      (fabrica.x - hoy.x).abs() < 0.01 &&
+      (fabrica.y - hoy.y).abs() < 0.01;
+
   /// Normal 2A, página 3: 78 mesas, numeradas por el jefe.
   ///
   /// Bloque izquierdo de 5 × 6 por filas, alternando (la 1 junto al

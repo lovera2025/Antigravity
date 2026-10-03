@@ -29,6 +29,10 @@ class VistaPlano extends StatefulWidget {
     this.mostrarRegla = false,
     this.mostrarMedidas = false,
     this.lugares,
+    this.encima,
+    this.onApretar,
+    this.onArrastrar,
+    this.onSoltar,
   });
 
   final ArmadoSalon armado;
@@ -58,6 +62,16 @@ class VistaPlano extends StatefulWidget {
   /// pide, en rojo si no lo tiene (para acomodar el salón).
   final MedidasPlano? lugares;
 
+  /// Algo más para dibujar encima del plano (la regla al acomodar el salón).
+  final CustomPainter? encima;
+
+  /// Para acomodar el salón arrastrando. Se aprieta en un punto, **en
+  /// coordenadas del plano**; si devuelve true se agarró algo, y lo que se
+  /// mueva hasta soltar llega por [onArrastrar].
+  final bool Function(Offset enPlano)? onApretar;
+  final ValueChanged<Offset>? onArrastrar;
+  final VoidCallback? onSoltar;
+
   @override
   State<VistaPlano> createState() => _VistaPlanoState();
 }
@@ -72,6 +86,20 @@ class _VistaPlanoState extends State<VistaPlano>
   );
   late Animation<double> _quieto = AlwaysStoppedAnimation(widget.pulsoFijo);
   int? _bajoMouse;
+
+  /// El puntero con el que se agarró algo para arrastrar.
+  int? _agarrado;
+
+  Offset? _enPlano(Size size, Offset punto) {
+    final h = widget.armado.hoja(widget.hoja);
+    return h == null ? null : EncuadrePlano.de(h.caja, size).aPlano(punto);
+  }
+
+  void _soltar(PointerEvent e) {
+    if (_agarrado != e.pointer) return;
+    _agarrado = null;
+    widget.onSoltar?.call();
+  }
 
   @override
   void initState() {
@@ -157,8 +185,34 @@ class _VistaPlanoState extends State<VistaPlano>
                   ),
                 ),
               ),
+            if (widget.encima != null)
+              IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(painter: widget.encima),
+                ),
+              ),
           ],
         );
+        if (widget.onApretar != null) {
+          // Con eventos crudos y no con un gesto: así no compite con el zoom
+          // y el desplazamiento del plano, que escuchan los mismos toques.
+          plano = Listener(
+            onPointerDown: (e) {
+              final p = _enPlano(size, e.localPosition);
+              if (_agarrado != null || p == null) return;
+              if (widget.onApretar!(p)) _agarrado = e.pointer;
+            },
+            onPointerMove: (e) {
+              final p = _enPlano(size, e.localPosition);
+              if (_agarrado == e.pointer && p != null) {
+                widget.onArrastrar?.call(p);
+              }
+            },
+            onPointerUp: _soltar,
+            onPointerCancel: _soltar,
+            child: plano,
+          );
+        }
         if (!tocable) return plano;
         plano = MouseRegion(
           cursor: _bajoMouse != null && widget.onTapMesa != null

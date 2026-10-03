@@ -347,6 +347,10 @@ class ArmadoSalon {
 
   double get _pegadasHasta => distanciaPegadas ?? pegadasHastaRadios * radio;
 
+  /// Hasta qué distancia de centro a centro, en unidades, dos mesas cuentan
+  /// como pegadas en este armado.
+  double get pegadasHastaU => _pegadasHasta;
+
   double aMetros(double unidades) => unidades * metrosPorUnidad;
   double aUnidades(double metros) => metros / metrosPorUnidad;
 
@@ -459,6 +463,7 @@ class ArmadoSalon {
     List<MesaPlano>? mesas,
     List<SectorPlano>? sectores,
     List<HojaPlano>? hojas,
+    double? distanciaPegadas,
   }) =>
       ArmadoSalon(
         clave: clave,
@@ -466,7 +471,7 @@ class ArmadoSalon {
         descripcion: descripcion,
         radio: radio,
         metrosPorUnidad: metrosPorUnidad,
-        distanciaPegadas: distanciaPegadas,
+        distanciaPegadas: distanciaPegadas ?? this.distanciaPegadas,
         hojas: hojas ?? this.hojas,
         mesas: mesas ?? this.mesas,
         sectores: sectores ?? this.sectores,

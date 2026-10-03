@@ -11,8 +11,9 @@
 //   • Pasos_plano_trabado.png: con familias ya sentadas;
 //   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, el
 //     momento de tocar a dónde se muda, la pestaña Medidas (como abre, y con
-//     una distancia escrita sin guardar, en una notebook) y la de Colores y
-//     textos (con un color y un título probándose);
+//     una distancia escrita sin guardar, en una notebook), la de Colores y
+//     textos (con un color y un título probándose) y la de Acomodar (una mesa
+//     agregada y corrida, con la regla; y la vista previa de separar);
 //   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
@@ -29,6 +30,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
@@ -41,6 +43,7 @@ import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart'
 import 'package:arguello_events/features/plano/widgets/cambio_de_mesa_dialogs.dart';
 import 'package:arguello_events/features/plano/widgets/elegir_plano_dialog.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
+import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
@@ -192,6 +195,7 @@ final _sinHacer = AccionesPlano(
   onMover: (_, _) {},
   onGuardarMedidas: (_) {},
   onGuardarColoresYTextos: (_) {},
+  onGuardarArmado: (_, _) {},
 );
 
 void main() {
@@ -346,6 +350,60 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets('personalizar: Acomodar, con una mesa agregada y corrida',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(aMedida, escuela, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1440, 900),
+      'Personalizar_acomodar.png',
+      antes: () async {
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('pestana_acomodar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('acomodar_agregar')));
+        await tester.pump();
+        // Se la corre un poco, como con el mouse: queda con la regla.
+        final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
+        final caja = tester.getRect(find.byType(VistaPlano));
+        final m = vista.armado.mesas.last;
+        final encuadre =
+            EncuadrePlano.de(vista.armado.hoja(m.hoja)!.caja, caja.size);
+        final gesto = await tester.startGesture(
+          caja.topLeft + encuadre.aPantalla(Offset(m.x, m.y)),
+        );
+        await tester.pump();
+        await gesto.moveBy(
+          const Offset(0.5, 2.5) * vista.armado.aUnidades(1) * encuadre.escala,
+        );
+        await tester.pump();
+        await gesto.up();
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: Acomodar, la vista previa de separar',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(aMedida, escuela, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1366, 768),
+      'Personalizar_separar.png',
+      antes: () async {
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('pestana_acomodar')));
+        await tester.pump();
+        tester
+            .widget<Slider>(find.byKey(const Key('separar_paso')))
+            .onChanged!(2.4);
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('personalizar: tocar a dónde se muda la familia', (tester) async {
     await _guardar(

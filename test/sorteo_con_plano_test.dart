@@ -6,6 +6,8 @@ import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart'
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/services/divisiones.dart';
+import 'package:arguello_events/features/plano/services/editar_armado.dart';
+import 'package:arguello_events/features/plano/services/sesion_acomodo.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/plano_evento.dart';
@@ -440,6 +442,124 @@ void main() {
         expect(probadas[ModoSorteo.entera] ?? 0, greaterThan(0));
         expect(probadas[ModoSorteo.bloques] ?? 0, greaterThan(0),
             reason: 'por bloques no entró en ningún armado');
+      });
+    }
+  });
+
+  // El pedido del 3-oct: después del sorteo, con el mismo botón, darle mesa
+  // al que faltaba. Si ya no queda lugar, se agregan mesas en Personalizar →
+  // Acomodar y se vuelve a sortear.
+  group('sortear a los que faltan, después de acomodar el salón', () {
+    for (final modo in ModoSorteo.values) {
+      test('${modo.clave}: los que ya tenían mesa no se mueven, y los que '
+          'faltaban van a las mesas agregadas', () {
+        final armado = ArmadosPredefinidos.normal2aPaginas45();
+        // El salón lleno: una familia por mesa, en cuatro divisiones.
+        final cuantas = armado.cantidadComunes;
+        final divisiones = ['5° A', '5° B', '5° C', '5° D'];
+        final alumnos = [
+          for (var i = 0; i < cuantas; i++)
+            alumno('f${i.toString().padLeft(3, '0')}',
+                division: divisiones[i * divisiones.length ~/ cuantas]),
+        ];
+        final orden = [for (final d in divisiones) Divisiones.clave(d)];
+        final e1 = EntradaSorteoPlano(
+          armado: armado,
+          alumnos: alumnos,
+          modo: modo,
+          ordenDivisiones: orden,
+        );
+        final primero = SorteoConPlano.sortear(e1, random: Random(3));
+        verificar(e1, primero, razon: 'primer sorteo');
+        final sentados = [
+          for (final a in alumnos)
+            a.copyWith(numeroMesa: primero.asignaciones[a.id]!.join(', ')),
+        ];
+        final config = ConfigPlano(bloques: primero.bloques);
+
+        // Aparecen tres familias: una terminó de pagar, otra se sumó tarde y
+        // otra, con dos mesas.
+        final faltaban = [
+          alumno('tarde-1', division: '5° A'),
+          alumno('tarde-2', division: '5° C'),
+          alumno('tarde-3', extras: 1, division: '5° D'),
+        ];
+        final todos = [...sentados, ...faltaban];
+
+        // Con el salón como estaba no hay lugar: avisa y no sortea.
+        final sinLugar = SorteoConPlano.preparar(EntradaSorteoPlano(
+          armado: armado,
+          config: config,
+          alumnos: todos,
+          modo: modo,
+          ordenDivisiones: orden,
+        ));
+        expect(sinLugar.entra, isFalse);
+
+        // Se agregan cuatro mesas en Acomodar, de a una al lado de la otra.
+        final sesion = SesionAcomodo(
+          base: armado,
+          enUso: EditarArmado.enUso(sentados, config),
+          haySorteo: true,
+        );
+        final hoja = armado.hojas.last.id;
+        final nuevas = <int>[];
+        for (var i = 0; i < 4; i++) {
+          nuevas.add(sesion.agregar(hoja, cerca: nuevas.isEmpty ? null : nuevas.last));
+        }
+        // Número nuevo: siguen al más alto, ninguna reusa uno.
+        final masAlto = armado.numeros.reduce(max);
+        expect(nuevas, [for (var i = 1; i <= 4; i++) masAlto + i]);
+        // Las que ya tienen familia no se sacan.
+        expect(sesion.sacar(armado.numeros.first), isNotNull);
+        expect(sesion.puedeGuardar, isTrue);
+        final guardar = EditarArmado.paraGuardar(
+          base: armado,
+          nuevo: sesion.actual,
+          fresco: armado,
+          config: config,
+          alumnos: sentados,
+        );
+        expect(guardar.sePuede, isTrue);
+        final acomodado = guardar.armado!;
+        // Nadie cambió de lugar en el dibujo ni de número.
+        for (final m in armado.mesas) {
+          expect(acomodado.mesa(m.numero)!.x, m.x);
+          expect(acomodado.mesa(m.numero)!.y, m.y);
+        }
+
+        // Se vuelve a tocar SORTEO.
+        final e2 = EntradaSorteoPlano(
+          armado: acomodado,
+          config: guardar.config!,
+          alumnos: todos,
+          modo: modo,
+          ordenDivisiones: orden,
+        );
+        expect(SorteoConPlano.preparar(e2).entra, isTrue);
+        final segundo = SorteoConPlano.sortear(e2, random: Random(8));
+        verificar(e2, segundo, razon: 'los que faltaban');
+
+        // Los que ya tenían mesa no figuran entre los sorteados, o figuran
+        // con la misma.
+        for (final a in sentados) {
+          final ahora = segundo.asignaciones[a.id];
+          if (ahora != null) {
+            expect(ahora.join(', '), a.numeroMesa, reason: a.id);
+          }
+        }
+        // Los que faltaban recibieron mesa, todas de las agregadas.
+        final dadas = <int>[];
+        for (final a in faltaban) {
+          final mesas = segundo.asignaciones[a.id];
+          expect(mesas, isNotNull, reason: a.id);
+          dadas.addAll(mesas!);
+        }
+        expect(dadas.toSet(), nuevas.toSet());
+        // Y la familia de dos mesas quedó con las dos pegadas.
+        final dos = segundo.asignaciones['tarde-3']!;
+        expect(dos.length, 2);
+        expect(acomodado.pegadas(dos.first, dos.last), isTrue);
       });
     }
   });

@@ -5,6 +5,7 @@ import '../../../models/sillas_reparto.dart';
 import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
+import '../dibujo/pintor_acomodo.dart';
 import '../dibujo/pintor_plano.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
@@ -14,8 +15,11 @@ import '../services/armar_a_medida.dart';
 import '../services/cambios_de_mesa.dart';
 import '../services/colores_y_textos.dart';
 import '../services/divisiones.dart';
+import '../services/editar_armado.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
+import '../services/sesion_acomodo.dart';
+import 'personalizar/panel_acomodar.dart';
 import 'personalizar/panel_colores_textos.dart';
 import 'personalizar/panel_medidas.dart';
 import 'vista_plano.dart';
@@ -45,6 +49,10 @@ class AccionesPlano {
   /// sectores. Null: no hay pestaña Colores y textos.
   final void Function(ColoresYTextos cambio)? onGuardarColoresYTextos;
 
+  /// Guardar el salón acomodado a mano: [base] es el que estaba guardado al
+  /// empezar y [nuevo] el que quedó. Null: no hay pestaña Acomodar.
+  final void Function(ArmadoSalon base, ArmadoSalon nuevo)? onGuardarArmado;
+
   const AccionesPlano({
     required this.onFijarEnMesa,
     required this.onFijar,
@@ -56,6 +64,7 @@ class AccionesPlano {
     required this.onMover,
     this.onGuardarMedidas,
     this.onGuardarColoresYTextos,
+    this.onGuardarArmado,
   });
 }
 
@@ -63,6 +72,9 @@ class AccionesPlano {
 enum ModoPersonalizar {
   /// Fijar, dejar libres, cambiar y mover familias.
   mesas('Mesas'),
+
+  /// Correr, agregar y sacar mesas y sectores, y separar o juntar.
+  acomodar('Acomodar'),
 
   /// Las medidas del playón y el lugar que pide cada mesa.
   medidas('Medidas'),
@@ -160,6 +172,20 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// plano se dibuja con eso.
   ColoresYTextos? _coloresEnPrueba;
 
+  /// El salón que se está acomodando, mientras la pestaña Acomodar está
+  /// abierta. Nada de esto se guarda hasta tocar GUARDAR EL SALÓN.
+  SesionAcomodo? _acomodo;
+  int? _mesaAcomodo;
+  int? _sectorAcomodo;
+
+  /// Dónde se agarró lo que se arrastra, respecto de su lugar: así no pega un
+  /// salto al empezar a moverlo.
+  Offset _desfase = Offset.zero;
+  String _alcance = 'hoja';
+  double? _pasoSeparar;
+  String? _mensajeAcomodo;
+  bool _confirmarDescartar = false;
+
   /// Se eligió una acción que necesita un toque más en el plano (a dónde va la
   /// familia, o con cuál cambia).
   ({_Espera que, String alumnoId})? _esperando;
@@ -204,7 +230,29 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     }
     // Una pestaña que dejó de estar (quien usa la pantalla le sacó la acción).
     final modo = _modo;
-    if (modo != null && !_modos.contains(modo)) _modo = _modos.first;
+    if (modo != null && !_modos.contains(modo)) {
+      _modo = _modos.first;
+      _limpiarAcomodo();
+    }
+    // El salón guardado cambió mientras se acomodaba.
+    final sesion = _acomodo;
+    if (sesion != null && !identical(sesion.base, _plano.armado)) {
+      final guardado = EditarArmado.firma(_plano.armado);
+      if (guardado != EditarArmado.firma(sesion.base)) {
+        if (!sesion.hayCambios ||
+            guardado == EditarArmado.firma(sesion.actual)) {
+          // Se guardó lo acomodado (o no había nada pendiente): se sigue desde
+          // lo que quedó.
+          final mesa = _mesaAcomodo;
+          _limpiarAcomodo();
+          _acomodo = _nuevaSesion();
+          if (mesa != null && _plano.armado.existe(mesa)) _mesaAcomodo = mesa;
+        } else {
+          _pista = 'El salón cambió en la otra PC mientras lo acomodabas: '
+              'tocá DESCARTAR para ver cómo quedó.';
+        }
+      }
+    }
     final mesa = _mesaElegida;
     if (mesa != null && !_plano.armado.existe(mesa)) _mesaElegida = null;
     // Lo que se estaba por hacer puede haber dejado de tener sentido con lo
@@ -407,6 +455,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// quien usa la pantalla le dio con qué guardar.
   List<ModoPersonalizar> get _modos => [
         ModoPersonalizar.mesas,
+        if (widget.acciones?.onGuardarArmado != null) ModoPersonalizar.acomodar,
         if (widget.acciones?.onGuardarMedidas != null) ModoPersonalizar.medidas,
         if (widget.acciones?.onGuardarColoresYTextos != null)
           ModoPersonalizar.colores,
@@ -424,10 +473,31 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ),
       );
 
-  /// El salón como se dibuja: el guardado o, mientras se prueban textos de
-  /// sectores, con esos textos.
+  /// El salón como se dibuja: el guardado; el que se está acomodando; o,
+  /// mientras se prueban textos de sectores, con esos textos.
   ArmadoSalon get _armadoVisto =>
-      _coloresEnPrueba?.armadoCon(_plano.armado) ?? _plano.armado;
+      _acomodo?.visto ??
+      _coloresEnPrueba?.armadoCon(_plano.armado) ??
+      _plano.armado;
+
+  SesionAcomodo _nuevaSesion() => SesionAcomodo(
+        base: _plano.armado,
+        medidas: _plano.medidas,
+        enUso: EditarArmado.enUso(widget.alumnos, _plano.config),
+        ocupantes: PlanoDeLaFiesta.ocupantes(widget.alumnos, widget.repartos),
+        // También las bajas que conservan mesa: los números ya están dados.
+        haySorteo: widget.alumnos.any(SalonMesas.tieneNumeros),
+      );
+
+  void _limpiarAcomodo() {
+    _acomodo = null;
+    _mesaAcomodo = null;
+    _sectorAcomodo = null;
+    _alcance = 'hoja';
+    _pasoSeparar = null;
+    _mensajeAcomodo = null;
+    _confirmarDescartar = false;
+  }
 
   /// Lo que quedaría sin guardar si se sale de la pestaña, dicho en palabras.
   /// Null: no hay nada pendiente.
@@ -436,6 +506,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           'Hay medidas sin guardar: tocá GUARDAR MEDIDAS o DESCARTAR.',
         ModoPersonalizar.colores when _coloresEnPrueba != null =>
           'Hay colores o textos sin guardar: tocá GUARDAR o DESCARTAR.',
+        ModoPersonalizar.acomodar when _acomodo?.hayCambios ?? false =>
+          'Hay cambios del salón sin guardar: tocá GUARDAR EL SALÓN o '
+              'DESCARTAR.',
         _ => null,
       };
 
@@ -452,6 +525,8 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _pista = null;
       _medidasEnPrueba = null;
       _coloresEnPrueba = null;
+      _limpiarAcomodo();
+      if (modo == ModoPersonalizar.acomodar) _acomodo = _nuevaSesion();
     });
   }
 
@@ -467,7 +542,72 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _pista = null;
       _medidasEnPrueba = null;
       _coloresEnPrueba = null;
+      _limpiarAcomodo();
     });
+  }
+
+  // ── Acomodar: lo que se toca en el plano ────────────────────────────────
+
+  /// La mesa de la hoja a la vista bajo un punto del plano, o null.
+  int? _mesaEn(ArmadoSalon armado, Offset p) {
+    int? mejor;
+    var cerca = double.infinity;
+    for (final m in armado.mesasDeHoja(_hoja)) {
+      final d = (Offset(m.x, m.y) - p).distance;
+      if (d <= armado.radio * 1.1 && d < cerca) {
+        mejor = m.numero;
+        cerca = d;
+      }
+    }
+    return mejor;
+  }
+
+  /// Se apretó en el plano: si ahí hay una mesa o un sector, queda elegido y
+  /// agarrado para arrastrar. Con la vista previa de separar abierta no se
+  /// agarra nada.
+  bool _apretar(Offset p) {
+    final s = _acomodo;
+    if (s == null || widget.ocupado || s.previa != null) return false;
+    final armado = s.actual;
+    final mesa = _mesaEn(armado, p);
+    final sector =
+        mesa != null ? null : EditarArmado.sectorEn(armado, _hoja, p.dx, p.dy);
+    setState(() {
+      _mesaAcomodo = mesa;
+      _sectorAcomodo = sector;
+      _mensajeAcomodo = null;
+      _confirmarDescartar = false;
+      if (mesa != null) {
+        final m = armado.mesa(mesa)!;
+        _desfase = p - Offset(m.x, m.y);
+        s.empezarArrastre();
+      } else if (sector != null) {
+        final c = armado.sectores[sector].caja;
+        _desfase = p - Offset(c.x, c.y);
+        s.empezarArrastre();
+      }
+    });
+    return mesa != null || sector != null;
+  }
+
+  void _arrastrar(Offset p) {
+    final s = _acomodo;
+    if (s == null || !s.arrastrando) return;
+    final destino = p - _desfase;
+    setState(() {
+      final mesa = _mesaAcomodo;
+      final sector = _sectorAcomodo;
+      if (mesa != null) {
+        s.arrastrarMesa(mesa, destino.dx, destino.dy);
+      } else if (sector != null) {
+        s.arrastrarSector(sector, destino.dx, destino.dy);
+      }
+    });
+  }
+
+  void _soltarArrastre() {
+    final s = _acomodo;
+    if (s != null) setState(s.terminarArrastre);
   }
 
   bool get _hayFamiliasConMesa => widget.alumnos
@@ -568,6 +708,11 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     } else if (_modo == ModoPersonalizar.colores) {
       texto = 'El color de cada división, el título del plano y los textos '
           'de los sectores.';
+    } else if (_modo == ModoPersonalizar.acomodar) {
+      texto = _acomodo?.previa != null
+          ? 'Así quedaría: APLICAR para dejarlo así, o CANCELAR.'
+          : 'Arrastrá una mesa para correrla: se ve la distancia a las tres '
+              'más cercanas. Nada cambia hasta tocar GUARDAR EL SALÓN.';
     } else if (espera == null || alumno == null) {
       texto = 'Personalizar las mesas: tocá una mesa o buscá una familia.';
     } else {
@@ -827,6 +972,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   Widget _areaPlano(BuildContext context) {
     final armado = _armadoVisto;
     final tema = _tema;
+    final acomodando = _acomodo != null;
     const altoBarra = 48.0;
     return Padding(
       padding: const EdgeInsets.only(left: 16, bottom: 4),
@@ -850,22 +996,48 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                       transformationController: _zoom,
                       minScale: 1,
                       maxScale: _zoomMaximo,
+                      // Mientras se arrastra una mesa, el plano se queda
+                      // quieto.
+                      panEnabled: !(_acomodo?.arrastrando ?? false),
                       child: VistaPlano(
                         armado: armado,
                         hoja: _hoja,
                         tema: tema,
                         estado: _plano.estado,
-                        resaltadas: _resaltadas,
-                        seleccionada: _mesaElegida,
+                        // Acomodando no se apaga ninguna mesa: hay que ver
+                        // las vecinas.
+                        resaltadas: acomodando ? const {} : _resaltadas,
+                        seleccionada: acomodando ? null : _mesaElegida,
                         // En Medidas y en Colores y textos no se elige
-                        // nada: el plano solo muestra cómo queda.
-                        onTapMesa: _soloMuestra ? null : _elegirMesa,
+                        // nada: el plano solo muestra cómo queda. En Acomodar
+                        // se elige apretando, para poder arrastrar.
+                        onTapMesa:
+                            _soloMuestra || acomodando ? null : _elegirMesa,
                         mostrarMedidas: true,
                         lugares: _modo == ModoPersonalizar.medidas
                             ? _medidasEnPrueba ?? _plano.medidas
-                            : widget.mostrarLugares
+                            : widget.mostrarLugares || acomodando
                                 ? _plano.medidas
                                 : null,
+                        encima: acomodando
+                            ? PintorAcomodo(
+                                armado: armado,
+                                hoja: _hoja,
+                                tema: tema,
+                                mesa: _mesaAcomodo,
+                                sector: _sectorAcomodo,
+                                vecinas: _mesaAcomodo == null
+                                    ? const []
+                                    : EditarArmado.vecinas(
+                                        armado,
+                                        _mesaAcomodo!,
+                                      ),
+                                pideM: _plano.medidas.lugarMesaM,
+                              )
+                            : null,
+                        onApretar: acomodando ? _apretar : null,
+                        onArrastrar: acomodando ? _arrastrar : null,
+                        onSoltar: acomodando ? _soltarArrastre : null,
                       ),
                     ),
                   ),
@@ -1019,7 +1191,196 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ),
       );
 
+  Widget _panelAcomodar() {
+    final s = _acomodo!;
+    final armado = s.actual;
+    final numeroElegido = _mesaAcomodo;
+    final mesa = numeroElegido == null ? null : armado.mesa(numeroElegido);
+    final indice = _sectorAcomodo;
+    final sector = indice != null && indice < armado.sectores.length
+        ? armado.sectores[indice]
+        : null;
+    final alcances = EditarArmado.alcances(
+      armado,
+      _hoja,
+      bloques: _plano.config.bloques,
+      nombres: _plano.estado.nombresDivision,
+    );
+    final alcance = alcances.any((a) => a.clave == _alcance)
+        ? _alcance
+        : alcances.isEmpty
+            ? 'hoja'
+            : alcances.first.clave;
+    final numeros = alcances
+            .where((a) => a.clave == alcance)
+            .map((a) => a.numeros)
+            .firstOrNull ??
+        const <int>{};
+    final paso = _pasoSeparar ??
+        EditarArmado.pasoDe(armado, numeros) ??
+        _plano.medidas.lugarMesaM;
+
+    String? seleccion;
+    String? detalle;
+    if (mesa != null) {
+      seleccion = [
+        'Mesa ${mesa.numero}',
+        s.enUso[mesa.numero] ?? 'vacía',
+        if (mesa.pasto) 'en el pasto',
+      ].join(' · ');
+      final vecinas = EditarArmado.vecinas(armado, mesa.numero);
+      if (vecinas.isNotEmpty) {
+        detalle = 'A ${[
+          for (final v in vecinas)
+            '${MedirSalon.metros(v.metros, decimales: 2)} de la ${v.numero}',
+        ].join(', ')}.';
+      }
+    } else if (sector != null) {
+      seleccion = 'Sector: '
+          '${sector.texto.trim().isEmpty ? PanelColoresTextos.rotuloDe(sector.tipo) : sector.texto.trim()}';
+    }
+
+    void hecho(String? mensaje) {
+      _mensajeAcomodo = mensaje;
+      _confirmarDescartar = false;
+      _pista = null;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
+      child: PanelAcomodar(
+        seleccion: seleccion,
+        detalle: detalle,
+        mensaje: _mensajeAcomodo,
+        onAgregar: () => setState(() {
+          final n = s.agregar(_hoja, cerca: _mesaAcomodo);
+          _mesaAcomodo = n;
+          _sectorAcomodo = null;
+          hecho('Mesa $n agregada: arrastrala a su lugar.');
+        }),
+        onSacar: mesa == null
+            ? null
+            : () => setState(() {
+                  final problema = s.sacar(mesa.numero);
+                  if (problema == null) _mesaAcomodo = null;
+                  hecho(problema ?? 'Mesa ${mesa.numero} sacada.');
+                }),
+        onPasto: mesa == null
+            ? null
+            : () => setState(() {
+                  s.cambiarPasto(mesa.numero);
+                  hecho(null);
+                }),
+        mesaEnPasto: mesa?.pasto ?? false,
+        onDeshacer: s.puedeDeshacer
+            ? () => setState(() {
+                  s.deshacer();
+                  _pasoSeparar = null;
+                  final n = _mesaAcomodo;
+                  if (n != null && !s.actual.existe(n)) _mesaAcomodo = null;
+                  final i = _sectorAcomodo;
+                  if (i != null && i >= s.actual.sectores.length) {
+                    _sectorAcomodo = null;
+                  }
+                  hecho(null);
+                })
+            : null,
+        onAgregarSector: (tipo) => setState(() {
+          _sectorAcomodo = s.agregarSector(
+            _hoja,
+            tipo,
+            texto: PanelColoresTextos.rotuloDe(tipo),
+          );
+          _mesaAcomodo = null;
+          hecho('Sector agregado arriba a la izquierda: arrastralo a su '
+              'lugar. El texto se cambia en Colores y textos.');
+        }),
+        onSacarSector: sector == null
+            ? null
+            : () => setState(() {
+                  s.sacarSector(indice!);
+                  _sectorAcomodo = null;
+                  hecho(null);
+                }),
+        onTamanoSector: sector == null
+            ? null
+            : (dx, dy) => setState(() {
+                  s.tamanoSector(
+                    indice!,
+                    anchoM: armado.aMetros(sector.caja.ancho) + dx,
+                    altoM: armado.aMetros(sector.caja.alto) + dy,
+                  );
+                  hecho(null);
+                }),
+        tamanoSector: sector == null
+            ? null
+            : '${MedirSalon.metros(armado.aMetros(sector.caja.ancho)).replaceFirst(' m', '')}'
+                ' × ${MedirSalon.metros(armado.aMetros(sector.caja.alto))}',
+        alcances: alcances,
+        alcance: alcance,
+        onAlcance: (v) => setState(() {
+          _alcance = v;
+          _pasoSeparar = null;
+          s.cancelarSeparar();
+        }),
+        paso: paso,
+        onPaso: (v) => setState(() {
+          _pasoSeparar = v;
+          _confirmarDescartar = false;
+          s.probarSeparar(numeros, v);
+        }),
+        textoPrevia: s.previa?.texto,
+        previaEntra: s.previa?.entra ?? true,
+        onAplicar: () => setState(() {
+          s.aplicarSeparar();
+          _pasoSeparar = null;
+          hecho(null);
+        }),
+        onCancelar: () => setState(() {
+          s.cancelarSeparar();
+          _pasoSeparar = null;
+        }),
+        bloqueos: s.bloqueos,
+        avisos: s.avisos((n) => _plano.estado.info(n).sillasExtra),
+        motivoSinOriginal: s.motivoSinOriginal,
+        onOriginal: () => setState(() {
+          final problema = s.volverAlOriginal();
+          _mesaAcomodo = null;
+          _sectorAcomodo = null;
+          _pasoSeparar = null;
+          hecho(problema ??
+              'Volvió el armado original. Todavía no se guardó: se puede '
+                  'deshacer.');
+        }),
+        hayCambios: s.hayCambios,
+        puedeGuardar: s.puedeGuardar,
+        ocupado: widget.ocupado,
+        confirmarDescartar: _confirmarDescartar,
+        onGuardar: () {
+          setState(() => _pista = null);
+          widget.acciones?.onGuardarArmado?.call(s.base, s.actual);
+        },
+        // Descartar pierde todo lo acomodado: se pide dos veces.
+        onDescartar: () => setState(() {
+          if (!_confirmarDescartar) {
+            _confirmarDescartar = true;
+            return;
+          }
+          s.descartar();
+          _mesaAcomodo = null;
+          _sectorAcomodo = null;
+          _pasoSeparar = null;
+          hecho(null);
+          // Si el salón guardado es otro (lo cambió la otra PC), se arranca
+          // desde ese.
+          if (!identical(s.base, _plano.armado)) _acomodo = _nuevaSesion();
+        }),
+      ),
+    );
+  }
+
   Widget _panel(BuildContext context) {
+    if (_modo == ModoPersonalizar.acomodar) return _panelAcomodar();
     if (_modo == ModoPersonalizar.medidas) return _panelMedidas();
     if (_modo == ModoPersonalizar.colores) return _panelColores();
     final consulta = _busqueda.text.trim();

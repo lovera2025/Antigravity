@@ -12,6 +12,7 @@ import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart'
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/colores_y_textos.dart';
+import 'package:arguello_events/features/plano/services/editar_armado.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
@@ -112,10 +113,12 @@ AccionesPlano _acciones(
   List<String> tocados, {
   List<MedidasPlano>? medidas,
   List<ColoresYTextos>? colores,
+  List<(ArmadoSalon, ArmadoSalon)>? salon,
 }) =>
     AccionesPlano(
       onGuardarMedidas: medidas?.add,
       onGuardarColoresYTextos: colores?.add,
+      onGuardarArmado: salon == null ? null : (b, n) => salon.add((b, n)),
       onFijarEnMesa: (m) => tocados.add('fijar en $m'),
       onFijar: (a, m) => tocados.add('fijar $a desde $m'),
       onQuitarFijadas: (a) => tocados.add('quitar fijadas de $a'),
@@ -153,6 +156,38 @@ Future<void> _tocarMesa(WidgetTester tester, ArmadoSalon armado, int numero) asy
   final punto = EncuadrePlano.de(armado.hoja(m.hoja)!.caja, caja.size)
       .aPantalla(Offset(m.x, m.y));
   await tester.tapAt(caja.topLeft + punto);
+  await tester.pump();
+}
+
+/// Dónde está una mesa en la pantalla, según el armado que se está dibujando.
+Offset _enPantalla(WidgetTester tester, int numero) {
+  final vista = _vista(tester);
+  final caja = tester.getRect(find.byType(VistaPlano));
+  final m = vista.armado.mesa(numero)!;
+  return caja.topLeft +
+      EncuadrePlano.de(vista.armado.hoja(m.hoja)!.caja, caja.size)
+          .aPantalla(Offset(m.x, m.y));
+}
+
+/// Arrastra una mesa [metros] para un lado (x, y), como con el mouse.
+Future<void> _arrastrarMesa(
+  WidgetTester tester,
+  int numero,
+  Offset metros,
+) async {
+  final vista = _vista(tester);
+  final caja = tester.getRect(find.byType(VistaPlano));
+  final m = vista.armado.mesa(numero)!;
+  final escala =
+      EncuadrePlano.de(vista.armado.hoja(m.hoja)!.caja, caja.size).escala;
+  final gesto = await tester.startGesture(_enPantalla(tester, numero));
+  await tester.pump();
+  final total = metros * vista.armado.aUnidades(1) * escala;
+  for (var i = 0; i < 4; i++) {
+    await gesto.moveBy(total / 4);
+    await tester.pump();
+  }
+  await gesto.up();
   await tester.pump();
 }
 
@@ -1249,6 +1284,346 @@ void main() {
       // Y el color queda.
       expect(_vista(tester).tema.colorDivision(0),
           TemaPlano.arquitecto.divisiones[5]);
+    });
+  });
+
+  group('personalizar: Acomodar', () {
+    // Una mesa vacía de la última fila: correrla hacia el fondo no la deja
+    // encima de ninguna otra.
+    final fondo = () {
+      final a = _armado();
+      final libres = a.mesas.where((m) => !{8, 9, 20}.contains(m.numero));
+      final abajo = libres.map((m) => m.y).reduce((x, y) => x > y ? x : y);
+      return libres.firstWhere((m) => m.y == abajo).numero;
+    }();
+
+    Future<void> abrir(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pestana_acomodar')));
+      await tester.pump();
+    }
+
+    String texto(WidgetTester tester, String clave) =>
+        tester.widget<Text>(find.byKey(Key(clave))).data!;
+
+    String elegido(WidgetTester tester) => tester
+        .widgetList<Text>(find.descendant(
+          of: find.byKey(const Key('elegido_acomodar')),
+          matching: find.byType(Text),
+        ))
+        .first
+        .data!;
+
+    bool prendido(WidgetTester tester, String clave) =>
+        tester.widget<ButtonStyleButton>(find.byKey(Key(clave))).onPressed !=
+        null;
+
+    testWidgets('la pestaña va segunda, y abre con el salón como está',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(
+        tester,
+        plano: _plano(armado: armado),
+        acciones: _acciones([], medidas: [], colores: [], salon: []),
+      );
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      final pestanas = tester
+          .widget<SegmentedButton<ModoPersonalizar>>(
+              find.byKey(const Key('pestanas_personalizar')))
+          .segments
+          .map((s) => s.value)
+          .toList();
+      expect(pestanas, ModoPersonalizar.values);
+
+      await tester.tap(find.byKey(const Key('pestana_acomodar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_acomodar')), findsOneWidget);
+      expect(find.byKey(const Key('buscar')), findsNothing);
+      expect(elegido(tester), startsWith('Tocá una mesa'));
+      // Se ve el lugar que pide cada mesa, y no hay nada para guardar.
+      expect(_vista(tester).lugares, const MedidasPlano());
+      expect(identical(_vista(tester).armado, armado), isTrue);
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      expect(find.text('SALÓN GUARDADO'), findsOneWidget);
+      expect(find.byKey(const Key('descartar_acomodo')), findsNothing);
+      expect(prendido(tester, 'acomodar_sacar'), isFalse);
+      expect(prendido(tester, 'acomodar_deshacer'), isFalse);
+    });
+
+    testWidgets('apretar una mesa la elige y dice si se puede sacar',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await tester.tapAt(_enPantalla(tester, 30));
+      await tester.pump();
+      expect(elegido(tester), 'Mesa 30 · vacía');
+      // Y a cuánto está de las tres más cercanas.
+      expect(texto(tester, 'detalle_acomodar'), startsWith('A 2 m de la '));
+      await tester.tapAt(_enPantalla(tester, 8));
+      await tester.pump();
+      expect(elegido(tester), 'Mesa 8 · la tiene GÓMEZ');
+      // Tocarla no la corrió: no hay nada para guardar ni deshacer.
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      expect(prendido(tester, 'acomodar_deshacer'), isFalse);
+    });
+
+    testWidgets('arrastrar corre la mesa de a cuartos de metro, sin guardar',
+        (tester) async {
+      final guardados = <(ArmadoSalon, ArmadoSalon)>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones([], salon: guardados));
+      await abrir(tester);
+      await _arrastrarMesa(tester, fondo, const Offset(0, 3));
+      final antes = armado.mesa(fondo)!;
+      final ahora = _vista(tester).armado.mesa(fondo)!;
+      final corrida = armado.aMetros(ahora.y - antes.y);
+      expect(corrida, closeTo(3, 0.26));
+      expect((corrida / 0.25 - (corrida / 0.25).round()).abs(), lessThan(1e-6));
+      expect(ahora.x, antes.x);
+      // El plano no se desplazó mientras se arrastraba.
+      expect(_zoom(tester), 1);
+      expect(guardados, isEmpty);
+      expect(elegido(tester), 'Mesa $fondo · vacía');
+      expect(prendido(tester, 'guardar_acomodo'), isTrue);
+      expect(find.text('GUARDAR EL SALÓN'), findsOneWidget);
+
+      // Deshacer la devuelve.
+      await tester.tap(find.byKey(const Key('acomodar_deshacer')));
+      await tester.pump();
+      expect(_vista(tester).armado.mesa(fondo)!.y, antes.y);
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    testWidgets('GUARDAR avisa el salón del que se partió y el que quedó',
+        (tester) async {
+      final guardados = <(ArmadoSalon, ArmadoSalon)>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones([], salon: guardados));
+      await abrir(tester);
+      await _arrastrarMesa(tester, fondo, const Offset(0, 3));
+      await tester.tap(find.byKey(const Key('guardar_acomodo')));
+      await tester.pump();
+      final (base, nuevo) = guardados.single;
+      expect(identical(base, armado), isTrue);
+      expect(nuevo.mesa(fondo)!.y, greaterThan(armado.mesa(fondo)!.y));
+
+      // Vuelve guardado: sigue en Acomodar, con la mesa elegida, sin nada
+      // pendiente.
+      await _mostrar(tester,
+          plano: _plano(armado: nuevo),
+          acciones: _acciones([], salon: guardados));
+      expect(find.byKey(const Key('panel_acomodar')), findsOneWidget);
+      expect(find.text('SALÓN GUARDADO'), findsOneWidget);
+      expect(elegido(tester), 'Mesa $fondo · vacía');
+      expect(prendido(tester, 'acomodar_deshacer'), isFalse);
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+    });
+
+    testWidgets('con cambios sin guardar no se sale; DESCARTAR pide dos veces',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await _arrastrarMesa(tester, 30, const Offset(0, 3));
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_acomodar')), findsOneWidget);
+      expect(texto(tester, 'pista'), contains('cambios del salón sin guardar'));
+
+      await tester.tap(find.byKey(const Key('descartar_acomodo')));
+      await tester.pump();
+      expect(find.text('¿DESCARTAR TODO?'), findsOneWidget);
+      expect(_vista(tester).armado.mesa(30)!.y, isNot(armado.mesa(30)!.y));
+      await tester.tap(find.byKey(const Key('descartar_acomodo')));
+      await tester.pump();
+      expect(identical(_vista(tester).armado, armado), isTrue);
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+    });
+
+    testWidgets('agregar da el número que sigue; una con familia no se saca',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await tester.tap(find.byKey(const Key('acomodar_agregar')));
+      await tester.pump();
+      expect(_vista(tester).armado.existe(41), isTrue);
+      expect(elegido(tester), 'Mesa 41 · vacía');
+      expect(texto(tester, 'mensaje_acomodar'),
+          'Mesa 41 agregada: arrastrala a su lugar.');
+      // La nueva se puede sacar.
+      await tester.tap(find.byKey(const Key('acomodar_sacar')));
+      await tester.pump();
+      expect(_vista(tester).armado.existe(41), isFalse);
+      // Una con familia, no: dice por qué y queda.
+      await tester.tapAt(_enPantalla(tester, 8));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('acomodar_sacar')));
+      await tester.pump();
+      expect(_vista(tester).armado.existe(8), isTrue);
+      expect(texto(tester, 'mensaje_acomodar'),
+          'La mesa 8 no se saca: la tiene GÓMEZ. Se puede correr.');
+    });
+
+    testWidgets('marcar de pasto y volver', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await tester.tapAt(_enPantalla(tester, 30));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('acomodar_pasto')));
+      await tester.pump();
+      expect(_vista(tester).armado.pasto, {30});
+      expect(elegido(tester), 'Mesa 30 · vacía · en el pasto');
+      expect(find.text('Sacar del pasto'), findsOneWidget);
+    });
+
+    testWidgets('una mesa encima de otra no deja guardar, y lo dice',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final a = armado.mesa(30)!;
+      final vecina = armado.mesasDeHoja(a.hoja).firstWhere(
+          (m) => m.numero != 30 && armado.distanciaM(30, m.numero)! < 2.1);
+      final metros = Offset(
+        armado.aMetros(vecina.x - a.x),
+        armado.aMetros(vecina.y - a.y),
+      );
+      await _arrastrarMesa(tester, 30, metros);
+      expect(find.byKey(const Key('bloqueo_0')), findsOneWidget);
+      expect(find.textContaining('se pisan'), findsOneWidget);
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    testWidgets('separar o juntar: se ve antes, y recién cambia con APLICAR',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      expect(texto(tester, 'separar_metros'), '2 m');
+      tester
+          .widget<Slider>(find.byKey(const Key('separar_paso')))
+          .onChanged!(2.5);
+      await tester.pump();
+      expect(texto(tester, 'separar_metros'), '2,5 m');
+      expect(texto(tester, 'separar_previa'), 'Siguen entrando las 40.');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('texto_personalizar'))).data,
+        startsWith('Así quedaría'),
+      );
+      // El plano ya lo muestra, pero no se puede guardar ni arrastrar.
+      expect(_vista(tester).armado.distanciaM(1, 2), closeTo(2.5, 1e-6));
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      await _arrastrarMesa(tester, 30, const Offset(0, 2));
+      expect(_vista(tester).armado.distanciaM(1, 2), closeTo(2.5, 1e-6));
+
+      await tester.tap(find.byKey(const Key('separar_cancelar')));
+      await tester.pump();
+      expect(identical(_vista(tester).armado, armado), isTrue);
+      expect(texto(tester, 'separar_metros'), '2 m');
+
+      tester
+          .widget<Slider>(find.byKey(const Key('separar_paso')))
+          .onChanged!(2.5);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('separar_aplicar')));
+      await tester.pump();
+      expect(_vista(tester).armado.distanciaM(1, 2), closeTo(2.5, 1e-6));
+      expect(prendido(tester, 'guardar_acomodo'), isTrue);
+      expect(texto(tester, 'separar_metros'), '2,5 m');
+    });
+
+    testWidgets('volver al armado original: con familias sentadas está '
+        'apagado, con el motivo', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], salon: []));
+      await abrir(tester);
+      expect(prendido(tester, 'acomodar_original'), isFalse);
+      expect(texto(tester, 'motivo_sin_original'), contains('deshacé el sorteo'));
+    });
+
+    testWidgets('volver al armado original: antes del sorteo vuelve, sin '
+        'guardar', (tester) async {
+      final sinMesa = [_alumno('vega', 'VEGA, ANA', extras: 1)];
+      final armado = _armado();
+      await _mostrar(tester,
+          alumnos: sinMesa,
+          plano: _plano(armado: armado, alumnos: sinMesa),
+          acciones: _acciones([], salon: []));
+      await abrir(tester);
+      expect(find.byKey(const Key('motivo_sin_original')), findsNothing);
+      await _arrastrarMesa(tester, 30, const Offset(0, 3));
+      await tester.ensureVisible(find.byKey(const Key('acomodar_original')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('acomodar_original')));
+      await tester.pump();
+      expect(_vista(tester).armado.mesa(30)!.y,
+          closeTo(armado.mesa(30)!.y, 1e-6));
+      expect(texto(tester, 'mensaje_acomodar'),
+          startsWith('Volvió el armado original'));
+    });
+
+    testWidgets('si la otra PC cambia el salón mientras se acomoda, lo dice y '
+        'no pierde lo hecho', (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await _arrastrarMesa(tester, 30, const Offset(0, 3));
+      final corrida = _vista(tester).armado.mesa(30)!.y;
+
+      final deLaOtra = EditarArmado.marcarPasto(armado, 1, true);
+      await _mostrar(tester,
+          plano: _plano(armado: deLaOtra), acciones: _acciones([], salon: []));
+      expect(texto(tester, 'pista'), contains('cambió en la otra PC'));
+      expect(_vista(tester).armado.mesa(30)!.y, corrida);
+      // Descartando se ve cómo quedó.
+      await tester.tap(find.byKey(const Key('descartar_acomodo')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('descartar_acomodo')));
+      await tester.pump();
+      expect(_vista(tester).armado.pasto, {1});
+      expect(find.byKey(const Key('pista')), findsNothing);
+    });
+
+    testWidgets('un sector se elige, se agranda y se saca', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final vista = _vista(tester);
+      final i = vista.armado.sectores
+          .indexWhere((s) => s.tipo == TipoSector.escenario);
+      final c = vista.armado.sectores[i].caja;
+      final caja = tester.getRect(find.byType(VistaPlano));
+      final punto = caja.topLeft +
+          EncuadrePlano.de(vista.armado.hoja('A')!.caja, caja.size)
+              .aPantalla(Offset(c.centroX, c.centroY));
+      await tester.tapAt(punto);
+      await tester.pump();
+      expect(elegido(tester), 'Sector: Escenario');
+      expect(texto(tester, 'tamano_sector'), startsWith('Mide 30 × '));
+      await tester.tap(find.byKey(const Key('sector_mas_ancho')));
+      await tester.pump();
+      expect(texto(tester, 'tamano_sector'), startsWith('Mide 30,5 × '));
+      await tester.tap(find.byKey(const Key('acomodar_sacar_sector')));
+      await tester.pump();
+      expect(_vista(tester).armado.sectores.length,
+          vista.armado.sectores.length - 1);
+      expect(elegido(tester), startsWith('Tocá una mesa'));
     });
   });
 

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../modelo/armado_salon.dart';
+import '../modelo/armados_predefinidos.dart';
 import '../modelo/medidas_salon.dart';
 
 /// Lo que ocupan las mesas de una hoja, con su lugar alrededor.
@@ -78,7 +79,8 @@ class MedirSalon {
   ///
   /// En un armado del Canva (sin el borde del hormigón) las mesas comunes
   /// están donde las puso el jefe: ahí solo se avisa por las que llevan
-  /// sillas extra.
+  /// sillas extra, **y por las que alguien corrió o agregó a mano** al
+  /// acomodar el salón.
   static SinLugar revisar(
     ArmadoSalon armado,
     MedidasPlano medidas,
@@ -90,6 +92,8 @@ class MedirSalon {
         armado,
         lugarDe,
         soloSiPideMasDe: armado.tieneBorde ? null : medidas.lugarMesaM,
+        siempre:
+            armado.tieneBorde ? const {} : ArmadosPredefinidos.corridas(armado),
       ),
       fueraDelHormigon(armado, lugarDe),
     );
@@ -128,10 +132,12 @@ class MedirSalon {
   /// Con [soloSiPideMasDe], un par donde ninguna de las dos pide más que eso
   /// no se mira. Es para los armados del Canva: ahí las mesas comunes están
   /// donde las puso el jefe, y solo se avisa cuando una lleva sillas extra.
+  /// Las de [siempre] se miran igual: son las que alguien corrió a mano.
   static List<ParApretado> apretadas(
     ArmadoSalon armado,
     double Function(int numero) lugarDe, {
     double? soloSiPideMasDe,
+    Set<int> siempre = const {},
   }) {
     final r = <ParApretado>[];
     for (final h in armado.hojas) {
@@ -141,7 +147,9 @@ class MedirSalon {
         for (var j = i + 1; j < mesas.length; j++) {
           if (soloSiPideMasDe != null &&
               lugar[i] <= soloSiPideMasDe + toleranciaM &&
-              lugar[j] <= soloSiPideMasDe + toleranciaM) {
+              lugar[j] <= soloSiPideMasDe + toleranciaM &&
+              !siempre.contains(mesas[i].numero) &&
+              !siempre.contains(mesas[j].numero)) {
             continue;
           }
           final pide = (lugar[i] + lugar[j]) / 2;

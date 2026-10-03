@@ -22,6 +22,7 @@ import '../eventos/repositories/sorteos_mesas_repository.dart';
 import '../eventos/services/registro_sorteo.dart';
 import '../eventos/services/salon_mesas.dart';
 import 'estilos/estilo_plano.dart';
+import 'modelo/armado_salon.dart';
 import 'modelo/medidas_salon.dart';
 import 'repositories/mesas_movimientos_repository.dart';
 import 'repositories/planos_evento_repository.dart';
@@ -29,6 +30,7 @@ import 'services/aplicar_eleccion.dart';
 import 'services/armar_a_medida.dart';
 import 'services/cambios_de_mesa.dart';
 import 'services/colores_y_textos.dart';
+import 'services/editar_armado.dart';
 import 'services/historial_sorteo.dart';
 import 'services/plano_de_la_fiesta.dart';
 import 'widgets/cambio_de_mesa_dialogs.dart';
@@ -642,6 +644,23 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
             : 'Medidas guardadas. Se redibujó el borde del hormigón.',
       );
 
+  // ── Personalizar: acomodar el salón ─────────────────────────────────────
+
+  /// El salón acomodado a mano. Antes de escribir se relee la nube y las
+  /// familias: si la otra PC cambió el salón mientras tanto, o una mesa que se
+  /// sacó ya tiene familia o quedó fijada, no se guarda nada y se dice.
+  Future<void> _guardarSalon(ArmadoSalon base, ArmadoSalon nuevo) =>
+      _cambiarConfig(
+        (p, alumnos) => EditarArmado.paraGuardar(
+          base: base,
+          nuevo: nuevo,
+          fresco: p.armado,
+          config: p.config,
+          alumnos: alumnos,
+        ),
+        hecho: (_) => 'El salón quedó guardado.',
+      );
+
   // ── Personalizar: colores y textos ──────────────────────────────────────
 
   /// El color de cada división, el título y los textos de los sectores. Los
@@ -953,6 +972,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         onMover: _mover,
         onGuardarMedidas: _guardarMedidas,
         onGuardarColoresYTextos: _guardarColoresYTextos,
+        onGuardarArmado: _guardarSalon,
       ),
       onImprimir: _imprimir,
       onHistorial: _abrirHistorial,
