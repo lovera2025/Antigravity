@@ -16,10 +16,16 @@ class CambioDeConfig {
   /// Las mesas que tocó.
   final List<int> mesas;
 
-  const CambioDeConfig.ok(ConfigPlano this.config, this.mesas) : problema = null;
+  /// El armado, si el cambio también lo toca (se acomodó el salón, o se
+  /// redibujó el borde del hormigón). Null: queda el que está.
+  final ArmadoSalon? armado;
+
+  const CambioDeConfig.ok(ConfigPlano this.config, this.mesas, {this.armado})
+      : problema = null;
   const CambioDeConfig.noSePuede(String this.problema)
       : config = null,
-        mesas = const [];
+        mesas = const [],
+        armado = null;
 
   bool get sePuede => problema == null;
 }

@@ -8,10 +8,13 @@ import '../../eventos/services/salon_mesas.dart';
 import '../dibujo/pintor_plano.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/estado_plano.dart';
+import '../modelo/medidas_salon.dart';
+import '../services/armar_a_medida.dart';
 import '../services/cambios_de_mesa.dart';
 import '../services/divisiones.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
+import 'personalizar/panel_medidas.dart';
 import 'vista_plano.dart';
 
 /// Lo que se puede hacer con las mesas desde Personalizar. La pantalla avisa
@@ -31,6 +34,10 @@ class AccionesPlano {
   final void Function(String alumnoId, String otroId) onCambiar;
   final void Function(String alumnoId, int desdeMesa) onMover;
 
+  /// Guardar las medidas del playón y de las mesas. Null: no hay pestaña
+  /// Medidas.
+  final void Function(MedidasPlano medidas)? onGuardarMedidas;
+
   const AccionesPlano({
     required this.onFijarEnMesa,
     required this.onFijar,
@@ -40,7 +47,20 @@ class AccionesPlano {
     required this.onVolverAUsar,
     required this.onCambiar,
     required this.onMover,
+    this.onGuardarMedidas,
   });
+}
+
+/// Las pestañas de Personalizar: una cosa por pestaña.
+enum ModoPersonalizar {
+  /// Fijar, dejar libres, cambiar y mover familias.
+  mesas('Mesas'),
+
+  /// Las medidas del playón y el lugar que pide cada mesa.
+  medidas('Medidas');
+
+  final String rotulo;
+  const ModoPersonalizar(this.rotulo);
 }
 
 /// Lo que Personalizar está esperando que se toque en el plano.
@@ -115,8 +135,15 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   int? _mesaElegida;
   Size _tamPlano = Size.zero;
 
-  /// Personalizar está prendido: lo elegido muestra qué se puede hacer.
-  bool _personalizando = false;
+  /// La pestaña de Personalizar que está abierta. Null: Personalizar está
+  /// apagado y la pantalla solo muestra.
+  ModoPersonalizar? _modo;
+
+  bool get _personalizando => _modo != null;
+
+  /// Las medidas que se están escribiendo en la pestaña Medidas, todavía sin
+  /// guardar: el plano dibuja el lugar de cada mesa con ellas.
+  MedidasPlano? _medidasEnPrueba;
 
   /// Se eligió una acción que necesita un toque más en el plano (a dónde va la
   /// familia, o con cuál cambia).
@@ -148,7 +175,17 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     if (_plano.armado.hoja(_hoja) == null) {
       _hoja = _plano.armado.hojas.first.id;
       _zoom.value = Matrix4.identity();
+    } else if (old.plano.armado.hoja(_hoja)?.caja !=
+        _plano.armado.hoja(_hoja)?.caja) {
+      // La hoja cambió de tamaño (se redibujó el hormigón): el zoom de antes
+      // apuntaría a otro lugar.
+      _zoom.value = Matrix4.identity();
     }
+    // Lo que se estaba probando ya se guardó, o cambió lo guardado.
+    if (old.plano.medidas != _plano.medidas) _medidasEnPrueba = null;
+    // Una pestaña que dejó de estar (quien usa la pantalla le sacó la acción).
+    final modo = _modo;
+    if (modo != null && !_modos.contains(modo)) _modo = _modos.first;
     final mesa = _mesaElegida;
     if (mesa != null && !_plano.armado.existe(mesa)) _mesaElegida = null;
     // Lo que se estaba por hacer puede haber dejado de tener sentido con lo
@@ -347,11 +384,52 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         _pista = null;
       });
 
-  void _salirDePersonalizar() => setState(() {
-        _personalizando = false;
-        _esperando = null;
-        _pista = null;
-      });
+  /// Las pestañas que hay: la de Mesas siempre, y cada una de las otras si
+  /// quien usa la pantalla le dio con qué guardar.
+  List<ModoPersonalizar> get _modos => [
+        ModoPersonalizar.mesas,
+        if (widget.acciones?.onGuardarMedidas != null) ModoPersonalizar.medidas,
+      ];
+
+  /// Lo que quedaría sin guardar si se sale de la pestaña, dicho en palabras.
+  /// Null: no hay nada pendiente.
+  String? get _sinGuardar => switch (_modo) {
+        ModoPersonalizar.medidas when _medidasEnPrueba != null =>
+          'Hay medidas sin guardar: tocá GUARDAR MEDIDAS o DESCARTAR.',
+        _ => null,
+      };
+
+  void _cambiarModo(ModoPersonalizar modo) {
+    if (modo == _modo || widget.ocupado) return;
+    final pendiente = _sinGuardar;
+    setState(() {
+      if (pendiente != null) {
+        _pista = pendiente;
+        return;
+      }
+      _modo = modo;
+      _esperando = null;
+      _pista = null;
+      _medidasEnPrueba = null;
+    });
+  }
+
+  void _salirDePersonalizar() {
+    final pendiente = _sinGuardar;
+    setState(() {
+      if (pendiente != null) {
+        _pista = pendiente;
+        return;
+      }
+      _modo = null;
+      _esperando = null;
+      _pista = null;
+      _medidasEnPrueba = null;
+    });
+  }
+
+  bool get _hayFamiliasConMesa => widget.alumnos
+      .any((a) => !a.esBajaTemporal && SalonMesas.tieneNumeros(a));
 
   // ── Zoom ────────────────────────────────────────────────────────────────
 
@@ -438,10 +516,14 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// Qué se está haciendo en Personalizar y qué hay que tocar ahora.
   Widget _franjaPersonalizar(BuildContext context) {
     final tema = Theme.of(context);
+    final modos = _modos;
     final espera = _esperando;
     final alumno = espera == null ? null : _alumno(espera.alumnoId);
     final String texto;
-    if (espera == null || alumno == null) {
+    if (_modo == ModoPersonalizar.medidas) {
+      texto = 'Los lados del playón como los da la cinta, y cuánto lugar '
+          'pide cada mesa.';
+    } else if (espera == null || alumno == null) {
       texto = 'Personalizar las mesas: tocá una mesa o buscá una familia.';
     } else {
       final quien = CambiosDeMesa.apellido(alumno);
@@ -473,13 +555,35 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       ),
       child: Row(
         children: [
-          Icon(Icons.tune, size: 18, color: tema.colorScheme.primary),
-          const SizedBox(width: 8),
+          if (modos.length > 1) ...[
+            SegmentedButton<ModoPersonalizar>(
+              key: const Key('pestanas_personalizar'),
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: [
+                for (final m in modos)
+                  ButtonSegment(
+                    value: m,
+                    label: Text(m.rotulo, key: Key('pestana_${m.name}')),
+                  ),
+              ],
+              selected: {_modo!},
+              onSelectionChanged: (s) => _cambiarModo(s.first),
+            ),
+            const SizedBox(width: 12),
+          ] else ...[
+            Icon(Icons.tune, size: 18, color: tema.colorScheme.primary),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(texto, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  texto,
+                  key: const Key('texto_personalizar'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 if (_pista != null)
                   Text(
                     _pista!,
@@ -513,7 +617,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// prendido.
   List<Widget> _accionesDeLoElegido() {
     final acciones = widget.acciones;
-    if (!_personalizando || acciones == null) return const [];
+    if (_modo != ModoPersonalizar.mesas || acciones == null) return const [];
     Widget boton(String clave, String texto, IconData icono, VoidCallback f) =>
         OutlinedButton.icon(
           key: Key(clave),
@@ -671,9 +775,17 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                         estado: _plano.estado,
                         resaltadas: _resaltadas,
                         seleccionada: _mesaElegida,
-                        onTapMesa: _elegirMesa,
+                        // En Medidas no se elige nada: el plano solo muestra
+                        // cómo queda el lugar de cada mesa.
+                        onTapMesa: _modo == ModoPersonalizar.medidas
+                            ? null
+                            : _elegirMesa,
                         mostrarMedidas: true,
-                        lugares: widget.mostrarLugares ? _plano.medidas : null,
+                        lugares: _modo == ModoPersonalizar.medidas
+                            ? _medidasEnPrueba ?? _plano.medidas
+                            : widget.mostrarLugares
+                                ? _plano.medidas
+                                : null,
                       ),
                     ),
                   ),
@@ -744,7 +856,54 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
 
   // ── Panel ───────────────────────────────────────────────────────────────
 
+  /// Lo que conviene hacer después de cambiar las medidas, si el salón está
+  /// armado a medida y ya no coincide con ellas.
+  String? get _avisoMedidas {
+    final lugar = ArmarAMedida.lugarDe(_plano.armado);
+    if (lugar == null) return null;
+    final guardado = _plano.medidas.lugarMesaM;
+    final afuera = _plano.sinLugar.fueraDelHormigon.length;
+    final partes = [
+      if ((lugar - guardado).abs() > 0.005)
+        'El salón está armado a ${MedirSalon.metros(lugar, decimales: 2)} '
+            'entre mesas y la medida guardada es '
+            '${MedirSalon.metros(guardado, decimales: 2)}.',
+      if (afuera > 0)
+        afuera == 1
+            ? 'Hay 1 mesa que no entra en el hormigón.'
+            : 'Hay $afuera mesas que no entran en el hormigón.',
+    ];
+    if (partes.isEmpty) return null;
+    partes.add(_hayFamiliasConMesa
+        ? 'Ya hay familias con mesa: el salón no se arma de nuevo, se '
+            'acomoda a mano.'
+        : 'Para armarlo de nuevo con estas medidas: ESTILO Y ARMADO → '
+            'A medida del playón.');
+    return partes.join(' ');
+  }
+
+  Widget _panelMedidas() => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
+        child: PanelMedidas(
+          medidas: _plano.medidas,
+          mesasNecesarias: _plano.mesasNecesarias,
+          ocupado: widget.ocupado,
+          onProbar: (m) => setState(() {
+            _medidasEnPrueba = m;
+            if (m == null) _pista = null;
+          }),
+          onGuardar: (m) {
+            setState(() => _pista = null);
+            widget.acciones?.onGuardarMedidas?.call(m);
+          },
+          aviso: _avisoMedidas,
+          textoAccionAviso: 'ARMAR DE NUEVO',
+          onAccionAviso: _hayFamiliasConMesa ? null : widget.onEstiloYArmado,
+        ),
+      );
+
   Widget _panel(BuildContext context) {
+    if (_modo == ModoPersonalizar.medidas) return _panelMedidas();
     final consulta = _busqueda.text.trim();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
@@ -1081,7 +1240,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               Icons.tune,
               () => _personalizando
                   ? _salirDePersonalizar()
-                  : setState(() => _personalizando = true),
+                  : setState(() => _modo = ModoPersonalizar.mesas),
             ),
           if (widget.onImprimir != null)
             boton(

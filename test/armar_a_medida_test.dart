@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/medir_salon.dart';
@@ -294,5 +295,158 @@ void main() {
         });
       }
     }
+  });
+
+  group('el borde del hormigón, con otro playón', () {
+    const o = OpcionesAMedida(playon: _surubi, cantidad: 132);
+    final a = ArmarAMedida.armar(o).armado;
+
+    /// Dónde está cada mesa respecto del medio del escenario.
+    Map<int, (double, double)> lugares(ArmadoSalon x) {
+      final b = x.hojas.first.contorno!.puntos;
+      final cx = (b[0].x + b[1].x) / 2;
+      return {
+        for (final m in x.mesas)
+          m.numero: (
+            double.parse((m.x - cx).toStringAsFixed(6)),
+            double.parse(m.y.toStringAsFixed(6)),
+          ),
+      };
+    }
+
+    test('se sabe a qué distancia y con qué playón se armó', () {
+      expect(ArmarAMedida.lugarDe(a), closeTo(2.0, 1e-9));
+      final p = ArmarAMedida.playonDe(a)!;
+      expect(p.frenteM, closeTo(30, 1e-6));
+      expect(p.fondoM, closeTo(46, 1e-6));
+      expect(p.profundidadM, closeTo(39, 1e-6));
+
+      final a25 = ArmarAMedida.armar(
+        const OpcionesAMedida(playon: _surubi, cantidad: 132, lugarM: 2.5),
+      ).armado;
+      expect(ArmarAMedida.lugarDe(a25), closeTo(2.5, 1e-9));
+    });
+
+    test('en dos hojas, el playón sale de las dos juntas', () {
+      final dos = ArmarAMedida.armar(
+        const OpcionesAMedida(playon: _surubi, cantidad: 132, partirEnFila: 5),
+      ).armado;
+      final p = ArmarAMedida.playonDe(dos)!;
+      expect(p.frenteM, closeTo(30, 1e-6));
+      expect(p.fondoM, closeTo(46, 1e-6));
+      expect(p.profundidadM, closeTo(39, 1e-6));
+    });
+
+    test('un armado del Canva no tiene nada de esto, y no se toca', () {
+      final canva = ArmadosPredefinidos.normal2aPagina3();
+      expect(ArmarAMedida.lugarDe(canva), isNull);
+      expect(ArmarAMedida.playonDe(canva), isNull);
+      expect(
+        identical(
+          ArmarAMedida.conPlayon(
+            canva,
+            const PlayonReal(frenteM: 20, fondoM: 20, profundidadM: 20),
+          ),
+          canva,
+        ),
+        isTrue,
+      );
+    });
+
+    test('con el mismo playón no cambia nada', () {
+      expect(identical(ArmarAMedida.conPlayon(a, _surubi), a), isTrue);
+      // Que esté marcado como aproximado o no, no cambia el dibujo.
+      expect(
+        identical(
+          ArmarAMedida.conPlayon(a, _surubi.copyWith(aproximado: false)),
+          a,
+        ),
+        isTrue,
+      );
+    });
+
+    test('más grande: el borde crece, las mesas quedan donde estaban', () {
+      const grande = PlayonReal(frenteM: 34, fondoM: 52, profundidadM: 45);
+      final b = ArmarAMedida.conPlayon(a, grande);
+      expect(b.numeros, a.numeros);
+      expect(lugares(b), lugares(a));
+      expect(b.cortes, a.cortes);
+      final p = ArmarAMedida.playonDe(b)!;
+      expect(p.frenteM, closeTo(34, 1e-6));
+      expect(p.fondoM, closeTo(52, 1e-6));
+      expect(p.profundidadM, closeTo(45, 1e-6));
+      expect(b.problemas(), isEmpty);
+      expect(MedirSalon.fueraDelHormigon(b, (_) => 2.0), isEmpty);
+      // El escenario toma el frente nuevo.
+      final escenario =
+          b.sectores.firstWhere((s) => s.tipo == TipoSector.escenario);
+      expect(b.aMetros(escenario.caja.ancho), closeTo(34, 1e-6));
+      // Y la distancia entre mesas es la de antes.
+      expect(ArmarAMedida.lugarDe(b), closeTo(2.0, 1e-9));
+    });
+
+    test('más chico: las mesas no se mueven, y las que quedan afuera avisan',
+        () {
+      const chico = PlayonReal(frenteM: 24, fondoM: 30, profundidadM: 20);
+      final b = ArmarAMedida.conPlayon(a, chico);
+      expect(b.numeros, a.numeros);
+      expect(lugares(b), lugares(a));
+      final afuera = MedirSalon.fueraDelHormigon(b, (_) => 2.0);
+      expect(afuera, isNotEmpty);
+      // Ninguna se sale del dibujo: el aviso es por el hormigón, no por la
+      // hoja.
+      expect(
+        b.problemas().where((p) => p.contains('se sale de la hoja')),
+        isEmpty,
+      );
+      expect(
+        b.problemas().where((p) => p.contains('fuera del hormigón')),
+        isNotEmpty,
+      );
+    });
+
+    test('ida y vuelta: con el playón de antes vuelve a no haber avisos', () {
+      const chico = PlayonReal(frenteM: 24, fondoM: 30, profundidadM: 20);
+      final vuelta =
+          ArmarAMedida.conPlayon(ArmarAMedida.conPlayon(a, chico), _surubi);
+      expect(lugares(vuelta), lugares(a));
+      expect(vuelta.problemas(), isEmpty);
+      expect(MedirSalon.fueraDelHormigon(vuelta, (_) => 2.0), isEmpty);
+    });
+
+    test('en dos hojas, el corte entre hojas no se mueve', () {
+      final dos = ArmarAMedida.armar(
+        const OpcionesAMedida(playon: _surubi, cantidad: 132, partirEnFila: 5),
+      ).armado;
+      const grande = PlayonReal(frenteM: 34, fondoM: 52, profundidadM: 45);
+      final b = ArmarAMedida.conPlayon(dos, grande);
+      expect(b.hojas.map((h) => h.id), ['A', 'B']);
+      expect(lugares(b), lugares(dos));
+      expect(b.problemas(), isEmpty);
+      double largoA(ArmadoSalon x) {
+        final c = x.hojas.first.contorno!.puntos;
+        return x.aMetros(c[3].y - c[0].y);
+      }
+
+      expect(largoA(b), closeTo(largoA(dos), 1e-6));
+      final p = ArmarAMedida.playonDe(b)!;
+      expect(p.profundidadM, closeTo(45, 1e-6));
+    });
+
+    test('en dos hojas, un playón más corto que el corte no rompe', () {
+      final dos = ArmarAMedida.armar(
+        const OpcionesAMedida(playon: _surubi, cantidad: 132, partirEnFila: 5),
+      ).armado;
+      const corto = PlayonReal(frenteM: 30, fondoM: 34, profundidadM: 6);
+      final b = ArmarAMedida.conPlayon(dos, corto);
+      expect(b.numeros, dos.numeros);
+      // Todas las de la hoja B quedaron sin hormigón.
+      final afuera = MedirSalon.fueraDelHormigon(b, (_) => 2.0).toSet();
+      expect(afuera, containsAll([for (final m in b.mesasDeHoja('B')) m.numero]));
+      final json = jsonEncode(b.toJson());
+      final leido =
+          ArmadoSalon.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      expect(jsonEncode(leido.toJson()), json);
+    });
   });
 }

@@ -26,6 +26,7 @@ import 'modelo/medidas_salon.dart';
 import 'repositories/mesas_movimientos_repository.dart';
 import 'repositories/planos_evento_repository.dart';
 import 'services/aplicar_eleccion.dart';
+import 'services/armar_a_medida.dart';
 import 'services/cambios_de_mesa.dart';
 import 'services/historial_sorteo.dart';
 import 'services/plano_de_la_fiesta.dart';
@@ -440,6 +441,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       }
       final nuevo = fresco.copyWith(
         config: config,
+        armado: cambio.armado,
         hechoPor: quien,
         ahora: DateTime.now().toUtc(),
       );
@@ -619,6 +621,24 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   Future<void> _volverAUsar(int mesa) => _cambiarConfig(
         (p, _) => CambiosDeMesa.volverAUsar(p.config, mesa),
         hecho: (_) => 'La mesa $mesa vuelve a entrar en el sorteo.',
+      );
+
+  // ── Personalizar: medidas ───────────────────────────────────────────────
+
+  /// Las medidas del playón y de las mesas. En un salón armado a medida, con
+  /// otro playón se redibuja el borde del hormigón; las mesas no se mueven.
+  Future<void> _guardarMedidas(MedidasPlano medidas) => _cambiarConfig(
+        (p, _) {
+          final armado = ArmarAMedida.conPlayon(p.armado, medidas.playon);
+          return CambioDeConfig.ok(
+            p.config.copyWith(medidas: medidas),
+            const [],
+            armado: identical(armado, p.armado) ? null : armado,
+          );
+        },
+        hecho: (c) => c.armado == null
+            ? 'Medidas guardadas.'
+            : 'Medidas guardadas. Se redibujó el borde del hormigón.',
       );
 
   // ── Personalizar: cambiar y mover familias ──────────────────────────────
@@ -899,8 +919,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       );
     }
     return PlanoEventoCuerpo(
-      // Con otro armado se arranca de cero: hoja, zoom y selección.
-      key: ValueKey(plano.armadoJson.hashCode),
+      // Con otro armado se arranca de cero: hoja, zoom y selección. Va por la
+      // clave del armado y no por su contenido: acomodar el salón o redibujar
+      // el hormigón cambia el contenido, y no tiene que sacar a nadie de
+      // Personalizar.
+      key: ValueKey(plano.armadoClave),
       plano: vista,
       estilo: plano.estiloPlano ?? EstiloPlano.arquitecto,
       alumnos: _alumnos,
@@ -917,6 +940,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         onVolverAUsar: _volverAUsar,
         onCambiar: _cambiar,
         onMover: _mover,
+        onGuardarMedidas: _guardarMedidas,
       ),
       onImprimir: _imprimir,
       onHistorial: _abrirHistorial,

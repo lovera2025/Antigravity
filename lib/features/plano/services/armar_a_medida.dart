@@ -177,6 +177,136 @@ class ArmarAMedida {
     return mejor == null ? null : (mejor * 100).round() / 100;
   }
 
+  /// El tramo del trapecio entre dos profundidades, dibujado desde [y0] y
+  /// centrado en [cx]. Siempre cuatro puntos: arriba a la izquierda, arriba a
+  /// la derecha, abajo a la derecha y abajo a la izquierda.
+  static ContornoPlano _borde4(
+    PlayonReal p,
+    double cx,
+    double y0,
+    double desde,
+    double hasta,
+  ) {
+    final arriba = _u(p.anchoA(desde) / 2);
+    final abajo = _u(p.anchoA(hasta) / 2);
+    final yFin = y0 + _u(hasta - desde);
+    return ContornoPlano([
+      (x: cx - arriba, y: y0),
+      (x: cx + arriba, y: y0),
+      (x: cx + abajo, y: yFin),
+      (x: cx - abajo, y: yFin),
+    ]);
+  }
+
+  /// Los bordes de un armado a medida, hoja por hoja. Null si no es un armado
+  /// a medida o alguna hoja no trae su trapecio.
+  static List<List<({double x, double y})>>? _bordes(ArmadoSalon armado) {
+    if (armado.clave != claveArmado || armado.hojas.isEmpty) return null;
+    final r = <List<({double x, double y})>>[];
+    for (final h in armado.hojas) {
+      final puntos = h.contorno?.puntos;
+      if (puntos == null || puntos.length != 4) return null;
+      r.add(puntos);
+    }
+    return r;
+  }
+
+  /// A qué distancia entre mesas se armó este salón. Null si no es un armado
+  /// a medida.
+  static double? lugarDe(ArmadoSalon armado) {
+    final pegadas = armado.distanciaPegadas;
+    if (armado.clave != claveArmado || pegadas == null) return null;
+    return armado.aMetros(pegadas / pegadasHastaPasos);
+  }
+
+  /// El playón con el que está dibujado el borde de este armado. Null si no
+  /// es un armado a medida.
+  static PlayonReal? playonDe(ArmadoSalon armado) {
+    final bordes = _bordes(armado);
+    if (bordes == null) return null;
+    var profundidad = 0.0;
+    for (final b in bordes) {
+      profundidad += b[3].y - b[0].y;
+    }
+    return PlayonReal(
+      frenteM: armado.aMetros(bordes.first[1].x - bordes.first[0].x),
+      fondoM: armado.aMetros(bordes.last[2].x - bordes.last[3].x),
+      profundidadM: armado.aMetros(profundidad),
+    );
+  }
+
+  static bool _mismoPlayon(PlayonReal a, PlayonReal b) =>
+      (a.frenteM - b.frenteM).abs() < 0.001 &&
+      (a.fondoM - b.fondoM).abs() < 0.001 &&
+      (a.profundidadM - b.profundidadM).abs() < 0.001;
+
+  /// El mismo salón con el borde del hormigón redibujado para otro playón
+  /// (se midió con cinta y no era el de la foto).
+  ///
+  /// **Las mesas no se mueven** respecto del escenario ni cambian de número:
+  /// la que quede afuera del hormigón nuevo se avisa, no se corre sola. El
+  /// escenario toma el frente nuevo. Si el armado no es a medida, o el playón
+  /// es el mismo, devuelve el mismo armado.
+  static ArmadoSalon conPlayon(ArmadoSalon armado, PlayonReal p) {
+    final bordes = _bordes(armado);
+    final actual = playonDe(armado);
+    if (bordes == null || actual == null || _mismoPlayon(actual, p)) {
+      return armado;
+    }
+    final cxViejo = (bordes.first[0].x + bordes.first[1].x) / 2;
+    // El dibujo sigue centrado y tiene que contener el hormigón nuevo y todas
+    // las mesas, aunque alguna haya quedado afuera.
+    var medio = _u(math.max(p.frenteM, p.fondoM) / 2);
+    for (final m in armado.mesas) {
+      medio = math.max(medio, (m.x - cxViejo).abs() + armado.radio);
+    }
+    final cx = _borde + medio;
+    final dx = cx - cxViejo;
+
+    // Dónde termina cada hoja, en metros desde el escenario: el corte entre
+    // hojas no cambia, salvo que el playón nuevo sea más corto.
+    final hojas = <HojaPlano>[];
+    var desde = 0.0;
+    for (final (i, h) in armado.hojas.indexed) {
+      final b = bordes[i];
+      final ultima = i == armado.hojas.length - 1;
+      final largo = armado.aMetros(b[3].y - b[0].y);
+      final inicio = math.min(desde, p.profundidadM);
+      final hasta =
+          ultima ? p.profundidadM : math.min(desde + largo, p.profundidadM);
+      final y0 = b[0].y;
+      var abajo = y0 + _u(math.max(0.0, hasta - inicio));
+      for (final m in armado.mesasDeHoja(h.id)) {
+        abajo = math.max(abajo, m.y + armado.radio);
+      }
+      hojas.add(HojaPlano(
+        id: h.id,
+        titulo: h.titulo,
+        caja: RectPlano(0, 0, 2 * _borde + 2 * medio, abajo + _borde),
+        contorno: _borde4(p, cx, y0, inicio, math.max(inicio, hasta)),
+      ));
+      desde += largo;
+    }
+
+    return armado.copyWith(
+      hojas: hojas,
+      mesas: [for (final m in armado.mesas) m.copyWith(x: m.x + dx)],
+      sectores: [
+        for (final s in armado.sectores)
+          s.tipo == TipoSector.escenario
+              ? s.copyWith(
+                  caja: RectPlano(
+                    cx - _u(p.frenteM / 2),
+                    s.caja.y,
+                    _u(p.frenteM),
+                    s.caja.alto,
+                  ),
+                )
+              : s.copyWith(caja: s.caja.mover(dx, 0)),
+      ],
+    );
+  }
+
   static ArmadoAMedida armar(OpcionesAMedida o) {
     final l = _lugar(o);
     final p = o.playon;
@@ -269,18 +399,8 @@ class ArmarAMedida {
       return mesas;
     }
 
-    // El tramo del trapecio entre dos profundidades, dibujado desde [y0].
-    ContornoPlano borde(double y0, double desde, double hasta) {
-      final arriba = _u(p.anchoA(desde) / 2);
-      final abajo = _u(p.anchoA(hasta) / 2);
-      final yFin = y0 + _u(hasta - desde);
-      return ContornoPlano([
-        (x: cx - arriba, y: y0),
-        (x: cx + arriba, y: y0),
-        (x: cx + abajo, y: yFin),
-        (x: cx - abajo, y: yFin),
-      ]);
-    }
+    ContornoPlano borde(double y0, double desde, double hasta) =>
+        _borde4(p, cx, y0, desde, hasta);
 
     final ancho = 2 * _borde + _u(math.max(p.frenteM, p.fondoM));
     final hojas = [

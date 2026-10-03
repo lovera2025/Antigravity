@@ -8,6 +8,7 @@ import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
@@ -106,7 +107,12 @@ Future<void> _mostrar(
 }
 
 /// Las acciones de Personalizar, anotando en [tocados] lo que se pidió.
-AccionesPlano _acciones(List<String> tocados) => AccionesPlano(
+AccionesPlano _acciones(
+  List<String> tocados, {
+  List<MedidasPlano>? medidas,
+}) =>
+    AccionesPlano(
+      onGuardarMedidas: medidas?.add,
       onFijarEnMesa: (m) => tocados.add('fijar en $m'),
       onFijar: (a, m) => tocados.add('fijar $a desde $m'),
       onQuitarFijadas: (a) => tocados.add('quitar fijadas de $a'),
@@ -840,6 +846,227 @@ void main() {
       }
       expect(tocados, ['estilo', 'imprimir', 'historial']);
       expect(find.byKey(const Key('personalizar')), findsOneWidget);
+    });
+  });
+
+  group('personalizar: las pestañas y Medidas', () {
+    Future<void> abrirMedidas(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pestana_medidas')));
+      await tester.pump();
+    }
+
+    String texto(WidgetTester tester) => tester
+        .widget<Text>(find.byKey(const Key('texto_personalizar')))
+        .data!;
+
+    testWidgets('sin con qué guardar medidas no hay pestañas: queda como antes',
+        (tester) async {
+      await _mostrar(tester, acciones: _acciones([]));
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsOneWidget);
+      expect(find.byKey(const Key('pestanas_personalizar')), findsNothing);
+    });
+
+    testWidgets('Personalizar abre en Mesas, y Medidas cambia el panel',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], medidas: []));
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('pestanas_personalizar')), findsOneWidget);
+      expect(texto(tester), startsWith('Personalizar las mesas'));
+      expect(find.byKey(const Key('buscar')), findsOneWidget);
+      expect(find.byKey(const Key('panel_medidas')), findsNothing);
+      expect(_vista(tester).lugares, isNull);
+
+      await tester.tap(find.byKey(const Key('pestana_medidas')));
+      await tester.pump();
+      expect(texto(tester), startsWith('Los lados del playón'));
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(find.byKey(const Key('buscar')), findsNothing);
+      // El plano muestra el lugar de cada mesa, y no se elige nada.
+      expect(_vista(tester).lugares, const MedidasPlano());
+      expect(_vista(tester).onTapMesa, isNull);
+
+      // De vuelta en Mesas, todo como estaba.
+      await tester.tap(find.byKey(const Key('pestana_mesas')));
+      await tester.pump();
+      expect(find.byKey(const Key('buscar')), findsOneWidget);
+      expect(_vista(tester).lugares, isNull);
+      await _tocarMesa(tester, armado, 30);
+      expect(find.byKey(const Key('accion_dejar_libre')), findsOneWidget);
+    });
+
+    testWidgets('lo que se escribe se ve en el plano antes de guardar',
+        (tester) async {
+      await _mostrar(tester, acciones: _acciones([], medidas: []));
+      await abrirMedidas(tester);
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      expect(_vista(tester).lugares!.lugarMesaM, 2.4);
+      // Algo que no sirve no se dibuja: vuelve a lo guardado.
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '9');
+      await tester.pump();
+      expect(_vista(tester).lugares, const MedidasPlano());
+    });
+
+    testWidgets('con medidas sin guardar no se sale ni se cambia de pestaña',
+        (tester) async {
+      final guardadas = <MedidasPlano>[];
+      await _mostrar(tester, acciones: _acciones([], medidas: guardadas));
+      await abrirMedidas(tester);
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('pista'))).data,
+        'Hay medidas sin guardar: tocá GUARDAR MEDIDAS o DESCARTAR.',
+      );
+      await tester.tap(find.byKey(const Key('pestana_mesas')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      // El botón de abajo tampoco saca.
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(guardadas, isEmpty);
+
+      // Descartando, se sale.
+      await tester.tap(find.byKey(const Key('descartar_medidas')));
+      await tester.pump();
+      expect(find.byKey(const Key('pista')), findsNothing);
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+    });
+
+    testWidgets('GUARDAR avisa las medidas; al llegar guardadas, sigue en '
+        'Medidas y ya no hay nada pendiente', (tester) async {
+      final guardadas = <MedidasPlano>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones([], medidas: guardadas));
+      await abrirMedidas(tester);
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('guardar_medidas')));
+      await tester.pump();
+      expect(guardadas.single.lugarMesaM, 2.4);
+
+      // La pantalla vuelve con lo guardado.
+      await _mostrar(
+        tester,
+        plano: _plano(
+          armado: armado,
+          config: ConfigPlano(medidas: guardadas.single),
+        ),
+        acciones: _acciones([], medidas: guardadas),
+      );
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(find.text('MEDIDAS GUARDADAS'), findsOneWidget);
+      expect(_vista(tester).lugares!.lugarMesaM, 2.4);
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+    });
+
+    testWidgets('si el salón quedó armado a otra distancia, lo dice y lleva a '
+        'armarlo de nuevo', (tester) async {
+      var abrio = 0;
+      final sinMesa = [_alumno('vega', 'VEGA, ANA', extras: 1)];
+      await _mostrar(
+        tester,
+        alumnos: sinMesa,
+        plano: _plano(
+          alumnos: sinMesa,
+          config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.5)),
+        ),
+        acciones: _acciones([], medidas: []),
+        onEstiloYArmado: () => abrio++,
+      );
+      await abrirMedidas(tester);
+      final aviso = tester
+          .widgetList<Text>(find.descendant(
+            of: find.byKey(const Key('aviso_medidas')),
+            matching: find.byType(Text),
+          ))
+          .first
+          .data!;
+      expect(aviso, contains('El salón está armado a 2 m entre mesas'));
+      expect(aviso, contains('la medida guardada es 2,5 m'));
+      expect(aviso, contains('ESTILO Y ARMADO → A medida del playón'));
+      await tester.ensureVisible(find.byKey(const Key('accion_aviso_medidas')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('accion_aviso_medidas')));
+      expect(abrio, 1);
+    });
+
+    testWidgets('con familias ya sentadas no ofrece armar de nuevo',
+        (tester) async {
+      await _mostrar(
+        tester,
+        plano: _plano(
+          config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.5)),
+        ),
+        acciones: _acciones([], medidas: []),
+        onEstiloYArmado: () {},
+      );
+      await abrirMedidas(tester);
+      final aviso = tester
+          .widgetList<Text>(find.descendant(
+            of: find.byKey(const Key('aviso_medidas')),
+            matching: find.byType(Text),
+          ))
+          .first
+          .data!;
+      expect(aviso, contains('Ya hay familias con mesa'));
+      expect(find.byKey(const Key('accion_aviso_medidas')), findsNothing);
+    });
+
+    testWidgets('un armado del Canva no lleva ese aviso', (tester) async {
+      await _mostrar(
+        tester,
+        plano: _plano(
+          armado: ArmadosPredefinidos.normal2aPagina3(),
+          config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.5)),
+        ),
+        acciones: _acciones([], medidas: []),
+      );
+      await abrirMedidas(tester);
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(find.byKey(const Key('aviso_medidas')), findsNothing);
+    });
+
+    testWidgets('si se redibuja el hormigón, sigue en Medidas con el zoom en '
+        'su lugar', (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], medidas: []));
+      await abrirMedidas(tester);
+      await tester.tap(find.byKey(const Key('acercar')));
+      await tester.pump();
+      expect(_zoom(tester), greaterThan(1));
+
+      const nuevo = PlayonReal(frenteM: 34, fondoM: 52, profundidadM: 45);
+      await _mostrar(
+        tester,
+        plano: _plano(
+          armado: ArmarAMedida.conPlayon(armado, nuevo),
+          config: const ConfigPlano(medidas: MedidasPlano(playon: nuevo)),
+        ),
+        acciones: _acciones([], medidas: []),
+      );
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      // La hoja cambió de tamaño: el zoom de antes ya no apunta a lo mismo.
+      expect(_zoom(tester), 1);
     });
   });
 

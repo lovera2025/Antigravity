@@ -9,8 +9,9 @@
 //   • Pantalla_plano_faltan.png: un armado donde la fiesta no entra;
 //   • Pasos_plano.png: la primera vez, con todo ya elegido;
 //   • Pasos_plano_trabado.png: con familias ya sentadas;
-//   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, y
-//     el momento de tocar a dónde se muda;
+//   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, el
+//     momento de tocar a dónde se muda, y la pestaña Medidas (como abre, y con
+//     una distancia escrita sin guardar, en una notebook);
 //   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
@@ -122,6 +123,9 @@ Future<void> _guardar(
   if (antes != null) {
     await antes();
     await tester.pump();
+    // Un botón que se prende cambia de color de a poco: se espera a que
+    // termine, para que la foto no salga a mitad de camino.
+    await tester.pump(const Duration(milliseconds: 400));
   }
   expect(tester.takeException(), isNull);
   await tester.runAsync(() async {
@@ -141,6 +145,7 @@ Widget _pantalla(
   EstiloPlano estilo, {
   String? resaltar,
   AccionesPlano? acciones,
+  ConfigPlano config = ConfigPlano.vacia,
 }) =>
     Scaffold(
       appBar: AppBar(
@@ -162,7 +167,7 @@ Widget _pantalla(
       body: PlanoEventoCuerpo(
         plano: PlanoDeLaFiesta.desde(
           armado: armado,
-          config: ConfigPlano.vacia,
+          config: config,
           alumnos: alumnos,
         ),
         estilo: estilo,
@@ -184,6 +189,7 @@ final _sinHacer = AccionesPlano(
   onVolverAUsar: (_) {},
   onCambiar: (_, _) {},
   onMover: (_, _) {},
+  onGuardarMedidas: (_) {},
 );
 
 void main() {
@@ -266,6 +272,42 @@ void main() {
       const Size(1440, 900),
       'Personalizar_familia.png',
       antes: () => tester.tap(find.byKey(const Key('personalizar'))),
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: la pestaña Medidas', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(aMedida, escuela, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1440, 900),
+      'Personalizar_medidas.png',
+      antes: () async {
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('pestana_medidas')));
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: Medidas con una distancia sin guardar, en una '
+      'notebook', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(aMedida, escuela, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1366, 768),
+      'Personalizar_medidas_probando.png',
+      antes: () async {
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('pestana_medidas')));
+        await tester.pump();
+        await tester.enterText(find.byKey(const Key('medida_lugar')), '2,3');
+        await tester.pump();
+        // Querer salir sin guardar: la franja dice qué falta.
+        await tester.tap(find.byKey(const Key('salir_personalizar')));
+      },
     );
     await tester.pumpWidget(const SizedBox());
   });
