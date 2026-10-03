@@ -10,8 +10,9 @@
 //   • Pasos_plano.png: la primera vez, con todo ya elegido;
 //   • Pasos_plano_trabado.png: con familias ya sentadas;
 //   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, el
-//     momento de tocar a dónde se muda, y la pestaña Medidas (como abre, y con
-//     una distancia escrita sin guardar, en una notebook);
+//     momento de tocar a dónde se muda, la pestaña Medidas (como abre, y con
+//     una distancia escrita sin guardar, en una notebook) y la de Colores y
+//     textos (con un color y un título probándose);
 //   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
@@ -190,6 +191,7 @@ final _sinHacer = AccionesPlano(
   onCambiar: (_, _) {},
   onMover: (_, _) {},
   onGuardarMedidas: (_) {},
+  onGuardarColoresYTextos: (_) {},
 );
 
 void main() {
@@ -311,6 +313,39 @@ void main() {
     );
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final e in [EstiloPlano.arquitecto, EstiloPlano.gala]) {
+    testWidgets('personalizar: Colores y textos, en ${e.nombre}',
+        (tester) async {
+      await _guardar(
+        tester,
+        _pantalla(aMedida, escuela, e, acciones: _sinHacer),
+        const Size(1440, 900),
+        'Personalizar_colores_${e.name}.png',
+        antes: () async {
+          await tester.tap(find.byKey(const Key('personalizar')));
+          await tester.pump();
+          await tester.tap(find.byKey(const Key('pestana_colores')));
+          await tester.pump();
+          final division = tester
+              .widgetList<InkWell>(find.byWidgetPredicate((w) =>
+                  w is InkWell &&
+                  w.key is ValueKey<String> &&
+                  (w.key! as ValueKey<String>).value.startsWith('color_') &&
+                  (w.key! as ValueKey<String>).value.endsWith('_4')))
+              .first;
+          await tester.tap(find.byKey(division.key!));
+          await tester.pump();
+          await tester.enterText(
+              find.byKey(const Key('texto_titulo')), 'Egresados 2026');
+          await tester.pump();
+          await tester.enterText(find.byKey(const Key('texto_subtitulo')),
+              'Predio Costa Surubí');
+        },
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('personalizar: tocar a dónde se muda la familia', (tester) async {
     await _guardar(

@@ -11,6 +11,7 @@ import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
+import 'package:arguello_events/features/plano/services/colores_y_textos.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
@@ -110,9 +111,11 @@ Future<void> _mostrar(
 AccionesPlano _acciones(
   List<String> tocados, {
   List<MedidasPlano>? medidas,
+  List<ColoresYTextos>? colores,
 }) =>
     AccionesPlano(
       onGuardarMedidas: medidas?.add,
+      onGuardarColoresYTextos: colores?.add,
       onFijarEnMesa: (m) => tocados.add('fijar en $m'),
       onFijar: (a, m) => tocados.add('fijar $a desde $m'),
       onQuitarFijadas: (a) => tocados.add('quitar fijadas de $a'),
@@ -1067,6 +1070,185 @@ void main() {
       expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
       // La hoja cambió de tamaño: el zoom de antes ya no apunta a lo mismo.
       expect(_zoom(tester), 1);
+    });
+  });
+
+  group('personalizar: Colores y textos', () {
+    Future<void> abrirColores(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pestana_colores')));
+      await tester.pump();
+    }
+
+    testWidgets('la pestaña aparece si hay con qué guardar, al lado de las '
+        'otras', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], medidas: []));
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('pestana_medidas')), findsOneWidget);
+      expect(find.byKey(const Key('pestana_colores')), findsNothing);
+
+      await _mostrar(tester, acciones: _acciones([], medidas: [], colores: []));
+      expect(find.byKey(const Key('pestana_colores')), findsOneWidget);
+    });
+
+    testWidgets('lista las divisiones de la fiesta: las de la leyenda y las '
+        'que todavía no tienen mesa', (tester) async {
+      final alumnos = [
+        ..._alumnos,
+        _alumno('paz', 'PAZ, LEO', division: '6° A'),
+        _alumno('rey', 'REY, EMA', division: '4° C'),
+      ];
+      await _mostrar(tester,
+          alumnos: alumnos, acciones: _acciones([], colores: []));
+      await abrirColores(tester);
+      expect(find.byKey(const Key('panel_colores')), findsOneWidget);
+      expect(find.byKey(const Key('buscar')), findsNothing);
+      // 5° A y 5° B ya tienen mesa: van primero, con su color marcado. Las
+      // otras dos, después, en orden.
+      final nombres = tester
+          .widgetList<Text>(find.descendant(
+            of: find.byKey(const Key('panel_colores')),
+            matching: find.byType(Text),
+          ))
+          .map((t) => t.data)
+          .where((t) => t != null && t.contains('°'))
+          .toList();
+      expect(nombres, ['5° A', '5° B', '4° C', '6° A']);
+      expect(_vista(tester).onTapMesa, isNull);
+    });
+
+    testWidgets('el color elegido se ve en el plano y en la leyenda antes de '
+        'guardar', (tester) async {
+      final guardados = <ColoresYTextos>[];
+      await _mostrar(tester, acciones: _acciones([], colores: guardados));
+      expect(_vista(tester).tema.colorDivision(0),
+          TemaPlano.arquitecto.divisiones[0]);
+      await abrirColores(tester);
+      await tester.tap(find.byKey(const Key('color_5A_5')));
+      await tester.pump();
+      expect(_vista(tester).tema.colorDivision(0),
+          TemaPlano.arquitecto.divisiones[5]);
+      // La otra división no cambió.
+      expect(_vista(tester).tema.colorDivision(1),
+          TemaPlano.arquitecto.divisiones[1]);
+      expect(guardados, isEmpty);
+
+      // Sin guardar no se sale.
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_colores')), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('pista'))).data,
+        'Hay colores o textos sin guardar: tocá GUARDAR o DESCARTAR.',
+      );
+
+      await tester.tap(find.byKey(const Key('guardar_colores')));
+      await tester.pump();
+      expect(guardados.single.colores, {'5A': 5});
+    });
+
+    testWidgets('con lo guardado, el plano y la leyenda llevan ese color, '
+        'también fuera de Personalizar', (tester) async {
+      await _mostrar(
+        tester,
+        plano: _plano(config: const ConfigPlano(colores: {'5B': 6})),
+        acciones: _acciones([], colores: []),
+      );
+      expect(_vista(tester).tema.colorDivision(0),
+          TemaPlano.arquitecto.divisiones[0]);
+      expect(_vista(tester).tema.colorDivision(1),
+          TemaPlano.arquitecto.divisiones[6]);
+    });
+
+    testWidgets('el título y el subtítulo se ven arriba, y mientras se '
+        'escriben', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], colores: []));
+      expect(find.byKey(const Key('titulo_del_plano')), findsNothing);
+      await abrirColores(tester);
+      await tester.enterText(
+          find.byKey(const Key('texto_titulo')), 'Egresados 2026');
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('titulo_del_plano')),
+          matching: find.text('Egresados 2026'),
+        ),
+        findsOneWidget,
+      );
+
+      await _mostrar(
+        tester,
+        plano: _plano(
+          config: const ConfigPlano(
+            titulo: 'Egresados 2026',
+            subtitulo: 'Costa Surubí',
+          ),
+        ),
+        acciones: _acciones([], colores: []),
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('titulo_del_plano')),
+          matching: find.text('Costa Surubí'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('el texto de un sector se ve en el plano mientras se escribe, '
+        'y las mesas no se mueven', (tester) async {
+      final guardados = <ColoresYTextos>[];
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones([], colores: guardados));
+      await abrirColores(tester);
+      final i = armado.sectores
+          .indexWhere((s) => s.tipo == TipoSector.escenario);
+      await tester.ensureVisible(find.byKey(Key('texto_sector_$i')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(Key('texto_sector_$i')), 'Escenario Mayor');
+      await tester.pump();
+      final visto = _vista(tester).armado;
+      expect(visto.sectores[i].texto, 'Escenario Mayor');
+      expect(visto.sectores[i].caja, armado.sectores[i].caja);
+      expect(visto.numeros, armado.numeros);
+
+      await tester.tap(find.byKey(const Key('guardar_colores')));
+      await tester.pump();
+      expect(guardados.single.sectores.single.texto, 'Escenario Mayor');
+      expect(
+        identical(guardados.single.sectores.single.sector, armado.sectores[i]),
+        isTrue,
+      );
+    });
+
+    testWidgets('al llegar guardado, sigue en la pestaña y ya no hay nada '
+        'pendiente', (tester) async {
+      final guardados = <ColoresYTextos>[];
+      await _mostrar(tester, acciones: _acciones([], colores: guardados));
+      await abrirColores(tester);
+      await tester.tap(find.byKey(const Key('color_5A_5')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('guardar_colores')));
+      await tester.pump();
+
+      await _mostrar(
+        tester,
+        plano: _plano(config: const ConfigPlano(colores: {'5A': 5})),
+        acciones: _acciones([], colores: guardados),
+      );
+      expect(find.byKey(const Key('panel_colores')), findsOneWidget);
+      expect(find.text('GUARDADO'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('salir_personalizar')));
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+      // Y el color queda.
+      expect(_vista(tester).tema.colorDivision(0),
+          TemaPlano.arquitecto.divisiones[5]);
     });
   });
 

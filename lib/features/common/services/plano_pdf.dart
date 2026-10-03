@@ -24,7 +24,15 @@ import 'planilla_tema.dart';
 class _Tinta {
   final bool bn;
 
-  const _Tinta(this.bn);
+  /// El color de cada división de la leyenda, como índice en la paleta: el
+  /// que eligió la fiesta en Personalizar. Así una división lleva en el papel
+  /// el mismo lugar de la paleta que en la pantalla.
+  final List<int> colores;
+
+  const _Tinta(this.bn, {this.colores = const []});
+
+  int _enPaleta(int division) =>
+      division < colores.length ? colores[division] : division;
 
   static const blanco = PdfColors.white;
   static const negro = PdfColor.fromInt(0xFF1F2328);
@@ -55,14 +63,14 @@ class _Tinta {
     if (division == null || division < 0) return blanco;
     if (bn) return division.isEven ? blanco : _grisDivision;
     final l = TemaPlano.arquitecto.divisiones;
-    return PdfColor.fromInt(l[division % l.length].toARGB32());
+    return PdfColor.fromInt(l[_enPaleta(division) % l.length].toARGB32());
   }
 
   /// El anillo y el número de una mesa con familia.
   PdfColor trazo(int? division) {
     if (bn || division == null || division < 0) return negro;
     final l = TemaPlano.arquitecto.numeroDivision!;
-    return PdfColor.fromInt(l[division % l.length].toARGB32());
+    return PdfColor.fromInt(l[_enPaleta(division) % l.length].toARGB32());
   }
 }
 
@@ -170,7 +178,7 @@ class PlanoPdf {
     DateTime? generada,
   }) async {
     final tema = PlanillaTema(blancoYNegro: blancoYNegro);
-    final tinta = _Tinta(blancoYNegro);
+    final tinta = _Tinta(blancoYNegro, colores: plano.colores);
     final theme = regular != null && negrita != null
         ? pw.ThemeData.withFont(base: regular, bold: negrita)
         : null;

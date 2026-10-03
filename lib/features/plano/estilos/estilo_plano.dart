@@ -129,6 +129,55 @@ class TemaPlano {
     return l[i % l.length];
   }
 
+  /// El mismo tema con los colores de las divisiones elegidos por la fiesta:
+  /// la división `i` de la leyenda lleva el color [indices]`[i]` de la paleta.
+  ///
+  /// Con la lista vacía, o con cada división en el color de su lugar, devuelve
+  /// este mismo tema.
+  TemaPlano conColores(List<int> indices) {
+    final n = divisiones.length;
+    var cambia = false;
+    for (final (i, k) in indices.indexed) {
+      if (k % n != i % n) cambia = true;
+    }
+    if (!cambia) return this;
+    List<Color> elegir(List<Color> paleta) => [
+          for (final k in indices) paleta[k % paleta.length],
+        ];
+    final numeros = numeroDivision;
+    return TemaPlano(
+      estilo: estilo,
+      fondo: fondo,
+      grilla: grilla,
+      hormigon: hormigon,
+      hormigonBorde: hormigonBorde,
+      sectorRelleno: sectorRelleno,
+      sectorBorde: sectorBorde,
+      sectorTexto: sectorTexto,
+      escenario: escenario,
+      escenarioTexto: escenarioTexto,
+      mesaRelleno: mesaRelleno,
+      mesaBorde: mesaBorde,
+      mesaVacia: mesaVacia,
+      numero: numero,
+      numeroVacia: numeroVacia,
+      divisiones: elegir(divisiones),
+      numeroDivision: numeros == null ? null : elegir(numeros),
+      resaltado: resaltado,
+      resaltadoNumero: resaltadoNumero,
+      ruta: ruta,
+      pasto: pasto,
+      conflicto: conflicto,
+      titulo: titulo,
+      tituloSuave: tituloSuave,
+      fuente: fuente,
+      pesoNumero: pesoNumero,
+      sillas: sillas,
+      brillo: brillo,
+      escalaMesa: escalaMesa,
+    );
+  }
+
   static TemaPlano de(EstiloPlano e) => switch (e) {
         EstiloPlano.gala => gala,
         EstiloPlano.arquitecto => arquitecto,

@@ -6,6 +6,7 @@ import '../../../models/sillas_reparto.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
+import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
@@ -59,6 +60,18 @@ class PlanoDeLaFiesta {
     required this.ocupa,
     required this.avisos,
   });
+
+  /// El color de cada división de la leyenda, como índice en la paleta del
+  /// estilo: el que eligió la fiesta o, si no eligió, el de su lugar.
+  static List<int> coloresDe(EstadoPlano estado, Map<String, int> elegidos) => [
+        for (final (i, clave) in estado.divisiones.indexed) elegidos[clave] ?? i,
+      ];
+
+  List<int> get colores => coloresDe(estado, config.colores);
+
+  /// El estilo con los colores de esta fiesta. Lo usan la pantalla y el papel:
+  /// así una división lleva el mismo color en los dos.
+  TemaPlano tema(EstiloPlano estilo) => TemaPlano.de(estilo).conColores(colores);
 
   int get mesasComunes => armado.cantidadComunes;
   int get mesasPasto => armado.cantidadPasto;

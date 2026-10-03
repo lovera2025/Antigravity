@@ -28,6 +28,7 @@ import 'repositories/planos_evento_repository.dart';
 import 'services/aplicar_eleccion.dart';
 import 'services/armar_a_medida.dart';
 import 'services/cambios_de_mesa.dart';
+import 'services/colores_y_textos.dart';
 import 'services/historial_sorteo.dart';
 import 'services/plano_de_la_fiesta.dart';
 import 'widgets/cambio_de_mesa_dialogs.dart';
@@ -641,6 +642,16 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
             : 'Medidas guardadas. Se redibujó el borde del hormigón.',
       );
 
+  // ── Personalizar: colores y textos ──────────────────────────────────────
+
+  /// El color de cada división, el título y los textos de los sectores. Los
+  /// textos van en el armado: si la otra PC acomodó el salón mientras tanto y
+  /// un sector ya no está como se veía, no se guarda nada.
+  Future<void> _guardarColoresYTextos(ColoresYTextos cambio) => _cambiarConfig(
+        (p, _) => cambio.aplicar(p.armado, p.config),
+        hecho: (_) => 'Colores y textos guardados.',
+      );
+
   // ── Personalizar: cambiar y mover familias ──────────────────────────────
 
   /// Cambia los números de mesa de una o dos familias y deja el renglón con el
@@ -941,6 +952,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         onCambiar: _cambiar,
         onMover: _mover,
         onGuardarMedidas: _guardarMedidas,
+        onGuardarColoresYTextos: _guardarColoresYTextos,
       ),
       onImprimir: _imprimir,
       onHistorial: _abrirHistorial,

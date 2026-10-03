@@ -7,13 +7,16 @@ import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../dibujo/pintor_plano.dart';
 import '../estilos/estilo_plano.dart';
+import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
 import '../services/armar_a_medida.dart';
 import '../services/cambios_de_mesa.dart';
+import '../services/colores_y_textos.dart';
 import '../services/divisiones.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
+import 'personalizar/panel_colores_textos.dart';
 import 'personalizar/panel_medidas.dart';
 import 'vista_plano.dart';
 
@@ -38,6 +41,10 @@ class AccionesPlano {
   /// Medidas.
   final void Function(MedidasPlano medidas)? onGuardarMedidas;
 
+  /// Guardar los colores de las divisiones, el título y los textos de los
+  /// sectores. Null: no hay pestaña Colores y textos.
+  final void Function(ColoresYTextos cambio)? onGuardarColoresYTextos;
+
   const AccionesPlano({
     required this.onFijarEnMesa,
     required this.onFijar,
@@ -48,6 +55,7 @@ class AccionesPlano {
     required this.onCambiar,
     required this.onMover,
     this.onGuardarMedidas,
+    this.onGuardarColoresYTextos,
   });
 }
 
@@ -57,7 +65,10 @@ enum ModoPersonalizar {
   mesas('Mesas'),
 
   /// Las medidas del playón y el lugar que pide cada mesa.
-  medidas('Medidas');
+  medidas('Medidas'),
+
+  /// El color de cada división, el título y los textos de los sectores.
+  colores('Colores y textos');
 
   final String rotulo;
   const ModoPersonalizar(this.rotulo);
@@ -145,6 +156,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// guardar: el plano dibuja el lugar de cada mesa con ellas.
   MedidasPlano? _medidasEnPrueba;
 
+  /// Lo que se está eligiendo en Colores y textos, todavía sin guardar: el
+  /// plano se dibuja con eso.
+  ColoresYTextos? _coloresEnPrueba;
+
   /// Se eligió una acción que necesita un toque más en el plano (a dónde va la
   /// familia, o con cuál cambia).
   ({_Espera que, String alumnoId})? _esperando;
@@ -183,6 +198,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     }
     // Lo que se estaba probando ya se guardó, o cambió lo guardado.
     if (old.plano.medidas != _plano.medidas) _medidasEnPrueba = null;
+    if (ColoresYTextos.firmaDe(old.plano.config, old.plano.armado.sectores) !=
+        ColoresYTextos.firmaDe(_plano.config, _plano.armado.sectores)) {
+      _coloresEnPrueba = null;
+    }
     // Una pestaña que dejó de estar (quien usa la pantalla le sacó la acción).
     final modo = _modo;
     if (modo != null && !_modos.contains(modo)) _modo = _modos.first;
@@ -389,13 +408,34 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   List<ModoPersonalizar> get _modos => [
         ModoPersonalizar.mesas,
         if (widget.acciones?.onGuardarMedidas != null) ModoPersonalizar.medidas,
+        if (widget.acciones?.onGuardarColoresYTextos != null)
+          ModoPersonalizar.colores,
       ];
+
+  /// Pestañas donde el plano solo muestra: no se elige ninguna mesa.
+  bool get _soloMuestra =>
+      _modo == ModoPersonalizar.medidas || _modo == ModoPersonalizar.colores;
+
+  /// El estilo con los colores de la fiesta (o los que se están probando).
+  TemaPlano get _tema => TemaPlano.de(widget.estilo).conColores(
+        PlanoDeLaFiesta.coloresDe(
+          _plano.estado,
+          _coloresEnPrueba?.colores ?? _plano.config.colores,
+        ),
+      );
+
+  /// El salón como se dibuja: el guardado o, mientras se prueban textos de
+  /// sectores, con esos textos.
+  ArmadoSalon get _armadoVisto =>
+      _coloresEnPrueba?.armadoCon(_plano.armado) ?? _plano.armado;
 
   /// Lo que quedaría sin guardar si se sale de la pestaña, dicho en palabras.
   /// Null: no hay nada pendiente.
   String? get _sinGuardar => switch (_modo) {
         ModoPersonalizar.medidas when _medidasEnPrueba != null =>
           'Hay medidas sin guardar: tocá GUARDAR MEDIDAS o DESCARTAR.',
+        ModoPersonalizar.colores when _coloresEnPrueba != null =>
+          'Hay colores o textos sin guardar: tocá GUARDAR o DESCARTAR.',
         _ => null,
       };
 
@@ -411,6 +451,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _esperando = null;
       _pista = null;
       _medidasEnPrueba = null;
+      _coloresEnPrueba = null;
     });
   }
 
@@ -425,6 +466,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _esperando = null;
       _pista = null;
       _medidasEnPrueba = null;
+      _coloresEnPrueba = null;
     });
   }
 
@@ -523,6 +565,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     if (_modo == ModoPersonalizar.medidas) {
       texto = 'Los lados del playón como los da la cinta, y cuánto lugar '
           'pide cada mesa.';
+    } else if (_modo == ModoPersonalizar.colores) {
+      texto = 'El color de cada división, el título del plano y los textos '
+          'de los sectores.';
     } else if (espera == null || alumno == null) {
       texto = 'Personalizar las mesas: tocá una mesa o buscá una familia.';
     } else {
@@ -695,10 +740,47 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       SemaforoPlano.faltan => Colors.red.shade700,
     };
     final aproximado = _plano.medidas.playon.aproximado;
+    final titulo =
+        (_coloresEnPrueba?.titulo ?? _plano.config.titulo ?? '').trim();
+    final subtitulo =
+        (_coloresEnPrueba?.subtitulo ?? _plano.config.subtitulo ?? '').trim();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       child: Row(
         children: [
+          if (titulo.isNotEmpty || subtitulo.isNotEmpty) ...[
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Column(
+                key: const Key('titulo_del_plano'),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (titulo.isNotEmpty)
+                    Text(
+                      titulo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  if (subtitulo.isNotEmpty)
+                    Text(
+                      subtitulo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+          ],
           Container(
             key: const Key('titular'),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -743,8 +825,8 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// El plano y, debajo, su barra: la regla, las hojas y el zoom. Van afuera
   /// del dibujo para no tapar ninguna mesa.
   Widget _areaPlano(BuildContext context) {
-    final armado = _plano.armado;
-    final tema = TemaPlano.de(widget.estilo);
+    final armado = _armadoVisto;
+    final tema = _tema;
     const altoBarra = 48.0;
     return Padding(
       padding: const EdgeInsets.only(left: 16, bottom: 4),
@@ -775,11 +857,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                         estado: _plano.estado,
                         resaltadas: _resaltadas,
                         seleccionada: _mesaElegida,
-                        // En Medidas no se elige nada: el plano solo muestra
-                        // cómo queda el lugar de cada mesa.
-                        onTapMesa: _modo == ModoPersonalizar.medidas
-                            ? null
-                            : _elegirMesa,
+                        // En Medidas y en Colores y textos no se elige
+                        // nada: el plano solo muestra cómo queda.
+                        onTapMesa: _soloMuestra ? null : _elegirMesa,
                         mostrarMedidas: true,
                         lugares: _modo == ModoPersonalizar.medidas
                             ? _medidasEnPrueba ?? _plano.medidas
@@ -902,8 +982,46 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ),
       );
 
+  /// Las divisiones de la fiesta, para elegirles el color: primero las de la
+  /// leyenda (las que ya tienen mesa), en su orden, y después las demás.
+  List<DivisionParaColor> get _divisionesParaColor {
+    final estado = _plano.estado;
+    final nombres = Divisiones.nombres(
+      widget.alumnos.where((a) => !a.esBajaTemporal),
+    );
+    final resto = Divisiones.ordenNatural(
+      nombres.keys.where((k) => k.isNotEmpty && !estado.divisiones.contains(k)),
+    );
+    return [
+      for (final (i, k) in estado.divisiones.indexed)
+        (clave: k, nombre: estado.nombresDivision[k] ?? k, lugar: i),
+      for (final k in resto) (clave: k, nombre: nombres[k] ?? k, lugar: null),
+    ];
+  }
+
+  Widget _panelColores() => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
+        child: PanelColoresTextos(
+          estilo: widget.estilo,
+          divisiones: _divisionesParaColor,
+          config: _plano.config,
+          sectores: _plano.armado.sectores,
+          variasHojas: _plano.armado.hojas.length > 1,
+          ocupado: widget.ocupado,
+          onProbar: (c) => setState(() {
+            _coloresEnPrueba = c;
+            if (c == null) _pista = null;
+          }),
+          onGuardar: (c) {
+            setState(() => _pista = null);
+            widget.acciones?.onGuardarColoresYTextos?.call(c);
+          },
+        ),
+      );
+
   Widget _panel(BuildContext context) {
     if (_modo == ModoPersonalizar.medidas) return _panelMedidas();
+    if (_modo == ModoPersonalizar.colores) return _panelColores();
     final consulta = _busqueda.text.trim();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 16, 8),
@@ -1118,7 +1236,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   List<Widget> _leyenda(BuildContext context) {
     final estado = _plano.estado;
     if (estado.divisiones.isEmpty && !estado.haySinDivision) return const [];
-    final tema = TemaPlano.de(widget.estilo);
+    final tema = _tema;
     final mesasDe = <int?, int>{};
     for (final i in estado.mesas) {
       if (i.ocupantes.isEmpty) continue;

@@ -182,6 +182,38 @@ void main() {
     });
   });
 
+  group('los colores que eligió la fiesta', () {
+    final alumnos = [
+      ...familias(1, 10),
+      ...familias(11, 20, division: '5° B'),
+    ];
+    Future<String> papel(Map<String, int> colores, {required bool bn}) async =>
+        contenidoDelPdf(await sinLetras(
+          PlanoDeLaFiesta.desde(
+            armado: pagina3,
+            config: ConfigPlano(colores: colores),
+            alumnos: alumnos,
+          ),
+          blancoYNegro: bn,
+        ));
+
+    test('en color, cada división sale con el color elegido', () async {
+      final base = await papel(const {}, bn: false);
+      // Elegir el color que ya tenía por su lugar no cambia el papel.
+      expect(await papel(const {'5A': 0, '5B': 1}, bn: false), base);
+      expect(await papel(const {'5A': 5}, bn: false), isNot(base));
+      // Un índice fuera de la paleta da la vuelta, no rompe.
+      expect(await papel(const {'5A': 8}, bn: false), base);
+    });
+
+    test('en blanco y negro no cambia nada: ahí no hay colores', () async {
+      expect(
+        await papel(const {'5A': 5, '5B': 2}, bn: true),
+        await papel(const {}, bn: true),
+      );
+    });
+  });
+
   group('lo que dice el papel', () {
     test('los números, los apellidos y lo que mide el playón', () async {
       final armado = aMedida(60);
