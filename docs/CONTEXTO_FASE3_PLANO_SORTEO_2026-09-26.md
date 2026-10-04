@@ -45,7 +45,7 @@ PCs siguen con la 5.0.0.
 | — | La cola de subida no pierde un cambio hecho mientras subía el anterior (lo encontró la revisión de M6) | Sí | Sí, `4fd931a` (1-oct) | — |
 | M7 | Plano impreso y planilla con bloques y pasto | Sí | Sí, `5fe73ec` (1-oct) | No hacía falta |
 | M8 | Botones a la vista y lista de la puerta trabada | Sí | Sí, `b508e8f` (2-oct) | No hacía falta |
-| M9 | Personalizar con cuatro pestañas: Mesas, Acomodar, Medidas y Colores y textos | Sí | Sí, `18a89f6`, `4f12969` y `2c84a55` (3-oct) | **Falta**: revisores de solo lectura |
+| M9 | Personalizar con cuatro pestañas: Mesas, Acomodar, Medidas y Colores y textos | Sí | Sí, `18a89f6`, `4f12969` y `2c84a55` (3-oct) | Hecha y **aplicada el 4-oct** (`8468626`, tres revisores). Queda lo anotado en la etapa 9c |
 
 **Tests:** la suite entera pasa, **1.466 tests** el 3-oct, con M9 programada (1.335 el 2-oct, al cerrar M8; 1.319 con M7; 1.275 con M6; 1.179 con M4;
 1.118 con la etapa 4b; 1.039 el 30-sep a la noche; 913 al
@@ -908,6 +908,98 @@ pestañas (un widget en el chat) y aprobó.
 - La sesión de Acomodar no refresca qué mesas están en uso si baja algo de la otra PC mientras se acomoda; el
   guardado lo vuelve a controlar con los datos frescos.
 
+## Qué pasó el 4-oct
+
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-wobbly-biscuit.md`. Fue la revisión de M9, con tres revisores
+de solo lectura lanzados de a uno (las cuentas, el guardado con dos PCs, las pantallas). Cada hallazgo se comprobó
+contra el código, y varios con una sonda que corría los números reales, antes de tocar nada. Todo quedó en un commit,
+`8468626`, con **1.497 tests** (31 nuevos) y el analizador en 313, sin avisos nuevos.
+
+No se tocó la base ni la nube, ni se abrió la app.
+
+### Lo que se arregló
+
+**El sorteo**
+- **Separar o juntar ya no cambia qué mesas están pegadas.** `distanciaPegadas` es un solo número para todo el salón,
+  y `separar` lo subía siempre: al separar un lado se borraban cortes de otra parte (en Técnica, hasta 9), y al
+  juntar no bajaba nunca. Ahora `EditarArmado._umbralQueConserva` busca el número que deja los cortes como estaban.
+  Si no hay ninguno, la vista previa trae `motivo`, APLICAR queda gris y dice hasta dónde se puede ("Se puede hasta
+  2,35 m"). En los armados del Canva, un lado solo llega hasta unos 2,35 a 2,4 m; a medida no hay tope.
+- **La mesa nueva sigue a la última fila** (`lugarLibre`): primero lo libre de esa fila, después una fila nueva
+  detrás; nunca hacia el escenario ni en el pasillo del medio. Las que se agregan seguidas en la misma sesión quedan
+  una al lado de la otra (`SesionAcomodo.agregar` sigue a la anterior). Antes, en el Canva la primera caía al pie de
+  la pasarela y la tercera a siete filas.
+- **El borde de un bloque que ya no existe** (`sorteo_con_plano.dart`): si en Acomodar se sacó la mesa `desde` o
+  `hasta` de un bloque, vale la que queda más cerca adentro. Sin esto, el que faltaba de esa división iba a la
+  reserva (comprobado: mesa 81 en vez de la 24).
+
+**El guardado con dos PCs**
+- **Lo más grave:** la sesión de Acomodar miraba las familias de cuando se abrió. Si la otra PC sorteaba en el
+  medio, se podía guardar un salón rearmado (por ejemplo con "volver al original") debajo de familias ya sentadas.
+  Ahora `paraGuardar` pide `enUsoVisto` y no guarda si las mesas en uso ya no son las que se vieron; la sesión se
+  pone al día (`ponerAlDia`, `cambioElUso`), apaga "volver al original" y lo dice.
+- **Medidas y Colores y textos** escriben su parte entera: ahora llevan lo que se veía (`vistas`, `visto`) y no
+  guardan si la otra PC lo cambió (`ArmarAMedida.medidasParaGuardar`, `ColoresYTextos.aplicar(visto:)`).
+
+**Volver al armado original, a medida**
+- `lugarDe` deducía la distancia de `distanciaPegadas`, que Separar cambia: después de separar a 3 m, rearmaba a 3 m
+  y se llevaba 16 mesas de 132. Y armaba siempre con pasarela, aunque el salón fuera sin. **El armado ahora guarda
+  `lugar_m` y `pasarela_m`** (`ArmadoSalon.lugarOriginalM` y `pasarelaOriginalM`). No hace falta migrar nada: es el
+  JSON del armado, y todavía no hay ningún plano guardado en ninguna PC.
+- Si se agregaron más mesas de las que entran, no vuelve y dice cuántas entran.
+
+**Las pantallas**
+- Con algo sin guardar, **la flecha de volver pregunta** (`PendienteDelPlano`, `PopScope`), y ESTILO Y ARMADO,
+  IMPRIMIR e HISTORIAL no se abren: la franja dice qué falta.
+- **DESCARTAR se puede deshacer** (es un paso más de la pila).
+- **Un clic no corre la mesa:** hasta que el puntero no se aleja 6 px no se mueve nada.
+- La vista previa de Separar mide con el lugar de cada mesa, como los avisos de después (`MedirSalon.revisar`).
+- Medidas: un casillero vacío o mal escrito cuenta como sin guardar; el hormigón se dibuja con la medida que se
+  prueba; pasar por un casillero sin cambiar el número no lo reescribe (se comparan números, no texto); el botón
+  del aviso se llama ESTILO Y ARMADO, como la pantalla que abre.
+- Cambiar de hoja cancela la vista previa y suelta lo elegido.
+- Avisos nuevos: un sector que tapa una mesa; la familia con dos mesas juntas y otra aparte a la que le separan las
+  juntas (`_grupos`).
+- Al guardar con la escuela sorteada y mesas agregadas, dice que se toca SORTEO. El aviso "Faltan N mesas" dice
+  dónde se agregan.
+- Los textos ya no dicen "la otra PC" cuando el cambio pudo ser acá: "El salón guardado cambió…".
+
+### Lo que quedó sin hacer (etapa 9c)
+
+Hallazgos confirmados que no entraron el 4-oct. **Los dos primeros son para decidir con el usuario.**
+
+1. **Un guardado del plano que no llegó a subir pisa después lo que hizo la otra PC** (viene de M6, no de M9). La
+   fila de `planos_evento` sube entera desde la cola; si subió tarde, reemplaza lo que la otra PC cambió en el
+   medio (por ejemplo los bloques de un sorteo). Necesita una subida fallida o sin red y que las dos PCs toquen el
+   plano. El revisor propone un contador `rev` dentro de `config` y no pisar si la nube tiene uno igual o mayor.
+   **Toca la cola de subida**: va en su propio paso, con su revisión. Junto con esto, `traerDeLaNube` puede dejar
+   la fila local vieja si una respuesta lenta llega después de guardar (probable, sin confirmar).
+2. **En Gala y en Neón, el color que se elige no es el que sale impreso.** El papel usa siempre la paleta de
+   Arquitecto por posición (`plano_pdf.dart`), y las tres paletas no tienen los colores en el mismo orden. Es una
+   decisión de diseño: reordenar las paletas, o mostrar al lado "en el papel sale así".
+3. **Los avisos de Acomodar no llevan a la mesa** (regla 3 de "intuitivo"): son solo texto, y "5 mesas quedan
+   apretadas" no dice cuáles. Hay que darles su mesa y que la dejen elegida.
+4. **El encabezado dice lo guardado mientras se prueba otra cosa**: "132 mesas" con la 133 agregada, "Entran las
+   132" arriba de "8 quedan fuera del hormigón".
+5. **En 1366 × 768, lo de abajo del panel queda sin señal de que hay más** (el motivo de GUARDAR gris, VOLVER AL
+   ARMADO ORIGINAL, "Corregilas con cinta" cortado). Barra de desplazamiento a la vista y los bloqueos pegados a
+   GUARDAR. Las muestras se sacan a 768 px enteros; la ventana real pierde unos 70.
+6. **La hoja solo crece**: arrastrar un sector lejos y traerlo, o separar y juntar, deja el dibujo más chico.
+7. **ESTILO Y ARMADO abre con "Como está ahora" elegido** cuando se llega desde el aviso de Medidas: LISTO no rearma.
+8. Colores antes del sorteo: se elige sin ver nada en el plano, y no lo dice.
+9. Menores: en Técnica la mesa nueva lleva el 151, después del pasto (131 a 150), y un bloque por número puede
+   "contener" el pasto; el número de la última mesa se vuelve a dar si se sacó y se guardó; "No se pudo guardar.
+   ($e)" muestra el error crudo; con zoom, la mesa nueva puede caer fuera de la vista.
+
+### Para tener en cuenta
+
+- **Los tres guardados de la pantalla siguen sin test de pantalla** (`PlanoEventoScreen` lee con Riverpod). Lo que
+  deciden está en funciones puras con test: `paraGuardar`, `medidasParaGuardar` y `ColoresYTextos.aplicar`. El
+  diálogo de la flecha de volver tampoco tiene test; sí lo que contesta `PendienteDelPlano`.
+- **No comparar dos armados enteros con `firma` en un test**: al fallar imprime el salón completo. Comparar mesa por
+  mesa. Además el borde recalculado difiere en un decimal (480,0000000000001).
+- En esta PC, un script de Python con comillas mezcladas no se puede pasar por heredoc: se escribe a un archivo.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -924,8 +1016,11 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
    subida en `4fd931a`).
 7. ~~M7: el plano impreso, y pasto y bloques en la planilla del sorteo.~~ **Hecho** (`5fe73ec`).
 8. ~~M8: los cuatro botones a la vista y la lista de la puerta trabada.~~ **Hecho** (`b508e8f`).
-9. ~~M9: Personalizar con cuatro pestañas.~~ **Programado** (`18a89f6`, `4f12969`, `2c84a55`). **Falta su
-   revisión** con revisores de solo lectura y, si encuentran algo, el arreglo en su commit.
+9. ~~M9: Personalizar con cuatro pestañas.~~ **Hecho y revisado** (`18a89f6`, `4f12969`, `2c84a55`; la revisión,
+   `8468626`).
+   - 9c. **Lo que dejó la revisión** (nueva; ver "Lo que quedó sin hacer" en "Qué pasó el 4-oct"). Preguntarle al
+     usuario por los puntos 1 (la cola de subida del plano) y 2 (los colores en el papel) antes de empezar. El
+     resto son arreglos de pantalla.
    - 9b. **Los que faltan** (nueva, a confirmar con el usuario; se le recomendó hacer las dos cosas):
      - en "Deshacer sorteo", elegir entre "solo los últimos sorteados" y "todo" (hoy borra la escuela entera). El
        registro de sorteos tiene con qué: cada sorteo es un renglón con lo que tocó (`RegistroSorteo.esperado`);
@@ -979,17 +1074,17 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
 entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 3-oct" y "Lo que falta, en orden"), el plan del 3-oct en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-calm-wall.md, el de la 6.0.0 en
-C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la
-memoria del proyecto. Están hechas y subidas las etapas 1 a 8, y M9 (etapa 9)
-está programada en tres pasos: las pestañas de Personalizar con Medidas
-(18a89f6), Colores y textos (4f12969) y Acomodar (2c84a55). La suite da 1.466
-tests en verde y el working tree está limpio. Falta la revisión de M9: lanzá
-los revisores de solo lectura, de a uno (las cuentas de editar_armado con sus
-tests; el guardado con dos PCs; las pantallas contra las reglas de
-"intuitivo"), con la suite, las imágenes y los diffs preparados por vos, y
-arreglá lo que encuentren en su commit. Después viene la etapa 9b, "los que
+"Qué pasó el 4-oct" y "Lo que falta, en orden"), el plan del 4-oct en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-wobbly-biscuit.md, el de la
+6.0.0 en C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y
+la memoria del proyecto. Están hechas y subidas las etapas 1 a 9: M9
+(Personalizar con cuatro pestañas) quedó revisada con tres revisores y sus
+arreglos están en 8468626. La suite da 1.497 tests en verde y el working tree
+está limpio. Sigue la etapa 9c, lo que dejó la revisión sin hacer (está en
+"Lo que quedó sin hacer" de "Qué pasó el 4-oct"): antes de empezar preguntame
+por los dos primeros puntos (el guardado atrasado del plano que pisa a la otra
+PC, que toca la cola de subida; y los colores de Gala y Neón en el papel) y
+mostrame cómo quedarían los de pantalla. Después viene la etapa 9b, "los que
 faltan": preguntame antes si la quiero (deshacer solo los últimos sorteados, y
 la planilla solo de ellos). Después la verificación final, la documentación de
 la 6.0.0, la versión y el build, en ese orden, una etapa por chat.
