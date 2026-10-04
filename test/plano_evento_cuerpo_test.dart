@@ -82,6 +82,7 @@ Future<void> _mostrar(
   AccionesPlano? acciones,
   VoidCallback? onImprimir,
   VoidCallback? onHistorial,
+  PendienteDelPlano? pendiente,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1;
@@ -100,6 +101,7 @@ Future<void> _mostrar(
           acciones: acciones,
           onImprimir: onImprimir,
           onHistorial: onHistorial,
+          pendiente: pendiente,
         ),
       ),
     ),
@@ -116,9 +118,10 @@ AccionesPlano _acciones(
   List<(ArmadoSalon, ArmadoSalon)>? salon,
 }) =>
     AccionesPlano(
-      onGuardarMedidas: medidas?.add,
-      onGuardarColoresYTextos: colores?.add,
-      onGuardarArmado: salon == null ? null : (b, n) => salon.add((b, n)),
+      onGuardarMedidas: medidas == null ? null : (m, _) => medidas.add(m),
+      onGuardarColoresYTextos:
+          colores == null ? null : (c, _) => colores.add(c),
+      onGuardarArmado: salon == null ? null : (b, n, _) => salon.add((b, n)),
       onFijarEnMesa: (m) => tocados.add('fijar en $m'),
       onFijar: (a, m) => tocados.add('fijar $a desde $m'),
       onQuitarFijadas: (a) => tocados.add('quitar fijadas de $a'),
@@ -1522,7 +1525,8 @@ void main() {
           .onChanged!(2.5);
       await tester.pump();
       expect(texto(tester, 'separar_metros'), '2,5 m');
-      expect(texto(tester, 'separar_previa'), 'Siguen entrando las 40.');
+      // Se mide con el lugar que pide cada mesa, como los avisos de después.
+      expect(texto(tester, 'separar_previa'), '2 quedan fuera del hormigón.');
       expect(
         tester.widget<Text>(find.byKey(const Key('texto_personalizar'))).data,
         startsWith('Así quedaría'),
@@ -1547,6 +1551,93 @@ void main() {
       expect(_vista(tester).armado.distanciaM(1, 2), closeTo(2.5, 1e-6));
       expect(prendido(tester, 'guardar_acomodo'), isTrue);
       expect(texto(tester, 'separar_metros'), '2,5 m');
+      // Lo que dijo la vista previa es lo que avisa el salón ya aplicado.
+      expect(find.textContaining('2 mesas no entran en el hormigón'),
+          findsOneWidget);
+    });
+
+    testWidgets('separar: a una distancia que borraría un pasillo, APLICAR '
+        'queda gris y dice hasta dónde se puede', (tester) async {
+      final armado = ArmadosPredefinidos.normal2a2b();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      tester
+          .widget<Slider>(find.byKey(const Key('separar_paso')))
+          .onChanged!(4.0);
+      await tester.pump();
+      expect(texto(tester, 'separar_previa'), contains('pasillo'));
+      expect(texto(tester, 'separar_previa'), contains('Se puede hasta'));
+      expect(prendido(tester, 'separar_aplicar'), isFalse);
+      expect(prendido(tester, 'separar_cancelar'), isTrue);
+      // Más cerca sí se puede, y los pasillos quedan donde estaban.
+      tester
+          .widget<Slider>(find.byKey(const Key('separar_paso')))
+          .onChanged!(2.3);
+      await tester.pump();
+      expect(prendido(tester, 'separar_aplicar'), isTrue);
+      await tester.tap(find.byKey(const Key('separar_aplicar')));
+      await tester.pump();
+      expect(_vista(tester).armado.cortes, armado.cortes);
+    });
+
+    testWidgets('si la otra PC sortea mientras se acomoda, lo dice, no deja '
+        'guardar y apaga "volver al armado original"', (tester) async {
+      final sinMesa = [_alumno('vega', 'VEGA, ANA', extras: 1)];
+      final armado = _armado();
+      final salon = <(ArmadoSalon, ArmadoSalon)>[];
+      await _mostrar(tester,
+          alumnos: sinMesa,
+          plano: _plano(armado: armado, alumnos: sinMesa),
+          acciones: _acciones([], salon: salon));
+      await abrir(tester);
+      // Medio metro: se corre sin encimarse con la de atrás.
+      await _arrastrarMesa(tester, 30, const Offset(0, 0.5));
+      final corrida = _vista(tester).armado.mesa(30)!.y;
+      expect(prendido(tester, 'guardar_acomodo'), isTrue);
+      expect(find.byKey(const Key('motivo_sin_original')), findsNothing);
+
+      // Baja el sorteo de la otra PC: VEGA ya tiene sus mesas.
+      final sorteados = [
+        _alumno('vega', 'VEGA, ANA', extras: 1, mesas: [29, 30]),
+      ];
+      await _mostrar(tester,
+          alumnos: sorteados,
+          plano: _plano(armado: armado, alumnos: sorteados),
+          acciones: _acciones([], salon: salon));
+      expect(texto(tester, 'pista'),
+          contains('Cambiaron las mesas de las familias'));
+      // Lo acomodado sigue a la vista, pero ya no se guarda.
+      expect(_vista(tester).armado.mesa(30)!.y, corrida);
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      expect(find.textContaining('cambiaron las mesas de las familias'),
+          findsOneWidget);
+      expect(prendido(tester, 'acomodar_original'), isFalse);
+      expect(texto(tester, 'motivo_sin_original'), contains('deshacé el sorteo'));
+      expect(salon, isEmpty);
+    });
+
+    testWidgets('si la otra PC sortea y acá no se acomodó nada, la pestaña '
+        'sigue con las familias nuevas, sin trabar nada', (tester) async {
+      final sinMesa = [_alumno('vega', 'VEGA, ANA', extras: 1)];
+      final armado = _armado();
+      await _mostrar(tester,
+          alumnos: sinMesa,
+          plano: _plano(armado: armado, alumnos: sinMesa),
+          acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final sorteados = [
+        _alumno('vega', 'VEGA, ANA', extras: 1, mesas: [29, 30]),
+      ];
+      await _mostrar(tester,
+          alumnos: sorteados,
+          plano: _plano(armado: armado, alumnos: sorteados),
+          acciones: _acciones([], salon: []));
+      expect(find.byKey(const Key('pista')), findsNothing);
+      expect(texto(tester, 'motivo_sin_original'), contains('deshacé el sorteo'));
+      // Y lo que se acomode ahora sí se puede guardar.
+      await _arrastrarMesa(tester, 10, const Offset(0, 0.5));
+      expect(prendido(tester, 'guardar_acomodo'), isTrue);
     });
 
     testWidgets('volver al armado original: con familias sentadas está '
@@ -1590,7 +1681,7 @@ void main() {
       final deLaOtra = EditarArmado.marcarPasto(armado, 1, true);
       await _mostrar(tester,
           plano: _plano(armado: deLaOtra), acciones: _acciones([], salon: []));
-      expect(texto(tester, 'pista'), contains('cambió en la otra PC'));
+      expect(texto(tester, 'pista'), contains('El salón guardado cambió'));
       expect(_vista(tester).armado.mesa(30)!.y, corrida);
       // Descartando se ve cómo quedó.
       await tester.tap(find.byKey(const Key('descartar_acomodo')));
@@ -1599,6 +1690,136 @@ void main() {
       await tester.pump();
       expect(_vista(tester).armado.pasto, {1});
       expect(find.byKey(const Key('pista')), findsNothing);
+    });
+
+    testWidgets('con algo acomodado sin guardar, ESTILO Y ARMADO, IMPRIMIR e '
+        'HISTORIAL no se abren: la franja dice qué falta', (tester) async {
+      final tocados = <String>[];
+      final pendiente = PendienteDelPlano();
+      await _mostrar(tester,
+          acciones: _acciones([], salon: []),
+          onEstiloYArmado: () => tocados.add('estilo'),
+          onImprimir: () => tocados.add('imprimir'),
+          onHistorial: () => tocados.add('historial'),
+          pendiente: pendiente);
+      await abrir(tester);
+      // Quien muestra el plano pregunta por acá antes de dejar salir.
+      expect(pendiente.sinGuardar, isNull);
+      await _arrastrarMesa(tester, 30, const Offset(0, 0.5));
+      expect(pendiente.sinGuardar, contains('sin guardar'));
+      for (final clave in ['estilo_y_armado', 'imprimir', 'historial']) {
+        await tester.tap(find.byKey(Key(clave)));
+        await tester.pump();
+        expect(texto(tester, 'pista'), contains('sin guardar'), reason: clave);
+      }
+      expect(tocados, isEmpty);
+      // Deshaciendo no queda nada pendiente, y vuelven a andar.
+      await tester.tap(find.byKey(const Key('acomodar_deshacer')));
+      await tester.pump();
+      expect(pendiente.sinGuardar, isNull);
+      await tester.tap(find.byKey(const Key('imprimir')));
+      await tester.pump();
+      expect(tocados, ['imprimir']);
+    });
+
+    testWidgets('un clic para elegir una mesa no la corre, aunque el mouse '
+        'tiemble un par de píxeles', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final antes = _vista(tester).armado.mesa(30)!;
+      final gesto = await tester.startGesture(_enPantalla(tester, 30));
+      await tester.pump();
+      await gesto.moveBy(const Offset(2, 2));
+      await tester.pump();
+      await gesto.up();
+      await tester.pump();
+      final despues = _vista(tester).armado.mesa(30)!;
+      expect(despues.x, antes.x);
+      expect(despues.y, antes.y);
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      // Quedó elegida, que es lo que se quería.
+      expect(elegido(tester), isNot(startsWith('Tocá una mesa')));
+    });
+
+    testWidgets('DESCARTAR dos veces vuelve al salón guardado, y Deshacer '
+        'trae de vuelta lo acomodado', (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await _arrastrarMesa(tester, 30, const Offset(0, 0.5));
+      final corrida = _vista(tester).armado.mesa(30)!.y;
+      await tester.tap(find.byKey(const Key('descartar_acomodo')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('descartar_acomodo')));
+      await tester.pump();
+      expect(_vista(tester).armado.mesa(30)!.y, armado.mesa(30)!.y);
+      expect(texto(tester, 'mensaje_acomodar'), contains('Con Deshacer vuelve'));
+      await tester.tap(find.byKey(const Key('acomodar_deshacer')));
+      await tester.pump();
+      expect(_vista(tester).armado.mesa(30)!.y, corrida);
+      expect(prendido(tester, 'guardar_acomodo'), isTrue);
+    });
+
+    testWidgets('Medidas: con un casillero vacío no se cambia de pestaña, y '
+        'lo demás que se corrigió no se pierde', (tester) async {
+      await _mostrar(tester,
+          acciones: _acciones([], medidas: [], colores: [], salon: []));
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pestana_medidas')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('medida_frente')), '32');
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('medida_costado')), '');
+      await tester.pump();
+      // No está "guardado": el botón lo dice y DESCARTAR sigue a la vista.
+      expect(find.text('MEDIDAS GUARDADAS'), findsNothing);
+      expect(find.byKey(const Key('descartar_medidas')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('pestana_acomodar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(texto(tester, 'pista'), contains('mal escrita'));
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('medida_frente')))
+            .controller!
+            .text,
+        '32',
+      );
+      // Descartando ya se puede cambiar de pestaña.
+      await tester.tap(find.byKey(const Key('descartar_medidas')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pestana_acomodar')));
+      await tester.pump();
+      expect(find.byKey(const Key('panel_medidas')), findsNothing);
+    });
+
+    testWidgets('Medidas: al corregir un lado del playón, el plano ya dibuja '
+        'el hormigón con esa medida', (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado),
+          acciones: _acciones([], medidas: [], colores: [], salon: []));
+      await tester.tap(find.byKey(const Key('personalizar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pestana_medidas')));
+      await tester.pump();
+      double frente() {
+        final borde = _vista(tester).armado.hoja('A')!.contorno!.puntos;
+        return borde[1].x - borde[0].x;
+      }
+
+      final antes = frente();
+      await tester.enterText(find.byKey(const Key('medida_frente')), '24');
+      await tester.pump();
+      expect(frente(), lessThan(antes));
+      // Las mesas siguen siendo las mismas, con sus números.
+      expect(_vista(tester).armado.numeros, armado.numeros);
+      // Descartando, el hormigón vuelve a ser el guardado.
+      await tester.tap(find.byKey(const Key('descartar_medidas')));
+      await tester.pump();
+      expect(frente(), closeTo(antes, 1e-6));
     });
 
     testWidgets('un sector se elige, se agranda y se saca', (tester) async {

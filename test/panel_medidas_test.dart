@@ -13,6 +13,7 @@ Future<({List<MedidasPlano> guardadas, List<MedidasPlano?> probadas})> _mostrar(
   bool ocupado = false,
   String? aviso,
   VoidCallback? onAccionAviso,
+  List<bool>? malEscrito,
 }) async {
   final guardadas = <MedidasPlano>[];
   final probadas = <MedidasPlano?>[];
@@ -33,6 +34,7 @@ Future<({List<MedidasPlano> guardadas, List<MedidasPlano?> probadas})> _mostrar(
               ocupado: ocupado,
               onGuardar: guardadas.add,
               onProbar: probadas.add,
+              onMalEscrito: malEscrito?.add,
               aviso: aviso,
               textoAccionAviso: 'ARMAR DE NUEVO',
               onAccionAviso: onAccionAviso,
@@ -116,6 +118,21 @@ void main() {
     expect(r.guardadas.single.playon, PlayonReal.costaSurubi);
   });
 
+  testWidgets('pasar por un casillero del playón sin cambiar la medida no lo '
+      'corrige: "30,0" es el mismo 30, y sigue siendo aproximado',
+      (tester) async {
+    final r = await _mostrar(tester);
+    await _escribir(tester, 'medida_frente', '30,0');
+    await _escribir(tester, 'medida_fondo', ' 46 ');
+    await _escribir(tester, 'medida_costado', '39.81');
+    await _escribir(tester, 'medida_lugar', '2,5');
+    expect(r.probadas.last!.playon, PlayonReal.costaSurubi);
+    expect(r.probadas.last!.playon.aproximado, isTrue);
+    expect(find.byKey(const Key('medidas_aproximadas')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('guardar_medidas')));
+    expect(r.guardadas.single.playon, PlayonReal.costaSurubi);
+  });
+
   testWidgets('con la cinta: el playón sale del frente, el fondo y un costado, '
       'y deja de ser aproximado', (tester) async {
     final r = await _mostrar(tester);
@@ -149,14 +166,15 @@ void main() {
       (tester) async {
     await _mostrar(tester);
     await _escribir(tester, 'medida_lugar', 'dos');
-    expect(_resultado(tester), contains('Entre mesas van de 1,5 m a 5 m'));
+    expect(_resultado(tester),
+        contains('"De centro a centro" va de 1,5 m a 5 m'));
     expect(_sePuedeGuardar(tester), isFalse);
     await _escribir(tester, 'medida_lugar', '1');
     expect(_sePuedeGuardar(tester), isFalse);
     await _escribir(tester, 'medida_lugar', '2');
 
     await _escribir(tester, 'medida_extra', '3');
-    expect(_resultado(tester), contains('Por silla extra va de 0 a 1 m'));
+    expect(_resultado(tester), contains('"Más, por cada silla extra" va de 0 a 1 m'));
     await _escribir(tester, 'medida_extra', '0,15');
 
     await _escribir(tester, 'medida_frente', '2');

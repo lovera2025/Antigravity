@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/contrato_alumno.dart';
+import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/services/planilla_sorteo.dart';
@@ -24,6 +25,15 @@ import 'personalizar/panel_colores_textos.dart';
 import 'personalizar/panel_medidas.dart';
 import 'vista_plano.dart';
 
+/// Por dónde quien muestra el plano le pregunta, antes de salir de la
+/// pantalla, si en Personalizar quedó algo sin guardar.
+class PendienteDelPlano {
+  String? Function()? _leer;
+
+  /// Lo que se perdería al salir, dicho en palabras. Null: nada.
+  String? get sinGuardar => _leer?.call();
+}
+
 /// Lo que se puede hacer con las mesas desde Personalizar. La pantalla avisa
 /// qué se tocó; quien la usa calcula, pide el motivo y guarda.
 class AccionesPlano {
@@ -41,17 +51,25 @@ class AccionesPlano {
   final void Function(String alumnoId, String otroId) onCambiar;
   final void Function(String alumnoId, int desdeMesa) onMover;
 
-  /// Guardar las medidas del playón y de las mesas. Null: no hay pestaña
-  /// Medidas.
-  final void Function(MedidasPlano medidas)? onGuardarMedidas;
+  /// Guardar las medidas del playón y de las mesas: [vistas] son las que
+  /// estaban guardadas cuando se corrigieron. Null: no hay pestaña Medidas.
+  final void Function(MedidasPlano medidas, MedidasPlano vistas)?
+      onGuardarMedidas;
 
   /// Guardar los colores de las divisiones, el título y los textos de los
-  /// sectores. Null: no hay pestaña Colores y textos.
-  final void Function(ColoresYTextos cambio)? onGuardarColoresYTextos;
+  /// sectores: [visto] es lo que estaba guardado cuando se eligieron. Null:
+  /// no hay pestaña Colores y textos.
+  final void Function(ColoresYTextos cambio, ConfigPlano visto)?
+      onGuardarColoresYTextos;
 
   /// Guardar el salón acomodado a mano: [base] es el que estaba guardado al
-  /// empezar y [nuevo] el que quedó. Null: no hay pestaña Acomodar.
-  final void Function(ArmadoSalon base, ArmadoSalon nuevo)? onGuardarArmado;
+  /// empezar, [nuevo] el que quedó y [enUso] las mesas que tenían familia o
+  /// estaban fijadas al empezar. Null: no hay pestaña Acomodar.
+  final void Function(
+    ArmadoSalon base,
+    ArmadoSalon nuevo,
+    Map<int, String> enUso,
+  )? onGuardarArmado;
 
   const AccionesPlano({
     required this.onFijarEnMesa,
@@ -129,6 +147,9 @@ class PlanoEventoCuerpo extends StatefulWidget {
   final VoidCallback? onImprimir;
   final VoidCallback? onHistorial;
 
+  /// Para que la pantalla sepa, al querer salir, si hay algo sin guardar.
+  final PendienteDelPlano? pendiente;
+
   const PlanoEventoCuerpo({
     super.key,
     required this.plano,
@@ -142,6 +163,7 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.acciones,
     this.onImprimir,
     this.onHistorial,
+    this.pendiente,
   });
 
   @override
@@ -181,10 +203,20 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// Dónde se agarró lo que se arrastra, respecto de su lugar: así no pega un
   /// salto al empezar a moverlo.
   Offset _desfase = Offset.zero;
+
+  /// Dónde se apretó, y si el puntero ya se alejó lo suficiente como para
+  /// que sea un arrastre y no un clic.
+  Offset _apretadoEn = Offset.zero;
+  bool _seMovio = false;
+  static const double _recorridoMinimoPx = 6;
   String _alcance = 'hoja';
   double? _pasoSeparar;
   String? _mensajeAcomodo;
   bool _confirmarDescartar = false;
+
+  /// En Medidas hay un casillero que no sirve (vacío, con letras, fuera de
+  /// rango): cuenta como algo sin guardar.
+  bool _medidasMalEscritas = false;
 
   /// Se eligió una acción que necesita un toque más en el plano (a dónde va la
   /// familia, o con cuál cambia).
@@ -195,9 +227,12 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
 
   PlanoDeLaFiesta get _plano => widget.plano;
 
+  String? _leerPendiente() => _sinGuardar;
+
   @override
   void initState() {
     super.initState();
+    widget.pendiente?._leer = _leerPendiente;
     _hoja = _plano.armado.hojas.first.id;
     final id = widget.resaltarAlumnoId;
     if (id != null) {
@@ -211,6 +246,12 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   @override
   void didUpdateWidget(PlanoEventoCuerpo old) {
     super.didUpdateWidget(old);
+    if (!identical(old.pendiente, widget.pendiente)) {
+      if (old.pendiente?._leer == _leerPendiente) {
+        old.pendiente!._leer = null;
+      }
+      widget.pendiente?._leer = _leerPendiente;
+    }
     // Si cambió el armado (se eligió otro), la hoja o la mesa elegidas pueden
     // no existir más.
     if (_plano.armado.hoja(_hoja) == null) {
@@ -222,10 +263,23 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       // apuntaría a otro lugar.
       _zoom.value = Matrix4.identity();
     }
-    // Lo que se estaba probando ya se guardó, o cambió lo guardado.
-    if (old.plano.medidas != _plano.medidas) _medidasEnPrueba = null;
+    // Lo que se estaba probando ya se guardó, o cambió lo guardado. Si no fue
+    // por guardar acá (bajó de la otra PC), lo escrito se pierde: se dice.
+    final guardando = widget.ocupado || old.ocupado;
+    if (old.plano.medidas != _plano.medidas) {
+      if (_medidasEnPrueba != null && !guardando) {
+        _pista = 'La otra PC cambió las medidas mientras las corregías: se '
+            'muestran las que guardó.';
+      }
+      _medidasEnPrueba = null;
+      _medidasMalEscritas = false;
+    }
     if (ColoresYTextos.firmaDe(old.plano.config, old.plano.armado.sectores) !=
         ColoresYTextos.firmaDe(_plano.config, _plano.armado.sectores)) {
+      if (_coloresEnPrueba != null && !guardando) {
+        _pista = 'La otra PC cambió los colores o los textos mientras los '
+            'elegías: se muestran los que guardó.';
+      }
       _coloresEnPrueba = null;
     }
     // Una pestaña que dejó de estar (quien usa la pantalla le sacó la acción).
@@ -248,8 +302,35 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           _acomodo = _nuevaSesion();
           if (mesa != null && _plano.armado.existe(mesa)) _mesaAcomodo = mesa;
         } else {
-          _pista = 'El salón cambió en la otra PC mientras lo acomodabas: '
-              'tocá DESCARTAR para ver cómo quedó.';
+          _pista = 'El salón guardado cambió mientras lo acomodabas: tocá '
+              'DESCARTAR para ver cómo quedó.';
+        }
+      }
+    }
+    // Las familias cambiaron de mesa mientras se acomodaba (la otra PC sorteó,
+    // cambió a una o fijó una mesa): la sesión deja de mirar lo viejo. Sin
+    // nada pendiente arranca de nuevo; con algo acomodado lo conserva, pero
+    // ya no deja volver al original ni guardar sobre familias que no vio.
+    final abierta = _acomodo;
+    if (abierta != null) {
+      final uso = EditarArmado.enUso(widget.alumnos, _plano.config);
+      if (!EditarArmado.mismoUso(uso, abierta.enUso)) {
+        if (!abierta.hayCambios) {
+          final mesa = _mesaAcomodo;
+          _limpiarAcomodo();
+          _acomodo = _nuevaSesion();
+          if (mesa != null && _plano.armado.existe(mesa)) _mesaAcomodo = mesa;
+        } else {
+          abierta.ponerAlDia(
+            enUso: uso,
+            ocupantes:
+                PlanoDeLaFiesta.ocupantes(widget.alumnos, widget.repartos),
+            haySorteo: widget.alumnos.any(SalonMesas.tieneNumeros),
+          );
+          if (abierta.cambioElUso) {
+            _pista = 'Cambiaron las mesas de las familias mientras '
+                'acomodabas: tocá DESCARTAR para ver cómo quedó.';
+          }
         }
       }
     }
@@ -475,10 +556,17 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
 
   /// El salón como se dibuja: el guardado; el que se está acomodando; o,
   /// mientras se prueban textos de sectores, con esos textos.
-  ArmadoSalon get _armadoVisto =>
-      _acomodo?.visto ??
-      _coloresEnPrueba?.armadoCon(_plano.armado) ??
-      _plano.armado;
+  ArmadoSalon get _armadoVisto {
+    final acomodando = _acomodo?.visto;
+    if (acomodando != null) return acomodando;
+    // Mientras se corrige un lado del playón, el borde del hormigón se dibuja
+    // con esa medida: lo que queda afuera se ve antes de guardar.
+    final medidas = _medidasEnPrueba;
+    if (medidas != null) {
+      return ArmarAMedida.conPlayon(_plano.armado, medidas.playon);
+    }
+    return _coloresEnPrueba?.armadoCon(_plano.armado) ?? _plano.armado;
+  }
 
   SesionAcomodo _nuevaSesion() => SesionAcomodo(
         base: _plano.armado,
@@ -502,6 +590,8 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// Lo que quedaría sin guardar si se sale de la pestaña, dicho en palabras.
   /// Null: no hay nada pendiente.
   String? get _sinGuardar => switch (_modo) {
+        ModoPersonalizar.medidas when _medidasMalEscritas =>
+          'Hay una medida mal escrita: corregila o tocá DESCARTAR.',
         ModoPersonalizar.medidas when _medidasEnPrueba != null =>
           'Hay medidas sin guardar: tocá GUARDAR MEDIDAS o DESCARTAR.',
         ModoPersonalizar.colores when _coloresEnPrueba != null =>
@@ -510,6 +600,19 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           'Hay cambios del salón sin guardar: tocá GUARDAR EL SALÓN o '
               'DESCARTAR.',
         _ => null,
+      };
+
+  /// Con algo sin guardar, lo que saca de la pestaña (otro armado, imprimir,
+  /// el historial) no se hace: la franja dice qué falta guardar o descartar.
+  /// Si no, se perdería sin aviso, o se imprimiría lo guardado y no lo que se
+  /// está viendo.
+  VoidCallback _siNoHayPendiente(VoidCallback accion) => () {
+        final pendiente = _sinGuardar;
+        if (pendiente != null) {
+          setState(() => _pista = pendiente);
+          return;
+        }
+        accion();
       };
 
   void _cambiarModo(ModoPersonalizar modo) {
@@ -524,6 +627,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _esperando = null;
       _pista = null;
       _medidasEnPrueba = null;
+      _medidasMalEscritas = false;
       _coloresEnPrueba = null;
       _limpiarAcomodo();
       if (modo == ModoPersonalizar.acomodar) _acomodo = _nuevaSesion();
@@ -541,6 +645,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _esperando = null;
       _pista = null;
       _medidasEnPrueba = null;
+      _medidasMalEscritas = false;
       _coloresEnPrueba = null;
       _limpiarAcomodo();
     });
@@ -572,6 +677,8 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     final mesa = _mesaEn(armado, p);
     final sector =
         mesa != null ? null : EditarArmado.sectorEn(armado, _hoja, p.dx, p.dy);
+    _apretadoEn = p;
+    _seMovio = false;
     setState(() {
       _mesaAcomodo = mesa;
       _sectorAcomodo = sector;
@@ -593,6 +700,18 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   void _arrastrar(Offset p) {
     final s = _acomodo;
     if (s == null || !s.arrastrando) return;
+    // Un clic para elegir no es un arrastre: mientras el puntero no se aleje
+    // de donde se apretó, no se corre nada. (Un temblor de un par de píxeles
+    // ya alcanzaba para correr la mesa un cuarto de metro sin querer.)
+    if (!_seMovio) {
+      final hoja = s.actual.hoja(_hoja);
+      final pxPorUnidad = hoja == null
+          ? 1.0
+          : EncuadrePlano.de(hoja.caja, _tamPlano).escala;
+      final lejos = (p - _apretadoEn).distance * pxPorUnidad * _escalaZoom;
+      if (lejos < _recorridoMinimoPx) return;
+      _seMovio = true;
+    }
     final destino = p - _desfase;
     setState(() {
       final mesa = _mesaAcomodo;
@@ -1076,6 +1195,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                         onSelectionChanged: (s) => setState(() {
                           _hoja = s.first;
                           _zoom.value = Matrix4.identity();
+                          // Lo elegido y la vista previa de separar eran de
+                          // la otra hoja: no se actúa sobre lo que no se ve.
+                          _acomodo?.cancelarSeparar();
+                          _pasoSeparar = null;
+                          _alcance = 'hoja';
+                          _mesaAcomodo = null;
+                          _sectorAcomodo = null;
                         }),
                       ),
                     const Spacer(),
@@ -1144,13 +1270,21 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
             _medidasEnPrueba = m;
             if (m == null) _pista = null;
           }),
+          onMalEscrito: (mal) {
+            if (mal != _medidasMalEscritas) {
+              setState(() => _medidasMalEscritas = mal);
+            }
+          },
           onGuardar: (m) {
             setState(() => _pista = null);
-            widget.acciones?.onGuardarMedidas?.call(m);
+            widget.acciones?.onGuardarMedidas?.call(m, _plano.medidas);
           },
           aviso: _avisoMedidas,
-          textoAccionAviso: 'ARMAR DE NUEVO',
-          onAccionAviso: _hayFamiliasConMesa ? null : widget.onEstiloYArmado,
+          // El botón se llama como la pantalla que abre.
+          textoAccionAviso: 'ESTILO Y ARMADO',
+          onAccionAviso: _hayFamiliasConMesa || widget.onEstiloYArmado == null
+              ? null
+              : _siNoHayPendiente(widget.onEstiloYArmado!),
         ),
       );
 
@@ -1186,7 +1320,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           }),
           onGuardar: (c) {
             setState(() => _pista = null);
-            widget.acciones?.onGuardarColoresYTextos?.call(c);
+            widget.acciones?.onGuardarColoresYTextos?.call(c, _plano.config);
           },
         ),
       );
@@ -1327,10 +1461,15 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         onPaso: (v) => setState(() {
           _pasoSeparar = v;
           _confirmarDescartar = false;
-          s.probarSeparar(numeros, v);
+          s.probarSeparar(
+            numeros,
+            v,
+            sillasExtraDe: (n) => _plano.estado.info(n).sillasExtra,
+          );
         }),
         textoPrevia: s.previa?.texto,
         previaEntra: s.previa?.entra ?? true,
+        previaSePuede: s.previa?.sePuede ?? true,
         onAplicar: () => setState(() {
           s.aplicarSeparar();
           _pasoSeparar = null;
@@ -1358,22 +1497,28 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         confirmarDescartar: _confirmarDescartar,
         onGuardar: () {
           setState(() => _pista = null);
-          widget.acciones?.onGuardarArmado?.call(s.base, s.actual);
+          widget.acciones?.onGuardarArmado
+              ?.call(s.base, s.actual, s.enUsoAlEmpezar);
         },
-        // Descartar pierde todo lo acomodado: se pide dos veces.
+        // Descartar se lleva todo lo acomodado: se pide dos veces, y aun así
+        // se puede deshacer (un doble clic no pierde una hora de trabajo).
         onDescartar: () => setState(() {
           if (!_confirmarDescartar) {
             _confirmarDescartar = true;
             return;
           }
+          // Si el salón guardado es otro (cambió mientras se acomodaba), se
+          // arranca desde ese: ahí lo de antes ya no se puede traer de vuelta.
+          final otroSalon = !identical(s.base, _plano.armado);
           s.descartar();
           _mesaAcomodo = null;
           _sectorAcomodo = null;
           _pasoSeparar = null;
-          hecho(null);
-          // Si el salón guardado es otro (lo cambió la otra PC), se arranca
-          // desde ese.
-          if (!identical(s.base, _plano.armado)) _acomodo = _nuevaSesion();
+          hecho(otroSalon
+              ? null
+              : 'Volvió el salón guardado. Con Deshacer vuelve lo que habías '
+                  'acomodado.');
+          if (otroSalon) _acomodo = _nuevaSesion();
         }),
       ),
     );
@@ -1709,7 +1854,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               const Key('estilo_y_armado'),
               'ESTILO Y ARMADO',
               Icons.dashboard_customize_outlined,
-              widget.onEstiloYArmado!,
+              _siNoHayPendiente(widget.onEstiloYArmado!),
               principal: true,
             ),
           if (widget.acciones != null)
@@ -1726,14 +1871,14 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               const Key('imprimir'),
               'IMPRIMIR',
               Icons.print_rounded,
-              widget.onImprimir!,
+              _siNoHayPendiente(widget.onImprimir!),
             ),
           if (widget.onHistorial != null)
             boton(
               const Key('historial'),
               'HISTORIAL',
               Icons.history,
-              widget.onHistorial!,
+              _siNoHayPendiente(widget.onHistorial!),
             ),
         ],
       ),

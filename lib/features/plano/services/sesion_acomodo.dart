@@ -1,6 +1,7 @@
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import 'armar_a_medida.dart';
 import 'editar_armado.dart';
 import 'medir_salon.dart';
 
@@ -14,15 +15,20 @@ class SesionAcomodo {
   final ArmadoSalon base;
   final MedidasPlano medidas;
 
-  /// Mesa → por qué no se puede sacar (tiene familia, está fijada).
-  final Map<int, String> enUso;
+  /// Mesa → por qué no se puede sacar (tiene familia, está fijada). Se pone
+  /// al día con [ponerAlDia] si la otra PC cambia algo mientras se acomoda.
+  Map<int, String> enUso;
+
+  /// Las mesas en uso **como estaban al abrir la sesión**. Si dejan de ser
+  /// las mismas, lo acomodado no se guarda: se pensó con otro salón.
+  final Map<int, String> enUsoAlEmpezar;
 
   /// Las familias con sus mesas, para avisar si alguna queda separada.
-  final List<OcupantePlano> ocupantes;
+  List<OcupantePlano> ocupantes;
 
   /// Ya hay familias con mesa (también de baja): los números no cambian y no
   /// se vuelve al armado original.
-  final bool haySorteo;
+  bool haySorteo;
 
   SesionAcomodo({
     required this.base,
@@ -30,7 +36,24 @@ class SesionAcomodo {
     this.enUso = const {},
     this.ocupantes = const [],
     this.haySorteo = false,
-  }) : _actual = base;
+  })  : _actual = base,
+        enUsoAlEmpezar = Map.unmodifiable(enUso);
+
+  /// Lo que bajó de la otra PC mientras se acomodaba: quién tiene cada mesa.
+  /// Lo acomodado queda; los avisos y lo que se puede sacar pasan a salir de
+  /// lo que hay de verdad.
+  void ponerAlDia({
+    required Map<int, String> enUso,
+    required List<OcupantePlano> ocupantes,
+    required bool haySorteo,
+  }) {
+    this.enUso = enUso;
+    this.ocupantes = ocupantes;
+    this.haySorteo = haySorteo;
+  }
+
+  /// ¿Cambiaron las mesas de las familias desde que se abrió la sesión?
+  bool get cambioElUso => !EditarArmado.mismoUso(enUsoAlEmpezar, enUso);
 
   static const int _maximoDeshacer = 60;
 
@@ -68,7 +91,12 @@ class SesionAcomodo {
   }
 
   /// Lo que no deja guardar así, en palabras.
-  List<String> get bloqueos => EditarArmado.bloqueos(_actual);
+  List<String> get bloqueos => [
+        ...EditarArmado.bloqueos(_actual),
+        if (hayCambios && cambioElUso)
+          'Mientras acomodabas cambiaron las mesas de las familias. Tocá '
+              'DESCARTAR para ver cómo quedó y acomodá de nuevo.',
+      ];
 
   bool get puedeGuardar =>
       hayCambios && bloqueos.isEmpty && !arrastrando && _previa == null;
@@ -121,6 +149,12 @@ class SesionAcomodo {
     final antes = _antesDeArrastrar;
     _antesDeArrastrar = null;
     if (antes == null || identical(antes, _actual)) return;
+    // Llevarla y traerla de vuelta en el mismo arrastre es no haberla movido:
+    // no queda un paso de Deshacer que no hace nada.
+    if (EditarArmado.firma(antes) == EditarArmado.firma(_actual)) {
+      _actual = antes;
+      return;
+    }
     _pila.add(antes);
     if (_pila.length > _maximoDeshacer) _pila.removeAt(0);
   }
@@ -135,11 +169,18 @@ class SesionAcomodo {
       _actual,
       [...base.numeros, ...enUso.keys],
     );
+    // Varias mesas nuevas seguidas quedan una al lado de la otra: a la
+    // familia que llega tarde con dos mesas le tienen que tocar juntas.
+    final anterior = numero - 1;
+    final sigueALaAnterior = cerca == null &&
+        !base.existe(anterior) &&
+        _actual.mesa(anterior)?.hoja == hoja;
     final lugar = EditarArmado.lugarLibre(
       _actual,
       hoja,
-      cerca: cerca,
+      cerca: sigueALaAnterior ? anterior : cerca,
       lugarM: medidas.lugarMesaM,
+      fueraDelPasillo: sigueALaAnterior,
     );
     _poner(EditarArmado.agregar(
       _actual,
@@ -199,14 +240,29 @@ class SesionAcomodo {
 
   // ── Separar o juntar ────────────────────────────────────────────────────
 
-  /// Muestra cómo quedaría, sin cambiar nada todavía.
-  void probarSeparar(Set<int> numeros, double pasoM) {
-    _previa = EditarArmado.separar(_actual, numeros, pasoM);
+  /// Muestra cómo quedaría, sin cambiar nada todavía. Lo que entra y lo que
+  /// queda apretado se mide como en [avisos]: con las medidas de la fiesta y
+  /// las sillas extra de cada mesa.
+  void probarSeparar(
+    Set<int> numeros,
+    double pasoM, {
+    int Function(int numero)? sillasExtraDe,
+  }) {
+    _previa = EditarArmado.separar(
+      _actual,
+      numeros,
+      pasoM,
+      medidas: medidas,
+      sillasExtraDe: sillasExtraDe,
+    );
   }
 
+  /// Aplica lo que se está viendo. Si a esa distancia no se puede (la vista
+  /// previa dice por qué), no cambia nada.
   void aplicarSeparar() {
     final previa = _previa;
-    if (previa != null) _poner(previa.armado);
+    if (previa == null || !previa.sePuede) return;
+    _poner(previa.armado);
   }
 
   void cancelarSeparar() => _previa = null;
@@ -219,12 +275,11 @@ class SesionAcomodo {
     _actual = _pila.removeLast();
   }
 
-  /// Vuelve al salón guardado: se pierde todo lo acomodado en esta sesión.
+  /// Vuelve al salón guardado. Es un paso más: Deshacer trae de vuelta lo
+  /// que se había acomodado.
   void descartar() {
-    _previa = null;
     _antesDeArrastrar = null;
-    _pila.clear();
-    _actual = base;
+    _poner(base);
   }
 
   /// Por qué no se puede volver al armado original, o null si se puede.
@@ -242,6 +297,14 @@ class SesionAcomodo {
         return 'La mesa $n ${enUso[n]} y el armado original no la tiene.';
       }
     }
+    // A medida se arma de nuevo con las mesas que hay: si se agregaron más de
+    // las que entran en el hormigón, volver al original se llevaría algunas.
+    final hay = _actual.cantidadComunes;
+    final entran = original.cantidadComunes;
+    if (ArmarAMedida.lugarDe(_actual) != null && entran < hay) {
+      return 'El salón tiene $hay mesas y armado de nuevo entran $entran: '
+          'sacá las que sobran o marcalas de pasto.';
+    }
     return null;
   }
 
@@ -257,9 +320,13 @@ class SesionAcomodo {
   // ── Lo que conviene saber antes de guardar ──────────────────────────────
 
   /// Avisos que no frenan el guardado: familias que quedaron con sus mesas
-  /// separadas, mesas apretadas y mesas fuera del hormigón.
+  /// separadas, mesas apretadas, mesas fuera del hormigón y mesas tapadas por
+  /// un sector.
   List<String> avisos(int Function(int numero) sillasExtraDe) {
     final r = <String>[];
+    // Lo mismo que el plano marca como grave una vez guardado: mejor verlo
+    // antes de guardar.
+    r.addAll(_actual.problemas().where((p) => p.contains('tapa la mesa')));
     for (final o in EditarArmado.familiasPartidas(base, _actual, ocupantes)) {
       final mesas = o.numeros.toList()..sort();
       r.add('${o.apellido} quedó con sus mesas ${mesas.join(' y ')} '

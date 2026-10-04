@@ -96,12 +96,27 @@ class ColoresYTextos {
 
   /// El cambio listo para guardar sobre el plano que hay de verdad, o por qué
   /// no se puede.
-  CambioDeConfig aplicar(ArmadoSalon armado, ConfigPlano config) {
+  ///
+  /// [visto] es lo que estaba guardado cuando se eligieron los colores y los
+  /// títulos. Si la otra PC los cambió mientras tanto no se guarda nada: esta
+  /// pestaña los escribe todos juntos, y pisaría lo que ella eligió.
+  CambioDeConfig aplicar(
+    ArmadoSalon armado,
+    ConfigPlano config, {
+    ConfigPlano? visto,
+  }) {
+    if (visto != null && firmaDe(visto, const []) != firmaDe(config, const [])) {
+      return const CambioDeConfig.noSePuede(
+        'La otra PC cambió los colores o el título mientras los elegías. No '
+        'se guardó nada, para no pisar lo que hizo: mirá cómo quedaron y '
+        'probá de nuevo.',
+      );
+    }
     final nuevo = armadoCon(armado);
     if (nuevo == null) {
       return const CambioDeConfig.noSePuede(
-        'El salón cambió en la otra PC y uno de los sectores ya no está como '
-        'se veía. Los textos no se guardaron: revisalos y probá de nuevo.',
+        'El salón guardado cambió y uno de los sectores ya no está como se '
+        'veía. Los textos no se guardaron: revisalos y probá de nuevo.',
       );
     }
     return CambioDeConfig.ok(

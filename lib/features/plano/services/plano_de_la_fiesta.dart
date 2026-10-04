@@ -206,7 +206,8 @@ class PlanoDeLaFiesta {
       final n = necesarias - tiene;
       avisos.add(AvisoPlano(
         '${n == 1 ? 'Falta 1 mesa' : 'Faltan $n mesas'}: la fiesta necesita '
-        '$necesarias y este armado tiene $tiene.',
+        '$necesarias y este armado tiene $tiene. Se agregan en Personalizar '
+        '→ Acomodar.',
         grave: true,
       ));
     }

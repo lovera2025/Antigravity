@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
+import '../../../models/plano_evento.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/medidas_salon.dart';
+import 'cambios_de_mesa.dart';
 import 'medir_salon.dart';
 
 /// Con qué se arma el salón a medida del playón.
@@ -213,10 +215,28 @@ class ArmarAMedida {
 
   /// A qué distancia entre mesas se armó este salón. Null si no es un armado
   /// a medida.
+  ///
+  /// Es la que quedó guardada al armarlo. Solo si falta se deduce de hasta
+  /// dónde cuentan como pegadas, que deja de servir en cuanto se separan o se
+  /// juntan las mesas.
   static double? lugarDe(ArmadoSalon armado) {
+    if (armado.clave != claveArmado) return null;
+    final guardado = armado.lugarOriginalM;
+    if (guardado != null) return guardado;
     final pegadas = armado.distanciaPegadas;
-    if (armado.clave != claveArmado || pegadas == null) return null;
+    if (pegadas == null) return null;
     return armado.aMetros(pegadas / pegadasHastaPasos);
+  }
+
+  /// El ancho de la pasarela con que se armó este salón (cero: sin pasarela).
+  /// Si no quedó guardado, el de la pasarela que tiene dibujada.
+  static double pasarelaDe(ArmadoSalon armado) {
+    final guardado = armado.pasarelaOriginalM;
+    if (guardado != null) return guardado;
+    for (final s in armado.sectores) {
+      if (s.tipo == TipoSector.pasarela) return armado.aMetros(s.caja.ancho);
+    }
+    return 0;
   }
 
   /// El playón con el que está dibujado el borde de este armado. Null si no
@@ -254,11 +274,17 @@ class ArmarAMedida {
       return armado;
     }
     final cxViejo = (bordes.first[0].x + bordes.first[1].x) / 2;
-    // El dibujo sigue centrado y tiene que contener el hormigón nuevo y todas
-    // las mesas, aunque alguna haya quedado afuera.
+    // El dibujo sigue centrado y tiene que contener el hormigón nuevo, todas
+    // las mesas (aunque alguna haya quedado afuera) y los sectores que se
+    // pusieron a un costado.
     var medio = _u(math.max(p.frenteM, p.fondoM) / 2);
     for (final m in armado.mesas) {
       medio = math.max(medio, (m.x - cxViejo).abs() + armado.radio);
+    }
+    for (final s in armado.sectores) {
+      if (s.tipo == TipoSector.escenario) continue;
+      medio = math.max(medio, (s.caja.x - cxViejo).abs());
+      medio = math.max(medio, (s.caja.derecha - cxViejo).abs());
     }
     final cx = _borde + medio;
     final dx = cx - cxViejo;
@@ -278,6 +304,9 @@ class ArmarAMedida {
       var abajo = y0 + _u(math.max(0.0, hasta - inicio));
       for (final m in armado.mesasDeHoja(h.id)) {
         abajo = math.max(abajo, m.y + armado.radio);
+      }
+      for (final s in armado.sectoresDeHoja(h.id)) {
+        abajo = math.max(abajo, s.caja.abajo);
       }
       hojas.add(HojaPlano(
         id: h.id,
@@ -304,6 +333,36 @@ class ArmarAMedida {
                 )
               : s.copyWith(caja: s.caja.mover(dx, 0)),
       ],
+    );
+  }
+
+  /// Las medidas listas para guardar sobre el plano que hay de verdad
+  /// ([armado] y [config], recién leídos), o por qué no se puede.
+  ///
+  /// [vistas] son las que estaban guardadas cuando se corrigieron. Si la otra
+  /// PC las cambió mientras tanto no se guarda nada: las medidas se escriben
+  /// todas juntas, y corregir la distancia entre mesas le pisaría el playón
+  /// que acaba de medir con cinta.
+  ///
+  /// En un salón a medida, con otro playón se redibuja el borde del hormigón.
+  static CambioDeConfig medidasParaGuardar({
+    required ArmadoSalon armado,
+    required ConfigPlano config,
+    required MedidasPlano vistas,
+    required MedidasPlano nuevas,
+  }) {
+    if (config.medidas != vistas) {
+      return const CambioDeConfig.noSePuede(
+        'La otra PC cambió las medidas mientras las corregías. No se guardó '
+        'nada, para no pisar lo que hizo: mirá cómo quedaron y probá de '
+        'nuevo.',
+      );
+    }
+    final redibujado = conPlayon(armado, nuevas.playon);
+    return CambioDeConfig.ok(
+      config.copyWith(medidas: nuevas),
+      const [],
+      armado: identical(redibujado, armado) ? null : redibujado,
     );
   }
 
@@ -473,6 +532,8 @@ class ArmarAMedida {
           radio: _radio,
           metrosPorUnidad: _mu,
           distanciaPegadas: pegadasHastaPasos * _u(l),
+          lugarOriginalM: l,
+          pasarelaOriginalM: math.max(0.0, o.pasarelaM),
           hojas: hojas,
           mesas: mesas,
           sectores: sectores,

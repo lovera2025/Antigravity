@@ -343,7 +343,7 @@ void main() {
     });
 
     test('dice si siguen entrando, o cuántas quedan afuera', () {
-      final entra = EditarArmado.separar(aMedida, todas, 2.2)!;
+      final entra = EditarArmado.separar(aMedida, todas, 2.05)!;
       expect(entra.entra, isTrue);
       expect(entra.texto, 'Siguen entrando las 132.');
       final no = EditarArmado.separar(aMedida, todas, 4.0)!;
@@ -380,7 +380,7 @@ void main() {
         nombres: const {'5A': '5° A'},
       );
       expect(alcances.map((a) => a.rotulo), [
-        'Toda la hoja',
+        'Todo el salón',
         'Lado izquierdo',
         'Lado derecho',
         'Bloque de 5° A',
@@ -639,13 +639,24 @@ void main() {
       expect(s.hayCambios, isFalse);
     });
 
-    test('descartar vuelve al salón guardado y vacía Deshacer', () {
+    test('descartar vuelve al salón guardado, y Deshacer trae de vuelta lo '
+        'acomodado', () {
       final s = SesionAcomodo(base: aMedida);
       s.agregar('A');
       s.cambiarPasto(5);
       s.descartar();
       expect(identical(s.actual, aMedida), isTrue);
-      expect(s.puedeDeshacer, isFalse);
+      expect(s.hayCambios, isFalse);
+      // Un doble clic en DESCARTAR no pierde el trabajo.
+      expect(s.puedeDeshacer, isTrue);
+      s.deshacer();
+      expect(s.actual.mesas.length, 133);
+      expect(s.actual.pasto, {5});
+      expect(s.hayCambios, isTrue);
+      // Descartar sin haber tocado nada no deja un paso que no hace nada.
+      final t = SesionAcomodo(base: aMedida);
+      t.descartar();
+      expect(t.puedeDeshacer, isFalse);
     });
 
     test('volver al original: antes del sorteo sí, y se puede deshacer', () {
@@ -720,6 +731,8 @@ void main() {
       libres: {50: MesaLibre(motivo: 'columna'), 60: MesaLibre()},
       fijadas: {7: MesaFijada(alumnoId: 'sosa')},
     );
+    // Lo que se veía al acomodar: las mesas de esas familias y la fijada.
+    final visto = EditarArmado.enUso(alumnos, config);
 
     test('guarda el salón nuevo y conserva lo demás', () {
       final nuevo = EditarArmado.sacar(
@@ -730,6 +743,7 @@ void main() {
         fresco: aMedida,
         config: config,
         alumnos: alumnos,
+        enUsoVisto: visto,
       );
       expect(c.sePuede, isTrue);
       expect(identical(c.armado, nuevo), isTrue);
@@ -747,9 +761,10 @@ void main() {
         fresco: deLaOtra,
         config: config,
         alumnos: alumnos,
+        enUsoVisto: visto,
       );
       expect(c.sePuede, isFalse);
-      expect(c.problema, contains('La otra PC cambió el salón'));
+      expect(c.problema, contains('El salón guardado cambió'));
     });
 
     test('si mientras tanto la mesa que saqué consiguió familia, no se saca',
@@ -760,6 +775,7 @@ void main() {
         fresco: aMedida,
         config: config,
         alumnos: [...alumnos, _alumno('vega', [100])],
+        enUsoVisto: visto,
       );
       expect(c.sePuede, isFalse);
       expect(c.problema, 'La mesa 100 no se puede sacar: la tiene VEGA. '
@@ -773,6 +789,7 @@ void main() {
         fresco: aMedida,
         config: config,
         alumnos: alumnos,
+        enUsoVisto: visto,
       );
       expect(c.problema, contains('está fijada para SOSA'));
     });
@@ -785,8 +802,425 @@ void main() {
         fresco: aMedida,
         config: config,
         alumnos: alumnos,
+        enUsoVisto: visto,
       );
       expect(c.problema, 'Las mesas 20 y 21 se pisan.');
+    });
+
+    test('si mientras se acomodaba la otra PC sorteó, no se guarda: el salón '
+        'se pensó sin esas familias', () {
+      // Se abrió Acomodar sin nadie sentado y se volvió al armado original.
+      final sesion = SesionAcomodo(base: aMedida);
+      expect(sesion.volverAlOriginal(), isNull);
+      final c = EditarArmado.paraGuardar(
+        base: aMedida,
+        nuevo: EditarArmado.mover(aMedida, 20, 300, 300),
+        fresco: aMedida,
+        config: ConfigPlano.vacia,
+        // Lo que hay de verdad al guardar: ya sortearon.
+        alumnos: alumnos,
+        enUsoVisto: sesion.enUsoAlEmpezar,
+      );
+      expect(c.sePuede, isFalse);
+      expect(c.problema, contains('cambiaron las mesas de las familias'));
+    });
+
+    test('tampoco si una familia cambió de mesa con otra: las mesas en uso '
+        'son las mismas, pero no de quien se vio', () {
+      final antes = [_alumno('gomez', [12]), _alumno('sosa', [13])];
+      final despues = [_alumno('gomez', [13]), _alumno('sosa', [12])];
+      final c = EditarArmado.paraGuardar(
+        base: aMedida,
+        nuevo: EditarArmado.mover(aMedida, 20, 300, 300),
+        fresco: aMedida,
+        config: ConfigPlano.vacia,
+        alumnos: despues,
+        enUsoVisto: EditarArmado.enUso(antes, ConfigPlano.vacia),
+      );
+      expect(c.sePuede, isFalse);
+    });
+  });
+
+  // Lo que encontró la revisión de M9 (4-oct): cada test es un caso que antes
+  // salía mal sin que nadie avisara.
+  group('separar o juntar no cambia qué mesas están pegadas', () {
+    final sinPasarela = ArmarAMedida.armar(
+      const OpcionesAMedida(
+        playon: PlayonReal.costaSurubi,
+        cantidad: 132,
+        pasarelaM: 0,
+      ),
+    ).armado;
+
+    test('en ningún armado, con ningún grupo, a ninguna distancia: o los '
+        'pasillos quedan como estaban, o no se aplica y dice por qué', () {
+      var aplicables = 0, frenadas = 0;
+      for (final a in [...todos, sinPasarela]) {
+        for (final h in a.hojas) {
+          for (final al in EditarArmado.alcances(a, h.id)) {
+            for (final paso in [1.5, 1.8, 2.3, 2.6, 3.0, 4.0]) {
+              final v = EditarArmado.separar(a, al.numeros, paso);
+              if (v == null) continue;
+              final caso = '${a.clave} ${h.id}/${al.clave} a $paso';
+              if (v.sePuede) {
+                aplicables++;
+                expect(v.armado.cortes, a.cortes, reason: caso);
+              } else {
+                frenadas++;
+                expect(v.entra, isFalse, reason: caso);
+                expect(v.texto, contains('pasillo'), reason: caso);
+                expect(v.texto, contains('Se puede'), reason: caso);
+              }
+            }
+          }
+        }
+      }
+      expect(aplicables, greaterThan(50));
+      expect(frenadas, greaterThan(0));
+    });
+
+    test('un lado de un armado del Canva: a 2,3 m sí; a 2,6 m no, y dice '
+        'hasta dónde', () {
+      final a = ArmadosPredefinidos.normal2aPaginas45();
+      final izq = EditarArmado.alcances(a, 'A')[1];
+      expect(izq.clave, 'izq');
+      expect(EditarArmado.separar(a, izq.numeros, 2.3)!.sePuede, isTrue);
+      final no = EditarArmado.separar(a, izq.numeros, 2.6)!;
+      expect(no.sePuede, isFalse);
+      expect(no.texto, contains('Se puede hasta 2,35 m.'));
+      // Hasta ahí, de verdad se puede.
+      final justo = EditarArmado.separar(a, izq.numeros, 2.35)!;
+      expect(justo.sePuede, isTrue);
+      expect(justo.armado.cortes, a.cortes);
+      // Y la sesión no aplica lo que no se puede: queda a la vista el motivo.
+      final s = SesionAcomodo(base: a);
+      s.probarSeparar(izq.numeros, 2.6);
+      s.aplicarSeparar();
+      expect(s.hayCambios, isFalse);
+      expect(s.previa!.sePuede, isFalse);
+    });
+
+    test('separar y volver a juntar deja los pasillos donde estaban', () {
+      for (final a in [...todos, sinPasarela]) {
+        for (final h in a.hojas) {
+          final numeros = {for (final m in a.mesasDeHoja(h.id)) m.numero};
+          final actual = EditarArmado.pasoDe(a, numeros)!;
+          final ida = EditarArmado.separar(a, numeros, actual + 0.3)!;
+          if (!ida.sePuede) continue;
+          final vuelta = EditarArmado.separar(ida.armado, numeros, actual)!;
+          expect(vuelta.sePuede, isTrue, reason: a.clave);
+          expect(vuelta.armado.cortes, a.cortes, reason: a.clave);
+        }
+      }
+      // A medida, además, vuelve a contar como pegadas hasta donde contaba.
+      final todas = aMedida.numeros.toSet();
+      final ida = EditarArmado.separar(aMedida, todas, 3.0)!.armado;
+      final vuelta = EditarArmado.separar(ida, todas, 2.0)!.armado;
+      expect(vuelta.pegadasHastaU, closeTo(aMedida.pegadasHastaU, 1e-6));
+    });
+
+    test('la vista previa mide como los avisos de después: si dice que '
+        'entran, el salón no avisa nada', () {
+      final todas = aMedida.numeros.toSet();
+      for (final paso in [2.05, 2.2, 2.6, 3.2]) {
+        final s = SesionAcomodo(base: aMedida);
+        s.probarSeparar(todas, paso, sillasExtraDe: (_) => 0);
+        final previa = s.previa!;
+        s.aplicarSeparar();
+        final avisos = s.avisos((_) => 0).join(' ');
+        expect(previa.fuera > 0, avisos.contains('hormigón'),
+            reason: 'a $paso: ${previa.texto} / $avisos');
+        if (previa.entra) expect(avisos, isEmpty, reason: 'a $paso');
+      }
+      // Más juntas que el lugar que pide cada mesa: lo dice antes de aplicar.
+      final juntas = EditarArmado.separar(aMedida, todas, 1.8)!;
+      expect(juntas.entra, isFalse);
+      expect(juntas.texto, '132 quedan apretadas.');
+      // Con sillas extra en una mesa, esa pide más lugar.
+      final conSillas = EditarArmado.separar(
+        aMedida,
+        todas,
+        2.05,
+        sillasExtraDe: (n) => n == 10 ? 2 : 0,
+      )!;
+      expect(conSillas.apretadas, greaterThan(0));
+    });
+  });
+
+  group('volver al armado original, a medida', () {
+    final todas = aMedida.numeros.toSet();
+
+    // Las mismas mesas, cada una en su lugar (sin comparar el salón entero
+    // letra por letra: el borde se vuelve a calcular y cambia un decimal).
+    void mismasMesas(ArmadoSalon o, ArmadoSalon esperado) {
+      expect(o.numeros, esperado.numeros);
+      for (final m in esperado.mesas) {
+        expect(o.mesa(m.numero)!.x, closeTo(m.x, 1e-6), reason: '${m.numero}');
+        expect(o.mesa(m.numero)!.y, closeTo(m.y, 1e-6), reason: '${m.numero}');
+      }
+    }
+
+    test('después de separar las mesas, vuelve a la distancia con que se armó '
+        'y no se lleva ninguna', () {
+      final separado = EditarArmado.separar(aMedida, todas, 3.0)!.armado;
+      expect(ArmarAMedida.lugarDe(separado), 2.0);
+      final o = EditarArmado.original(separado)!;
+      mismasMesas(o, aMedida);
+      expect(o.cortes, aMedida.cortes);
+      expect(o.pegadasHastaU, closeTo(aMedida.pegadasHastaU, 1e-6));
+      // Separar un solo lado tampoco cambia con qué distancia se armó.
+      final izq = EditarArmado.alcances(aMedida, 'A')[1].numeros;
+      final unLado = EditarArmado.separar(aMedida, izq, 2.6)!.armado;
+      expect(ArmarAMedida.lugarDe(unLado), 2.0);
+    });
+
+    test('uno armado sin pasarela vuelve sin pasarela, con cada mesa en su '
+        'lugar', () {
+      final sin = ArmarAMedida.armar(
+        const OpcionesAMedida(
+          playon: PlayonReal.costaSurubi,
+          cantidad: 132,
+          pasarelaM: 0,
+        ),
+      ).armado;
+      expect(ArmarAMedida.pasarelaDe(sin), 0);
+      final m = sin.mesa(10)!;
+      final corrido = EditarArmado.mover(sin, 10, m.x - 40, m.y + 15);
+      final o = EditarArmado.original(corrido)!;
+      expect(o.sectores.where((s) => s.tipo == TipoSector.pasarela), isEmpty);
+      mismasMesas(o, sin);
+    });
+
+    test('lo que se guarda y se vuelve a leer sigue sabiendo cómo se armó', () {
+      final leido = ArmadoSalon.fromJson(
+        jsonDecode(jsonEncode(aMedida.toJson())) as Map<String, dynamic>,
+      );
+      expect(leido.lugarOriginalM, 2.0);
+      expect(leido.pasarelaOriginalM, 2.1);
+      // Un armado del Canva no lleva nada de eso.
+      expect(canva.toJson().containsKey('lugar_m'), isFalse);
+      expect(ArmarAMedida.lugarDe(canva), isNull);
+    });
+
+    test('si se agregaron más mesas de las que entran, no se vuelve al '
+        'original y dice por qué', () {
+      const chico =
+          PlayonReal(frenteM: 12, fondoM: 12, profundidadM: 12);
+      final entran = ArmarAMedida.capacidad(
+        const OpcionesAMedida(playon: chico, cantidad: 999),
+      );
+      final lleno = ArmarAMedida.armar(
+        OpcionesAMedida(playon: chico, cantidad: entran),
+      ).armado;
+      expect(lleno.mesas.length, entran);
+      final s = SesionAcomodo(
+        base: lleno,
+        medidas: const MedidasPlano(playon: chico),
+      );
+      expect(s.motivoSinOriginal, isNull);
+      s.agregar('A');
+      expect(
+        s.motivoSinOriginal,
+        'El salón tiene ${entran + 1} mesas y armado de nuevo entran $entran: '
+        'sacá las que sobran o marcalas de pasto.',
+      );
+      expect(s.volverAlOriginal(), isNotNull);
+      expect(s.actual.mesas.length, entran + 1);
+    });
+  });
+
+  group('la mesa nueva, sin elegir dónde', () {
+    test('sigue a la última fila: nunca hacia el escenario, y las que se '
+        'agregan seguidas quedan una al lado de la otra', () {
+      for (final a in todos) {
+        for (final h in a.hojas) {
+          var fondo = 0.0;
+          for (final m in a.mesasDeHoja(h.id)) {
+            if (m.y > fondo) fondo = m.y;
+          }
+          final s = SesionAcomodo(base: a);
+          final nuevas = [for (var i = 0; i < 4; i++) s.agregar(h.id)];
+          final caso = '${a.clave} ${h.id}';
+          for (final (i, n) in nuevas.indexed) {
+            final m = s.actual.mesa(n)!;
+            expect(m.y, greaterThanOrEqualTo(fondo - 0.01),
+                reason: '$caso: la $n quedó hacia el escenario');
+            if (i > 0) {
+              expect(s.actual.pegadas(nuevas[i - 1], n), isTrue,
+                  reason: '$caso: la $n no quedó al lado de la anterior');
+            }
+          }
+          expect(s.bloqueos, isEmpty, reason: caso);
+          expect(s.avisos((_) => 0), isEmpty, reason: caso);
+          _sano(s.actual, caso);
+        }
+      }
+    });
+
+    test('no cae en el pasillo del medio', () {
+      for (final a in todos) {
+        for (final h in a.hojas) {
+          final medio = EditarArmado.centroX(a, h.id);
+          var desde = -double.infinity, hasta = double.infinity;
+          for (final m in a.mesasDeHoja(h.id)) {
+            if (m.x < medio && m.x > desde) desde = m.x;
+            if (m.x >= medio && m.x < hasta) hasta = m.x;
+          }
+          final s = SesionAcomodo(base: a);
+          for (var i = 0; i < 6; i++) {
+            final n = s.agregar(h.id);
+            final m = s.actual.mesa(n)!;
+            expect(m.x > desde + 0.01 && m.x < hasta - 0.01, isFalse,
+                reason: '${a.clave} ${h.id}: la ${m.numero} en el pasillo');
+          }
+        }
+      }
+    });
+
+    test('al lado de la que se eligió, aunque la hoja tenga que crecer hacia '
+        'el fondo', () {
+      final a = ArmadosPredefinidos.normal2aPaginas45();
+      // La del fondo de todo.
+      final delFondo = a.mesas.reduce((x, y) => y.y > x.y ? y : x);
+      final lugar = EditarArmado.lugarLibre(a, delFondo.hoja,
+          cerca: delFondo.numero, lugarM: 2.0);
+      final n = EditarArmado.proximoNumero(a);
+      final b = EditarArmado.agregar(a,
+          numero: n, hoja: delFondo.hoja, x: lugar.x, y: lugar.y);
+      expect(b.distanciaM(n, delFondo.numero), closeTo(2.0, 1e-6));
+      _sano(b, 'al lado de la del fondo');
+    });
+  });
+
+  group('lo demás que encontró la revisión', () {
+    test('una familia con dos mesas juntas y otra aparte: si le separan las '
+        'dos juntas, se avisa', () {
+      const familia = OcupantePlano(
+        id: 'g',
+        nombre: 'GÓMEZ, SOFÍA',
+        numeros: [12, 13, 60],
+      );
+      expect(aMedida.pegadas(12, 13), isTrue);
+      final m = aMedida.mesa(13)!;
+      final lejos =
+          EditarArmado.mover(aMedida, 13, m.x, m.y + aMedida.aUnidades(9));
+      expect(lejos.pegadas(12, 13), isFalse);
+      expect(
+        EditarArmado.familiasPartidas(aMedida, lejos, [familia]).single.id,
+        'g',
+      );
+      // Correr la que ya estaba aparte no cambia nada.
+      final otra = aMedida.mesa(60)!;
+      final corrida = EditarArmado.mover(aMedida, 60, otra.x + 30, otra.y);
+      expect(EditarArmado.familiasPartidas(aMedida, corrida, [familia]), isEmpty);
+    });
+
+    test('llevar una mesa y traerla de vuelta en el mismo arrastre no deja '
+        'un paso de Deshacer que no hace nada', () {
+      final s = SesionAcomodo(base: aMedida);
+      final m = aMedida.mesa(20)!;
+      s.empezarArrastre();
+      s.arrastrarMesa(20, m.x + 60, m.y);
+      s.arrastrarMesa(20, m.x, m.y);
+      s.terminarArrastre();
+      expect(s.puedeDeshacer, isFalse);
+      expect(s.hayCambios, isFalse);
+    });
+
+    test('un sector encima de una mesa se avisa antes de guardar', () {
+      final s = SesionAcomodo(base: aMedida);
+      expect(s.avisos((_) => 0), isEmpty);
+      final i = s.agregarSector('A', TipoSector.barra, texto: 'Barra');
+      final m = aMedida.mesa(40)!;
+      s.empezarArrastre();
+      s.arrastrarSector(i, m.x - 20, m.y - 20);
+      s.terminarArrastre();
+      expect(s.avisos((_) => 0).join(' '), contains('tapa la mesa 40'));
+    });
+
+    test('la otra PC sortea mientras se acomoda: la sesión se pone al día, ya '
+        'no deja volver al original ni guardar', () {
+      final s = SesionAcomodo(base: aMedida);
+      s.cambiarPasto(132);
+      expect(s.puedeGuardar, isTrue);
+      expect(s.motivoSinOriginal, isNull);
+      final alumnos = [_alumno('gomez', [12, 13])];
+      s.ponerAlDia(
+        enUso: EditarArmado.enUso(alumnos, ConfigPlano.vacia),
+        ocupantes: const [
+          OcupantePlano(id: 'gomez', nombre: 'GOMEZ, ALUMNO', numeros: [12, 13]),
+        ],
+        haySorteo: true,
+      );
+      expect(s.cambioElUso, isTrue);
+      expect(s.puedeGuardar, isFalse);
+      expect(s.bloqueos.single, contains('cambiaron las mesas de las familias'));
+      expect(s.motivoSinOriginal, contains('deshacé el sorteo'));
+      // Y la mesa que ahora tiene familia ya no se saca.
+      expect(s.sacar(12), contains('la tiene GOMEZ'));
+      // Descartando lo acomodado no queda nada trabado a la vista.
+      s.descartar();
+      expect(s.bloqueos, isEmpty);
+    });
+
+    test('corregir el playón de un salón a medida no deja afuera de la hoja '
+        'un sector puesto a un costado', () {
+      var a = EditarArmado.agregarSector(aMedida,
+          hoja: 'A', tipo: TipoSector.barra, texto: 'Barra');
+      final i = a.sectores.length - 1;
+      // Bien a la derecha y al fondo, fuera del hormigón de hoy.
+      final caja = a.hoja('A')!.caja;
+      a = EditarArmado.moverSector(a, i, caja.derecha + 300, caja.abajo + 200);
+      final angosto = ArmarAMedida.conPlayon(
+        a,
+        const PlayonReal(frenteM: 28, fondoM: 40, profundidadM: 36),
+      );
+      final s = angosto.sectores[i];
+      final hoja = angosto.hoja('A')!.caja;
+      expect(s.caja.x, greaterThanOrEqualTo(hoja.x));
+      expect(s.caja.derecha, lessThanOrEqualTo(hoja.derecha + 1e-6));
+      expect(s.caja.abajo, lessThanOrEqualTo(hoja.abajo + 1e-6));
+    });
+  });
+
+  group('las medidas, listas para guardar', () {
+    const vistas = MedidasPlano();
+
+    test('se guardan, y con otro playón se redibuja el hormigón', () {
+      final soloLugar = ArmarAMedida.medidasParaGuardar(
+        armado: aMedida,
+        config: ConfigPlano.vacia,
+        vistas: vistas,
+        nuevas: vistas.copyWith(lugarMesaM: 2.2),
+      );
+      expect(soloLugar.sePuede, isTrue);
+      expect(soloLugar.config!.medidas.lugarMesaM, 2.2);
+      expect(soloLugar.armado, isNull);
+      final otroPlayon = ArmarAMedida.medidasParaGuardar(
+        armado: aMedida,
+        config: ConfigPlano.vacia,
+        vistas: vistas,
+        nuevas: vistas.copyWith(
+          playon: const PlayonReal(frenteM: 31, fondoM: 45, profundidadM: 38),
+        ),
+      );
+      expect(otroPlayon.armado, isNotNull);
+      expect(otroPlayon.armado!.numeros, aMedida.numeros);
+    });
+
+    test('si la otra PC midió el playón mientras tanto, corregir la distancia '
+        'no se lo pisa: no se guarda nada', () {
+      const conCinta = PlayonReal(frenteM: 31, fondoM: 45, profundidadM: 38);
+      final c = ArmarAMedida.medidasParaGuardar(
+        armado: aMedida,
+        // Lo que hay de verdad: el playón que guardó la otra PC.
+        config: const ConfigPlano(medidas: MedidasPlano(playon: conCinta)),
+        // Lo que se veía acá al corregir: el de antes.
+        vistas: vistas,
+        nuevas: vistas.copyWith(lugarMesaM: 2.2),
+      );
+      expect(c.sePuede, isFalse);
+      expect(c.problema, contains('La otra PC cambió las medidas'));
     });
   });
 }

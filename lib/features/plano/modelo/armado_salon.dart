@@ -320,6 +320,13 @@ class ArmadoSalon {
   /// armado a medida con las mesas más separadas trae la suya: si no, toda
   /// diagonal de la serpentina sería un corte.
   final double? distanciaPegadas;
+
+  /// Con qué distancia entre mesas y con qué ancho de pasarela (cero: sin
+  /// pasarela) se armó un salón a medida. Se guardan, no se deducen: separar o
+  /// juntar las mesas cambia [distanciaPegadas], y "Volver al armado original"
+  /// tiene que armar el mismo salón de la primera vez. Null en los del Canva.
+  final double? lugarOriginalM;
+  final double? pasarelaOriginalM;
   final List<HojaPlano> hojas;
   final List<MesaPlano> mesas;
   final List<SectorPlano> sectores;
@@ -332,6 +339,8 @@ class ArmadoSalon {
     this.radio = 38,
     this.metrosPorUnidad = kMetrosPorUnidadCanva,
     this.distanciaPegadas,
+    this.lugarOriginalM,
+    this.pasarelaOriginalM,
     required this.hojas,
     required List<MesaPlano> mesas,
     this.sectores = const [],
@@ -451,8 +460,8 @@ class ArmadoSalon {
       for (final m in mesasDeHoja(s.hoja)) {
         // Se tolera un roce; tapar media mesa no.
         if (s.caja.solapeConCirculo(m.x, m.y, radio) > radio * 0.25) {
-          p.add('El sector "${s.texto.isEmpty ? s.tipo.name : s.texto}" '
-              'tapa la mesa ${m.numero}.');
+          p.add('${s.texto.isEmpty ? 'Un sector sin nombre' : 'El sector '
+              '"${s.texto}"'} tapa la mesa ${m.numero}.');
         }
       }
     }
@@ -472,6 +481,8 @@ class ArmadoSalon {
         radio: radio,
         metrosPorUnidad: metrosPorUnidad,
         distanciaPegadas: distanciaPegadas ?? this.distanciaPegadas,
+        lugarOriginalM: lugarOriginalM,
+        pasarelaOriginalM: pasarelaOriginalM,
         hojas: hojas ?? this.hojas,
         mesas: mesas ?? this.mesas,
         sectores: sectores ?? this.sectores,
@@ -486,6 +497,8 @@ class ArmadoSalon {
         'radio': radio,
         'm_u': metrosPorUnidad,
         if (distanciaPegadas != null) 'pegadas_u': distanciaPegadas,
+        if (lugarOriginalM != null) 'lugar_m': lugarOriginalM,
+        if (pasarelaOriginalM != null) 'pasarela_m': pasarelaOriginalM,
         'hojas': [for (final h in hojas) h.toJson()],
         'mesas': [for (final m in mesas) m.toJson()],
         'sectores': [for (final s in sectores) s.toJson()],
@@ -499,6 +512,12 @@ class ArmadoSalon {
         radio: (m['radio'] as num?)?.toDouble() ?? 38,
         metrosPorUnidad: _positivo(m['m_u']) ?? kMetrosPorUnidadCanva,
         distanciaPegadas: _positivo(m['pegadas_u']),
+        lugarOriginalM: _positivo(m['lugar_m']),
+        // Cero vale: es un salón armado sin pasarela.
+        pasarelaOriginalM: switch (m['pasarela_m']) {
+          final num v when v.isFinite && v >= 0 => v.toDouble(),
+          _ => null,
+        },
         hojas: [
           for (final h in (m['hojas'] as List? ?? const []))
             HojaPlano.fromJson(Map<String, dynamic>.from(h as Map)),

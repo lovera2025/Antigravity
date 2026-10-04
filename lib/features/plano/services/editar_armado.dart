@@ -30,11 +30,19 @@ class VistaPreviaSeparar {
   final double pasoActualM;
   final double pasoNuevoM;
 
-  /// Mesas que quedarían fuera del hormigón (solo en un armado a medida).
+  /// Mesas que quedarían fuera del hormigón (solo en un armado a medida),
+  /// medidas con el lugar que pide cada una: lo mismo que avisa el salón
+  /// después de aplicar.
   final int fuera;
 
   /// Pares de mesas que quedarían una encima de la otra.
   final int pisan;
+
+  /// Mesas que quedarían con menos lugar del que piden.
+  final int apretadas;
+
+  /// Por qué a esta distancia no se puede aplicar, o null si se puede.
+  final String? motivo;
 
   const VistaPreviaSeparar({
     required this.armado,
@@ -42,23 +50,32 @@ class VistaPreviaSeparar {
     required this.pasoNuevoM,
     required this.fuera,
     required this.pisan,
+    this.apretadas = 0,
+    this.motivo,
   });
 
-  bool get entra => fuera == 0 && pisan == 0;
+  bool get sePuede => motivo == null;
+
+  bool get entra => sePuede && fuera == 0 && pisan == 0 && apretadas == 0;
 
   /// "Siguen entrando las 132." o "3 quedan fuera del hormigón y 2 se pisan."
   String get texto {
+    if (motivo != null) return motivo!;
     if (entra) {
       final n = armado.mesas.length;
       return n == 1 ? 'Sigue entrando la mesa.' : 'Siguen entrando las $n.';
     }
-    return '${[
+    final partes = [
       if (fuera > 0)
         fuera == 1
             ? '1 queda fuera del hormigón'
             : '$fuera quedan fuera del hormigón',
       if (pisan > 0) pisan == 1 ? '1 par se pisa' : '$pisan pares se pisan',
-    ].join(' y ')}.';
+      if (apretadas > 0)
+        apretadas == 1 ? '1 queda apretada' : '$apretadas quedan apretadas',
+    ];
+    final ultima = partes.removeLast();
+    return partes.isEmpty ? '$ultima.' : '${partes.join(', ')} y $ultima.';
   }
 }
 
@@ -148,7 +165,9 @@ class EditarArmado {
 
   /// El número para una mesa nueva: **el que sigue al más alto**, contando
   /// también los que ya usa alguna familia o están reservados ([otros]).
-  /// Nunca reusa uno: lo que ya se imprimió o se dijo sigue valiendo.
+  /// Nunca llena un hueco del medio. El de la última mesa solo vuelve a
+  /// darse si esa mesa se sacó y nadie lo reservó en [otros]: la sesión
+  /// reserva los del salón guardado, que son los que ya se pudieron imprimir.
   static int proximoNumero(ArmadoSalon a, [Iterable<int> otros = const []]) {
     var mayor = 0;
     for (final n in [...a.numeros, ...otros]) {
@@ -164,7 +183,14 @@ class EditarArmado {
     double y,
     double lugarU,
   ) {
-    if (!h.caja.contieneCirculo(x, y, a.radio)) return false;
+    // A los costados y hacia el escenario no se sale de la hoja. Hacia el
+    // fondo sí: la hoja se agranda y la mesa sigue a la última fila.
+    final c = h.caja;
+    if (x < c.x + a.radio - 0.01 ||
+        x > c.derecha - a.radio + 0.01 ||
+        y < c.y + a.radio - 0.01) {
+      return false;
+    }
     final borde = h.contorno;
     if (borde != null && !borde.contieneCirculo(x, y, a.radio)) return false;
     for (final m in a.mesasDeHoja(h.id)) {
@@ -177,25 +203,37 @@ class EditarArmado {
     return true;
   }
 
-  /// Un lugar libre en [hoja] para una mesa nueva, lo más cerca que se pueda
-  /// de la mesa [cerca] o, si no se da, **del fondo del salón** (la mesa más
-  /// lejos del escenario): a [lugarM] de las demás, sin tapar un sector y, si
-  /// la hoja tiene hormigón, adentro. Así una mesa nueva sigue la última fila
-  /// y no aparece en el pasillo de la pasarela.
+  /// Un lugar libre en [hoja] para una mesa nueva: a [lugarM] de las demás,
+  /// sin tapar un sector y, si la hoja tiene hormigón, adentro.
   ///
-  /// Si no hay ninguno, va debajo de la última fila: la hoja se agranda y la
-  /// mesa queda a la vista para arrastrarla.
+  /// - Con [cerca], lo más cerca que se pueda de esa mesa: primero a su lado,
+  ///   después atrás, después adelante.
+  /// - Sin [cerca], **a continuación de la última fila**: primero lo que le
+  ///   queda libre a esa fila hacia los costados y, si está completa, una
+  ///   fila nueva detrás. Nunca hacia el escenario ni en el pasillo del medio:
+  ///   así varias mesas nuevas quedan una al lado de la otra.
+  ///
+  /// Con [fueraDelPasillo], tampoco al lado de [cerca] se usa el pasillo del
+  /// medio: es para seguir a una mesa que se acaba de agregar, no a una que
+  /// eligió la persona.
+  ///
+  /// Si no hay ninguno, va debajo de la última fila aunque salga del
+  /// hormigón: la hoja se agranda y la mesa queda a la vista para arrastrarla.
   static ({double x, double y}) lugarLibre(
     ArmadoSalon a,
     String hoja, {
     int? cerca,
     required double lugarM,
+    bool fueraDelPasillo = false,
   }) {
     final h = a.hoja(hoja)!;
     final mesas = a.mesasDeHoja(hoja);
     final paso = a.aUnidades(lugarM);
     MesaPlano? delFondo;
     final medio = centroX(a, hoja);
+    // El pasillo del medio: entre la mesa más de adentro de cada lado.
+    var pasilloDesde = -double.infinity;
+    var pasilloHasta = double.infinity;
     for (final m in mesas) {
       final f = delFondo;
       if (f == null ||
@@ -204,25 +242,62 @@ class EditarArmado {
               (m.x - medio).abs() < (f.x - medio).abs())) {
         delFondo = m;
       }
-    }
-    final ref = (cerca == null ? null : a.mesa(cerca)) ?? delFondo;
-    final rx = ref?.x ?? h.caja.centroX;
-    final ry = ref?.y ?? h.caja.centroY;
-    ({double x, double y})? mejor;
-    var mejorD = double.infinity;
-    const vueltas = 30;
-    for (var i = -vueltas; i <= vueltas; i++) {
-      for (var j = -vueltas; j <= vueltas; j++) {
-        final d = (i * i + j * j).toDouble();
-        if (d >= mejorD) continue;
-        final x = rx + i * paso;
-        final y = ry + j * paso;
-        if (!_lugarLibre(a, h, x, y, paso)) continue;
-        mejor = (x: x, y: y);
-        mejorD = d;
+      if (m.x < medio) {
+        pasilloDesde = math.max(pasilloDesde, m.x);
+      } else {
+        pasilloHasta = math.min(pasilloHasta, m.x);
       }
     }
-    if (mejor != null) return mejor;
+    final vecina = cerca == null ? null : a.mesa(cerca);
+    final ref = vecina ?? delFondo;
+    final rx = ref?.x ?? h.caja.centroX;
+    final ry = ref?.y ?? h.caja.centroY;
+    const vueltas = 30;
+    bool enPasillo(double x) =>
+        pasilloDesde.isFinite &&
+        pasilloHasta.isFinite &&
+        x > pasilloDesde + 0.01 &&
+        x < pasilloHasta - 0.01;
+
+    if (vecina == null) {
+      for (var j = 0; j <= vueltas; j++) {
+        final y = ry + j * paso;
+        for (var k = 0; k <= vueltas; k++) {
+          // De los dos costados, primero el que queda más cerca del medio:
+          // la fila crece pareja.
+          final xs = k == 0 ? [rx] : [rx - k * paso, rx + k * paso]
+            ..sort((p, q) => (p - medio).abs().compareTo((q - medio).abs()));
+          for (final x in xs) {
+            if (enPasillo(x)) continue;
+            if (_lugarLibre(a, h, x, y, paso)) return (x: x, y: y);
+          }
+        }
+      }
+    } else {
+      ({double x, double y})? mejor;
+      (int, int, int)? mejorOrden;
+      for (var i = -vueltas; i <= vueltas; i++) {
+        for (var j = -vueltas; j <= vueltas; j++) {
+          // A igual distancia: al lado, después atrás, después adelante.
+          final orden = (i * i + j * j, j.abs(), j < 0 ? 1 : 0);
+          final m = mejorOrden;
+          if (m != null &&
+              (orden.$1 > m.$1 ||
+                  (orden.$1 == m.$1 &&
+                      (orden.$2 > m.$2 ||
+                          (orden.$2 == m.$2 && orden.$3 >= m.$3))))) {
+            continue;
+          }
+          final x = rx + i * paso;
+          final y = ry + j * paso;
+          if (fueraDelPasillo && enPasillo(x)) continue;
+          if (!_lugarLibre(a, h, x, y, paso)) continue;
+          mejor = (x: x, y: y);
+          mejorOrden = orden;
+        }
+      }
+      if (mejor != null) return mejor;
+    }
     var abajo = h.caja.y;
     for (final m in mesas) {
       abajo = math.max(abajo, m.y);
@@ -286,6 +361,16 @@ class EditarArmado {
       }
     }
     return r;
+  }
+
+  /// ¿Son las mismas mesas en uso, de las mismas familias? Es comparar dos
+  /// resultados de [enUso].
+  static bool mismoUso(Map<int, String> a, Map<int, String> b) {
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) return false;
+    }
+    return true;
   }
 
   // ── Sectores ────────────────────────────────────────────────────────────
@@ -486,7 +571,11 @@ class EditarArmado {
     final izq = {for (final m in mesas) if (m.x < cx) m.numero};
     final der = {for (final m in mesas) if (m.x >= cx) m.numero};
     return [
-      AlcanceSeparar('hoja', 'Toda la hoja', {for (final m in mesas) m.numero}),
+      AlcanceSeparar(
+        'hoja',
+        a.hojas.length == 1 ? 'Todo el salón' : 'Toda la hoja',
+        {for (final m in mesas) m.numero},
+      ),
       if (izq.length > 1 && der.length > 1) ...[
         AlcanceSeparar('izq', 'Lado izquierdo', izq),
         AlcanceSeparar('der', 'Lado derecho', der),
@@ -506,18 +595,74 @@ class EditarArmado {
   /// sí, **desde el lado del escenario y desde el medio hacia afuera**: la
   /// fila de adelante y la pasarela no se mueven.
   ///
-  /// No cambia ningún número. Agranda la hoja si hace falta, y si se separan
-  /// más, las mesas que eran vecinas siguen contando como pegadas. Null si no
-  /// hay nada que separar (menos de dos mesas).
+  /// No cambia ningún número y agranda la hoja si hace falta.
+  ///
+  /// **Tampoco cambia qué mesas están pegadas**: las vecinas siguen siendo
+  /// vecinas y los pasillos siguen siendo pasillos, en el grupo y en el resto
+  /// del salón. Si a esa distancia no se puede (una vecina quedaría más lejos
+  /// que la mesa del otro lado de un pasillo), la vista previa lo dice en
+  /// [VistaPreviaSeparar.motivo] y no se aplica.
+  ///
+  /// Lo que entra y lo que queda apretado se mide con [medidas] y las sillas
+  /// extra de cada mesa, como los avisos del salón. Null si no hay nada que
+  /// separar (menos de dos mesas).
   static VistaPreviaSeparar? separar(
     ArmadoSalon a,
     Set<int> numeros,
-    double pasoNuevoM,
-  ) {
+    double pasoNuevoM, {
+    MedidasPlano medidas = const MedidasPlano(),
+    int Function(int numero)? sillasExtraDe,
+  }) {
     final actual = pasoDe(a, numeros);
     if (actual == null || actual <= 0) return null;
     final paso = pasoNuevoM.clamp(separarMinimoM, separarMaximoM).toDouble();
-    final f = paso / actual;
+    final estirado = _estirar(a, numeros, actual, paso);
+    String? motivo;
+    if (!estirado.conserva) {
+      // Hasta dónde sí se puede, de a 5 cm hacia la distancia de hoy.
+      final sentido = paso > actual ? -1 : 1;
+      double? limite;
+      for (var k = 1; k <= 60; k++) {
+        final p = ((paso + sentido * k * 0.05) * 100).round() / 100;
+        if ((p - actual) * sentido >= 0) break;
+        if (_estirar(a, numeros, actual, p).conserva) {
+          limite = p;
+          break;
+        }
+      }
+      final cuanto = MedirSalon.metros(paso, decimales: 2);
+      motivo = paso > actual
+          ? 'A $cuanto las mesas vecinas quedarían tan lejos como las del '
+              'otro lado del pasillo, y el sorteo ya no sabría cuáles van '
+              'juntas. ${limite == null ? 'No se pueden separar más.' : 'Se '
+                  'puede hasta ${MedirSalon.metros(limite, decimales: 2)}.'}'
+          : 'A $cuanto las mesas del otro lado del pasillo quedarían tan '
+              'cerca como las vecinas, y el sorteo ya no sabría cuáles van '
+              'juntas. ${limite == null ? 'No se pueden juntar más.' : 'Se '
+                  'puede desde ${MedirSalon.metros(limite, decimales: 2)}.'}';
+    }
+    final armado = estirado.armado;
+    final lugar = MedirSalon.revisar(armado, medidas, sillasExtraDe ?? (_) => 0);
+    return VistaPreviaSeparar(
+      armado: armado,
+      pasoActualM: actual,
+      pasoNuevoM: paso,
+      fuera: lugar.fueraDelHormigon.length,
+      pisan: pisadas(armado).length,
+      apretadas: {for (final p in lugar.apretadas) ...p.sinLugar}.length,
+      motivo: motivo,
+    );
+  }
+
+  /// Las mesas de [numeros] llevadas a [pasoM] entre sí, y si con eso las
+  /// mesas pegadas siguen siendo las mismas.
+  static ({ArmadoSalon armado, bool conserva}) _estirar(
+    ArmadoSalon a,
+    Set<int> numeros,
+    double actualM,
+    double pasoM,
+  ) {
+    final f = pasoM / actualM;
     final nuevas = <int, MesaPlano>{};
     for (final h in a.hojas) {
       final grupo = [
@@ -545,36 +690,76 @@ class EditarArmado {
         );
       }
     }
-    final pegadas = f > 1
-        ? math.max(a.pegadasHastaU, ArmarAMedida.pegadasHastaPasos * a.aUnidades(paso))
-        : null;
-    final armado = _conCajas(a.copyWith(
+    final movido = _conCajas(a.copyWith(
       mesas: [for (final m in a.mesas) nuevas[m.numero] ?? m],
-      distanciaPegadas: pegadas,
     ));
-    return VistaPreviaSeparar(
-      armado: armado,
-      pasoActualM: actual,
-      pasoNuevoM: paso,
-      fuera: MedirSalon.fueraDelHormigon(armado, (_) => armado.diametroMesaM)
-          .length,
-      pisan: pisadas(armado).length,
+    final umbral = _umbralQueConserva(
+      a,
+      movido,
+      ArmarAMedida.pegadasHastaPasos * a.aUnidades(pasoM),
     );
+    if (umbral == null) return (armado: movido, conserva: false);
+    return (
+      armado: (umbral - movido.pegadasHastaU).abs() < 1e-9
+          ? movido
+          : movido.copyWith(distanciaPegadas: umbral),
+      conserva: true,
+    );
+  }
+
+  /// Hasta qué distancia tienen que contar como pegadas las mesas de [nuevo]
+  /// para que sus cortes sean los de [antes]. Prueba primero con [sugerido]
+  /// (lo que corresponde a la distancia nueva) y con el que ya tenía. Null si
+  /// no hay ninguno: una mesa que estaba pegada a la siguiente quedó más lejos
+  /// que otra que no lo estaba.
+  static double? _umbralQueConserva(
+    ArmadoSalon antes,
+    ArmadoSalon nuevo,
+    double sugerido,
+  ) {
+    var pegadaMasLejos = 0.0;
+    var cortadaMasCerca = double.infinity;
+    for (final m in nuevo.mesas) {
+      final o = nuevo.mesa(m.numero + 1);
+      if (o == null || o.hoja != m.hoja) continue;
+      final d = m.distanciaA(o);
+      if (antes.cortes.contains(m.numero)) {
+        cortadaMasCerca = math.min(cortadaMasCerca, d);
+      } else {
+        pegadaMasLejos = math.max(pegadaMasLejos, d);
+      }
+    }
+    // El mismo margen de [ArmadoSalon.pegadas], con algo de aire para que un
+    // redondeo no cambie nada.
+    bool sirve(double t) =>
+        pegadaMasLejos <= t + 0.005 && cortadaMasCerca > t + 0.02;
+    for (final t in [
+      sugerido,
+      nuevo.pegadasHastaU,
+      if (cortadaMasCerca.isFinite) (pegadaMasLejos + cortadaMasCerca) / 2,
+      pegadaMasLejos,
+    ]) {
+      if (sirve(t)) return t;
+    }
+    return null;
   }
 
   // ── Familias ────────────────────────────────────────────────────────────
 
-  static bool _juntas(ArmadoSalon a, List<int> numeros) {
+  /// En cuántos grupos de mesas pegadas están las de una familia: 1 si están
+  /// todas juntas.
+  static int _grupos(ArmadoSalon a, List<int> numeros) {
     final l = numeros.toSet().toList()..sort();
+    var grupos = l.isEmpty ? 0 : 1;
     for (var i = 1; i < l.length; i++) {
-      if (l[i] != l[i - 1] + 1 || !a.pegadas(l[i - 1], l[i])) return false;
+      if (l[i] != l[i - 1] + 1 || !a.pegadas(l[i - 1], l[i])) grupos++;
     }
-    return true;
+    return grupos;
   }
 
-  /// Las familias que tenían sus mesas juntas en [antes] y en [despues] ya
-  /// no: al correr mesas quedaron separadas. Las que ya estaban separadas (lo
-  /// pidieron así) no cuentan.
+  /// Las familias que al correr mesas quedaron más separadas que en [antes]:
+  /// dos mesas suyas que estaban pegadas ya no lo están. La que ya tenía una
+  /// mesa aparte (lo pidió así) cuenta igual si se le separan las otras.
   static List<OcupantePlano> familiasPartidas(
     ArmadoSalon antes,
     ArmadoSalon despues,
@@ -584,16 +769,20 @@ class EditarArmado {
         for (final o in ocupantes)
           if (o.numeros.length > 1 &&
               o.numeros.every(despues.existe) &&
-              _juntas(antes, o.numeros) &&
-              !_juntas(despues, o.numeros))
+              _grupos(despues, o.numeros) > _grupos(antes, o.numeros))
             o,
       ];
 
   // ── El armado original ──────────────────────────────────────────────────
 
   /// El armado como venía de fábrica: el del Canva o, si es a medida, armado
-  /// de nuevo con el mismo playón, la misma distancia y la misma cantidad de
-  /// mesas. Null si no se sabe de dónde salió.
+  /// de nuevo con el mismo playón, la misma distancia y la misma pasarela (o
+  /// sin ella) de la primera vez, y la cantidad de mesas que hay hoy. Null si
+  /// no se sabe de dónde salió.
+  ///
+  /// Puede traer menos mesas que [a] si se agregaron más de las que entran:
+  /// quien llama lo tiene que mirar (la sesión de Acomodar no deja volver al
+  /// original en ese caso).
   static ArmadoSalon? original(ArmadoSalon a) {
     final fabrica = ArmadosPredefinidos.porClave(a.clave);
     if (fabrica != null) return fabrica;
@@ -610,6 +799,7 @@ class EditarArmado {
       playon: playon,
       cantidad: a.cantidadComunes,
       lugarM: lugar,
+      pasarelaM: ArmarAMedida.pasarelaDe(a),
       partirEnFila: partir,
     )).armado;
   }
@@ -624,6 +814,11 @@ class EditarArmado {
   /// - Si [fresco] ya no es el salón del que se partió ([base]), la otra PC lo
   ///   cambió mientras tanto: no se pisa.
   /// - Una mesa que se sacó y ahora tiene familia o está fijada no se saca.
+  /// - Si las mesas en uso ya no son las que se vieron al acomodar
+  ///   ([enUsoVisto]: la otra PC sorteó, cambió a una familia o fijó una
+  ///   mesa), tampoco se guarda. Lo acomodado se pensó con otro salón: los
+  ///   avisos de familias separadas y el permiso para volver al armado
+  ///   original salieron de datos que ya no valen.
   /// - Las mesas que se sacaron dejan de figurar como libres.
   static CambioDeConfig paraGuardar({
     required ArmadoSalon base,
@@ -631,12 +826,12 @@ class EditarArmado {
     required ArmadoSalon fresco,
     required ConfigPlano config,
     required Iterable<ContratoAlumno> alumnos,
+    required Map<int, String> enUsoVisto,
   }) {
     if (firma(fresco) != firma(base)) {
       return const CambioDeConfig.noSePuede(
-        'La otra PC cambió el salón mientras lo acomodabas. No se guardó '
-        'nada, para no pisar lo que hizo: mirá cómo quedó y acomodalo de '
-        'nuevo.',
+        'El salón guardado cambió mientras lo acomodabas. No se guardó nada, '
+        'para no pisar ese cambio: mirá cómo quedó y acomodalo de nuevo.',
       );
     }
     final trabas = bloqueos(nuevo);
@@ -653,6 +848,14 @@ class EditarArmado {
           'La mesa $n no se puede sacar: $porque. No se guardó nada.',
         );
       }
+    }
+    if (!mismoUso(enUsoVisto, usadas)) {
+      return const CambioDeConfig.noSePuede(
+        'Mientras acomodabas cambiaron las mesas de las familias (un sorteo, '
+        'un cambio de mesa o una mesa fijada). No se guardó nada, para no '
+        'dejar a nadie en un lugar que no viste: tocá DESCARTAR, mirá cómo '
+        'quedó y acomodá de nuevo.',
+      );
     }
     return CambioDeConfig.ok(
       sacadas.any(config.libres.containsKey)

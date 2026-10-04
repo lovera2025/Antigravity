@@ -39,10 +39,16 @@ class PanelMedidas extends StatefulWidget {
     required this.onGuardar,
     this.ocupado = false,
     this.onProbar,
+    this.onMalEscrito,
     this.aviso,
     this.textoAccionAviso,
     this.onAccionAviso,
   });
+
+  /// Avisa si hay algo escrito que no sirve (un casillero vacío, una letra,
+  /// un número fuera de rango). Eso también es algo sin guardar: salir de la
+  /// pestaña en ese momento perdería lo demás que se corrigió.
+  final ValueChanged<bool>? onMalEscrito;
 
   /// "39,8": con coma y sin ceros de más, para escribir en un casillero.
   static String numero(double v) {
@@ -104,17 +110,33 @@ class _PanelMedidasState extends State<PanelMedidas> {
     _lugar.text = PanelMedidas.numero(m.lugarMesaM);
     _extra.text = PanelMedidas.numero(m.extraPorSillaM);
     _playonCargado = [_frente.text, _fondo.text, _costado.text];
+    _cadaMesaCargado = [_lugar.text, _extra.text];
     _base = m;
   }
+
+  late List<String> _cadaMesaCargado;
+
+  static bool _mismoNumero(TextEditingController c, String cargado) =>
+      c.text == cargado ||
+      (PanelMedidas.leer(c.text) != null &&
+          PanelMedidas.leer(c.text) == PanelMedidas.leer(cargado));
+
+  /// Algún casillero dice otra cosa que al cargarlo.
+  bool get _tocado =>
+      !_playonSinTocar ||
+      !_mismoNumero(_lugar, _cadaMesaCargado[0]) ||
+      !_mismoNumero(_extra, _cadaMesaCargado[1]);
 
   /// De dónde salieron los casilleros: lo guardado, o las de fábrica si se
   /// tocó "volver a las de fábrica".
   late MedidasPlano _base;
 
+  /// Se compara el número, no lo escrito: "30", "30,0" y "30 " son la misma
+  /// medida, y pasar por el casillero sin cambiarla no es corregir el playón.
   bool get _playonSinTocar =>
-      _frente.text == _playonCargado[0] &&
-      _fondo.text == _playonCargado[1] &&
-      _costado.text == _playonCargado[2];
+      _mismoNumero(_frente, _playonCargado[0]) &&
+      _mismoNumero(_fondo, _playonCargado[1]) &&
+      _mismoNumero(_costado, _playonCargado[2]);
 
   /// Lo que dicen los casilleros, o por qué no sirve.
   ({MedidasPlano? medidas, String? problema}) _leer() {
@@ -125,7 +147,7 @@ class _PanelMedidasState extends State<PanelMedidas> {
         lugar > MedidasPlano.lugarMaximoM) {
       return (
         medidas: null,
-        problema: 'Entre mesas van de '
+        problema: '"De centro a centro" va de '
             '${MedirSalon.metros(MedidasPlano.lugarMinimoM)} a '
             '${MedirSalon.metros(MedidasPlano.lugarMaximoM)}.',
       );
@@ -133,7 +155,7 @@ class _PanelMedidasState extends State<PanelMedidas> {
     if (extra == null || extra < 0 || extra > 1) {
       return (
         medidas: null,
-        problema: 'Por silla extra va de 0 a 1 m.',
+        problema: '"Más, por cada silla extra" va de 0 a 1 m.',
       );
     }
     final PlayonReal playon;
@@ -182,6 +204,7 @@ class _PanelMedidasState extends State<PanelMedidas> {
   void _cambio() {
     final leido = _leer().medidas;
     widget.onProbar?.call(leido == widget.medidas ? null : leido);
+    widget.onMalEscrito?.call(leido == null && _tocado);
     setState(() {});
   }
 
@@ -200,6 +223,9 @@ class _PanelMedidasState extends State<PanelMedidas> {
     final leido = _leer();
     final medidas = leido.medidas;
     final cambio = medidas != null && medidas != widget.medidas;
+    // Algo escrito que no sirve: no se puede guardar, pero tampoco está
+    // "guardado". El motivo va en el recuadro de abajo.
+    final malEscrito = medidas == null && _tocado;
     final gris = TextStyle(color: Colors.grey.shade700, fontSize: 12.5);
 
     Widget casillero(String clave, String rotulo, TextEditingController c) =>
@@ -276,7 +302,8 @@ class _PanelMedidasState extends State<PanelMedidas> {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 Text(
-                  'El playón tiene unos ${playon!.superficieM2.round()} m².',
+                  'El playón tiene unos ${playon!.superficieM2.round()} m². '
+                  'Es lo que entra si el salón se arma de nuevo.',
                   style: gris,
                 ),
                 if (noEntran)
@@ -381,10 +408,12 @@ class _PanelMedidasState extends State<PanelMedidas> {
                     ? () => widget.onGuardar(medidas)
                     : null,
                 icon: const Icon(Icons.check, size: 18),
-                label: Text(cambio ? 'GUARDAR MEDIDAS' : 'MEDIDAS GUARDADAS'),
+                label: Text(cambio || malEscrito
+                    ? 'GUARDAR MEDIDAS'
+                    : 'MEDIDAS GUARDADAS'),
               ),
             ),
-            if (cambio) ...[
+            if (cambio || malEscrito) ...[
               const SizedBox(width: 6),
               TextButton(
                 key: const Key('descartar_medidas'),
@@ -393,6 +422,7 @@ class _PanelMedidasState extends State<PanelMedidas> {
                     : () => setState(() {
                           _cargar(widget.medidas);
                           widget.onProbar?.call(null);
+                          widget.onMalEscrito?.call(false);
                         }),
                 child: const Text('DESCARTAR'),
               ),

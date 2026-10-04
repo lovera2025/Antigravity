@@ -176,6 +176,24 @@ void main() {
       expect(leido.medidas, c.medidas);
     });
 
+    test('si la otra PC eligió un color o cambió el título mientras tanto, no '
+        'se le pisa: no se guarda nada', () {
+      const cambio = ColoresYTextos(colores: {'5A': 5}, titulo: 'Egresados');
+      // Lo que se veía al elegir es lo que hay: se guarda.
+      expect(cambio.aplicar(armado, config, visto: config).sePuede, isTrue);
+      // La otra PC cambió un color.
+      final conOtroColor = config.copyWith(colores: const {'5A': 1, '5B': 3});
+      final pisaria = cambio.aplicar(armado, conOtroColor, visto: config);
+      expect(pisaria.sePuede, isFalse);
+      expect(pisaria.problema, contains('cambió los colores o el título'));
+      // Si cambió otra cosa del plano (las medidas), no molesta.
+      final conOtrasMedidas =
+          config.copyWith(medidas: const MedidasPlano(lugarMesaM: 2.6));
+      final sigue = cambio.aplicar(armado, conOtrasMedidas, visto: config);
+      expect(sigue.sePuede, isTrue);
+      expect(sigue.config!.medidas, const MedidasPlano(lugarMesaM: 2.6));
+    });
+
     test('borrar el título lo saca, no deja uno vacío', () {
       final c = const ColoresYTextos(colores: {'5A': 2})
           .aplicar(armado, config)
@@ -227,7 +245,7 @@ void main() {
         sectores: [(sector: escenario, texto: 'Escenario Mayor')],
       ).aplicar(corrido, ConfigPlano.vacia);
       expect(cambio.sePuede, isFalse);
-      expect(cambio.problema, contains('cambió en la otra PC'));
+      expect(cambio.problema, contains('El salón guardado cambió'));
       // Ni los colores: es todo o nada.
       expect(cambio.config, isNull);
     });

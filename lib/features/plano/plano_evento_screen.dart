@@ -309,6 +309,37 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   /// El plano sube como una fila entera: si no se pudo leer el de la nube,
   /// guardar desde acá puede pisar lo que la otra PC hizo recién. Se pregunta,
   /// nombrando el riesgo.
+  /// Lo que el plano tiene sin guardar en Personalizar, para preguntar antes
+  /// de salir.
+  final _pendiente = PendienteDelPlano();
+
+  Future<bool> _salirSinGuardar() async {
+    if (!mounted) return false;
+    final salir = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hay cambios sin guardar'),
+        content: const Text(
+          'Si salís ahora se pierde lo que acomodaste o corregiste en '
+          'Personalizar.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('salir_sin_guardar'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('SALIR SIN GUARDAR'),
+          ),
+          FilledButton(
+            key: const Key('seguir_aca'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('SEGUIR ACÁ'),
+          ),
+        ],
+      ),
+    );
+    return salir ?? false;
+  }
+
   Future<bool> _seguirSinLaNube() => _preguntar(
         'Sin conexión',
         'No se pudo leer el plano de la nube. Si la otra PC lo cambió hace un '
@@ -630,15 +661,15 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
 
   /// Las medidas del playón y de las mesas. En un salón armado a medida, con
   /// otro playón se redibuja el borde del hormigón; las mesas no se mueven.
-  Future<void> _guardarMedidas(MedidasPlano medidas) => _cambiarConfig(
-        (p, _) {
-          final armado = ArmarAMedida.conPlayon(p.armado, medidas.playon);
-          return CambioDeConfig.ok(
-            p.config.copyWith(medidas: medidas),
-            const [],
-            armado: identical(armado, p.armado) ? null : armado,
-          );
-        },
+  /// Si la otra PC las cambió mientras se corregían, no se guarda nada.
+  Future<void> _guardarMedidas(MedidasPlano medidas, MedidasPlano vistas) =>
+      _cambiarConfig(
+        (p, _) => ArmarAMedida.medidasParaGuardar(
+          armado: p.armado,
+          config: p.config,
+          vistas: vistas,
+          nuevas: medidas,
+        ),
         hecho: (c) => c.armado == null
             ? 'Medidas guardadas.'
             : 'Medidas guardadas. Se redibujó el borde del hormigón.',
@@ -648,8 +679,13 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
 
   /// El salón acomodado a mano. Antes de escribir se relee la nube y las
   /// familias: si la otra PC cambió el salón mientras tanto, o una mesa que se
-  /// sacó ya tiene familia o quedó fijada, no se guarda nada y se dice.
-  Future<void> _guardarSalon(ArmadoSalon base, ArmadoSalon nuevo) =>
+  /// sacó ya tiene familia o quedó fijada, o las familias ya no tienen las
+  /// mesas que se veían al acomodar ([enUso]), no se guarda nada y se dice.
+  Future<void> _guardarSalon(
+    ArmadoSalon base,
+    ArmadoSalon nuevo,
+    Map<int, String> enUso,
+  ) =>
       _cambiarConfig(
         (p, alumnos) => EditarArmado.paraGuardar(
           base: base,
@@ -657,17 +693,30 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           fresco: p.armado,
           config: p.config,
           alumnos: alumnos,
+          enUsoVisto: enUso,
         ),
-        hecho: (_) => 'El salón quedó guardado.',
+        // Con la escuela ya sorteada, las mesas que se suman son para quien
+        // todavía no tiene: se dice cómo sigue.
+        hecho: (c) => _hayFamiliasConMesa &&
+                (c.armado?.mesas.length ?? 0) > base.mesas.length
+            ? 'El salón quedó guardado. Para darle mesa a quien todavía no '
+                'tiene, tocá SORTEO en la fiesta: los que ya tienen no se '
+                'mueven.'
+            : 'El salón quedó guardado.',
       );
 
   // ── Personalizar: colores y textos ──────────────────────────────────────
 
   /// El color de cada división, el título y los textos de los sectores. Los
   /// textos van en el armado: si la otra PC acomodó el salón mientras tanto y
-  /// un sector ya no está como se veía, no se guarda nada.
-  Future<void> _guardarColoresYTextos(ColoresYTextos cambio) => _cambiarConfig(
-        (p, _) => cambio.aplicar(p.armado, p.config),
+  /// un sector ya no está como se veía, o cambió los colores o el título, no
+  /// se guarda nada.
+  Future<void> _guardarColoresYTextos(
+    ColoresYTextos cambio,
+    ConfigPlano visto,
+  ) =>
+      _cambiarConfig(
+        (p, _) => cambio.aplicar(p.armado, p.config, visto: visto),
         hecho: (_) => 'Colores y textos guardados.',
       );
 
@@ -906,8 +955,18 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     final institucion = widget.evento.cliente?.nombreCompleto ?? 'Evento';
     // Mientras se guarda no se sale: lo confirmado tiene que terminar de
     // escribirse y de avisar cómo quedó.
+    //
+    // Con algo sin guardar en Personalizar tampoco se sale sin preguntar: la
+    // flecha de volver se llevaba lo acomodado sin una palabra.
     return PopScope(
-      canPop: !_ocupado,
+      canPop: false,
+      onPopInvokedWithResult: (salio, _) async {
+        if (salio || _ocupado) return;
+        final navegador = Navigator.of(context);
+        final pendiente = _pendiente.sinGuardar;
+        if (pendiente != null && !await _salirSinGuardar()) return;
+        if (mounted) navegador.pop();
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Column(
@@ -976,6 +1035,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       ),
       onImprimir: _imprimir,
       onHistorial: _abrirHistorial,
+      pendiente: _pendiente,
     );
   }
 }

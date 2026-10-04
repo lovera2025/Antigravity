@@ -55,6 +55,10 @@ class PanelAcomodar extends StatelessWidget {
   /// Cómo quedaría (si se movió la barra) y si entra.
   final String? textoPrevia;
   final bool previaEntra;
+
+  /// A esa distancia se puede aplicar. Si no, [textoPrevia] dice por qué y
+  /// APLICAR queda gris.
+  final bool previaSePuede;
   final VoidCallback? onAplicar;
   final VoidCallback? onCancelar;
 
@@ -99,6 +103,7 @@ class PanelAcomodar extends StatelessWidget {
     required this.onPaso,
     required this.textoPrevia,
     required this.previaEntra,
+    this.previaSePuede = true,
     required this.onAplicar,
     required this.onCancelar,
     required this.bloqueos,
@@ -296,7 +301,8 @@ class PanelAcomodar extends StatelessWidget {
                         FilledButton(
                           key: const Key('separar_aplicar'),
                           style: compacto,
-                          onPressed: ocupado ? null : onAplicar,
+                          onPressed:
+                              ocupado || !previaSePuede ? null : onAplicar,
                           child: const Text('APLICAR'),
                         ),
                         const SizedBox(width: 8),
@@ -339,7 +345,7 @@ class PanelAcomodar extends StatelessWidget {
                   ),
                   if (onSacarSector != null)
                     boton('acomodar_sacar_sector', 'Sacar sector',
-                        Icons.delete_outline, onSacarSector),
+                        Icons.delete_outline, probando ? null : onSacarSector),
                 ],
               ),
               if (onTamanoSector != null) ...[
@@ -355,16 +361,19 @@ class PanelAcomodar extends StatelessWidget {
                     for (final (clave, pista, icono, dx, dy) in const [
                       ('sector_menos_ancho', 'Más angosto', Icons.west, -0.5, 0.0),
                       ('sector_mas_ancho', 'Más ancho', Icons.east, 0.5, 0.0),
-                      ('sector_menos_alto', 'Más bajo', Icons.north, 0.0, -0.5),
-                      ('sector_mas_alto', 'Más alto', Icons.south, 0.0, 0.5),
+                      ('sector_menos_alto', 'Más corto', Icons.north, 0.0, -0.5),
+                      ('sector_mas_alto', 'Más largo', Icons.south, 0.0, 0.5),
                     ])
                       IconButton(
                         key: Key(clave),
                         tooltip: pista,
                         visualDensity: VisualDensity.compact,
                         iconSize: 18,
-                        onPressed:
-                            ocupado ? null : () => onTamanoSector!(dx, dy),
+                        // Con la vista previa de separar abierta no se toca
+                        // nada más: se aplica o se cancela primero.
+                        onPressed: ocupado || probando
+                            ? null
+                            : () => onTamanoSector!(dx, dy),
                         icon: Icon(icono),
                       ),
                   ],

@@ -193,9 +193,9 @@ final _sinHacer = AccionesPlano(
   onVolverAUsar: (_) {},
   onCambiar: (_, _) {},
   onMover: (_, _) {},
-  onGuardarMedidas: (_) {},
-  onGuardarColoresYTextos: (_) {},
-  onGuardarArmado: (_, _) {},
+  onGuardarMedidas: (_, _) {},
+  onGuardarColoresYTextos: (_, _) {},
+  onGuardarArmado: (_, _, _) {},
 );
 
 void main() {

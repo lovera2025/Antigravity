@@ -150,7 +150,8 @@ void main() {
       expect(p.semaforo, SemaforoPlano.faltan);
       expect(p.titular, 'Faltan 6 mesas');
       expect(p.avisos.first.texto,
-          'Faltan 6 mesas: la fiesta necesita 46 y este armado tiene 40.');
+          'Faltan 6 mesas: la fiesta necesita 46 y este armado tiene 40. '
+          'Se agregan en Personalizar → Acomodar.');
       expect(p.avisos.first.grave, isTrue);
     });
 

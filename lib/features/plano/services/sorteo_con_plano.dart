@@ -760,15 +760,35 @@ class SorteoConPlano {
       // Un sorteo que ya se hizo: los que llegan tarde van a los huecos de su
       // bloque; si no entran, a la reserva (después del último bloque) y, si
       // tampoco hay, a cualquier mesa libre del salón. Siempre con aviso.
+      //
+      // Si la mesa del borde de un bloque ya no está (se sacó al acomodar el
+      // salón), vale la que queda más cerca adentro del bloque: los huecos
+      // siguen siendo de su división.
+      int? primerCasillero(BloqueDivision bl) {
+        for (var n = bl.desde; n <= bl.hasta; n++) {
+          final c = cas.casillero(n);
+          if (c != null) return c;
+        }
+        return null;
+      }
+
+      int? ultimoCasillero(BloqueDivision bl) {
+        for (var n = bl.hasta; n >= bl.desde; n--) {
+          final c = cas.casillero(n);
+          if (c != null) return c;
+        }
+        return null;
+      }
+
       final finBloques = guardados.values
-          .map((bl) => cas.casillero(bl.hasta) ?? 0)
+          .map((bl) => ultimoCasillero(bl) ?? 0)
           .fold<int>(0, max);
       final aReserva = <String, List<PedidoSorteo>>{};
       for (final k in orden) {
         final ps = nuevosPorDivision[k]!;
         final bl = guardados[k];
-        final ini = bl == null ? null : cas.casillero(bl.desde);
-        final fin = bl == null ? null : cas.casillero(bl.hasta);
+        final ini = bl == null ? null : primerCasillero(bl);
+        final fin = bl == null ? null : ultimoCasillero(bl);
         if (ini != null && fin != null) {
           final oc = {
             ...ocupadas,

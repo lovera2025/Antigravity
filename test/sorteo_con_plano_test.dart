@@ -503,13 +503,26 @@ void main() {
           haySorteo: true,
         );
         final hoja = armado.hojas.last.id;
+        var fondo = 0.0;
+        for (final m in armado.mesasDeHoja(hoja)) {
+          fondo = max(fondo, m.y);
+        }
         final nuevas = <int>[];
         for (var i = 0; i < 4; i++) {
-          nuevas.add(sesion.agregar(hoja, cerca: nuevas.isEmpty ? null : nuevas.last));
+          nuevas.add(sesion.agregar(hoja));
         }
         // Número nuevo: siguen al más alto, ninguna reusa uno.
         final masAlto = armado.numeros.reduce(max);
         expect(nuevas, [for (var i = 1; i <= 4; i++) masAlto + i]);
+        // Sin elegir dónde, quedan al fondo y cada una pegada a la anterior.
+        for (final (i, n) in nuevas.indexed) {
+          expect(sesion.actual.mesa(n)!.y, greaterThanOrEqualTo(fondo - 0.01),
+              reason: 'la $n quedó hacia el escenario');
+          if (i > 0) {
+            expect(sesion.actual.pegadas(nuevas[i - 1], n), isTrue,
+                reason: 'la $n no quedó al lado de la ${nuevas[i - 1]}');
+          }
+        }
         // Las que ya tienen familia no se sacan.
         expect(sesion.sacar(armado.numeros.first), isNotNull);
         expect(sesion.puedeGuardar, isTrue);
@@ -519,6 +532,7 @@ void main() {
           fresco: armado,
           config: config,
           alumnos: sentados,
+          enUsoVisto: sesion.enUsoAlEmpezar,
         );
         expect(guardar.sePuede, isTrue);
         final acomodado = guardar.armado!;
@@ -562,5 +576,72 @@ void main() {
         expect(acomodado.pegadas(dos.first, dos.last), isTrue);
       });
     }
+
+    test('por bloques: si en Acomodar se sacó la mesa del borde de un bloque, '
+        'el que faltaba de esa división sigue yendo a un hueco de su bloque',
+        () {
+      final armado = ArmadosPredefinidos.normal2aPaginas45();
+      final divisiones = ['5° A', '5° B', '5° C', '5° D'];
+      final alumnos = [
+        for (var i = 0; i < 80; i++)
+          alumno('f${i.toString().padLeft(3, '0')}',
+              division: divisiones[i * divisiones.length ~/ 80]),
+      ];
+      final orden = [for (final d in divisiones) Divisiones.clave(d)];
+      final primero = SorteoConPlano.sortear(
+        EntradaSorteoPlano(
+          armado: armado,
+          alumnos: alumnos,
+          modo: ModoSorteo.bloques,
+          ordenDivisiones: orden,
+        ),
+        random: Random(3),
+      );
+      final bloque = primero.bloques
+          .firstWhere((b) => b.division == Divisiones.clave('5° B'));
+      String familiaDe(int mesa) => primero.asignaciones.entries
+          .firstWhere((e) => e.value.contains(mesa))
+          .key;
+      // Dos familias de 5° B dejan su mesa: la del borde del bloque y una del
+      // medio.
+      final hueco = bloque.desde + 3;
+      final seFueron = {familiaDe(bloque.hasta), familiaDe(hueco)};
+      final sentados = [
+        for (final a in alumnos)
+          if (!seFueron.contains(a.id))
+            a.copyWith(numeroMesa: primero.asignaciones[a.id]!.join(', ')),
+      ];
+      final config = ConfigPlano(bloques: primero.bloques);
+
+      // En Acomodar se saca la mesa del borde, que quedó vacía.
+      final sesion = SesionAcomodo(
+        base: armado,
+        enUso: EditarArmado.enUso(sentados, config),
+        haySorteo: true,
+      );
+      expect(sesion.sacar(bloque.hasta), isNull);
+      final guardar = EditarArmado.paraGuardar(
+        base: armado,
+        nuevo: sesion.actual,
+        fresco: armado,
+        config: config,
+        alumnos: sentados,
+        enUsoVisto: sesion.enUsoAlEmpezar,
+      );
+      expect(guardar.sePuede, isTrue);
+
+      // Llega una familia de 5° B y se vuelve a tocar SORTEO: va al hueco de
+      // su bloque, no a la reserva de después del último.
+      final e2 = EntradaSorteoPlano(
+        armado: guardar.armado!,
+        config: guardar.config!,
+        alumnos: [...sentados, alumno('tarde', division: '5° B')],
+        modo: ModoSorteo.bloques,
+        ordenDivisiones: orden,
+      );
+      final segundo = SorteoConPlano.sortear(e2, random: Random(8));
+      verificar(e2, segundo, razon: 'borde de bloque sacado');
+      expect(segundo.asignaciones['tarde'], [hueco]);
+    });
   });
 }
