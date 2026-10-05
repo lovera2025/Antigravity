@@ -1000,6 +1000,37 @@ Hallazgos confirmados que no entraron el 4-oct. **Los dos primeros son para deci
   mesa. Además el borde recalculado difiere en un decimal (480,0000000000001).
 - En esta PC, un script de Python con comillas mezcladas no se puede pasar por heredoc: se escribe a un archivo.
 
+## Qué pasó el 4-oct a la noche
+
+Plan: `C:\Users\lover\.claude\plans\que-falta-o-en-mutable-sprout.md`. El usuario preguntó qué faltaba y contestó lo
+que la 9c tenía pendiente de decidir.
+
+### Decisiones del usuario
+
+- **El plano y el sorteo los hace solo el jefe, desde la PC de la oficina.** Él entra en modo jefe en su PC para
+  mantenimiento, no para armar salones. Lo dijo al ver el plan del "seguro" (el punto 1 de la 9c): para él ese caso
+  no debería poder pasar.
+- **El programa no lo impedía.** PLANO, PERSONALIZAR y SORTEO los podía usar cualquiera, también el operario con su
+  caja (en la 5.0.0 el sorteo tampoco pide modo jefe). Eligió que **todo lo que cambia el salón quede solo para el
+  modo jefe**: armar y personalizar el plano, sortear, deshacer y restaurar, y cambiar o mudar familias de mesa. Al
+  operario le queda ver el plano, imprimir, las planillas, el Historial, las entradas y el reparto de sillas.
+- **El "seguro" del plano atrasado no se programa.** Preguntó qué convenía ("tengo un dilema") y se le recomendó no
+  hacerlo: con la regla el plano lo cambia una sola PC, y el seguro toca la subida a la nube, por donde van los
+  cobros. Quedó escrito con su diseño en [docs/ideas/seguro-plano-atrasado.md](ideas/seguro-plano-atrasado.md).
+- **Colores de Gala y Neón (punto 2 de la 9c):** el mismo color en pantalla y en papel. Se ordenan las paletas de
+  Gala y Neón como la de Arquitecto. Va en la 9c-3.
+- **9b confirmada, las dos cosas:** deshacer solo a los últimos sorteados y la planilla solo de ellos.
+- **El casillero "N° de mesa" de Editar alumno** se escribe a mano y lo cambia cualquiera. Se le avisó y queda como
+  está, salvo que pida cerrarlo.
+
+### Lo que preguntó, y vale tener a mano
+
+Quería saber si todo lo del plano "sube como lo demás y queda actualizado en todas las PCs". Sí: cada cambio se
+guarda, sube en el momento (`subirYa`) y avisa a la otra PC por el pulso; las pantallas del plano y de la fiesta se
+recargan solas (`cambiosBajadosStream`); antes de cada cambio se lee el plano de la nube (`traerDeLaNube`) y las
+mesas de la otra PC (`mesasDeOtraPcSinBajar`). Los cambios de mesa, el Historial y el registro del sorteo son
+renglones que solo se agregan.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -1018,10 +1049,13 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 8. ~~M8: los cuatro botones a la vista y la lista de la puerta trabada.~~ **Hecho** (`b508e8f`).
 9. ~~M9: Personalizar con cuatro pestañas.~~ **Hecho y revisado** (`18a89f6`, `4f12969`, `2c84a55`; la revisión,
    `8468626`).
-   - 9c. **Lo que dejó la revisión** (nueva; ver "Lo que quedó sin hacer" en "Qué pasó el 4-oct"). Preguntarle al
-     usuario por los puntos 1 (la cola de subida del plano) y 2 (los colores en el papel) antes de empezar. El
-     resto son arreglos de pantalla.
-   - 9b. **Los que faltan** (nueva, a confirmar con el usuario; se le recomendó hacer las dos cosas):
+   - 9c. **Lo que dejó la revisión** (ver "Lo que quedó sin hacer" en "Qué pasó el 4-oct"), en tres partes. Los
+     dos puntos a decidir ya están decididos (ver "Qué pasó el 4-oct a la noche"):
+     - 9c-1. **Lo que cambia el salón, solo en modo jefe.** Reemplaza al "seguro" del punto 1, que no se hace.
+     - 9c-2. **Tests de pantalla de los guardados del plano** (los tres de Personalizar y el aviso de la flecha de
+       volver). Sacar de `_cambiarConfig` una función pura, y probar también que sin modo jefe no se guarda.
+     - 9c-3. **Las pantallas** (puntos 3 a 9) y los colores de Gala y Neón iguales al papel (punto 2).
+   - 9b. **Los que faltan** (confirmada el 4-oct, las dos cosas):
      - en "Deshacer sorteo", elegir entre "solo los últimos sorteados" y "todo" (hoy borra la escuela entera). El
        registro de sorteos tiene con qué: cada sorteo es un renglón con lo que tocó (`RegistroSorteo.esperado`);
      - en la planilla del sorteo, la opción "solo los últimos sorteados", y arriba los dos sorteos nombrados;

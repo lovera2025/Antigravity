@@ -23,3 +23,6 @@ Para lo que **sí** se decidió hacer y quedó postergado, la carpeta es
 - [Portal de pagos web](portal-pagos-web.md) — que la familia consulte su
   estado de cuenta, pague online y descargue su recibo sola, en vez de
   resolverlo por WhatsApp uno por uno. Objetivo: temporada 2027.
+- [Seguro para el plano atrasado](seguro-plano-atrasado.md) — que un cambio del
+  plano que quedó sin subir no pise lo que hizo otra PC. No se hace: el plano lo
+  cambia solo el jefe. Queda el diseño por si algún día dos PCs arman planos.
