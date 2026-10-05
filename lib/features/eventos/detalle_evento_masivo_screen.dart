@@ -27,6 +27,7 @@ import '../plano/services/sorteo_con_plano.dart';
 import '../../core/utils/uuid_utils.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
+import '../common/utils/solo_jefe.dart';
 import '../common/utils/subir_ya.dart';
 import '../../core/services/sync_engine.dart';
 import 'repositories/notas_operativas_contrato_repository.dart';
@@ -419,6 +420,7 @@ class _DetalleEventoMasivoScreenState
           config: plano?.config ?? ConfigPlano.vacia,
           alumnos: _alumnos,
         ),
+        soloJefe: !ref.read(esRolJefeProvider),
       );
     } catch (e) {
       if (!mounted) return;
@@ -1093,6 +1095,7 @@ class _DetalleEventoMasivoScreenState
   Widget _buildAlumnosTab() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final bool modoJefe = ref.watch(adminAuthProvider).esModoJefe;
+    final bool puedeCambiarSalon = ref.watch(esRolJefeProvider);
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1295,6 +1298,7 @@ class _DetalleEventoMasivoScreenState
         );
         final Widget grupoFiestaToolbar = GrupoFiestaToolbar(
           compacto: layoutCompact,
+          esJefe: puedeCambiarSalon,
           onPlano: _abrirPlano,
           onSortear: _sortearMesas,
           onDeshacer: _deshacerSorteoMesas,
@@ -3608,6 +3612,21 @@ class _DetalleEventoMasivoScreenState
     if (mounted) setState(() => _hayRespaldoSorteo = r != null);
   }
 
+  /// Sortear, deshacer y restaurar cambian el salón, y eso lo hace solo el
+  /// jefe. La barra ya los muestra apagados sin modo jefe; esta es la segunda
+  /// llave, por si algún camino llega igual hasta acá.
+  bool _frenaSinModoJefe() {
+    if (ref.read(esRolJefeProvider)) return false;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('$kSoloEnModoJefe: el sorteo lo hace el jefe.'),
+        ),
+      );
+    }
+    return true;
+  }
+
   /// Sorteo de mesas, pensado para no fallar (ver [SorteoMesasMotor]):
   ///
   /// 1. Si otra PC ya asignó mesas que todavía no llegaron, no sortea: sería
@@ -3620,6 +3639,7 @@ class _DetalleEventoMasivoScreenState
   ///
   /// Escribe **solo** `numero_mesa`: no toca cuentas ni pagos.
   Future<void> _sortearMesas() async {
+    if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
     final eventoId = widget.evento.id;
     final titulo = widget.evento.cliente?.nombreCompleto ?? 'Evento masivo';
@@ -3763,6 +3783,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, PagoAlumno> pagos,
     PlanoEvento? plano,
   ) async {
+    if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
@@ -3883,6 +3904,7 @@ class _DetalleEventoMasivoScreenState
     PlanoEvento plano,
     DateTime checkpoint,
   ) async {
+    if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
     final entrada = EntradaSorteoPlano(
       armado: plano.armado,
@@ -4002,6 +4024,7 @@ class _DetalleEventoMasivoScreenState
   /// evento, también a los de baja. Pide confirmación con tilde y antes guarda
   /// una copia local ([RespaldoSorteo]) para poder restaurarlo.
   Future<void> _deshacerSorteoMesas() async {
+    if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
     final eventoId = widget.evento.id;
     final alumnos = await repo.getByEvento(eventoId);
@@ -4282,6 +4305,7 @@ class _DetalleEventoMasivoScreenState
       );
 
   Future<void> _restaurarSorteoAnterior() async {
+    if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
     final eventoId = widget.evento.id;
     final respaldo = await RespaldoSorteo.leer(eventoId);

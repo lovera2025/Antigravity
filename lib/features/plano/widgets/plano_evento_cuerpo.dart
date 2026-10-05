@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../common/utils/solo_jefe.dart';
 import '../../common/utils/texto_busqueda.dart';
 import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
@@ -147,6 +148,11 @@ class PlanoEventoCuerpo extends StatefulWidget {
   final VoidCallback? onImprimir;
   final VoidCallback? onHistorial;
 
+  /// La sesión no está en modo jefe: ESTILO Y ARMADO y PERSONALIZAR llegan en
+  /// null, y en vez de desaparecer quedan a la vista, apagados, con el motivo
+  /// escrito ([kSoloEnModoJefe]).
+  final bool soloJefe;
+
   /// Para que la pantalla sepa, al querer salir, si hay algo sin guardar.
   final PendienteDelPlano? pendiente;
 
@@ -163,6 +169,7 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.acciones,
     this.onImprimir,
     this.onHistorial,
+    this.soloJefe = false,
     this.pendiente,
   });
 
@@ -1845,6 +1852,35 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                   label: Text(texto),
                 ),
         );
+    // Sin modo jefe, lo que cambia el salón queda a la vista y apagado: si
+    // desapareciera, el operario no sabría que existe ni a quién pedírselo.
+    Widget apagado(
+      Key key,
+      String texto,
+      IconData icono, {
+      bool principal = false,
+    }) =>
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Tooltip(
+            message: kSoloEnModoJefe,
+            child: principal
+                ? FilledButton.icon(
+                    key: key,
+                    onPressed: null,
+                    icon: Icon(icono, size: 18),
+                    label: Text(texto),
+                  )
+                : OutlinedButton.icon(
+                    key: key,
+                    onPressed: null,
+                    icon: Icon(icono, size: 18),
+                    label: Text(texto),
+                  ),
+          ),
+        );
+    final sinArmar = widget.soloJefe && widget.onEstiloYArmado == null;
+    final sinPersonalizar = widget.soloJefe && widget.acciones == null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
       child: Row(
@@ -1856,6 +1892,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               Icons.dashboard_customize_outlined,
               _siNoHayPendiente(widget.onEstiloYArmado!),
               principal: true,
+            )
+          else if (sinArmar)
+            apagado(
+              const Key('estilo_y_armado'),
+              'ESTILO Y ARMADO',
+              Icons.dashboard_customize_outlined,
+              principal: true,
             ),
           if (widget.acciones != null)
             boton(
@@ -1865,7 +1908,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               () => _personalizando
                   ? _salirDePersonalizar()
                   : setState(() => _modo = ModoPersonalizar.mesas),
-            ),
+            )
+          else if (sinPersonalizar)
+            apagado(const Key('personalizar'), 'PERSONALIZAR', Icons.tune),
           if (widget.onImprimir != null)
             boton(
               const Key('imprimir'),
@@ -1879,6 +1924,15 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               'HISTORIAL',
               Icons.history,
               _siNoHayPendiente(widget.onHistorial!),
+            ),
+          if (sinArmar || sinPersonalizar)
+            Flexible(
+              child: Text(
+                'Armar y personalizar el plano: solo en modo jefe.',
+                key: const Key('motivo_solo_jefe'),
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
             ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../common/utils/solo_jefe.dart';
 import '../../recepcion/services/lista_puerta.dart';
 
 /// Las herramientas de la fiesta, a la vista en la barra del evento masivo:
@@ -18,6 +19,10 @@ import '../../recepcion/services/lista_puerta.dart';
 class GrupoFiestaToolbar extends StatelessWidget {
   /// Los tamaños chicos de la barra (ventanas de menos de 1520 px).
   final bool compacto;
+
+  /// Sortear, deshacer y restaurar cambian el salón: sin modo jefe quedan a la
+  /// vista, apagados, con [kSoloEnModoJefe]. Lo demás anda igual.
+  final bool esJefe;
 
   final VoidCallback onPlano;
 
@@ -44,6 +49,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
   const GrupoFiestaToolbar({
     super.key,
     required this.compacto,
+    required this.esJefe,
     required this.onPlano,
     required this.onSortear,
     required this.onDeshacer,
@@ -133,24 +139,27 @@ class GrupoFiestaToolbar extends StatelessWidget {
         onSelected: (accion) => accion(),
         itemBuilder: (context) => [
           _item(
-            accion: onSortear,
+            accion: esJefe ? onSortear : null,
             icono: Icons.casino,
             color: Colors.indigo,
             titulo: 'Sortear mesas',
+            detalle: esJefe ? null : kSoloEnModoJefe,
           ),
           _item(
-            accion: onDeshacer,
+            accion: esJefe ? onDeshacer : null,
             icono: Icons.undo,
             color: Colors.deepOrange,
             titulo: 'Deshacer sorteo de mesas',
+            detalle: esJefe ? null : kSoloEnModoJefe,
           ),
           if (onRestaurar != null)
             _item(
-              accion: onRestaurar,
+              accion: esJefe ? onRestaurar : null,
               icono: Icons.restore_rounded,
               color: Colors.teal,
               titulo: 'Restaurar sorteo anterior',
-              detalle: 'La copia guardada al deshacer',
+              detalle:
+                  esJefe ? 'La copia guardada al deshacer' : kSoloEnModoJefe,
             ),
           _item(
             accion: onHistorial,

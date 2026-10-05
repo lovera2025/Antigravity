@@ -82,6 +82,7 @@ Future<void> _mostrar(
   AccionesPlano? acciones,
   VoidCallback? onImprimir,
   VoidCallback? onHistorial,
+  bool soloJefe = false,
   PendienteDelPlano? pendiente,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
@@ -101,6 +102,7 @@ Future<void> _mostrar(
           acciones: acciones,
           onImprimir: onImprimir,
           onHistorial: onHistorial,
+          soloJefe: soloJefe,
           pendiente: pendiente,
         ),
       ),
@@ -437,6 +439,87 @@ void main() {
       expect(_vista(tester).hoja, 'B');
       await tester.tap(find.byKey(const Key('soltar')));
       await tester.pump();
+    });
+  });
+
+  // Armar y personalizar el plano lo hace solo el jefe. Sin modo jefe la
+  // pantalla llega sin esas dos acciones, y en vez de esconder los botones los
+  // muestra apagados con el motivo.
+  group('sin modo jefe', () {
+    bool prendido(WidgetTester tester, String clave) =>
+        tester.widget<ButtonStyleButton>(find.byKey(Key(clave))).enabled;
+
+    testWidgets('ESTILO Y ARMADO y PERSONALIZAR se ven, apagados, con el motivo',
+        (tester) async {
+      await _mostrar(
+        tester,
+        soloJefe: true,
+        onImprimir: () {},
+        onHistorial: () {},
+      );
+      expect(prendido(tester, 'estilo_y_armado'), isFalse);
+      expect(prendido(tester, 'personalizar'), isFalse);
+      expect(
+        find.text('Armar y personalizar el plano: solo en modo jefe.'),
+        findsOneWidget,
+      );
+      // Tocarlos no prende nada.
+      await tester.tap(find.byKey(const Key('personalizar')),
+          warnIfMissed: false);
+      await tester.pump();
+      expect(find.byKey(const Key('franja_personalizar')), findsNothing);
+    });
+
+    testWidgets('IMPRIMIR e HISTORIAL andan igual', (tester) async {
+      final tocados = <String>[];
+      await _mostrar(
+        tester,
+        soloJefe: true,
+        onImprimir: () => tocados.add('imprimir'),
+        onHistorial: () => tocados.add('historial'),
+      );
+      expect(prendido(tester, 'imprimir'), isTrue);
+      expect(prendido(tester, 'historial'), isTrue);
+      await tester.tap(find.byKey(const Key('imprimir')));
+      await tester.tap(find.byKey(const Key('historial')));
+      expect(tocados, ['imprimir', 'historial']);
+    });
+
+    testWidgets('tocar una mesa muestra de quién es, sin ofrecer cambios',
+        (tester) async {
+      final armado = _armado();
+      await _mostrar(tester, plano: _plano(armado: armado), soloJefe: true);
+      await _tocarMesa(tester, armado, 30);
+      expect(find.byKey(const Key('accion_dejar_libre')), findsNothing);
+      expect(find.byKey(const Key('accion_fijar_en_mesa')), findsNothing);
+      await _tocarMesa(tester, armado, 8);
+      expect(find.byKey(const Key('accion_mover')), findsNothing);
+      expect(find.byKey(const Key('soltar')), findsOneWidget);
+    });
+
+    testWidgets('en modo jefe no aparece el motivo', (tester) async {
+      await _mostrar(
+        tester,
+        onEstiloYArmado: () {},
+        acciones: _acciones([]),
+      );
+      expect(prendido(tester, 'estilo_y_armado'), isTrue);
+      expect(prendido(tester, 'personalizar'), isTrue);
+      expect(find.byKey(const Key('motivo_solo_jefe')), findsNothing);
+    });
+
+    testWidgets('sin modo jefe pero con las acciones, mandan las acciones',
+        (tester) async {
+      // No es un caso de la app (la pantalla nunca las pasa sin modo jefe),
+      // pero el aviso no tiene que aparecer al lado de un botón que anda.
+      await _mostrar(
+        tester,
+        soloJefe: true,
+        onEstiloYArmado: () {},
+        acciones: _acciones([]),
+      );
+      expect(prendido(tester, 'personalizar'), isTrue);
+      expect(find.byKey(const Key('motivo_solo_jefe')), findsNothing);
     });
   });
 

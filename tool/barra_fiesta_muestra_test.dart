@@ -8,7 +8,8 @@
 //   Barra_ancha.png, Barra_notebook.png y Barra_angosta.png — la barra en tres
 //     anchos de ventana;
 //   Barra_menu_sorteo.png, Barra_menu_planillas.png y Barra_menu_mas.png — cada
-//     menú abierto.
+//     menú abierto;
+//   Barra_menu_sorteo_operario.png — el menú de SORTEO sin modo jefe.
 //
 // Los botones y los menús son los de la app. Lo de la izquierda (contadores,
 // chips, REGISTRAR y CONTRATOS) está copiado a mano de la pantalla, con los
@@ -96,7 +97,11 @@ Widget _botonLleno(
     );
 
 /// La barra entera, armada como en `detalle_evento_masivo_screen.dart`.
-Widget _barra(double anchoVentana, {bool conCopia = false}) {
+Widget _barra(
+  double anchoVentana, {
+  bool conCopia = false,
+  bool esJefe = true,
+}) {
   final compacto = anchoVentana < 1520;
   final double margen = compacto ? 12 : 32;
   final anchoMaximoPrimarios = math.max(
@@ -163,6 +168,7 @@ Widget _barra(double anchoVentana, {bool conCopia = false}) {
           Expanded(
             child: GrupoFiestaToolbar(
               compacto: compacto,
+              esJefe: esJefe,
               onPlano: () {},
               onSortear: () {},
               onDeshacer: () {},
@@ -215,6 +221,7 @@ void main() {
     double alto = 76,
     String? menu,
     bool conCopia = false,
+    bool esJefe = true,
   }) async {
     await preparar();
     final clave = GlobalKey();
@@ -232,7 +239,7 @@ void main() {
             backgroundColor: Colors.white,
             body: Align(
               alignment: Alignment.topLeft,
-              child: _barra(ancho, conCopia: conCopia),
+              child: _barra(ancho, conCopia: conCopia, esJefe: esJefe),
             ),
           ),
         ),
@@ -280,6 +287,18 @@ void main() {
       alto: 330,
       menu: 'fiesta_sorteo',
       conCopia: true,
+    );
+  });
+
+  testWidgets('el menú de SORTEO, sin modo jefe', (tester) async {
+    await sacar(
+      tester,
+      archivo: 'Barra_menu_sorteo_operario.png',
+      ancho: 1366,
+      alto: 330,
+      menu: 'fiesta_sorteo',
+      conCopia: true,
+      esJefe: false,
     );
   });
 

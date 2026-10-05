@@ -406,6 +406,40 @@ void main() {
       expect(find.text('Historial de las mesas'), findsNothing);
     });
 
+    // Deshacer un cambio mueve familias: sin modo jefe no se ofrece, aunque
+    // quien abre el Historial le pase con qué deshacer.
+    testWidgets('sin modo jefe no deja deshacer y dice por qué', (tester) async {
+      final deshechos = <String>[];
+      await _abrir<void>(
+        tester,
+        (c) => mostrarHistorialSorteo(
+          context: c,
+          historial: historial(),
+          onDeshacer: (m) => deshechos.add(m.id),
+          soloJefe: true,
+        ),
+      );
+      expect(find.byKey(const Key('deshacer_m1')), findsNothing);
+      expect(find.text('Deshacer un cambio: solo en modo jefe.'), findsOneWidget);
+      // Lo demás se lee igual.
+      expect(find.text('VEGA pasó a otras mesas'), findsOneWidget);
+      expect(deshechos, isEmpty);
+    });
+
+    testWidgets('en modo jefe, desde la fiesta, dice dónde se deshace',
+        (tester) async {
+      await _abrir<void>(
+        tester,
+        (c) => mostrarHistorialSorteo(context: c, historial: historial()),
+      );
+      expect(
+        find.text(
+          'Para deshacer un cambio, abrí el Historial desde el Plano del salón.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('una fiesta sin nada lo dice', (tester) async {
       await _abrir<void>(
         tester,

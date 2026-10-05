@@ -384,27 +384,34 @@ class _FijarMesaDialogState extends State<FijarMesaDialog> {
 
 /// El Historial de las mesas de la fiesta. Con [onDeshacer], los cambios que
 /// siguen en pie se pueden volver atrás desde acá.
+///
+/// [soloJefe]: la sesión no está en modo jefe. Deshacer un cambio mueve
+/// familias, así que no se ofrece, y abajo se dice por qué.
 Future<void> mostrarHistorialSorteo({
   required BuildContext context,
   required HistorialSorteo historial,
   void Function(MovimientoMesas movimiento)? onDeshacer,
+  bool soloJefe = false,
 }) =>
     showDialog<void>(
       context: context,
       builder: (_) => HistorialSorteoDialog(
         historial: historial,
-        onDeshacer: onDeshacer,
+        onDeshacer: soloJefe ? null : onDeshacer,
+        soloJefe: soloJefe,
       ),
     );
 
 class HistorialSorteoDialog extends StatelessWidget {
   final HistorialSorteo historial;
   final void Function(MovimientoMesas movimiento)? onDeshacer;
+  final bool soloJefe;
 
   const HistorialSorteoDialog({
     super.key,
     required this.historial,
     this.onDeshacer,
+    this.soloJefe = false,
   });
 
   static IconData _icono(TipoRenglonHistorial t) => switch (t) {
@@ -513,8 +520,10 @@ class HistorialSorteoDialog extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: Text(
-                        'Para deshacer un cambio, abrí el Historial desde el '
-                        'Plano del salón.',
+                        soloJefe
+                            ? 'Deshacer un cambio: solo en modo jefe.'
+                            : 'Para deshacer un cambio, abrí el Historial '
+                                'desde el Plano del salón.',
                         key: const Key('donde_se_deshace'),
                         style: TextStyle(fontSize: 12, color: gris),
                       ),

@@ -16,6 +16,7 @@ void main() {
     bool conPlano = true,
     bool conAlumnos = true,
     int conMora = 3,
+    bool esJefe = true,
     String? letra,
   }) async {
     final pedidos = <String>[];
@@ -32,6 +33,7 @@ void main() {
               width: ancho,
               child: GrupoFiestaToolbar(
                 compacto: compacto,
+                esJefe: esJefe,
                 onPlano: () => pedidos.add('plano'),
                 onSortear: () => pedidos.add('sortear'),
                 onDeshacer: () => pedidos.add('deshacer'),
@@ -167,6 +169,65 @@ void main() {
     expect(pedidos, isEmpty);
     // El menú sigue abierto: tocar algo apagado no hace nada.
     expect(find.text('Planilla de entrega'), findsOneWidget);
+  });
+
+  // Lo que cambia el salón lo hace solo el jefe. Sin modo jefe se ve, apagado
+  // y con el motivo: así el operario sabe que existe y a quién pedírselo.
+  group('sin modo jefe', () {
+    testWidgets('sortear, deshacer y restaurar quedan apagados y dicen por qué',
+        (tester) async {
+      final pedidos = await mostrar(tester, esJefe: false, conCopia: true);
+      await tester.tap(find.byKey(const Key('fiesta_sorteo')));
+      await tester.pumpAndSettle();
+      expect(find.text('Solo en modo jefe'), findsNWidgets(3));
+      // El motivo reemplaza al detalle de siempre.
+      expect(find.text('La copia guardada al deshacer'), findsNothing);
+
+      for (final apagado in [
+        'Sortear mesas',
+        'Deshacer sorteo de mesas',
+        'Restaurar sorteo anterior',
+      ]) {
+        await tester.tap(find.text(apagado), warnIfMissed: false);
+        await tester.pumpAndSettle();
+      }
+      expect(pedidos, isEmpty);
+      // El menú sigue abierto: tocar algo apagado no hace nada.
+      expect(find.text('Historial de las mesas'), findsOneWidget);
+    });
+
+    testWidgets('el Historial se sigue pudiendo abrir', (tester) async {
+      final pedidos = await mostrar(tester, esJefe: false);
+      await elegir(tester, 'fiesta_sorteo', 'Historial de las mesas');
+      expect(pedidos, ['historial']);
+    });
+
+    testWidgets('PLANO, PLANILLAS y ENTRADAS andan igual', (tester) async {
+      final pedidos = await mostrar(tester, esJefe: false);
+      await tester.tap(find.byKey(const Key('fiesta_plano')));
+      await tester.tap(find.byKey(const Key('fiesta_entradas')));
+      await elegir(tester, 'fiesta_planillas', 'Planilla del sorteo');
+      await elegir(tester, 'fiesta_planillas', 'Plano impreso');
+      await elegir(tester, 'fiesta_planillas', 'Planilla de entrega');
+      await elegir(tester, 'fiesta_planillas', 'Planilla de mora');
+      expect(pedidos, [
+        'plano',
+        'entradas',
+        'planilla',
+        'plano impreso',
+        'entrega',
+        'mora',
+      ]);
+      expect(find.text('Solo en modo jefe'), findsNothing);
+    });
+
+    testWidgets('en modo jefe no aparece el motivo', (tester) async {
+      await mostrar(tester, conCopia: true);
+      await tester.tap(find.byKey(const Key('fiesta_sorteo')));
+      await tester.pumpAndSettle();
+      expect(find.text('Solo en modo jefe'), findsNothing);
+      expect(find.text('La copia guardada al deshacer'), findsOneWidget);
+    });
   });
 
   group('MÁS', () {

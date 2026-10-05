@@ -12,8 +12,10 @@ import '../../models/movimiento_mesas.dart';
 import '../../models/plano_evento.dart';
 import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
+import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/quien_opera.dart';
+import '../common/utils/solo_jefe.dart';
 import '../common/utils/subir_ya.dart';
 import '../eventos/repositories/contratos_repository.dart';
 import '../eventos/repositories/entradas_retiro_repository.dart';
@@ -243,11 +245,21 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   }
 
   /// La primera vez que se entra, la fiesta no tiene plano: se abren los tres
-  /// pasos sin que haya que buscar el botón.
+  /// pasos sin que haya que buscar el botón. Sin modo jefe no se ofrece nada:
+  /// la pantalla dice que lo arma el jefe.
   void _ofrecerArmar() {
     if (!mounted || _yaOfrecioArmar || _errorCarga != null) return;
     _yaOfrecioArmar = true;
-    if (_plano == null) _elegir();
+    if (_plano == null && ref.read(esRolJefeProvider)) _elegir();
+  }
+
+  /// Armar y personalizar el plano, y cambiar o mudar familias, lo hace solo
+  /// el jefe. Los botones ya llegan apagados sin modo jefe; esta es la segunda
+  /// llave, en cada función que guarda, por si algún camino llega igual.
+  bool _frenaSinModoJefe() {
+    if (ref.read(esRolJefeProvider)) return false;
+    _decir('$kSoloEnModoJefe: el plano lo cambia el jefe.');
+    return true;
   }
 
   bool get _hayFamiliasConMesa =>
@@ -363,7 +375,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   // ── Estilo y armado ─────────────────────────────────────────────────────
 
   Future<void> _elegir() async {
-    if (_ocupado) return;
+    if (_ocupado || _frenaSinModoJefe()) return;
     final actual = _plano;
     final tieneArmado = actual?.armadoONull != null;
     final eleccion = await mostrarElegirPlano(
@@ -382,6 +394,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   }
 
   Future<void> _guardar(EleccionPlano eleccion) async {
+    if (_frenaSinModoJefe()) return;
     setState(() => _ocupado = true);
     try {
       final planos = ref.read(planosEventoRepositoryProvider);
@@ -437,7 +450,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         calcular, {
     required String Function(CambioDeConfig cambio) hecho,
   }) async {
-    if (_ocupado) return;
+    if (_ocupado || _frenaSinModoJefe()) return;
     setState(() => _ocupado = true);
     try {
       final contratos = ref.read(contratosRepositoryProvider);
@@ -743,6 +756,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     if (!mounted || _ocupado || plano == null || plano.armadoONull == null) {
       return;
     }
+    if (_frenaSinModoJefe()) return;
     final previa = calcular(plano, _alumnos, _movimientos);
     if (!previa.sePuede) {
       await _avisar('No se puede', previa.problema!);
@@ -947,7 +961,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           alumnos: _alumnos,
           yaRetiraron: _yaRetiraron,
         ),
-        onDeshacer: _deshacer,
+        onDeshacer: ref.read(esRolJefeProvider) ? _deshacer : null,
+        soloJefe: !ref.read(esRolJefeProvider),
       );
 
   @override
@@ -1001,10 +1016,14 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   Widget _cuerpo() {
     final plano = _plano;
     final vista = _vista;
+    // Lo que cambia el salón, solo en modo jefe: sin él la pantalla muestra,
+    // imprime y abre el Historial, y lo demás queda apagado con el motivo.
+    final esJefe = ref.watch(esRolJefeProvider);
     if (plano == null || vista == null) {
       return _SinPlano(
         ilegible: plano != null,
-        onArmar: _ocupado ? null : _elegir,
+        soloJefe: !esJefe,
+        onArmar: _ocupado || !esJefe ? null : _elegir,
       );
     }
     return PlanoEventoCuerpo(
@@ -1019,22 +1038,25 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       repartos: _repartos,
       resaltarAlumnoId: widget.resaltarAlumnoId,
       ocupado: _ocupado,
-      onEstiloYArmado: _elegir,
-      acciones: AccionesPlano(
-        onFijarEnMesa: _fijarEnMesa,
-        onFijar: _fijar,
-        onQuitarFijadas: _quitarFijadas,
-        onQuitarFijadaDeMesa: _quitarFijadaDeMesa,
-        onDejarLibre: _dejarLibre,
-        onVolverAUsar: _volverAUsar,
-        onCambiar: _cambiar,
-        onMover: _mover,
-        onGuardarMedidas: _guardarMedidas,
-        onGuardarColoresYTextos: _guardarColoresYTextos,
-        onGuardarArmado: _guardarSalon,
-      ),
+      onEstiloYArmado: esJefe ? _elegir : null,
+      acciones: esJefe
+          ? AccionesPlano(
+              onFijarEnMesa: _fijarEnMesa,
+              onFijar: _fijar,
+              onQuitarFijadas: _quitarFijadas,
+              onQuitarFijadaDeMesa: _quitarFijadaDeMesa,
+              onDejarLibre: _dejarLibre,
+              onVolverAUsar: _volverAUsar,
+              onCambiar: _cambiar,
+              onMover: _mover,
+              onGuardarMedidas: _guardarMedidas,
+              onGuardarColoresYTextos: _guardarColoresYTextos,
+              onGuardarArmado: _guardarSalon,
+            )
+          : null,
       onImprimir: _imprimir,
       onHistorial: _abrirHistorial,
+      soloJefe: !esJefe,
       pendiente: _pendiente,
     );
   }
@@ -1043,9 +1065,16 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
 /// La fiesta todavía no tiene plano (o el que tiene no se puede leer).
 class _SinPlano extends StatelessWidget {
   final bool ilegible;
+
+  /// Sin modo jefe: el botón queda apagado y el texto dice quién lo arma.
+  final bool soloJefe;
   final VoidCallback? onArmar;
 
-  const _SinPlano({required this.ilegible, required this.onArmar});
+  const _SinPlano({
+    required this.ilegible,
+    required this.soloJefe,
+    required this.onArmar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1068,10 +1097,17 @@ class _SinPlano extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              ilegible
-                  ? 'Elegí el armado de nuevo. Lo demás del plano se conserva.'
-                  : 'Se arma en tres pasos y ya viene todo elegido: el armado '
-                      'del salón, el estilo y cómo se sortea.',
+              soloJefe
+                  ? (ilegible
+                      ? 'Hay que elegir el armado de nuevo. Lo hace el jefe: '
+                          '${kSoloEnModoJefe.toLowerCase()}.'
+                      : 'Lo arma el jefe: ${kSoloEnModoJefe.toLowerCase()}.')
+                  : ilegible
+                      ? 'Elegí el armado de nuevo. Lo demás del plano se '
+                          'conserva.'
+                      : 'Se arma en tres pasos y ya viene todo elegido: el '
+                          'armado del salón, el estilo y cómo se sortea.',
+              key: const Key('sin_plano_texto'),
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade700),
             ),
