@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/database/local_database.dart';
 import '../../../core/services/sync_engine.dart';
 
@@ -83,3 +85,32 @@ Future<bool> subirYa(
           engine.status == SyncStatus.wakingUp ||
           engine.status == SyncStatus.probing,
     );
+
+/// Lo que una pantalla necesita justo después de guardar: subirlo ya y saber
+/// si llegó.
+///
+/// Es [subirYa] y [quedaEnCola], sin cambiar nada de lo que hacen. Van detrás
+/// de un provider porque las dos leen la cola de la base directamente: así un
+/// test que monta la pantalla entera puede contestar "subió" o "quedó en esta
+/// PC" sin base ni red (`test/plano_evento_screen_test.dart`).
+class SubidaInmediata {
+  final SyncEngine _motor;
+
+  const SubidaInmediata(this._motor);
+
+  /// Ver [subirYa].
+  Future<bool> subir({
+    required String tabla,
+    required String registroId,
+    required DateTime desde,
+  }) =>
+      subirYa(_motor, tabla: tabla, registroId: registroId, desde: desde);
+
+  /// Ver [quedaEnCola].
+  Future<bool> queda(Map<String, Iterable<String>> registros) =>
+      quedaEnCola(registros);
+}
+
+final subidaInmediataProvider = Provider<SubidaInmediata>(
+  (ref) => SubidaInmediata(ref.watch(syncEngineProvider)),
+);

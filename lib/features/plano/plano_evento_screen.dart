@@ -398,7 +398,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     setState(() => _ocupado = true);
     try {
       final planos = ref.read(planosEventoRepositoryProvider);
-      final motor = ref.read(syncEngineProvider);
+      final subida = ref.read(subidaInmediataProvider);
       final quien = quienOpera(ref);
       final desde = DateTime.now().toUtc();
       // Antes de escribir, lo que diga la nube: sube la fila entera, y con la
@@ -423,8 +423,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           : null;
       await planos.guardar(nuevo);
       await _cargar();
-      final subio = await subirYa(
-        motor,
+      final subio = await subida.subir(
         tabla: 'planos_evento',
         registroId: nuevo.id,
         desde: desde,
@@ -455,7 +454,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     try {
       final contratos = ref.read(contratosRepositoryProvider);
       final planos = ref.read(planosEventoRepositoryProvider);
-      final motor = ref.read(syncEngineProvider);
+      final subida = ref.read(subidaInmediataProvider);
       final quien = quienOpera(ref);
       final eventoId = widget.evento.id;
       final desde = DateTime.now().toUtc();
@@ -494,8 +493,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       );
       await planos.guardar(nuevo);
       await _cargar();
-      final subio = await subirYa(
-        motor,
+      final subio = await subida.subir(
         tabla: 'planos_evento',
         registroId: nuevo.id,
         desde: desde,
@@ -778,7 +776,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     try {
       final contratos = ref.read(contratosRepositoryProvider);
       final movimientosRepo = ref.read(mesasMovimientosRepositoryProvider);
-      final motor = ref.read(syncEngineProvider);
+      final subida = ref.read(subidaInmediataProvider);
       final quien = quienOpera(ref);
       final eventoId = widget.evento.id;
       final desde = DateTime.now().toUtc();
@@ -851,13 +849,12 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         plano: planoNuevo,
       );
       await _cargar();
-      final subio = await subirYa(
-            motor,
+      final subio = await subida.subir(
             tabla: 'mesas_movimientos',
             registroId: renglon.id,
             desde: desde,
           ) &&
-          !await quedaEnCola({
+          !await subida.queda({
             'contratos_alumnos': cambio.despues.keys,
             if (planoNuevo != null) 'planos_evento': [planoNuevo.id],
           });
