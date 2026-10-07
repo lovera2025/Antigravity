@@ -28,7 +28,6 @@ import 'package:arguello_events/features/eventos/repositories/sorteos_mesas_repo
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
-import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/plano_evento_screen.dart';
@@ -116,11 +115,15 @@ class _Planos extends PlanosEventoRepository {
 
   final guardados = <PlanoEvento>[];
 
+  /// Para frenar un guardado por la mitad y mirar la pantalla mientras tanto.
+  Completer<void>? freno;
+
   @override
   Future<PlanoEvento?> obtener(String eventoId) async => aca;
 
   @override
   Future<void> guardar(PlanoEvento plano) async {
+    await freno?.future;
     guardados.add(plano);
     aca = plano;
     if (!sinRed) nube = plano;
@@ -154,9 +157,15 @@ class _Contratos extends ContratosRepository {
   final asignaciones = <_Asignacion>[];
   final movimientos = <MovimientoMesas>[];
 
+  /// Cuántas veces se leyeron las familias: cada recarga de la pantalla las
+  /// lee una vez.
+  int lecturas = 0;
+
   @override
-  Future<List<ContratoAlumno>> getByEvento(String eventoId) async =>
-      List.of(alumnos);
+  Future<List<ContratoAlumno>> getByEvento(String eventoId) async {
+    lecturas++;
+    return List.of(alumnos);
+  }
 
   @override
   Future<int?> mesasDeOtraPcSinBajar(String eventoId) async =>
@@ -283,10 +292,11 @@ final _evento = Evento(
 
 late SupabaseClient _supabase;
 
-/// Deja pasar lo que la pantalla tiene pendiente (lecturas, guardados).
+/// Deja pasar lo que la pantalla tiene pendiente: lecturas, guardados, y un
+/// cartel que se abre o termina de cerrarse.
 Future<void> _asentar(WidgetTester tester) async {
-  for (var i = 0; i < 6; i++) {
-    await tester.pump(const Duration(milliseconds: 20));
+  for (var i = 0; i < 10; i++) {
+    await tester.pump(const Duration(milliseconds: 30));
   }
 }
 
@@ -386,15 +396,34 @@ Future<void> _guardar(WidgetTester tester, String clave) async {
   await _asentar(tester);
 }
 
-/// Toca un botón de un cartel, por su texto.
+/// Toca un botón del cartel de arriba, por su texto.
 Future<void> _contestar(WidgetTester tester, String texto) async {
-  await tester.tap(find.text(texto));
+  await tester.tap(find.text(texto).last);
   await _asentar(tester);
 }
 
 /// Lo último que dijo la pantalla abajo (el aviso que se va solo).
 String _dicho(WidgetTester tester) =>
     (tester.widget<SnackBar>(find.byType(SnackBar).last).content as Text).data!;
+
+/// Espera a que se vaya el aviso de abajo. Mientras está a la vista tapa los
+/// botones del pie (ESTILO Y ARMADO, IMPRIMIR, HISTORIAL): tocarlos no hace
+/// nada hasta que se va.
+Future<void> _esperarAQueSeVayaElAviso(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 9));
+  await _asentar(tester);
+  expect(find.byType(SnackBar), findsNothing);
+}
+
+/// La flecha de volver, y lo que tarda la pantalla en irse.
+Future<void> _volver(WidgetTester tester) async {
+  await tester.pageBack();
+  await _asentar(tester);
+  await tester.pump(const Duration(milliseconds: 500));
+}
+
+bool _sigueAbierto(WidgetTester tester) =>
+    find.byType(PlanoEventoScreen).evaluate().isNotEmpty;
 
 /// El cartel que hay que cerrar: su título y su texto.
 (String, String) _cartel(WidgetTester tester) {
@@ -406,6 +435,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() {
+    // Tocar un botón tapado (por un cartel, por el aviso de abajo) es un
+    // error del test, no un aviso: si no, el caso pasaría sin haber tocado
+    // nada.
+    WidgetController.hitTestWarningShouldBeFatal = true;
     // No se usa para nada: los reemplazos heredan de clases que lo piden.
     _supabase = SupabaseClient(
       'http://localhost:1',
@@ -413,6 +446,8 @@ void main() {
       authOptions: const AuthClientOptions(autoRefreshToken: false),
     );
   });
+
+  tearDownAll(() => WidgetController.hitTestWarningShouldBeFatal = false);
 
   group('abrir el plano', () {
     testWidgets('en modo jefe se ve el salón, con todo para cambiarlo',
@@ -723,6 +758,278 @@ void main() {
         _dicho(tester),
         'Medidas guardadas. Quedó en esta PC; sube cuando vuelva la conexión.',
       );
+    });
+  });
+
+  // Fijar y dejar libre cambian el plano; cambiar y mudar cambian los números
+  // de mesa de las familias, con su renglón en el Historial.
+  group('las mesas y las familias', () {
+    testWidgets('dejar libre una mesa la guarda con su motivo', (tester) async {
+      final mundo = await _abrir(tester, alumnos: _sinSortear());
+      await _personalizar(tester);
+      await _tocarMesa(tester, 30);
+      await _guardar(tester, 'accion_dejar_libre');
+      await tester.enterText(find.byKey(const Key('motivo')), 'Columna');
+      await tester.pump();
+      await _guardar(tester, 'confirmar');
+
+      expect(mundo.guardado.config.libres.keys, [30]);
+      expect(mundo.guardado.config.libres[30]!.motivo, 'Columna');
+      expect(mundo.guardado.config.libres[30]!.por, isNotEmpty);
+      expect(_dicho(tester), 'La mesa 30 quedó libre.');
+      expect(mundo.contratos.asignaciones, isEmpty);
+    });
+
+    testWidgets('fijar una mesa para una familia la guarda con su motivo',
+        (tester) async {
+      final mundo = await _abrir(tester, alumnos: _sinSortear());
+      await _personalizar(tester);
+      await _tocarMesa(tester, 30);
+      await _guardar(tester, 'accion_fijar_en_mesa');
+      await _tocar(tester, 'familia_sosa');
+      await tester.enterText(
+        find.byKey(const Key('motivo')),
+        'Cerca del ingreso',
+      );
+      await tester.pump();
+      await _guardar(tester, 'confirmar');
+
+      expect(mundo.guardado.config.fijadas.keys, [30]);
+      expect(mundo.guardado.config.fijadas[30]!.alumnoId, 'sosa');
+      expect(mundo.guardado.config.fijadas[30]!.motivo, 'Cerca del ingreso');
+      expect(_dicho(tester), 'Quedó fijada la 30 para SOSA.');
+    });
+
+    /// SOSA, que está en la 20, pasa a la 30: hasta el cartel de confirmar.
+    Future<_Mundo> mudarASosa(WidgetTester tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester);
+      await _tocarMesa(tester, 20);
+      await _tocar(tester, 'accion_mover');
+      await _tocarMesa(tester, 30);
+      await _asentar(tester);
+      await tester.enterText(
+        find.byKey(const Key('motivo')),
+        'Pedido de la familia',
+      );
+      await tester.pump();
+      return mundo;
+    }
+
+    testWidgets('mudar una familia guarda los números y el renglón, juntos',
+        (tester) async {
+      final mundo = await mudarASosa(tester);
+      await _guardar(tester, 'confirmar');
+
+      final cambio = mundo.contratos.asignaciones.single;
+      expect(cambio.numeros, {'sosa': '30'});
+      expect(cambio.movimiento!.tipo, TipoMovimientoMesas.mover);
+      expect(cambio.movimiento!.antes, {'sosa': '20'});
+      expect(cambio.movimiento!.despues, {'sosa': '30'});
+      expect(cambio.movimiento!.motivo, 'Pedido de la familia');
+      expect(cambio.movimiento!.eventoId, _eventoId);
+      expect(_dicho(tester), 'SOSA pasó a la 30.');
+      expect(mundo.subida.pedidas, ['mesas_movimientos']);
+    });
+
+    testWidgets('DESHACER, recién hecho el cambio, lo vuelve atrás con otro '
+        'renglón', (tester) async {
+      final mundo = await mudarASosa(tester);
+      await _guardar(tester, 'confirmar');
+      final hecho = mundo.contratos.asignaciones.single.movimiento!;
+
+      await tester.tap(find.widgetWithText(SnackBarAction, 'DESHACER'));
+      await _asentar(tester);
+      expect(
+        tester.widget<AlertDialog>(find.byType(AlertDialog)).title,
+        isA<Text>().having((t) => t.data, 'título', 'Deshacer el cambio'),
+      );
+      // No pide el motivo de nuevo: queda el del cambio que se deshace.
+      expect(find.byKey(const Key('motivo')), findsNothing);
+      await _guardar(tester, 'confirmar');
+
+      expect(mundo.contratos.asignaciones, hasLength(2));
+      final vuelta = mundo.contratos.asignaciones.last;
+      expect(vuelta.numeros, {'sosa': '20'});
+      expect(vuelta.movimiento!.tipo, TipoMovimientoMesas.deshacer);
+      expect(vuelta.movimiento!.deshaceId, hecho.id);
+      expect(vuelta.movimiento!.motivo, 'Pedido de la familia');
+      expect(_dicho(tester), 'El cambio se deshizo.');
+    });
+
+    testWidgets('desde el Historial también se deshace', (tester) async {
+      final mundo = await mudarASosa(tester);
+      await _guardar(tester, 'confirmar');
+      final hecho = mundo.contratos.asignaciones.single.movimiento!;
+      await _tocar(tester, 'salir_personalizar');
+      await _esperarAQueSeVayaElAviso(tester);
+
+      await _guardar(tester, 'historial');
+      await _guardar(tester, 'deshacer_${hecho.id}');
+      await _guardar(tester, 'confirmar');
+      expect(mundo.contratos.asignaciones.last.numeros, {'sosa': '20'});
+    });
+
+    testWidgets('si las mesas de esa familia cambiaron mientras se confirmaba, '
+        'no se guarda nada', (tester) async {
+      final mundo = await mudarASosa(tester);
+      // La otra PC la pasó a la 21, y ya bajó.
+      mundo.contratos.alumnos = [
+        for (final a in mundo.contratos.alumnos)
+          a.id == 'sosa' ? a.copyWith(numeroMesa: '21') : a,
+      ];
+      await _guardar(tester, 'confirmar');
+      expect(mundo.contratos.asignaciones, isEmpty);
+      expect(_cartel(tester).$1, 'Las mesas cambiaron recién');
+      await _contestar(tester, 'ENTENDIDO');
+    });
+
+    testWidgets('si la otra PC cambió mesas que todavía no bajaron, espera',
+        (tester) async {
+      final mundo = await mudarASosa(tester);
+      mundo.contratos.distintasEnLaOtraPc = 1;
+      await _guardar(tester, 'confirmar');
+      expect(mundo.contratos.asignaciones, isEmpty);
+      expect(_cartel(tester), (
+        'Todavía no',
+        'La otra PC cambió mesas de 1 familia y todavía no llegaron acá. '
+            'Esperá unos segundos y probá de nuevo.',
+      ));
+      await _contestar(tester, 'ENTENDIDO');
+    });
+
+    testWidgets('sin conexión pregunta antes de mudar, y CANCELAR no guarda',
+        (tester) async {
+      final mundo = await mudarASosa(tester);
+      mundo.contratos.distintasEnLaOtraPc = null;
+      mundo.planos.sinRed = true;
+      await _guardar(tester, 'confirmar');
+      expect(_cartel(tester).$1, 'Sin conexión');
+      await _contestar(tester, 'CANCELAR');
+      expect(mundo.contratos.asignaciones, isEmpty);
+    });
+
+    testWidgets('sin modo jefe el Historial se lee, y no deja deshacer',
+        (tester) async {
+      final cambio = MovimientoMesas(
+        id: 'm0000000-0000-4000-8000-000000000001',
+        eventoId: _eventoId,
+        tipo: TipoMovimientoMesas.mover,
+        antes: const {'sosa': '12'},
+        despues: const {'sosa': '20'},
+        motivo: 'Pedido de la familia',
+        hechoPor: 'Jefe',
+        createdAt: _ahora,
+      );
+      final mundo = await _abrir(
+        tester,
+        esJefe: false,
+        antes: (m) => m.contratos.movimientos.add(cambio),
+      );
+      await _guardar(tester, 'historial');
+      expect(find.text('Historial de las mesas'), findsOneWidget);
+      expect(find.text('Motivo: Pedido de la familia'), findsOneWidget);
+      expect(find.byKey(Key('deshacer_${cambio.id}')), findsNothing);
+      expect(
+        find.text('Deshacer un cambio: solo en modo jefe.'),
+        findsOneWidget,
+      );
+      await _contestar(tester, 'CERRAR');
+      expect(mundo.contratos.asignaciones, isEmpty);
+    });
+  });
+
+  group('la flecha de volver', () {
+    testWidgets('sin nada pendiente, sale sin preguntar', (tester) async {
+      await _abrir(tester);
+      await _volver(tester);
+      expect(_sigueAbierto(tester), isFalse);
+      expect(find.text('La fiesta'), findsOneWidget);
+    });
+
+    testWidgets('con algo sin guardar pregunta: SEGUIR ACÁ no pierde nada, '
+        'SALIR SIN GUARDAR sale', (tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'acomodar');
+      await _tocar(tester, 'acomodar_agregar');
+
+      await _volver(tester);
+      expect(find.text('Hay cambios sin guardar'), findsOneWidget);
+      await _guardar(tester, 'seguir_aca');
+      expect(_sigueAbierto(tester), isTrue);
+      // Lo acomodado sigue ahí.
+      expect(find.byKey(const Key('panel_acomodar')), findsOneWidget);
+      expect(_vista(tester).armado.existe(41), isTrue);
+
+      await _volver(tester);
+      await _guardar(tester, 'salir_sin_guardar');
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(_sigueAbierto(tester), isFalse);
+      expect(mundo.planos.guardados, isEmpty);
+    });
+
+    testWidgets('mientras se guarda no se sale', (tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'medidas');
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      mundo.planos.freno = Completer<void>();
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.planos.guardados, isEmpty);
+
+      await _volver(tester);
+      expect(_sigueAbierto(tester), isTrue);
+      expect(find.byType(AlertDialog), findsNothing);
+
+      mundo.planos.freno!.complete();
+      await _asentar(tester);
+      expect(mundo.planos.guardados, hasLength(1));
+      expect(_dicho(tester), 'Medidas guardadas.');
+    });
+  });
+
+  group('lo que baja de la otra PC', () {
+    testWidgets('con la pantalla abierta, se actualiza sola', (tester) async {
+      final mundo = await _abrir(tester);
+      expect(find.text('Promo 2026'), findsNothing);
+      final antes = mundo.contratos.lecturas;
+
+      // Lo que la bajada dejó en la base de esta PC.
+      mundo.planos.aca = _plano(config: const ConfigPlano(titulo: 'Promo 2026'));
+      mundo.motor.bajo.add({'planos_evento'});
+      await _asentar(tester);
+      expect(find.text('Promo 2026'), findsOneWidget);
+      expect(mundo.contratos.lecturas, antes + 1);
+      expect(mundo.planos.guardados, isEmpty);
+    });
+
+    testWidgets('si baja algo que no es del salón, no recarga', (tester) async {
+      final mundo = await _abrir(tester);
+      final antes = mundo.contratos.lecturas;
+      mundo.motor.bajo.add({'pagos_contrato_alumno', 'egresos'});
+      await _asentar(tester);
+      expect(mundo.contratos.lecturas, antes);
+    });
+
+    testWidgets('si baja mientras se guarda, se relee al terminar',
+        (tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'medidas');
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      mundo.planos.freno = Completer<void>();
+      await _guardar(tester, 'guardar_medidas');
+
+      // Guardando: lo que baja espera.
+      final antes = mundo.contratos.lecturas;
+      mundo.motor.bajo.add({'contratos_alumnos'});
+      await _asentar(tester);
+      expect(mundo.contratos.lecturas, antes);
+
+      // Al terminar se lee dos veces: lo recién guardado, y lo que bajó.
+      mundo.planos.freno!.complete();
+      await _asentar(tester);
+      expect(mundo.contratos.lecturas, antes + 2);
     });
   });
 }
