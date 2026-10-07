@@ -8,6 +8,7 @@
 //   • Pantalla_plano_<estilo>.png: la pantalla con una familia elegida;
 //   • Pantalla_plano_faltan.png: un armado donde la fiesta no entra;
 //   • Pantalla_plano_operario.png: la pantalla sin modo jefe;
+//   • Pantalla_plano_aviso.png: el aviso de lo que pasó, al lado de los botones;
 //   • Pasos_plano.png: la primera vez, con todo ya elegido;
 //   • Pasos_plano_trabado.png: con familias ya sentadas;
 //   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, el
@@ -152,6 +153,7 @@ Widget _pantalla(
   AccionesPlano? acciones,
   ConfigPlano config = ConfigPlano.vacia,
   bool soloJefe = false,
+  AvisoDelPlano? aviso,
 }) =>
     Scaffold(
       appBar: AppBar(
@@ -181,9 +183,10 @@ Widget _pantalla(
         resaltarAlumnoId: resaltar,
         onEstiloYArmado: soloJefe ? null : () {},
         acciones: soloJefe ? null : acciones,
-        onImprimir: soloJefe ? () {} : null,
+        onImprimir: soloJefe || aviso != null ? () {} : null,
         onHistorial: () {},
         soloJefe: soloJefe,
+        aviso: aviso,
       ),
     );
 
@@ -254,6 +257,25 @@ void main() {
     );
     // Queda corriendo el pulso de la familia resaltada.
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('la pantalla con el aviso de lo que pasó', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(
+        aMedida,
+        escuela,
+        EstiloPlano.arquitecto,
+        acciones: _sinHacer,
+        aviso: AvisoDelPlano(
+          'ACOSTA pasó a la 60 y la 61.',
+          accion: 'DESHACER',
+          onAccion: () {},
+        ),
+      ),
+      const Size(1366, 768),
+      'Pantalla_plano_aviso.png',
+    );
   });
 
   testWidgets('la pantalla cuando la fiesta no entra en el armado',

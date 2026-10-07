@@ -118,12 +118,16 @@ class _Planos extends PlanosEventoRepository {
   /// Para frenar un guardado por la mitad y mirar la pantalla mientras tanto.
   Completer<void>? freno;
 
+  /// La base no deja guardar.
+  bool falla = false;
+
   @override
   Future<PlanoEvento?> obtener(String eventoId) async => aca;
 
   @override
   Future<void> guardar(PlanoEvento plano) async {
     await freno?.future;
+    if (falla) throw Exception('SqliteException(5): database is locked');
     guardados.add(plano);
     aca = plano;
     if (!sinRed) nube = plano;
@@ -402,18 +406,10 @@ Future<void> _contestar(WidgetTester tester, String texto) async {
   await _asentar(tester);
 }
 
-/// Lo último que dijo la pantalla abajo (el aviso que se va solo).
-String _dicho(WidgetTester tester) =>
-    (tester.widget<SnackBar>(find.byType(SnackBar).last).content as Text).data!;
-
-/// Espera a que se vaya el aviso de abajo. Mientras está a la vista tapa los
-/// botones del pie (ESTILO Y ARMADO, IMPRIMIR, HISTORIAL): tocarlos no hace
-/// nada hasta que se va.
-Future<void> _esperarAQueSeVayaElAviso(WidgetTester tester) async {
-  await tester.pump(const Duration(seconds: 9));
-  await _asentar(tester);
-  expect(find.byType(SnackBar), findsNothing);
-}
+/// Lo último que dijo la pantalla: el aviso al lado de los botones del pie.
+String _dicho(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const Key('aviso_del_pie_texto')))
+    .data!;
 
 /// La flecha de volver, y lo que tarda la pantalla en irse.
 Future<void> _volver(WidgetTester tester) async {
@@ -838,8 +834,7 @@ void main() {
       await _guardar(tester, 'confirmar');
       final hecho = mundo.contratos.asignaciones.single.movimiento!;
 
-      await tester.tap(find.widgetWithText(SnackBarAction, 'DESHACER'));
-      await _asentar(tester);
+      await _guardar(tester, 'aviso_del_pie_accion');
       expect(
         tester.widget<AlertDialog>(find.byType(AlertDialog)).title,
         isA<Text>().having((t) => t.data, 'título', 'Deshacer el cambio'),
@@ -862,8 +857,9 @@ void main() {
       await _guardar(tester, 'confirmar');
       final hecho = mundo.contratos.asignaciones.single.movimiento!;
       await _tocar(tester, 'salir_personalizar');
-      await _esperarAQueSeVayaElAviso(tester);
 
+      // Con el aviso todavía a la vista: va al lado de los botones, no encima.
+      expect(find.byKey(const Key('aviso_del_pie')), findsOneWidget);
       await _guardar(tester, 'historial');
       await _guardar(tester, 'deshacer_${hecho.id}');
       await _guardar(tester, 'confirmar');
@@ -1030,6 +1026,92 @@ void main() {
       mundo.planos.freno!.complete();
       await _asentar(tester);
       expect(mundo.contratos.lecturas, antes + 2);
+    });
+  });
+
+  // Lo que la pantalla dice después de un cambio va al lado de los botones del
+  // pie. Antes iba en el aviso de abajo de siempre, que quedaba varios segundos
+  // encima de ESTILO Y ARMADO, PERSONALIZAR, IMPRIMIR e HISTORIAL: tocarlos en
+  // ese rato no hacía nada.
+  group('el aviso de lo que pasó', () {
+    Future<_Mundo> guardarMedidas(
+      WidgetTester tester, {
+      void Function(_Mundo mundo)? antes,
+    }) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'medidas');
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      antes?.call(mundo);
+      await _guardar(tester, 'guardar_medidas');
+      return mundo;
+    }
+
+    testWidgets('va al lado de los botones del pie, y no los tapa',
+        (tester) async {
+      await guardarMedidas(tester);
+      expect(_dicho(tester), 'Medidas guardadas.');
+      expect(find.byType(SnackBar), findsNothing);
+      // Está en el mismo renglón que los botones, a su derecha.
+      final aviso = tester.getRect(find.byKey(const Key('aviso_del_pie')));
+      final historial = tester.getRect(find.byKey(const Key('historial')));
+      expect(aviso.left, greaterThanOrEqualTo(historial.right));
+      expect(aviso.center.dy, closeTo(historial.center.dy, 12));
+      // Y los botones se pueden tocar ya: en este archivo, tocar algo tapado
+      // es un error.
+      await _guardar(tester, 'historial');
+      expect(find.text('Historial de las mesas'), findsOneWidget);
+      await _contestar(tester, 'CERRAR');
+    });
+
+    testWidgets('se va solo', (tester) async {
+      await guardarMedidas(tester);
+      expect(find.byKey(const Key('aviso_del_pie')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      expect(find.byKey(const Key('aviso_del_pie')), findsNothing);
+    });
+
+    testWidgets('si no se pudo guardar lo dice en palabras, sin el error crudo',
+        (tester) async {
+      final mundo = await guardarMedidas(tester, antes: (m) => m.planos.falla = true);
+      expect(mundo.planos.guardados, isEmpty);
+      expect(
+        _dicho(tester),
+        'No se pudo guardar. Tocá Actualizar para ver cómo quedó y probá de '
+        'nuevo.',
+      );
+      // El error tal cual vino queda para quien lo busque, al pasar el mouse.
+      final pista = tester.widget<Tooltip>(
+        find.ancestor(
+          of: find.byKey(const Key('aviso_del_pie_texto')),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(pista.message, contains('database is locked'));
+      // Y la pantalla queda libre para probar de nuevo.
+      mundo.planos.falla = false;
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.planos.guardados, hasLength(1));
+      expect(_dicho(tester), 'Medidas guardadas.');
+    });
+
+    testWidgets('en una fiesta sin plano no hay pie: va en el aviso de abajo',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        conPlano: false,
+        alumnos: _sinSortear(),
+        antes: (m) => m.planos.falla = true,
+      );
+      await _guardar(tester, 'listo');
+      expect(mundo.planos.guardados, isEmpty);
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.text('No se pudo guardar el plano. Tocá Actualizar para ver cómo '
+            'quedó y probá de nuevo.'),
+        findsOneWidget,
+      );
     });
   });
 }

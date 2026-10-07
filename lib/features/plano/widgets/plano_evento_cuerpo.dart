@@ -108,6 +108,41 @@ enum ModoPersonalizar {
 /// Lo que Personalizar está esperando que se toque en el plano.
 enum _Espera { mover, fijar, cambiar }
 
+/// Lo último que pasó en el plano ("SOSA pasó a la 30."), con lo que se puede
+/// hacer al respecto (DESHACER).
+///
+/// Se muestra al lado de los botones del pie y no en el aviso de abajo de
+/// siempre: ese quedaba varios segundos encima de ESTILO Y ARMADO,
+/// PERSONALIZAR, IMPRIMIR e HISTORIAL, y tocarlos en ese rato no hacía nada.
+class AvisoDelPlano {
+  final String texto;
+
+  /// El rótulo de lo que se puede hacer ("DESHACER"). Null: nada.
+  final String? accion;
+  final VoidCallback? onAccion;
+
+  /// Algo no salió: va en rojo.
+  final bool esError;
+
+  /// El error tal cual vino, para quien lo busque: se ve al pasar el mouse.
+  final String? detalle;
+
+  const AvisoDelPlano(
+    this.texto, {
+    this.accion,
+    this.onAccion,
+    this.esError = false,
+    this.detalle,
+  });
+
+  /// Cuánto queda a la vista: lo que lleva leerlo, y más si trae un botón.
+  static Duration duracion(String texto, {required bool conAccion}) {
+    final leer = (texto.length / 16).ceil();
+    final minimo = conAccion ? 8 : 4;
+    return Duration(seconds: leer < minimo ? minimo : leer.clamp(minimo, 12));
+  }
+}
+
 /// La pantalla del plano, sin base ni Riverpod: recibe el plano ya calculado
 /// ([PlanoDeLaFiesta]) y avisa lo que se toca. Así se prueba y se dibuja en
 /// una muestra sin abrir la app.
@@ -153,6 +188,10 @@ class PlanoEventoCuerpo extends StatefulWidget {
   /// escrito ([kSoloEnModoJefe]).
   final bool soloJefe;
 
+  /// Lo último que pasó, al lado de los botones del pie. La pantalla lo saca
+  /// sola a los segundos.
+  final AvisoDelPlano? aviso;
+
   /// Para que la pantalla sepa, al querer salir, si hay algo sin guardar.
   final PendienteDelPlano? pendiente;
 
@@ -170,6 +209,7 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.onImprimir,
     this.onHistorial,
     this.soloJefe = false,
+    this.aviso,
     this.pendiente,
   });
 
@@ -1934,8 +1974,52 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ),
+          if (widget.aviso != null) Expanded(child: _avisoDelPie(widget.aviso!)),
         ],
       ),
+    );
+  }
+
+  /// Lo último que pasó, en el lugar que sobra a la derecha de los botones.
+  Widget _avisoDelPie(AvisoDelPlano aviso) {
+    final color =
+        aviso.esError ? Colors.red.shade700 : Colors.green.shade800;
+    return Row(
+      key: const Key('aviso_del_pie'),
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Icon(
+          aviso.esError ? Icons.error_outline : Icons.check_circle_outline,
+          size: 18,
+          color: color,
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Tooltip(
+            // Entero, por si el lugar no alcanzó; y el error tal cual vino.
+            message: aviso.detalle == null
+                ? aviso.texto
+                : '${aviso.texto}\n${aviso.detalle}',
+            child: Text(
+              aviso.texto,
+              key: const Key('aviso_del_pie_texto'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        if (aviso.accion != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: TextButton(
+              key: const Key('aviso_del_pie_accion'),
+              onPressed: aviso.onAccion,
+              child: Text(aviso.accion!),
+            ),
+          ),
+      ],
     );
   }
 }

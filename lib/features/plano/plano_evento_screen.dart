@@ -146,6 +146,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   @override
   void dispose() {
     _cambiosSub?.cancel();
+    _relojDelAviso?.cancel();
     final mensajes = _mensajes;
     if (mensajes != null) {
       // Después de este cuadro: cerrar el aviso en medio del desmontaje no se
@@ -267,16 +268,55 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
 
   // ── Avisos y preguntas ──────────────────────────────────────────────────
 
-  void _decir(String texto, {SnackBarAction? accion}) {
+  /// Lo último que pasó, al lado de los botones del pie.
+  AvisoDelPlano? _aviso;
+  Timer? _relojDelAviso;
+
+  /// Dice lo que pasó. Va al lado de los botones del pie, donde no tapa nada,
+  /// y se va solo. [accion] es lo que se puede hacer al respecto (DESHACER).
+  /// Con [error], va en rojo y el error tal cual vino queda para quien lo
+  /// busque (al pasar el mouse, y en el registro): a quien usa la pantalla se
+  /// le dice qué hacer, no el texto de la excepción.
+  ///
+  /// Una fiesta sin plano no tiene pie: ahí va en el aviso de abajo de siempre.
+  void _decir(
+    String texto, {
+    String? accion,
+    VoidCallback? onAccion,
+    Object? error,
+  }) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text(texto),
-        action: accion,
-        duration: Duration(seconds: accion == null ? 4 : 8),
-        persist: false,
-      ));
+    if (error != null) debugPrint('⚠️ Plano: $texto ($error)');
+    _relojDelAviso?.cancel();
+    if (_plano == null || _vista == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(texto)));
+      return;
+    }
+    setState(() {
+      _aviso = AvisoDelPlano(
+        texto,
+        accion: accion,
+        onAccion: onAccion == null
+            ? null
+            : () {
+                _quitarAviso();
+                onAccion();
+              },
+        esError: error != null,
+        detalle: error?.toString(),
+      );
+    });
+    _relojDelAviso = Timer(
+      AvisoDelPlano.duracion(texto, conAccion: accion != null),
+      _quitarAviso,
+    );
+  }
+
+  void _quitarAviso() {
+    _relojDelAviso?.cancel();
+    if (mounted && _aviso != null) setState(() => _aviso = null);
   }
 
   Future<void> _avisar(String titulo, String texto) async {
@@ -433,7 +473,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
       );
     } catch (e) {
-      _decir('No se pudo guardar el plano. ($e)');
+      _decir(
+        'No se pudo guardar el plano. Tocá Actualizar para ver cómo quedó y '
+        'probá de nuevo.',
+        error: e,
+      );
     } finally {
       _terminar();
     }
@@ -503,7 +547,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
       );
     } catch (e) {
-      _decir('No se pudo guardar. ($e)');
+      _decir(
+        'No se pudo guardar. Tocá Actualizar para ver cómo quedó y probá de '
+        'nuevo.',
+        error: e,
+      );
     } finally {
       _terminar();
     }
@@ -861,17 +909,19 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       _decir(
         '${cambio.textoHecho((id) => _apellidoDe(id, alumnos))}'
         '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
-        accion: cambio.tipo == TipoMovimientoMesas.deshacer
+        accion: cambio.tipo == TipoMovimientoMesas.deshacer ? null : 'DESHACER',
+        onAccion: cambio.tipo == TipoMovimientoMesas.deshacer
             ? null
-            : SnackBarAction(
-                label: 'DESHACER',
-                onPressed: () {
-                  if (mounted) _deshacer(renglon);
-                },
-              ),
+            : () {
+                if (mounted) _deshacer(renglon);
+              },
       );
     } catch (e) {
-      _decir('No se pudo guardar el cambio. ($e)');
+      _decir(
+        'No se pudo guardar el cambio. Tocá Actualizar para ver cómo quedó y '
+        'probá de nuevo.',
+        error: e,
+      );
     } finally {
       _terminar();
     }
@@ -945,7 +995,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         blancoYNegro: blancoYNegro,
       );
     } catch (e) {
-      _decir('No se pudo armar el plano para imprimir. ($e)');
+      _decir('No se pudo armar el plano para imprimir.', error: e);
     }
   }
 
@@ -1054,6 +1104,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       onImprimir: _imprimir,
       onHistorial: _abrirHistorial,
       soloJefe: !esJefe,
+      aviso: _aviso,
       pendiente: _pendiente,
     );
   }

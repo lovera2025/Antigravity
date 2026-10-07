@@ -83,6 +83,7 @@ Future<void> _mostrar(
   VoidCallback? onImprimir,
   VoidCallback? onHistorial,
   bool soloJefe = false,
+  AvisoDelPlano? aviso,
   PendienteDelPlano? pendiente,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
@@ -103,6 +104,7 @@ Future<void> _mostrar(
           onImprimir: onImprimir,
           onHistorial: onHistorial,
           soloJefe: soloJefe,
+          aviso: aviso,
           pendiente: pendiente,
         ),
       ),
@@ -520,6 +522,126 @@ void main() {
       );
       expect(prendido(tester, 'personalizar'), isTrue);
       expect(find.byKey(const Key('motivo_solo_jefe')), findsNothing);
+    });
+  });
+
+  // Lo último que pasó va al lado de los botones del pie: ahí no tapa nada.
+  group('el aviso del pie', () {
+    testWidgets('sin aviso no hay nada', (tester) async {
+      await _mostrar(tester, onImprimir: () {}, onHistorial: () {});
+      expect(find.byKey(const Key('aviso_del_pie')), findsNothing);
+    });
+
+    testWidgets('dice lo que pasó, a la derecha de los botones', (tester) async {
+      await _mostrar(
+        tester,
+        onEstiloYArmado: () {},
+        acciones: _acciones([]),
+        onImprimir: () {},
+        onHistorial: () {},
+        aviso: const AvisoDelPlano('La mesa 30 quedó libre.'),
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('aviso_del_pie_texto')))
+            .data,
+        'La mesa 30 quedó libre.',
+      );
+      expect(find.byKey(const Key('aviso_del_pie_accion')), findsNothing);
+      final aviso = tester.getRect(find.byKey(const Key('aviso_del_pie')));
+      for (final boton in ['estilo_y_armado', 'personalizar', 'imprimir', 'historial']) {
+        expect(
+          aviso.left,
+          greaterThanOrEqualTo(tester.getRect(find.byKey(Key(boton))).right),
+          reason: boton,
+        );
+      }
+    });
+
+    testWidgets('con algo para hacer, trae su botón', (tester) async {
+      var deshechos = 0;
+      await _mostrar(
+        tester,
+        onHistorial: () {},
+        aviso: AvisoDelPlano(
+          'SOSA pasó a la 30.',
+          accion: 'DESHACER',
+          onAccion: () => deshechos++,
+        ),
+      );
+      await tester.tap(find.byKey(const Key('aviso_del_pie_accion')));
+      expect(deshechos, 1);
+    });
+
+    testWidgets('un error va en rojo, con el detalle al pasar el mouse',
+        (tester) async {
+      await _mostrar(
+        tester,
+        onHistorial: () {},
+        aviso: const AvisoDelPlano(
+          'No se pudo guardar.',
+          esError: true,
+          detalle: 'SqliteException(5)',
+        ),
+      );
+      final texto =
+          tester.widget<Text>(find.byKey(const Key('aviso_del_pie_texto')));
+      expect(texto.style!.color, Colors.red.shade700);
+      expect(find.byIcon(Icons.error_outline), findsWidgets);
+      expect(
+        tester
+            .widget<Tooltip>(find.ancestor(
+              of: find.byKey(const Key('aviso_del_pie_texto')),
+              matching: find.byType(Tooltip),
+            ))
+            .message,
+        'No se pudo guardar.\nSqliteException(5)',
+      );
+    });
+
+    testWidgets('uno largo no desborda: se corta, y entero al pasar el mouse',
+        (tester) async {
+      const largo = 'El salón quedó guardado. Para darle mesa a quien todavía '
+          'no tiene, tocá SORTEO en la fiesta: los que ya tienen no se mueven.';
+      await _mostrar(
+        tester,
+        onEstiloYArmado: () {},
+        acciones: _acciones([]),
+        onImprimir: () {},
+        onHistorial: () {},
+        aviso: const AvisoDelPlano(largo),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .widget<Tooltip>(find.ancestor(
+              of: find.byKey(const Key('aviso_del_pie_texto')),
+              matching: find.byType(Tooltip),
+            ))
+            .message,
+        largo,
+      );
+    });
+
+    test('queda a la vista lo que lleva leerlo, y más si trae un botón', () {
+      expect(
+        AvisoDelPlano.duracion('Medidas guardadas.', conAccion: false),
+        const Duration(seconds: 4),
+      );
+      expect(
+        AvisoDelPlano.duracion('SOSA pasó a la 30.', conAccion: true),
+        const Duration(seconds: 8),
+      );
+      // Uno de 125 letras necesita más de cuatro segundos.
+      expect(
+        AvisoDelPlano.duracion('x' * 125, conAccion: false),
+        const Duration(seconds: 8),
+      );
+      // Pero no se queda para siempre.
+      expect(
+        AvisoDelPlano.duracion('x' * 900, conAccion: false),
+        const Duration(seconds: 12),
+      );
     });
   });
 
