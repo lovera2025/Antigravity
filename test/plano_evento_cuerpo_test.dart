@@ -1527,6 +1527,186 @@ void main() {
         tester.widget<ButtonStyleButton>(find.byKey(Key(clave))).onPressed !=
         null;
 
+    /// Separa todo el salón a 2,5 m: dos mesas quedan fuera del hormigón.
+    Future<void> separar(WidgetTester tester) async {
+      tester
+          .widget<Slider>(find.byKey(const Key('separar_paso')))
+          .onChanged!(2.5);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('separar_aplicar')));
+      await tester.pump();
+    }
+
+    testWidgets('un aviso dice de qué mesas habla, se toca y lleva a ellas, '
+        'de a una', (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await separar(tester);
+
+      // El del panel (el encabezado también lo dice, más corto).
+      final aviso = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('aviso_acomodar_0')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(aviso.data, startsWith('2 mesas no entran en el hormigón: la '));
+      expect(aviso.data, endsWith('. Correlas o marcalas de pasto.'));
+      final mesas = [
+        for (final m in RegExp(r'la (\d+)').allMatches(aviso.data!))
+          int.parse(m.group(1)!),
+      ];
+      expect(mesas, hasLength(2));
+      expect(elegido(tester), 'Tocá una mesa o un sector, o arrastralo.');
+
+      // Toca el aviso: va a la primera y la deja elegida, con el plano
+      // acercado a ella.
+      await tester.ensureVisible(find.byKey(const Key('aviso_acomodar_0')));
+      await tester.tap(find.byKey(const Key('aviso_acomodar_0')));
+      await tester.pump();
+      expect(elegido(tester), 'Mesa ${mesas[0]} · vacía');
+      expect(_zoom(tester), greaterThan(2));
+      // Otro toque: la que sigue. Y después vuelve a la primera.
+      await tester.tap(find.byKey(const Key('aviso_acomodar_0')));
+      await tester.pump();
+      expect(elegido(tester), 'Mesa ${mesas[1]} · vacía');
+      await tester.tap(find.byKey(const Key('aviso_acomodar_0')));
+      await tester.pump();
+      expect(elegido(tester), 'Mesa ${mesas[0]} · vacía');
+    });
+
+    testWidgets('por qué no se puede guardar va pegado a GUARDAR, fuera de lo '
+        'que se desliza, y lleva a la mesa', (tester) async {
+      final armado = _armado();
+      await _mostrar(tester,
+          plano: _plano(armado: armado), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final a = armado.mesa(30)!;
+      final vecina = armado.mesasDeHoja(a.hoja).firstWhere(
+          (m) => m.numero != 30 && armado.distanciaM(30, m.numero)! < 2.1);
+      await _arrastrarMesa(
+        tester,
+        30,
+        Offset(armado.aMetros(vecina.x - a.x), armado.aMetros(vecina.y - a.y)),
+      );
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      final bloqueo = find.byKey(const Key('bloqueo_0'));
+      expect(bloqueo, findsOneWidget);
+      // No está adentro de la lista que se desliza.
+      expect(
+        find.ancestor(of: bloqueo, matching: find.byType(ListView)),
+        findsNothing,
+      );
+      // Y queda justo arriba del botón.
+      final caja = tester.getRect(bloqueo);
+      final guardar = tester.getRect(find.byKey(const Key('guardar_acomodo')));
+      expect(caja.bottom, lessThanOrEqualTo(guardar.top));
+      expect(guardar.top - caja.bottom, lessThan(24));
+
+      // Se toca y lleva a una de las dos que se pisan; otro toque, a la otra.
+      await tester.tap(bloqueo);
+      await tester.pump();
+      final primera = elegido(tester);
+      await tester.tap(bloqueo);
+      await tester.pump();
+      final segunda = elegido(tester);
+      expect({primera, segunda}, hasLength(2));
+      expect(
+        {primera, segunda}.map((t) => t.split(' · ').first).toSet(),
+        {'Mesa 30', 'Mesa ${vecina.numero}'},
+      );
+    });
+
+    testWidgets('con la vista previa de separar abierta, dice por qué GUARDAR '
+        'está gris', (tester) async {
+      await _mostrar(tester,
+          plano: _plano(armado: _armado()), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await tester.tap(find.byKey(const Key('acomodar_agregar')));
+      await tester.pump();
+      expect(find.byKey(const Key('motivo_sin_guardar')), findsNothing);
+      tester
+          .widget<Slider>(find.byKey(const Key('separar_paso')))
+          .onChanged!(2.2);
+      await tester.pump();
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      expect(
+        texto(tester, 'motivo_sin_guardar'),
+        'Para guardar, primero tocá APLICAR o CANCELAR en Separar o juntar.',
+      );
+    });
+
+    testWidgets('la barra de desplazamiento del panel queda a la vista',
+        (tester) async {
+      await _mostrar(tester,
+          plano: _plano(armado: _armado()), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final barra =
+          tester.widget<Scrollbar>(find.byKey(const Key('barra_acomodar')));
+      expect(barra.thumbVisibility, isTrue);
+      expect(barra.controller, isNotNull);
+    });
+
+    testWidgets('el encabezado dice lo que se está probando, no lo guardado',
+        (tester) async {
+      await _mostrar(tester,
+          plano: _plano(armado: _armado()), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      expect(texto(tester, 'encabezado_detalle'), startsWith('40 mesas'));
+      expect(find.byKey(const Key('encabezado_sin_guardar')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('acomodar_agregar')));
+      await tester.pump();
+      expect(texto(tester, 'encabezado_detalle'), startsWith('41 mesas'));
+      expect(find.byKey(const Key('encabezado_sin_guardar')), findsOneWidget);
+
+      // Deshecho, vuelve a decir lo guardado.
+      await tester.tap(find.byKey(const Key('acomodar_deshacer')));
+      await tester.pump();
+      expect(texto(tester, 'encabezado_detalle'), startsWith('40 mesas'));
+      expect(find.byKey(const Key('encabezado_sin_guardar')), findsNothing);
+    });
+
+    testWidgets('con mesas fuera del hormigón, el encabezado ya no dice que '
+        'entran', (tester) async {
+      await _mostrar(tester,
+          plano: _plano(armado: _armado()), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final antes =
+          tester.widget<Text>(find.descendant(
+        of: find.byKey(const Key('titular')),
+        matching: find.byType(Text),
+      )).data!;
+      await separar(tester);
+      final despues =
+          tester.widget<Text>(find.descendant(
+        of: find.byKey(const Key('titular')),
+        matching: find.byType(Text),
+      )).data!;
+      expect(antes, startsWith('Entran'));
+      expect(despues, '2 mesas no entran en el hormigón');
+      expect(find.byKey(const Key('encabezado_sin_guardar')), findsOneWidget);
+    });
+
+    testWidgets('con el plano acercado, la mesa que se agrega queda a la vista',
+        (tester) async {
+      await _mostrar(tester,
+          plano: _plano(armado: _armado()), acciones: _acciones([], salon: []));
+      await abrir(tester);
+      await tester.tap(find.byKey(const Key('acercar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('acercar')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('acomodar_agregar')));
+      await tester.pump();
+      // `_enPantalla` ya da el lugar con el zoom puesto.
+      final vista = tester.getRect(find.byType(InteractiveViewer));
+      expect(vista.contains(_enPantalla(tester, 41)), isTrue);
+      expect(_zoom(tester), greaterThan(2));
+    });
+
     testWidgets('la pestaña va segunda, y abre con el salón como está',
         (tester) async {
       final armado = _armado();
@@ -1756,9 +1936,16 @@ void main() {
       expect(_vista(tester).armado.distanciaM(1, 2), closeTo(2.5, 1e-6));
       expect(prendido(tester, 'guardar_acomodo'), isTrue);
       expect(texto(tester, 'separar_metros'), '2,5 m');
-      // Lo que dijo la vista previa es lo que avisa el salón ya aplicado.
-      expect(find.textContaining('2 mesas no entran en el hormigón'),
-          findsOneWidget);
+      // Lo que dijo la vista previa es lo que avisa el salón ya aplicado: en
+      // el panel, con sus mesas, y arriba, en el encabezado.
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('panel_acomodar')),
+          matching: find.textContaining('2 mesas no entran en el hormigón: '),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('2 mesas no entran en el hormigón'), findsOneWidget);
     });
 
     testWidgets('separar: a una distancia que borraría un pasillo, APLICAR '

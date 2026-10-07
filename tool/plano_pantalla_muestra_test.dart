@@ -448,6 +448,33 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('personalizar: Acomodar, los avisos antes de guardar, en una '
+      'notebook', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(aMedida, escuela, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1366, 768),
+      'Personalizar_acomodar_avisos.png',
+      antes: () async {
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('pestana_acomodar')));
+        await tester.pump();
+        // Se separa todo el salón: algunas mesas ya no entran en el hormigón.
+        tester
+            .widget<Slider>(find.byKey(const Key('separar_paso')))
+            .onChanged!(2.6);
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('separar_aplicar')));
+        await tester.pump();
+        // Se toca el aviso: va a la primera de esas mesas.
+        await tester.ensureVisible(find.byKey(const Key('aviso_acomodar_0')));
+        await tester.pump();
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('personalizar: tocar a dónde se muda la familia', (tester) async {
     await _guardar(
       tester,

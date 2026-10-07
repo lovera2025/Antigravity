@@ -90,13 +90,20 @@ class SesionAcomodo {
     return !_igualALaBase;
   }
 
-  /// Lo que no deja guardar así, en palabras.
-  List<String> get bloqueos => [
-        ...EditarArmado.bloqueos(_actual),
+  /// Lo que no deja guardar así, con las mesas de las que habla.
+  List<AvisoAcomodo> get bloqueosConMesas => [
+        for (final (x, y) in EditarArmado.pisadas(_actual))
+          AvisoAcomodo('Las mesas $x y $y se pisan.', [x, y]),
+        if (_actual.mesas.isEmpty) const AvisoAcomodo('El salón quedó sin mesas.'),
         if (hayCambios && cambioElUso)
-          'Mientras acomodabas cambiaron las mesas de las familias. Tocá '
-              'DESCARTAR para ver cómo quedó y acomodá de nuevo.',
+          const AvisoAcomodo(
+            'Mientras acomodabas cambiaron las mesas de las familias. Tocá '
+            'DESCARTAR para ver cómo quedó y acomodá de nuevo.',
+          ),
       ];
+
+  /// Lo que no deja guardar así, en palabras.
+  List<String> get bloqueos => [for (final b in bloqueosConMesas) b.texto];
 
   bool get puedeGuardar =>
       hayCambios && bloqueos.isEmpty && !arrastrando && _previa == null;
@@ -321,32 +328,77 @@ class SesionAcomodo {
 
   /// Avisos que no frenan el guardado: familias que quedaron con sus mesas
   /// separadas, mesas apretadas, mesas fuera del hormigón y mesas tapadas por
-  /// un sector.
-  List<String> avisos(int Function(int numero) sillasExtraDe) {
-    final r = <String>[];
+  /// un sector. Cada uno trae sus mesas: en la pantalla se toca y lleva a
+  /// ellas ("5 mesas quedan apretadas" solo no dice cuáles).
+  List<AvisoAcomodo> avisosConMesas(int Function(int numero) sillasExtraDe) {
+    final r = <AvisoAcomodo>[];
     // Lo mismo que el plano marca como grave una vez guardado: mejor verlo
     // antes de guardar.
-    r.addAll(_actual.problemas().where((p) => p.contains('tapa la mesa')));
+    for (final p in _actual.problemas()) {
+      if (!p.contains('tapa la mesa')) continue;
+      r.add(AvisoAcomodo(p, [
+        for (final m in RegExp(r'mesa (\d+)').allMatches(p))
+          int.parse(m.group(1)!),
+      ]));
+    }
     for (final o in EditarArmado.familiasPartidas(base, _actual, ocupantes)) {
       final mesas = o.numeros.toList()..sort();
-      r.add('${o.apellido} quedó con sus mesas ${mesas.join(' y ')} '
-          'separadas.');
+      r.add(AvisoAcomodo(
+        '${o.apellido} quedó con sus mesas ${mesas.join(' y ')} separadas.',
+        mesas,
+      ));
     }
     final lugar = MedirSalon.revisar(_actual, medidas, sillasExtraDe);
-    final apretadas = <int>{for (final p in lugar.apretadas) ...p.sinLugar};
+    final apretadas = <int>{for (final p in lugar.apretadas) ...p.sinLugar}
+        .toList()
+      ..sort();
     if (apretadas.isNotEmpty) {
-      r.add(apretadas.length == 1
-          ? 'La mesa ${apretadas.single} queda apretada.'
-          : '${apretadas.length} mesas quedan apretadas (en rojo).');
+      r.add(AvisoAcomodo(
+        apretadas.length == 1
+            ? 'La mesa ${apretadas.single} queda apretada.'
+            : '${apretadas.length} mesas quedan apretadas: '
+                '${AvisoAcomodo.enLista(apretadas)}.',
+        apretadas,
+      ));
     }
-    final afuera = lugar.fueraDelHormigon;
+    final afuera = lugar.fueraDelHormigon.toList()..sort();
     if (afuera.isNotEmpty) {
-      r.add(afuera.length == 1
-          ? 'La mesa ${afuera.single} no entra en el hormigón: correla o '
-              'marcala de pasto.'
-          : '${afuera.length} mesas no entran en el hormigón: correlas o '
-              'marcalas de pasto.');
+      r.add(AvisoAcomodo(
+        afuera.length == 1
+            ? 'La mesa ${afuera.single} no entra en el hormigón: correla o '
+                'marcala de pasto.'
+            : '${afuera.length} mesas no entran en el hormigón: '
+                '${AvisoAcomodo.enLista(afuera)}. Correlas o marcalas de '
+                'pasto.',
+        afuera,
+      ));
     }
     return r;
+  }
+
+  /// Los mismos avisos, solo en palabras.
+  List<String> avisos(int Function(int numero) sillasExtraDe) =>
+      [for (final a in avisosConMesas(sillasExtraDe)) a.texto];
+}
+
+/// Algo para mirar antes de guardar el salón, con las mesas de las que habla.
+/// En la pantalla se toca y lleva a ellas, de a una.
+class AvisoAcomodo {
+  final String texto;
+  final List<int> mesas;
+
+  const AvisoAcomodo(this.texto, [this.mesas = const []]);
+
+  /// "la 40, la 44 y la 50". Con más de [maximo], las primeras y cuántas más:
+  /// un renglón con treinta números no se lee.
+  static String enLista(List<int> mesas, {int maximo = 8}) {
+    if (mesas.isEmpty) return '';
+    final cortadas = mesas.length > maximo;
+    final partes = [
+      for (final n in cortadas ? mesas.take(maximo) : mesas) 'la $n',
+    ];
+    if (cortadas) return '${partes.join(', ')} y ${mesas.length - maximo} más';
+    if (partes.length == 1) return partes.single;
+    return '${partes.sublist(0, partes.length - 1).join(', ')} y ${partes.last}';
   }
 }

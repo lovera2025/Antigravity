@@ -595,7 +595,88 @@ void main() {
       s.terminarArrastre();
       expect(s.hayCambios, isTrue);
       expect(s.bloqueos.single, 'Las mesas 20 y 21 se pisan.');
+      // Y trae las dos, para ir a ellas desde la pantalla.
+      expect(s.bloqueosConMesas.single.mesas, [20, 21]);
       expect(s.puedeGuardar, isFalse);
+    });
+
+    // "5 mesas quedan apretadas" solo no dice cuáles: cada aviso trae sus
+    // mesas, y la pantalla lleva a ellas.
+    group('los avisos dicen de qué mesas hablan', () {
+      test('las que no entran en el hormigón, nombradas y en orden', () {
+        final s = SesionAcomodo(base: aMedida);
+        s.probarSeparar(aMedida.numeros.toSet(), 2.6, sillasExtraDe: (_) => 0);
+        final fuera = s.previa!.fuera;
+        expect(fuera, greaterThan(1));
+        s.aplicarSeparar();
+        final aviso = s
+            .avisosConMesas((_) => 0)
+            .singleWhere((a) => a.texto.contains('hormigón'));
+        expect(aviso.mesas, hasLength(fuera));
+        expect(aviso.mesas, [...aviso.mesas]..sort());
+        expect(
+          aviso.texto,
+          '$fuera mesas no entran en el hormigón: '
+          '${AvisoAcomodo.enLista(aviso.mesas)}. Correlas o marcalas de pasto.',
+        );
+        for (final n in aviso.mesas) {
+          expect(s.actual.existe(n), isTrue);
+        }
+      });
+
+      test('la familia que quedó separada trae sus mesas', () {
+        final s = SesionAcomodo(
+          base: aMedida,
+          ocupantes: const [
+            OcupantePlano(id: 'g', nombre: 'GÓMEZ, SOFÍA', numeros: [10, 11]),
+          ],
+          haySorteo: true,
+        );
+        final m = aMedida.mesa(11)!;
+        s.empezarArrastre();
+        s.arrastrarMesa(11, m.x - aMedida.aUnidades(40), m.y);
+        s.terminarArrastre();
+        final aviso = s
+            .avisosConMesas((_) => 0)
+            .singleWhere((a) => a.texto.startsWith('GÓMEZ'));
+        expect(aviso.mesas, [10, 11]);
+      });
+
+      test('las apretadas, nombradas', () {
+        // Con dos sillas extra cada una pide 2,3 m, y están a 2 m.
+        final s = SesionAcomodo(base: aMedida);
+        s.agregar('A');
+        final aviso = s
+            .avisosConMesas((n) => n == 1 || n == 2 ? 2 : 0)
+            .singleWhere((a) => a.texto.contains('apretada'));
+        expect(aviso.mesas, containsAll([1, 2]));
+        expect(aviso.texto, contains(AvisoAcomodo.enLista(aviso.mesas)));
+      });
+
+      test('en palabras dicen lo mismo', () {
+        final s = SesionAcomodo(base: aMedida);
+        s.probarSeparar(aMedida.numeros.toSet(), 2.6, sillasExtraDe: (_) => 0);
+        s.aplicarSeparar();
+        expect(
+          s.avisos((_) => 0),
+          [for (final a in s.avisosConMesas((_) => 0)) a.texto],
+        );
+      });
+
+      test('la lista de mesas se lee: con muchas, las primeras y cuántas más',
+          () {
+        expect(AvisoAcomodo.enLista(const []), '');
+        expect(AvisoAcomodo.enLista(const [40]), 'la 40');
+        expect(AvisoAcomodo.enLista(const [40, 44]), 'la 40 y la 44');
+        expect(
+          AvisoAcomodo.enLista(const [40, 44, 50]),
+          'la 40, la 44 y la 50',
+        );
+        expect(
+          AvisoAcomodo.enLista(const [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+          'la 1, la 2, la 3, la 4, la 5, la 6, la 7, la 8 y 3 más',
+        );
+      });
     });
 
     test('agregar da el número que sigue, y no reusa el de una que se sacó '

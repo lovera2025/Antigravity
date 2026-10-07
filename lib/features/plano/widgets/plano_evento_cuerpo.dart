@@ -624,8 +624,38 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         haySorteo: widget.alumnos.any(SalonMesas.tieneNumeros),
       );
 
+  /// El último aviso de Acomodar que se tocó, y por cuál de sus mesas va: si
+  /// habla de varias, cada toque pasa a la siguiente.
+  String? _avisoTocado;
+  int _vueltaDelAviso = 0;
+
+  /// En Acomodar, lleva a la mesa de un aviso y la deja elegida: "5 mesas
+  /// quedan apretadas" solo no dice cuáles.
+  void _irAlAviso(AvisoAcomodo aviso) {
+    final s = _acomodo;
+    if (s == null) return;
+    final mesas = [
+      for (final n in aviso.mesas)
+        if (s.actual.existe(n)) n,
+    ];
+    if (mesas.isEmpty) return;
+    final vuelta = _avisoTocado == aviso.texto ? _vueltaDelAviso + 1 : 0;
+    final numero = mesas[vuelta % mesas.length];
+    setState(() {
+      _avisoTocado = aviso.texto;
+      _vueltaDelAviso = vuelta;
+      _hoja = s.actual.mesa(numero)!.hoja;
+      _mesaAcomodo = numero;
+      _sectorAcomodo = null;
+      _confirmarDescartar = false;
+    });
+    _acercarA(s.actual, numero);
+  }
+
   void _limpiarAcomodo() {
     _acomodo = null;
+    _avisoTocado = null;
+    _vueltaDelAviso = 0;
     _mesaAcomodo = null;
     _sectorAcomodo = null;
     _alcance = 'hoja';
@@ -808,7 +838,15 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     if (hoja == null) return;
     setState(() => _hoja = m.hoja);
     if (elegir) _elegirMesa(mesa);
-    if (_tamPlano.isEmpty) return;
+    _acercarA(_plano.armado, mesa);
+  }
+
+  /// Deja una mesa de [armado] al medio de la vista, con zoom como para leer
+  /// el apellido. No cambia de hoja ni elige nada.
+  void _acercarA(ArmadoSalon armado, int mesa) {
+    final m = armado.mesa(mesa);
+    final hoja = m == null ? null : armado.hoja(m.hoja);
+    if (m == null || hoja == null || _tamPlano.isEmpty) return;
     final punto = EncuadrePlano.de(hoja.caja, _tamPlano)
         .aPantalla(Offset(m.x, m.y));
     const escala = 2.4;
@@ -1044,13 +1082,48 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     ];
   }
 
+  /// El plano con lo que se está probando: el salón a medio acomodar, o las
+  /// medidas todavía sin guardar. Sin nada en prueba, es el guardado.
+  ///
+  /// Es para el encabezado. Decía siempre lo guardado, y quedaba "132 mesas"
+  /// con la 133 ya agregada, o "Entran las 132" arriba de "8 quedan fuera del
+  /// hormigón".
+  PlanoDeLaFiesta get _planoVisto {
+    final s = _acomodo;
+    final medidas =
+        _modo == ModoPersonalizar.medidas ? _medidasEnPrueba : null;
+    final acomodando = s != null && (s.hayCambios || s.previa != null);
+    if (!acomodando && medidas == null) return _plano;
+    return PlanoDeLaFiesta.desde(
+      armado: _armadoVisto,
+      config: medidas == null
+          ? _plano.config
+          : _plano.config.copyWith(medidas: medidas),
+      alumnos: widget.alumnos,
+      repartos: widget.repartos,
+    );
+  }
+
   Widget _encabezado(BuildContext context) {
-    final color = switch (_plano.semaforo) {
-      SemaforoPlano.entran => Colors.green.shade700,
-      SemaforoPlano.revisar => Colors.orange.shade800,
-      SemaforoPlano.faltan => Colors.red.shade700,
+    final visto = _planoVisto;
+    final enPrueba = !identical(visto, _plano);
+    // Mientras se prueba, lo primero que hay que saber es si quedó alguna mesa
+    // fuera del hormigón: "Entran las 132" (que habla de cuántas mesas hay)
+    // arriba de "8 no entran en el hormigón" se leía como una contradicción.
+    final fuera = enPrueba ? visto.sinLugar.fueraDelHormigon.length : 0;
+    final titular = switch (fuera) {
+      0 => visto.titular,
+      1 => '1 mesa no entra en el hormigón',
+      _ => '$fuera mesas no entran en el hormigón',
     };
-    final aproximado = _plano.medidas.playon.aproximado;
+    final color = fuera > 0
+        ? Colors.orange.shade800
+        : switch (visto.semaforo) {
+            SemaforoPlano.entran => Colors.green.shade700,
+            SemaforoPlano.revisar => Colors.orange.shade800,
+            SemaforoPlano.faltan => Colors.red.shade700,
+          };
+    final aproximado = visto.medidas.playon.aproximado;
     final titulo =
         (_coloresEnPrueba?.titulo ?? _plano.config.titulo ?? '').trim();
     final subtitulo =
@@ -1100,14 +1173,35 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              _plano.titular,
+              titular,
               style: TextStyle(fontWeight: FontWeight.w800, color: color),
             ),
           ),
+          if (enPrueba) ...[
+            const SizedBox(width: 8),
+            Container(
+              key: const Key('encabezado_sin_guardar'),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade500),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'ASÍ QUEDARÍA · SIN GUARDAR',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              _plano.detalle,
+              visto.detalle,
+              key: const Key('encabezado_detalle'),
               style: TextStyle(color: Colors.grey.shade700),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1433,12 +1527,18 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         seleccion: seleccion,
         detalle: detalle,
         mensaje: _mensajeAcomodo,
-        onAgregar: () => setState(() {
-          final n = s.agregar(_hoja, cerca: _mesaAcomodo);
-          _mesaAcomodo = n;
-          _sectorAcomodo = null;
-          hecho('Mesa $n agregada: arrastrala a su lugar.');
-        }),
+        onAgregar: () {
+          late final int n;
+          setState(() {
+            n = s.agregar(_hoja, cerca: _mesaAcomodo);
+            _mesaAcomodo = n;
+            _sectorAcomodo = null;
+            hecho('Mesa $n agregada: arrastrala a su lugar.');
+          });
+          // Con el plano acercado, la mesa nueva podía caer fuera de lo que
+          // se ve: la vista va a ella.
+          if (_escalaZoom > 1.01) _acercarA(s.actual, n);
+        },
         onSacar: mesa == null
             ? null
             : () => setState(() {
@@ -1526,8 +1626,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           s.cancelarSeparar();
           _pasoSeparar = null;
         }),
-        bloqueos: s.bloqueos,
-        avisos: s.avisos((n) => _plano.estado.info(n).sillasExtra),
+        bloqueos: s.bloqueosConMesas,
+        avisos: s.avisosConMesas((n) => _plano.estado.info(n).sillasExtra),
+        onAviso: _irAlAviso,
         motivoSinOriginal: s.motivoSinOriginal,
         onOriginal: () => setState(() {
           final problema = s.volverAlOriginal();

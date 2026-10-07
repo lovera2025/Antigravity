@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../modelo/armado_salon.dart';
 import '../../services/editar_armado.dart';
 import '../../services/medir_salon.dart';
+import '../../services/sesion_acomodo.dart';
 import 'panel_colores_textos.dart';
 
 /// Personalizar → Acomodar: lo que se le puede hacer al salón, al lado del
@@ -11,7 +12,7 @@ import 'panel_colores_textos.dart';
 /// GUARDAR.
 ///
 /// No sabe nada del salón: muestra lo que le pasan y avisa lo que se toca.
-class PanelAcomodar extends StatelessWidget {
+class PanelAcomodar extends StatefulWidget {
   /// Lo elegido en el plano ("Mesa 12 · la tiene GÓMEZ"). Null: nada.
   final String? seleccion;
 
@@ -63,11 +64,16 @@ class PanelAcomodar extends StatelessWidget {
   final VoidCallback? onCancelar;
 
   // ── Antes de guardar ──
-  /// Lo que no deja guardar.
-  final List<String> bloqueos;
+  /// Lo que no deja guardar. Va pegado a GUARDAR, siempre a la vista: es por
+  /// qué el botón está gris.
+  final List<AvisoAcomodo> bloqueos;
 
   /// Lo que conviene saber.
-  final List<String> avisos;
+  final List<AvisoAcomodo> avisos;
+
+  /// Se tocó un aviso o un bloqueo que habla de alguna mesa: hay que
+  /// llevar la vista a ella.
+  final ValueChanged<AvisoAcomodo>? onAviso;
 
   /// Por qué no se puede volver al armado original. Null: se puede.
   final String? motivoSinOriginal;
@@ -108,6 +114,7 @@ class PanelAcomodar extends StatelessWidget {
     required this.onCancelar,
     required this.bloqueos,
     required this.avisos,
+    this.onAviso,
     required this.motivoSinOriginal,
     required this.onOriginal,
     required this.hayCambios,
@@ -117,6 +124,73 @@ class PanelAcomodar extends StatelessWidget {
     this.confirmarDescartar = false,
     this.ocupado = false,
   });
+
+  @override
+  State<PanelAcomodar> createState() => _PanelAcomodarState();
+}
+
+class _PanelAcomodarState extends State<PanelAcomodar> {
+  /// El panel es más largo que una notebook: la barra queda a la vista para
+  /// que se note que hay más abajo.
+  final _barra = ScrollController();
+
+  @override
+  void dispose() {
+    _barra.dispose();
+    super.dispose();
+  }
+
+  // Lo que el panel muestra, a mano.
+  String? get seleccion => widget.seleccion;
+  String? get detalle => widget.detalle;
+  String? get mensaje => widget.mensaje;
+  VoidCallback get onAgregar => widget.onAgregar;
+  VoidCallback? get onSacar => widget.onSacar;
+  VoidCallback? get onPasto => widget.onPasto;
+  bool get mesaEnPasto => widget.mesaEnPasto;
+  VoidCallback? get onDeshacer => widget.onDeshacer;
+  ValueChanged<TipoSector> get onAgregarSector => widget.onAgregarSector;
+  VoidCallback? get onSacarSector => widget.onSacarSector;
+  void Function(double anchoM, double altoM)? get onTamanoSector =>
+      widget.onTamanoSector;
+  String? get tamanoSector => widget.tamanoSector;
+  List<AlcanceSeparar> get alcances => widget.alcances;
+  String get alcance => widget.alcance;
+  ValueChanged<String> get onAlcance => widget.onAlcance;
+  double get paso => widget.paso;
+  ValueChanged<double> get onPaso => widget.onPaso;
+  String? get textoPrevia => widget.textoPrevia;
+  bool get previaEntra => widget.previaEntra;
+  bool get previaSePuede => widget.previaSePuede;
+  VoidCallback? get onAplicar => widget.onAplicar;
+  VoidCallback? get onCancelar => widget.onCancelar;
+  List<AvisoAcomodo> get bloqueos => widget.bloqueos;
+  List<AvisoAcomodo> get avisos => widget.avisos;
+  String? get motivoSinOriginal => widget.motivoSinOriginal;
+  VoidCallback get onOriginal => widget.onOriginal;
+  bool get hayCambios => widget.hayCambios;
+  bool get puedeGuardar => widget.puedeGuardar;
+  bool get ocupado => widget.ocupado;
+  bool get confirmarDescartar => widget.confirmarDescartar;
+  VoidCallback get onGuardar => widget.onGuardar;
+  VoidCallback get onDescartar => widget.onDescartar;
+
+  /// Un aviso o un bloqueo. Si habla de alguna mesa se toca y lleva a ella.
+  Widget _renglon(
+    String clave,
+    AvisoAcomodo a, {
+    required IconData icono,
+    required Color color,
+  }) {
+    final lleva = a.mesas.isNotEmpty && widget.onAviso != null;
+    return _Renglon(
+      key: Key(clave),
+      texto: a.texto,
+      icono: icono,
+      color: color,
+      onTap: lleva && !ocupado ? () => widget.onAviso!(a) : null,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +232,14 @@ class PanelAcomodar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView(
+          child: Scrollbar(
+            key: const Key('barra_acomodar'),
+            controller: _barra,
+            thumbVisibility: true,
+            child: ListView(
+            controller: _barra,
+            // Lugar para la barra: que no pise los botones.
+            padding: const EdgeInsets.only(right: 12),
             children: [
               Container(
                 key: const Key('elegido_acomodar'),
@@ -379,19 +460,12 @@ class PanelAcomodar extends StatelessWidget {
                   ],
                 ),
               ],
-              if (bloqueos.isNotEmpty || avisos.isNotEmpty) ...[
+              if (avisos.isNotEmpty) ...[
                 titulo('ANTES DE GUARDAR'),
-                for (final (i, b) in bloqueos.indexed)
-                  _Renglon(
-                    key: Key('bloqueo_$i'),
-                    texto: b,
-                    icono: Icons.error_outline,
-                    color: Colors.red.shade700,
-                  ),
                 for (final (i, a) in avisos.indexed)
-                  _Renglon(
-                    key: Key('aviso_acomodar_$i'),
-                    texto: a,
+                  _renglon(
+                    'aviso_acomodar_$i',
+                    a,
                     icono: Icons.info_outline,
                     color: Colors.orange.shade800,
                   ),
@@ -417,7 +491,38 @@ class PanelAcomodar extends StatelessWidget {
                 ),
             ],
           ),
+          ),
         ),
+        // Por qué GUARDAR está gris, pegado al botón y fuera de lo que se
+        // desliza: en una notebook quedaba abajo de todo, sin verse.
+        if (bloqueos.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          for (final (i, b) in bloqueos.take(_maximoBloqueos).indexed)
+            _renglon(
+              'bloqueo_$i',
+              b,
+              icono: Icons.error_outline,
+              color: Colors.red.shade700,
+            ),
+          if (bloqueos.length > _maximoBloqueos)
+            Padding(
+              padding: const EdgeInsets.only(left: 23),
+              child: Text(
+                'Y ${bloqueos.length - _maximoBloqueos} más.',
+                key: const Key('bloqueos_mas'),
+                style: gris,
+              ),
+            ),
+        ] else if (hayCambios && probando)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Para guardar, primero tocá APLICAR o CANCELAR en Separar o '
+              'juntar.',
+              key: const Key('motivo_sin_guardar'),
+              style: gris,
+            ),
+          ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -444,28 +549,42 @@ class PanelAcomodar extends StatelessWidget {
   }
 }
 
+/// Cuántos bloqueos se muestran arriba de GUARDAR: con muchas mesas pisadas
+/// se comerían el panel.
+const _maximoBloqueos = 3;
+
 class _Renglon extends StatelessWidget {
   final String texto;
   final IconData icono;
   final Color color;
+
+  /// Null: el renglón solo informa. Si no, se toca y lleva a su mesa.
+  final VoidCallback? onTap;
 
   const _Renglon({
     super.key,
     required this.texto,
     required this.icono,
     required this.color,
+    this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icono, size: 17, color: color),
-            const SizedBox(width: 6),
-            Expanded(child: Text(texto)),
-          ],
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icono, size: 17, color: color),
+              const SizedBox(width: 6),
+              Expanded(child: Text(texto)),
+              if (onTap != null)
+                Icon(Icons.chevron_right, size: 18, color: Colors.grey.shade500),
+            ],
+          ),
         ),
       );
 }
