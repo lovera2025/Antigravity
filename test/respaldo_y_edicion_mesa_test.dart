@@ -6,6 +6,7 @@ import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ContratoAlumno alumno(String id, {String? mesa}) => ContratoAlumno(
@@ -203,6 +204,110 @@ void main() {
       );
       expect(datos.containsKey('numero_mesa'), isTrue);
       expect(datos['numero_mesa'], isNull);
+    });
+  });
+
+  // Cambiar una mesa cambia el salón, y eso lo hace solo el jefe: se cambia
+  // desde el plano, con su motivo y su renglón en el Historial.
+  group('Editar alumno: el número de mesa lo cambia solo el jefe', () {
+    final antes = alumno('a', mesa: '12, 13');
+
+    Map<String, dynamic> guardar({
+      required bool esJefe,
+      required ContratoAlumno alumnoAntes,
+      required String escrito,
+    }) =>
+        datosEdicionAlumno(
+          antes: alumnoAntes,
+          editado: alumnoAntes.copyWith(telefono: '3777123456'),
+          numeroMesaEscrito: numeroMesaParaGuardar(
+            esJefe: esJefe,
+            antes: alumnoAntes.numeroMesa,
+            escrito: escrito,
+          ),
+        );
+
+    test('sin modo jefe, lo escrito no viaja: queda la mesa que tenía', () {
+      final datos = guardar(esJefe: false, alumnoAntes: antes, escrito: '40');
+      expect(datos.containsKey('numero_mesa'), isFalse);
+      // Lo demás del alumno se guarda igual.
+      expect(datos['telefono'], '3777123456');
+    });
+
+    test('sin modo jefe, vaciarlo tampoco la libera', () {
+      final datos = guardar(esJefe: false, alumnoAntes: antes, escrito: '');
+      expect(datos.containsKey('numero_mesa'), isFalse);
+    });
+
+    test('sin modo jefe, a quien no tiene mesa no se le pone una', () {
+      final datos =
+          guardar(esJefe: false, alumnoAntes: alumno('b'), escrito: '40');
+      expect(datos.containsKey('numero_mesa'), isFalse);
+    });
+
+    test('en modo jefe viaja como siempre', () {
+      expect(
+        guardar(esJefe: true, alumnoAntes: antes, escrito: '40')['numero_mesa'],
+        '40',
+      );
+      final vaciado = guardar(esJefe: true, alumnoAntes: antes, escrito: ' ');
+      expect(vaciado.containsKey('numero_mesa'), isTrue);
+      expect(vaciado['numero_mesa'], isNull);
+    });
+
+    test('en un alta sin modo jefe no se carga ninguna mesa', () {
+      expect(
+        numeroMesaParaGuardar(esJefe: false, antes: null, escrito: '40'),
+        '',
+      );
+      expect(
+        numeroMesaParaGuardar(esJefe: true, antes: null, escrito: '40'),
+        '40',
+      );
+    });
+
+    Future<TextEditingController> mostrar(
+      WidgetTester tester, {
+      required bool esJefe,
+    }) async {
+      final controller = TextEditingController(text: '12, 13');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CasilleroNumeroMesa(
+              controller: controller,
+              esJefe: esJefe,
+              decoration: const InputDecoration(
+                labelText: 'N° de Mesa Asignada / Contrato',
+              ),
+            ),
+          ),
+        ),
+      );
+      return controller;
+    }
+
+    testWidgets('sin modo jefe el casillero se ve, no se escribe y dice por qué',
+        (tester) async {
+      final controller = await mostrar(tester, esJefe: false);
+      expect(find.text('12, 13'), findsOneWidget);
+      expect(find.text('Solo en modo jefe'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('numero_mesa')),
+        '40',
+      );
+      await tester.pump();
+      expect(controller.text, '12, 13');
+    });
+
+    testWidgets('en modo jefe se escribe como siempre, sin el motivo',
+        (tester) async {
+      final controller = await mostrar(tester, esJefe: true);
+      expect(find.text('Solo en modo jefe'), findsNothing);
+      await tester.enterText(find.byKey(const Key('numero_mesa')), '40');
+      await tester.pump();
+      expect(controller.text, '40');
     });
   });
 }

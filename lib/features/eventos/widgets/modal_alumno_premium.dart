@@ -6,12 +6,14 @@ import '../../../models/evento.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../common/utils/currency_input_formatter.dart';
+import '../../common/utils/solo_jefe.dart';
 import '../../../models/mesa_extra_item.dart';
 import '../repositories/contratos_repository.dart';
 import '../services/mesas_extra_utils.dart';
 import '../services/salon_mesas.dart';
 import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
+import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../caja_sesiones/services/caja_auto_sync_service.dart';
 
 /// Lo que se guarda al editar un alumno.
@@ -32,6 +34,57 @@ Map<String, dynamic> datosEdicionAlumno({
     datos['numero_mesa'] = mesaAhora.isEmpty ? null : mesaAhora;
   }
   return datos;
+}
+
+/// El número de mesa que se toma al guardar un alumno, según quién guarda.
+///
+/// Cambiar una mesa cambia el salón, y eso lo hace solo el jefe (ver
+/// `solo_jefe.dart`). Sin modo jefe el casillero ya llega apagado; esta es la
+/// segunda llave: se toma el número que el alumno ya tenía ([antes]; nada en
+/// un alta), así [datosEdicionAlumno] no lo manda aunque en el casillero haya
+/// quedado escrita otra cosa.
+String numeroMesaParaGuardar({
+  required bool esJefe,
+  required String? antes,
+  required String escrito,
+}) =>
+    esJefe ? escrito : (antes ?? '');
+
+/// El casillero del número de mesa de Editar alumno.
+///
+/// Sin modo jefe se ve y no se escribe, con el motivo debajo: la mesa de una
+/// familia se cambia desde el plano, con su motivo y su renglón en el
+/// Historial, y eso lo hace el jefe.
+class CasilleroNumeroMesa extends StatelessWidget {
+  final TextEditingController controller;
+  final bool esJefe;
+  final InputDecoration decoration;
+
+  const CasilleroNumeroMesa({
+    super.key,
+    required this.controller,
+    required this.esJefe,
+    required this.decoration,
+  });
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+        key: const Key('numero_mesa'),
+        controller: controller,
+        // Solo lectura y no apagado: el número se tiene que seguir leyendo
+        // bien, que es lo que el operario viene a mirar.
+        readOnly: !esJefe,
+        decoration: esJefe
+            ? decoration
+            : decoration.copyWith(
+                helperText: kSoloEnModoJefe,
+                suffixIcon: const Icon(
+                  Icons.lock_outline,
+                  size: 18,
+                  color: Colors.grey,
+                ),
+              ),
+      );
 }
 
 class ModalAlumnoPremium extends ConsumerStatefulWidget {
@@ -316,6 +369,12 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
 
     try {
       final repo = ref.read(contratosRepositoryProvider);
+      // La mesa la cambia solo el jefe: sin modo jefe queda la que tenía.
+      final numeroMesa = numeroMesaParaGuardar(
+        esJefe: ref.read(esRolJefeProvider),
+        antes: widget.alumno?.numeroMesa,
+        escrito: _numeroMesaCtrl.text,
+      );
 
       final nombre = _nombreCtrl.text.trim();
       final mesaCuotas = int.tryParse(_mesaCuotasCtrl.text) ?? 1;
@@ -387,7 +446,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           institucion: _institucionParaPersistir(),
           cursoDivision: _cursoDivisionCtrl.text.trim(),
           musicaElegida: _musicaElegidaCtrl.text.trim(),
-          numeroMesa: _numeroMesaCtrl.text.trim(),
+          numeroMesa: numeroMesa.trim(),
           nombresAcompanantes: _acompanantes,
           cantidadAcompanantes: _acompanantes.length,
           montoTotalPactado: totalGeneralEfectivo,
@@ -407,7 +466,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           datosEdicionAlumno(
             antes: al,
             editado: alumnoEditado,
-            numeroMesaEscrito: _numeroMesaCtrl.text,
+            numeroMesaEscrito: numeroMesa,
           ),
         );
         await repo.recalcularProgresoContrato(al.id);
@@ -438,9 +497,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           musicaElegida: _musicaElegidaCtrl.text.trim().isNotEmpty
               ? _musicaElegidaCtrl.text.trim()
               : null,
-          numeroMesa: _numeroMesaCtrl.text.trim().isNotEmpty
-              ? _numeroMesaCtrl.text.trim()
-              : null,
+          numeroMesa: numeroMesa.trim().isNotEmpty ? numeroMesa.trim() : null,
           telefono: _telefonoCtrl.text.trim().isNotEmpty
               ? _telefonoCtrl.text.trim()
               : null,
@@ -484,6 +541,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const gold = Color(0xFFD4AF37);
+    final esJefe = ref.watch(esRolJefeProvider);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -603,8 +661,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
+                          CasilleroNumeroMesa(
                             controller: _numeroMesaCtrl,
+                            esJefe: esJefe,
                             decoration: _premiumInputDecoration(
                               'N° de Mesa Asignada / Contrato',
                               isDark,

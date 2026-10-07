@@ -89,6 +89,30 @@ void main() {
     }
   });
 
+  test('Editar alumno: el número de mesa escrito a mano pasa por la llave', () {
+    final fuente =
+        leer('lib/features/eventos/widgets/modal_alumno_premium.dart');
+    // Lo escrito en el casillero se lee en un solo lugar: lo que se le pasa a
+    // `numeroMesaParaGuardar`, que sin modo jefe devuelve el que ya tenía.
+    expect(
+      RegExp(r'_numeroMesaCtrl\.text').allMatches(fuente).length,
+      1,
+      reason: 'el casillero se lee por fuera de numeroMesaParaGuardar',
+    );
+    expect(
+      fuente,
+      contains('''
+      final numeroMesa = numeroMesaParaGuardar(
+        esJefe: ref.read(esRolJefeProvider),
+        antes: widget.alumno?.numeroMesa,
+        escrito: _numeroMesaCtrl.text,
+      );'''),
+    );
+    // Y el casillero se dibuja con el modo jefe de la sesión.
+    expect(fuente, contains('final esJefe = ref.watch(esRolJefeProvider);'));
+    expect(fuente, contains('CasilleroNumeroMesa('));
+  });
+
   test('nadie más guarda el salón', () {
     // Los números de mesa, el renglón del cambio y el plano se escriben por
     // estos caminos. Si otra pantalla empieza a usarlos, tiene que preguntar

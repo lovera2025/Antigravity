@@ -16,4 +16,8 @@
 /// guardan (`detalle_evento_masivo_screen.dart` y `plano_evento_screen.dart`)
 /// lo preguntan además en cada función que escribe, con `_frenaSinModoJefe`:
 /// `test/solo_modo_jefe_test.dart` falla si aparece un guardado sin esa llave.
+///
+/// El casillero "N° de mesa" de Editar alumno entra en la misma regla: sin
+/// modo jefe es de solo lectura (`CasilleroNumeroMesa`), y al guardar se toma
+/// el número que el alumno ya tenía (`numeroMesaParaGuardar`).
 const kSoloEnModoJefe = 'Solo en modo jefe';
