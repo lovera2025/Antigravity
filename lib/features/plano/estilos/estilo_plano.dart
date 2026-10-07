@@ -129,6 +129,56 @@ class TemaPlano {
     return l[i % l.length];
   }
 
+  // ── En papel ────────────────────────────────────────────────────────────
+  //
+  // El plano impreso va siempre sobre blanco, con el número oscuro. Lo que no
+  // puede cambiar es el color: el que la fiesta eligió para una división es el
+  // que tiene que salir. Antes la hoja usaba siempre la paleta de Arquitecto
+  // por posición, y en una fiesta en Gala el verde salía celeste.
+
+  /// El relleno de cada división en la hoja, en el mismo orden que
+  /// [divisiones]: el mismo color, en su tono claro. Arquitecto ya es de tonos
+  /// claros y sale tal cual.
+  List<Color> get papel => estilo == EstiloPlano.arquitecto
+      ? divisiones
+      : [for (final c in divisiones) enPapel(c)];
+
+  /// El anillo y el número de cada división en la hoja: el mismo color, oscuro.
+  List<Color> get papelNumero =>
+      (estilo == EstiloPlano.arquitecto ? numeroDivision : null) ??
+      [for (final c in divisiones) tintaDePapel(c)];
+
+  /// Un color de pantalla llevado a papel blanco: conserva el tono, y se aclara
+  /// hasta que un número oscuro se lea encima.
+  ///
+  /// El más fuerte en pantalla sale más fuerte en papel (el rubí de Gala y su
+  /// cuarzo rosa tienen el mismo tono, y así siguen siendo dos). Un neutro (la
+  /// perla) queda neutro.
+  static Color enPapel(Color c) {
+    final hsl = HSLColor.fromColor(c);
+    final t = ((hsl.lightness - 0.45) / 0.45).clamp(0.0, 1.0);
+    final s = hsl.saturation;
+    return hsl
+        .withLightness(0.80 + 0.12 * t)
+        .withSaturation(
+          s < _neutro ? s : (s * (0.95 - 0.25 * t)).clamp(0.35, 0.85),
+        )
+        .toColor();
+  }
+
+  /// El mismo color, oscuro: para el anillo y el número sobre [enPapel].
+  static Color tintaDePapel(Color c) {
+    final hsl = HSLColor.fromColor(c);
+    final s = hsl.saturation;
+    return hsl
+        .withLightness(0.24)
+        .withSaturation(s < _neutro ? s : s.clamp(0.50, 0.85))
+        .toColor();
+  }
+
+  /// Con menos color que esto es un gris: no se le inventa un tono.
+  static const double _neutro = 0.12;
+
   /// El mismo tema con los colores de las divisiones elegidos por la fiesta:
   /// la división `i` de la leyenda lleva el color [indices]`[i]` de la paleta.
   ///
