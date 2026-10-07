@@ -1,14 +1,14 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-10-04 a la noche (ver "Qué pasó el 4-oct a la noche": lo que cambia el
-salón, solo en modo jefe)
+**Fecha:** 2026-09-26, puesto al día el 2026-10-07 (ver "Qué pasó el 7-oct": el casillero "N° de mesa" y los tests
+de pantalla del plano)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
-**Estado:** en curso. Las etapas 1 a 9 del plan de la 6.0.0 están hechas y subidas, M9 con su revisión, y la
-**9c-1 (lo que cambia el salón, solo en modo jefe) también**. Siguen la 9c-2, la 9c-3 y la 9b. **Nada está
-publicado**: las PCs siguen con la 5.0.0.
+**Estado:** en curso. Las etapas 1 a 9 del plan de la 6.0.0 están hechas y subidas, M9 con su revisión, y también
+la **9c-1** (lo que cambia el salón, solo en modo jefe) y la **9c-2** (tests de pantalla de los guardados del
+plano). Siguen la 9c-3 y la 9b. **Nada está publicado**: las PCs siguen con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 4-oct a la noche" y "Lo que falta, en orden". El texto
-> para pegar en otro chat está al final.
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 7-oct" y "Lo que falta, en orden". El texto para pegar
+> en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
 > Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md`, partes M0 a M9.
@@ -48,14 +48,17 @@ publicado**: las PCs siguen con la 5.0.0.
 | M8 | Botones a la vista y lista de la puerta trabada | Sí | Sí, `b508e8f` (2-oct) | No hacía falta |
 | M9 | Personalizar con cuatro pestañas: Mesas, Acomodar, Medidas y Colores y textos | Sí | Sí, `18a89f6`, `4f12969` y `2c84a55` (3-oct) | Hecha y **aplicada el 4-oct** (`8468626`, tres revisores). Queda lo anotado en la etapa 9c |
 | 9c-1 | Lo que cambia el salón (armar y personalizar el plano, sortear, deshacer, restaurar, cambiar familias), solo en modo jefe (decisión del 4-oct) | Sí | Sí, `7031623` (4-oct) | No hacía falta |
+| — | El casillero "N° de mesa" de Editar alumno, solo en modo jefe (decisión del 7-oct) | Sí | Sí, `938b167` (7-oct) | No hacía falta |
+| 9c-2 | Tests de pantalla de los guardados del plano: la pantalla entera montada sin base ni red | Sí | Sí, `fc7cde3`, `b324669` y `124e731` (7-oct) | Se comprobó rompiendo cada protección a propósito |
 
-**Tests:** la suite entera pasa, **1.512 tests** el 4-oct a la noche, con la 9c-1 (1.497 con la revisión de M9;
+**Tests:** la suite entera pasa, **1.553 tests** el 7-oct, con el casillero y la 9c-2 (1.512 el 4-oct a la noche,
+con la 9c-1; 1.497 con la revisión de M9;
 1.466 el 3-oct, con M9 programada; 1.335 el 2-oct, al cerrar M8; 1.319 con M7; 1.275 con M6; 1.179 con M4;
 1.118 con la etapa 4b; 1.039 el 30-sep a la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Siguen la 9c-2, la 9c-3 y la 9b (ver
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Siguen la 9c-3 y la 9b (ver
 "Lo que falta, en orden").
 
 ## Qué hay programado
@@ -1080,6 +1083,93 @@ a quién pedírselo. No se pide ningún PIN nuevo; el modo jefe es el de siempre
 - En la 9c-2, al sacar de `_cambiarConfig` una función pura, sumar un test de pantalla de que sin modo jefe no se
   guarda.
 
+## Qué pasó el 7-oct
+
+Plan: `C:\Users\lover\.claude\plans\que-falta-o-en-mutable-sprout.md` (el mismo archivo del 4-oct a la noche, vuelto
+a escribir). Quedó con **1.553 tests** (41 nuevos) y el analizador en 313, sin avisos nuevos. No se tocó la base, la
+nube ni la sincronización, y no se abrió la app.
+
+### El casillero "N° de mesa" de Editar alumno, solo en modo jefe (`938b167`)
+
+El usuario contestó lo que había quedado colgado de la 9c-1: **"Solo el jefe lo cambia"**.
+
+- Sin modo jefe, en Editar alumno y en Registrar alumno el casillero "N° de Mesa Asignada / Contrato" **se lee
+  igual que siempre, con un candado y "Solo en modo jefe" debajo, y no se puede escribir**. Es de solo lectura y no
+  apagado, a propósito: apagado, el número quedaba en gris claro, y es lo que el operario viene a mirar.
+- `CasilleroNumeroMesa` y `numeroMesaParaGuardar` (`modal_alumno_premium.dart`). La segunda es la otra llave: sin
+  modo jefe devuelve el número que el alumno ya tenía, así que `datosEdicionAlumno` no lo manda aunque en el
+  casillero haya quedado otra cosa; en un alta no carga ninguno.
+- Tests en `test/respaldo_y_edicion_mesa_test.dart`, y en `test/solo_modo_jefe_test.dart` uno que falla si el
+  casillero se lee por fuera de esa función.
+- Imagen: `tool/casillero_mesa_muestra_test.dart` (`Casillero_numero_mesa.png`). El usuario la recibió.
+- Era el único lugar donde se escribía a mano la mesa de un alumno. Los `numeroMesa:` de `lib/features/recepcion/`
+  son de la lista de la puerta (`invitados`), otra tabla.
+
+### Etapa 9c-2 hecha: tests de pantalla de los guardados del plano (`fc7cde3`, `b324669`, `124e731`)
+
+**Para el usuario no cambia nada a la vista.** Lo que calcula cada guardado ya estaba probado; la pantalla que lo
+ejecuta (releer la nube, volver a hacer la cuenta, guardar o frenar, avisar) no tenía ningún test.
+
+**Cómo está hecho** — `test/plano_evento_screen_test.dart`, 33 casos
+
+- Se monta `PlanoEventoScreen` **de verdad**, dentro de un `ProviderScope`. En lugar de la base y la nube lleva
+  reemplazos en memoria que heredan de las clases reales, puestos por los mismos providers que usa la app
+  (`_Planos`, `_Contratos`, `_Movimientos`, `_Sillas`, `_Entradas`, `_Sorteos`, `_Conexion`, `_Motor`). Un test
+  dice "la otra PC cambió el plano" con `mundo.planos.nube = ...`, "no hay conexión" con `sinRed`, y mira
+  `mundo.planos.guardados` y `mundo.contratos.asignaciones`.
+- Como no hay base de verdad, todo corre dentro del reloj de mentira de `testWidgets`, sin `runAsync`. **Es el
+  modelo para probar otra pantalla que lea con Riverpod.**
+- **Un solo cambio en el programa:** `subirYa` y `quedaEnCola` leen la cola de la base directamente, sin provider.
+  Ahora tienen uno delante (`SubidaInmediata` y `subidaInmediataProvider`, en `subir_ya.dart`) y la pantalla del
+  plano lo usa en sus tres guardados. Hace lo mismo que antes. Las otras pantallas que llaman a `subirYa` no se
+  tocaron.
+- **No se sacó ninguna función de `_cambiarConfig`** (lo decía el plan anterior): con la pantalla montada no hace
+  falta, y es menos código tocado.
+- En ese archivo, tocar un botón tapado es un error y no un aviso (`hitTestWarningShouldBeFatal`): si no, un caso
+  pasaría sin haber tocado nada.
+
+**Lo que se prueba**
+
+| Grupo | Casos |
+|---|---|
+| Abrir el plano | En modo jefe, con todo para cambiarlo · sin modo jefe, apagado y sin guardar nada · lee primero la nube · sin conexión abre con el de esta PC |
+| Una fiesta sin plano | En modo jefe se abren los tres pasos y LISTO lo guarda con su id fijo · sin modo jefe dice quién lo arma |
+| Medidas, Colores y textos, Acomodar | Cada uno guarda lo que se ve y lo dice · **ninguno guarda si la otra PC cambió eso mismo** · Acomodar tampoco si la otra PC sorteó mientras tanto |
+| Antes de guardar | Espera si hay mesas de la otra PC sin bajar · sin conexión pregunta (CANCELAR no guarda, SEGUIR sí) · también pregunta si hay conexión pero no se pudo leer el plano · dice "Quedó en esta PC" si no subió |
+| Las mesas y las familias | Dejar libre y fijar, con su motivo · mudar una familia guarda los números y el renglón juntos · DESHACER desde el aviso y desde el Historial · no guarda si las mesas cambiaron mientras se confirmaba · sin modo jefe el Historial se lee y no deja deshacer |
+| La flecha de volver | Sin nada pendiente sale · con algo sin guardar pregunta (SEGUIR ACÁ no pierde nada) · mientras se guarda no se sale |
+| Lo que baja de la otra PC | La pantalla se actualiza sola · no recarga por tablas que no son del salón · si baja mientras se guarda, se relee al terminar |
+
+**Se comprobó que los tests muerden.** Pasaron todos a la primera, y eso solo no prueba nada. Se rompió a
+propósito una protección por vez en `plano_evento_screen.dart`, se corrió el test y se dejó el archivo como estaba.
+Las ocho roturas las vio algún test:
+
+| Rotura | Tests que fallaron |
+|---|---|
+| No esperar a las mesas de la otra PC | 1 |
+| Hacer la cuenta sobre lo que se veía, y no sobre lo releído | 4 (los "no se guarda" de Medidas, Colores y Acomodar) |
+| No preguntar sin conexión | 2 |
+| Guardar una mudanza aunque las mesas hayan cambiado | 1 |
+| Dejar salir mientras se guarda | 1 |
+| Salir sin preguntar con cambios sin guardar | 1 |
+| No recargar cuando baja algo de la otra PC | 1 |
+| Decir "subió" aunque haya quedado en esta PC | 2 |
+
+**Lo que encontró, y queda para la 9c-3**
+
+- **El aviso de abajo tapa los botones del pie.** Después de cualquier cambio, el aviso ("SOSA pasó a la 30 ·
+  DESHACER") queda 4 segundos a la vista, 8 si trae DESHACER, a todo el ancho y encima de ESTILO Y ARMADO,
+  PERSONALIZAR, IMPRIMIR e HISTORIAL. Tocar uno de esos botones en ese rato no hace nada. Viene de M6. Es de
+  pantalla, así que va con la 9c-3, con imagen: que el aviso flote sin taparlos.
+
+**Para tener en cuenta**
+
+- Los guardados de la pantalla de la fiesta (`detalle_evento_masivo_screen.dart`: sortear, deshacer, restaurar)
+  siguen sin test de pantalla. Esa pantalla tiene más de 7.500 líneas y muchas más dependencias; lo que deciden está
+  probado aparte, y su llave de modo jefe la cuida `solo_modo_jefe_test`.
+- `PdfService` (IMPRIMIR) no se prueba acá: abriría el diálogo de impresión.
+- En esta PC, un script de Python con comillas mezcladas no se puede pasar por heredoc: se escribe a un archivo.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -1102,9 +1192,10 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
      dos puntos a decidir ya están decididos (ver "Qué pasó el 4-oct a la noche"):
      - 9c-1. ~~Lo que cambia el salón, solo en modo jefe.~~ **Hecho** (`7031623`). Reemplaza al "seguro" del punto
        1, que no se hace.
-     - 9c-2. **Tests de pantalla de los guardados del plano** (los tres de Personalizar y el aviso de la flecha de
-       volver). Sacar de `_cambiarConfig` una función pura, y probar también que sin modo jefe no se guarda.
-     - 9c-3. **Las pantallas** (puntos 3 a 9) y los colores de Gala y Neón iguales al papel (punto 2).
+     - 9c-2. ~~Tests de pantalla de los guardados del plano.~~ **Hecho** (`fc7cde3`, `b324669`, `124e731`), con el
+       casillero "N° de mesa" de Editar alumno (`938b167`). Ver "Qué pasó el 7-oct".
+     - 9c-3. **Las pantallas** (puntos 3 a 9), los colores de Gala y Neón iguales al papel (punto 2) y **el aviso de
+       abajo, que tapa los botones del pie** (lo encontró la 9c-2).
    - 9b. **Los que faltan** (confirmada el 4-oct, las dos cosas):
      - en "Deshacer sorteo", elegir entre "solo los últimos sorteados" y "todo" (hoy borra la escuela entera). El
        registro de sorteos tiene con qué: cada sorteo es un renglón con lo que tocó (`RegistroSorteo.esperado`);
@@ -1120,8 +1211,9 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     - `tool/extras_muestra_test.dart` otra vez, para revisar con el usuario lo que marca.
 11. **Documentación:** `docs/CONTEXTO_v6.0.0_<fecha>.md`, CLAUDE.md al día (base v73, tablas nuevas,
     `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre`, los
-    números de Gala en papel, los cuatro botones, `kListaPuertaHabilitada` y **lo que cambia el salón, solo en modo
-    jefe**, en "Roles y permisos") y la memoria.
+    números de Gala en papel, los cuatro botones, `kListaPuertaHabilitada`, **lo que cambia el salón, solo en modo
+    jefe** (en "Roles y permisos", con el casillero "N° de mesa") y **cómo se prueba una pantalla entera**
+    (`plano_evento_screen_test.dart` y `subidaInmediataProvider`)) y la memoria.
 12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
     windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
     texto de novedades antes de publicar.
@@ -1159,23 +1251,24 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
 entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 4-oct a la noche" y "Lo que falta, en orden"), el plan del 4-oct a
-la noche en C:\Users\lover\.claude\plans\que-falta-o-en-mutable-sprout.md, el de
-la 6.0.0 en C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y
-la memoria del proyecto. Están hechas y subidas las etapas 1 a 9 y la 9c-1: lo
-que cambia el salón (armar y personalizar el plano, sortear, deshacer, restaurar
-y cambiar familias de mesa) quedó solo para el modo jefe, en 7031623. La suite
-da 1.512 tests en verde y el working tree está limpio. El "seguro" del plano
-atrasado no se hace: quedó en docs/ideas/seguro-plano-atrasado.md. Sigue la
-etapa 9c-2: los tests de pantalla de los guardados del plano (los tres de
-Personalizar y el aviso de la flecha de volver), sacando de _cambiarConfig una
-función pura, y probando también que sin modo jefe no se guarda. Después la
-9c-3 (las pantallas de Acomodar que dejó la revisión, puntos 3 a 9 de "Lo que
-quedó sin hacer", y los colores de Gala y Neón iguales al papel: ya lo decidí,
-el mismo color en pantalla y en papel), después la 9b (confirmada, las dos
-cosas: deshacer solo a los últimos sorteados y la planilla solo de ellos),
-después la verificación final, la documentación de la 6.0.0, la versión y el
-build, en ese orden, una etapa por chat.
+"Qué pasó el 7-oct" y "Lo que falta, en orden"), el plan del 7-oct en
+C:\Users\lover\.claude\plans\que-falta-o-en-mutable-sprout.md, el de la 6.0.0 en
+C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la memoria
+del proyecto. Están hechas y subidas las etapas 1 a 9, la 9c-1 (lo que cambia
+el salón, solo en modo jefe, incluido el casillero "N° de mesa" de Editar
+alumno) y la 9c-2 (33 tests que montan la pantalla del plano entera, sin base
+ni red, en 124e731). La suite da 1.553 tests en verde y el working tree está
+limpio. Sigue la etapa 9c-3, las pantallas: los puntos 3 a 9 de "Lo que quedó
+sin hacer (etapa 9c)" en "Qué pasó el 4-oct" (los avisos de Acomodar que lleven
+a la mesa, el encabezado que diga lo que se ve, la barra de desplazamiento y
+los bloqueos pegados a GUARDAR, y los menores); los colores de Gala y Neón
+iguales al papel (ya lo decidí: el mismo color en pantalla y en papel); y el
+aviso de abajo, que hoy tapa los botones del pie (ESTILO Y ARMADO,
+PERSONALIZAR, IMPRIMIR, HISTORIAL) mientras está a la vista. Mostrame antes
+cómo quedaría cada cosa, con opciones donde haya más de una forma. Después la
+9b (confirmada, las dos cosas: deshacer solo a los últimos sorteados y la
+planilla solo de ellos), después la verificación final, la documentación de la
+6.0.0, la versión y el build, en ese orden, una etapa por chat.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
