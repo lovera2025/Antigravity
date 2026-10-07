@@ -1,11 +1,11 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-10-07 (ver "Qué pasó el 7-oct": el casillero "N° de mesa" y los tests
-de pantalla del plano)
+**Fecha:** 2026-09-26, puesto al día el 2026-10-07 (ver "Qué pasó el 7-oct": el casillero "N° de mesa", los tests
+de pantalla del plano y las pantallas de la 9c-3)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
 **Estado:** en curso. Las etapas 1 a 9 del plan de la 6.0.0 están hechas y subidas, M9 con su revisión, y también
-la **9c-1** (lo que cambia el salón, solo en modo jefe) y la **9c-2** (tests de pantalla de los guardados del
-plano). Siguen la 9c-3 y la 9b. **Nada está publicado**: las PCs siguen con la 5.0.0.
+la **9c** entera: 9c-1 (lo que cambia el salón, solo en modo jefe), 9c-2 (tests de pantalla de los guardados del
+plano) y 9c-3 (las pantallas). Sigue la 9b. **Nada está publicado**: las PCs siguen con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 7-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
@@ -50,15 +50,17 @@ plano). Siguen la 9c-3 y la 9b. **Nada está publicado**: las PCs siguen con la 
 | 9c-1 | Lo que cambia el salón (armar y personalizar el plano, sortear, deshacer, restaurar, cambiar familias), solo en modo jefe (decisión del 4-oct) | Sí | Sí, `7031623` (4-oct) | No hacía falta |
 | — | El casillero "N° de mesa" de Editar alumno, solo en modo jefe (decisión del 7-oct) | Sí | Sí, `938b167` (7-oct) | No hacía falta |
 | 9c-2 | Tests de pantalla de los guardados del plano: la pantalla entera montada sin base ni red | Sí | Sí, `fc7cde3`, `b324669` y `124e731` (7-oct) | Se comprobó rompiendo cada protección a propósito |
+| 9c-3 | Las pantallas: el aviso al lado de los botones, los colores del papel, Acomodar (avisos que llevan a la mesa, encabezado, barra) y los menores | Sí | Sí, `7482816`, `f877ccd`, `d3b826e`, `a358bab` y `22b95fd` (7-oct) | No hacía falta |
 
-**Tests:** la suite entera pasa, **1.553 tests** el 7-oct, con el casillero y la 9c-2 (1.512 el 4-oct a la noche,
+**Tests:** la suite entera pasa, **1.616 tests** el 7-oct, al cerrar la 9c-3 (1.553 con el casillero y la 9c-2;
+1.512 el 4-oct a la noche,
 con la 9c-1; 1.497 con la revisión de M9;
 1.466 el 3-oct, con M9 programada; 1.335 el 2-oct, al cerrar M8; 1.319 con M7; 1.275 con M6; 1.179 con M4;
 1.118 con la etapa 4b; 1.039 el 30-sep a la noche; 913 al
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Siguen la 9c-3 y la 9b (ver
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Sigue la 9b (ver
 "Lo que falta, en orden").
 
 ## Qué hay programado
@@ -1155,12 +1157,11 @@ Las ocho roturas las vio algún test:
 | No recargar cuando baja algo de la otra PC | 1 |
 | Decir "subió" aunque haya quedado en esta PC | 2 |
 
-**Lo que encontró, y queda para la 9c-3**
+**Lo que encontró** (arreglado el mismo día, en la 9c-3)
 
-- **El aviso de abajo tapa los botones del pie.** Después de cualquier cambio, el aviso ("SOSA pasó a la 30 ·
-  DESHACER") queda 4 segundos a la vista, 8 si trae DESHACER, a todo el ancho y encima de ESTILO Y ARMADO,
-  PERSONALIZAR, IMPRIMIR e HISTORIAL. Tocar uno de esos botones en ese rato no hace nada. Viene de M6. Es de
-  pantalla, así que va con la 9c-3, con imagen: que el aviso flote sin taparlos.
+- **El aviso de abajo tapaba los botones del pie.** Después de cualquier cambio, el aviso ("SOSA pasó a la 30 ·
+  DESHACER") quedaba 4 segundos a la vista, 8 si traía DESHACER, a todo el ancho y encima de ESTILO Y ARMADO,
+  PERSONALIZAR, IMPRIMIR e HISTORIAL. Tocar uno de esos botones en ese rato no hacía nada. Venía de M6.
 
 **Para tener en cuenta**
 
@@ -1169,6 +1170,91 @@ Las ocho roturas las vio algún test:
   probado aparte, y su llave de modo jefe la cuida `solo_modo_jefe_test`.
 - `PdfService` (IMPRIMIR) no se prueba acá: abriría el diálogo de impresión.
 - En esta PC, un script de Python con comillas mezcladas no se puede pasar por heredoc: se escribe a un archivo.
+
+### Etapa 9c-3 hecha: las pantallas (`7482816`, `f877ccd`, `d3b826e`, `a358bab`, `22b95fd`)
+
+Siguió en el mismo chat ("sigamos"). Quedó con **1.616 tests** (63 nuevos) y el analizador en 313. No se tocó la
+base, la nube ni la sincronización, y no se abrió la app.
+
+**Decisiones del usuario** (vio una maqueta con las dos opciones de cada una)
+
+- **El aviso de lo que pasó: al lado de los botones del pie**, y no flotando arriba de ellos.
+- **Los colores: el papel sigue al estilo de la fiesta.** Se le había propuesto reordenar las paletas de Gala y
+  Neón, y al mirarlas en detalle no alcanzaba: Gala no tiene naranja ni amarillo y Neón no tiene gris, así que
+  siempre quedaban colores que salían distintos. Se le dijo y eligió esta.
+
+**1. El aviso al lado de los botones** (`7482816`)
+
+- `AvisoDelPlano` (en `plano_evento_cuerpo.dart`) y `_decir` en la pantalla. Va a la derecha de ESTILO Y ARMADO,
+  PERSONALIZAR, IMPRIMIR e HISTORIAL, en el mismo renglón, con DESHACER si corresponde. Se va solo: 4 segundos, 8
+  con botón, y más si es largo (`AvisoDelPlano.duracion`). Si no entra se corta, y entero al pasar el mouse.
+- **En la pantalla del plano ya no se usa el aviso de abajo de siempre (SnackBar)**, salvo en una fiesta sin plano,
+  que no tiene pie.
+- **Un error ya no muestra el texto de la excepción** (punto 9): dice qué hacer ("No se pudo guardar. Tocá
+  Actualizar para ver cómo quedó y probá de nuevo."), en rojo. El error tal cual vino queda al pasar el mouse y en
+  el registro (`debugPrint`).
+
+**2. El color que se elige es el que sale impreso** (`f877ccd`, punto 2)
+
+- La hoja pintaba las divisiones con la paleta de Arquitecto **por posición**: en una fiesta en Gala el verde
+  salía celeste y el azul, salmón.
+- Ahora cada estilo lleva sus colores a papel: `TemaPlano.papel` (el relleno) y `TemaPlano.papelNumero` (el anillo
+  y el número), que salen de `TemaPlano.enPapel` y `TemaPlano.tintaDePapel`: **el mismo tono**, aclarado para el
+  relleno y oscuro para el número. Es una cuenta, no una lista a mano: si se cambia un color de la paleta, el papel
+  lo sigue.
+- **Arquitecto imprime igual que antes** (sus listas son las de siempre). **La pantalla no cambió en ningún estilo.**
+- `test/plano_colores_en_papel_test.dart` cuida: mismo tono, número legible sobre su relleno (contraste 4,5 o más),
+  que no haya dos que se confundan, que ninguno quede blanco, y que el PDF use los del estilo de la fiesta.
+- El más fuerte en pantalla sale más fuerte en papel: el rubí y el cuarzo rosa de Gala tienen el mismo tono, y con
+  una claridad fija salían iguales.
+
+**3. Acomodar** (`d3b826e`, puntos 3, 4 y 5)
+
+- **Cada aviso dice de qué mesas habla y lleva a ellas.** "5 mesas quedan apretadas (en rojo)" pasó a "5 mesas
+  quedan apretadas: la 40, la 44, la 50, la 61 y la 97." (con más de ocho, las primeras y "y N más"). Se toca y va
+  a la primera, la deja elegida y acerca el plano; otro toque, a la siguiente. `AvisoAcomodo`,
+  `SesionAcomodo.avisosConMesas` y `bloqueosConMesas`; en la pantalla, `_irAlAviso`.
+- **El encabezado dice lo que se está probando** (`_planoVisto`): con la 133 agregada dice "133 mesas", con la
+  etiqueta "ASÍ QUEDARÍA · SIN GUARDAR". Si quedó alguna mesa fuera del hormigón lo dice ahí arriba, en naranja
+  ("20 mesas no entran en el hormigón"), en vez de "Entran las 132". Vale también para Medidas.
+- **Por qué GUARDAR está gris va pegado al botón**, fuera de lo que se desliza (hasta tres, y "Y N más"). Con la
+  vista previa de separar abierta también lo dice.
+- **La barra de desplazamiento queda a la vista** en Acomodar, Medidas y Colores y textos: en una notebook los tres
+  paneles son más largos que la pantalla, y no había señal de que había más abajo.
+- Con el plano acercado, la mesa que se agrega queda a la vista (punto 9).
+
+**4. Los menores** (`a358bab` y `22b95fd`, puntos 6 a 9)
+
+- **La hoja ya no queda agrandada** (punto 6): `EditarArmado.ajustarCajas`, que la sesión llama al terminar cada
+  cosa (al soltar, al aplicar). Mientras se arrastra sigue solo creciendo, para que el dibujo no salte. Nunca queda
+  más chica que la del salón guardado.
+- **ESTILO Y ARMADO, cuando se llega desde el aviso de Medidas, abre listo para rearmar** (punto 7): con "A medida
+  del playón" ya elegido, las mesas que el salón tiene hoy y su pasarela (`rearmar`, y `onRearmar` en el cuerpo).
+  Antes abría en "Como está ahora" y LISTO no rearmaba nada. Desde el botón del pie abre como siempre.
+- **Colores y textos dice lo que faltaba** (punto 8): antes del sorteo, "Todavía no hay mesas sorteadas: el color
+  de cada división se va a ver en el plano cuando tenga sus mesas."; con la escuela sorteada, la división que
+  todavía no tiene mesas lo dice al lado; y "En el plano impreso sale el mismo color, en tono claro."
+- **El número de una mesa que se sacó y se guardó no se vuelve a dar** (punto 9): `ArmadoSalon.ultimoNumero`
+  (`ultimo_numero` en el JSON del armado), que se anota **al guardar** (`EditarArmado.recordandoNumeros`), no al
+  agregar: una mesa que se agrega y se saca sin guardar nunca existió. No hace falta migrar nada: es el JSON del
+  armado, y todavía no hay ningún plano guardado en ninguna PC.
+
+**Lo que no se hizo**
+
+- **En Técnica la mesa nueva lleva el 151, después del pasto (131 a 150), y un bloque por número puede "contener"
+  el pasto** (lo que quedaba del punto 9). No es de pantalla: es de cómo el sorteo por bloques guarda cada bloque
+  (un rango de números) mientras reparte por casilleros (las comunes primero, el pasto después). El sorteo ya sabe
+  cuándo un bloque usa el pasto (`usaPasto`). Va a la etapa 10, con un test primero, junto con el de la mesa fijada
+  alta.
+
+**Para tener en cuenta**
+
+- Las imágenes: `tool/plano_pantalla_muestra_test.dart` (`Pantalla_plano_aviso.png`,
+  `Personalizar_acomodar_avisos.png`) y `tool/plano_pdf_muestra_test.dart` (los tres estilos en papel). El usuario
+  las recibió; **todavía no opinó** de ninguna de las de la 9c.
+- En el test de pantalla, lo de abajo de un panel no está armado hasta que se llega: `_bajarHasta`.
+- En Acomodar, con el salón muy separado las mesas se dibujan chicas y sin número; por eso importa que el aviso
+  lleve a la mesa y acerque.
 
 ## Lo que falta, en orden
 
@@ -1194,8 +1280,9 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
        1, que no se hace.
      - 9c-2. ~~Tests de pantalla de los guardados del plano.~~ **Hecho** (`fc7cde3`, `b324669`, `124e731`), con el
        casillero "N° de mesa" de Editar alumno (`938b167`). Ver "Qué pasó el 7-oct".
-     - 9c-3. **Las pantallas** (puntos 3 a 9), los colores de Gala y Neón iguales al papel (punto 2) y **el aviso de
-       abajo, que tapa los botones del pie** (lo encontró la 9c-2).
+     - 9c-3. ~~Las pantallas, los colores iguales al papel y el aviso que tapaba los botones.~~ **Hecho**
+       (`7482816`, `f877ccd`, `d3b826e`, `a358bab`, `22b95fd`). Quedó una sola cosa, que pasa a la etapa 10: el
+       bloque que puede contener el pasto.
    - 9b. **Los que faltan** (confirmada el 4-oct, las dos cosas):
      - en "Deshacer sorteo", elegir entre "solo los últimos sorteados" y "todo" (hoy borra la escuela entera). El
        registro de sorteos tiene con qué: cada sorteo es un renglón con lo que tocó (`RegistroSorteo.esperado`);
@@ -1206,6 +1293,8 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
       barra, de M8);
     - un test que confirme si una mesa fijada alta estira el sorteo entero (anotado en M6); si es cierto, se
       arregla acá;
+    - un test de Técnica con una mesa agregada (lleva el 151, después del pasto): si el bloque de una división
+      queda "conteniendo" el pasto y eso cambia a quién le toca qué, se arregla acá (anotado en la 9c-3);
     - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
       tabla de antes y después. El OK ya está dado en el plan;
     - `tool/extras_muestra_test.dart` otra vez, para revisar con el usuario lo que marca.
@@ -1213,7 +1302,8 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre`, los
     números de Gala en papel, los cuatro botones, `kListaPuertaHabilitada`, **lo que cambia el salón, solo en modo
     jefe** (en "Roles y permisos", con el casillero "N° de mesa") y **cómo se prueba una pantalla entera**
-    (`plano_evento_screen_test.dart` y `subidaInmediataProvider`)) y la memoria.
+    (`plano_evento_screen_test.dart` y `subidaInmediataProvider`), **los colores en papel** (`TemaPlano.papel`),
+    **el aviso del plano** (`AvisoDelPlano`, no el SnackBar) y `ArmadoSalon.ultimoNumero`) y la memoria.
 12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
     windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
     texto de novedades antes de publicar.
@@ -1251,24 +1341,23 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
 entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 7-oct" y "Lo que falta, en orden"), el plan del 7-oct en
-C:\Users\lover\.claude\plans\que-falta-o-en-mutable-sprout.md, el de la 6.0.0 en
+"Qué pasó el 7-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
 C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la memoria
-del proyecto. Están hechas y subidas las etapas 1 a 9, la 9c-1 (lo que cambia
-el salón, solo en modo jefe, incluido el casillero "N° de mesa" de Editar
-alumno) y la 9c-2 (33 tests que montan la pantalla del plano entera, sin base
-ni red, en 124e731). La suite da 1.553 tests en verde y el working tree está
-limpio. Sigue la etapa 9c-3, las pantallas: los puntos 3 a 9 de "Lo que quedó
-sin hacer (etapa 9c)" en "Qué pasó el 4-oct" (los avisos de Acomodar que lleven
-a la mesa, el encabezado que diga lo que se ve, la barra de desplazamiento y
-los bloqueos pegados a GUARDAR, y los menores); los colores de Gala y Neón
-iguales al papel (ya lo decidí: el mismo color en pantalla y en papel); y el
-aviso de abajo, que hoy tapa los botones del pie (ESTILO Y ARMADO,
-PERSONALIZAR, IMPRIMIR, HISTORIAL) mientras está a la vista. Mostrame antes
-cómo quedaría cada cosa, con opciones donde haya más de una forma. Después la
-9b (confirmada, las dos cosas: deshacer solo a los últimos sorteados y la
-planilla solo de ellos), después la verificación final, la documentación de la
-6.0.0, la versión y el build, en ese orden, una etapa por chat.
+del proyecto. Están hechas y subidas las etapas 1 a 9 y la 9c entera: 9c-1 (lo
+que cambia el salón, solo en modo jefe), 9c-2 (tests que montan la pantalla del
+plano entera) y 9c-3 (el aviso al lado de los botones, los colores del papel
+iguales a los de la pantalla, y los arreglos de Acomodar), hasta 22b95fd. La
+suite da 1.616 tests en verde y el working tree está limpio. Sigue la etapa 9b,
+"los que faltan", ya confirmada con las dos cosas: en "Deshacer sorteo", elegir
+entre "solo los últimos sorteados" y "todo" (hoy borra las mesas de toda la
+escuela); y en la planilla del sorteo, la opción "solo los últimos sorteados",
+con los dos sorteos nombrados arriba. Más un test de punta a punta de la
+historia entera, con plano y sin plano. Es lo que cambia el salón: va solo en
+modo jefe. Mostrame antes cómo quedaría (maqueta), con cómo se llega a cada
+cosa. Después la verificación final (la migración sobre una copia de mi base,
+el control de mesas y sillas, el test de la mesa fijada alta y el del bloque
+que puede contener el pasto), la documentación de la 6.0.0, la versión y el
+build, en ese orden, una etapa por chat.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
