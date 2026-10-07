@@ -86,14 +86,14 @@ List<ContratoAlumno> _sinSortear() => [
       _alumno('vega', 'VEGA, ANA', extras: 1, division: '5° B'),
     ];
 
-ArmadoSalon _armado() => ArmarAMedida.armar(
-      const OpcionesAMedida(playon: PlayonReal.costaSurubi, cantidad: 40),
+ArmadoSalon _armado({int mesas = 40}) => ArmarAMedida.armar(
+      OpcionesAMedida(playon: PlayonReal.costaSurubi, cantidad: mesas),
     ).armado;
 
-PlanoEvento _plano({ConfigPlano config = ConfigPlano.vacia}) =>
+PlanoEvento _plano({ConfigPlano config = ConfigPlano.vacia, int mesas = 40}) =>
     PlanoEvento.nuevo(
       eventoId: _eventoId,
-      armado: _armado(),
+      armado: _armado(mesas: mesas),
       estilo: EstiloPlano.arquitecto,
       modo: ModoSorteo.entera,
       ahora: _ahora,
@@ -380,6 +380,28 @@ Future<void> _personalizar(WidgetTester tester, [String? pestana]) async {
   if (pestana != null) await _tocar(tester, 'pestana_$pestana');
 }
 
+/// Toca GUARDAR (u otro botón) y espera a que la pantalla termine.
+Future<void> _guardar(WidgetTester tester, String clave) async {
+  await _tocar(tester, clave);
+  await _asentar(tester);
+}
+
+/// Toca un botón de un cartel, por su texto.
+Future<void> _contestar(WidgetTester tester, String texto) async {
+  await tester.tap(find.text(texto));
+  await _asentar(tester);
+}
+
+/// Lo último que dijo la pantalla abajo (el aviso que se va solo).
+String _dicho(WidgetTester tester) =>
+    (tester.widget<SnackBar>(find.byType(SnackBar).last).content as Text).data!;
+
+/// El cartel que hay que cerrar: su título y su texto.
+(String, String) _cartel(WidgetTester tester) {
+  final cartel = tester.widget<AlertDialog>(find.byType(AlertDialog).last);
+  return ((cartel.title! as Text).data!, (cartel.content! as Text).data!);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -492,6 +514,215 @@ void main() {
       expect(find.text('Lo arma el jefe: solo en modo jefe.'), findsOneWidget);
       expect(_prendido(tester, 'armar_plano'), isFalse);
       expect(mundo.planos.guardados, isEmpty);
+    });
+  });
+
+  // Los tres guardados de Personalizar pasan por el mismo camino: releer la
+  // nube y las familias, volver a hacer la cuenta sobre eso, y recién ahí
+  // guardar. Si lo que hay ya no es lo que se veía, no se guarda.
+  group('Personalizar: Medidas', () {
+    Future<_Mundo> corregir(WidgetTester tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'medidas');
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      return mundo;
+    }
+
+    testWidgets('corregir y GUARDAR las guarda, y lo dice', (tester) async {
+      final mundo = await corregir(tester);
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.guardado.config.medidas.lugarMesaM, 2.4);
+      // Solo cambia la medida: el salón y lo demás del plano quedan igual.
+      expect(mundo.guardado.armado.mesas.length, 40);
+      expect(mundo.planos.guardados, hasLength(1));
+      expect(_dicho(tester), 'Medidas guardadas.');
+      expect(mundo.subida.pedidas, ['planos_evento']);
+      // Sigue en Medidas, con lo guardado a la vista.
+      expect(find.byKey(const Key('panel_medidas')), findsOneWidget);
+      expect(_vista(tester).lugares!.lugarMesaM, 2.4);
+    });
+
+    testWidgets('si la otra PC las cambió mientras se corregían, no se guarda',
+        (tester) async {
+      final mundo = await corregir(tester);
+      mundo.planos.nube = _plano(
+        config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.2)),
+      );
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.planos.guardados, isEmpty);
+      expect(_cartel(tester).$1, 'No se puede');
+      await _contestar(tester, 'ENTENDIDO');
+      // Quedan a la vista las de la otra PC.
+      expect(_vista(tester).lugares!.lugarMesaM, 2.2);
+    });
+  });
+
+  group('Personalizar: Colores y textos', () {
+    Future<_Mundo> elegir(WidgetTester tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'colores');
+      await _tocar(tester, 'color_5A_5');
+      await tester.enterText(
+        find.byKey(const Key('texto_titulo')),
+        'Promo 2026',
+      );
+      await tester.pump();
+      return mundo;
+    }
+
+    testWidgets('elegir un color y un título y GUARDAR los guarda',
+        (tester) async {
+      final mundo = await elegir(tester);
+      await _guardar(tester, 'guardar_colores');
+      expect(mundo.guardado.config.colores, {'5A': 5});
+      expect(mundo.guardado.config.titulo, 'Promo 2026');
+      expect(mundo.planos.guardados, hasLength(1));
+      expect(_dicho(tester), 'Colores y textos guardados.');
+      expect(find.byKey(const Key('panel_colores')), findsOneWidget);
+    });
+
+    testWidgets('si la otra PC cambió los colores mientras tanto, no se guarda',
+        (tester) async {
+      final mundo = await elegir(tester);
+      mundo.planos.nube = _plano(
+        config: const ConfigPlano(colores: {'5B': 2}),
+      );
+      await _guardar(tester, 'guardar_colores');
+      expect(mundo.planos.guardados, isEmpty);
+      expect(_cartel(tester).$1, 'No se puede');
+      await _contestar(tester, 'ENTENDIDO');
+    });
+  });
+
+  group('Personalizar: Acomodar', () {
+    Future<_Mundo> agregarUna(
+      WidgetTester tester, {
+      List<ContratoAlumno>? alumnos,
+    }) async {
+      final mundo = await _abrir(tester, alumnos: alumnos);
+      await _personalizar(tester, 'acomodar');
+      await _tocar(tester, 'acomodar_agregar');
+      expect(_vista(tester).armado.existe(41), isTrue);
+      return mundo;
+    }
+
+    testWidgets('agregar una mesa y GUARDAR guarda el salón nuevo',
+        (tester) async {
+      final mundo = await agregarUna(tester, alumnos: _sinSortear());
+      await _guardar(tester, 'guardar_acomodo');
+      expect(mundo.guardado.armado.mesas.length, 41);
+      expect(mundo.planos.guardados, hasLength(1));
+      expect(_dicho(tester), 'El salón quedó guardado.');
+      // Las mesas no se tocan desde acá: solo el plano.
+      expect(mundo.contratos.asignaciones, isEmpty);
+    });
+
+    testWidgets('con la escuela ya sorteada, dice cómo darle mesa al que falta',
+        (tester) async {
+      final mundo = await agregarUna(tester);
+      await _guardar(tester, 'guardar_acomodo');
+      expect(mundo.guardado.armado.mesas.length, 41);
+      expect(
+        _dicho(tester),
+        'El salón quedó guardado. Para darle mesa a quien todavía no tiene, '
+        'tocá SORTEO en la fiesta: los que ya tienen no se mueven.',
+      );
+    });
+
+    testWidgets('si la otra PC acomodó el salón mientras tanto, no se guarda',
+        (tester) async {
+      final mundo = await agregarUna(tester);
+      mundo.planos.nube = _plano(mesas: 42);
+      await _guardar(tester, 'guardar_acomodo');
+      expect(mundo.planos.guardados, isEmpty);
+      expect(_cartel(tester).$1, 'No se puede');
+      await _contestar(tester, 'ENTENDIDO');
+    });
+
+    testWidgets('si la otra PC sorteó mientras se acomodaba, no se guarda',
+        (tester) async {
+      final mundo = await agregarUna(tester, alumnos: _sinSortear());
+      // Bajó el sorteo de la otra PC, y la pantalla todavía no lo mostró.
+      mundo.contratos.alumnos = _sorteada();
+      await _guardar(tester, 'guardar_acomodo');
+      expect(mundo.planos.guardados, isEmpty);
+      expect(_cartel(tester).$1, 'No se puede');
+      await _contestar(tester, 'ENTENDIDO');
+    });
+  });
+
+  group('antes de guardar', () {
+    Future<_Mundo> conAlgoParaGuardar(WidgetTester tester) async {
+      final mundo = await _abrir(tester);
+      await _personalizar(tester, 'medidas');
+      await tester.enterText(find.byKey(const Key('medida_lugar')), '2,4');
+      await tester.pump();
+      return mundo;
+    }
+
+    testWidgets('si la otra PC cambió mesas que todavía no bajaron, espera',
+        (tester) async {
+      final mundo = await conAlgoParaGuardar(tester);
+      mundo.contratos.distintasEnLaOtraPc = 2;
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.planos.guardados, isEmpty);
+      expect(_cartel(tester), (
+        'Todavía no',
+        'La otra PC cambió mesas de 2 familias y todavía no llegaron acá. '
+            'Esperá unos segundos y probá de nuevo.',
+      ));
+      await _contestar(tester, 'ENTENDIDO');
+
+      // Cuando llegaron, se guarda.
+      mundo.contratos.distintasEnLaOtraPc = 0;
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.guardado.config.medidas.lugarMesaM, 2.4);
+    });
+
+    testWidgets('sin conexión pregunta: con CANCELAR no guarda, con SEGUIR sí',
+        (tester) async {
+      final mundo = await conAlgoParaGuardar(tester);
+      mundo.planos.sinRed = true;
+      mundo.conexion.estado = AppConnectivity.offline;
+      mundo.contratos.distintasEnLaOtraPc = null;
+      mundo.subida.sube = false;
+
+      await _guardar(tester, 'guardar_medidas');
+      expect(_cartel(tester).$1, 'Sin conexión');
+      await _contestar(tester, 'CANCELAR');
+      expect(mundo.planos.guardados, isEmpty);
+
+      await _guardar(tester, 'guardar_medidas');
+      expect(_cartel(tester).$1, 'Sin conexión');
+      await _contestar(tester, 'SEGUIR');
+      expect(mundo.guardado.config.medidas.lugarMesaM, 2.4);
+      expect(
+        _dicho(tester),
+        'Medidas guardadas. Quedó en esta PC; sube cuando vuelva la conexión.',
+      );
+    });
+
+    testWidgets('con conexión pero sin poder leer el plano de la nube, '
+        'también pregunta', (tester) async {
+      final mundo = await conAlgoParaGuardar(tester);
+      mundo.planos.sinRed = true;
+      await _guardar(tester, 'guardar_medidas');
+      expect(_cartel(tester).$1, 'Sin conexión');
+      await _contestar(tester, 'CANCELAR');
+      expect(mundo.planos.guardados, isEmpty);
+    });
+
+    testWidgets('si guardó y no pudo subir, dice que quedó en esta PC',
+        (tester) async {
+      final mundo = await conAlgoParaGuardar(tester);
+      mundo.subida.sube = false;
+      await _guardar(tester, 'guardar_medidas');
+      expect(mundo.planos.guardados, hasLength(1));
+      expect(
+        _dicho(tester),
+        'Medidas guardadas. Quedó en esta PC; sube cuando vuelva la conexión.',
+      );
     });
   });
 }
