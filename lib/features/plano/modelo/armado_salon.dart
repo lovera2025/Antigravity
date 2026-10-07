@@ -327,6 +327,14 @@ class ArmadoSalon {
   /// tiene que armar el mismo salón de la primera vez. Null en los del Canva.
   final double? lugarOriginalM;
   final double? pasarelaOriginalM;
+
+  /// El número más alto que tuvo alguna mesa de este salón **ya guardado**,
+  /// aunque esa mesa después se haya sacado. Una mesa nueva sigue desde ahí.
+  ///
+  /// Sin esto, sacar la última mesa, guardar y agregar otra le daba el mismo
+  /// número a un lugar distinto: y ese número ya pudo haber salido en un plano
+  /// impreso o en el Historial. Null: nunca hizo falta anotarlo.
+  final int? ultimoNumero;
   final List<HojaPlano> hojas;
   final List<MesaPlano> mesas;
   final List<SectorPlano> sectores;
@@ -341,6 +349,7 @@ class ArmadoSalon {
     this.distanciaPegadas,
     this.lugarOriginalM,
     this.pasarelaOriginalM,
+    this.ultimoNumero,
     required this.hojas,
     required List<MesaPlano> mesas,
     this.sectores = const [],
@@ -473,6 +482,7 @@ class ArmadoSalon {
     List<SectorPlano>? sectores,
     List<HojaPlano>? hojas,
     double? distanciaPegadas,
+    int? ultimoNumero,
   }) =>
       ArmadoSalon(
         clave: clave,
@@ -483,6 +493,7 @@ class ArmadoSalon {
         distanciaPegadas: distanciaPegadas ?? this.distanciaPegadas,
         lugarOriginalM: lugarOriginalM,
         pasarelaOriginalM: pasarelaOriginalM,
+        ultimoNumero: ultimoNumero ?? this.ultimoNumero,
         hojas: hojas ?? this.hojas,
         mesas: mesas ?? this.mesas,
         sectores: sectores ?? this.sectores,
@@ -499,6 +510,7 @@ class ArmadoSalon {
         if (distanciaPegadas != null) 'pegadas_u': distanciaPegadas,
         if (lugarOriginalM != null) 'lugar_m': lugarOriginalM,
         if (pasarelaOriginalM != null) 'pasarela_m': pasarelaOriginalM,
+        if (ultimoNumero != null) 'ultimo_numero': ultimoNumero,
         'hojas': [for (final h in hojas) h.toJson()],
         'mesas': [for (final m in mesas) m.toJson()],
         'sectores': [for (final s in sectores) s.toJson()],
@@ -516,6 +528,10 @@ class ArmadoSalon {
         // Cero vale: es un salón armado sin pasarela.
         pasarelaOriginalM: switch (m['pasarela_m']) {
           final num v when v.isFinite && v >= 0 => v.toDouble(),
+          _ => null,
+        },
+        ultimoNumero: switch (m['ultimo_numero']) {
+          final num v when v.isFinite && v > 0 => v.toInt(),
           _ => null,
         },
         hojas: [

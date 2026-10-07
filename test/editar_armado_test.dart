@@ -600,6 +600,98 @@ void main() {
       expect(s.puedeGuardar, isFalse);
     });
 
+    // El número de una mesa que se sacó y se guardó no se vuelve a dar: ya
+    // pudo haber salido en un plano impreso o en el Historial.
+    group('el número de una mesa que se sacó no se vuelve a dar', () {
+      /// Lo que queda guardado al tocar GUARDAR EL SALÓN.
+      ArmadoSalon guardar(SesionAcomodo s) => EditarArmado.paraGuardar(
+            base: s.base,
+            nuevo: s.actual,
+            fresco: s.base,
+            config: ConfigPlano.vacia,
+            alumnos: const [],
+            enUsoVisto: const {},
+          ).armado!;
+
+      test('se saca la última, se guarda, y la que se agrega después lleva el '
+          'número que sigue', () {
+        final uno = SesionAcomodo(base: aMedida);
+        expect(uno.sacar(132), isNull);
+        final guardado = guardar(uno);
+        expect(guardado.existe(132), isFalse);
+        expect(guardado.ultimoNumero, 132);
+
+        final dos = SesionAcomodo(base: guardado);
+        expect(dos.agregar('A'), 133);
+      });
+
+      test('una que se agregó, se guardó y después se sacó tampoco', () {
+        final uno = SesionAcomodo(base: aMedida);
+        expect(uno.agregar('A'), 133);
+        final conLa133 = guardar(uno);
+
+        final dos = SesionAcomodo(base: conLa133);
+        expect(dos.sacar(133), isNull);
+        final sinLa133 = guardar(dos);
+        expect(sinLa133.ultimoNumero, 133);
+
+        final tres = SesionAcomodo(base: sinLa133);
+        expect(tres.agregar('A'), 134);
+        // Y sigue anotado aunque se guarde de nuevo.
+        expect(guardar(tres).ultimoNumero, 134);
+      });
+
+      test('agregar y sacar sin guardar no gasta el número', () {
+        final s = SesionAcomodo(base: aMedida);
+        expect(s.agregar('A'), 133);
+        expect(s.sacar(133), isNull);
+        expect(s.agregar('A'), 133);
+      });
+
+      test('volver al armado original no lo olvida', () {
+        final uno = SesionAcomodo(base: aMedida);
+        expect(uno.agregar('A'), 133);
+        final conLa133 = guardar(uno);
+        final dos = SesionAcomodo(base: conLa133);
+        expect(dos.sacar(133), isNull);
+        final sinLa133 = guardar(dos);
+
+        final tres = SesionAcomodo(base: sinLa133);
+        expect(tres.volverAlOriginal(), isNull);
+        expect(tres.agregar('A'), 134);
+        expect(guardar(tres).ultimoNumero, 134);
+      });
+
+      test('si no se sacó ninguna, no se anota nada', () {
+        final s = SesionAcomodo(base: aMedida);
+        final m = aMedida.mesa(20)!;
+        s.empezarArrastre();
+        s.arrastrarMesa(20, m.x, m.y + aMedida.aUnidades(0.5));
+        s.terminarArrastre();
+        expect(guardar(s).ultimoNumero, isNull);
+        final con133 = SesionAcomodo(base: aMedida)..agregar('A');
+        expect(guardar(con133).ultimoNumero, isNull);
+      });
+
+      test('va y vuelve por el JSON; uno viejo, sin el dato, se lee igual', () {
+        final uno = SesionAcomodo(base: aMedida);
+        uno.sacar(132);
+        final guardado = guardar(uno);
+        final leido = ArmadoSalon.fromJson(
+          jsonDecode(jsonEncode(guardado.toJson())) as Map<String, dynamic>,
+        );
+        expect(leido.ultimoNumero, 132);
+        expect(EditarArmado.firma(leido), EditarArmado.firma(guardado));
+        expect(aMedida.toJson().containsKey('ultimo_numero'), isFalse);
+        expect(ArmadoSalon.fromJson(aMedida.toJson()).ultimoNumero, isNull);
+        expect(
+          ArmadoSalon.fromJson({...aMedida.toJson(), 'ultimo_numero': 'x'})
+              .ultimoNumero,
+          isNull,
+        );
+      });
+    });
+
     // La hoja crecía para que entrara lo que se llevaba lejos, y no volvía:
     // el salón quedaba dibujado más chico para siempre.
     group('la hoja no queda agrandada', () {

@@ -180,7 +180,13 @@ class SesionAcomodo {
   int agregar(String hoja, {int? cerca}) {
     final numero = EditarArmado.proximoNumero(
       _actual,
-      [...base.numeros, ...enUso.keys],
+      [
+        ...base.numeros,
+        ...enUso.keys,
+        // El más alto que tuvo el salón guardado, aunque esa mesa ya no esté
+        // (y aunque en esta sesión se haya vuelto al armado original).
+        if (base.ultimoNumero != null) base.ultimoNumero!,
+      ],
     );
     // Varias mesas nuevas seguidas quedan una al lado de la otra: a la
     // familia que llega tarde con dos mesas le tienen que tocar juntas.

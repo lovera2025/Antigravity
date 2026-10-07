@@ -189,7 +189,8 @@ class EditarArmado {
   /// darse si esa mesa se sacó y nadie lo reservó en [otros]: la sesión
   /// reserva los del salón guardado, que son los que ya se pudieron imprimir.
   static int proximoNumero(ArmadoSalon a, [Iterable<int> otros = const []]) {
-    var mayor = 0;
+    // El más alto que tuvo el salón guardado, aunque esa mesa ya no esté.
+    var mayor = a.ultimoNumero ?? 0;
     for (final n in [...a.numeros, ...otros]) {
       if (n > mayor) mayor = n;
     }
@@ -885,7 +886,29 @@ class EditarArmado {
             })
           : config,
       sacadas,
-      armado: nuevo,
+      armado: recordandoNumeros(nuevo, base),
     );
+  }
+
+  /// [nuevo], con anotado el número más alto que tuvo alguna mesa del salón,
+  /// contando las de [base] (el guardado). Solo hace falta si ese número ya no
+  /// está: se sacó la última mesa, o ya venía anotado de antes.
+  ///
+  /// Se anota al guardar y no al agregar: una mesa que se agrega y se saca sin
+  /// guardar nunca existió, y su número se puede volver a dar.
+  static ArmadoSalon recordandoNumeros(ArmadoSalon nuevo, ArmadoSalon base) {
+    var mayor = base.ultimoNumero ?? 0;
+    for (final n in base.numeros) {
+      if (n > mayor) mayor = n;
+    }
+    var mayorNuevo = 0;
+    for (final n in nuevo.numeros) {
+      if (n > mayorNuevo) mayorNuevo = n;
+    }
+    if (mayorNuevo > mayor) mayor = mayorNuevo;
+    if (mayor == mayorNuevo && base.ultimoNumero == null) return nuevo;
+    return nuevo.ultimoNumero == mayor
+        ? nuevo
+        : nuevo.copyWith(ultimoNumero: mayor);
   }
 }
