@@ -79,6 +79,7 @@ Future<void> _mostrar(
   String? resaltar,
   bool ocupado = false,
   VoidCallback? onEstiloYArmado,
+  VoidCallback? onRearmar,
   AccionesPlano? acciones,
   VoidCallback? onImprimir,
   VoidCallback? onHistorial,
@@ -100,6 +101,7 @@ Future<void> _mostrar(
           resaltarAlumnoId: resaltar,
           ocupado: ocupado,
           onEstiloYArmado: onEstiloYArmado,
+          onRearmar: onRearmar,
           acciones: acciones,
           onImprimir: onImprimir,
           onHistorial: onHistorial,
@@ -1255,6 +1257,41 @@ void main() {
       expect(abrio, 1);
     });
 
+    testWidgets('el botón del aviso abre para armar de nuevo, no como siempre',
+        (tester) async {
+      final tocados = <String>[];
+      final sinMesa = [_alumno('vega', 'VEGA, ANA', extras: 1)];
+      await _mostrar(
+        tester,
+        alumnos: sinMesa,
+        plano: _plano(
+          alumnos: sinMesa,
+          config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.5)),
+        ),
+        acciones: _acciones([], medidas: []),
+        onEstiloYArmado: () => tocados.add('como siempre'),
+        onRearmar: () => tocados.add('armar de nuevo'),
+      );
+      await abrirMedidas(tester);
+      await tester.ensureVisible(find.byKey(const Key('accion_aviso_medidas')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('accion_aviso_medidas')));
+      expect(tocados, ['armar de nuevo']);
+      // El botón del pie sigue abriendo como siempre.
+      await tester.tap(find.byKey(const Key('estilo_y_armado')));
+      expect(tocados, ['armar de nuevo', 'como siempre']);
+    });
+
+    testWidgets('la barra de desplazamiento de Medidas queda a la vista',
+        (tester) async {
+      await _mostrar(tester, acciones: _acciones([], medidas: []));
+      await abrirMedidas(tester);
+      final barra =
+          tester.widget<Scrollbar>(find.byKey(const Key('barra_medidas')));
+      expect(barra.thumbVisibility, isTrue);
+      expect(barra.controller, isNotNull);
+    });
+
     testWidgets('con familias ya sentadas no ofrece armar de nuevo',
         (tester) async {
       await _mostrar(
@@ -1360,6 +1397,55 @@ void main() {
           .toList();
       expect(nombres, ['5° A', '5° B', '4° C', '6° A']);
       expect(_vista(tester).onTapMesa, isNull);
+    });
+
+    testWidgets('antes del sorteo dice que el color todavía no se ve en el '
+        'plano', (tester) async {
+      final sinSortear = [
+        _alumno('gomez', 'GÓMEZ, SOFÍA'),
+        _alumno('sosa', 'SOSA, LUZ', division: '5° B'),
+      ];
+      await _mostrar(
+        tester,
+        alumnos: sinSortear,
+        plano: _plano(alumnos: sinSortear),
+        acciones: _acciones([], colores: []),
+      );
+      await abrirColores(tester);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('colores_sin_sorteo'))).data,
+        'Todavía no hay mesas sorteadas: el color de cada división se va a '
+        'ver en el plano cuando tenga sus mesas.',
+      );
+      // Ninguna lleva el rótulo suelto: lo dice el aviso de arriba.
+      expect(find.textContaining('todavía sin mesas'), findsNothing);
+    });
+
+    testWidgets('con la escuela sorteada, la división que todavía no tiene '
+        'mesas lo dice', (tester) async {
+      final alumnos = [..._alumnos, _alumno('paz', 'PAZ, LEO', division: '6° A')];
+      await _mostrar(tester,
+          alumnos: alumnos, acciones: _acciones([], colores: []));
+      await abrirColores(tester);
+      expect(find.byKey(const Key('colores_sin_sorteo')), findsNothing);
+      expect(find.byKey(const Key('sin_mesas_6A')), findsOneWidget);
+      expect(find.byKey(const Key('sin_mesas_5A')), findsNothing);
+    });
+
+    testWidgets('dice que en papel sale el mismo color, y la barra queda a la '
+        'vista', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], colores: []));
+      await abrirColores(tester);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('colores_en_papel'))).data,
+        'En el plano impreso sale el mismo color, en tono claro.',
+      );
+      expect(
+        tester
+            .widget<Scrollbar>(find.byKey(const Key('barra_colores')))
+            .thumbVisibility,
+        isTrue,
+      );
     });
 
     testWidgets('el color elegido se ve en el plano y en la leyenda antes de '

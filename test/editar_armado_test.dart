@@ -600,6 +600,65 @@ void main() {
       expect(s.puedeGuardar, isFalse);
     });
 
+    // La hoja crecía para que entrara lo que se llevaba lejos, y no volvía:
+    // el salón quedaba dibujado más chico para siempre.
+    group('la hoja no queda agrandada', () {
+      RectPlano caja(ArmadoSalon a) => a.hojas.first.caja;
+
+      test('llevar un sector lejos y traerlo deja la hoja como estaba', () {
+        final s = SesionAcomodo(base: aMedida);
+        final i = aMedida.sectores
+            .indexWhere((x) => x.tipo == TipoSector.pasarela);
+        final c = aMedida.sectores[i].caja;
+        s.empezarArrastre();
+        s.arrastrarSector(i, c.x + aMedida.aUnidades(60), c.y);
+        s.terminarArrastre();
+        expect(caja(s.actual).ancho, greaterThan(caja(aMedida).ancho));
+
+        s.empezarArrastre();
+        s.arrastrarSector(i, c.x, c.y);
+        s.terminarArrastre();
+        expect(caja(s.actual), caja(aMedida));
+      });
+
+      test('separar y volver a juntar deja la hoja como estaba', () {
+        final s = SesionAcomodo(base: aMedida);
+        final todas = aMedida.numeros.toSet();
+        // A cuatro metros el salón no entra en la hoja: se agranda.
+        s.probarSeparar(todas, 4.0, sillasExtraDe: (_) => 0);
+        s.aplicarSeparar();
+        expect(caja(s.actual), isNot(caja(aMedida)));
+        expect(
+          caja(s.actual).ancho * caja(s.actual).alto,
+          greaterThan(caja(aMedida).ancho * caja(aMedida).alto),
+        );
+
+        s.probarSeparar(todas, 2.0, sillasExtraDe: (_) => 0);
+        s.aplicarSeparar();
+        expect(caja(s.actual), caja(aMedida));
+      });
+
+      test('nunca queda más chica que la del salón guardado', () {
+        final s = SesionAcomodo(base: aMedida);
+        final todas = aMedida.numeros.toSet();
+        s.probarSeparar(todas, 1.8, sillasExtraDe: (_) => 0);
+        s.aplicarSeparar();
+        final ahora = caja(s.actual);
+        final guardada = caja(aMedida);
+        expect(ahora.x, lessThanOrEqualTo(guardada.x));
+        expect(ahora.y, lessThanOrEqualTo(guardada.y));
+        expect(ahora.derecha, greaterThanOrEqualTo(guardada.derecha));
+        expect(ahora.abajo, greaterThanOrEqualTo(guardada.abajo));
+      });
+
+      test('si nada quedó afuera, no cambia nada', () {
+        expect(
+          identical(EditarArmado.ajustarCajas(aMedida, aMedida), aMedida),
+          isTrue,
+        );
+      });
+    });
+
     // "5 mesas quedan apretadas" solo no dice cuáles: cada aviso trae sus
     // mesas, y la pantalla lleva a ellas.
     group('los avisos dicen de qué mesas hablan', () {

@@ -25,6 +25,8 @@ Future<_Resultado> _abrir(
   int necesarias = 132,
   PlanoEvento? actual,
   String? trabado,
+  bool rearmar = false,
+  MedidasPlano medidas = const MedidasPlano(),
 }) async {
   tester.view.physicalSize = const Size(1400, 1000);
   tester.view.devicePixelRatio = 1;
@@ -41,9 +43,10 @@ Future<_Resultado> _abrir(
                 r.eleccion = await mostrarElegirPlano(
                   context: context,
                   mesasNecesarias: necesarias,
-                  medidas: const MedidasPlano(),
+                  medidas: medidas,
                   actual: actual,
                   armadoTrabado: trabado,
+                  rearmar: rearmar,
                 );
                 r.cerrado = true;
               },
@@ -255,6 +258,90 @@ void main() {
       expect(find.byKey(const Key('armado___actual__')), findsNothing);
       await _tocar(tester, 'listo');
       expect(r.eleccion!.armado.clave, ArmarAMedida.claveArmado);
+    });
+  });
+
+  // El aviso de Medidas ("armalo de nuevo con estas medidas") abría esta
+  // pantalla con "Como está ahora" elegido: LISTO no rearmaba nada.
+  group('cuando se viene a armarlo de nuevo (desde Medidas)', () {
+    PlanoEvento aMedida({int mesas = 132, double pasarela = 2.1}) =>
+        PlanoEvento.nuevo(
+          eventoId: 'e0000000-0000-4000-8000-000000000001',
+          armado: ArmarAMedida.armar(OpcionesAMedida(
+            playon: PlayonReal.costaSurubi,
+            cantidad: mesas,
+            pasarelaM: pasarela,
+          )).armado,
+          estilo: EstiloPlano.gala,
+          modo: ModoSorteo.bloques,
+          ahora: ahora,
+        );
+
+    testWidgets('abre con "A medida" elegido, y LISTO lo arma con la distancia '
+        'guardada', (tester) async {
+      final actual = aMedida();
+      final r = await _abrir(
+        tester,
+        actual: actual,
+        rearmar: true,
+        medidas: const MedidasPlano(lugarMesaM: 2.4),
+      );
+      await _tocar(tester, 'listo');
+      final e = r.eleccion!;
+      expect(e.armado.clave, ArmarAMedida.claveArmado);
+      expect(ArmarAMedida.lugarDe(e.armado), closeTo(2.4, 1e-9));
+      expect(jsonEncode(e.armado.toJson()), isNot(actual.armadoJson));
+      // El estilo y el sorteo no se tocan.
+      expect(e.estilo, EstiloPlano.gala);
+      expect(e.modo, ModoSorteo.bloques);
+    });
+
+    testWidgets('conserva las mesas que el salón ya tiene, aunque sean más de '
+        'las que piden las familias', (tester) async {
+      final r = await _abrir(
+        tester,
+        necesarias: 132,
+        actual: aMedida(mesas: 140),
+        rearmar: true,
+      );
+      await _tocar(tester, 'listo');
+      expect(r.eleccion!.armado.cantidadComunes, 140);
+    });
+
+    testWidgets('si no tenía pasarela, sigue sin pasarela', (tester) async {
+      final r = await _abrir(
+        tester,
+        actual: aMedida(pasarela: 0),
+        rearmar: true,
+      );
+      await _tocar(tester, 'listo');
+      expect(ArmarAMedida.pasarelaDe(r.eleccion!.armado), 0);
+    });
+
+    testWidgets('con familias ya sentadas no rearma nada', (tester) async {
+      final actual = aMedida();
+      final r = await _abrir(
+        tester,
+        actual: actual,
+        rearmar: true,
+        trabado: 'Ya hay familias con mesa.',
+        medidas: const MedidasPlano(lugarMesaM: 2.4),
+      );
+      await _tocar(tester, 'listo');
+      expect(jsonEncode(r.eleccion!.armado.toJson()), actual.armadoJson);
+    });
+
+    testWidgets('sin venir de Medidas, abre como siempre: como está ahora',
+        (tester) async {
+      final actual = aMedida();
+      final r = await _abrir(
+        tester,
+        actual: actual,
+        medidas: const MedidasPlano(lugarMesaM: 2.4),
+      );
+      expect(_tarjeta(tester, '__actual__').first, 'Como está ahora');
+      await _tocar(tester, 'listo');
+      expect(jsonEncode(r.eleccion!.armado.toJson()), actual.armadoJson);
     });
   });
 

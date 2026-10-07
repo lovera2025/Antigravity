@@ -108,8 +108,11 @@ class SesionAcomodo {
   bool get puedeGuardar =>
       hayCambios && bloqueos.isEmpty && !arrastrando && _previa == null;
 
-  void _poner(ArmadoSalon nuevo) {
+  void _poner(ArmadoSalon armado) {
     _previa = null;
+    // La hoja vuelve al tamaño que le hace falta: no queda agrandada por algo
+    // que ya se trajo de vuelta.
+    final nuevo = EditarArmado.ajustarCajas(armado, base);
     if (identical(nuevo, _actual)) return;
     _pila.add(_actual);
     if (_pila.length > _maximoDeshacer) _pila.removeAt(0);
@@ -156,6 +159,9 @@ class SesionAcomodo {
     final antes = _antesDeArrastrar;
     _antesDeArrastrar = null;
     if (antes == null || identical(antes, _actual)) return;
+    // Mientras se arrastraba la hoja solo crecía, para que el dibujo no
+    // saltara. Al soltar queda del tamaño que hace falta.
+    _actual = EditarArmado.ajustarCajas(_actual, base);
     // Llevarla y traerla de vuelta en el mismo arrastre es no haberla movido:
     // no queda un paso de Deshacer que no hace nada.
     if (EditarArmado.firma(antes) == EditarArmado.firma(_actual)) {

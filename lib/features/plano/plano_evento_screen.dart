@@ -414,7 +414,9 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
 
   // ── Estilo y armado ─────────────────────────────────────────────────────
 
-  Future<void> _elegir() async {
+  /// [rearmar]: se llega desde el aviso de Medidas, para armar el salón de
+  /// nuevo con las medidas recién guardadas.
+  Future<void> _elegir({bool rearmar = false}) async {
     if (_ocupado || _frenaSinModoJefe()) return;
     final actual = _plano;
     final tieneArmado = actual?.armadoONull != null;
@@ -428,6 +430,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           ? 'Ya hay familias con mesa: para cambiar el armado hay que deshacer '
               'el sorteo. El estilo se cambia siempre.'
           : null,
+      rearmar: rearmar,
     );
     if (eleccion == null || !mounted) return;
     await _guardar(eleccion);
@@ -1086,6 +1089,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       resaltarAlumnoId: widget.resaltarAlumnoId,
       ocupado: _ocupado,
       onEstiloYArmado: esJefe ? _elegir : null,
+      onRearmar: esJefe ? () => _elegir(rearmar: true) : null,
       acciones: esJefe
           ? AccionesPlano(
               onFijarEnMesa: _fijarEnMesa,

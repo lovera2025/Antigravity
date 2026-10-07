@@ -34,6 +34,7 @@ Future<EleccionPlano?> mostrarElegirPlano({
   PlanoEvento? actual,
   List<OcupantePlano> ocupantes = const [],
   String? armadoTrabado,
+  bool rearmar = false,
 }) =>
     showDialog<EleccionPlano>(
       context: context,
@@ -44,6 +45,7 @@ Future<EleccionPlano?> mostrarElegirPlano({
         actual: actual,
         ocupantes: ocupantes,
         armadoTrabado: armadoTrabado,
+        rearmar: rearmar,
       ),
     );
 
@@ -66,6 +68,12 @@ class ElegirPlanoDialog extends StatefulWidget {
   /// palabras (ya hay familias con mesa). El estilo se cambia siempre.
   final String? armadoTrabado;
 
+  /// Se llega desde Medidas, para armar el salón de nuevo con las medidas
+  /// recién guardadas: abre con "A medida del playón" ya elegido, con las
+  /// mesas y la pasarela que el salón tiene hoy. Antes abría en "Como está
+  /// ahora", y LISTO no rearmaba nada. Con el armado trabado no cambia nada.
+  final bool rearmar;
+
   const ElegirPlanoDialog({
     super.key,
     required this.mesasNecesarias,
@@ -73,6 +81,7 @@ class ElegirPlanoDialog extends StatefulWidget {
     this.actual,
     this.ocupantes = const [],
     this.armadoTrabado,
+    this.rearmar = false,
   });
 
   @override
@@ -104,11 +113,21 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
     _lugar = widget.medidas.lugarMesaM
         .clamp(MedidasPlano.lugarMinimoM, _lugarMaximo)
         .toDouble();
+    final hoy = _armadoActual;
+    final rearmar =
+        widget.rearmar && widget.armadoTrabado == null && hoy != null;
+    if (rearmar) {
+      // Las mesas que ya tiene (si se agregaron a mano, no se pierden) y la
+      // pasarela, si tenía.
+      if (hoy.cantidadComunes > _cantidad) _cantidad = hoy.cantidadComunes;
+      _pasarela = ArmarAMedida.pasarelaDe(hoy) > 0;
+    }
     _cantidadCtrl = TextEditingController(text: '$_cantidad');
     // Lo recomendado ya viene elegido: el armado que la fiesta tiene o, la
-    // primera vez, el hecho a medida del playón, que siempre da las mesas
-    // justas.
-    _armado = _armadoActual != null ? _claveActual : ArmarAMedida.claveArmado;
+    // primera vez (o si se vino a armarlo de nuevo), el hecho a medida del
+    // playón, que siempre da las mesas justas.
+    _armado =
+        hoy != null && !rearmar ? _claveActual : ArmarAMedida.claveArmado;
     _estilo = widget.actual?.estiloPlano ?? EstiloPlano.arquitecto;
     _modo = widget.actual?.modoSorteo ?? ModoSorteo.bloques;
   }

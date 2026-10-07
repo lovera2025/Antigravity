@@ -394,6 +394,27 @@ Future<void> _personalizar(WidgetTester tester, [String? pestana]) async {
   if (pestana != null) await _tocar(tester, 'pestana_$pestana');
 }
 
+/// Baja por un panel de Personalizar hasta que se vea algo de más abajo. Los
+/// paneles son más largos que la pantalla, y lo de abajo no está armado hasta
+/// que se llega.
+Future<void> _bajarHasta(
+  WidgetTester tester,
+  String clave, {
+  required String panel,
+}) async {
+  await tester.scrollUntilVisible(
+    find.byKey(Key(clave)),
+    120,
+    scrollable: find
+        .descendant(
+          of: find.byKey(Key(panel)),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.pump();
+}
+
 /// Toca GUARDAR (u otro botón) y espera a que la pantalla termine.
 Future<void> _guardar(WidgetTester tester, String clave) async {
   await _tocar(tester, clave);
@@ -1112,6 +1133,40 @@ void main() {
             'quedó y probá de nuevo.'),
         findsOneWidget,
       );
+    });
+  });
+
+  group('armar el salón de nuevo con las medidas guardadas', () {
+    testWidgets('desde el aviso de Medidas, LISTO guarda el salón rearmado',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.5)),
+      );
+      expect(ArmarAMedida.lugarDe(mundo.planos.aca!.armado), closeTo(2, 1e-9));
+      await _personalizar(tester, 'medidas');
+      await _bajarHasta(tester, 'accion_aviso_medidas', panel: 'panel_medidas');
+      await _guardar(tester, 'accion_aviso_medidas');
+      // Abre con "A medida" ya elegido: alcanza con LISTO.
+      await _guardar(tester, 'listo');
+
+      expect(ArmarAMedida.lugarDe(mundo.guardado.armado), closeTo(2.5, 1e-9));
+      // Las medidas guardadas siguen ahí.
+      expect(mundo.guardado.config.medidas.lugarMesaM, 2.5);
+      expect(_dicho(tester), 'Plano guardado.');
+    });
+
+    testWidgets('desde el botón del pie abre como siempre: LISTO no rearma',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        config: const ConfigPlano(medidas: MedidasPlano(lugarMesaM: 2.5)),
+      );
+      await _guardar(tester, 'estilo_y_armado');
+      await _guardar(tester, 'listo');
+      expect(ArmarAMedida.lugarDe(mundo.guardado.armado), closeTo(2, 1e-9));
     });
   });
 }

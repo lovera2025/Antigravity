@@ -95,8 +95,13 @@ class _PanelMedidasState extends State<PanelMedidas> {
     if (old.medidas != widget.medidas) _cargar(widget.medidas);
   }
 
+  /// El panel es más largo que una notebook: la barra queda a la vista para
+  /// que se note que hay más abajo ("Corregilas con cinta" quedaba cortado).
+  final _barra = ScrollController();
+
   @override
   void dispose() {
+    _barra.dispose();
     for (final c in [_frente, _fondo, _costado, _lugar, _extra]) {
       c.dispose();
     }
@@ -322,7 +327,13 @@ class _PanelMedidasState extends State<PanelMedidas> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView(
+          child: Scrollbar(
+            key: const Key('barra_medidas'),
+            controller: _barra,
+            thumbVisibility: true,
+            child: ListView(
+            controller: _barra,
+            padding: const EdgeInsets.only(right: 12),
             children: [
               titulo('EL PLAYÓN, CON CINTA'),
               SizedBox(
@@ -394,6 +405,7 @@ class _PanelMedidasState extends State<PanelMedidas> {
                 ),
               ],
             ],
+          ),
           ),
         ),
         const SizedBox(height: 8),

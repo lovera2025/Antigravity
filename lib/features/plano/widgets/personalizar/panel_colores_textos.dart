@@ -94,8 +94,12 @@ class _PanelColoresTextosState extends State<PanelColoresTextos> {
     }
   }
 
+  /// El panel es más largo que una notebook: la barra queda a la vista.
+  final _barra = ScrollController();
+
   @override
   void dispose() {
+    _barra.dispose();
     _titulo.dispose();
     _subtitulo.dispose();
     for (final c in _textos) {
@@ -144,6 +148,9 @@ class _PanelColoresTextosState extends State<PanelColoresTextos> {
     final leido = _leer();
     final cambio = !leido.igualA(widget.config);
     final gris = TextStyle(color: Colors.grey.shade700, fontSize: 12.5);
+    // Antes del sorteo ninguna división tiene mesas: el color se elige, pero
+    // en el plano todavía no hay dónde verlo.
+    final sinMesas = widget.divisiones.every((d) => d.lugar == null);
 
     Widget titulo(String texto) => Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -184,7 +191,24 @@ class _PanelColoresTextosState extends State<PanelColoresTextos> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(d.nombre, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Row(
+              children: [
+                Text(
+                  d.nombre,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                // Con otras ya sorteadas, esta todavía no se ve en el plano.
+                if (d.lugar == null && !sinMesas)
+                  Flexible(
+                    child: Text(
+                      ' · todavía sin mesas',
+                      key: Key('sin_mesas_${d.clave}'),
+                      overflow: TextOverflow.ellipsis,
+                      style: gris,
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(height: 4),
             Wrap(
               spacing: 6,
@@ -256,7 +280,13 @@ class _PanelColoresTextosState extends State<PanelColoresTextos> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView(
+          child: Scrollbar(
+            key: const Key('barra_colores'),
+            controller: _barra,
+            thumbVisibility: true,
+            child: ListView(
+            controller: _barra,
+            padding: const EdgeInsets.only(right: 12),
             children: [
               titulo('COLOR DE CADA DIVISIÓN'),
               if (widget.divisiones.isEmpty)
@@ -264,8 +294,27 @@ class _PanelColoresTextosState extends State<PanelColoresTextos> {
                   'Todavía no hay divisiones cargadas en los alumnos.',
                   style: gris,
                 )
-              else
+              else ...[
+                if (sinMesas)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'Todavía no hay mesas sorteadas: el color de cada '
+                      'división se va a ver en el plano cuando tenga sus mesas.',
+                      key: const Key('colores_sin_sorteo'),
+                      style: gris,
+                    ),
+                  ),
                 for (final d in widget.divisiones) division(d),
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'En el plano impreso sale el mismo color, en tono claro.',
+                    key: const Key('colores_en_papel'),
+                    style: gris,
+                  ),
+                ),
+              ],
               titulo('TÍTULO DEL PLANO'),
               TextField(
                 key: const Key('texto_titulo'),
@@ -324,6 +373,7 @@ class _PanelColoresTextosState extends State<PanelColoresTextos> {
                   ),
               ],
             ],
+          ),
           ),
         ),
         const SizedBox(height: 8),

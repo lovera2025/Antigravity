@@ -106,13 +106,33 @@ class EditarArmado {
   }
 
   /// La caja de cada hoja, agrandada si hace falta para que entren todas sus
-  /// mesas y sus sectores. Nunca se achica: el dibujo no salta.
-  static ArmadoSalon _conCajas(ArmadoSalon a) {
+  /// mesas y sus sectores. Nunca se achica: mientras se arrastra, el dibujo no
+  /// salta.
+  static ArmadoSalon _conCajas(ArmadoSalon a) => _cajas(a, (h) => h.caja);
+
+  /// Las cajas de las hojas ajustadas a lo que tienen hoy: nunca más chicas
+  /// que las de [base] (el salón del que se partió), y agrandadas lo justo si
+  /// algo quedó afuera.
+  ///
+  /// [_conCajas] solo agranda. Sin esto la hoja quedaba grande para siempre:
+  /// llevar un sector lejos y traerlo, o separar y volver a juntar, dejaba el
+  /// salón dibujado más chico. La sesión de Acomodar lo llama al terminar cada
+  /// cosa (al soltar, al aplicar), no mientras se arrastra.
+  static ArmadoSalon ajustarCajas(ArmadoSalon a, ArmadoSalon base) =>
+      _cajas(a, (h) => base.hoja(h.id)?.caja ?? h.caja);
+
+  /// La caja de cada hoja: la [minima] que le toca, agrandada para que entren
+  /// todas sus mesas y sus sectores.
+  static ArmadoSalon _cajas(
+    ArmadoSalon a,
+    RectPlano Function(HojaPlano hoja) minima,
+  ) {
     var cambio = false;
     final hojas = <HojaPlano>[];
     for (final h in a.hojas) {
-      var x0 = h.caja.x, y0 = h.caja.y;
-      var x1 = h.caja.derecha, y1 = h.caja.abajo;
+      final m = minima(h);
+      var x0 = m.x, y0 = m.y;
+      var x1 = m.derecha, y1 = m.abajo;
       for (final m in a.mesasDeHoja(h.id)) {
         x0 = math.min(x0, m.x - a.radio - _margen);
         y0 = math.min(y0, m.y - a.radio - _margen);

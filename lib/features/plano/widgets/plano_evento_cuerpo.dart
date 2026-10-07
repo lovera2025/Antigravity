@@ -178,6 +178,10 @@ class PlanoEventoCuerpo extends StatefulWidget {
 
   final VoidCallback? onEstiloYArmado;
 
+  /// Abre "Estilo y armado" para armar el salón de nuevo con las medidas
+  /// guardadas (el botón del aviso de Medidas). Null: abre como siempre.
+  final VoidCallback? onRearmar;
+
   /// Fijar, dejar libres, cambiar y mover. Null: no hay PERSONALIZAR.
   final AccionesPlano? acciones;
   final VoidCallback? onImprimir;
@@ -205,6 +209,7 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.mostrarLugares = false,
     this.ocupado = false,
     this.onEstiloYArmado,
+    this.onRearmar,
     this.acciones,
     this.onImprimir,
     this.onHistorial,
@@ -1425,7 +1430,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           textoAccionAviso: 'ESTILO Y ARMADO',
           onAccionAviso: _hayFamiliasConMesa || widget.onEstiloYArmado == null
               ? null
-              : _siNoHayPendiente(widget.onEstiloYArmado!),
+              : _siNoHayPendiente(widget.onRearmar ?? widget.onEstiloYArmado!),
         ),
       );
 
