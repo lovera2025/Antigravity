@@ -1,3 +1,5 @@
+import '../core/utils/ar_time.dart';
+
 /// Nota operativa por contrato de alumno — espejo local ↔ Supabase; sin impacto contable.
 class NotaOperativaContrato {
   final String id;
@@ -30,4 +32,33 @@ class NotaOperativaContrato {
   }
 
   bool get tieneTexto => texto.trim().isNotEmpty;
+
+  /// Lo que puede tardar una nota recién escrita en volver de la nube con su
+  /// `updated_at`. El trigger de Supabase lo reescribe también al insertar: sin
+  /// este margen, toda nota que subió figuraría como modificada.
+  ///
+  /// Una nota escrita sin internet y subida más tarde pasa el margen y figura
+  /// como modificada a la hora en que subió. Es raro, y no hay otro dato del
+  /// que sacarlo.
+  static const Duration margenDeSubida = Duration(minutes: 5);
+
+  /// Se tocó después de escribirla: el texto, o el "hecho".
+  bool get seModifico => updatedAt.difference(createdAt) > margenDeSubida;
+
+  /// Cuándo se escribió y, si se tocó después, cuándo fue la última vez, en
+  /// hora de Argentina. Vacío si la nota no trae fecha.
+  ///
+  /// - con hora: "Escrita el 13/05/2026 20:16 hs · modificada el 10/06/2026
+  ///   09:35 hs";
+  /// - sin hora, para un renglón corto: "Escrita el 13/05/2026 · modificada el
+  ///   10/06/2026".
+  String cuando({bool conHora = true}) {
+    if (createdAt.millisecondsSinceEpoch == 0) return '';
+    String fecha(DateTime d) =>
+        conHora ? ArTime.formatFechaHora(d) : ArTime.formatFechaCorta(d);
+    final escrita = 'Escrita el ${fecha(createdAt)}';
+    return seModifico
+        ? '$escrita · modificada el ${fecha(updatedAt)}'
+        : escrita;
+  }
 }

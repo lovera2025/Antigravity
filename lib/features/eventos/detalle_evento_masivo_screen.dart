@@ -3079,6 +3079,8 @@ class _DetalleEventoMasivoScreenState
   ) {
     final bool tieneNota = notaOp != null && notaOp.tieneTexto;
     final bool resuelto = tieneNota && notaOp.resuelto;
+    // Al pasar el mouse, además del texto, cuándo se escribió.
+    final String cuandoNota = tieneNota ? notaOp.cuando(conHora: false) : '';
 
     Color? bgColor;
     Color iconColor;
@@ -3113,9 +3115,9 @@ class _DetalleEventoMasivoScreenState
       child: IconButton(
         padding: EdgeInsets.zero,
         tooltip: tieneNota
-            ? (resuelto
-                  ? 'Nota resuelta: ${notaOp.texto}'
-                  : 'Nota pendiente: ${notaOp.texto}')
+            ? '${resuelto ? 'Nota resuelta' : 'Nota pendiente'}: '
+                  '${notaOp.texto}'
+                  '${cuandoNota.isEmpty ? '' : '\n$cuandoNota'}'
             : 'Agregar nota operativa',
         icon: Stack(
           clipBehavior: Clip.none,

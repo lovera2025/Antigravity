@@ -9,23 +9,48 @@ import '../../caja_sesiones/services/caja_auto_sync_service.dart';
 
 const _gold = Color(0xFFD4AF37);
 
-/// Bottom sheet para crear / editar / borrar nota operativa (no contable).
+/// Cómo se abre la nota si quien llama no dice nada: `false`, la hoja que sube
+/// desde abajo; `true`, una ventana al centro de la pantalla.
+const bool kNotaComoVentana = false;
+
+/// La nota operativa de un alumno (no contable): crearla, editarla o borrarla.
+///
+/// Con [comoVentana] se abre como una ventana al centro en vez de la hoja de
+/// abajo. El contenido es el mismo.
 Future<void> showNotaOperativaSheet({
   required BuildContext context,
   required WidgetRef ref,
   required ContratoAlumno alumno,
   NotaOperativaContrato? existente,
   required VoidCallback onChanged,
+  bool comoVentana = kNotaComoVentana,
 }) async {
+  final cuerpo = _NotaOperativaSheetBody(
+    alumno: alumno,
+    existente: existente,
+    onChanged: onChanged,
+    comoVentana: comoVentana,
+  );
+  if (comoVentana) {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: cuerpo,
+        ),
+      ),
+    );
+    return;
+  }
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _NotaOperativaSheetBody(
-      alumno: alumno,
-      existente: existente,
-      onChanged: onChanged,
-    ),
+    builder: (ctx) => cuerpo,
   );
 }
 
@@ -33,11 +58,13 @@ class _NotaOperativaSheetBody extends ConsumerStatefulWidget {
   final ContratoAlumno alumno;
   final NotaOperativaContrato? existente;
   final VoidCallback onChanged;
+  final bool comoVentana;
 
   const _NotaOperativaSheetBody({
     required this.alumno,
     required this.existente,
     required this.onChanged,
+    this.comoVentana = false,
   });
 
   @override
@@ -184,6 +211,8 @@ class _NotaOperativaSheetBodyState
 
     final tieneGuardada =
         widget.existente != null && widget.existente!.tieneTexto;
+    // Cuándo se escribió: la fecha estaba en la base y no se veía en la app.
+    final cuando = tieneGuardada ? widget.existente!.cuando() : '';
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -192,7 +221,9 @@ class _NotaOperativaSheetBodyState
       child: Container(
         decoration: BoxDecoration(
           color: bgTop,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: widget.comoVentana
+              ? BorderRadius.circular(28)
+              : const BorderRadius.vertical(top: Radius.circular(28)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.12),
@@ -210,19 +241,21 @@ class _NotaOperativaSheetBodyState
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black).withValues(
-                        alpha: 0.15,
+                // La manija es de la hoja que se arrastra; la ventana no la
+                // lleva.
+                if (!widget.comoVentana)
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(99),
                       ),
-                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
-                ),
-                const SizedBox(height: 18),
+                SizedBox(height: widget.comoVentana ? 10 : 18),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -319,6 +352,34 @@ class _NotaOperativaSheetBodyState
                     },
                   ),
                 ),
+                if (cuando.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 2),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.schedule_rounded,
+                          size: 15,
+                          color: (isDark ? Colors.white : Colors.black)
+                              .withValues(alpha: 0.5),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            cuando,
+                            key: const Key('nota-cuando'),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              height: 1.3,
+                              color: (isDark ? Colors.white : Colors.black)
+                                  .withValues(alpha: 0.6),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
@@ -349,7 +410,7 @@ class _NotaOperativaSheetBodyState
                       subtitle: Text(
                         _resuelto
                             ? 'Podés seguir editando o borrar cuando quieras.'
-                            : 'Cuando lo atiendas el mes que viene, activá esto.',
+                            : 'Cuando ya esté resuelto, activá esto.',
                         style: TextStyle(
                           fontSize: 11,
                           height: 1.3,

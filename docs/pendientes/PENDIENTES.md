@@ -32,6 +32,10 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 - [Chequeo de salud de saldos](chequeo-salud-saldos.md) — auditar saldos contra
   Supabase en vez de la base local. Incluye cuál es la herramienta buena
   (`tool/recalcular_contrato.dart --dry-run`) y cuál es una trampa.
+- [Que una nota borrada también se vaya de la PC que estaba cerrada](notas-borradas-en-pc-cerrada.md)
+  — el borrado de una nota no le llega a una PC que estaba cerrada, y la
+  reconciliación no mira las notas. No se arregló el día de publicar porque es
+  agregar un camino que borra.
 
 ### Tótem y Recepción para las fiestas de diciembre
 

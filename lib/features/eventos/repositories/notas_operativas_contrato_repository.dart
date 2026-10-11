@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
@@ -35,8 +36,13 @@ class NotasOperativasContratoRepository {
     return map;
   }
 
-  Future<NotaOperativaContrato?> obtenerUno(String contratoAlumnoId) async {
-    final db = await LocalDatabase.instance;
+  Future<NotaOperativaContrato?> obtenerUno(String contratoAlumnoId) async =>
+      obtenerUnoEn(await LocalDatabase.instance, contratoAlumnoId);
+
+  static Future<NotaOperativaContrato?> obtenerUnoEn(
+    DatabaseExecutor db,
+    String contratoAlumnoId,
+  ) async {
     final rows = await db.query(
       'notas_operativas_contrato',
       where: 'contrato_alumno_id = ?',
@@ -47,37 +53,74 @@ class NotasOperativasContratoRepository {
     return NotaOperativaContrato.fromMap(rows.first);
   }
 
+  /// El id con el que la nota se guarda y viaja a la nube.
+  ///
+  /// Una nota nueva lleva el id fijo de su alumno, el mismo en todas las PCs.
+  /// **Una que ya existe conserva el suyo, aunque no sea el fijo.** Las notas
+  /// de mora condonada de julio de 2026 las escribió una herramienta con otro
+  /// id: al editarlas o borrarlas, la app mandaba el cambio a la nube con el id
+  /// fijo, que allá no existe. La edición no llegaba a ninguna otra PC y el
+  /// borrado dejaba la nota en la nube, sin avisar.
+  static String idDe(
+    NotaOperativaContrato? existente,
+    String contratoAlumnoId,
+  ) =>
+      existente != null && existente.id.length == 36
+          ? existente.id
+          : UuidUtils.notaOperativaContratoId(contratoAlumnoId);
+
   /// Salva y encola sync. [texto] no vacío tras trim.
   Future<void> guardar({
     required String contratoAlumnoId,
     required String texto,
     required bool resuelto,
   }) async {
+    final db = await LocalDatabase.instance;
+    // La nota y su subida van juntas: una nota guardada sin su entrada en la
+    // cola no sube nunca, y nada la reporta como pendiente.
+    await db.transaction(
+      (txn) => guardarEn(
+        txn,
+        contratoAlumnoId: contratoAlumnoId,
+        texto: texto,
+        resuelto: resuelto,
+      ),
+    );
+    debugPrint('📝 Nota operativa encolada sync ($contratoAlumnoId)');
+  }
+
+  /// Lo mismo que [guardar], sobre la base o la transacción que se le pase.
+  static Future<void> guardarEn(
+    DatabaseExecutor db, {
+    required String contratoAlumnoId,
+    required String texto,
+    required bool resuelto,
+    String? ahoraIso,
+  }) async {
     final t = texto.trim();
     if (t.isEmpty) {
       throw ArgumentError('La nota no puede estar vacía.');
     }
-    final db = await LocalDatabase.instance;
-    final nowIso = ArTime.nowUtcIso();
-    final canonicalId = UuidUtils.notaOperativaContratoId(contratoAlumnoId);
-    final existente = await obtenerUno(contratoAlumnoId);
+    final nowIso = ahoraIso ?? ArTime.nowUtcIso();
+    final existente = await obtenerUnoEn(db, contratoAlumnoId);
+    final id = idDe(existente, contratoAlumnoId);
 
     if (existente == null) {
-      final localRow = <String, dynamic>{
-        'id': canonicalId,
+      await db.insert('notas_operativas_contrato', <String, dynamic>{
+        'id': id,
         'contrato_alumno_id': contratoAlumnoId,
         'texto': t,
         'resuelto': resuelto ? 1 : 0,
         'created_at': nowIso,
         'updated_at': nowIso,
-      };
-      await db.insert('notas_operativas_contrato', localRow);
+      });
       await SyncQueue.enqueue(
+        executor: db,
         tabla: 'notas_operativas_contrato',
         operacion: SyncOperation.insert,
-        registroId: canonicalId,
+        registroId: id,
         payload: {
-          'id': canonicalId,
+          'id': id,
           'contrato_alumno_id': contratoAlumnoId,
           'texto': t,
           'resuelto': resuelto,
@@ -90,7 +133,7 @@ class NotasOperativasContratoRepository {
       await db.update(
         'notas_operativas_contrato',
         {
-          'id': canonicalId,
+          'id': id,
           'texto': t,
           'resuelto': resuelto ? 1 : 0,
           'updated_at': nowIso,
@@ -99,11 +142,12 @@ class NotasOperativasContratoRepository {
         whereArgs: [contratoAlumnoId],
       );
       await SyncQueue.enqueue(
+        executor: db,
         tabla: 'notas_operativas_contrato',
         operacion: SyncOperation.update,
-        registroId: canonicalId,
+        registroId: id,
         payload: {
-          'id': canonicalId,
+          'id': id,
           'contrato_alumno_id': contratoAlumnoId,
           'texto': t,
           'resuelto': resuelto,
@@ -112,28 +156,43 @@ class NotasOperativasContratoRepository {
         },
       );
     }
-
-    debugPrint('📝 Nota operativa encolada sync ($contratoAlumnoId)');
   }
 
   Future<void> eliminar(String contratoAlumnoId) async {
-    final existente = await obtenerUno(contratoAlumnoId);
-    if (existente == null) return;
-    final canonicalId = UuidUtils.notaOperativaContratoId(contratoAlumnoId);
     final db = await LocalDatabase.instance;
+    final borrada = await db.transaction(
+      (txn) => eliminarEn(txn, contratoAlumnoId),
+    );
+    if (borrada) {
+      debugPrint(
+        '🗑️ Nota operativa borrada local + encolada ($contratoAlumnoId)',
+      );
+    }
+  }
+
+  /// Lo mismo que [eliminar], sobre la base o la transacción que se le pase.
+  /// Devuelve si había una nota para borrar.
+  static Future<bool> eliminarEn(
+    DatabaseExecutor db,
+    String contratoAlumnoId,
+  ) async {
+    final existente = await obtenerUnoEn(db, contratoAlumnoId);
+    if (existente == null) return false;
+    // Con el id que la nota tiene de verdad: es el que está en la nube.
+    final id = idDe(existente, contratoAlumnoId);
     await db.delete(
       'notas_operativas_contrato',
       where: 'contrato_alumno_id = ?',
       whereArgs: [contratoAlumnoId],
     );
     await SyncQueue.enqueue(
+      executor: db,
       tabla: 'notas_operativas_contrato',
       operacion: SyncOperation.delete,
-      registroId: canonicalId,
-      payload: {'id': canonicalId},
+      registroId: id,
+      payload: {'id': id},
     );
-
-    debugPrint('🗑️ Nota operativa borrada local + encolada ($contratoAlumnoId)');
+    return true;
   }
 }
 
