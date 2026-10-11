@@ -1,9 +1,9 @@
-// Ordena las 31 notas operativas que estaban en esta PC y no en la nube.
-// Revisadas con el usuario el 11-oct-2026; aprobó hacerlo así.
+// Saca de esta PC las 31 notas operativas que estaban acá y no en la nube.
+// Revisadas con el usuario el 11-oct-2026, una por una.
 //
 // Qué eran. Al contar la nube antes de publicar la 6.0.0 apareció que
 // `notas_operativas_contrato` tenía 56 filas acá y 26 en Supabase, con la cola
-// de subida vacía. Las 31 de diferencia son dos cosas distintas:
+// de subida vacía. Las 31 de diferencia eran dos cosas distintas:
 //
 //   • 17 que nunca subieron. Son las de la auditoría del 4-sep
 //     (`reencolar_notas_sin_subir.dart`, que no se llegó a aplicar): notas de
@@ -13,15 +13,13 @@
 //     nota?"— y acá quedaron porque esta PC estaba cerrada: el borrado viaja por
 //     el aviso entre PCs, y la reconciliación de borrados no mira las notas.
 //
-// Qué hace, con tres listas fijas:
-//   • SUBE 8 de las que nunca subieron, las que pueden seguir valiendo (saldos a
-//     favor y cuentas a arreglar), para que las vean todas las PCs;
-//   • BORRA de esta PC las otras 9, que ya vencieron ("REVISAR" del 15-ago, un
-//     "viene hoy a la tarde" de mayo, dos ya resueltas);
-//   • BORRA de esta PC las 14 que ya se habían borrado desde otra PC.
+// Qué decidió el usuario. Se le propuso subir 8 de las que nunca subieron (las
+// de saldos a favor y cuentas a arreglar) y contestó que no: "eso ya pasó, esas
+// fechas ya pasaron, para mí hay que borrar esas notas". **No sube ninguna: se
+// borran las 31 de esta PC.** De la nube no se borra nada, porque ninguna está.
 //
-// Son listas y no "todo lo que falte en la nube" a propósito: una nota que
-// falta en la nube puede ser una que nunca subió, y esas no se borran sin
+// Son listas fijas y no "todo lo que falte en la nube" a propósito: una nota
+// que falta en la nube puede ser una que nunca subió, y esas no se borran sin
 // mirarlas. Ver "Nada se borra de la base local" en CLAUDE.md.
 //
 // Uso:
@@ -32,16 +30,13 @@
 // su texto cambió desde la revisión, o si hay algo suyo en la cola de subida.
 // Antes de aplicar hay que mirar en Supabase que ninguno de los 31 ids esté en
 // la nube: esta herramienta no la puede consultar.
-// APPLY: copia de data.db y una sola transacción. No toca ninguna otra tabla,
-// y no borra nada de la nube.
-// Después: abrir la app, "Subir pendientes" y mirar que el contador quede en 0.
+// APPLY: copia de data.db, y al lado un .txt con las 31 notas enteras; después,
+// una sola transacción. No toca ninguna otra tabla ni encola nada.
 
 // ignore_for_file: avoid_print
 
 import 'dart:io';
 
-import 'package:arguello_events/core/database/sync_queue.dart';
-import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -54,8 +49,8 @@ class _Nota {
   const _Nota(this.id, this.alumno, this.empieza);
 }
 
-/// Nunca subieron y pueden seguir valiendo: suben a la nube.
-const _subir = <_Nota>[
+/// Nunca subieron a la nube: solo se veían en esta PC.
+const _nuncaSubieron = <_Nota>[
   _Nota('eb1b8a12-8b19-49cb-8d15-4e35ab8aa5f5', 'MENDEZ, GUILLERMO', 'A FAVOR \$50'),
   _Nota('1d3a2371-b391-4361-87fe-21bdc6bd0c9a', 'MACIEL, JOSE SANTIAGO', 'queda 50 pesos a favor nuest'),
   _Nota('86a33596-e3f9-4439-ae86-538557768209', 'FABBRO, NAHIARA MELINA', 'dijo que dejaba los 900 de m'),
@@ -64,10 +59,6 @@ const _subir = <_Nota>[
   _Nota('63b1c31b-75ed-4fd3-868d-5e74acfd3624', 'ARANDA, BRISA ABIGAIL', 'ARREGLA ESTA CUENTA, SACALE '),
   _Nota('65c651a3-a632-4339-b68e-c609583eadad', 'AYALA, PRISCILA', 'le quedo 300 a favor'),
   _Nota('c35ed6fa-6c5e-41fb-ae09-38dcc981f36c', 'VEGA, LUANA', 'ya abono la mora expone la a'),
-];
-
-/// Nunca subieron y ya vencieron: se borran de esta PC.
-const _vencidas = <_Nota>[
   _Nota('dafc1e36-0bc8-4b10-98e1-a3669933e309', 'QUIRICO, BRUNO', 'Quedaron 50 pesos para la pr'),
   _Nota('12c991d2-9067-48e3-bafe-c07807992741', 'ORTIZ, NICOLAS', 'VENDRA O AVISARÁ HOY A LA TA'),
   _Nota('bb0e7c72-239c-43f1-bc90-059c11b36927', 'FERNANDEZ, LUANA VICTORIA', '\$26.900 gracias al adelanto '),
@@ -79,7 +70,7 @@ const _vencidas = <_Nota>[
   _Nota('cc98fc5c-7f54-44b4-8425-44fbd6d478a9', 'MAIDANA, DAIARA SOLANGE', 'REVISAR'),
 ];
 
-/// Ya las borró alguien desde otra PC: se borran también de esta.
+/// Ya las había borrado alguien desde otra PC.
 const _yaBorradas = <_Nota>[
   _Nota('7deff39c-1f2b-4ee3-9aaf-658930150fee', 'MORATO, DIEGO BENJAMIN', 'CUOTA BASE "PADRE APARTE PAG'),
   _Nota('2fac9eea-0112-4b55-a042-6951143fa43b', 'VELASQUEZ, VICTOR SAMUEL', 'descuento por hijo a ver'),
@@ -110,16 +101,17 @@ Future<int> _contar(DatabaseExecutor db, String sql) async =>
     ((await db.rawQuery(sql)).first.values.first as num).toInt();
 
 class _Plan {
-  /// Las filas que suben, como están en la base.
-  final List<Map<String, dynamic>> aSubir;
   final List<String> aBorrar;
   final int notasAntes;
   final List<String> lineas;
-  _Plan(this.aSubir, this.aBorrar, this.notasAntes, this.lineas);
+
+  /// Las 31 notas enteras, para dejarlas escritas antes de borrarlas.
+  final String respaldo;
+  _Plan(this.aBorrar, this.notasAntes, this.lineas, this.respaldo);
 }
 
 Future<_Plan> _planificar(DatabaseExecutor db) async {
-  final todas = [..._subir, ..._vencidas, ..._yaBorradas];
+  final todas = [..._nuncaSubieron, ..._yaBorradas];
   if ({for (final n in todas) n.id}.length != todas.length) {
     throw _Freno('Hay un id repetido en las listas.');
   }
@@ -159,15 +151,6 @@ Future<_Plan> _planificar(DatabaseExecutor db) async {
     filas[n.id] = Map<String, dynamic>.from(r);
   }
 
-  // Las que suben tienen que llevar el id fijo de su alumno: es el que usa la
-  // app en todas las PCs. Con otro, subiría una segunda nota del mismo alumno.
-  for (final n in _subir) {
-    final contrato = filas[n.id]!['contrato_alumno_id'] as String;
-    if (UuidUtils.notaOperativaContratoId(contrato) != n.id) {
-      throw _Freno('${n.alumno}: el id de la nota no es el fijo de su alumno.');
-    }
-  }
-
   final notasAntes =
       await _contar(db, 'SELECT COUNT(*) FROM notas_operativas_contrato');
 
@@ -181,26 +164,36 @@ Future<_Plan> _planificar(DatabaseExecutor db) async {
   }
 
   final lineas = <String>[
-    'SUBEN A LA NUBE (${_subir.length}): nunca subieron y pueden seguir '
-        'valiendo',
-    for (final n in _subir) renglon(n),
-    '',
-    'SE BORRAN DE ESTA PC (${_vencidas.length}): nunca subieron y ya vencieron',
-    for (final n in _vencidas) renglon(n),
+    'SE BORRAN DE ESTA PC (${_nuncaSubieron.length}): nunca subieron a la nube',
+    for (final n in _nuncaSubieron) renglon(n),
     '',
     'SE BORRAN DE ESTA PC (${_yaBorradas.length}): ya las borró alguien desde '
         'otra PC',
     for (final n in _yaBorradas) renglon(n),
     '',
-    'Notas en esta PC: $notasAntes → '
-        '${notasAntes - _vencidas.length - _yaBorradas.length}. '
-        'En la nube suben ${_subir.length} y no se borra ninguna.',
+    'Notas en esta PC: $notasAntes → ${notasAntes - todas.length}. '
+        'A la nube no sube ninguna y de la nube no se borra ninguna.',
   ];
+
+  final respaldo = StringBuffer()
+    ..writeln('Notas operativas sacadas de esta PC el '
+        '${DateTime.now().toIso8601String().substring(0, 16)}')
+    ..writeln();
+  for (final n in todas) {
+    final r = filas[n.id]!;
+    respaldo
+      ..writeln('${n.alumno}  (nota ${n.id}, alumno ${r['contrato_alumno_id']})')
+      ..writeln('  escrita: ${r['created_at']} · tocada: ${r['updated_at']} · '
+          'resuelta: ${(r['resuelto'] as num? ?? 0) != 0 ? 'sí' : 'no'}')
+      ..writeln('  ${'${r['texto']}'.replaceAll('\n', '\n  ')}')
+      ..writeln();
+  }
+
   return _Plan(
-    [for (final n in _subir) filas[n.id]!],
-    [for (final n in [..._vencidas, ..._yaBorradas]) n.id],
+    [for (final n in todas) n.id],
     notasAntes,
     lineas,
+    respaldo.toString(),
   );
 }
 
@@ -213,37 +206,11 @@ Future<void> _aplicar(DatabaseExecutor txn, _Plan plan) async {
     );
     if (n != 1) throw _Freno('$id: no se pudo borrar (filas: $n).');
   }
-  for (final r in plan.aSubir) {
-    // El mismo paquete que arma la app al guardar una nota nueva.
-    await SyncQueue.enqueue(
-      executor: txn,
-      tabla: 'notas_operativas_contrato',
-      operacion: SyncOperation.insert,
-      registroId: r['id'] as String,
-      payload: {
-        'id': r['id'],
-        'contrato_alumno_id': r['contrato_alumno_id'],
-        'texto': r['texto'],
-        'resuelto': (r['resuelto'] as num? ?? 0) != 0,
-        'created_at': r['created_at'],
-        'updated_at': r['updated_at'],
-      },
-    );
-  }
-
   final quedan =
       await _contar(txn, 'SELECT COUNT(*) FROM notas_operativas_contrato');
   if (quedan != plan.notasAntes - plan.aBorrar.length) {
     throw _Freno('Quedaron $quedan notas y tenían que quedar '
         '${plan.notasAntes - plan.aBorrar.length}.');
-  }
-  final encoladas = await _contar(
-    txn,
-    "SELECT COUNT(*) FROM _sync_queue WHERE tabla = 'notas_operativas_contrato'",
-  );
-  if (encoladas != plan.aSubir.length) {
-    throw _Freno('En la cola quedaron $encoladas notas y tenían que ser '
-        '${plan.aSubir.length}.');
   }
 }
 
@@ -267,6 +234,7 @@ void main() {
     print('DB: $dbPath');
     print(apply ? 'Modo: APLICAR\n' : 'Modo: DRY-RUN (no escribe nada)\n');
 
+    String? copia;
     if (apply) {
       if (await _appAbierta()) {
         fail('La app está abierta. Cerrala (en esta PC) y volvé a correr.');
@@ -276,7 +244,7 @@ void main() {
           .replaceAll(':', '-')
           .split('.')
           .first;
-      final copia = '$dbPath.bak.notas.$stamp';
+      copia = '$dbPath.bak.notas.$stamp';
       await File(dbPath).copy(copia);
       print('Copia: $copia\n');
     }
@@ -289,14 +257,15 @@ void main() {
       final plan = apply
           ? await db.transaction((txn) async {
               final p = await _planificar(txn);
+              // Las notas enteras quedan escritas antes de borrar la primera.
+              File('$copia.txt').writeAsStringSync(p.respaldo);
               await _aplicar(txn, p);
               return p;
             })
           : await _planificar(db);
       print('${plan.lineas.join('\n')}\n');
       print(apply
-          ? 'Aplicado. Abrí la app y tocá "Subir pendientes": el contador tiene '
-              'que quedar en 0.'
+          ? 'Aplicado. Las 31 notas enteras quedaron en $copia.txt'
           : 'DRY-RUN OK: no se escribió nada.');
     } on _Freno catch (e) {
       fail('FRENO, no se escribió nada: $e');

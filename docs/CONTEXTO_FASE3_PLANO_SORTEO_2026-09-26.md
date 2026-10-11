@@ -1549,9 +1549,17 @@ un id fijo por alumno (`UuidUtils.notaOperativaContratoId`), y ninguno de esos 3
 - La que está solo en la nube ("MORA CONDONADA", 29-jul) no bajó a esta PC; no se investigó por qué.
 - Son notas de texto sobre cuentas. No cambian el saldo de nadie.
 - **No frena la publicación:** la 6.0.0 no toca cómo viajan las notas.
-- **Propuesto al usuario:** borrar de esta PC las 14 ya borradas, y de las 17 subir las que sigan valiendo y
-  borrar las vencidas. Falta su respuesta. Va por la regla de las correcciones de datos: lista fija, DRY-RUN, su
-  OK, copia de `data.db` y la app cerrada.
+- **Lo que decidió el usuario y se hizo (11-oct, 15:29).** Se le propuso subir 8 de las que nunca subieron y
+  contestó que no: "eso ya pasó, esas fechas ya pasaron, para mí hay que borrar esas notas". **No subió ninguna:
+  se borraron las 31 de esta PC**, con `tool/ordenar_notas_operativas_test.dart` (listas fijas, frenos y
+  DRY-RUN antes). De la nube no se borró nada.
+  - Copia de antes: `Documents\Junior Eventos\data.db.bak.notas.2026-10-11T15-29-52`, y al lado un `.txt` con
+    las 31 notas enteras (alumno, cuándo se escribió y el texto).
+  - Comprobado contra la copia: de las 28 tablas, 27 iguales; `notas_operativas_contrato` pasó de 56 a 25. Los
+    643 contratos y los 3.963 pagos, iguales. La cola de subida, en 0. Las 25 que quedan están todas en la nube.
+  - `tool/reencolar_notas_sin_subir.dart` quedó sin efecto: sus notas ya no están.
+- **Pidió algo de paso:** que en la app se vea **cuándo se escribió cada nota**. Hoy la fecha está en la base y
+  la app no la muestra. Falta decidir si entra en la 6.0.0.
 
 ### Para tener en cuenta
 
@@ -1650,9 +1658,8 @@ el programa, hay que armarlo de nuevo. La documentación también está hecha
 seguí los pasos de "Lo que falta para publicar" de ese CONTEXTO, frenando en
 los dos SQL de la nube y antes del release para pedirme el OK. Las pantallas
 las miré en build/muestras_6.0.0/Recorrido_6.0.0.html: preguntame qué cambio
-antes de publicar. Aparte, y sin apuro: hay 31 notas
-operativas que están en mi PC y no en la nube (ver "Las notas operativas que
-no están en la nube"); decidamos qué se hace.
+antes de publicar. Pedí además que en la app se vea cuándo se escribió cada
+nota de un alumno: preguntame si entra en la 6.0.0 o queda para después.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada

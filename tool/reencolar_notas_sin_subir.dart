@@ -1,3 +1,7 @@
+// SIN EFECTO desde el 11-oct-2026. No se llegó a aplicar, y ese día el usuario
+// decidió no subir estas notas ("eso ya pasó"): se borraron de esta PC con
+// `tool/ordenar_notas_operativas_test.dart`. Queda como registro de la auditoría.
+//
 // Re-encola las notas operativas de contrato que quedaron solo en esta PC.
 //
 //   dart run tool/reencolar_notas_sin_subir.dart            (dry-run, no escribe)

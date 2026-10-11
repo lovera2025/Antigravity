@@ -113,5 +113,6 @@ las pantallas con calma. **No se publica sin su "publicamos".** En orden:
 - Los cuatro lados del playón medidos con cinta (hoy son 30, 46 y 39 m, a ojo del satélite).
 - Las respuestas del jefe: qué armado usa cada escuela, las numeraciones, el pasto, y por división o entera.
 - La fecha del sorteo.
-- Aparte, y no es de esta versión: 31 notas operativas que están en su PC y no en la nube (ver "Las notas
-  operativas que no están en la nube" en el CONTEXTO de la Fase 3).
+- Pidió, de paso, que en la app se vea **cuándo se escribió cada nota** de un alumno. Falta decidir si entra en
+  esta versión. (Las 31 notas que estaban en su PC y no en la nube ya se resolvieron el 11-oct: ver "Las notas
+  operativas que no están en la nube" en el CONTEXTO de la Fase 3.)
