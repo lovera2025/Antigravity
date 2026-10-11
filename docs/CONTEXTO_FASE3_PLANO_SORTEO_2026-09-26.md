@@ -1517,18 +1517,15 @@ las notas operativas de abajo. Dijo que se podía seguir en el mismo chat.
 - **La nube, antes de los SQL** (11-oct, 13:45, solo lectura): 643 contratos, 3.963 pagos, 26 notas, 7 invitados y
   30 eventos. La función `update_updated_at_column` existe y ninguna de las cinco tablas nuevas está creada.
 
-**El texto de novedades** (lo que ven los operadores en el aviso de la app; va con
+**El texto de novedades**, acortado a pedido del usuario (lo que ven los operadores en el aviso de la app; va con
 `tool/publish_windows_release.ps1 -SoloNotas -NotesFile <archivo>`):
 
 ```text
-- PLANO: cada fiesta de alumnos tiene el plano de su salón, en tres estilos y con cada división en su color. Se arma a medida del playón y se imprime.
-- SORTEO: por división (cada una junta) o toda la escuela, sobre el plano. Antes se pueden fijar mesas o dejarlas libres; después, cambiar o mudar familias con motivo, y queda un Historial.
-- "Sortear" de nuevo les da mesa a los que faltaban sin mover a nadie, y "Deshacer sorteo" deja elegir solo los últimos sorteados o todo.
-- PLANILLAS: la planilla del sorteo es nueva, una hoja acostada por división, y se puede sacar solo de los últimos sorteados. También está el plano impreso.
-- ENTRADAS: retiro de entradas en la oficina, con su planilla de entrega.
-- Columna MESA: antes del sorteo dice cuántas mesas y sillas tiene cada alumno, y el filtro "Mesas y sillas" muestra quién las pagó y quién no.
-- Armar el plano, sortear, deshacer y cambiar mesas se hace solo en modo jefe.
-- El recibo reimpreso cuenta bien las cuotas, y Mi Empresa muestra lo disponible en efectivo y en transferencia.
+- PLANO: cada fiesta de alumnos tiene el plano de su salón, armado a medida del playón, y se imprime.
+- SORTEO sobre el plano, por división o toda la escuela. "Sortear" de nuevo les da mesa a los que faltaban sin mover a nadie.
+- PLANILLAS y ENTRADAS: la planilla del sorteo es nueva, por división, y está el retiro de entradas con su planilla de entrega.
+- Columna MESA: cuántas mesas y sillas tiene cada alumno y quién las pagó, con el filtro "Mesas y sillas".
+- Armar el plano, sortear y cambiar mesas se hace solo en modo jefe.
 ```
 
 ### Las notas operativas que no están en la nube (no es de la 6.0.0)
