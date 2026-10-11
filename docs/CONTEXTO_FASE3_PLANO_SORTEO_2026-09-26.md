@@ -1535,15 +1535,23 @@ Apareció al contar la nube antes de los SQL: `notas_operativas_contrato` tiene 
 nube**. 25 están en las dos, **31 solo en esta PC** (del 13-may al 7-sep) y 1 solo en la nube. La cola de subida de
 esta PC está vacía.
 
-- **No es nuevo.** Se auditó el 4-sep: 49 en la PC contra 31 en la nube, 18 que no iban a subir nunca. Para eso
-  está `tool/reencolar_notas_sin_subir.dart`, con la lista fija de esos 18. **No se aplicó**: la primera de la
-  lista sigue sin estar en la nube.
-- Las otras 13 estaban en la nube el 4-sep y hoy no. Lectura mía, sin confirmar: se borraron desde otra PC y el
-  borrado no cruza a esta (`docs/pendientes/borrados-que-cruzan.md`).
-- Son notas de texto sobre cuentas ("le quedó 300 a favor", "sacar mora remanente"). No cambian el saldo de nadie.
+**Revisado el mismo día, solo lectura** (el usuario pidió que se mirara acá y no en otra sesión). Cada nota tiene
+un id fijo por alumno (`UuidUtils.notaOperativaContratoId`), y ninguno de esos 31 alumnos tiene nota en la nube.
+
+- **17 nunca subieron.** Son las de la auditoría del 4-sep (`tool/reencolar_notas_sin_subir.dart`, lista fija de
+  18, **sin aplicar**; una de las 18 ya no cuenta: ese alumno tiene hoy una nota nueva, del 6-oct). Tienen que haberse escrito
+  en esta PC entre mayo y agosto y solo se ven acá. Subirlas hoy no pisa nada.
+- **14 las borró alguien desde otra PC.** No estaban en la lista del 4-sep, o sea que ese día estaban en la nube,
+  y hoy no. Una nota se borra de una sola forma: el botón Eliminar de la nota, con su "¿Borrar nota?"
+  (`nota_operativa_bottom_sheet.dart`); ninguna herramienta las borra. Acá quedaron porque el borrado viaja por el
+  aviso entre PCs y esta estaba cerrada, y la reconciliación de borrados no mira las notas
+  (`_tablasAReconciliar` son solo las tablas padre). La de OVELAR (4-sep, tocada el 7) es la única dudosa.
+- La que está solo en la nube ("MORA CONDONADA", 29-jul) no bajó a esta PC; no se investigó por qué.
+- Son notas de texto sobre cuentas. No cambian el saldo de nadie.
 - **No frena la publicación:** la 6.0.0 no toca cómo viajan las notas.
-- Queda para decidir con el usuario qué se hace con cada grupo. Cualquier cosa que suba o borre va por la regla de
-  las correcciones de datos: lista fija, DRY-RUN, su OK y copia.
+- **Propuesto al usuario:** borrar de esta PC las 14 ya borradas, y de las 17 subir las que sigan valiendo y
+  borrar las vencidas. Falta su respuesta. Va por la regla de las correcciones de datos: lista fija, DRY-RUN, su
+  OK, copia de `data.db` y la app cerrada.
 
 ### Para tener en cuenta
 
