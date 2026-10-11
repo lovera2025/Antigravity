@@ -340,6 +340,71 @@ void main() {
     });
   });
 
+  group('lo que guarda un deshacer', () {
+    final registros = [
+      _sorteo({'a': '12', 'b': '14'}, dia: 0),
+      _sorteo({'a': '12, 13', 'c': '20'}, dia: 3, antes: {'a': '12'}),
+    ];
+    final alumnos = [
+      _alumno('a', '12, 13'),
+      _alumno('b', ' 14 '),
+      _alumno('c', '20'),
+      _alumno('d', null),
+      _alumno('e', '  '),
+    ];
+
+    test('todo: cada uno con mesa queda sin mesa, y los bloques se van', () {
+      final que = LoQueSeDeshace.todo(alumnos);
+      expect(que.numeros, {'a': null, 'b': null, 'c': null});
+      expect(que.tenian, {'a': '12, 13', 'b': '14', 'c': '20'});
+      expect(que.quedan, isNull);
+      expect(que.seVanLosBloques, isTrue);
+    });
+
+    test('solo los últimos: lo que dicen los últimos sorteados, y los bloques '
+        'se quedan', () {
+      final u = UltimosSorteados.de(registros, alumnos)!;
+      final que = LoQueSeDeshace.soloUltimos(u);
+      expect(que.numeros, {'a': '12', 'c': null});
+      expect(que.tenian, {'a': '12, 13', 'c': '20'});
+      expect(que.quedan, {'a': '12'});
+      expect(que.seVanLosBloques, isFalse);
+    });
+
+    test('si los últimos eran el único sorteo en pie, los bloques se van', () {
+      final u = UltimosSorteados.de(
+        [_sorteo({'a': '1'}, dia: 0)],
+        [_alumno('a', '1'), _alumno('b', '50')],
+      )!;
+      expect(LoQueSeDeshace.soloUltimos(u).seVanLosBloques, isTrue);
+    });
+
+    test('con los mismos datos es lo mismo; si cambió una mesa, ya no', () {
+      final mostrado = LoQueSeDeshace.soloUltimos(
+        UltimosSorteados.de(registros, alumnos)!,
+      );
+      final igual = LoQueSeDeshace.soloUltimos(
+        UltimosSorteados.de(registros, List.of(alumnos))!,
+      );
+      expect(igual.mismoQue(mostrado), isTrue);
+
+      // Con el aviso abierto, a `c` le cambiaron la mesa.
+      final cambio = LoQueSeDeshace.soloUltimos(
+        UltimosSorteados.de(registros, _aplicar(alumnos, {'c': '31'}))!,
+      );
+      expect(cambio.mismoQue(mostrado), isFalse);
+
+      final todo = LoQueSeDeshace.todo(alumnos);
+      expect(todo.mismoQue(LoQueSeDeshace.todo(alumnos)), isTrue);
+      expect(
+        todo.mismoQue(LoQueSeDeshace.todo(_aplicar(alumnos, {'d': '40'}))),
+        isFalse,
+      );
+      // Deshacer todo nunca es lo mismo que deshacer solo a los últimos.
+      expect(todo.mismoQue(mostrado), isFalse);
+    });
+  });
+
   group('lo que se anota al sortear', () {
     test('solo las familias del sorteo que ya tenían mesa', () {
       final antes = UltimosSorteados.antesDe(

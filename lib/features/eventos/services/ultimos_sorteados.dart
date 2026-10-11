@@ -18,6 +18,73 @@ class FamiliaQueNoSeToca {
   });
 }
 
+/// Lo que guarda un deshacer del sorteo, sea de todo o de solo los últimos
+/// sorteados: la pantalla lo muestra, lo vuelve a armar con los datos recién
+/// leídos y guarda solo si sigue siendo lo mismo.
+class LoQueSeDeshace {
+  /// Alumno → cómo queda. `null`: sin mesa.
+  final Map<String, String?> numeros;
+
+  /// Alumno → lo que tenía. Va a la copia y al registro.
+  final Map<String, String> tenian;
+
+  /// Lo que conserva cada uno al deshacer solo los últimos. `null` al deshacer
+  /// todo: es lo que distingue los dos renglones en el registro.
+  final Map<String, String>? quedan;
+
+  /// Los bloques de cada división dejan de valer: no queda ningún sorteo en
+  /// pie. El próximo sorteo los vuelve a armar.
+  final bool seVanLosBloques;
+
+  const LoQueSeDeshace._({
+    required this.numeros,
+    required this.tenian,
+    required this.quedan,
+    required this.seVanLosBloques,
+  });
+
+  /// Todas las mesas de la institución, también las cargadas a mano y las de
+  /// los alumnos de baja.
+  factory LoQueSeDeshace.todo(Iterable<ContratoAlumno> alumnos) {
+    final tenian = {
+      for (final a in alumnos)
+        if (a.numeroMesa?.trim().isNotEmpty ?? false)
+          a.id: a.numeroMesa!.trim(),
+    };
+    return LoQueSeDeshace._(
+      numeros: {for (final id in tenian.keys) id: null},
+      tenian: tenian,
+      quedan: null,
+      seVanLosBloques: true,
+    );
+  }
+
+  /// Solo las familias del último sorteo, que vuelven a como estaban.
+  factory LoQueSeDeshace.soloUltimos(UltimosSorteados ultimos) =>
+      LoQueSeDeshace._(
+        numeros: ultimos.aGuardar,
+        tenian: ultimos.tenian,
+        quedan: ultimos.quedan,
+        seVanLosBloques: ultimos.eraElUnico,
+      );
+
+  static bool _iguales(Map<String, String?>? a, Map<String, String?>? b) {
+    if (a == null || b == null) return a == b;
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (!b.containsKey(e.key) || b[e.key] != e.value) return false;
+    }
+    return true;
+  }
+
+  /// Guardaría exactamente lo mismo que [otro].
+  bool mismoQue(LoQueSeDeshace otro) =>
+      _iguales(numeros, otro.numeros) &&
+      _iguales(tenian, otro.tenian) &&
+      _iguales(quedan, otro.quedan) &&
+      seVanLosBloques == otro.seVanLosBloques;
+}
+
 /// Los últimos sorteados de una fiesta: las familias del sorteo más nuevo que
 /// sigue valiendo, y qué pasaría si se deshiciera solo ese.
 ///

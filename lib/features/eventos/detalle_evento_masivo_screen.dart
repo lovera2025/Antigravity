@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -4049,6 +4048,17 @@ class _DetalleEventoMasivoScreenState
     );
     if (alcance == null || !mounted) return;
     final parcial = alcance == AlcanceDeshacer.ultimos;
+    // Lo que se guardaría con lo que se leyó: lo que mostró el aviso, y después
+    // lo mismo con los datos recién leídos.
+    LoQueSeDeshace? loQueSeDeshace(
+      ({List<ContratoAlumno> conMesa, UltimosSorteados? ultimos}) leido,
+    ) {
+      if (!parcial) return LoQueSeDeshace.todo(leido.conMesa);
+      final ultimos = leido.ultimos;
+      return ultimos == null ? null : LoQueSeDeshace.soloUltimos(ultimos);
+    }
+
+    final mostrado = loQueSeDeshace(visto)!;
 
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
@@ -4056,24 +4066,8 @@ class _DetalleEventoMasivoScreenState
       // Se guarda lo que mostró el aviso. Si mientras estaba abierto cambió una
       // mesa (la otra PC, o algo que bajó), no se guarda nada.
       final fresco = await _paraDeshacer(eventoId);
-      final ultimos = fresco.ultimos;
-      final Map<String, String?> numeros;
-      // Lo que tenía cada uno: va a la copia y al registro.
-      final Map<String, String> antes;
-      Map<String, String>? quedan;
-      final Map<String, String> mostrado;
-      if (parcial) {
-        numeros = ultimos?.aGuardar ?? const {};
-        antes = ultimos?.tenian ?? const {};
-        quedan = ultimos?.quedan ?? const {};
-        mostrado = visto.ultimos!.tenian;
-      } else {
-        numeros = {for (final a in fresco.conMesa) a.id: null};
-        antes = {for (final a in fresco.conMesa) a.id: a.numeroMesa!.trim()};
-        mostrado = {for (final a in conMesa) a.id: a.numeroMesa!.trim()};
-      }
-      if (!mapEquals(antes, mostrado) ||
-          (parcial && !mapEquals(numeros, visto.ultimos!.aGuardar))) {
+      final aGuardar = loQueSeDeshace(fresco);
+      if (aGuardar == null || !aGuardar.mismoQue(mostrado)) {
         if (mounted) {
           await _avisarSorteo(
             'No se deshizo nada',
@@ -4094,25 +4088,24 @@ class _DetalleEventoMasivoScreenState
       // deshacer solo a los últimos se quedan, porque son del sorteo anterior,
       // salvo que los últimos fueran el único sorteo en pie. Las mesas fijas y
       // libres se conservan siempre.
-      final seVanLosBloques = !parcial || ultimos!.eraElUnico;
-      final bloques = seVanLosBloques
+      final bloques = aGuardar.seVanLosBloques
           ? plano?.config.bloques ?? const <BloqueDivision>[]
           : const <BloqueDivision>[];
       // La copia primero: sin copia a salvo no se borra nada. Lleva también los
       // bloques que se van, para que Restaurar los devuelva.
       await RespaldoSorteo.guardar(
         eventoId,
-        antes,
+        aGuardar.tenian,
         bloques: bloques,
-        quedaron: quedan ?? const {},
+        quedaron: aGuardar.quedan ?? const {},
       );
       // El registro guarda lo que había: queda en la nube quién deshizo, y qué.
       await repo.asignarNumerosMesa(
-        numeros,
+        aGuardar.numeros,
         registro: _registroSorteo(
           TipoRegistroSorteo.deshacer,
-          antes,
-          quedan: quedan,
+          aGuardar.tenian,
+          quedan: aGuardar.quedan,
         ),
         plano: plano == null || bloques.isEmpty
             ? null
@@ -4131,15 +4124,17 @@ class _DetalleEventoMasivoScreenState
       await _fetchDatos(cargaSilenciosa: true);
       if (mounted) {
         setState(() => _hayRespaldoSorteo = true);
-        final sinTocar = parcial ? ultimos!.noSeTocan.length : 0;
+        final n = aGuardar.numeros.length;
+        final sinTocar = parcial ? fresco.ultimos!.noSeTocan.length : 0;
+        final hecho = parcial
+            ? '$n familia(s) volvieron a como estaban antes del último sorteo'
+                '${sinTocar > 0 ? ' · $sinTocar no se tocaron' : ''}'
+            : 'Mesas desasignadas ($n)';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 8),
             content: Text(
-              '${parcial ? '${numeros.length} familia(s) volvieron a como '
-                  'estaban antes del último sorteo'
-                  '${sinTocar > 0 ? ' · $sinTocar no se tocaron' : ''}' : 'Mesas desasignadas (${numeros.length})'}'
-              '. Si fue un error: SORTEO → Restaurar sorteo anterior.',
+              '$hecho. Si fue un error: SORTEO → Restaurar sorteo anterior.',
             ),
           ),
         );
