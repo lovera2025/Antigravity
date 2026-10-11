@@ -347,6 +347,42 @@ void main() {
       );
     });
 
+    test('el bloque es su lista de mesas: el nombre va sobre las suyas, no '
+        'sobre todas las del rango de números', () {
+      final estado = conDobles();
+      // 5° B tiene las mesas 11 a 20, pero su número más bajo es el 1 (como
+      // el bloque que arranca en la mesa agregada después del pasto, en
+      // Técnica): las del medio por número no son suyas.
+      final e = PlanoPapel.etiquetas(
+        armado: armado,
+        hoja: 'A',
+        estado: estado,
+        bloques: [
+          BloqueDivision(
+            '5B',
+            1,
+            20,
+            mesas: [for (var n = 11; n <= 20; n++) n],
+          ),
+        ],
+        marco: marco,
+        ocupa: 37,
+        despeje: 36,
+        alto: 24,
+        ancho: (t) => 12.0 * t.length + 14,
+        llevaApellido: (n) {
+          final i = estado.info(n);
+          return i.principal && i.ocupante != null;
+        },
+        anchoApellido: 90,
+        altoApellido: 14,
+      );
+      final deSiempre = etiquetas(estado).last;
+      expect(e.single.texto, '5° B');
+      expect(e.single.caja.x, deSiempre.caja.x);
+      expect(e.single.caja.y, deSiempre.caja.y);
+    });
+
     test('un bloque que no está en esta hoja no cuenta', () {
       final estado = conDobles();
       final e = PlanoPapel.etiquetas(

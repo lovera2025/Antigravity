@@ -3945,7 +3945,7 @@ class _DetalleEventoMasivoScreenState
     final bloques = resultado.bloques.isEmpty
         ? ''
         : ' · ${[
-            for (final b in resultado.bloques) '${b.desde}-${b.hasta}',
+            for (final b in resultado.bloques) b.texto(),
           ].join(', ')}';
     final sinMesa = exclusion.sinMesa.length;
     final soloBase = exclusion.soloBase.length;

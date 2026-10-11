@@ -88,6 +88,21 @@ void main() {
       expect(RespaldoSorteo.bloquesARestaurar(r, plano()), bloques);
     });
 
+    test('la copia guarda las mesas de cada bloque, una por una', () {
+      final conLista = [
+        BloqueDivision.deMesas('6C', [151, 131, 132]),
+      ];
+      final r = RespaldoSorteo.deJson(
+        jsonDecode(
+          jsonEncode(
+            RespaldoSorteo.aJson(fecha, const {'a': '151'}, bloques: conLista),
+          ),
+        ),
+      )!;
+      expect(r.bloques.single.mesas, [151, 131, 132]);
+      expect(r.bloques.single.contiene(140), isFalse);
+    });
+
     test('no se pisan los bloques de un sorteo que se volvió a hacer', () {
       final r = RespaldoSorteo(
         fecha: fecha,

@@ -80,18 +80,68 @@ class MesaLibre {
       : const MesaLibre();
 }
 
-/// El rango de mesas que le tocó a una división en un sorteo por bloques.
+/// Las mesas que le tocaron a una división en un sorteo por bloques.
+///
+/// [desde] y [hasta] son el número más bajo y el más alto. **No alcanzan para
+/// saber si una mesa es del bloque:** el sorteo recorre el salón con las mesas
+/// comunes primero y el pasto al final, y una mesa común puede tener un número
+/// más alto que el pasto. En Técnica el pasto va del 131 al 150 y la mesa que
+/// se agrega a mano lleva el 151: el bloque "121 a 151" no tiene ninguna mesa
+/// del pasto. Por eso el bloque guarda [mesas], una por una, y lo que hay que
+/// preguntar es [contiene].
 class BloqueDivision {
   final String division;
   final int desde;
   final int hasta;
 
-  const BloqueDivision(this.division, this.desde, this.hasta);
+  /// Las mesas del bloque. Null si se guardó sin la lista: vale el rango.
+  final List<int>? mesas;
 
-  bool contiene(int n) => n >= desde && n <= hasta;
+  const BloqueDivision(this.division, this.desde, this.hasta, {this.mesas});
 
-  Map<String, dynamic> toMap() =>
-      {'division': division, 'desde': desde, 'hasta': hasta};
+  /// El bloque de [mesas] (no vacía).
+  factory BloqueDivision.deMesas(String division, Iterable<int> mesas) {
+    final lista = List<int>.unmodifiable(mesas);
+    return BloqueDivision(
+      division,
+      lista.reduce((a, b) => a < b ? a : b),
+      lista.reduce((a, b) => a > b ? a : b),
+      mesas: lista,
+    );
+  }
+
+  bool contiene(int n) => mesas?.contains(n) ?? (n >= desde && n <= hasta);
+
+  /// El bloque en palabras, por tramos de números seguidos: "121-130 y 151".
+  /// Con [a] se cambia el guion: `texto(a: ' a ')` da "121 a 130 y 151".
+  String texto({String a = '-'}) => textoDeMesas(
+        mesas ?? [for (var n = desde; n <= hasta; n++) n],
+        a: a,
+      );
+
+  /// [numeros] por tramos de seguidos: "121-130 y 151", "131-135 y 151".
+  static String textoDeMesas(Iterable<int> numeros, {String a = '-'}) {
+    final ordenados = numeros.toSet().toList()..sort();
+    final tramos = <String>[];
+    for (var i = 0; i < ordenados.length; i++) {
+      final inicio = ordenados[i];
+      while (i + 1 < ordenados.length && ordenados[i + 1] == ordenados[i] + 1) {
+        i++;
+      }
+      tramos.add(
+        ordenados[i] == inicio ? '$inicio' : '$inicio$a${ordenados[i]}',
+      );
+    }
+    if (tramos.length <= 1) return tramos.join();
+    return '${tramos.sublist(0, tramos.length - 1).join(', ')} y ${tramos.last}';
+  }
+
+  Map<String, dynamic> toMap() => {
+        'division': division,
+        'desde': desde,
+        'hasta': hasta,
+        if (mesas != null) 'mesas': mesas,
+      };
 
   static BloqueDivision? fromMap(Object? v) {
     if (v is! Map) return null;
@@ -99,7 +149,15 @@ class BloqueDivision {
     final a = v['desde'];
     final b = v['hasta'];
     if (d is! String || a is! num || b is! num) return null;
-    return BloqueDivision(d, a.toInt(), b.toInt());
+    final m = v['mesas'];
+    return BloqueDivision(
+      d,
+      a.toInt(),
+      b.toInt(),
+      mesas: m is List && m.isNotEmpty && m.every((x) => x is num)
+          ? List<int>.unmodifiable([for (final x in m) (x as num).toInt()])
+          : null,
+    );
   }
 }
 

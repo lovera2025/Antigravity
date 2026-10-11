@@ -466,10 +466,7 @@ class PlanillaSorteo {
     final porId = {for (final a in lista) a.id: a};
     // Los bloques se guardan por la clave de la división ("5A"); la planilla
     // la muestra como está escrita ("5° A").
-    final bloqueDe = {
-      for (final b in bloques)
-        b.division: b.desde == b.hasta ? '${b.desde}' : '${b.desde}-${b.hasta}',
-    };
+    final bloqueDe = {for (final b in bloques) b.division: b.texto()};
 
     final divisiones = <ResumenDivision>[];
     final aLlamar = <({FilaPlanillaSorteo fila, String division})>[];

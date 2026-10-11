@@ -416,7 +416,7 @@ class CambiosDeMesa {
       if (nuevas.any((n) => !b.contiene(n))) {
         avisos.add(
           '$nombre queda fuera del bloque de ${_division(a)} (mesas '
-          '${b.desde} a ${b.hasta}).',
+          '${b.texto(a: ' a ')}).',
         );
       }
     }

@@ -424,6 +424,23 @@ void main() {
       );
     });
 
+    test('un bloque con una mesa después del pasto se dice por tramos', () {
+      // Técnica con una mesa agregada: el bloque de 5° b termina en la 151 y
+      // no tiene ninguna del pasto (131 a 150).
+      final r = PlanillaSorteo.resumen(
+        alumnos,
+        pasto: {for (var n = 131; n <= 150; n++) n},
+        bloques: [
+          const BloqueDivision('5A', 1, 10),
+          BloqueDivision.deMesas('5B', [for (var n = 121; n <= 130; n++) n, 151]),
+        ],
+      );
+      expect(
+        {for (final d in r.divisiones) d.division: d.bloque},
+        {'5° A': '1-10', '5° b': '121-130 y 151', PlanillaSorteo.sinDivision: null},
+      );
+    });
+
     test('sin plano, el resumen no habla de pasto ni de bloques', () {
       final r = PlanillaSorteo.resumen(alumnos);
       expect(r.hayPasto, isFalse);
@@ -495,6 +512,40 @@ void main() {
           '(CUARTA)',
           '(QUINTA)',
         ]) {
+          expect(texto.contains(palabra), isTrue, reason: '$version: $palabra');
+        }
+      }
+    });
+
+    test('un bloque en dos tramos ("121-130 y 151") sale escrito entero', () async {
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+      for (final version in VersionPlanillaSorteo.values) {
+        final bytes = await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: [
+            _alumno('a', nombre: 'ACOSTA, LUCÍA', mesas: [125]),
+            _alumno('b', nombre: 'LÓPEZ, IVÁN', mesas: [151]),
+          ],
+          pasto: {for (var n = 131; n <= 150; n++) n},
+          bloques: [
+            BloqueDivision.deMesas(
+              '5A',
+              [for (var n = 121; n <= 130; n++) n, 151],
+            ),
+          ],
+          version: version,
+          generada: DateTime(2026, 11, 12, 21, 30),
+        );
+        final texto = contenidoDelPdf(bytes);
+        for (final palabra in ['(BLOQUE)', '(121-130)', '(y)', '(151)']) {
           expect(texto.contains(palabra), isTrue, reason: '$version: $palabra');
         }
       }

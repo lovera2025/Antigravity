@@ -301,6 +301,13 @@ void main() {
           ('5° E', 81, 100),
         ],
       );
+      // En un salón de siempre el bloque se dice igual que antes, y su lista
+      // son las mesas de ese rango.
+      expect(
+        [for (final f in plan.bloques) f.texto],
+        ['1 a 24', '25 a 49', '52 a 54', '55 a 80', '81 a 100'],
+      );
+      expect(plan.bloques[1].numeros, [for (var n = 25; n <= 49; n++) n]);
     });
 
     test('cada familia queda en el bloque de su división, y la vista previa '
@@ -425,6 +432,116 @@ void main() {
       expect(r.asignaciones['nuevo-a'], [liberada]);
       expect(r.asignaciones['nuevo-c']!.single, greaterThan(80));
       expect(r.avisos.join(), contains('no entra en su bloque'));
+    });
+  });
+
+  group('bloques con una mesa común después del pasto', () {
+    // Técnica: 130 mesas comunes y el pasto del 131 al 150. La mesa que se
+    // agrega a mano en Acomodar lleva el 151 y es común: el sorteo la usa
+    // antes que el pasto, aunque su número sea más alto.
+    ArmadoSalon tecnicaConUnaMas() {
+      final base = ArmadosPredefinidos.tecnica1a1b();
+      final sesion = SesionAcomodo(base: base);
+      expect(sesion.agregar(base.hojas.last.id), 151);
+      return sesion.actual;
+    }
+
+    const orden = ['6A', '6B', '6C', '6D'];
+
+    test('sin usar el pasto, el bloque que termina en la 151 no tiene '
+        'ninguna mesa del pasto', () {
+      final a = tecnicaConUnaMas();
+      final e = EntradaSorteoPlano(
+        armado: a,
+        alumnos: [
+          ...familias('6° A', 60),
+          ...familias('6° B', 60),
+          ...familias('6° C', 11),
+        ],
+        modo: ModoSorteo.bloques,
+        ordenDivisiones: orden,
+      );
+      final plan = SorteoConPlano.preparar(e);
+      expect(plan.entra, isTrue);
+      final fila = plan.bloques.last;
+      expect((fila.nombre, fila.desde, fila.hasta), ('6° C', 121, 151));
+      expect(fila.usaPasto, isFalse);
+      expect(fila.texto, '121 a 130 y 151');
+
+      final r = SorteoConPlano.sortear(e, random: Random(2));
+      verificar(e, r, razon: 'sin pasto');
+      final bloque = r.bloques.last;
+      for (final n in a.pasto) {
+        expect(bloque.contiene(n), isFalse, reason: 'la $n es del pasto');
+      }
+      for (final n in [for (var n = 121; n <= 130; n++) n, 151]) {
+        expect(bloque.contiene(n), isTrue, reason: 'la $n es del bloque');
+      }
+    });
+
+    test('con el pasto, el bloque que arranca en la 151 y sigue en el pasto '
+        'sienta en sus huecos a los que llegan después', () {
+      final a = tecnicaConUnaMas();
+      final alumnos = [
+        ...familias('6° A', 65),
+        ...familias('6° B', 65),
+        ...familias('6° C', 6),
+        ...familias('6° D', 5),
+      ];
+      final e = EntradaSorteoPlano(
+        armado: a,
+        alumnos: alumnos,
+        modo: ModoSorteo.bloques,
+        ordenDivisiones: orden,
+        usarPasto: true,
+      );
+      final plan = SorteoConPlano.preparar(e);
+      expect(plan.entra, isTrue);
+      final fila = plan.bloques[2];
+      expect(fila.nombre, '6° C');
+      expect(fila.usaPasto, isTrue);
+      expect(fila.texto, '131 a 135 y 151');
+      expect(plan.bloques[3].texto, '136 a 140');
+
+      final primero = SorteoConPlano.sortear(e, random: Random(5));
+      verificar(e, primero, razon: 'primer sorteo');
+      final deC = {
+        for (final x in primero.asignaciones.entries)
+          if (x.key.startsWith('6C-')) ...x.value,
+      };
+      expect(deC, {151, 131, 132, 133, 134, 135});
+      final bloque = primero.bloques[2];
+      for (final n in deC) {
+        expect(bloque.contiene(n), isTrue, reason: 'la $n es de 6° C');
+      }
+      // Las de 6° D (136 a 140) y el resto del pasto no son suyas.
+      for (var n = 136; n <= 150; n++) {
+        expect(bloque.contiene(n), isFalse, reason: 'la $n no es de 6° C');
+      }
+
+      // Se va una familia de 6° C y otra de 6° D, y llega una de 6° C: va al
+      // hueco de su bloque, no al de 6° D ni a la reserva.
+      final hueco = primero.asignaciones['6C-002']!.single;
+      final sentados = [
+        for (final x in alumnos)
+          if (x.id != '6C-002' && x.id != '6D-001')
+            x.copyWith(numeroMesa: primero.asignaciones[x.id]!.join(', ')),
+      ];
+      final e2 = EntradaSorteoPlano(
+        armado: a,
+        config: ConfigPlano(bloques: primero.bloques),
+        alumnos: [...sentados, alumno('tarde', division: '6° C')],
+        modo: ModoSorteo.bloques,
+        ordenDivisiones: orden,
+        usarPasto: true,
+      );
+      final plan2 = SorteoConPlano.preparar(e2);
+      expect(plan2.entra, isTrue);
+      expect(plan2.bloques.single.enReserva, isFalse);
+      final segundo = SorteoConPlano.sortear(e2, random: Random(8));
+      verificar(e2, segundo, razon: 'el que llega después');
+      expect(segundo.asignaciones['tarde'], [hueco]);
+      expect(segundo.avisos.join(), isNot(contains('no entra en su bloque')));
     });
   });
 

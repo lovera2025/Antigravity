@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
+import 'package:arguello_events/features/plano/services/sesion_acomodo.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
@@ -311,6 +312,35 @@ void main() {
         'GOMEZ queda fuera del bloque de 5° A (mesas 1 a 24).',
         'SOSA queda fuera del bloque de 5° B (mesas 25 a 49).',
       ]));
+    });
+
+    test('el bloque es su lista de mesas: una mesa del pasto no es suya '
+        'aunque su número caiga en el medio', () {
+      // Técnica con una mesa agregada: el bloque de 6° C va de la 121 a la
+      // 130 y sigue en la 151. El pasto (131 a 150) queda en el medio por
+      // número, pero no es del bloque.
+      final sesion = SesionAcomodo(base: tecnica);
+      expect(sesion.agregar(tecnica.hojas.last.id), 151);
+      final conUnaMas = sesion.actual;
+      final bloque = BloqueDivision.deMesas(
+        '6C',
+        [for (var n = 121; n <= 130; n++) n, 151],
+      );
+      final familia = alumno('perez', mesas: [125], division: '6° C');
+      List<String> avisosAl(int mesa) => CambiosDeMesa.mover(
+            armado: conUnaMas,
+            config: ConfigPlano(bloques: [bloque]),
+            alumnos: [familia],
+            alumnoId: 'perez',
+            desdeMesa: mesa,
+          ).avisos;
+
+      expect(
+        avisosAl(140),
+        contains('PEREZ queda fuera del bloque de 6° C (mesas 121 a 130 y 151).'),
+      );
+      expect(avisosAl(151).join(), isNot(contains('fuera del bloque')));
+      expect(avisosAl(128).join(), isNot(contains('fuera del bloque')));
     });
 
     test('las fijadas siguen a la familia, con su motivo', () {

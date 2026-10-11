@@ -272,4 +272,75 @@ void main() {
       expect(f['updated_at'], f['created_at']);
     });
   });
+
+  group('el bloque de una división', () {
+    // Técnica con una mesa agregada: el pasto va del 131 al 150 y la mesa
+    // común que se agregó lleva el 151.
+    final sinPasto = BloqueDivision.deMesas(
+      '6C',
+      [for (var n = 121; n <= 130; n++) n, 151],
+    );
+    final conPasto = BloqueDivision.deMesas('6C', [151, 131, 132, 133, 134, 135]);
+
+    test('es su lista de mesas, no el rango entre la más baja y la más alta',
+        () {
+      expect((sinPasto.desde, sinPasto.hasta), (121, 151));
+      expect(sinPasto.contiene(130), isTrue);
+      expect(sinPasto.contiene(151), isTrue);
+      for (var n = 131; n <= 150; n++) {
+        expect(sinPasto.contiene(n), isFalse, reason: 'la $n es del pasto');
+      }
+      expect((conPasto.desde, conPasto.hasta), (131, 151));
+      expect(conPasto.contiene(135), isTrue);
+      expect(conPasto.contiene(136), isFalse);
+    });
+
+    test('se dice por tramos de mesas seguidas', () {
+      expect(sinPasto.texto(), '121-130 y 151');
+      expect(sinPasto.texto(a: ' a '), '121 a 130 y 151');
+      expect(conPasto.texto(), '131-135 y 151');
+      expect(BloqueDivision.deMesas('5C', [52]).texto(), '52');
+      expect(
+        BloqueDivision.textoDeMesas([1, 2, 3, 7, 9, 10]),
+        '1-3, 7 y 9-10',
+      );
+    });
+
+    test('la lista va y vuelve por el JSON del plano', () {
+      final c = ConfigPlano.fromJson(
+        ConfigPlano(bloques: [sinPasto, conPasto]).toJson(),
+      );
+      expect(c.bloques[0].mesas, sinPasto.mesas);
+      expect(c.bloques[0].contiene(140), isFalse);
+      // En el orden en que se recorre el salón, no por número.
+      expect(c.bloques[1].mesas, [151, 131, 132, 133, 134, 135]);
+    });
+
+    test('un bloque guardado sin la lista vale por su rango, como siempre', () {
+      const viejo = BloqueDivision('5A', 1, 24);
+      expect(viejo.toMap(), {'division': '5A', 'desde': 1, 'hasta': 24});
+      final leido = BloqueDivision.fromMap(jsonDecode(jsonEncode(viejo.toMap())))!;
+      expect(leido.mesas, isNull);
+      expect(leido.contiene(24), isTrue);
+      expect(leido.contiene(25), isFalse);
+      expect(leido.texto(), '1-24');
+      expect(leido.texto(a: ' a '), '1 a 24');
+      expect(const BloqueDivision('5C', 52, 52).texto(), '52');
+    });
+
+    test('una lista que no se entiende no rompe: queda el rango', () {
+      for (final rota in [
+        'x',
+        const <Object>[],
+        const ['1', '2'],
+        const [1, null],
+      ]) {
+        final b = BloqueDivision.fromMap(
+          {'division': '5A', 'desde': 1, 'hasta': 3, 'mesas': rota},
+        )!;
+        expect(b.mesas, isNull, reason: '$rota');
+        expect(b.contiene(2), isTrue, reason: '$rota');
+      }
+    });
+  });
 }

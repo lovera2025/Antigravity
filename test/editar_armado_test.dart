@@ -389,6 +389,20 @@ void main() {
       expect(alcances[3].numeros, {for (var n = 1; n <= 40; n++) n});
     });
 
+    test('el bloque es su lista de mesas: las que quedan en el medio por '
+        'número y no son suyas no se separan con él', () {
+      // Como en Técnica con una mesa agregada después del pasto: el bloque va
+      // de la 121 a la 130 y sigue en la 132, sin la 131.
+      final suyas = [for (var n = 121; n <= 130; n++) n, 132];
+      final alcances = EditarArmado.alcances(
+        aMedida,
+        'A',
+        bloques: [BloqueDivision.deMesas('5A', suyas)],
+      );
+      final bloque = alcances.singleWhere((a) => a.clave == 'div:5A');
+      expect(bloque.numeros, suyas.toSet());
+    });
+
     test('los límites: no más juntas que la mesa ni más de 4 m', () {
       expect(EditarArmado.separar(aMedida, todas, 0.5)!.pasoNuevoM,
           EditarArmado.separarMinimoM);

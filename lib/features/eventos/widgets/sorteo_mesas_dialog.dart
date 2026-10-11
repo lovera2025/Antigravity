@@ -698,7 +698,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                                   ? 'fuera de su bloque'
                                   : f.desde == null
                                       ? ''
-                                      : 'mesas ${f.desde} a ${f.hasta}'
+                                      : 'mesas ${f.texto}'
                                           '${f.usaPasto ? ' (con pasto)' : ''}',
                           style: TextStyle(
                             fontSize: 12.5,

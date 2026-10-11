@@ -113,9 +113,13 @@ class FilaBloque {
   final int familias;
   final int mesas;
 
-  /// El bloque, en números de mesa. Null si no entra.
+  /// El bloque: su número de mesa más bajo y el más alto. Null si no entra.
   final int? desde;
   final int? hasta;
+
+  /// Las mesas del bloque, una por una ([BloqueDivision.mesas]). Null si no
+  /// entra, o en un bloque guardado sin la lista.
+  final List<int>? numeros;
   final bool entra;
   final bool usaPasto;
 
@@ -130,10 +134,22 @@ class FilaBloque {
     required this.mesas,
     this.desde,
     this.hasta,
+    this.numeros,
     this.entra = true,
     this.usaPasto = false,
     this.enReserva = false,
   });
+
+  /// El bloque en palabras: "121 a 130 y 151". Vacío si no tiene bloque.
+  String get texto {
+    final d = desde;
+    final h = hasta;
+    if (d == null || h == null) return '';
+    return BloqueDivision.textoDeMesas(
+      numeros ?? [for (var n = d; n <= h; n++) n],
+      a: ' a ',
+    );
+  }
 }
 
 /// Lo que va a pasar si se sortea así. Lo que muestra el diálogo es lo que
@@ -237,10 +253,20 @@ class SorteoConPlano {
       if (x.clave != y.clave ||
           x.desde != y.desde ||
           x.hasta != y.hasta ||
+          !_mismasMesas(x.numeros, y.numeros) ||
           x.entra != y.entra ||
           x.enReserva != y.enReserva) {
         return false;
       }
+    }
+    return true;
+  }
+
+  static bool _mismasMesas(List<int>? a, List<int>? b) {
+    if (a == null || b == null) return a == b;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
     }
     return true;
   }
@@ -779,18 +805,19 @@ class SorteoConPlano {
     var entraTodo = true;
 
     FilaBloque fila(String k, List<PedidoSorteo> ps,
-            {int? desde, int? hasta, bool entra = true, bool reserva = false}) =>
+            {BloqueDivision? bloque, bool entra = true, bool reserva = false}) =>
         FilaBloque(
           clave: k,
           nombre: b.nombresDivision[k] ?? (k.isEmpty ? Divisiones.sinDivision : k),
           familias: ps.length,
           mesas: ps.fold<int>(0, (s, p) => s + p.mesas),
-          desde: desde,
-          hasta: hasta,
+          desde: bloque?.desde,
+          hasta: bloque?.hasta,
+          numeros: bloque?.mesas,
           entra: entra,
-          usaPasto: desde != null &&
-              hasta != null &&
-              cas.pasto.any((n) => n >= desde && n <= hasta),
+          // Por las mesas que tiene, no por el rango: en Técnica el bloque
+          // "121 a 151" no toca el pasto (131 a 150).
+          usaPasto: bloque != null && cas.pasto.any(bloque.contiene),
           enReserva: reserva,
         );
 
@@ -826,27 +853,45 @@ class SorteoConPlano {
         return null;
       }
 
-      final finBloques = guardados.values
-          .map((bl) => ultimoCasillero(bl) ?? 0)
+      // Los casilleros del bloque que siguen en el salón, en orden. Con la
+      // lista de mesas son esos y ninguno más: el rango de números no sirve
+      // cuando una mesa común va después del pasto (ver [BloqueDivision]). Un
+      // bloque guardado sin la lista es el tramo entre sus bordes.
+      List<int> casillerosDe(BloqueDivision bl) {
+        final lista = bl.mesas;
+        if (lista != null) {
+          return [for (final n in lista) ?cas.casillero(n)]..sort();
+        }
+        final ini = primerCasillero(bl);
+        final fin = ultimoCasillero(bl);
+        if (ini == null || fin == null) return const [];
+        return [for (var c = ini; c <= fin; c++) c];
+      }
+
+      final casilleros = {
+        for (final bl in guardados.values) bl.division: casillerosDe(bl),
+      };
+      final finBloques = casilleros.values
+          .map((cs) => cs.isEmpty ? 0 : cs.last)
           .fold<int>(0, max);
       final aReserva = <String, List<PedidoSorteo>>{};
       for (final k in orden) {
         final ps = nuevosPorDivision[k]!;
-        final bl = guardados[k];
-        final ini = bl == null ? null : primerCasillero(bl);
-        final fin = bl == null ? null : ultimoCasillero(bl);
-        if (ini != null && fin != null) {
+        final suyos = casilleros[k] ?? const <int>[];
+        if (suyos.isNotEmpty) {
+          final permitidos = suyos.toSet();
+          final fin = suyos.last;
           final oc = {
             ...ocupadas,
             for (var c = 1; c <= cas.total; c++)
-              if (c < ini || c > fin) c,
+              if (!permitidos.contains(c)) c,
           };
           if (SorteoMesasMotor.esFactible(
             pedidos: ps,
             ocupadas: oc,
             capacidad: fin,
           )) {
-            filas.add(fila(k, ps, desde: bl!.desde, hasta: bl.hasta));
+            filas.add(fila(k, ps, bloque: guardados[k]));
             anotar(_sortearEn(ps, oc, fin, azar));
             continue;
           }
@@ -904,13 +949,13 @@ class SorteoConPlano {
         while (inicio < fin && oc.contains(inicio)) {
           inicio++;
         }
+        // El bloque se guarda con sus mesas una por una, en el orden en que
+        // se recorre el salón.
         final numeros = cas.numerosEntre(inicio, fin);
-        final desde = numeros.isEmpty ? null : numeros.first;
-        final hasta = numeros.isEmpty ? null : numeros.last;
-        filas.add(fila(k, ps, desde: desde, hasta: hasta));
-        if (desde != null && hasta != null) {
-          bloquesNuevos.add(BloqueDivision(k, desde, hasta));
-        }
+        final bloque =
+            numeros.isEmpty ? null : BloqueDivision.deMesas(k, numeros);
+        filas.add(fila(k, ps, bloque: bloque));
+        if (bloque != null) bloquesNuevos.add(bloque);
         anotar(_sortearEn(ps, oc, fin, azar));
         cursor = fin + 1;
       }
