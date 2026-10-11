@@ -77,37 +77,11 @@ class UltimosSorteados {
   /// La planilla solo de los últimos no es la de toda la escuela.
   bool get planillaSolaCambiaAlgo => familias.isNotEmpty && otrosConMesa > 0;
 
-  static List<SorteoMesasRegistro> _enOrden(
-    List<SorteoMesasRegistro> registros,
-  ) =>
-      List<SorteoMesasRegistro>.from(registros)
-        ..sort((a, b) {
-          final c = a.createdAt.compareTo(b.createdAt);
-          return c != 0 ? c : a.id.compareTo(b.id);
-        });
-
-  /// Los sorteos que siguen valiendo. Un sorteo o una restauración se apilan;
-  /// deshacer todo los saca a todos; deshacer solo los últimos saca el de
-  /// arriba.
+  /// Los sorteos que siguen valiendo ([RegistroSorteo.sorteosEnPie]).
   static List<SorteoMesasRegistro> sorteosEnPie(
     List<SorteoMesasRegistro> registros,
-  ) {
-    final pila = <SorteoMesasRegistro>[];
-    for (final r in _enOrden(registros)) {
-      switch (r.tipo) {
-        case TipoRegistroSorteo.sorteo:
-        case TipoRegistroSorteo.restaurar:
-          pila.add(r);
-        case TipoRegistroSorteo.deshacer:
-          if (!r.esDeshacerDeUltimos) {
-            pila.clear();
-          } else if (pila.isNotEmpty) {
-            pila.removeLast();
-          }
-      }
-    }
-    return pila;
-  }
+  ) =>
+      RegistroSorteo.sorteosEnPie(registros);
 
   static String _texto(Set<int> numeros) =>
       MesasExtraUtils.formatearAsignacionMesas(numeros.toList()..sort());
@@ -137,7 +111,7 @@ class UltimosSorteados {
       if (anotado != null) {
         return MesasExtraUtils.numerosMesaDesdeTexto(anotado[id]);
       }
-      final ordenados = _enOrden(registros);
+      final ordenados = RegistroSorteo.enOrden(registros);
       segunElRegistro ??= RegistroSorteo.esperado(
         ordenados.sublist(0, ordenados.indexOf(sorteo)),
         [

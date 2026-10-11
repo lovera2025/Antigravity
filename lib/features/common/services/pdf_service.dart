@@ -4202,6 +4202,7 @@ class PdfService {
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
     String? lineaSorteo,
+    bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     DateTime? generada,
@@ -4216,6 +4217,7 @@ class PdfService {
       pasto: pasto,
       bloques: bloques,
       lineaSorteo: lineaSorteo,
+      soloUltimos: soloUltimos,
       version: version,
       blancoYNegro: blancoYNegro,
       regular: fuentes?.$1,
@@ -4284,6 +4286,9 @@ class PdfService {
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
     String? lineaSorteo,
+
+    /// [alumnos] son solo los últimos sorteados: una hoja corrida.
+    bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
   }) async {
@@ -4296,6 +4301,7 @@ class PdfService {
       pasto: pasto,
       bloques: bloques,
       lineaSorteo: lineaSorteo,
+      soloUltimos: soloUltimos,
       version: version,
       blancoYNegro: blancoYNegro,
     );
@@ -4306,8 +4312,8 @@ class PdfService {
     );
     final sufijo =
         version == VersionPlanillaSorteo.interna ? 'interna' : 'para_repartir';
-    final nombre =
-        'Planilla_Sorteo_${safeName}_$sufijo${blancoYNegro ? '_BN' : ''}.pdf';
+    final nombre = 'Planilla_Sorteo_${safeName}_$sufijo'
+        '${soloUltimos ? '_ultimos' : ''}${blancoYNegro ? '_BN' : ''}.pdf';
 
     if (!kIsWeb && Platform.isWindows) {
       await _entregarPdfEnWindows(bytes, nombre);

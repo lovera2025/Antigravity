@@ -33,6 +33,10 @@ typedef _Seccion = ({
 ///   separado. Si una división no entra, sigue en la hoja siguiente con los
 ///   títulos de las columnas repetidos, y el pie dice "5° A · hoja 2 de 2".
 ///
+/// La de **solo los últimos sorteados** (a los que se les dio mesa después del
+/// primer sorteo) es otra cosa: pocas familias, que van todas en una hoja
+/// corrida, una división debajo de la otra y sin hoja de resumen.
+///
 /// Respeta la planilla que ya usa el jefe: primero sus columnas y en su orden
 /// (egresado, acompañante, mesa principal, adicional, sillas), la mesa principal
 /// en verde y la fila roja cuando no tiene mesa. Cada color lleva su palabra,
@@ -87,6 +91,9 @@ class PlanillaSorteoPdf {
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
     String? lineaSorteo,
+
+    /// [alumnos] son solo los últimos sorteados: salen en una hoja corrida.
+    bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
     pw.Font? regular,
@@ -129,34 +136,68 @@ class PlanillaSorteoPdf {
       pasto: pasto,
     );
 
-    final secciones = <_Seccion>[
-      (
-        nombre: 'Resumen',
-        encabezado: () => tema.encabezado(
-              titulo: 'Planilla del sorteo · Resumen del salón',
-              institucion: institucion,
-              version: textoVersion,
-              generada: textoGenerada,
-              extra: lineaSorteo,
+    final secciones = soloUltimos
+        ? <_Seccion>[
+            (
+              nombre: 'Últimos sorteados',
+              encabezado: () => tema.encabezado(
+                    titulo: 'Planilla del sorteo · Solo los últimos sorteados',
+                    institucion: institucion,
+                    version: textoVersion,
+                    generada: textoGenerada,
+                    extra: lineaSorteo,
+                    control: '${resumen.egresados} egresados · '
+                        '${resumen.mesas} mesas · ${resumen.sillasExtra} '
+                        'sillas extra · ${resumen.conCena} con cena',
+                  ),
+              contenido: () => [
+                    for (final (i, entrada) in divisiones.entries.indexed) ...[
+                      // El nombre de una división no queda solo al pie.
+                      if (i > 0) pw.NewPage(freeSpace: 70),
+                      pw.Padding(
+                        padding: pw.EdgeInsets.only(
+                          top: i > 0 ? 10 : 0,
+                          bottom: 4,
+                        ),
+                        child: pw.Text(
+                          entrada.key,
+                          style: tema.estilo(size: 11, negrita: true),
+                        ),
+                      ),
+                      _tablaDivision(tema, entrada.value, version),
+                    ],
+                  ],
             ),
-        contenido: () => _resumen(tema, resumen, interna),
-      ),
-      for (final entrada in divisiones.entries)
-        (
-          nombre: entrada.key,
-          encabezado: () => tema.encabezado(
-                titulo: 'Planilla del sorteo · ${entrada.key}',
-                institucion: institucion,
-                version: textoVersion,
-                generada: textoGenerada,
-                extra: lineaSorteo,
-                control: _control(
-                  resumen.divisiones.firstWhere((d) => d.division == entrada.key),
-                ),
+          ]
+        : <_Seccion>[
+            (
+              nombre: 'Resumen',
+              encabezado: () => tema.encabezado(
+                    titulo: 'Planilla del sorteo · Resumen del salón',
+                    institucion: institucion,
+                    version: textoVersion,
+                    generada: textoGenerada,
+                    extra: lineaSorteo,
+                  ),
+              contenido: () => _resumen(tema, resumen, interna),
+            ),
+            for (final entrada in divisiones.entries)
+              (
+                nombre: entrada.key,
+                encabezado: () => tema.encabezado(
+                      titulo: 'Planilla del sorteo · ${entrada.key}',
+                      institucion: institucion,
+                      version: textoVersion,
+                      generada: textoGenerada,
+                      extra: lineaSorteo,
+                      control: _control(
+                        resumen.divisiones
+                            .firstWhere((d) => d.division == entrada.key),
+                      ),
+                    ),
+                contenido: () => [_tablaDivision(tema, entrada.value, version)],
               ),
-          contenido: () => [_tablaDivision(tema, entrada.value, version)],
-        ),
-    ];
+          ];
 
     pw.MultiPage pagina(_Seccion s, {required int inicio, int? total}) =>
         pw.MultiPage(

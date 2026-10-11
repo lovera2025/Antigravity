@@ -550,5 +550,114 @@ void main() {
         }
       }
     });
+
+    group('solo los últimos sorteados', () {
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+      // Cinco familias de tres divisiones: con una hoja por división y la de
+      // resumen serían cuatro hojas para cinco renglones.
+      final ultimos = [
+        _alumno('a', nombre: 'ACOSTA, LARA', curso: '5° A', mesas: [129]),
+        _alumno('b', nombre: 'BENITEZ, TOMAS', curso: '5° A', mesas: [130]),
+        _alumno(
+          'c',
+          nombre: 'DUARTE, MILAGROS',
+          curso: '5° B',
+          mesas: [41, 42],
+          extras: 1,
+        ),
+        _alumno('d', nombre: 'FLORES, IVAN', curso: '5° B', mesas: [118]),
+        _alumno('e', nombre: 'GOMEZ, ABRIL', curso: '5° C', mesas: [131]),
+      ];
+      const dosSorteos = 'Sorteo del 12/11/2026 21:40 hs · Jefe · 128 familias\n'
+          'Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias';
+
+      test('van todos en una sola hoja, sin la de resumen', () async {
+        for (final version in VersionPlanillaSorteo.values) {
+          final bytes = await PlanillaSorteoPdf.construir(
+            evento: evento,
+            alumnos: ultimos,
+            lineaSorteo: dosSorteos,
+            soloUltimos: true,
+            version: version,
+            generada: DateTime(2026, 11, 20, 18, 10),
+          );
+          expect(paginasDelPdf(bytes), 1, reason: '$version');
+          final texto = contenidoDelPdf(bytes);
+          for (final palabra in [
+            // El título dice de quiénes es.
+            '(SOLO)',
+            '(SORTEADOS)',
+            // Los cinco, de las tres divisiones.
+            '(ACOSTA,)',
+            '(BENITEZ,)',
+            '(DUARTE,)',
+            '(FLORES,)',
+            '(GOMEZ,)',
+            // Arriba, los dos sorteos.
+            '(128)',
+            '(faltaban:)',
+          ]) {
+            expect(texto.contains(palabra), isTrue, reason: '$version: $palabra');
+          }
+          // La hoja de resumen no va.
+          expect(texto.contains('(RESUMEN)'), isFalse, reason: '$version');
+          expect(texto.contains('(Divisiones)'), isFalse, reason: '$version');
+        }
+      });
+
+      test('la de toda la escuela sigue igual: resumen y una hoja por división',
+          () async {
+        final bytes = await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: ultimos,
+          lineaSorteo: dosSorteos,
+          generada: DateTime(2026, 11, 20, 18, 10),
+        );
+        expect(paginasDelPdf(bytes), 4);
+        final texto = contenidoDelPdf(bytes);
+        expect(texto.contains('(RESUMEN)'), isTrue);
+        // Y arriba nombra los dos sorteos.
+        expect(texto.contains('(faltaban:)'), isTrue);
+      });
+
+      test('si son muchos, sigue en la hoja siguiente sin desbordar', () async {
+        final muchos = [
+          for (var i = 0; i < 70; i++)
+            _alumno(
+              'm$i',
+              nombre: 'ALUMNO $i',
+              curso: i < 40 ? '5° A' : '5° B',
+              mesas: [i + 1],
+            ),
+        ];
+        final bytes = await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: muchos,
+          soloUltimos: true,
+          generada: DateTime(2026, 11, 20, 18, 10),
+        );
+        expect(paginasDelPdf(bytes), greaterThan(1));
+      });
+
+      test('se arma con las fuentes de la app', () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        final bytes = await PdfService.construirPlanillaSorteoPdf(
+          evento,
+          ultimos,
+          lineaSorteo: dosSorteos,
+          soloUltimos: true,
+          generada: DateTime(2026, 11, 20, 18, 10),
+        );
+        expect(paginasDelPdf(bytes), 1);
+      });
+    });
   });
 }

@@ -249,5 +249,59 @@ void main() {
         for (final b in sorteo.bloques) '${b.division} ${b.desde}-${b.hasta}',
       ].join(', ')}',
     );
+
+    // "Sortear a los que faltan": después del primer sorteo se le dio mesa a
+    // cinco familias más. Salen la planilla solo de ellas (una hoja corrida) y
+    // la de toda la escuela, que arriba nombra los dos sorteos.
+    const dosSorteos = 'Sorteo del 12/11/2026 21:40 hs · Jefe · 110 familias\n'
+        'Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias';
+    final ultimos = [
+      for (final a in sorteados)
+        if (const {'a7', 'a9', 'a45', 'a60', 'a90'}.contains(a.id)) a,
+    ];
+    expect(ultimos, hasLength(5));
+    for (final (nombre, lista, solo, version, bn) in [
+      (
+        'ultimos_interna',
+        ultimos,
+        true,
+        VersionPlanillaSorteo.interna,
+        false,
+      ),
+      (
+        'ultimos_para_repartir_BN',
+        ultimos,
+        true,
+        VersionPlanillaSorteo.paraRepartir,
+        true,
+      ),
+      (
+        'dos_sorteos_interna',
+        sorteados,
+        false,
+        VersionPlanillaSorteo.interna,
+        false,
+      ),
+    ]) {
+      final bytes = await PdfService.construirPlanillaSorteoPdf(
+        evento,
+        lista,
+        pagos: pagos,
+        notas: notas,
+        repartos: repartos,
+        pasto: armado.pasto,
+        bloques: sorteo.bloques,
+        lineaSorteo: dosSorteos,
+        soloUltimos: solo,
+        version: version,
+        blancoYNegro: bn,
+        generada: DateTime(2026, 11, 20, 18, 10),
+      );
+      final archivo = File(
+        '$destino${Platform.pathSeparator}Planilla_Sorteo_MUESTRA_$nombre.pdf',
+      )..writeAsBytesSync(bytes);
+      stdout.writeln('── PDF en: ${archivo.path}');
+      expect(archivo.lengthSync(), greaterThan(1000));
+    }
   }, timeout: const Timeout(Duration(minutes: 3)));
 }

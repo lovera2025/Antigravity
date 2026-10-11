@@ -19,10 +19,15 @@ class ResumenRegistroSorteo {
   /// (los que después se deshicieron no cuentan).
   final int cambiosConMotivo;
 
+  /// Los sorteos que siguen valiendo, del más viejo al más nuevo
+  /// ([RegistroSorteo.sorteosEnPie]).
+  final List<SorteoMesasRegistro> enPie;
+
   const ResumenRegistroSorteo({
     this.ultimo,
     this.cambiosAMano = 0,
     this.cambiosConMotivo = 0,
+    this.enPie = const [],
   });
 
   static const vacio = ResumenRegistroSorteo();
@@ -32,6 +37,40 @@ class ResumenRegistroSorteo {
 /// hizo, cuándo, y si después se tocó algo a mano.
 class RegistroSorteo {
   RegistroSorteo._();
+
+  /// Los renglones del más viejo al más nuevo. A la misma hora, por id: el
+  /// mismo orden en que los devuelve la base.
+  static List<SorteoMesasRegistro> enOrden(
+    List<SorteoMesasRegistro> registros,
+  ) =>
+      List<SorteoMesasRegistro>.from(registros)
+        ..sort((a, b) {
+          final c = a.createdAt.compareTo(b.createdAt);
+          return c != 0 ? c : a.id.compareTo(b.id);
+        });
+
+  /// Los sorteos que siguen valiendo. Un sorteo o una restauración se apilan;
+  /// deshacer todo los saca a todos; deshacer solo los últimos saca el de
+  /// arriba.
+  static List<SorteoMesasRegistro> sorteosEnPie(
+    List<SorteoMesasRegistro> registros,
+  ) {
+    final pila = <SorteoMesasRegistro>[];
+    for (final r in enOrden(registros)) {
+      switch (r.tipo) {
+        case TipoRegistroSorteo.sorteo:
+        case TipoRegistroSorteo.restaurar:
+          pila.add(r);
+        case TipoRegistroSorteo.deshacer:
+          if (!r.esDeshacerDeUltimos) {
+            pila.clear();
+          } else if (pila.isNotEmpty) {
+            pila.removeLast();
+          }
+      }
+    }
+    return pila;
+  }
 
   /// Las mesas que cada alumno *debería* tener hoy según lo registrado: los
   /// sorteos y, mezclados por fecha, los cambios hechos desde el plano
@@ -162,8 +201,7 @@ class RegistroSorteo {
     if (registros.isEmpty && movimientos.isEmpty) {
       return ResumenRegistroSorteo.vacio;
     }
-    final ordenados = List<SorteoMesasRegistro>.from(registros)
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final ordenados = enOrden(registros);
     final deberian = esperado(registros, movimientos);
 
     final seCompara = seComparaA(registros, movimientos);
@@ -178,22 +216,41 @@ class RegistroSorteo {
       ultimo: ordenados.isEmpty ? null : ordenados.last,
       cambiosAMano: cambios,
       cambiosConMotivo: cambiosEnPie(movimientos, registros).length,
+      enPie: sorteosEnPie(registros),
     );
   }
 
-  /// La línea que va arriba de la planilla: "Sorteo del 12/11/2026 21:40 hs ·
-  /// Jefe", con los cambios con motivo y los hechos a mano si los hay. `null`
-  /// si no hay ningún sorteo registrado.
+  static String _quien(SorteoMesasRegistro r) =>
+      r.hechoPor?.trim().isNotEmpty == true ? ' · ${r.hechoPor}' : '';
+
+  static String _familias(int n) => n == 1 ? '1 familia' : '$n familias';
+
+  /// Lo que va arriba de la planilla: "Sorteo del 12/11/2026 21:40 hs · Jefe",
+  /// con los cambios con motivo y los hechos a mano si los hay. `null` si no
+  /// hay ningún sorteo registrado.
+  ///
+  /// Si después del sorteo se sorteó a los que faltaban, son **dos renglones**
+  /// (separados por un salto de línea), cada uno con sus familias: el primer
+  /// sorteo y el de los que faltaban. Así el papel dice de cuál de los dos
+  /// salió cada mesa.
   static String? lineaParaPlanilla(ResumenRegistroSorteo resumen) {
-    final u = resumen.ultimo;
+    final enPie = resumen.enPie;
+    // Lo que explica las mesas de hoy es el sorteo que sigue en pie. Si no
+    // queda ninguno, se dice lo último que pasó (que se deshizo).
+    final u = enPie.isNotEmpty ? enPie.last : resumen.ultimo;
     if (u == null) return null;
-    final cuando = ArTime.formatFechaHora(u.createdAt);
-    final que = switch (u.tipo) {
-      TipoRegistroSorteo.sorteo => 'Sorteo del $cuando',
-      TipoRegistroSorteo.deshacer => 'Sorteo deshecho el $cuando',
-      TipoRegistroSorteo.restaurar => 'Sorteo restaurado el $cuando',
-    };
-    final quien = u.hechoPor?.trim().isNotEmpty == true ? ' · ${u.hechoPor}' : '';
+    final String texto;
+    if (enPie.length > 1) {
+      texto = '${_primerSorteo(enPie.first)}\n${_losQueFaltaban(enPie)}';
+    } else {
+      final cuando = ArTime.formatFechaHora(u.createdAt);
+      final que = switch (u.tipo) {
+        TipoRegistroSorteo.sorteo => 'Sorteo del $cuando',
+        TipoRegistroSorteo.deshacer => 'Sorteo deshecho el $cuando',
+        TipoRegistroSorteo.restaurar => 'Sorteo restaurado el $cuando',
+      };
+      texto = '$que${_quien(u)}';
+    }
     final m = resumen.cambiosConMotivo;
     final conMotivo = m == 0
         ? ''
@@ -202,6 +259,31 @@ class RegistroSorteo {
     final aMano = n == 0
         ? ''
         : ' · $n ${n == 1 ? 'cambio' : 'cambios'} a mano después';
-    return '$que$quien$conMotivo$aMano';
+    return '$texto$conMotivo$aMano';
+  }
+
+  /// "Sorteo del 12/11/2026 21:40 hs · Jefe · 128 familias".
+  static String _primerSorteo(SorteoMesasRegistro r) {
+    final cuando = ArTime.formatFechaHora(r.createdAt);
+    final que = r.tipo == TipoRegistroSorteo.restaurar
+        ? 'Sorteo restaurado el'
+        : 'Sorteo del';
+    return '$que $cuando${_quien(r)} · ${_familias(r.alumnos)}';
+  }
+
+  /// "Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias". Si entre el
+  /// primer sorteo y este hubo otros, dice cuántos y de cuántas familias.
+  static String _losQueFaltaban(List<SorteoMesasRegistro> enPie) {
+    final r = enPie.last;
+    final cuando = ArTime.formatFechaHora(r.createdAt);
+    final que = r.tipo == TipoRegistroSorteo.restaurar
+        ? 'Los que faltaban, restaurados el'
+        : 'Los que faltaban:';
+    final medio = enPie.sublist(1, enPie.length - 1);
+    final antes = medio.isEmpty
+        ? ''
+        : ' (antes, ${medio.length == 1 ? 'otro sorteo' : '${medio.length} sorteos más'}: '
+            '${_familias(medio.fold<int>(0, (s, x) => s + x.alumnos))})';
+    return '$que $cuando${_quien(r)} · ${_familias(r.alumnos)}$antes';
   }
 }

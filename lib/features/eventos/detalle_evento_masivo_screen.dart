@@ -53,7 +53,6 @@ import 'services/concepto_pago_display.dart';
 import 'services/cobro_masivo_conceptos_pdf.dart';
 import 'services/mesas_extra_utils.dart';
 import 'services/pago_para_sorteo.dart';
-import 'services/planilla_sorteo.dart';
 import 'services/registro_sorteo.dart';
 import 'services/reparto_de_sillas.dart';
 import 'services/respaldo_sorteo.dart';
@@ -73,6 +72,7 @@ import 'widgets/contratos_firmados_bulk_dialog.dart';
 import 'widgets/deshacer_sorteo_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
+import 'widgets/opciones_planilla_sorteo_dialog.dart';
 import 'widgets/perdonar_mora_alumno_dialog.dart';
 import 'widgets/reparto_sillas_dialog.dart';
 import 'retiro_entradas_screen.dart';
@@ -3454,22 +3454,18 @@ class _DetalleEventoMasivoScreenState
   /// (para marcar lo que no tiene nada pagado) y las notas operativas (las
   /// observaciones de la versión interna).
   ///
-  /// Antes pregunta qué versión y cómo se imprime. Se ofrece también al
-  /// terminar el sorteo.
-  Future<void> _generarPlanillaSorteo() async {
+  /// Antes pregunta qué versión y cómo se imprime y, si después del sorteo se
+  /// sorteó a los que faltaban, si va toda la escuela o solo ellos
+  /// ([elegirOpcionesPlanillaSorteo]). Se ofrece también al terminar el
+  /// sorteo: ahí [sugerirUltimos] deja elegidos a los recién sorteados.
+  Future<void> _generarPlanillaSorteo({bool sugerirUltimos = false}) async {
     if (_alumnos.isEmpty) return;
-    final opciones = await _elegirOpcionesPlanilla();
-    if (opciones == null || !mounted) return;
-
     final repo = ref.read(contratosRepositoryProvider);
     final alumnos = List<ContratoAlumno>.from(_alumnos);
     try {
-      final pagos = pagosPorAlumno(
-        alumnos,
-        await _pagosPorContrato(repo, alumnos),
-      );
       // Quién sorteó y cuándo, y si después se cambió algo a mano: va arriba de
-      // cada hoja, para poder responder una queja con el papel en la mano.
+      // cada hoja, para poder responder una queja con el papel en la mano. Se
+      // lee antes de preguntar: de ahí sale si hay últimos sorteados.
       final registros = await ref
           .read(sorteosMesasRepositoryProvider)
           .delEvento(widget.evento.id);
@@ -3478,6 +3474,23 @@ class _DetalleEventoMasivoScreenState
       final movimientos = await ref
           .read(mesasMovimientosRepositoryProvider)
           .delEvento(widget.evento.id);
+      if (!mounted) return;
+      final ultimos = UltimosSorteados.de(
+        registros,
+        alumnos,
+        movimientos: movimientos,
+      );
+      final opciones = await elegirOpcionesPlanillaSorteo(
+        context: context,
+        ultimos: ultimos,
+        sugerirUltimos: sugerirUltimos,
+      );
+      if (opciones == null || !mounted) return;
+
+      final pagos = pagosPorAlumno(
+        alumnos,
+        await _pagosPorContrato(repo, alumnos),
+      );
       final lineaSorteo = RegistroSorteo.lineaParaPlanilla(
         RegistroSorteo.resumir(registros, alumnos, movimientos: movimientos),
       );
@@ -3494,13 +3507,19 @@ class _DetalleEventoMasivoScreenState
       }
       await PdfService.generarPlanillaSorteo(
         widget.evento,
-        alumnos,
+        opciones.soloUltimos
+            ? [
+                for (final a in alumnos)
+                  if (ultimos!.familias.contains(a.id)) a,
+              ]
+            : alumnos,
         pagos: pagos,
         notas: _notasOperativasPorContrato,
         repartos: _repartosPorContrato,
         pasto: plano?.armadoONull?.pasto ?? const {},
         bloques: plano?.config.bloques ?? const [],
         lineaSorteo: lineaSorteo,
+        soloUltimos: opciones.soloUltimos,
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,
       );
@@ -3510,88 +3529,6 @@ class _DetalleEventoMasivoScreenState
         SnackBar(content: Text('No se pudo generar la planilla: $e')),
       );
     }
-  }
-
-  /// Qué planilla se imprime: la interna (con teléfonos y observaciones) o la
-  /// de repartir, y en color o en blanco y negro. `null` si se cancela.
-  Future<({VersionPlanillaSorteo version, bool blancoYNegro})?>
-      _elegirOpcionesPlanilla() {
-    var version = VersionPlanillaSorteo.interna;
-    var blancoYNegro = false;
-    return showDialog<({VersionPlanillaSorteo version, bool blancoYNegro})>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialog) => AlertDialog(
-          title: const Text('Planilla del sorteo'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Versión'),
-              const SizedBox(height: 8),
-              SegmentedButton<VersionPlanillaSorteo>(
-                segments: const [
-                  ButtonSegment(
-                    value: VersionPlanillaSorteo.interna,
-                    icon: Icon(Icons.lock_outline_rounded),
-                    label: Text('Interna'),
-                  ),
-                  ButtonSegment(
-                    value: VersionPlanillaSorteo.paraRepartir,
-                    icon: Icon(Icons.groups_rounded),
-                    label: Text('Para repartir'),
-                  ),
-                ],
-                selected: {version},
-                onSelectionChanged: (s) => setDialog(() => version = s.first),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                version == VersionPlanillaSorteo.interna
-                    ? 'Con teléfonos, observaciones y a quién llamar por el '
-                        'reparto de sillas.'
-                    : 'Sin teléfonos ni observaciones: son datos de otras '
-                        'familias.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              const Text('Impresión'),
-              const SizedBox(height: 8),
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(
-                    value: false,
-                    icon: Icon(Icons.palette_outlined),
-                    label: Text('Color'),
-                  ),
-                  ButtonSegment(
-                    value: true,
-                    icon: Icon(Icons.contrast_rounded),
-                    label: Text('Blanco y negro'),
-                  ),
-                ],
-                selected: {blancoYNegro},
-                onSelectionChanged: (s) =>
-                    setDialog(() => blancoYNegro = s.first),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('CANCELAR'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(
-                context,
-                (version: version, blancoYNegro: blancoYNegro),
-              ),
-              child: const Text('GENERAR'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _avisarSorteo(String titulo, String mensaje) {
@@ -3876,7 +3813,8 @@ class _DetalleEventoMasivoScreenState
             duration: const Duration(seconds: 12),
             action: SnackBarAction(
               label: 'PLANILLA',
-              onPressed: _generarPlanillaSorteo,
+              onPressed: () =>
+                  _generarPlanillaSorteo(sugerirUltimos: true),
             ),
             content: Text(
               'Sorteo listo: ${asignaciones.length} alumno(s) con mesa'
@@ -4017,7 +3955,7 @@ class _DetalleEventoMasivoScreenState
         duration: const Duration(seconds: 12),
         action: SnackBarAction(
           label: 'PLANILLA',
-          onPressed: _generarPlanillaSorteo,
+          onPressed: () => _generarPlanillaSorteo(sugerirUltimos: true),
         ),
         content: Text(
           'Sorteo listo: ${resultado.asignaciones.length} familia(s) con mesa'

@@ -144,6 +144,95 @@ void main() {
     expect(r.cambiosAMano, 0);
   });
 
+  group('con los que faltaban ya sorteados', () {
+    // 20/11/2026 18:05 en Argentina.
+    final faltaban = DateTime.utc(2026, 11, 20, 21, 5);
+    final primero = _registro(
+      TipoRegistroSorteo.sorteo,
+      {'a': '12', 'b': '14', 'c': '15'},
+      cuando: sorteo,
+    );
+    final segundo = _registro(
+      TipoRegistroSorteo.sorteo,
+      {'d': '20'},
+      cuando: faltaban,
+      quien: 'María',
+    );
+    final alumnos = [
+      _alumno('a', '12'),
+      _alumno('b', '14'),
+      _alumno('c', '15'),
+      _alumno('d', '20'),
+    ];
+
+    test('arriba van los dos sorteos, cada uno con sus familias', () {
+      final r = RegistroSorteo.resumir([primero, segundo], alumnos);
+      expect(r.enPie, [primero, segundo]);
+      expect(
+        RegistroSorteo.lineaParaPlanilla(r),
+        'Sorteo del 12/11/2026 21:40 hs · Jefe · 3 familias\n'
+        'Los que faltaban: 20/11/2026 18:05 hs · María · 1 familia',
+      );
+    });
+
+    test('los cambios a mano se dicen al final', () {
+      final r = RegistroSorteo.resumir(
+        [primero, segundo],
+        [...alumnos.take(3), _alumno('d', '31')],
+      );
+      expect(
+        RegistroSorteo.lineaParaPlanilla(r),
+        'Sorteo del 12/11/2026 21:40 hs · Jefe · 3 familias\n'
+        'Los que faltaban: 20/11/2026 18:05 hs · María · 1 familia'
+        ' · 1 cambio a mano después',
+      );
+    });
+
+    test('con más de dos, nombra el primero y el último y cuenta el resto',
+        () {
+      final tercero = _registro(
+        TipoRegistroSorteo.sorteo,
+        {'e': '21', 'f': '22'},
+        cuando: faltaban.add(const Duration(days: 1)),
+      );
+      final r = RegistroSorteo.resumir(
+        [primero, segundo, tercero],
+        [...alumnos, _alumno('e', '21'), _alumno('f', '22')],
+      );
+      expect(
+        RegistroSorteo.lineaParaPlanilla(r),
+        'Sorteo del 12/11/2026 21:40 hs · Jefe · 3 familias\n'
+        'Los que faltaban: 21/11/2026 18:05 hs · Jefe · 2 familias'
+        ' (antes, otro sorteo: 1 familia)',
+      );
+    });
+
+    test('si se deshizo solo a los últimos, vuelve a nombrar el que quedó',
+        () {
+      final deshacer = SorteoMesasRegistro(
+        id: 'z',
+        eventoId: 'e',
+        tipo: TipoRegistroSorteo.deshacer,
+        resultado: const {'d': '20'},
+        quedan: const {},
+        hechoPor: 'Jefe',
+        createdAt: faltaban.add(const Duration(hours: 1)),
+      );
+      final r = RegistroSorteo.resumir(
+        [primero, segundo, deshacer],
+        [...alumnos.take(3), _alumno('d', null)],
+      );
+      expect(r.ultimo, deshacer);
+      expect(r.enPie, [primero]);
+      expect(r.cambiosAMano, 0);
+      // El papel muestra las mesas del primer sorteo: es el que nombra.
+      expect(
+        RegistroSorteo.lineaParaPlanilla(r),
+        'Sorteo del 12/11/2026 21:40 hs · Jefe',
+      );
+    });
+  });
+
   test('el renglón va y vuelve de la base igual', () {
     final original = _registro(
       TipoRegistroSorteo.sorteo,

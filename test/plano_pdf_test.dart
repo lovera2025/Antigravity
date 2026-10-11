@@ -180,6 +180,36 @@ void main() {
       );
       expect(paginasDelPdf(bytes), 1);
     });
+
+    test('con los dos sorteos nombrados arriba (dos renglones) sigue entrando '
+        'en una hoja, en los tres estilos', () async {
+      final armado = aMedida(132);
+      final plano = PlanoDeLaFiesta.desde(
+        armado: armado,
+        config: const ConfigPlano(
+          titulo: 'Fiesta de egresados 2026',
+          subtitulo: 'Promoción de los cincuenta años de la escuela',
+        ),
+        alumnos: familias(1, 132),
+      );
+      const dosSorteos = 'Sorteo del 12/11/2026 21:40 hs · Jefe · 128 familias\n'
+          'Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias (antes, '
+          'otro sorteo: 3 familias) · 12 cambios con motivo · 3 cambios a mano '
+          'después';
+      for (final estilo in EstiloPlano.values) {
+        final bytes = await PdfService.construirPlanoPdf(
+          _evento,
+          plano,
+          estilo: estilo,
+          lineaSorteo: dosSorteos,
+          generada: _cuando,
+        );
+        expect(paginasDelPdf(bytes), 1, reason: estilo.name);
+      }
+      final texto = contenidoDelPdf(await sinLetras(plano, lineaSorteo: dosSorteos));
+      expect(texto.contains('(faltaban:)'), isTrue);
+      expect(texto.contains('(128)'), isTrue);
+    });
   });
 
   group('los colores que eligió la fiesta', () {

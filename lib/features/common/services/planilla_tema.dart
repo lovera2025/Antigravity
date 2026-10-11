@@ -172,8 +172,11 @@ class PlanillaTema {
                 ),
                 if (extra != null) ...[
                   pw.SizedBox(height: 1),
+                  // Puede traer dos renglones (el sorteo y el de los que
+                  // faltaban): los dos contra el margen derecho.
                   pw.Text(
                     extra,
+                    textAlign: pw.TextAlign.right,
                     style: estilo(size: secundario, color: textoSuave),
                   ),
                 ],
