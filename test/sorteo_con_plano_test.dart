@@ -161,6 +161,107 @@ void main() {
       expect(r.asignaciones.values.expand((l) => l).where(a.pasto.contains),
           isEmpty);
     });
+
+    test('una mesa fijada lejos no desparrama a los demás por el salón', () {
+      final alumnos = familias('5° A', 60);
+      final fijo = alumnos.last;
+      final e = EntradaSorteoPlano(
+        armado: ArmadosPredefinidos.normal2aPaginas45(),
+        config: ConfigPlano(fijadas: {98: MesaFijada(alumnoId: fijo.id)}),
+        alumnos: alumnos,
+      );
+      final plan = SorteoConPlano.preparar(e);
+      expect(plan.entra, isTrue);
+      expect(plan.hastaMesaMinima, 59);
+      for (var s = 0; s < 20; s++) {
+        final r = SorteoConPlano.sortear(e, random: Random(s));
+        verificar(e, r, razon: 'semilla $s');
+        expect(r.asignaciones[fijo.id], [98]);
+        expect(
+          {
+            for (final x in r.asignaciones.entries)
+              if (x.key != fijo.id) ...x.value,
+          },
+          {for (var n = 1; n <= 59; n++) n},
+          reason: 'semilla $s',
+        );
+      }
+    });
+
+    test('la familia de una fijada lejos recibe su otra mesa pegada a esa', () {
+      final a = ArmadosPredefinidos.normal2aPaginas45();
+      final dos = alumno('dos', extras: 1);
+      final e = EntradaSorteoPlano(
+        armado: a,
+        config: ConfigPlano(fijadas: {98: MesaFijada(alumnoId: dos.id)}),
+        alumnos: [...familias('5° A', 40), dos],
+      );
+      expect(SorteoConPlano.preparar(e).hastaMesaMinima, 40);
+      for (var s = 0; s < 20; s++) {
+        final r = SorteoConPlano.sortear(e, random: Random(s));
+        verificar(e, r, razon: 'semilla $s');
+        final suyas = r.asignaciones[dos.id]!;
+        expect(suyas, hasLength(2));
+        expect(suyas, contains(98));
+        expect(a.pegadas(suyas.first, suyas.last), isTrue, reason: '$suyas');
+        expect(
+          {
+            for (final x in r.asignaciones.entries)
+              if (x.key != dos.id) ...x.value,
+          },
+          {for (var n = 1; n <= 40; n++) n},
+          reason: 'semilla $s',
+        );
+      }
+    });
+
+    test('con todas las mesas fijadas, sigue habiendo "hasta qué mesa"', () {
+      final alumnos = familias('5° A', 3);
+      final e = EntradaSorteoPlano(
+        armado: ArmadosPredefinidos.normal2aPaginas45(),
+        config: ConfigPlano(fijadas: {
+          10: MesaFijada(alumnoId: alumnos[0].id),
+          55: MesaFijada(alumnoId: alumnos[1].id),
+          98: MesaFijada(alumnoId: alumnos[2].id),
+        }),
+        alumnos: alumnos,
+      );
+      final plan = SorteoConPlano.preparar(e);
+      expect(plan.entra, isTrue);
+      expect(plan.hastaMesaMinima, 98);
+      final r = SorteoConPlano.sortear(e, random: Random(1));
+      verificar(e, r, razon: 'todo fijado');
+      expect(r.asignaciones[alumnos[0].id], [10]);
+      expect(r.asignaciones[alumnos[1].id], [55]);
+      expect(r.asignaciones[alumnos[2].id], [98]);
+    });
+
+    test('si la fijada no tiene dónde completarse, no entra y lo dice', () {
+      // La 100 es la última mesa y la 99 está libre a propósito: a la familia
+      // de dos mesas con la 100 fijada no hay dónde darle la otra pegada, pero
+      // sí en la libre más cercana. Con todo el salón tomado, no entra.
+      final a = ArmadosPredefinidos.normal2aPaginas45();
+      final dos = alumno('dos', extras: 1);
+      final e = EntradaSorteoPlano(
+        armado: a,
+        config: ConfigPlano(
+          fijadas: {100: MesaFijada(alumnoId: dos.id)},
+          libres: {for (var n = 1; n <= 99; n++) n: const MesaLibre()},
+        ),
+        alumnos: [dos],
+      );
+      expect(SorteoConPlano.preparar(e).entra, isFalse);
+      expect(() => SorteoConPlano.sortear(e), throwsStateError);
+    });
+
+    test('una mesa alta cargada a mano, sin fijar, sigue marcando hasta dónde '
+        'se usa el salón (como en la 5.0.0)', () {
+      final e = EntradaSorteoPlano(
+        armado: ArmadosPredefinidos.normal2aPaginas45(),
+        alumnos: [...familias('5° A', 20), alumno('ya', mesa: '90')],
+      );
+      expect(SorteoConPlano.preparar(e).hastaMesaMinima, 90);
+    });
   });
 
   group('sorteo por bloques', () {

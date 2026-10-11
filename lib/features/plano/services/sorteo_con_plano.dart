@@ -422,6 +422,8 @@ class SorteoConPlano {
     }
 
     final pedidosPlano = <PedidoSorteo>[];
+    // A quiénes se les da una fijada en este sorteo.
+    final conFijada = <String>{};
     for (final p in SorteoMesasMotor.pedidos(
       e.alumnos,
       separaciones: e.separaciones,
@@ -448,6 +450,7 @@ class SorteoConPlano {
               '${p.faltan}. ${propias.skip(p.faltan).join(', ')} queda '
               'reservada.');
         }
+        conFijada.add(p.alumnoId);
         pedidosPlano.add(PedidoSorteo(
           alumnoId: p.alumnoId,
           mesas: p.mesas,
@@ -499,16 +502,16 @@ class SorteoConPlano {
     };
     // El casillero más alto que ya tiene familia. El pasto no cuenta si no se
     // usa: está al final de la fila y haría parecer que el salón se usó entero.
+    // Una fijada que se da en este sorteo tampoco: todavía no es de nadie, y
+    // si está lejos (la 98) estiraba el salón hasta ahí (ver [_entera]).
     final masAltoAsignado = [
-      for (final n in {
-        ...SorteoMesasMotor.ocupadas(e.alumnos).where(a.existe),
-        for (final p in pedidosPlano) ...p.actuales,
-      })
+      for (final n in SorteoMesasMotor.ocupadas(e.alumnos).where(a.existe))
         if (e.usarPasto || !cas.pasto.contains(n)) cas.casillero(n) ?? 0,
     ].fold<int>(0, max);
     return _Base(
       cas: cas,
       masAltoAsignado: masAltoAsignado,
+      conFijada: conFijada,
       pedidos: [for (final p in pedidosPlano) aCasilleros(p)],
       ocupadas: ocupadas,
       avisos: avisos,
@@ -627,23 +630,66 @@ class SorteoConPlano {
     bool forzado,
   ) {
     final cas = b.cas;
-    // Nunca por debajo de la mesa más alta que ya tiene familia, igual que el
-    // sorteo sin plano: si no, a quien compró una mesa después se la daba en
-    // un hueco del principio del salón en vez de pegada a la suya.
-    final minima = _minimaCapacidad(
-      b.pedidos,
-      b.ocupadas,
-      max(1, b.masAltoAsignado),
-      cas.total,
-    );
+    // Las familias que reciben una fijada en este sorteo van aparte, igual que
+    // en el paso 1 de [_bloques]: se quedan con su fijada y, si les falta otra
+    // mesa, se les da pegada a esa, en todo el salón. Si entraran en la cuenta
+    // de "hasta qué mesa", una fijada lejos (la 98, con 60 familias) estiraba
+    // el salón hasta ahí y las demás caían repartidas entre las 98.
+    final fijos = [
+      for (final p in b.pedidos)
+        if (b.conFijada.contains(p.alumnoId)) p,
+    ];
+    final resto = fijos.isEmpty
+        ? b.pedidos
+        : [
+            for (final p in b.pedidos)
+              if (!b.conFijada.contains(p.alumnoId)) p,
+          ];
+    var ocupadas = b.ocupadas;
+    var deFijos = const <String, List<int>>{};
+    var hayLugarParaFijos = true;
+    if (fijos.isNotEmpty) {
+      hayLugarParaFijos = SorteoMesasMotor.esFactible(
+        pedidos: fijos,
+        ocupadas: ocupadas,
+        capacidad: cas.total,
+      );
+      if (hayLugarParaFijos) {
+        // Completar no usa el azar: da lo mismo en la vista previa y al
+        // sortear.
+        deFijos = _sortearEn(fijos, ocupadas, cas.total, Random(0));
+        ocupadas = {...ocupadas, for (final l in deFijos.values) ...l};
+      }
+    }
+    final int? minima;
+    if (!hayLugarParaFijos) {
+      minima = null;
+    } else if (fijos.isNotEmpty && resto.isEmpty) {
+      // No queda nadie más por sentar: "hasta qué mesa" es la más alta que
+      // queda con familia.
+      minima = [
+        b.masAltoAsignado,
+        for (final l in deFijos.values) ...l,
+      ].fold<int>(0, max);
+    } else {
+      // Nunca por debajo de la mesa más alta que ya tiene familia, igual que
+      // el sorteo sin plano: si no, a quien compró una mesa después se la daba
+      // en un hueco del principio del salón en vez de pegada a la suya.
+      minima = _minimaCapacidad(
+        resto,
+        ocupadas,
+        max(1, b.masAltoAsignado),
+        cas.total,
+      );
+    }
     int? capacidad = minima;
     if (e.hastaMesa != null && minima != null) {
       final pedida = cas.casillero(e.hastaMesa!);
       if (pedida != null &&
           pedida >= minima &&
           SorteoMesasMotor.esFactible(
-            pedidos: b.pedidos,
-            ocupadas: b.ocupadas,
+            pedidos: resto,
+            ocupadas: ocupadas,
             capacidad: pedida,
           )) {
         capacidad = pedida;
@@ -661,7 +707,7 @@ class SorteoConPlano {
       avisos: avisos,
     );
     if (rng == null || !entra) return (plan, null);
-    final r = _sortearEn(b.pedidos, b.ocupadas, capacidad, rng);
+    final r = {...deFijos, ..._sortearEn(resto, ocupadas, capacidad, rng)};
     return (
       plan,
       ResultadoSorteoPlano(asignaciones: _aNumeros(cas, r), avisos: avisos),
@@ -899,6 +945,9 @@ class _Base {
 
   /// El casillero más alto que ya tiene familia (0 si nadie tiene mesa).
   final int masAltoAsignado;
+
+  /// Las familias a las que este sorteo les da una mesa fijada.
+  final Set<String> conFijada;
   final List<PedidoSorteo> pedidos;
   final Set<int> ocupadas;
   final List<String> avisos;
@@ -909,6 +958,7 @@ class _Base {
   _Base({
     required this.cas,
     required this.masAltoAsignado,
+    required this.conFijada,
     required this.pedidos,
     required this.ocupadas,
     required this.avisos,
