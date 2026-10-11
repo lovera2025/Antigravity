@@ -1585,8 +1585,9 @@ la base y la app no la mostraba. Eligió sumarlo a la 6.0.0, y agregó "mejoralo
   sola PC.
 - **Diseño.** El texto del interruptor ya no dice "el mes que viene" ("Cuando ya esté resuelto, activá esto").
   Y quedó preparada, **sin prender**, la opción de abrir la nota como una ventana al centro en vez de la hoja de
-  abajo (`kNotaComoVentana`): el usuario recibe `build/muestras_6.0.0/Nota_dos_opciones.png` con las dos, lado
-  a lado, y **falta que elija**.
+  abajo (`kNotaComoVentana`): el usuario recibió `build/muestras_6.0.0/Nota_dos_opciones.png` con las dos, lado
+  a lado, y dijo que **elegiría la B**, la ventana al centro. Pidió dejarlo anotado: **falta prenderla**
+  (pasar `kNotaComoVentana` a `true`).
 - Preguntó si convenía que una nota resuelta "desaparezca". Se le recomendó que no se borre sola (queda el
   registro, y marcar "resuelto" cruza bien entre PCs; borrar es lo que dejó las 14 fantasma) y se le ofreció que
   deje de llamar la atención en la grilla. **No contestó.**

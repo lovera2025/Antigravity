@@ -20,8 +20,10 @@ y caja no cambian.
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
   minutos; la carpeta no va a git.
 - No hay release `v6.0.0` en GitHub y los dos SQL de la nube no se corrieron.
-- El usuario tiene para mirar las pantallas (`build/muestras_6.0.0/Recorrido_6.0.0.html`, 26 pantallas numeradas) y
-  las dos formas de abrir la nota (`build/muestras_6.0.0/Nota_dos_opciones.png`). **Todavía no opinó.**
+- El usuario tiene para mirar las pantallas (`build/muestras_6.0.0/Recorrido_6.0.0.html`, 26 pantallas numeradas).
+  **Todavía no opinó.**
+- **La nota de un alumno: eligió la B**, la ventana al centro (`build/muestras_6.0.0/Nota_dos_opciones.png`). Lo
+  dijo al cerrar el chat y pidió dejarlo anotado: **está elegido y sin aplicar.**
 - El 11-oct pidió frenar ahí y seguir en otro chat. El texto para pegar está al final.
 
 ---
@@ -114,7 +116,8 @@ El detalle está en "Qué pasó el 11-oct" y "Qué pasó el 11-oct, a la tarde" 
    - editar o borrar una nota de mora condonada ahora llega a la nube (viajaba con un id que allá no existe);
    - la nota y su subida se guardan juntas;
    - quedó preparada, **sin prender**, la opción de abrir la nota como una ventana al centro
-     (`kNotaComoVentana`, en `nota_operativa_bottom_sheet.dart`);
+     (`kNotaComoVentana`, en `nota_operativa_bottom_sheet.dart`). Al ver las dos lado a lado, el usuario
+     dijo que **elegiría la B**, la ventana al centro, y pidió dejarlo anotado;
    - quedó anotado como pendiente que el borrado de una nota no le llega a una PC que estaba cerrada
      (`docs/pendientes/notas-borradas-en-pc-cerrada.md`).
 
@@ -122,28 +125,29 @@ El detalle está en "Qué pasó el 11-oct" y "Qué pasó el 11-oct, a la tarde" 
 
 **No se publica sin su "publicamos".** En orden:
 
-1. **Tres cosas que tiene que contestar el usuario:**
+1. **Aplicar lo que ya eligió: la nota como ventana al centro (opción B).** Es pasar `kNotaComoVentana` a `true`
+   en `lib/features/eventos/widgets/nota_operativa_bottom_sheet.dart`. Después, la suite, y sacar de nuevo la
+   muestra (`tool/nota_operativa_muestra_test.dart`) para mostrarle cómo quedó.
+2. **Dos cosas que tiene que contestar el usuario:**
    - **las pantallas:** qué cambiaría del recorrido (`Recorrido_6.0.0.html`), por número de pantalla;
-   - **la nota, A o B:** como hoy, que sube desde abajo, o como una ventana al centro (`Nota_dos_opciones.png`). Si
-     elige B, es pasar `kNotaComoVentana` a `true`;
    - **la nota resuelta:** se le ofreció que deje de llamar la atención en la grilla (el ícono en gris clarito) sin
      borrarse. Preguntó si convenía que "desaparezca"; se le recomendó no borrarla sola. No contestó.
-2. **Armar de nuevo el instalador** (`installer\build_installer.ps1`), después de lo que cambie en el punto 1. Antes,
-   la suite entera y `flutter analyze`.
-3. **Los dos SQL en la nube, con su OK en el momento** (un domingo sin cobros o después de las 20 hs). Antes y
+3. **Armar de nuevo el instalador** (`installer\build_installer.ps1`), después de los puntos 1 y 2. Antes, la suite
+   entera y `flutter analyze`.
+4. **Los dos SQL en la nube, con su OK en el momento** (un domingo sin cobros o después de las 20 hs). Antes y
    después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y 30
    eventos**, y tienen que dar igual. Después, las consultas de verificación del final de cada archivo (RLS
    prendida, un trigger de insert y uno de update por tabla, la policy, y ninguna en Realtime).
-4. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
+5. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
    Crea el tag `v6.0.0` sobre la rama y sube el instalador. El texto de novedades (cinco renglones, acortado a
    pedido) está también en el CONTEXTO de la Fase 3. No nombra lo de las notas: si el usuario quiere, se suma un
    renglón. `build/` no va a git: si el archivo no está, se arma de nuevo desde el CONTEXTO.
-5. **Instalar:** primero la PC del usuario, para probarla; después la del operario y la de la oficina. Al abrir, la
+6. **Instalar:** primero la PC del usuario, para probarla; después la del operario y la de la oficina. Al abrir, la
    app saca sola la copia y actualiza la base.
-6. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea ni se entregan entradas
+7. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea ni se entregan entradas
    hasta que todas tengan la 6.0.0**: la 5.0.0 no ve el plano, los repartos ni las entregas.
-7. **Después de instalar:** mirar en la nube que las tablas nuevas reciben filas y que la cola de subida queda en 0.
-8. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
+8. **Después de instalar:** mirar en la nube que las tablas nuevas reciben filas y que la cola de subida queda en 0.
+9. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
 
@@ -164,11 +168,11 @@ orden" y "Lo que falta para publicar") y la memoria del proyecto. Está todo
 programado, verificado y documentado, hasta 3b63b55, con 1.712 tests en verde y
 el working tree limpio. NO está publicada: las PCs siguen con la 5.0.0 y los
 dos SQL de la nube no se corrieron.
-Antes de seguir, preguntame tres cosas que quedé debiendo: (1) qué cambiaría de
-las pantallas del recorrido (build/muestras_6.0.0/Recorrido_6.0.0.html, por
-número); (2) si la nota de un alumno se abre como hoy, desde abajo, o como una
-ventana al centro (build/muestras_6.0.0/Nota_dos_opciones.png); (3) si una nota
-resuelta deja de llamar la atención en la grilla.
+Lo primero: aplicá lo que ya elegí para la nota de un alumno, la opción B, que
+se abra como una ventana al centro (está preparada y sin prender), y mostrame
+cómo quedó. Después preguntame dos cosas que quedé debiendo: (1) qué cambiaría
+de las pantallas del recorrido (build/muestras_6.0.0/Recorrido_6.0.0.html, por
+número); (2) si una nota resuelta deja de llamar la atención en la grilla.
 Después: armá de nuevo el instalador (el que hay quedó viejo), y para publicar
 seguí los pasos del CONTEXTO, frenando en los dos SQL de la nube y antes del
 release para pedirme el OK. Instalo primero en mi PC, después el operario y la
