@@ -1,15 +1,17 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-10-11 (ver "Qué pasó el 11-oct": la etapa 9b, "los que faltan")
+**Fecha:** 2026-09-26, puesto al día el 2026-10-11 (ver "Qué pasó el 11-oct": la etapa 9b, "los que faltan", y
+"Qué pasó el 11-oct, a la tarde": la etapa 10, la verificación final)
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
 **Estado:** en curso. Las etapas 1 a 9 del plan de la 6.0.0 están hechas y subidas, M9 con su revisión, y también
 la **9c** entera: 9c-1 (lo que cambia el salón, solo en modo jefe), 9c-2 (tests de pantalla de los guardados del
 plano) y 9c-3 (las pantallas), y la **9b** ("los que faltan": deshacer y planilla solo de los últimos sorteados).
-**Ya no falta programar nada**: sigue la etapa 10, la verificación final. **Nada está publicado**: las PCs siguen
-con la 5.0.0.
+**La etapa 10, la verificación final, también está hecha**: los dos arreglos del sorteo que dejó, la migración
+probada sobre una copia de la base real y el control de mesas y sillas. Sigue la etapa 11, la documentación.
+**Nada está publicado**: las PCs siguen con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 11-oct" y "Lo que falta, en orden". El texto para pegar
-> en otro chat está al final.
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 11-oct, a la tarde" y "Lo que falta, en orden". El
+> texto para pegar en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
 > Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-glittery-waffle.md`, partes M0 a M9.
@@ -53,8 +55,10 @@ con la 5.0.0.
 | 9c-2 | Tests de pantalla de los guardados del plano: la pantalla entera montada sin base ni red | Sí | Sí, `fc7cde3`, `b324669` y `124e731` (7-oct) | Se comprobó rompiendo cada protección a propósito |
 | 9c-3 | Las pantallas: el aviso al lado de los botones, los colores del papel, Acomodar (avisos que llevan a la mesa, encabezado, barra) y los menores | Sí | Sí, `7482816`, `f877ccd`, `d3b826e`, `a358bab` y `22b95fd` (7-oct) | No hacía falta |
 | 9b | "Los que faltan": Deshacer sorteo con "solo los últimos sorteados" o "todo", y la planilla del sorteo solo de ellos, con los dos sorteos nombrados arriba | Sí | Sí, `a442e64`, `7fd8f12`, `48e658a` y `28112b6` (11-oct) | Se comprobó rompiendo diez protecciones a propósito |
+| 10 | La verificación final: una mesa fijada lejos ya no desparrama el sorteo de toda la escuela, y el bloque de cada división guarda sus mesas una por una (el pasto ya no se cuenta como propio) | Sí | Sí, `f70fec2` y `2761762` (11-oct) | Se comprobó rompiendo seis protecciones a propósito. La migración v73, probada sobre una copia de la base real |
 
-**Tests:** la suite entera pasa, **1.679 tests** el 11-oct, al cerrar la 9b (1.616 el 7-oct, al cerrar la 9c-3;
+**Tests:** la suite entera pasa, **1.697 tests** el 11-oct, al cerrar la etapa 10 (1.679 al cerrar la 9b; 1.616
+el 7-oct, al cerrar la 9c-3;
 1.553 con el casillero y la 9c-2;
 1.512 el 4-oct a la noche,
 con la 9c-1; 1.497 con la revisión de M9;
@@ -63,8 +67,8 @@ con la 9c-1; 1.497 con la revisión de M9;
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Sigue la etapa 10, la verificación
-final (ver "Lo que falta, en orden").
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Sigue la etapa 11, la documentación
+(ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -1367,6 +1371,143 @@ botón PLANILLA del aviso "Sorteo listo".
   A esa familia el deshacer parcial tampoco la toca (hoy no tiene lo que le dejó el sorteo).
 - "Deshacer solo los últimos" después de un Restaurar deshace lo restaurado: la restauración es el sorteo de arriba.
 
+## Qué pasó el 11-oct, a la tarde
+
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-que-nifty-newt.md`. Fue la etapa 10, la verificación final.
+Quedó con **1.697 tests** (18 nuevos) y el analizador en 313. **No se tocó la base, el SQL de la nube ni la
+sincronización**, y no se abrió la app nueva. La base real solo se leyó.
+
+El usuario preguntó dos veces por la app antes de aprobar ("¿necesitás que la abra o la mantenga cerrada?", "¿todo
+ok o me debo preocupar?"). Lo que le sirvió: una sola indicación, al principio del plan ("tenela cerrada; te aviso
+cuando la puedas abrir"), y decirle en limpio que nada de lo encontrado estaba en las PCs.
+
+### La migración v73, sobre una copia de la base real
+
+`tool/verificar_migracion_v73_test.dart`, con la app cerrada (la cerró el usuario; estaba abierta la 5.0.0
+instalada, en `C:\Junior Eventos\`).
+
+- La base real estaba en la **v71**. La copia pasó de la 71 a la 73 en un paso.
+- **Las 28 tablas de siempre, iguales fila por fila** (643 alumnos, 3.963 pagos, 159 sesiones de caja, 262 líneas
+  de presupuesto). El esquema de lo que ya existía, igual (56 tablas, índices y triggers).
+- **Las cinco tablas nuevas, vacías:** `sillas_reparto`, `entradas_retiro`, `sorteos_mesas`, `planos_evento` y
+  `mesas_movimientos`.
+- La vuelta a la 5.0.0 y de nuevo a la versión nueva: los mismos datos.
+- **La base real, idéntica antes y después:** 2.584.576 bytes, la misma fecha y el mismo SHA-256
+  (`e9c061e9…c198fc`). La copia se borró.
+
+Los dos arreglos de abajo no tocan `local_database.dart`: la prueba sigue valiendo.
+
+### El control de mesas y sillas con los datos reales
+
+`tool/extras_muestra_test.dart`, solo lectura, el 11-oct a las 13:36. Ahora **nombra también a los que no pagaron
+nada de la base** (`8a1146e`); antes decía solo cuántos eran. Quedó en `build/muestras_6.0.0/mesas_y_sillas.txt` y
+el usuario lo recibió.
+
+| Escuela | Mesas cargadas | Con lo pagado hoy | Sin pago de la base | Mesa agregada sin pagar | Sillas sin pagar |
+|---|---|---|---|---|---|
+| Buena Vista | 55 | 51 | 3 | 1 | 0 |
+| Colegio Nacional | 127 | 105 | 20 | 2 | 0 |
+| Gregoria Morales | 41 | 36 | 5 | 0 | 0 |
+| Güemez de Tejada | 73 | 51 | 19 | 2 | 0 |
+| Normal Mariano Iloza | 137 | 116 | 17 | 4 | 1 |
+| Puerto Viejo | 31 | 29 | 1 | 1 | 0 |
+| Rotonda | 53 | 49 | 3 | 1 | 0 |
+| Sagrado Corazón | 117 | 96 | 18 | 3 | 2 |
+| Técnica Pinaroli | 99 | 88 | 8 | 3 | 1 |
+
+- **94 sin pago de la base** (99 el 30-sep), **17 con una mesa agregada sin pagar** (19) y **4 con sillas sin pagar**
+  (5). Ninguna fiesta está sorteada.
+- **Para revisar, uno solo:** ESMAY, THIAGO, 4 sillas a $9.000 (lo habitual es $8.000). Ya se sabía.
+- **La Normal tiene 137 mesas cargadas**, más que las 132 de las que se venía hablando. Con lo pagado hoy son 116.
+- **Técnica tiene 99**: con las 130 comunes le sobra, sin el pasto.
+- No se corrigió nada. Es una foto del día: hay que volver a sacarla cerca del sorteo y verla con el usuario.
+
+**Los seis alumnos de la corrección del 24-sep, mirados de nuevo** (el usuario preguntó si "lo de Alina Gonzales y
+los que había" ya estaba arreglado). Solo lectura, en la base de esta PC y en la nube: dicen lo mismo.
+
+| Alumno | Hoy |
+|---|---|
+| GONZALES, ALINA JAZMIN | 2 mesas agregadas ($140.000, pagó $60.000); 2 sillas por $16.000, sin pagar |
+| PONCE, AYELEN MILAGROS | 2 mesas agregadas ($140.000, pagó $60.000) |
+| SILVERO, MAXIMILIANO NAHUEL | 2 mesas agregadas ($140.000, pagó $105.000) |
+| QUIROZ MEZA, MATIAS NAHUEL | 4 sillas por $32.000, pagadas |
+| BALDI, JUAN MARTIN | 1 silla a $8.000 (pagó $6.000) |
+| ESMAY, THIAGO | Deshecho el 29-sep: 4 sillas por $36.000, pagadas; el pago del 25/06, en $12.000 |
+
+- Alina sale en "sillas sin pagar" porque no las pagó todavía, no por un error de carga.
+- Esmay sale en "Para revisar" por el precio ($9.000 por silla contra $8.000). **El usuario confirmó el 11-oct que
+  sigue de acuerdo con haberlo deshecho**: ese aviso queda, no hay nada que tocar.
+
+### La mesa fijada alta (`f70fec2`)
+
+Estaba anotado desde M6 y era cierto. En el sorteo de toda la escuela junta, con 60 familias y la 98 fijada para
+una, "hasta qué mesa" pasaba a ser la 98 y las otras 59 caían al azar entre las 98. La fijada que se da en el
+sorteo entraba en `masAltoAsignado`, que es "la mesa más alta que ya tiene familia". Por división no pasaba.
+
+- `_armar` anota a quiénes se les da una fijada en este sorteo (`_Base.conFijada`) y ya no las cuenta en
+  `masAltoAsignado`.
+- `_entera` las pone aparte, como hace el paso 1 de `_bloques`: se quedan con su fijada y, si les falta otra mesa,
+  se les da pegada a esa, en todo el salón. El resto se sortea como siempre. Si no queda nadie más por sentar,
+  "hasta qué mesa" sigue siendo la fijada más alta.
+- **Queda como en la 5.0.0, a propósito:** una mesa alta **cargada a mano** antes del primer sorteo, sin fijar,
+  sigue marcando hasta dónde se usa el salón. Hay un test que lo deja escrito.
+- Tests: cinco en `test/sorteo_con_plano_test.dart`, grupo "sorteo entero". Roto a propósito de dos maneras
+  (volver a contar la fijada; no ponerlas aparte): las dos las vio algún test.
+
+### El bloque y el pasto (`2761762`)
+
+Estaba anotado desde la 9c-3 y era cierto, y más general que Técnica. El bloque de una división se guardaba como
+"de la mesa X a la mesa Y", pero el sorteo recorre el salón con las mesas comunes primero y el pasto al final
+(`CasillerosPlano`). **Cuando una mesa común tiene un número más alto que una del pasto, el rango de números ya no
+es el bloque.** Pasa en Técnica al agregar una mesa a mano (lleva el 151; el pasto va del 131 al 150) y en
+cualquier salón donde se marque como pasto una mesa del medio.
+
+- El bloque "121 a 151" decía que usaba el pasto sin usarlo, y el nombre de la división en el plano impreso, el
+  aviso "queda fuera de su bloque" y Separar contaban las 20 mesas del pasto como suyas.
+- El bloque que arrancaba en la 151 y seguía en el pasto quedaba guardado al revés ("151 a 135"): no contenía
+  ninguna mesa, y **a los que llegaban después a esa división se los mandaba a la reserva** en vez de a los huecos
+  de su bloque.
+
+**Cómo quedó**
+
+- **`BloqueDivision` guarda `mesas`, la lista exacta**, en el orden en que se recorre el salón
+  (`BloqueDivision.deMesas`). `desde` y `hasta` pasan a ser el número más bajo y el más alto: sirven para decirlo en
+  un salón de siempre, **no para saber si una mesa es del bloque**. Eso se pregunta con `contiene`, que mira la
+  lista y, si no hay, el rango. `cambios_de_mesa.dart`, `plano_papel.dart` y `editar_armado.dart` ya preguntaban
+  con `contiene`: quedaron bien sin tocarlos.
+- **El texto del bloque va por tramos** (`BloqueDivision.texto`, `textoDeMesas`): "121-130 y 151". Lo usan el aviso
+  del sorteo (`FilaBloque.texto`), la planilla, el aviso de cambio de mesa y el cartel de "Sorteo listo".
+- En `_bloques`: el bloque nuevo se arma con la lista; `usaPasto` sale de las mesas que tiene; a los que llegan
+  después se les dan **solo** las mesas de la lista que siguen en el salón (`casillerosDe`); y la vista previa se
+  compara con el sorteo también por la lista (`_mismasMesas`).
+- **Un bloque guardado sin la lista se lee como rango**, igual que antes. No hay ninguno: todavía no hay ningún
+  plano guardado en ninguna PC.
+- **Sin cambios en la base ni en el SQL:** la lista viaja adentro de `config`, que es texto. También va en la copia
+  del sorteo (`RespaldoSorteo`).
+- Un salón sin mesas después del pasto guarda los mismos `desde` y `hasta` que antes. Si en Acomodar se sacó una
+  mesa del medio antes del sorteo, el bloque lo dice: "25-29 y 31-49".
+- Tests: el grupo "bloques con una mesa común después del pasto" de `test/sorteo_con_plano_test.dart`, el grupo "el
+  bloque de una división" de `test/plano_evento_test.dart`, y un caso en los de cambio de mesa, plano impreso,
+  Acomodar, planilla y copia del sorteo. Roto a propósito de cuatro maneras (`contiene` por rango, guardar sin la
+  lista, buscar a los que llegan por el rango, el texto por rango): las cuatro las vio algún test.
+- Se miró el PDF de la planilla con un bloque en dos tramos: "121-130 y 151" entra en un renglón de la columna
+  Bloque.
+
+### Las muestras
+
+Se volvieron a sacar las 80 (imágenes y PDF, con datos inventados) en `build/muestras_6.0.0/`, con los nueve
+`tool/*_muestra_test.dart` (todos aceptan `--dart-define=salida=<carpeta>`). El usuario recibió nueve: la pantalla
+del plano, los tres estilos, la barra, la columna Mesa, Acomodar, el aviso de Deshacer sorteo, el plano impreso de
+Técnica, la planilla del sorteo y la de entrega. **Todavía no opinó**, ni de estas ni de las de M7, M8, M9, la 9c
+y la 9b.
+
+### Para tener en cuenta
+
+- `flutter test --no-pub` evita el listado de paquetes, que tapa la salida.
+- Para probar la migración hay que frenar cualquier otra corrida de tests, y la app instalada tiene que estar
+  cerrada: se mira con `tasklist` (`arguello_events.exe`). No la cierro yo: se le pide al usuario.
+- Para mirar un PDF de prueba sin dejar nada en el repo: un test en `build/` (git la ignora), que se borra después.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -1396,16 +1537,10 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
        bloque que puede contener el pasto.
    - 9b. ~~Los que faltan: deshacer y planilla solo de los últimos sorteados, y el test de la historia entera.~~
      **Hecho** (`a442e64`, `7fd8f12`, `48e658a`, `28112b6`). Ver "Qué pasó el 11-oct".
-10. **Verificación final:**
-    - PNG y PDF de muestra para el usuario (los del plano impreso y la planilla ya los tiene, de M7; los de la
-      barra, de M8);
-    - un test que confirme si una mesa fijada alta estira el sorteo entero (anotado en M6); si es cierto, se
-      arregla acá;
-    - un test de Técnica con una mesa agregada (lleva el 151, después del pasto): si el bloque de una división
-      queda "conteniendo" el pasto y eso cambia a quién le toca qué, se arregla acá (anotado en la 9c-3);
-    - `tool/verificar_migracion_v73_test.dart` sobre una copia de la base real, con la app cerrada, mostrándole la
-      tabla de antes y después. El OK ya está dado en el plan;
-    - `tool/extras_muestra_test.dart` otra vez, para revisar con el usuario lo que marca.
+10. ~~Verificación final: las muestras, la mesa fijada alta, el bloque y el pasto, la migración v73 sobre una copia
+    de la base real y el control de mesas y sillas.~~ **Hecho** (`f70fec2`, `2761762`, `8a1146e`). Ver "Qué pasó el
+    11-oct, a la tarde". **Queda para cerca del sorteo:** volver a sacar el control de mesas y sillas y verlo con el
+    usuario, y la migración una vez más el día de publicar.
 11. **Documentación:** `docs/CONTEXTO_v6.0.0_<fecha>.md`, CLAUDE.md al día (base v73, tablas nuevas,
     `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre`, los
     números de Gala en papel, los cuatro botones, `kListaPuertaHabilitada`, **lo que cambia el salón, solo en modo
@@ -1413,7 +1548,9 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     (`plano_evento_screen_test.dart` y `subidaInmediataProvider`), **los colores en papel** (`TemaPlano.papel`),
     **el aviso del plano** (`AvisoDelPlano`, no el SnackBar), `ArmadoSalon.ultimoNumero` y **los que faltan**: el
     registro con `_antes` y `_quedan` adentro de `resultado`, `UltimosSorteados`, `LoQueSeDeshace` y por qué no se
-    agrega un valor a `tipo`) y la memoria.
+    agrega un valor a `tipo`; y, de la etapa 10, **el bloque de una división es su lista de mesas**
+    (`BloqueDivision.mesas`, se pregunta con `contiene` y nunca por el rango, porque el sorteo recorre las comunes
+    primero y el pasto al final) y **las fijadas van aparte en el sorteo de toda la escuela**) y la memoria.
 12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
     windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
     texto de novedades antes de publicar.
@@ -1451,19 +1588,20 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
 entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 11-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
-C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la memoria
-del proyecto. Ya no falta programar nada: están hechas y subidas las etapas 1 a
-9, la 9c entera y la 9b ("los que faltan": Deshacer sorteo con "solo los últimos
-sorteados" o "todo", la planilla solo de ellos y los dos sorteos nombrados
-arriba), hasta 28112b6. La suite da 1.679 tests en verde y el working tree está
-limpio. Sigue la etapa 10, la verificación final: el test de la mesa fijada alta
-(si estira el sorteo entero) y el del bloque que puede contener el pasto en
-Técnica (la mesa agregada lleva el 151), que si confirman el problema se
-arreglan ahí; la migración v73 sobre una copia de mi base, con la app cerrada y
-mostrándome la tabla de antes y después; y el control de mesas y sillas con mis
-datos reales, para revisarlo nombre por nombre. Después la documentación de la
-6.0.0, la versión y el build, en ese orden, una etapa por chat.
+"Qué pasó el 11-oct, a la tarde" y "Lo que falta, en orden"), el plan de la
+6.0.0 en C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la
+memoria del proyecto. Ya no falta programar nada y la verificación final está
+hecha: están subidas las etapas 1 a 10, hasta 2761762 (la mesa fijada lejos ya
+no desparrama el sorteo de toda la escuela, y el bloque de cada división guarda
+sus mesas una por una). La migración v73 se probó sobre una copia de mi base y
+no cambió ni un dato, y el control de mesas y sillas está en
+build/muestras_6.0.0/mesas_y_sillas.txt. La suite da 1.697 tests en verde y el
+working tree está limpio. Sigue la etapa 11, la documentación de la 6.0.0
+(docs/CONTEXTO_v6.0.0_<fecha>.md, CLAUDE.md al día con todo lo anotado en el
+punto 11 de "Lo que falta", los pendientes y la memoria). Después la versión y
+el build (etapa 12) y publicar (etapa 13), en ese orden, una etapa por chat.
+Todavía no opiné de las muestras: preguntame si quiero cambiar algo antes del
+build.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
