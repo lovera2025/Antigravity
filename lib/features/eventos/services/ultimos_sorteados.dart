@@ -31,6 +31,9 @@ class UltimosSorteados {
   /// Las familias del último sorteo que siguen en la fiesta.
   final Set<String> familias;
 
+  /// El nombre de cada una, para mostrarlas.
+  final Map<String, String> nombres;
+
   /// Cuántos tienen mesa hoy y no son del último sorteo.
   final int otrosConMesa;
 
@@ -51,6 +54,7 @@ class UltimosSorteados {
   const UltimosSorteados._({
     required this.enPie,
     required this.familias,
+    required this.nombres,
     required this.otrosConMesa,
     required this.aGuardar,
     required this.tenian,
@@ -145,6 +149,7 @@ class UltimosSorteados {
     }
 
     final familias = <String>{};
+    final nombres = <String, String>{};
     final aGuardar = <String, String?>{};
     final tenian = <String, String>{};
     final quedan = <String, String>{};
@@ -160,6 +165,7 @@ class UltimosSorteados {
         continue;
       }
       familias.add(a.id);
+      nombres[a.id] = a.nombreAlumno;
       final dejo = MesasExtraUtils.numerosMesaDesdeTexto(dejado);
       void noSeToca(String motivo) => noSeTocan.add(FamiliaQueNoSeToca(
             alumnoId: a.id,
@@ -195,6 +201,7 @@ class UltimosSorteados {
     return UltimosSorteados._(
       enPie: enPie,
       familias: familias,
+      nombres: nombres,
       otrosConMesa: otrosConMesa,
       aGuardar: aGuardar,
       tenian: tenian,

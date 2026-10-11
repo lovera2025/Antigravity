@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -69,6 +70,7 @@ import 'widgets/grupo_fiesta_toolbar.dart';
 import 'widgets/sorteo_mesas_dialog.dart';
 import 'widgets/dialogo_seleccion_cuotas_plan.dart';
 import 'widgets/contratos_firmados_bulk_dialog.dart';
+import 'widgets/deshacer_sorteo_dialog.dart';
 import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
 import 'widgets/perdonar_mora_alumno_dialog.dart';
@@ -4029,18 +4031,70 @@ class _DetalleEventoMasivoScreenState
     );
   }
 
-  /// Deshacer el sorteo: saca el número de mesa a **todos** los alumnos del
-  /// evento, también a los de baja. Pide confirmación con tilde y antes guarda
-  /// una copia local ([RespaldoSorteo]) para poder restaurarlo.
+  /// Las mesas de hoy y los últimos sorteados, recién leídos: lo que muestra el
+  /// aviso de deshacer, y contra lo que se compara antes de guardar.
+  Future<({List<ContratoAlumno> conMesa, UltimosSorteados? ultimos})>
+      _paraDeshacer(String eventoId) async {
+    final alumnos =
+        await ref.read(contratosRepositoryProvider).getByEvento(eventoId);
+    final registros =
+        await ref.read(sorteosMesasRepositoryProvider).delEvento(eventoId);
+    final movimientos =
+        await ref.read(mesasMovimientosRepositoryProvider).delEvento(eventoId);
+    return (
+      conMesa: [
+        for (final a in alumnos)
+          if (a.numeroMesa?.trim().isNotEmpty ?? false) a,
+      ],
+      ultimos: UltimosSorteados.de(
+        registros,
+        alumnos,
+        movimientos: movimientos,
+      ),
+    );
+  }
+
+  /// Deshacer el sorteo. Antes pregunta qué ([mostrarDeshacerSorteoDialog]):
+  /// **todo** —el número de mesa de todos los alumnos del evento, también los
+  /// de baja— o **solo los últimos sorteados** ([UltimosSorteados]), que
+  /// vuelven a como estaban antes de ese sorteo sin tocar a nadie más. Siempre
+  /// guarda antes una copia local ([RespaldoSorteo]) para poder restaurarlo.
   Future<void> _deshacerSorteoMesas() async {
     if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
     final eventoId = widget.evento.id;
-    final alumnos = await repo.getByEvento(eventoId);
-    final conMesa = alumnos
-        .where((a) => a.numeroMesa?.trim().isNotEmpty ?? false)
-        .toList();
+
+    setState(() => _isLoading = true);
+    int? distintos;
+    ({List<ContratoAlumno> conMesa, UltimosSorteados? ultimos})? visto;
+    try {
+      // Si la otra PC sorteó o cambió mesas y todavía no bajó, los "últimos
+      // sorteados" de esta PC no son los últimos.
+      distintos = await repo.mesasDeOtraPcSinBajar(eventoId);
+      visto = await _paraDeshacer(eventoId);
+    } catch (e) {
+      debugPrint('Error al leer las mesas para deshacer: $e');
+    }
     if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (visto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudieron leer las mesas. Probá de nuevo.'),
+        ),
+      );
+      return;
+    }
+    if (distintos != null && distintos > 0) {
+      await _avisarSorteo(
+        'La otra PC tiene mesas sin bajar',
+        'En la nube hay números de mesa de $distintos alumno(s) que todavía no '
+            'llegaron a esta PC. Esperá unos segundos a que sincronice y volvé '
+            'a abrir Deshacer sorteo.',
+      );
+      return;
+    }
+    final conMesa = visto.conMesa;
     if (conMesa.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -4050,77 +4104,79 @@ class _DetalleEventoMasivoScreenState
       return;
     }
 
-    var entendido = false;
-    final confirmar = await showDialog<bool>(
+    final alcance = await mostrarDeshacerSorteoDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Deshacer sorteo de mesas'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Se van a borrar los números de mesa de ${conMesa.length} '
-                'alumno(s) de esta institución, incluidas las asignaciones a '
-                'mano y las de alumnos de baja.\n\n'
-                'Antes se guarda una copia: si fue un error, se vuelve atrás '
-                'desde el menú ⋮ → "Restaurar sorteo anterior".',
-              ),
-              const SizedBox(height: 8),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text(
-                  'Entiendo que se borran los números sorteados',
-                ),
-                value: entendido,
-                onChanged: (v) => setLocal(() => entendido = v == true),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('CANCELAR'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: entendido ? () => Navigator.pop(context, true) : null,
-              child: const Text('DESHACER MESAS'),
-            ),
-          ],
-        ),
-      ),
+      conMesa: conMesa.length,
+      ultimos: visto.ultimos,
     );
-    if (confirmar != true || !mounted) return;
+    if (alcance == null || !mounted) return;
+    final parcial = alcance == AlcanceDeshacer.ultimos;
 
     final autoSyncCheckpoint = DateTime.now().toUtc();
     setState(() => _isLoading = true);
     try {
+      // Se guarda lo que mostró el aviso. Si mientras estaba abierto cambió una
+      // mesa (la otra PC, o algo que bajó), no se guarda nada.
+      final fresco = await _paraDeshacer(eventoId);
+      final ultimos = fresco.ultimos;
+      final Map<String, String?> numeros;
+      // Lo que tenía cada uno: va a la copia y al registro.
+      final Map<String, String> antes;
+      Map<String, String>? quedan;
+      final Map<String, String> mostrado;
+      if (parcial) {
+        numeros = ultimos?.aGuardar ?? const {};
+        antes = ultimos?.tenian ?? const {};
+        quedan = ultimos?.quedan ?? const {};
+        mostrado = visto.ultimos!.tenian;
+      } else {
+        numeros = {for (final a in fresco.conMesa) a.id: null};
+        antes = {for (final a in fresco.conMesa) a.id: a.numeroMesa!.trim()};
+        mostrado = {for (final a in conMesa) a.id: a.numeroMesa!.trim()};
+      }
+      if (!mapEquals(antes, mostrado) ||
+          (parcial && !mapEquals(numeros, visto.ultimos!.aGuardar))) {
+        if (mounted) {
+          await _avisarSorteo(
+            'No se deshizo nada',
+            'Las mesas cambiaron mientras este aviso estaba abierto (por '
+                'ejemplo, la otra PC guardó algo). Volvé a abrir Deshacer '
+                'sorteo para ver cómo quedaron.',
+          );
+        }
+        return;
+      }
+
       // El plano, de la nube si hay red: se reescribe entero, y con el de esta
       // PC se pisaría una mesa que la otra acaba de fijar. Si no se puede leer,
       // el plano no se toca y los números se deshacen igual.
       final plano = (await _leerPlano(eventoId, nube: _hayConexion)).plano;
+      // Con plano, los bloques del sorteo deshecho dejan de valer: el próximo
+      // sorteo los vuelve a armar (en el orden que se elija ese día). Al
+      // deshacer solo a los últimos se quedan, porque son del sorteo anterior,
+      // salvo que los últimos fueran el único sorteo en pie. Las mesas fijas y
+      // libres se conservan siempre.
+      final seVanLosBloques = !parcial || ultimos!.eraElUnico;
+      final bloques = seVanLosBloques
+          ? plano?.config.bloques ?? const <BloqueDivision>[]
+          : const <BloqueDivision>[];
       // La copia primero: sin copia a salvo no se borra nada. Lleva también los
-      // bloques, para que Restaurar los devuelva.
-      final antes = {for (final a in conMesa) a.id: a.numeroMesa!.trim()};
+      // bloques que se van, para que Restaurar los devuelva.
       await RespaldoSorteo.guardar(
         eventoId,
         antes,
-        bloques: plano?.config.bloques ?? const [],
+        bloques: bloques,
+        quedaron: quedan ?? const {},
       );
-      // Con plano, los bloques del sorteo deshecho dejan de valer: el próximo
-      // sorteo los vuelve a armar (en el orden que se elija ese día). Las mesas
-      // fijas y libres se conservan.
       // El registro guarda lo que había: queda en la nube quién deshizo, y qué.
       await repo.asignarNumerosMesa(
-        {for (final a in conMesa) a.id: null},
-        registro: _registroSorteo(TipoRegistroSorteo.deshacer, antes),
-        plano: plano == null || plano.config.bloques.isEmpty
+        numeros,
+        registro: _registroSorteo(
+          TipoRegistroSorteo.deshacer,
+          antes,
+          quedan: quedan,
+        ),
+        plano: plano == null || bloques.isEmpty
             ? null
             : plano.copyWith(
                 config: plano.config.copyWith(bloques: const []),
@@ -4137,12 +4193,15 @@ class _DetalleEventoMasivoScreenState
       await _fetchDatos(cargaSilenciosa: true);
       if (mounted) {
         setState(() => _hayRespaldoSorteo = true);
+        final sinTocar = parcial ? ultimos!.noSeTocan.length : 0;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 8),
             content: Text(
-              'Mesas desasignadas (${conMesa.length}). Si fue un error: menú '
-              '⋮ → Restaurar sorteo anterior.',
+              '${parcial ? '${numeros.length} familia(s) volvieron a como '
+                  'estaban antes del último sorteo'
+                  '${sinTocar > 0 ? ' · $sinTocar no se tocaron' : ''}' : 'Mesas desasignadas (${numeros.length})'}'
+              '. Si fue un error: SORTEO → Restaurar sorteo anterior.',
             ),
           ),
         );

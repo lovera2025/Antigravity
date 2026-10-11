@@ -363,5 +363,63 @@ void main() {
       );
       expect(h.vacio, isTrue);
     });
+
+    test('deshacer solo a los últimos sorteados se dice distinto que deshacer '
+        'todo, y no deja nada "sin registro"', () {
+      // A `vega` el sorteo de los que faltaban le sumó la 61; a `ruiz` le dio
+      // la 80. Se deshizo solo ese sorteo.
+      final faltaban = SorteoMesasRegistro(
+        id: 's2',
+        eventoId: 'e',
+        tipo: TipoRegistroSorteo.sorteo,
+        resultado: const {'vega': '60, 61', 'ruiz': '80'},
+        antes: const {'vega': '60'},
+        hechoPor: 'Jefe',
+        createdAt: hora(4),
+      );
+      final deshacerUltimos = SorteoMesasRegistro(
+        id: 's3',
+        eventoId: 'e',
+        tipo: TipoRegistroSorteo.deshacer,
+        resultado: const {'vega': '60, 61', 'ruiz': '80'},
+        quedan: const {'vega': '60'},
+        hechoPor: 'Jefe',
+        createdAt: hora(5),
+      );
+      final h = HistorialSorteo.armar(
+        registros: [sorteo, faltaban, deshacerUltimos],
+        movimientos: const [],
+        config: ConfigPlano.vacia,
+        alumnos: [
+          alumno('gomez', '12, 13'),
+          alumno('sosa', '40, 41'),
+          alumno('vega', '60'),
+          alumno('ruiz', null),
+        ],
+      );
+      expect(
+        h.renglones.first.titulo,
+        'Se deshizo el sorteo de los últimos: 2 familias',
+      );
+      expect(h.renglones.first.tipo, TipoRenglonHistorial.sorteoDeshecho);
+      expect(h.sinRegistro, isEmpty);
+
+      final todo = HistorialSorteo.armar(
+        registros: [
+          sorteo,
+          SorteoMesasRegistro(
+            id: 's4',
+            eventoId: 'e',
+            tipo: TipoRegistroSorteo.deshacer,
+            resultado: sorteo.resultado,
+            createdAt: hora(6),
+          ),
+        ],
+        movimientos: const [],
+        config: ConfigPlano.vacia,
+        alumnos: [alumno('gomez', null)],
+      );
+      expect(todo.renglones.first.titulo, 'Se deshizo el sorteo: 3 familias');
+    });
   });
 }

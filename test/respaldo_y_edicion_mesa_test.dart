@@ -164,6 +164,78 @@ void main() {
     });
   });
 
+  group('Restaurar después de deshacer solo a los últimos sorteados', () {
+    // `a` tenía la 12 y el último sorteo le sumó la 13; `c` no tenía nada y le
+    // tocó la 20. Al deshacer, `a` se quedó con la 12 y `c` sin mesa.
+    final copia = RespaldoSorteo(
+      fecha: DateTime.utc(2026, 11, 20, 21),
+      numeros: const {'a': '12, 13', 'c': '20'},
+      quedaron: const {'a': '12'},
+    );
+
+    test('a cada uno le vuelve lo suyo, y a nadie más', () {
+      final plan = RespaldoSorteo.planRestauracion(copia, [
+        alumno('a', mesa: '12'),
+        alumno('b', mesa: '14'),
+        alumno('c'),
+      ]);
+      expect(plan.aRestaurar, {'a': '12, 13', 'c': '20'});
+      expect(plan.omitidos, 0);
+    });
+
+    test('si la que se le había sumado hoy es de otro, no se le devuelve', () {
+      final plan = RespaldoSorteo.planRestauracion(copia, [
+        alumno('a', mesa: '12'),
+        alumno('nuevo', mesa: '13'),
+        alumno('c'),
+      ]);
+      expect(plan.aRestaurar, {'c': '20'});
+      expect(plan.omitidos, 1);
+    });
+
+    test('si después del deshacer le cambiaron la mesa, no se toca', () {
+      final plan = RespaldoSorteo.planRestauracion(copia, [
+        alumno('a', mesa: '30'),
+        alumno('c', mesa: '31'),
+      ]);
+      expect(plan.aRestaurar, isEmpty);
+      expect(plan.omitidos, 2);
+    });
+
+    test('si quedó sin la que conservaba, tampoco', () {
+      final plan = RespaldoSorteo.planRestauracion(copia, [
+        alumno('a'),
+        alumno('c'),
+      ]);
+      expect(plan.aRestaurar, {'c': '20'});
+      expect(plan.omitidos, 1);
+    });
+
+    test('lo que conservó cada uno va y vuelve por el archivo', () {
+      final json = jsonDecode(
+        jsonEncode(
+          RespaldoSorteo.aJson(
+            copia.fecha,
+            copia.numeros,
+            quedaron: copia.quedaron,
+          ),
+        ),
+      );
+      final r = RespaldoSorteo.deJson(json)!;
+      expect(r.numeros, copia.numeros);
+      expect(r.quedaron, {'a': '12'});
+      expect(r.bloques, isEmpty);
+    });
+
+    test('una copia de antes (sin esa clave) se lee como siempre', () {
+      final r = RespaldoSorteo.deJson({
+        'fecha': copia.fecha.toIso8601String(),
+        'numeros': {'a': '3'},
+      })!;
+      expect(r.quedaron, isEmpty);
+    });
+  });
+
   group('Editar alumno: el número de mesa solo si se cambió', () {
     final antes = alumno('a', mesa: '12, 13');
 

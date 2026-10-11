@@ -36,10 +36,16 @@ class RespaldoSorteo {
   /// llegaban tarde ya no iban al bloque de su división.
   final List<BloqueDivision> bloques;
 
+  /// Cuando se deshizo solo a los últimos sorteados: lo que conservó cada
+  /// familia que no quedó sin mesa. Restaurar le devuelve lo de [numeros] solo
+  /// si sigue teniendo exactamente esto.
+  final Map<String, String> quedaron;
+
   const RespaldoSorteo({
     required this.fecha,
     required this.numeros,
     this.bloques = const [],
+    this.quedaron = const {},
   });
 
   static Future<File> _archivo(String eventoId) async {
@@ -55,10 +61,13 @@ class RespaldoSorteo {
     String eventoId,
     Map<String, String> numeros, {
     List<BloqueDivision> bloques = const [],
+    Map<String, String> quedaron = const {},
   }) async {
     final archivo = await _archivo(eventoId);
     await archivo.writeAsString(
-      jsonEncode(aJson(DateTime.now(), numeros, bloques: bloques)),
+      jsonEncode(
+        aJson(DateTime.now(), numeros, bloques: bloques, quedaron: quedaron),
+      ),
       flush: true,
     );
   }
@@ -68,24 +77,33 @@ class RespaldoSorteo {
     DateTime fecha,
     Map<String, String> numeros, {
     List<BloqueDivision> bloques = const [],
+    Map<String, String> quedaron = const {},
   }) =>
       {
         'fecha': fecha.toUtc().toIso8601String(),
         'numeros': numeros,
         if (bloques.isNotEmpty) 'bloques': [for (final b in bloques) b.toMap()],
+        if (quedaron.isNotEmpty) 'quedaron': quedaron,
       };
 
   /// Lee una copia. Null si está vacía o no se entiende. Una copia de antes
-  /// de los bloques (sin esa clave) se lee igual, sin bloques.
+  /// de los bloques o del deshacer parcial (sin esas claves) se lee igual.
   static RespaldoSorteo? deJson(Object? json) {
     try {
       if (json is! Map) return null;
       final numeros = Map<String, String>.from(json['numeros'] as Map);
       if (numeros.isEmpty) return null;
       final crudos = json['bloques'];
+      final quedaron = json['quedaron'];
       return RespaldoSorteo(
         fecha: DateTime.parse(json['fecha'] as String),
         numeros: numeros,
+        quedaron: quedaron is Map
+            ? {
+                for (final e in quedaron.entries)
+                  e.key.toString(): e.value?.toString() ?? '',
+              }
+            : const {},
         bloques: [
           for (final b in crudos is List ? crudos : const [])
             ?BloqueDivision.fromMap(b),
@@ -119,8 +137,9 @@ class RespaldoSorteo {
     return respaldo.bloques;
   }
 
-  /// Devuelve cada número solo a quien sigue sin mesa, y nunca a un número
-  /// que hoy esté ocupado o que aparezca dos veces en la copia.
+  /// Devuelve cada número solo a quien sigue como lo dejó el deshacer —sin
+  /// mesa, o con las que conservó si se deshizo solo a los últimos—, y nunca a
+  /// un número que hoy esté ocupado o que aparezca dos veces en la copia.
   static PlanRestauracion planRestauracion(
     RespaldoSorteo respaldo,
     Iterable<ContratoAlumno> alumnosHoy,
@@ -135,15 +154,23 @@ class RespaldoSorteo {
     for (final e in respaldo.numeros.entries) {
       final alumno = porId[e.key];
       final numeros = MesasExtraUtils.numerosMesaDesdeTexto(e.value);
-      final libre = alumno != null &&
-          (alumno.numeroMesa?.trim().isEmpty ?? true) &&
-          numeros.isNotEmpty &&
-          numeros.every((n) => !ocupadas.contains(n));
+      final hoy = MesasExtraUtils.numerosMesaDesdeTexto(alumno?.numeroMesa);
+      final conservo =
+          MesasExtraUtils.numerosMesaDesdeTexto(respaldo.quedaron[e.key]);
+      final sigueIgual = alumno != null &&
+          (conservo.isEmpty
+              ? (alumno.numeroMesa?.trim().isEmpty ?? true)
+              : hoy.length == conservo.length && hoy.containsAll(conservo));
+      // Las que conservó ya son suyas: lo que tiene que estar libre es el resto.
+      final vuelven = numeros.difference(hoy);
+      final libre = sigueIgual &&
+          vuelven.isNotEmpty &&
+          vuelven.every((n) => !ocupadas.contains(n));
       if (!libre) {
         omitidos++;
         continue;
       }
-      ocupadas.addAll(numeros);
+      ocupadas.addAll(vuelven);
       aRestaurar[e.key] = e.value;
     }
     return PlanRestauracion(aRestaurar: aRestaurar, omitidos: omitidos);

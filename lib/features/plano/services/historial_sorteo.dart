@@ -105,7 +105,9 @@ class HistorialSorteo {
         TipoRegistroSorteo.sorteo => (TipoRenglonHistorial.sorteo, 'Sorteo'),
         TipoRegistroSorteo.deshacer => (
             TipoRenglonHistorial.sorteoDeshecho,
-            'Se deshizo el sorteo',
+            r.esDeshacerDeUltimos
+                ? 'Se deshizo el sorteo de los últimos'
+                : 'Se deshizo el sorteo',
           ),
         TipoRegistroSorteo.restaurar => (
             TipoRenglonHistorial.sorteoRestaurado,
