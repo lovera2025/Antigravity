@@ -1,13 +1,14 @@
 # Fase 3: el plano del salón, el sorteo por bloques y la personalización
 
-**Fecha:** 2026-09-26, puesto al día el 2026-10-07 (ver "Qué pasó el 7-oct": el casillero "N° de mesa", los tests
-de pantalla del plano y las pantallas de la 9c-3)
+**Fecha:** 2026-09-26, puesto al día el 2026-10-11 (ver "Qué pasó el 11-oct": la etapa 9b, "los que faltan")
 **Rama:** `feature/v4.6-cierre-por-sesiones` (sobre la Fase 2, que sigue sin publicar)
 **Estado:** en curso. Las etapas 1 a 9 del plan de la 6.0.0 están hechas y subidas, M9 con su revisión, y también
 la **9c** entera: 9c-1 (lo que cambia el salón, solo en modo jefe), 9c-2 (tests de pantalla de los guardados del
-plano) y 9c-3 (las pantallas). Sigue la 9b. **Nada está publicado**: las PCs siguen con la 5.0.0.
+plano) y 9c-3 (las pantallas), y la **9b** ("los que faltan": deshacer y planilla solo de los últimos sorteados).
+**Ya no falta programar nada**: sigue la etapa 10, la verificación final. **Nada está publicado**: las PCs siguen
+con la 5.0.0.
 
-> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 7-oct" y "Lo que falta, en orden". El texto para pegar
+> **Para retomar:** leer "Estado de cada parte", "Qué pasó el 11-oct" y "Lo que falta, en orden". El texto para pegar
 > en otro chat está al final.
 
 > **Referencia:** `Fase 3` · `plano` · `armados` · `sorteo por bloques` · `planos_evento` · `mesas_movimientos` · `v73`
@@ -51,8 +52,10 @@ plano) y 9c-3 (las pantallas). Sigue la 9b. **Nada está publicado**: las PCs si
 | — | El casillero "N° de mesa" de Editar alumno, solo en modo jefe (decisión del 7-oct) | Sí | Sí, `938b167` (7-oct) | No hacía falta |
 | 9c-2 | Tests de pantalla de los guardados del plano: la pantalla entera montada sin base ni red | Sí | Sí, `fc7cde3`, `b324669` y `124e731` (7-oct) | Se comprobó rompiendo cada protección a propósito |
 | 9c-3 | Las pantallas: el aviso al lado de los botones, los colores del papel, Acomodar (avisos que llevan a la mesa, encabezado, barra) y los menores | Sí | Sí, `7482816`, `f877ccd`, `d3b826e`, `a358bab` y `22b95fd` (7-oct) | No hacía falta |
+| 9b | "Los que faltan": Deshacer sorteo con "solo los últimos sorteados" o "todo", y la planilla del sorteo solo de ellos, con los dos sorteos nombrados arriba | Sí | Sí, `a442e64`, `7fd8f12`, `48e658a` y `28112b6` (11-oct) | Se comprobó rompiendo diez protecciones a propósito |
 
-**Tests:** la suite entera pasa, **1.616 tests** el 7-oct, al cerrar la 9c-3 (1.553 con el casillero y la 9c-2;
+**Tests:** la suite entera pasa, **1.679 tests** el 11-oct, al cerrar la 9b (1.616 el 7-oct, al cerrar la 9c-3;
+1.553 con el casillero y la 9c-2;
 1.512 el 4-oct a la noche,
 con la 9c-1; 1.497 con la revisión de M9;
 1.466 el 3-oct, con M9 programada; 1.335 el 2-oct, al cerrar M8; 1.319 con M7; 1.275 con M6; 1.179 con M4;
@@ -60,8 +63,8 @@ con la 9c-1; 1.497 con la revisión de M9;
 cerrar M2, 984 con M3, 1.034 con M5; 854 el 27-sep; 727 al cerrar la Fase 2). `flutter analyze`: 313 avisos, los mismos de antes; ninguno es de los
 archivos nuevos.
 
-**Todo lo programado está commiteado y subido.** El working tree queda limpio. Sigue la 9b (ver
-"Lo que falta, en orden").
+**Todo lo programado está commiteado y subido.** El working tree queda limpio. Sigue la etapa 10, la verificación
+final (ver "Lo que falta, en orden").
 
 ## Qué hay programado
 
@@ -1256,6 +1259,114 @@ base, la nube ni la sincronización, y no se abrió la app.
 - En Acomodar, con el salón muy separado las mesas se dibujan chicas y sin número; por eso importa que el aviso
   lleve a la mesa y acerque.
 
+## Qué pasó el 11-oct
+
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-lively-turtle.md`. El usuario preguntó dónde habíamos
+quedado, vio la maqueta de la 9b (un widget en el chat, con los dos avisos y el papel) y aprobó el plan. Quedó con
+**1.679 tests** (63 nuevos) y el analizador en 313. **No se tocó la base, el SQL de la nube ni la sincronización**,
+y no se abrió la app.
+
+### Etapa 9b hecha: "los que faltan" (`a442e64`, `7fd8f12`, `48e658a`, `28112b6`)
+
+"Sortear a los que faltan" ya funcionaba desde la 5.0.0. Lo que no acompañaba era deshacer (borraba a toda la
+escuela) y la planilla (salía siempre entera y nombraba solo el último sorteo).
+
+**Decisiones** (las tomé yo y se las mostré en la maqueta y en el plan; aprobó sin cambios)
+
+- En el aviso de deshacer viene elegido **"Solo los últimos sorteados"**, que es lo que menos borra, y no pide
+  tilde. "Todo" la sigue pidiendo.
+- La planilla de los últimos va en **una sola hoja corrida**, agrupada por división y sin hoja de resumen.
+- Las dos opciones aparecen **solo cuando hay diferencia**: si el último sorteo es de todos los que tienen mesa, el
+  aviso es el de siempre.
+
+**1. Deshacer sorteo, con dos opciones** (`7fd8f12`). Se llega por SORTEO ▾ → "Deshacer sorteo de mesas", solo en
+modo jefe.
+
+- **Solo los últimos sorteados:** cada familia del último sorteo vuelve a como estaba antes de él.
+  - El que no tenía mesa queda sin mesa.
+  - Al que ya tenía una y el sorteo le sumó otra (compró una mesa después) **se le saca solo la sumada**.
+  - **Al que le cambiaron la mesa después de ese sorteo no se lo toca**, y el aviso lo nombra con el motivo. Si le
+    pasó a todos, la opción se ve apagada y dice por qué.
+  - A nadie más se le toca la mesa, y **los bloques de cada división quedan** (son del primer sorteo). Solo se van
+    si los últimos eran el único sorteo en pie (por ejemplo, mesas cargadas a mano y después un sorteo).
+- **Todo:** como antes.
+- Antes de deshacer se lee si la otra PC tiene mesas sin bajar (`mesasDeOtraPcSinBajar`, lo mismo que usa SORTEO):
+  si hay, avisa y no deshace. Y **si las mesas cambian con el aviso abierto, no se guarda nada**: se vuelve a leer,
+  se arma de nuevo lo que se guardaría y se compara (`LoQueSeDeshace.mismoQue`).
+- **Restaurar sorteo anterior** devuelve también este deshacer: la copia guarda lo que conservó cada uno
+  (`quedaron`), y le devuelve lo suyo solo a quien sigue exactamente como lo dejó el deshacer.
+- El Historial dice "Se deshizo el sorteo de los últimos: N familias".
+- De paso: el aviso decía que Restaurar estaba en "el menú ⋮". Desde M8 está en SORTEO ▾; ahora dice eso.
+
+**2. La planilla solo de los últimos** (`48e658a`). Se llega por PLANILLAS ▾ → "Planilla del sorteo", y por el
+botón PLANILLA del aviso "Sorteo listo".
+
+- El aviso suma **Quiénes**: "Toda la escuela" / "Solo los últimos sorteados (N)". Aparece solo si hay familias con
+  mesa que no son del último sorteo. Desde "Sorteo listo" de un sorteo de los que faltaban viene elegida la segunda.
+- La de los últimos: un solo documento corrido, el nombre de cada división arriba de su tabla
+  (`pw.NewPage(freeSpace: 70)` para que el nombre no quede solo al pie), las columnas de siempre. El archivo se
+  llama `..._ultimos.pdf`.
+- **Arriba, en las dos planillas y en el plano impreso, los sorteos nombrados**, en dos renglones contra el margen
+  derecho:
+  - "Sorteo del 12/11/2026 21:40 hs · Jefe · 128 familias"
+  - "Los que faltaban: 20/11/2026 18:05 hs · Jefe · 5 familias"
+
+  Con más de dos sorteos en pie nombra el primero y el último, y cuenta el resto ("antes, otro sorteo: 3
+  familias"). Con uno solo dice lo de siempre, sin familias. El plano impreso mide su encabezado, así que el
+  renglón de más le achica apenas el dibujo; sigue entrando en una hoja en los tres estilos (hay test).
+
+**Cómo está hecho**
+
+- **El registro anota lo que hacía falta, sin columnas nuevas** (`a442e64`, `lib/models/sorteo_mesas_registro.dart`):
+  - `antes`: en un sorteo o una restauración, qué tenía cada familia que ya tenía mesa. Sin esto, una mesa cargada
+    a mano (que el registro nunca vio) y después completada se perdía entera al deshacer;
+  - `quedan`: en un deshacer de solo los últimos, qué conserva cada uno. **Que esté, aunque vacío, es lo que dice
+    que fue parcial** (`esDeshacerDeUltimos`); en el que borra todo es `null`.
+
+  Los dos viajan **adentro del texto `resultado`**, con las claves `_antes` y `_quedan` (el id de un alumno nunca
+  empieza con guion bajo; una clave con guion bajo que la versión no conoce se ignora). No se agregó un tipo nuevo
+  porque el SQL de la nube limita `tipo` a `sorteo`, `deshacer` y `restaurar`.
+- **Los sorteos en pie** (`RegistroSorteo.sorteosEnPie`): un sorteo o una restauración se apilan; deshacer todo
+  los saca a todos; deshacer solo los últimos saca el de arriba. `RegistroSorteo.esperado` entiende el parcial.
+- **`UltimosSorteados`** (`lib/features/eventos/services/ultimos_sorteados.dart`): las familias del último sorteo
+  en pie y qué pasa al deshacer solo ese (`aGuardar`, `tenian`, `quedan`, `noSeTocan`), más cuándo hay algo que
+  elegir (`deshacerSoloCambiaAlgo`, `planillaSolaCambiaAlgo`). Una familia se revierte **solo si hoy tiene
+  exactamente lo que ese sorteo le dejó**. Un renglón sin `_antes` (no debería haber) se resuelve repasando el
+  registro hasta ese sorteo.
+- **`LoQueSeDeshace`** (mismo archivo): lo que guarda un deshacer, de todo o de los últimos. Lo usan la pantalla y
+  el test de la historia, para no tener la misma cuenta escrita dos veces.
+- Los dos avisos salieron de la pantalla a archivos propios, para probarlos y sacarles imagen:
+  `widgets/deshacer_sorteo_dialog.dart` y `widgets/opciones_planilla_sorteo_dialog.dart`.
+- En la pantalla (`detalle_evento_masivo_screen.dart`): `_deshacerSorteoMesas` (conserva `_frenaSinModoJefe`),
+  `_paraDeshacer`, `_registroSorteo` con `antes` en sus tres usos, y `_generarPlanillaSorteo`.
+
+**Los tests**
+
+- `test/sortear_a_los_que_faltan_historia_test.dart`: **la historia entera, con plano y sin plano** — el primer
+  sorteo, llegan cinco (tres nuevos, el que terminó de pagar, uno que compró otra mesa), sortear a los que faltan,
+  la planilla solo de ellos, a uno lo mudan, deshacer solo a los últimos, restaurar, deshacer de nuevo, volver a
+  sortear, deshacer todo y restaurar todo. Después de cada paso: nadie comparte mesa, los del primer sorteo no se
+  movieron ni cambiaron sus bloques, y el registro explica las mesas de hoy. Cada renglón pasa por el formato en
+  que se guarda.
+- `test/ultimos_sorteados_test.dart`, `test/deshacer_sorteo_dialog_test.dart`,
+  `test/opciones_planilla_sorteo_dialog_test.dart`, y casos nuevos en los de registro, historial, respaldo,
+  planilla y plano impreso.
+- **Se comprobó rompiendo a propósito diez protecciones** (sacarle todo al que compró otra mesa, revertir al
+  mudado, borrar siempre los bloques, que el parcial vacíe la pila, que Restaurar ignore lo que conservó cada uno,
+  que lo anotado no se guarde...): las diez las vio algún test.
+
+**Para tener en cuenta**
+
+- Las imágenes: `tool/dialogos_sorteo_muestra_test.dart` (los dos avisos) y `tool/planilla_sorteo_muestra_test.dart`
+  (suma la planilla de los últimos y la completa con dos sorteos). El usuario recibió cinco muestras;
+  **todavía no opinó**. Siguen sin su opinión las de la 9c, M7, M8 y M9.
+- La pantalla de la fiesta no se puede montar en un test (lee con Riverpod y es enorme): por eso los avisos y las
+  cuentas están afuera, y lo que queda en la pantalla es leer, comparar y guardar. `test/solo_modo_jefe_test.dart`
+  sigue cuidando que el deshacer tenga su llave.
+- Sin plano no existe "mudar con motivo": un cambio de mesa es escribirla en Editar alumno, que no deja registro.
+  A esa familia el deshacer parcial tampoco la toca (hoy no tiene lo que le dejó el sorteo).
+- "Deshacer solo los últimos" después de un Restaurar deshace lo restaurado: la restauración es el sorteo de arriba.
+
 ## Lo que falta, en orden
 
 Es el orden del plan de la 6.0.0 (`C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`), con lo
@@ -1283,11 +1394,8 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
      - 9c-3. ~~Las pantallas, los colores iguales al papel y el aviso que tapaba los botones.~~ **Hecho**
        (`7482816`, `f877ccd`, `d3b826e`, `a358bab`, `22b95fd`). Quedó una sola cosa, que pasa a la etapa 10: el
        bloque que puede contener el pasto.
-   - 9b. **Los que faltan** (confirmada el 4-oct, las dos cosas):
-     - en "Deshacer sorteo", elegir entre "solo los últimos sorteados" y "todo" (hoy borra la escuela entera). El
-       registro de sorteos tiene con qué: cada sorteo es un renglón con lo que tocó (`RegistroSorteo.esperado`);
-     - en la planilla del sorteo, la opción "solo los últimos sorteados", y arriba los dos sorteos nombrados;
-     - un test de punta a punta de la historia entera, con plano y sin plano.
+   - 9b. ~~Los que faltan: deshacer y planilla solo de los últimos sorteados, y el test de la historia entera.~~
+     **Hecho** (`a442e64`, `7fd8f12`, `48e658a`, `28112b6`). Ver "Qué pasó el 11-oct".
 10. **Verificación final:**
     - PNG y PDF de muestra para el usuario (los del plano impreso y la planilla ya los tiene, de M7; los de la
       barra, de M8);
@@ -1303,7 +1411,9 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     números de Gala en papel, los cuatro botones, `kListaPuertaHabilitada`, **lo que cambia el salón, solo en modo
     jefe** (en "Roles y permisos", con el casillero "N° de mesa") y **cómo se prueba una pantalla entera**
     (`plano_evento_screen_test.dart` y `subidaInmediataProvider`), **los colores en papel** (`TemaPlano.papel`),
-    **el aviso del plano** (`AvisoDelPlano`, no el SnackBar) y `ArmadoSalon.ultimoNumero`) y la memoria.
+    **el aviso del plano** (`AvisoDelPlano`, no el SnackBar), `ArmadoSalon.ultimoNumero` y **los que faltan**: el
+    registro con `_antes` y `_quedan` adentro de `resultado`, `UltimosSorteados`, `LoQueSeDeshace` y por qué no se
+    agrega un valor a `tipo`) y la memoria.
 12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
     windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
     texto de novedades antes de publicar.
@@ -1341,23 +1451,19 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
 Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
 entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
 docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 7-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
+"Qué pasó el 11-oct" y "Lo que falta, en orden"), el plan de la 6.0.0 en
 C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la memoria
-del proyecto. Están hechas y subidas las etapas 1 a 9 y la 9c entera: 9c-1 (lo
-que cambia el salón, solo en modo jefe), 9c-2 (tests que montan la pantalla del
-plano entera) y 9c-3 (el aviso al lado de los botones, los colores del papel
-iguales a los de la pantalla, y los arreglos de Acomodar), hasta 22b95fd. La
-suite da 1.616 tests en verde y el working tree está limpio. Sigue la etapa 9b,
-"los que faltan", ya confirmada con las dos cosas: en "Deshacer sorteo", elegir
-entre "solo los últimos sorteados" y "todo" (hoy borra las mesas de toda la
-escuela); y en la planilla del sorteo, la opción "solo los últimos sorteados",
-con los dos sorteos nombrados arriba. Más un test de punta a punta de la
-historia entera, con plano y sin plano. Es lo que cambia el salón: va solo en
-modo jefe. Mostrame antes cómo quedaría (maqueta), con cómo se llega a cada
-cosa. Después la verificación final (la migración sobre una copia de mi base,
-el control de mesas y sillas, el test de la mesa fijada alta y el del bloque
-que puede contener el pasto), la documentación de la 6.0.0, la versión y el
-build, en ese orden, una etapa por chat.
+del proyecto. Ya no falta programar nada: están hechas y subidas las etapas 1 a
+9, la 9c entera y la 9b ("los que faltan": Deshacer sorteo con "solo los últimos
+sorteados" o "todo", la planilla solo de ellos y los dos sorteos nombrados
+arriba), hasta 28112b6. La suite da 1.679 tests en verde y el working tree está
+limpio. Sigue la etapa 10, la verificación final: el test de la mesa fijada alta
+(si estira el sorteo entero) y el del bloque que puede contener el pasto en
+Técnica (la mesa agregada lleva el 151), que si confirman el problema se
+arreglan ahí; la migración v73 sobre una copia de mi base, con la app cerrada y
+mostrándome la tabla de antes y después; y el control de mesas y sillas con mis
+datos reales, para revisarlo nombre por nombre. Después la documentación de la
+6.0.0, la versión y el build, en ese orden, una etapa por chat.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
