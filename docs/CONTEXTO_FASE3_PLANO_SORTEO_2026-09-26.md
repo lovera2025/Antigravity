@@ -7,7 +7,8 @@
 la **9c** entera: 9c-1 (lo que cambia el salón, solo en modo jefe), 9c-2 (tests de pantalla de los guardados del
 plano) y 9c-3 (las pantallas), y la **9b** ("los que faltan": deshacer y planilla solo de los últimos sorteados).
 **La etapa 10, la verificación final, también está hecha**: los dos arreglos del sorteo que dejó, la migración
-probada sobre una copia de la base real y el control de mesas y sillas. Sigue la etapa 11, la documentación.
+probada sobre una copia de la base real y el control de mesas y sillas. **La etapa 12 se adelantó**: la rama está
+en la `6.0.0+57` y el instalador está armado. Faltan la documentación (etapa 11) y publicar (etapa 13).
 **Nada está publicado**: las PCs siguen con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 11-oct, a la tarde" y "Lo que falta, en orden". El
@@ -1501,6 +1502,51 @@ del plano, los tres estilos, la barra, la columna Mesa, Acomodar, el aviso de De
 Técnica, la planilla del sorteo y la de entrega. **Todavía no opinó**, ni de estas ni de las de M7, M8, M9, la 9c
 y la 9b.
 
+### La versión y el instalador (etapa 12, adelantada: `8ca3598`)
+
+Al cerrar la etapa 10 el usuario preguntó si se podía publicar ese mismo día: era domingo, sin cobros, y podía
+instalar en su PC, la del operario y la de la oficina. Se le dijo que sí y se adelantó la etapa 12. Después frenó
+("¿eso era lo que seguía? ¿no te estoy apurando y pasando por largo algo?") y se le contestó que no era lo que
+seguía (seguía la documentación) y qué se pasaba por alto: no miró las pantallas, su regla de una etapa por chat, y
+las notas operativas de abajo. Dijo que se podía seguir en el mismo chat.
+
+- `pubspec.yaml` en `6.0.0+57` e `installer/junior_eventos_setup.iss` en `6.0.0`.
+- `installer\build_installer.ps1` (build de Windows y después Inno Setup): salió
+  `installer/dist/Setup Junior Eventos v6.0.0.exe`, 33,3 MB. La carpeta `installer/dist` no va a git.
+- **No está publicado**: no hay release `v6.0.0` en GitHub y las PCs no ven nada.
+- **La nube, antes de los SQL** (11-oct, 13:45, solo lectura): 643 contratos, 3.963 pagos, 26 notas, 7 invitados y
+  30 eventos. La función `update_updated_at_column` existe y ninguna de las cinco tablas nuevas está creada.
+
+**El texto de novedades** (lo que ven los operadores en el aviso de la app; va con
+`tool/publish_windows_release.ps1 -SoloNotas -NotesFile <archivo>`):
+
+```text
+- PLANO: cada fiesta de alumnos tiene el plano de su salón, en tres estilos y con cada división en su color. Se arma a medida del playón y se imprime.
+- SORTEO: por división (cada una junta) o toda la escuela, sobre el plano. Antes se pueden fijar mesas o dejarlas libres; después, cambiar o mudar familias con motivo, y queda un Historial.
+- "Sortear" de nuevo les da mesa a los que faltaban sin mover a nadie, y "Deshacer sorteo" deja elegir solo los últimos sorteados o todo.
+- PLANILLAS: la planilla del sorteo es nueva, una hoja acostada por división, y se puede sacar solo de los últimos sorteados. También está el plano impreso.
+- ENTRADAS: retiro de entradas en la oficina, con su planilla de entrega.
+- Columna MESA: antes del sorteo dice cuántas mesas y sillas tiene cada alumno, y el filtro "Mesas y sillas" muestra quién las pagó y quién no.
+- Armar el plano, sortear, deshacer y cambiar mesas se hace solo en modo jefe.
+- El recibo reimpreso cuenta bien las cuotas, y Mi Empresa muestra lo disponible en efectivo y en transferencia.
+```
+
+### Las notas operativas que no están en la nube (no es de la 6.0.0)
+
+Apareció al contar la nube antes de los SQL: `notas_operativas_contrato` tiene **56 filas en esta PC y 26 en la
+nube**. 25 están en las dos, **31 solo en esta PC** (del 13-may al 7-sep) y 1 solo en la nube. La cola de subida de
+esta PC está vacía.
+
+- **No es nuevo.** Se auditó el 4-sep: 49 en la PC contra 31 en la nube, 18 que no iban a subir nunca. Para eso
+  está `tool/reencolar_notas_sin_subir.dart`, con la lista fija de esos 18. **No se aplicó**: la primera de la
+  lista sigue sin estar en la nube.
+- Las otras 13 estaban en la nube el 4-sep y hoy no. Lectura mía, sin confirmar: se borraron desde otra PC y el
+  borrado no cruza a esta (`docs/pendientes/borrados-que-cruzan.md`).
+- Son notas de texto sobre cuentas ("le quedó 300 a favor", "sacar mora remanente"). No cambian el saldo de nadie.
+- **No frena la publicación:** la 6.0.0 no toca cómo viajan las notas.
+- Queda para decidir con el usuario qué se hace con cada grupo. Cualquier cosa que suba o borre va por la regla de
+  las correcciones de datos: lista fija, DRY-RUN, su OK y copia.
+
 ### Para tener en cuenta
 
 - `flutter test --no-pub` evita el listado de paquetes, que tapa la salida.
@@ -1551,9 +1597,10 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     agrega un valor a `tipo`; y, de la etapa 10, **el bloque de una división es su lista de mesas**
     (`BloqueDivision.mesas`, se pregunta con `contiene` y nunca por el rango, porque el sorteo recorre las comunes
     primero y el pasto al final) y **las fijadas van aparte en el sorteo de toda la escuela**) y la memoria.
-12. **Versión y build:** `pubspec.yaml` a `6.0.0+57`, `installer/junior_eventos_setup.iss` a `6.0.0`, `flutter build
-    windows --release` e Inno Setup. El `installer.iss` de la raíz está viejo y no se usa. Mandarle al usuario el
-    texto de novedades antes de publicar.
+12. ~~Versión y build.~~ **Hecho, adelantado** (`8ca3598`): `6.0.0+57`, y el instalador en
+    `installer/dist/Setup Junior Eventos v6.0.0.exe`. El `installer.iss` de la raíz está viejo y no se usa. El texto
+    de novedades está en "Qué pasó el 11-oct, a la tarde". **Si se toca el programa antes de publicar, hay que
+    volver a armar el instalador.**
 13. **Publicar** (abajo). El usuario ya dijo "publicalo" el 30-sep; igual, los dos SQL van después de las 20 hs y con
     su OK en el momento.
 
@@ -1596,12 +1643,17 @@ no desparrama el sorteo de toda la escuela, y el bloque de cada división guarda
 sus mesas una por una). La migración v73 se probó sobre una copia de mi base y
 no cambió ni un dato, y el control de mesas y sillas está en
 build/muestras_6.0.0/mesas_y_sillas.txt. La suite da 1.697 tests en verde y el
-working tree está limpio. Sigue la etapa 11, la documentación de la 6.0.0
-(docs/CONTEXTO_v6.0.0_<fecha>.md, CLAUDE.md al día con todo lo anotado en el
-punto 11 de "Lo que falta", los pendientes y la memoria). Después la versión y
-el build (etapa 12) y publicar (etapa 13), en ese orden, una etapa por chat.
-Todavía no opiné de las muestras: preguntame si quiero cambiar algo antes del
-build.
+working tree está limpio. La versión ya está puesta (6.0.0+57, 8ca3598) y el
+instalador armado en installer/dist/Setup Junior Eventos v6.0.0.exe; si se toca
+el programa, hay que armarlo de nuevo. Faltan dos cosas: publicar (etapa 13:
+los dos SQL de la nube con mi OK, el release con el texto de novedades que está
+en "Qué pasó el 11-oct, a la tarde", e instalar primero en mi PC, después el
+operario y la oficina) y la documentación de la 6.0.0 (etapa 11:
+docs/CONTEXTO_v6.0.0_<fecha>.md, CLAUDE.md al día con todo lo anotado en el
+punto 11 de "Lo que falta", los pendientes y la memoria). Preguntame por cuál
+seguimos. Todavía no opiné de las muestras. Aparte, y sin apuro: hay 31 notas
+operativas que están en mi PC y no en la nube (ver "Las notas operativas que
+no están en la nube"); decidamos qué se hace.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
 un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
 dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
