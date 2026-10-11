@@ -8,8 +8,9 @@ la **9c** entera: 9c-1 (lo que cambia el salón, solo en modo jefe), 9c-2 (tests
 plano) y 9c-3 (las pantallas), y la **9b** ("los que faltan": deshacer y planilla solo de los últimos sorteados).
 **La etapa 10, la verificación final, también está hecha**: los dos arreglos del sorteo que dejó, la migración
 probada sobre una copia de la base real y el control de mesas y sillas. **La etapa 12 se adelantó**: la rama está
-en la `6.0.0+57` y el instalador está armado. **La documentación (etapa 11) también está hecha.** Falta publicar
-(etapa 13): ver "Lo que falta para publicar" en [CONTEXTO_v6.0.0_2026-10-11](CONTEXTO_v6.0.0_2026-10-11.md).
+en la `6.0.0+57`. **La documentación (etapa 11) también está hecha.** Falta publicar (etapa 13), y antes armar de
+nuevo el instalador, que quedó viejo con lo de las notas (`3b63b55`): ver "Lo que falta para publicar" en
+[CONTEXTO_v6.0.0_2026-10-11](CONTEXTO_v6.0.0_2026-10-11.md), **que es el punto de entrada para retomar**.
 **Nada está publicado**: las PCs siguen con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 11-oct, a la tarde" y "Lo que falta, en orden". El
@@ -1561,6 +1562,44 @@ un id fijo por alumno (`UuidUtils.notaOperativaContratoId`), y ninguno de esos 3
 - **Pidió algo de paso:** que en la app se vea **cuándo se escribió cada nota**. Hoy la fecha está en la base y
   la app no la muestra. Falta decidir si entra en la 6.0.0.
 
+### Las notas en la app (`3b63b55`)
+
+Al terminar la limpieza el usuario dijo que "está bueno ver en las notas cuándo se hicieron": la fecha estaba en
+la base y la app no la mostraba. Eligió sumarlo a la 6.0.0, y agregó "mejoralo igual, si notás algunas fallas" y
+"y en diseño igual". Quedó con **1.712 tests** (15 nuevos) y el analizador en 313.
+
+- **La nota dice cuándo se escribió** y, si se tocó después, cuándo fue la última vez
+  (`NotaOperativaContrato.cuando`), en hora de Argentina. Se ve en la hoja de la nota, debajo del texto, y al
+  pasar el mouse por el ícono de la nota en la grilla.
+  - El trigger de la nube reescribe `updated_at` también al insertar: sin un margen (cinco minutos,
+    `margenDeSubida`) toda nota que subió figuraría como modificada. Una nota escrita sin internet y subida más
+    tarde igual pasa el margen; es raro y no hay otro dato del que sacarlo.
+- **Falla encontrada: una nota con un id que no es el de la app no se podía editar ni borrar de verdad.** Las
+  notas de mora condonada de julio (siete en la nube) las escribió una herramienta con un id cualquiera. La app
+  mandaba el cambio a la nube con el id fijo del alumno, que allá no existe: la edición no llegaba a ninguna
+  otra PC y el borrado dejaba la nota en la nube, las dos cosas sin avisar. Es lo que le pasó a la nota de
+  RODRIGUEZ, que está en la nube y no en la PC de desarrollo. Ahora una nota que ya existe viaja con el id que
+  tiene (`NotasOperativasContratoRepository.idDe`). Roto a propósito: lo vieron dos tests.
+- **La nota y su subida se guardan juntas**, en una transacción (`guardarEn`, `eliminarEn`). Una nota guardada
+  sin su entrada en la cola no sube nunca y nada la reporta: es una forma en que una nota puede quedar en una
+  sola PC.
+- **Diseño.** El texto del interruptor ya no dice "el mes que viene" ("Cuando ya esté resuelto, activá esto").
+  Y quedó preparada, **sin prender**, la opción de abrir la nota como una ventana al centro en vez de la hoja de
+  abajo (`kNotaComoVentana`): el usuario recibe `build/muestras_6.0.0/Nota_dos_opciones.png` con las dos, lado
+  a lado, y **falta que elija**.
+- Preguntó si convenía que una nota resuelta "desaparezca". Se le recomendó que no se borre sola (queda el
+  registro, y marcar "resuelto" cruza bien entre PCs; borrar es lo que dejó las 14 fantasma) y se le ofreció que
+  deje de llamar la atención en la grilla. **No contestó.**
+- **No se arregló, y quedó como pendiente:** el borrado de una nota no le llega a una PC que estaba cerrada
+  (`docs/pendientes/notas-borradas-en-pc-cerrada.md`). Es agregar un camino que borra, y no se hace el día de
+  publicar.
+- Tests: `test/notas_operativas_contrato_test.dart`. Muestra: `tool/nota_operativa_muestra_test.dart`, que
+  carga las letras que la app instalada ya bajó en esta PC (Oswald y los pesos gruesos de Outfit no vienen con
+  la app: `google_fonts` las baja la primera vez) y abre la hoja en una zona propia, porque `google_fonts` avisa
+  tarde, por fuera de la prueba, por cada letra que no encuentra.
+- **El instalador que se había armado quedó viejo.** Hay que armarlo de nuevo antes de publicar.
+- Con "actualizá el contexto" el usuario pidió frenar ahí y seguir en otro chat.
+
 ### Para tener en cuenta
 
 - `flutter test --no-pub` evita el listado de paquetes, que tapa la salida.
@@ -1607,8 +1646,8 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     **Al publicar, pasar el estado del CONTEXTO de la versión a "publicada".**
 12. ~~Versión y build.~~ **Hecho, adelantado** (`8ca3598`): `6.0.0+57`, y el instalador en
     `installer/dist/Setup Junior Eventos v6.0.0.exe`. El `installer.iss` de la raíz está viejo y no se usa. El texto
-    de novedades está en "Qué pasó el 11-oct, a la tarde". **Si se toca el programa antes de publicar, hay que
-    volver a armar el instalador.**
+    de novedades está en "Qué pasó el 11-oct, a la tarde". **Ese instalador quedó viejo con lo de las notas
+    (`3b63b55`): hay que armarlo de nuevo antes de publicar**, y también si se toca algo más del programa.
 13. **Publicar** (abajo). El usuario ya dijo "publicalo" el 30-sep; igual, los dos SQL van después de las 20 hs y con
     su OK en el momento.
 
@@ -1637,35 +1676,8 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
   - qué escuelas van por división y cuáles enteras;
   - por qué Técnica usó el pasto si le sobran mesas.
 
-## Para seguir en otro chat, pegar
+## Para seguir en otro chat
 
-```text
-Seguimos con el camino a la 6.0.0 (plano del salón, sorteo por bloques,
-entradas, mesas y sillas en la grilla y las medidas del playón). Leé primero
-docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md (secciones "Estado de cada parte",
-"Qué pasó el 11-oct, a la tarde" y "Lo que falta, en orden"), el plan de la
-6.0.0 en C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md y la
-memoria del proyecto. Ya no falta programar nada y la verificación final está
-hecha: están subidas las etapas 1 a 10, hasta 2761762 (la mesa fijada lejos ya
-no desparrama el sorteo de toda la escuela, y el bloque de cada división guarda
-sus mesas una por una). La migración v73 se probó sobre una copia de mi base y
-no cambió ni un dato, y el control de mesas y sillas está en
-build/muestras_6.0.0/mesas_y_sillas.txt. La suite da 1.697 tests en verde y el
-working tree está limpio. La versión ya está puesta (6.0.0+57, 8ca3598) y el
-instalador armado en installer/dist/Setup Junior Eventos v6.0.0.exe; si se toca
-el programa, hay que armarlo de nuevo. La documentación también está hecha
-(docs/CONTEXTO_v6.0.0_2026-10-11.md y CLAUDE.md). Falta publicar (etapa 13):
-seguí los pasos de "Lo que falta para publicar" de ese CONTEXTO, frenando en
-los dos SQL de la nube y antes del release para pedirme el OK. Las pantallas
-las miré en build/muestras_6.0.0/Recorrido_6.0.0.html: preguntame qué cambio
-antes de publicar. Pedí además que en la app se vea cuándo se escribió cada
-nota de un alumno: preguntame si entra en la 6.0.0 o queda para después.
-Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con
-un commit y push por paso, y cuando te diga "actualizá el contexto" frená y
-dejá todo anotado. Mandame las imágenes y los PDF de muestra de cada
-etapa. Todo va en una sola versión, la 6.0.0: no se instala nada antes. No
-corras la app desde el working tree (la v73 migraría la base real). Ya dije
-"publicalo", pero los dos SQL de la nube van después de las 20 hs y con mi OK en
-el momento: frená ahí y recordámelo. Lo que toque la base real, después de las
-20 hs. Para volver atrás en el código está el tag antes-de-6.0.0.
-```
+El texto para pegar está al final de [CONTEXTO_v6.0.0_2026-10-11](CONTEXTO_v6.0.0_2026-10-11.md), que desde el
+11-oct es el punto de entrada: dice qué pasó ese día, qué falta para publicar y las tres cosas que el usuario
+quedó debiendo contestar. Este archivo queda como el detalle de cada parte.
