@@ -134,6 +134,13 @@ void main() {
         }
 
         lista(
+          'SIN PAGO DE LA BASE (el sorteo no le da mesa)',
+          FiltroExtras.sinPagoBase,
+          (a, e) => e.mesas.cantidad == 0
+              ? 'su mesa'
+              : 'su mesa y ${e.mesas.cantidad} agregada(s)',
+        );
+        lista(
           'Mesa agregada SIN PAGAR (el sorteo le da solo la del contrato)',
           FiltroExtras.mesaSinPagar,
           (a, e) => '${e.mesas.cantidad} agregada(s), ${_plata(e.mesas.precio)}',
