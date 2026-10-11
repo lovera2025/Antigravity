@@ -8,7 +8,8 @@ la **9c** entera: 9c-1 (lo que cambia el salón, solo en modo jefe), 9c-2 (tests
 plano) y 9c-3 (las pantallas), y la **9b** ("los que faltan": deshacer y planilla solo de los últimos sorteados).
 **La etapa 10, la verificación final, también está hecha**: los dos arreglos del sorteo que dejó, la migración
 probada sobre una copia de la base real y el control de mesas y sillas. **La etapa 12 se adelantó**: la rama está
-en la `6.0.0+57` y el instalador está armado. Faltan la documentación (etapa 11) y publicar (etapa 13).
+en la `6.0.0+57` y el instalador está armado. **La documentación (etapa 11) también está hecha.** Falta publicar
+(etapa 13): ver "Lo que falta para publicar" en [CONTEXTO_v6.0.0_2026-10-11](CONTEXTO_v6.0.0_2026-10-11.md).
 **Nada está publicado**: las PCs siguen con la 5.0.0.
 
 > **Para retomar:** leer "Estado de cada parte", "Qué pasó el 11-oct, a la tarde" y "Lo que falta, en orden". El
@@ -1584,16 +1585,10 @@ verde, commit y push, y un aviso al usuario de qué se hizo y cómo quedó.
     de la base real y el control de mesas y sillas.~~ **Hecho** (`f70fec2`, `2761762`, `8a1146e`). Ver "Qué pasó el
     11-oct, a la tarde". **Queda para cerca del sorteo:** volver a sacar el control de mesas y sillas y verlo con el
     usuario, y la migración una vez más el día de publicar.
-11. **Documentación:** `docs/CONTEXTO_v6.0.0_<fecha>.md`, CLAUDE.md al día (base v73, tablas nuevas,
-    `lib/features/plano/`, la copia con fecha, el reintento de trabados, la cola de subida, `AltoLibre`, los
-    números de Gala en papel, los cuatro botones, `kListaPuertaHabilitada`, **lo que cambia el salón, solo en modo
-    jefe** (en "Roles y permisos", con el casillero "N° de mesa") y **cómo se prueba una pantalla entera**
-    (`plano_evento_screen_test.dart` y `subidaInmediataProvider`), **los colores en papel** (`TemaPlano.papel`),
-    **el aviso del plano** (`AvisoDelPlano`, no el SnackBar), `ArmadoSalon.ultimoNumero` y **los que faltan**: el
-    registro con `_antes` y `_quedan` adentro de `resultado`, `UltimosSorteados`, `LoQueSeDeshace` y por qué no se
-    agrega un valor a `tipo`; y, de la etapa 10, **el bloque de una división es su lista de mesas**
-    (`BloqueDivision.mesas`, se pregunta con `contiene` y nunca por el rango, porque el sorteo recorre las comunes
-    primero y el pasto al final) y **las fijadas van aparte en el sorteo de toda la escuela**) y la memoria.
+11. ~~Documentación.~~ **Hecho** el 11-oct: `docs/CONTEXTO_v6.0.0_2026-10-11.md` y `CLAUDE.md` al día (la base v73 y
+    las cinco tablas, la sección "El salón: plano, sorteo y entradas", lo que cambia el salón solo en modo jefe, y
+    en "Trampas conocidas": la copia con fecha, los CHECK, la cola de subida, lo trabado en la cola y `AltoLibre`).
+    **Al publicar, pasar el estado del CONTEXTO de la versión a "publicada".**
 12. ~~Versión y build.~~ **Hecho, adelantado** (`8ca3598`): `6.0.0+57`, y el instalador en
     `installer/dist/Setup Junior Eventos v6.0.0.exe`. El `installer.iss` de la raíz está viejo y no se usa. El texto
     de novedades está en "Qué pasó el 11-oct, a la tarde". **Si se toca el programa antes de publicar, hay que
@@ -1642,13 +1637,12 @@ no cambió ni un dato, y el control de mesas y sillas está en
 build/muestras_6.0.0/mesas_y_sillas.txt. La suite da 1.697 tests en verde y el
 working tree está limpio. La versión ya está puesta (6.0.0+57, 8ca3598) y el
 instalador armado en installer/dist/Setup Junior Eventos v6.0.0.exe; si se toca
-el programa, hay que armarlo de nuevo. Faltan dos cosas: publicar (etapa 13:
-los dos SQL de la nube con mi OK, el release con el texto de novedades que está
-en "Qué pasó el 11-oct, a la tarde", e instalar primero en mi PC, después el
-operario y la oficina) y la documentación de la 6.0.0 (etapa 11:
-docs/CONTEXTO_v6.0.0_<fecha>.md, CLAUDE.md al día con todo lo anotado en el
-punto 11 de "Lo que falta", los pendientes y la memoria). Preguntame por cuál
-seguimos. Todavía no opiné de las muestras. Aparte, y sin apuro: hay 31 notas
+el programa, hay que armarlo de nuevo. La documentación también está hecha
+(docs/CONTEXTO_v6.0.0_2026-10-11.md y CLAUDE.md). Falta publicar (etapa 13):
+seguí los pasos de "Lo que falta para publicar" de ese CONTEXTO, frenando en
+los dos SQL de la nube y antes del release para pedirme el OK. Las pantallas
+las miré en build/muestras_6.0.0/Recorrido_6.0.0.html: preguntame qué cambio
+antes de publicar. Aparte, y sin apuro: hay 31 notas
 operativas que están en mi PC y no en la nube (ver "Las notas operativas que
 no están en la nube"); decidamos qué se hace.
 Trabajá por secciones: avisame cada etapa que termines y cómo quedó, con

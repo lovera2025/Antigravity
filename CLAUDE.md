@@ -12,7 +12,7 @@ con check-in por QR y un tótem que se proyecta en el salón.
 ## Antes de tocar nada: la rama
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
-rama está ~95 commits adelante y va por la v5.0.0; `main` quedó en la 2.2.0.
+rama está ~170 commits adelante y va por la v6.0.0; `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 ## Documentación del proyecto
@@ -34,7 +34,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 72) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 73) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -84,6 +84,71 @@ Empresa. No se cruza con el rol de Supabase.
 de sesión (`main.dart:567-576`), así que un permiso recién asignado no se ve
 hasta re-loguear.
 
+**Lo que cambia el salón, solo en modo jefe** (v6.0.0). Armar y personalizar el plano, sortear, deshacer, restaurar,
+cambiar o mudar familias y escribir el "N° de mesa" de Editar alumno piden modo jefe (`esRolJefeProvider`, en
+`caja_sesiones/providers/app_role_provider.dart`; no hay PIN nuevo). Sin él se ve, se imprime y se entrega.
+- **Lo bloqueado se ve, apagado y con el motivo** (`kSoloEnModoJefe`, en `common/utils/solo_jefe.dart`). Si
+  desapareciera, el operario no sabría que existe ni a quién pedírselo.
+- **Doble llave:** los botones, y `_frenaSinModoJefe()` al principio de cada función que guarda el salón, en
+  `detalle_evento_masivo_screen.dart` y `plano_evento_screen.dart`.
+- `test/solo_modo_jefe_test.dart` lee esas dos pantallas y falla si aparece un guardado del salón sin la llave.
+  **Un guardado nuevo del salón tiene que llevarla.**
+
+## El salón: plano, sorteo y entradas
+
+Todo lo de la v6.0.0 está en `lib/features/plano/` (`modelo/`, `dibujo/`, `estilos/`, `services/`, `widgets/`) y se
+abre desde la barra de la fiesta (`GrupoFiestaToolbar`: PLANO, SORTEO ▾, PLANILLAS ▾ y ENTRADAS, al lado de MÁS).
+El detalle de cada parte, con sus decisiones, está en `docs/CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md`.
+
+**Cinco tablas nuevas, todas aparte** (ver la primera trampa de abajo): `sillas_reparto`, `entradas_retiro` y
+`sorteos_mesas` (v72), `planos_evento` y `mesas_movimientos` (v73).
+- `planos_evento`: una fila por fiesta, con id fijo. Lleva la copia del armado (`armado_json`) y, en `config`
+  (JSON en texto), las mesas fijadas y libres, los bloques, los colores, los textos y las medidas.
+  **La fila sube entera**, así que antes de sortear, deshacer o restaurar se lee el plano de la nube
+  (`leerPlanoParaSortear`): con el de esta PC se pisaba lo que la otra acababa de cambiar.
+- `sorteos_mesas` y `mesas_movimientos`: **solo se agregan renglones**. Deshacer es otro renglón, nunca un borrado.
+- **No agregar un valor a `sorteos_mesas.tipo`:** el SQL de la nube lo limita a `sorteo`, `deshacer` y `restaurar`.
+  Lo nuevo del registro viaja adentro del texto `resultado`, con claves que empiezan con guion bajo (`_antes`,
+  `_quedan`); una clave así que la versión no conoce se ignora.
+
+**El sorteo sobre el plano no toca el motor.** `SorteoMesasMotor` sigue igual; `SorteoConPlano` le arma las
+entradas y traduce la salida.
+- **El sorteo no recorre las mesas por número.** `CasillerosPlano` las pone en fila: primero las comunes, por
+  número, y **el pasto al final**; en cada corte (otra hoja, mesas sueltas, un número que no existe) mete un
+  casillero fantasma, siempre ocupado, para que una familia no quede a los dos lados.
+- **Por eso el bloque de una división es su lista de mesas, no un rango.** `BloqueDivision.mesas` es la lista
+  exacta; `desde` y `hasta` son solo el número más bajo y el más alto. **Para saber si una mesa es del bloque se
+  pregunta con `contiene`, nunca comparando números.** En Técnica el pasto va del 131 al 150 y una mesa agregada a
+  mano lleva el 151: el bloque "121 a 151" no tiene ninguna mesa del pasto. El texto sale de `texto()`, por tramos
+  ("121-130 y 151").
+- **Las familias que reciben una mesa fijada van aparte**, por división y con toda la escuela junta: se quedan con
+  su fijada y, si les falta otra mesa, se les da pegada a esa. Si entran en la cuenta de "hasta qué mesa", una
+  fijada lejos estira el salón y las demás caen repartidas hasta ahí.
+- **"Sortear a los que faltan" es el mismo botón SORTEO**: completa sin mover a nadie. `UltimosSorteados` y
+  `LoQueSeDeshace` (`ultimos_sorteados.dart`) dicen quiénes son los del último sorteo y qué pasa al deshacer solo
+  ese. Una familia se revierte solo si hoy tiene exactamente lo que ese sorteo le dejó.
+- **El número de una mesa que se sacó y se guardó no se vuelve a dar** (`ArmadoSalon.ultimoNumero`): ya pudo salir
+  impreso.
+
+**En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
+botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin
+el texto de la excepción.
+
+**En papel:**
+- cada estilo lleva sus colores a la hoja (`TemaPlano.papel` y `papelNumero`): es una cuenta sobre el color de
+  pantalla, no una lista a mano;
+- **los números de Gala van en Outfit**: las cifras de su serif son de estilo antiguo, un 1 se lee como una I, y el
+  PDF no sabe pedir las alineadas.
+
+**Cómo se prueba una pantalla entera.** `test/plano_evento_screen_test.dart` monta `PlanoEventoScreen` de verdad,
+con reemplazos en memoria puestos por los mismos providers que usa la app. Es el modelo para otra pantalla que lea
+con Riverpod. Para eso `subirYa` tiene un provider delante (`subidaInmediataProvider`, en `subir_ya.dart`).
+`detalle_evento_masivo_screen.dart` no se puede montar así (son casi 10.000 líneas): lo que decide está afuera, en
+servicios y diálogos con sus tests.
+
+**Las muestras.** `tool/*_muestra_test.dart` sacan imágenes y PDF con datos inventados; todos aceptan
+`--dart-define=salida=<carpeta>`. La carpeta `build/` no va a git: sirve para dejarlas donde el usuario las abra.
+
 ## El tótem
 
 **La lista de la puerta es por evento**, y el tótem no distingue particular de masivo: lo que cambia es cómo se
@@ -98,6 +163,12 @@ carga.
   - **Hasta cerrar la RLS de `invitados` no se pasa la lista de ninguna fiesta.** Hoy cualquiera con la clave
     pública la lee y la cambia, DNI incluido. Se cierra en diciembre con el tótem, porque el tótem lee como
     anónimo ([docs/pendientes/rls-invitados.md](docs/pendientes/rls-invitados.md)).
+  - **Desde la 6.0.0 la app lo traba sola:** `kListaPuertaHabilitada = false` (`lista_puerta.dart`). El renglón de
+    MÁS queda apagado con su motivo, y un test falla si alguien prende la bandera. Pasarla a `true` es el último
+    paso de cerrar la RLS.
+
+**Recepción y el tótem nuevos están diseñados y sin programar**, para las fiestas de diciembre: son los seis
+pendientes de "Tótem y Recepción" en `docs/pendientes/PENDIENTES.md`. La 6.0.0 no los toca.
 
 **El retiro de entradas** (v72, `retiro_entradas_screen.dart`) es otra cosa: la entrega de entradas y pulseras en la
 oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados`.
@@ -139,8 +210,30 @@ históricos y la pantalla se ve como siempre.
   (`UuidUtils`), como `sillas_reparto` y `entradas_retiro` (v72). El usuario le tiene miedo a las migraciones con
   razón:
   - solo tablas nuevas, con `CREATE ... IF NOT EXISTS`;
-  - copia antes de migrar (`LocalDatabase.copiaAntesDeMigrar`);
-  - probar sobre una copia de la base real (`tool/verificar_migracion_v72_test.dart` como modelo).
+  - copia antes de migrar (`LocalDatabase.copiaAntesDeMigrar`). Si ya hay una (`antes_de_v73.db`), saca otra con
+    la fecha y la hora: reinstalar la versión vieja, seguir cobrando y volver a instalar dejaba la copia del primer
+    día. **Esa copia es la última red, no el camino para volver atrás:** restaurarla deja afuera lo cobrado después;
+  - probar sobre una copia de la base real (`tool/verificar_migracion_v73_test.dart` como modelo): compara tabla
+    por tabla, prueba la vuelta a la versión anterior y exige que la base real quede con el mismo SHA-256. La app
+    instalada tiene que estar cerrada, y se le pide al usuario: no se cierra desde acá;
+  - **volver atrás es reinstalar la versión anterior sobre la misma base**: por eso una migración no puede cambiar
+    nada de lo que la versión anterior lee.
+
+- **Las tablas que se sincronizan no llevan CHECK nuevos en la nube.** El motor toma cualquier "violates" como un
+  padre que falta: reencola el evento y la fila queda trabada para siempre. Los valores válidos los controla la
+  app, y un test compara el SQL con lo que la app manda. (El SQL de la Fase 2 sí tiene CHECK en
+  `sorteos_mesas.tipo`, en `entradas_retiro.estado` y en las cantidades: por eso no se les agrega un valor.)
+
+- **Un cambio hecho mientras sube el anterior no se puede perder.** `SyncQueue.enqueue` no agrega una segunda
+  entrada para un registro que ya está en la cola: reescribe la que hay. Si pasaba durante la subida, al terminar
+  se borraba la entrada con el cambio nuevo adentro: la nube con el dato viejo, la PC con el nuevo y nada en la
+  cola. Por eso `markCompleted(id, leidaCon:)` saca la entrada solo si sigue siendo la que se leyó. Estaba en la
+  5.0.0; lo encontró una revisión, no un incidente.
+
+- **Lo trabado en la cola se reintenta todo junto** (`entradasDeEstaPasada`, en `sync_engine.dart`). Antes el
+  primer trabado sellaba la hora y los demás no entraban: uno que no podía subir —una tabla que todavía no existe
+  en la nube— le sacaba el turno a un pago. **Por eso el SQL de la nube se corre antes de instalar** una versión
+  con tablas nuevas.
 
 - **Nada se borra de la base local salvo que alguien lo haya borrado a mano.**
   Un `DELETE` local solo es legítimo si viene con nombre y apellido —una lista
@@ -200,6 +293,11 @@ históricos y la pantalla se ve como siempre.
   ARGUELLO, TOMAS daba $30.000 de base pagados según el contrato y no tenía ningún pago. Lo que manda es
   `grossHistoricoClaseCobro(pagos, clase)` (`cobro_abono_acumulado.dart`), lo mismo que usa el recálculo del saldo.
   El sorteo de la v5.0.0 decide así (`pago_para_sorteo.dart`).
+- **En un PDF, una columna de renglones dentro de una celda de tabla puede perder el último, sin avisar.** El
+  paquete arma cada fila dos veces y, en la segunda, le da a la celda como tope exactamente lo que mide; si la suma
+  de los renglones lo pasa por un redondeo, deja el último "para la hoja siguiente" y no lo dibuja. Así no salía
+  "PASTO · avisar" ni el último acompañante. Se arregla envolviendo el contenido de la celda en `AltoLibre`
+  (`planilla_tema.dart`). La planilla del sorteo es la única tabla con `TableCellVerticalAlignment.full`.
 - **Realtime no cubre todas las tablas.** Verificar con `pg_publication_tables`
   antes de suscribirse: varias tablas no están en la publicación
   `supabase_realtime`.
@@ -212,12 +310,18 @@ históricos y la pantalla se ve como siempre.
 
 ## Archivos grandes
 
-`finanzas_view.dart` (~6500), `totem_display.dart` (~1900),
-`totem_panel.dart` (~1500), `local_database.dart` (~1200 con todas las
-migraciones). Leer por tramos, no enteros.
+`detalle_evento_masivo_screen.dart` (~9900), `pdf_service.dart` (~8800),
+`finanzas_view.dart` (~7600), `local_database.dart` (~3500 con todas las
+migraciones), `plano_evento_cuerpo.dart` (~2200), `totem_display.dart` (~2200),
+`totem_panel.dart` (~1500). Leer por tramos, no enteros.
 
 ## SQL
 
 Las migraciones se versionan en `supabase/` y se corren a mano en el SQL Editor.
 No hay CLI de Supabase configurado. Convención: cada sentencia riesgosa lleva su
-`ROLLBACK` escrito arriba, comentado.
+`ROLLBACK` escrito arriba, comentado, y el archivo termina con las consultas de
+verificación: los conteos de antes y después, que tienen que dar igual.
+
+**Los SQL de una versión se corren antes de instalarla**, después de las 20 hs y
+con el OK del usuario en el momento. Sin las tablas en la nube, lo que se cargue
+en las PCs queda trabado en la cola.
