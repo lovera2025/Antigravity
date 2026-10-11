@@ -58,6 +58,7 @@ import 'services/reparto_de_sillas.dart';
 import 'services/respaldo_sorteo.dart';
 import 'services/salon_mesas.dart';
 import 'services/sorteo_mesas_motor.dart';
+import 'services/ultimos_sorteados.dart';
 import '../../core/services/connectivity_service.dart';
 import '../recepcion/repositories/invitados_repository.dart';
 import '../recepcion/services/lista_puerta.dart';
@@ -3843,7 +3844,11 @@ class _DetalleEventoMasivoScreenState
       };
       await repo.asignarNumerosMesa(
         numeros,
-        registro: _registroSorteo(TipoRegistroSorteo.sorteo, numeros),
+        registro: _registroSorteo(
+          TipoRegistroSorteo.sorteo,
+          numeros,
+          antes: UltimosSorteados.antesDe(alumnos, numeros),
+        ),
       );
       await ref
           .read(cajaAutoSyncServiceProvider)
@@ -3962,7 +3967,11 @@ class _DetalleEventoMasivoScreenState
       for (final e in resultado.asignaciones.entries)
         e.key: MesasExtraUtils.formatearAsignacionMesas(e.value),
     };
-    final registro = _registroSorteo(TipoRegistroSorteo.sorteo, numeros);
+    final registro = _registroSorteo(
+      TipoRegistroSorteo.sorteo,
+      numeros,
+      antes: UltimosSorteados.antesDe(alumnos, numeros),
+    );
     final planoNuevo = plano.copyWith(
       modoSorteo: config.modo,
       config: plano.config.copyWith(
@@ -4290,16 +4299,22 @@ class _DetalleEventoMasivoScreenState
   }
 
   /// El renglón de `sorteos_mesas` para un sorteo, un deshacer o una
-  /// restauración: qué quedó (o qué se sacó), quién y cuándo.
+  /// restauración: qué quedó (o qué se sacó), quién y cuándo. Un sorteo y una
+  /// restauración anotan además lo que ya tenía cada uno ([antes]), para poder
+  /// deshacer solo ese renglón.
   SorteoMesasRegistro _registroSorteo(
     TipoRegistroSorteo tipo,
-    Map<String, String> numeros,
-  ) =>
+    Map<String, String> numeros, {
+    Map<String, String>? antes,
+    Map<String, String>? quedan,
+  }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
         eventoId: widget.evento.id,
         tipo: tipo,
         resultado: numeros,
+        antes: antes,
+        quedan: quedan,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );
@@ -4367,7 +4382,11 @@ class _DetalleEventoMasivoScreenState
       final bloques = RespaldoSorteo.bloquesARestaurar(respaldo, planoHoy);
       await repo.asignarNumerosMesa(
         plan.aRestaurar,
-        registro: _registroSorteo(TipoRegistroSorteo.restaurar, plan.aRestaurar),
+        registro: _registroSorteo(
+          TipoRegistroSorteo.restaurar,
+          plan.aRestaurar,
+          antes: UltimosSorteados.antesDe(alumnos, plan.aRestaurar),
+        ),
         plano: bloques == null
             ? null
             : planoHoy!.copyWith(

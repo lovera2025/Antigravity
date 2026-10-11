@@ -38,7 +38,8 @@ class RegistroSorteo {
   /// ([movimientos]). Quien no figura no debería tener ninguna.
   ///
   /// Un sorteo o una restauración dejan los números de cada alumno que tocaron;
-  /// un deshacer se los saca; un cambio de mesa deja los que dice su `despues`.
+  /// un deshacer se los saca (el de solo los últimos sorteados deja a cada uno
+  /// lo que dice su `quedan`); un cambio de mesa deja los que dice su `despues`.
   static Map<String, Set<int>> esperado(
     List<SorteoMesasRegistro> registros, [
     List<MovimientoMesas> movimientos = const [],
@@ -58,7 +59,13 @@ class RegistroSorteo {
                 esperado[e.key] =
                     MesasExtraUtils.numerosMesaDesdeTexto(e.value).toSet();
               case TipoRegistroSorteo.deshacer:
-                esperado.remove(e.key);
+                final queda =
+                    MesasExtraUtils.numerosMesaDesdeTexto(r.quedan?[e.key]);
+                if (queda.isEmpty) {
+                  esperado.remove(e.key);
+                } else {
+                  esperado[e.key] = queda;
+                }
             }
           }
         },
