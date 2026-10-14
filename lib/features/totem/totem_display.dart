@@ -17,7 +17,9 @@ import '../../models/invitado.dart';
 import '../../models/totem_config.dart';
 import '../../../main.dart' show kWebBaseUrl;
 import 'providers/totem_config_provider.dart';
+import 'services/bienvenidas_totem.dart';
 import 'totem_orientation.dart';
+import 'widgets/aviso_sin_internet.dart';
 
 class TotemDisplay extends ConsumerStatefulWidget {
   final String eventoId;
@@ -72,7 +74,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   late final AnimationController _pulseCtrl;
   late final AnimationController _particleCtrl;
   late final AnimationController _shimmerCtrl;
-  late final AnimationController _handshakeCtrl; // Nueva animación de apertura
+  late final AnimationController _aperturaCtrl;
 
   late final Animation<double> _bgFade;
   late final Animation<double> _goldBloom;
@@ -83,25 +85,26 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   late final Animation<Offset> _titleSlide;
   late final Animation<double> _nameReveal;
   late final Animation<Offset> _mesaSlide;
-  late final Animation<double> _handshakeFade;
-  late final Animation<double> _handshakeScale;
+  late final Animation<double> _aperturaFade;
 
   // ── Stream / cola ──────────────────────────────────────────────────────────
   StreamSubscription<List<Invitado>>? _sub;
   RealtimeChannel? _broadcastChannel;
   
-  final _queue = <Invitado>[];
-  final _processedIds = <String>{};
-  Invitado? _current;
-  bool _initialized = false;
+  /// La lista de los que llegaron, la cola de bienvenidas y si se viene
+  /// pudiendo leer la nube. A quién se saluda lo decide esto, no la pantalla:
+  /// tiene sus tests en `test/bienvenidas_totem_test.dart`.
+  final _sala = IngresosTotem();
+  List<Invitado> get _queue => _sala.cola;
 
-  // ── Lista ingresados ───────────────────────────────────────────────────────
-  final _ingresados = <Invitado>[];   // orden: más recientes primero
+  /// Orden: más recientes primero.
+  List<Invitado> get _ingresados => _sala.ingresados;
+
+  Invitado? _current;
   final _recentIds = <String>{};      // destacados con brillo dorado
 
   // ── Timers ─────────────────────────────────────────────────────────────────
   Timer? _displayTimer;
-  Timer? _cleanupTimer;
 
   /// Reconciliación periódica contra la base.
   ///
@@ -122,7 +125,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   // ── Reconexión ────────────────────────────────────────────────────────────
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
-  bool _isConnected = true;
 
   late final SupabaseService svc;
 
@@ -133,7 +135,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     svc = widget.svc ?? SupabaseService();
     _setupAnimations();
     _connect();
-    _startCleanupTimer();
     _setupInterWindowChannel();
     _cargarOrientacion();
     _programarOcultadoControles();
@@ -247,7 +248,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
           if (call.arguments != null && !_pausado) {
             final data = jsonDecode(call.arguments as String);
             final guest = Invitado.fromJson(data);
-            _handleManualIncoming(guest);
+            _handleManualIncoming(guest, porElPuente: true);
           }
           return null;
         case 'guest_removed':
@@ -297,17 +298,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
 
     setState(() {
       _eventoId = nuevo;
-      _queue.clear();
-      _processedIds.clear();
-      _ingresados.clear();
+      // Como recién abierto: la primera lectura del evento nuevo va en
+      // silencio, y la gente que ya había ingresado aparece sin bienvenida.
+      _sala.reiniciar();
       _recentIds.clear();
       _current = null;
-      // `false` es lo que evita re-animar bienvenidas: la primera pasada por
-      // `_onData` puebla la lista y llena `_processedIds` sin encolar nada, así
-      // que la gente ya ingresada del evento nuevo aparece en silencio.
-      _initialized = false;
       _reconnectAttempts = 0;
-      _isConnected = true;
       // Evita un frame con el branding del evento anterior.
       _cfg = TotemConfig.defaults(nuevo);
     });
@@ -333,7 +329,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     _entryCtrl.reset();
     setState(() {
       _pausado = true;
-      _queue.clear();
+      _sala.pausar();
       _current = null;
     });
   }
@@ -344,12 +340,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     if (!_pausado || !mounted) return;
     setState(() {
       _pausado = false;
-      _initialized = false;
-      _processedIds.clear();
-      _ingresados.clear();
+      _sala.reiniciar();
       _recentIds.clear();
       _reconnectAttempts = 0;
-      _isConnected = true;
     });
     _connect();
   }
@@ -377,23 +370,20 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     }
   }
 
-  void _handleManualIncoming(Invitado guest) {
+  /// Un ingreso que llega por un aviso, sin esperar a la nube: por el puente
+  /// entre ventanas ([porElPuente], lo marcó esta misma PC) o por el canal de
+  /// avisos (lo marcó otra PC o un celular).
+  void _handleManualIncoming(Invitado guest, {bool porElPuente = false}) {
     if (!mounted) return;
-    if (_processedIds.contains(guest.id)) return;
-    
-    _queue.add(guest);
-    _processedIds.add(guest.id);
-    setState(() => _ingresados.insert(0, guest));
-    
-    if (_current == null) _showNext();
+    var nuevo = false;
+    setState(() => nuevo = _sala.aviso(guest, porElPuente: porElPuente));
+    if (nuevo && _current == null) _showNext();
   }
 
   void _handleListReset() {
     if (!mounted) return;
     setState(() {
-      _ingresados.clear();
-      _queue.clear();
-      _processedIds.clear();
+      _sala.vaciar();
       _recentIds.clear();
       _current = null;
     });
@@ -491,23 +481,15 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
       curve: const Interval(0.72, 1.0, curve: Curves.easeOutBack),
     ));
 
-    // Handshake
-    _handshakeCtrl = AnimationController(
+    // Apertura: la pantalla aparece de a poco desde el negro del fondo.
+    _aperturaCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 900),
     );
-
-    _handshakeFade = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 70),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
-    ]).animate(CurvedAnimation(parent: _handshakeCtrl, curve: Curves.easeInOut));
-
-    _handshakeScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.8, end: 1.0), weight: 40),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 60),
-    ]).animate(CurvedAnimation(parent: _handshakeCtrl, curve: Curves.easeOutCubic));
-
-    _handshakeCtrl.forward();
+    _aperturaFade = Tween(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _aperturaCtrl, curve: Curves.easeOut),
+    );
+    _aperturaCtrl.forward();
   }
 
   // ── Conexión y datos ───────────────────────────────────────────────────────
@@ -545,10 +527,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
         _broadcastChannel!.subscribe();
       }
 
-      setState(() {
-        _isConnected = true;
-        _reconnectAttempts = 0;
-      });
+      // Acá no se da por conectado: eso lo dice la primera lectura que llega
+      // (`_onData`). Dándolo por bueno al intentar, la espera entre reintentos
+      // volvía siempre a 2 segundos y el aviso de conexión parpadeaba.
 
       // Al (re)conectar, repoblar de una. El stream solo avisa de lo que pasa
       // de acá en adelante: si estuvimos caídos treinta segundos, todo lo que
@@ -572,26 +553,38 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   /// Vuelve a leer los invitados del evento y los pasa por el mismo camino que
   /// el stream.
   ///
-  /// Reutiliza [_onData] a propósito: ahí vive el guard de `_processedIds` que
-  /// evita volver a disparar la bienvenida de gente que ya entró. Si esto
+  /// Reutiliza [_onData] a propósito: por ahí pasa todo lo que se lee, y es lo
+  /// que evita volver a disparar la bienvenida de gente que ya entró. Si esto
   /// armara la lista por su cuenta, cada minuto se llenaría la pantalla de
   /// saludos repetidos.
   Future<void> _reconciliar() async {
-    if (!mounted || _eventoId.length != 36) return;
+    if (!mounted || _pausado || _eventoId.length != 36) return;
+    final evento = _eventoId;
+    final List<dynamic> filas;
     try {
-      final filas = await svc.client
+      filas = await svc.client
           .from('invitados')
           .select()
-          .eq('evento_id', _eventoId)
+          .eq('evento_id', evento)
           .order('nombre_completo');
+    } catch (e) {
+      debugPrint('Reconciliación del tótem falló: $e');
+      // No poder leer es un corte, aunque el stream no haya dado error: es lo
+      // que pasa cuando la conexión queda muda.
+      if (mounted && !_pausado && evento == _eventoId) _onError(e);
+      return;
+    }
 
-      if (!mounted) return;
-      final invitados = (filas as List)
+    // Mientras se esperaba la respuesta pudo cambiar el evento o esconderse la
+    // ventana: esa lectura ya no es de lo que se está mostrando.
+    if (!mounted || _pausado || evento != _eventoId) return;
+    try {
+      final invitados = filas
           .map((f) => Invitado.fromJson(f as Map<String, dynamic>))
           .toList();
       _onData(invitados);
     } catch (e) {
-      debugPrint('Reconciliación del tótem falló: $e');
+      debugPrint('Reconciliación del tótem: no se pudo leer una fila: $e');
     }
   }
 
@@ -602,84 +595,38 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   void _handleGuestRemoved(String invitadoId) {
     if (!mounted) return;
     setState(() {
-      _ingresados.removeWhere((i) => i.id == invitadoId);
-      _queue.removeWhere((i) => i.id == invitadoId);
-      _processedIds.remove(invitadoId);
+      _sala.baja(invitadoId);
       _recentIds.remove(invitadoId);
       if (_current?.id == invitadoId) _current = null;
     });
   }
 
+  /// Una lectura completa de los invitados, del stream o de la relectura.
+  ///
+  /// A quién se saluda, a quién se pone en la lista callado y a quién se saca
+  /// lo decide [IngresosTotem]. Acá solo se le cuenta que se leyó.
   void _onData(List<Invitado> invitados) {
     if (!mounted) return;
-
-    if (!_initialized) {
-      // Primera carga: poblar lista y processedIds sin disparar bienvenidas.
-      final yaIngresados = invitados
-          .where((i) => i.estadoIngreso == EstadoIngreso.ingresado)
-          .toList();
-      for (var inv in yaIngresados) {
-        _processedIds.add(inv.id);
-      }
-      setState(() {
-        _ingresados
-          ..clear()
-          ..addAll(yaIngresados.reversed); // más recientes al fondo en carga inicial
-      });
-      _initialized = true;
-      if (!_isConnected) setState(() => _isConnected = true);
-      return;
-    }
-
-    // Cargas siguientes: detectar nuevos ingresos.
-    for (var invitado in invitados) {
-      if (invitado.estadoIngreso == EstadoIngreso.ingresado &&
-          !_processedIds.contains(invitado.id)) {
-        if (_current?.id == invitado.id) continue;
-        if (_queue.any((i) => i.id == invitado.id)) continue;
-        _queue.add(invitado);
-        _processedIds.add(invitado.id);
-
-        // Agregar al inicio de la lista (más reciente primero)
-        setState(() => _ingresados.insert(0, invitado));
-      }
-    }
-
-    // Remover los que ya no están en la lista (vaciar lista o deshacer ingreso)
-    final actualesIngresadosIds = invitados
-        .where((i) => i.estadoIngreso == EstadoIngreso.ingresado)
-        .map((i) => i.id)
-        .toSet();
-
-    if (_ingresados.any((inv) => !actualesIngresadosIds.contains(inv.id))) {
-      setState(() {
-        _ingresados.removeWhere((inv) => !actualesIngresadosIds.contains(inv.id));
-        _processedIds.removeWhere((id) => !actualesIngresadosIds.contains(id));
-      });
-    }
-
-    if (_current == null && _queue.isNotEmpty) _showNext();
-
-    if (!_isConnected) {
-      setState(() => _isConnected = true);
+    setState(() {
+      _sala.leyo(invitados, ahora: DateTime.now(), enPantalla: _current?.id);
       _reconnectAttempts = 0;
-    }
+    });
+    if (_current == null && _queue.isNotEmpty) _showNext();
   }
 
   void _onError(dynamic error) {
     debugPrint('Stream error: $error');
-    if (!mounted) return;
-    setState(() => _isConnected = false);
+    if (!mounted || _pausado) return;
+    final estabaConectado = _sala.conectado;
+    _sala.noPudoLeer(DateTime.now());
+    if (estabaConectado) setState(() {});
     _reconnectWithBackoff();
   }
 
   void _reconnectWithBackoff() {
     _reconnectTimer?.cancel();
-    const baseDelay = 2;
-    const maxDelay = 32;
-    final delay = (baseDelay * (1 << _reconnectAttempts)).clamp(baseDelay, maxDelay);
-    _reconnectTimer = Timer(Duration(seconds: delay), () {
-      if (!mounted) return;
+    _reconnectTimer = Timer(esperaDeReintento(_reconnectAttempts), () {
+      if (!mounted || _pausado) return;
       _reconnectAttempts++;
       _connect();
     });
@@ -714,29 +661,19 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     });
   }
 
-  void _startCleanupTimer() {
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (_processedIds.length > 1000) {
-        final toRemove = _processedIds.length - 500;
-        _processedIds.removeAll(_processedIds.take(toRemove));
-      }
-    });
-  }
-
   @override
   void dispose() {
     _broadcastChannel?.unsubscribe();
     _sub?.cancel();
     _displayTimer?.cancel();
     _reconnectTimer?.cancel();
-    _cleanupTimer?.cancel();
     _ocultarControlesTimer?.cancel();
     _reconciliarTimer?.cancel();
     _entryCtrl.dispose();
     _pulseCtrl.dispose();
     _particleCtrl.dispose();
     _shimmerCtrl.dispose();
-    _handshakeCtrl.dispose();
+    _aperturaCtrl.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -796,8 +733,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
                 ),
 
               if (_current != null) _buildWelcomeCard(constraints),
-              _buildHandshakeOverlay(),
-              _buildConnectionIndicator(),
+              _buildApertura(),
               _buildStatsIndicator(),
               _buildFloatingControls(context),
             ],
@@ -826,58 +762,20 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     return base.clamp(0.7, 1.8).toDouble();
   }
 
-  Widget _buildHandshakeOverlay() {
+  /// La pantalla aparece de a poco desde el negro del fondo.
+  ///
+  /// Antes acá había un cartel "ESTABLECIENDO CONEXIÓN" con otra marca: se
+  /// mostraba igual sin internet, y no establecía nada.
+  Widget _buildApertura() {
     return AnimatedBuilder(
-      animation: _handshakeCtrl,
+      animation: _aperturaCtrl,
       builder: (context, child) {
-        if (_handshakeFade.value <= 0) return const SizedBox.shrink();
-        
-        return Opacity(
-          opacity: _handshakeFade.value,
-          child: Container(
-            color: const Color(0xFFF2F0EB), // Gris Perla
-            child: Center(
-              child: Transform.scale(
-                scale: _handshakeScale.value,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(30),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _gold.withValues(alpha: 0.2), width: 1),
-                      ),
-                      child: Image.asset(
-                        'assets/icons/logo-transparent-final.png',
-                        width: 180,
-                        height: 180,
-                        color: _gold,
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                    Text(
-                      'ESTABLECIENDO CONEXIÓN'.toUpperCase(),
-                      style: GoogleFonts.oswald(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 4,
-                        color: _gold.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'JUNIOR EVENTOS • ELITE SYSTEM',
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        letterSpacing: 2,
-                        color: Colors.black.withValues(alpha: 0.2),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        if (_aperturaFade.value <= 0) return const SizedBox.shrink();
+        return Positioned.fill(
+          child: IgnorePointer(
+            child: ColoredBox(
+              color: const Color(0xFF050505)
+                  .withValues(alpha: _aperturaFade.value),
             ),
           ),
         );
@@ -885,7 +783,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     );
   }
 
-  /// Barra flotante: girar y salir.
+  /// Barra flotante: girar y salir, y el aviso de que no hay internet.
+  ///
+  /// El aviso va acá y no a la vista del salón: es para quien opera el tótem.
   ///
   /// Cubre toda la pantalla con un detector transparente para que cualquier
   /// movimiento del mouse o toque los traiga de vuelta, y a los 5 segundos se
@@ -911,6 +811,16 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (!_sala.conectado) ...[
+                        Flexible(
+                          child: AvisoSinInternet(
+                            // Solo la ventana del tótem tiene puente con
+                            // Recepción; en la web y embebido no hay.
+                            conPuente: widget.windowId != null,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
                       _ControlPill(
                         icono: Icons.screen_rotation_rounded,
                         etiqueta: _orientacion.etiqueta,
@@ -1554,42 +1464,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  // ── Indicador de conexión ──────────────────────────────────────────────────
-
-  Widget _buildConnectionIndicator() {
-    return Positioned(
-      // Debajo de la barra de controles, que ocupa la esquina superior derecha.
-      top: 68,
-      right: 16,
-      child: AnimatedOpacity(
-        opacity: _isConnected ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 300),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.redAccent.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.cloud_off_rounded, color: Colors.white, size: 14),
-              const SizedBox(width: 6),
-              Text(
-                'Reconectando...',
-                style: GoogleFonts.outfit(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
