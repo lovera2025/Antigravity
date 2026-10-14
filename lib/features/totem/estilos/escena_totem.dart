@@ -88,6 +88,11 @@ class EscenaTotem extends StatefulWidget {
   /// Lo que tarda en irse. Quien la usa espera esto antes de la siguiente.
   static const salida = Duration(milliseconds: 700);
 
+  /// El camino en el plano empieza a dibujarse cuando la tarjeta ya casi
+  /// entró, y tarda esto.
+  static const caminoEmpieza = Duration(milliseconds: 900);
+  static const caminoDura = Duration(milliseconds: 1600);
+
   /// Cuántas veces se armó el plano de una llegada. Solo los tests: se arma
   /// una vez por llegada, no en cada cuadro.
   @visibleForTesting
@@ -290,6 +295,17 @@ class _EscenaTotemState extends State<EscenaTotem>
     );
   }
 
+  /// Cuánto se dibujó del camino, de 0 a 1: arranca cuando la tarjeta ya
+  /// entró ([EscenaTotem.caminoEmpieza]) y tarda [EscenaTotem.caminoDura].
+  /// Quieta, entero.
+  double get _progresoCamino {
+    final a = widget.empezo;
+    if (widget.quieta || a == null) return 1;
+    final ms = DateTime.now().difference(a).inMilliseconds -
+        EscenaTotem.caminoEmpieza.inMilliseconds;
+    return (ms / EscenaTotem.caminoDura.inMilliseconds).clamp(0.0, 1.0);
+  }
+
   /// La llegada con el plano: en una pantalla vertical, la llegada arriba y el
   /// plano abajo; apaisada, la llegada a la izquierda y el plano a la derecha.
   /// Abajo de todo quedan "N más en camino" y la línea del tiempo.
@@ -337,6 +353,7 @@ class _EscenaTotemState extends State<EscenaTotem>
               borde: d.color,
               u: u,
               animar: !widget.quieta,
+              progresoCamino: _progresoCamino,
             ),
           ),
         ),
@@ -454,7 +471,8 @@ abstract class EscenaEstilo {
 // ── Piezas comunes ─────────────────────────────────────────────────────────
 
 /// El plano en la llegada: la hoja de la mesa de la familia, con su mesa
-/// encendida, en el tema de la apariencia ([temaPlanoDelTotem]).
+/// encendida y el camino desde el ingreso, en el tema de la apariencia
+/// ([temaPlanoDelTotem]).
 class PanelPlano extends StatelessWidget {
   final PlanoDeLaLlegada guia;
   final TemaPlano tema;
@@ -466,6 +484,9 @@ class PanelPlano extends StatelessWidget {
   /// False: quieto (tests y muestras).
   final bool animar;
 
+  /// Cuánto se dibujó del camino desde el ingreso, de 0 a 1.
+  final double progresoCamino;
+
   const PanelPlano({
     super.key,
     required this.guia,
@@ -473,6 +494,7 @@ class PanelPlano extends StatelessWidget {
     required this.borde,
     required this.u,
     this.animar = true,
+    this.progresoCamino = 1,
   });
 
   @override
@@ -495,6 +517,8 @@ class PanelPlano extends StatelessWidget {
           tema: tema,
           estado: guia.estado,
           resaltadas: guia.mesas,
+          ruta: guia.ruta,
+          progresoRuta: progresoCamino,
           animar: animar,
         ),
       ),

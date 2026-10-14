@@ -1,11 +1,16 @@
+import 'dart:ui' show Offset;
+
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../plano/modelo/estado_plano.dart';
+import 'camino_a_la_mesa.dart';
 
 /// Lo que el tótem dibuja del salón cuando llega una familia de un evento
-/// masivo: la hoja de su mesa, con su mesa (o sus mesas) encendida.
+/// masivo: la hoja de su mesa, con su mesa (o sus mesas) encendida y el
+/// camino desde el ingreso.
 ///
-/// Sin pantalla ni base. Lo arma la escena una vez por llegada.
+/// Sin pantalla ni base. Lo arma la escena una vez por llegada: el camino se
+/// busca.
 class PlanoDeLaLlegada {
   final ArmadoSalon armado;
 
@@ -23,12 +28,17 @@ class PlanoDeLaLlegada {
   /// y dos ocupantes en una mesa son un "conflicto".
   final EstadoPlano estado;
 
+  /// El camino desde el ingreso hasta el borde de la mesa principal, en
+  /// coordenadas del plano ([CaminoALaMesa]). Null: la hoja no tiene ingreso.
+  final List<Offset>? ruta;
+
   const PlanoDeLaLlegada._({
     required this.armado,
     required this.hoja,
     required this.mesas,
     required this.principal,
     required this.estado,
+    required this.ruta,
   });
 
   /// La división con que va la familia: el tema del tótem le da el color del
@@ -65,6 +75,7 @@ class PlanoDeLaLlegada {
       },
       principal: principal,
       estado: EstadoPlano.desde(armado: armado, ocupantes: [familia]),
+      ruta: CaminoALaMesa.trazar(armado, principal),
     );
   }
 }

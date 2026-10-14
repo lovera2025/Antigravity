@@ -295,6 +295,10 @@ void main() {
           final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
           expect(vista.resaltadas, {12});
           expect(vista.hoja, salon.mesa(12)!.hoja);
+          // El salón de la Normal tiene marcado el ingreso: va el camino,
+          // entero porque la escena está quieta.
+          expect(vista.ruta, isNotNull);
+          expect(vista.progresoRuta, 1);
           // Lo de la llegada sigue estando.
           expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
           expect(find.text('10 sillas (8 + 2 extra)'), findsOneWidget);
@@ -338,6 +342,34 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byType(PanelPlano), findsNothing);
       }
+    });
+
+    testWidgets('el camino se dibuja de a poco después de la entrada',
+        (tester) async {
+      Future<double> progresoCon(DateTime empezo) async {
+        await _montar(
+          tester,
+          EscenaTotem(
+            estilo: EstiloTotem.neon,
+            cfg: _masivo,
+            llegada: _llegada(familia),
+            claveLlegada: empezo,
+            empezo: empezo,
+            fin: empezo.add(const Duration(seconds: 7)),
+            plano: salon,
+          ),
+        );
+        await tester.pump(EscenaTotem.entrada);
+        return tester.widget<VistaPlano>(find.byType(VistaPlano)).progresoRuta;
+      }
+
+      // La escena mide con el reloj de verdad: recién empezada, nada; a los
+      // 3 s, entero.
+      expect(await progresoCon(DateTime.now()), lessThan(0.5));
+      expect(
+        await progresoCon(DateTime.now().subtract(const Duration(seconds: 3))),
+        1,
+      );
     });
 
     testWidgets('en la espera no hay plano', (tester) async {
