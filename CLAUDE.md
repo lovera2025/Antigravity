@@ -296,6 +296,24 @@ PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve
   - se prueba entera con `test/helpers/personalizar_en_memoria.dart`, y `PersonalizarTotem.elegirFoto` reemplaza al
     selector de archivos.
 
+**El plano en la llegada** (v6.0.0, sección 4). Cuando llega una familia de un masivo sorteado, la llegada va arriba
+(a la izquierda en una tele horizontal) y abajo el salón con su mesa encendida y el camino desde el Ingreso.
+- **Datos:** el armado viaja en la ficha (`FichaTotem.plano`). `armarFichaTotem` lo lee con `leerPlano`, y
+  `TotemLocal` con `planoDelEventoProvider`.
+- **Lo que decide**, sin pantalla:
+  - `PlanoDeLaLlegada` arma la hoja, las mesas y **un solo ocupante, la familia**: uno por fila de la puerta da
+    "conflicto";
+  - `CaminoALaMesa` busca el paso (A* en una grilla de medio radio, sin pisar mesas con sus sillas, escenario,
+    pasarela, barras, cajas ni baños), sale del sector "Ingreso" o de `armado.ingreso` y, sin paso, va recto.
+- **Cómo se dibuja:**
+  - la escena arma la guía **una vez por llegada** (`EscenaTotem.planosArmados`);
+  - los temas salen de `temaPlanoDelTotem`, **guardados por apariencia y color**: `TemaPlano` no tiene `==` y uno
+    nuevo por cuadro redibuja el salón.
+- **Ojo con `withValues(alpha: x)`: fija la transparencia, no la multiplica.** Para aclarar un color que ya es
+  transparente: `c.withValues(alpha: c.a * x)`.
+- **Quien solo lee el plano entra por `leerPlanoDeLaFiestaProvider`**, no por `planosEventoRepositoryProvider`:
+  `test/solo_modo_jefe_test.dart` vigila que el repositorio que guarda el salón lo usen solo la fiesta y el plano.
+
 **Un aviso que no llega no quiere decir que la ventana murió.** `KioskLauncher` reintenta y, si igual no llega,
 pregunta si la ventana sigue abierta: solo la olvida si ya no existe. Olvidarla de más dejaba a Recepción sin
 avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le habla a las ventanas por

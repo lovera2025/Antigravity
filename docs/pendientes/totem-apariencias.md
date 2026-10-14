@@ -1,10 +1,14 @@
 # El tótem con cuatro apariencias: Neón, Cristal, Póster y Gala
 
-**Estado:** en parte. **El 2026-10-14 quedaron hechos el tótem del salón con las cuatro, Personalizar con las cuatro
-tarjetas y la vista del tótem en Recepción** (secciones 3a, 3b y 3c de la 6.0.0; el detalle, en "La sección 3a",
-"La sección 3b" y "La sección 3c" de [CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md)). `totem_panel.dart` ya no
-existe: lo visual se hace una sola vez. Falta el plano con la guía en la llegada (sección 4). Salió distinto de lo
-de abajo en dos cosas:
+**Estado:** hecho el 2026-10-14, en la 6.0.0, sin publicar. Las piezas fueron:
+- el tótem del salón con las cuatro apariencias;
+- Personalizar con las cuatro tarjetas;
+- la vista del tótem en Recepción;
+- el plano con la mesa y el camino en la llegada.
+
+Son las secciones 3a, 3b, 3c y 4. El detalle está en "La sección 3a", "La sección 3b", "La sección 3c" y "La sección
+4" de [CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md). `totem_panel.dart` ya no existe: lo visual se hace una
+sola vez. Salió distinto de lo de abajo en dos cosas:
 - en Gala las cifras van alineadas (`FontFeature.liningFigures()`), porque las de Cormorant hacían leer "I2";
 - en Neón lo que se lee va arriba del horizonte y el QR sobre el piso.
 **Postergado el:** 2026-09-24
@@ -117,11 +121,18 @@ Sale lo que se reemplaza:
 **El shader se carga al abrir el tótem.** Si una PC no puede compilarlo, se usa un degradé del mismo color: nunca una
 pantalla rota.
 
-## Lo que el plano de la Fase 3 todavía no tiene para el tótem
+## Lo que el plano de la Fase 3 todavía no tenía para el tótem
+
+**Resuelto en la sección 4 (14-oct):**
+- **Estilos:** el plano se viste como la apariencia del tótem (`temaPlanoDelTotem`); manda `totem_config.estilo`.
+- **El color del evento:** los temas se guardan por apariencia y color.
+- **El fondo:** el tema del tótem lleva un fondo apenas transparente, no hizo falta una opción sin fondo.
+- **El encuadre:** se ve la hoja entera.
+- **La lista de la puerta:** un solo ocupante, la familia.
+- **Tests:** el camino recién empezado y entero, y cada mesa del salón de la Normal sin pisar otra.
 
 Lo encontró la revisión del dibujo del plano el 2026-09-27
-([CONTEXTO de la Fase 3](../CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md)). Es cierto, pero es de diciembre: hoy nada
-de esto se usa. Hay que decidirlo al retomar el tótem.
+([CONTEXTO de la Fase 3](../CONTEXTO_FASE3_PLANO_SORTEO_2026-09-26.md)). Lo de abajo es como estaba anotado.
 
 - **Estilos:** el plano tiene tres temas (Gala, Arquitecto y Neón) y el tótem cuatro apariencias. Cristal y Póster no
   tienen tema de plano. Falta decidir qué tema usa cada apariencia y quién manda: `planos_evento.estilo` o

@@ -17,9 +17,9 @@ y caja no cambian.
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
-las secciones 1, 2 y 3** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
-del tótem en Recepción); **sigue la 4 (el plano con la guía en la llegada)**. Lo de este encabezado es cómo quedó el
-11-oct.
+las secciones 1 a 4** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
+del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada); **sigue la 5 (una PC completa sin
+internet)**. Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -373,7 +373,7 @@ vaciarla al deshacer todo) sigue igual.
 | 1 | Recepción distingue particular y masivo (el panel del operador de la parte 6, más lo del masivo) | **hecha el 14-oct** |
 | 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **hecha el 14-oct** |
 | 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **hecha el 14-oct**, en tres pasos: 3a (el tótem del salón), 3b (Personalizar) y 3c (Recepción) |
-| 4 | El plano con la guía en la llegada | falta |
+| 4 | El plano con la guía en la llegada | **hecha el 14-oct**, en dos pasos: 4a (la mesa en el plano) y 4b (el camino desde el ingreso) |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
 | 6 | Modo kiosco (parte 7) | falta |
 | 7 | Dos puestos en la puerta (partes 8 y 8b, paso 3) | falta |
@@ -825,6 +825,119 @@ cerrada.**
 andando con el candado de Flutter tomado. La corrida siguiente esperó diez minutos. Se cerró ese proceso (era de la
 prueba) y la suite corrió en 51 s.
 
+### La sección 4: el plano con la guía en la llegada
+
+Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md` (la sección 4 arriba). Se le
+mostró una maqueta con tres formas (A, el plano abajo; B, el plano de pantalla; C, en dos tiempos) en las cuatro
+apariencias. **Eligió la A.** Pidió "completá la sección 4 y después actualizá el contexto". Dos pasos, cada uno con
+su commit: **4a** (`4ae3d57`) y **4b** (`51818fb`). **Programado y subido; sin publicar.**
+
+**Qué cambió para el usuario:**
+- **Cuando llega una familia de un evento masivo ya sorteado,** el tótem muestra:
+  - arriba, la llegada de siempre (saludo, nombre, mesa con sillas, música);
+  - abajo, el salón de su plano, con su mesa encendida en el color del evento y las demás apagadas.
+
+  En una tele horizontal, la llegada va a la izquierda y el plano a la derecha. Con dos mesas, las dos encendidas.
+- **El camino:** se dibuja en 1,6 s desde el cartel "Ingreso" hasta el borde de la mesa.
+  - Va **por los pasillos, sin pisar otras mesas** (con sus sillas) ni el escenario, la pasarela, las barras, las
+    cajas o los baños. La pista se cruza.
+  - Si no encuentra paso, va en línea recta.
+  - Sale del borde del cartel, sin tacharlo.
+- **Para que haya camino, el salón tiene que tener marcado el ingreso:** PLANO → PERSONALIZAR → Acomodar → + Sector
+  → Ingreso, corrido hasta la entrada (del jefe, como todo el salón).
+  - El armado de fábrica "Normal 2A · página 3" ya lo trae.
+  - **El armado a medida del playón no.**
+
+  Sin ingreso, la mesa se marca igual, sin camino. Si la mesa está en otra hoja que el ingreso (el pasto), esa hoja
+  sin camino.
+- **No aparece** en un particular, antes del sorteo, sin mesa, con un número que el plano no tiene, ni en el tótem
+  por el navegador (no tiene ficha).
+- **El plano se viste como el tótem** (decisión mía, dicha en el plan; responde la pregunta abierta del pendiente):
+  - Neón con su plano Neón, Gala con su plano Gala;
+  - Cristal con mesas blancas sobre vidrio;
+  - Póster con mesas blancas.
+
+  Sin colores de división: en la puerta importa una sola mesa.
+- **Anda sin internet:** el plano sale de la base de la PC.
+  - Al tótem del salón le llega dentro de la ficha, por el puente: al abrir y cada 60 s.
+  - Recepción y el asesor lo leen directo.
+- Sin SQL y sin cambios en la base.
+
+**Cómo se arma:**
+- **`PlanoDeLaLlegada`** (`totem/services/plano_de_la_llegada.dart`, pura).
+  - Arma la hoja de la mesa principal, las mesas a encender, un `EstadoPlano` con **un solo ocupante, la familia**
+    (uno por fila daría "conflicto") y el camino.
+  - Da null si no hay qué mostrar.
+- **`CaminoALaMesa`** (`totem/services/camino_a_la_mesa.dart`, pura).
+  - **De dónde sale:** de `armado.ingreso` si está en esa hoja; si no, del sector "Ingreso".
+  - **Por dónde va:** búsqueda A* en una grilla de medio radio, con las mesas tapadas a 1,35 radios por las sillas.
+  - **Cómo queda:** se endereza, termina a 1,05 radios del centro y arranca en el borde del cartel.
+- **`temaPlanoDelTotem(EstiloTotem, color)`** (`totem/estilos/plano_del_totem.dart`).
+  - Los cuatro temas, guardados una vez por apariencia y color: `TemaPlano` no tiene `==`, y uno nuevo por cuadro
+    redibujaría el salón entero.
+  - La familia va en la única división, con el color del evento.
+- **La ficha lleva el plano:** `FichaTotem.plano`.
+  - `armarFichaTotem` lo lee con `leerPlano` (en `main.dart`, por `leerPlanoDeLaFiestaProvider`).
+  - Un plano roto no tira la ficha.
+  - Un particular no lleva plano.
+- **`EscenaTotem.plano`:**
+  - la guía se arma una vez por llegada (`planosArmados`, para los tests);
+  - `_conPlano` reparte la pantalla y `PanelPlano` dibuja `VistaPlano`;
+  - el camino crece con `caminoEmpieza` (0,9 s) y `caminoDura` (1,6 s).
+  - `DatosEscena.conPlanoEn` da la medida de la parte de la llegada (en una apaisada se agranda).
+  - Neón usa `planoAlCostado` para seguir arriba del horizonte.
+- **`TotemLocal`** lee el plano con `planoDelEventoProvider`: lo relee al bajar un cambio de `planos_evento` y cada
+  minuto, y avisa solo si cambió.
+- **`leerPlanoDeLaFiestaProvider`** (en `planos_evento_repository.dart`) es una puerta que solo deja leer.
+  `test/solo_modo_jefe_test.dart` vigila quién usa el repositorio del plano (nadie más puede guardar el salón). El
+  tótem entra por esa puerta, y el test comprueba que sea solo `obtener`.
+
+**Lo que apareció al mirar las muestras, y se arregló antes de subir:**
+- En Cristal y Póster los sectores y la pista salían casi blancos: `withValues(alpha: 0.7)` **fija** la
+  transparencia, no la multiplica. Ahora se multiplica.
+- En una tele horizontal la llegada quedaba chica (medía con la pantalla entera): ahora la parte de la llegada tiene
+  su medida.
+- En Neón horizontal, las sillas y la música caían sobre la línea del horizonte: ahí se vuelve a respetar.
+- El camino tachaba el cartel "Ingreso": ahora sale de su borde.
+
+**Cómo se comprobó:**
+- Tests nuevos o ampliados:
+  - `test/plano_de_la_llegada_test.dart` (5);
+  - `test/camino_a_la_mesa_test.dart` (12): **a cada una de las 78 mesas del salón de la Normal sin pisar otra**,
+    medido tramo por tramo, y un playón de 284 mesas en menos de medio segundo;
+  - `test/escena_totem_test.dart`: las cuatro apariencias en tres tamaños con el plano, sin plano, el tema que se
+    reusa, la guía una vez por llegada y el camino que crece;
+  - `test/ficha_totem_test.dart` y `test/puente_ficha_test.dart`: el plano por el puente;
+  - `test/totem_local_test.dart`: con y sin plano en la PC.
+- **2.163 tests** en la suite (eran 2.119); `flutter analyze` sigue en 312.
+- **Quince roturas a propósito, todas vistas.**
+  - En el 4a, siete:
+    - el plano en un particular;
+    - el plano que no viaja por el puente;
+    - un ocupante por fila;
+    - un tema nuevo por cuadro;
+    - la guía por cuadro;
+    - `TotemLocal` sin el plano;
+    - la mesa sin el color del evento.
+  - En el 4b, ocho:
+    - el camino que pisa una mesa;
+    - pisa la barra;
+    - sin paso, ningún camino;
+    - termina en el centro de la mesa;
+    - tacha el cartel;
+    - el ingreso de otra hoja;
+    - la guía sin camino;
+    - el camino entero desde el principio.
+- **Muestras** en `build/muestras_6.0.0/totem/`:
+  - `Totem_llegada_plano.png` (las cuatro, vertical);
+  - `Totem_llegada_plano_horizontal.png`.
+- **No se probó en la app.** La prueba de verdad es el ensayo: marcar el Ingreso en Acomodar, sortear, ingresar a
+  una familia y mirar el tótem.
+
+**Tropiezo de la sesión, sin consecuencias:** el script de las roturas dejó una copia de respaldo
+(`respaldo_4b.dart`) en la raíz del proyecto, porque se corrió desde otra carpeta. Se vio porque `flutter analyze`
+subió a 333; se borró (era idéntica al archivo del camino) y volvió a 312. No llegó a ningún commit.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
@@ -855,6 +968,12 @@ prueba) y la suite corrió en 51 s.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
 
+- **Marcar el Ingreso en el plano de cada institución** (PLANO → PERSONALIZAR → Acomodar → + Sector → Ingreso),
+  para que el tótem dibuje el camino. Lo hace el jefe; el armado a medida del playón no lo trae. Sin eso, la mesa se
+  marca igual, sin camino.
+- **Las imágenes de la sección 4** (`Totem_llegada_plano.png` y su horizontal): se le mandaron al cerrar el chat;
+  todavía no opinó.
+
 - **Si cambiaría algo de las pantallas del recorrido** (`build/muestras_6.0.0/recorrido/Recorrido.html`, 33
   pantallas; abrírselo en Edge). No preguntarle "¿cambiarías algo?" a secas: no lo entendió. Mostrarle primero.
   (Lo de la nota resuelta ya lo contestó: queda con el tilde verde.)
@@ -876,27 +995,30 @@ prueba) y la suite corrió en 51 s.
 ```text
 Seguimos con la 6.0.0 de Junior Eventos. Leé primero
 docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
-"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. Los
-últimos planes aprobados están en
-C:\Users\lover\.claude\plans\purrfect-waddling-micali.md (la sección 3) y
-C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md (sus pasos
-3b y 3c); el camino de las secciones, en
+"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El
+último plan aprobado está en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md (la
+sección 4 arriba; los pasos 3b y 3c abajo); el camino de las secciones, en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
-corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no. Va
-todo en una sola versión, por partes. El objetivo de lo que
-falta: que Recepción y el tótem distingan un evento particular de uno masivo
-(se dice "evento masivo", no "fiesta de alumnos"). Están hechas la sección 1
-(Recepción distingue particular y masivo) y la 2 (el tótem distingue
-particular y masivo: la ficha por el puente, la familia junta, la cola que se
-acorta, sin QR en masivos y la música en Personalizar). La sección 3 está
-hecha entera, en tres pasos (el tótem del salón con las cuatro apariencias,
-Personalizar con las cuatro tarjetas y la vista del tótem en Recepción, con
-TotemLocal; totem_panel.dart ya no existe). Seguí por la
-sección 4 (el plano con la guía en la llegada), con su plan corto y una
-maqueta antes de programar. Avisame
-al terminar cada uno con cómo quedó, un commit y un push. Cada cambio lo
-apruebo yo a mano: no quiero modo automático.
+corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no (lo
+confirmé mirando la nube el 14-oct: esas cinco tablas no existen). Van antes
+de instalar, con mi OK. Va todo en una sola versión, por partes. El objetivo
+de lo que falta: que Recepción y el tótem distingan un evento particular de
+uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
+las secciones 1 (Recepción distingue particular y masivo), 2 (el tótem
+distingue particular y masivo), 3 (las cuatro apariencias en el tótem,
+Personalizar y la vista del tótem en Recepción con TotemLocal;
+totem_panel.dart ya no existe) y 4 (en la llegada de un masivo, el plano con
+la mesa encendida y el camino desde el Ingreso). Seguí por la sección 5: una
+PC completa sin internet (el tótem abre con la lista aunque no haya
+internet, la foto guardada en la PC, entrar con la sesión vencida y "Lista
+para trabajar sin internet"); está en "1. Una PC, completa sin internet" de
+docs/pendientes/modo-local-sin-internet.md. Hacé primero su plan corto y, si
+trae algo nuevo a la vista, una maqueta. Después siguen la 6 (kiosco), la 7
+(dos puestos), la 8 (cerrar la lista de la puerta) y la 9 (verificación y
+publicar). Avisame al terminar cada paso con cómo quedó, un commit y un
+push. Cada cambio lo apruebo yo a mano: no quiero modo automático.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).
