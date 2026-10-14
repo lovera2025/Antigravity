@@ -242,6 +242,12 @@ class IngresosTotem {
   /// Si la última vez que quiso leer la nube, pudo.
   bool get conectado => _cortadoDesde == null;
 
+  /// El que está en pantalla y los que esperan en la cola.
+  Set<String> get _enCurso => {
+        ...?enPantalla?.personas.map((i) => i.id),
+        for (final i in cola) i.id,
+      };
+
   /// Llegó una lectura completa de los invitados, del stream o de la
   /// relectura.
   void leyo(List<Invitado> lectura, {required DateTime ahora}) {
@@ -250,10 +256,7 @@ class IngresosTotem {
       lectura: lectura,
       vistos: _vistos,
       delPuente: _delPuente,
-      enCurso: {
-        ...?enPantalla?.personas.map((i) => i.id),
-        for (final i in cola) i.id,
-      },
+      enCurso: _enCurso,
       enSilencio: lecturaEnSilencio(
         primera: !_leyoAlgunaVez,
         corte: desde == null ? null : ahora.difference(desde),
@@ -265,23 +268,57 @@ class IngresosTotem {
     _cortadoDesde = null;
 
     _delPuente.removeAll(r.confirmados);
-    _vistos.removeAll(r.sacar);
-    ingresados.removeWhere((i) => r.sacar.contains(i.id));
-
-    // Los nuevos van arriba de la lista, lleven bienvenida o no. Los que ya
-    // estaban no se mueven: después de un corte la lista no se rearma.
-    final nuevos = [...r.sinSaludo, ...r.saludar];
-    for (final i in nuevos) {
-      _vistos.add(i.id);
-    }
-    ingresados.insertAll(0, nuevos.reversed);
+    _aplicar(r);
     for (final i in r.saludar) {
       _llega(i, ahora);
     }
   }
 
+  /// Saca a los que ya no están y pone arriba de la lista a los nuevos,
+  /// lleven bienvenida o no. Los que ya estaban no se mueven: después de un
+  /// corte la lista no se rearma.
+  void _aplicar(LecturaResuelta r) {
+    _vistos.removeAll(r.sacar);
+    ingresados.removeWhere((i) => r.sacar.contains(i.id));
+    final nuevos = [...r.sinSaludo, ...r.saludar];
+    for (final i in nuevos) {
+      _vistos.add(i.id);
+    }
+    ingresados.insertAll(0, nuevos.reversed);
+  }
+
   /// No se pudo leer la nube. El corte se cuenta desde el primer fallo.
   void noPudoLeer(DateTime ahora) => _cortadoDesde ??= ahora;
+
+  /// Si ya leyó la nube desde que se abrió, o desde [reiniciar].
+  bool get leyoDeLaNube => _leyoAlgunaVez;
+
+  /// Lo que tiene la base de esta PC, para cuando el tótem abre sin poder leer
+  /// la nube. Sin esto la lista arrancaba vacía y "LLEGARON" decía 0 con la
+  /// fiesta empezada.
+  ///
+  /// - Va siempre en silencio: es quién ya había entrado.
+  /// - Una vez que leyó la nube no se usa más: la nube trae también lo de las
+  ///   otras PCs, y lo de esta puede estar atrasado.
+  /// - [sinSubir] es lo que esta PC marcó y todavía no subió (solo de los que
+  ///   están adentro: `armarListaDeLaPc`). Se cuida como lo avisado por el
+  ///   puente: la primera lectura de la nube no lo trae, y no tiene que
+  ///   sacarlo ni, cuando suba, saludarlo de nuevo.
+  /// - No da por conectado: la nube sigue sin poder leerse.
+  ///
+  /// Devuelve si la tomó.
+  bool leyoDeLaPc(List<Invitado> lectura, {Set<String> sinSubir = const {}}) {
+    if (_leyoAlgunaVez) return false;
+    _delPuente.addAll(sinSubir);
+    _aplicar(resolverLectura(
+      lectura: lectura,
+      vistos: _vistos,
+      delPuente: _delPuente,
+      enCurso: _enCurso,
+      enSilencio: true,
+    ));
+    return true;
+  }
 
   /// Llegó un aviso de ingreso, sin esperar a la nube: por el puente entre
   /// ventanas ([porElPuente], lo marcó esta misma PC) o por el canal de avisos

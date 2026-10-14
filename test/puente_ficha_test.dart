@@ -8,7 +8,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
+import 'package:arguello_events/features/totem/services/lista_de_la_pc.dart';
 import 'package:arguello_events/features/totem/services/puente_ficha.dart';
+import 'package:arguello_events/models/invitado.dart';
 
 import 'helpers/ficha_de_prueba.dart';
 import 'helpers/puerta_en_memoria.dart';
@@ -140,6 +142,77 @@ void main() {
         (_) async => throw StateError('la base está ocupada'),
       );
       expect(r, isNull);
+    });
+  });
+
+  // Sección 5: el tótem que abre sin internet le pide a la ventana principal
+  // quién ya entró según la base de la PC.
+  group('la lista de la PC', () {
+    Invitado inv(String id, {bool adentro = true}) => Invitado(
+          id: id,
+          eventoId: eventoMasivo,
+          nombreCompleto: 'INVITADO $id',
+          dni: '',
+          numeroMesa: '12',
+          estadoIngreso:
+              adentro ? EstadoIngreso.ingresado : EstadoIngreso.pendiente,
+          updatedAt: DateTime.utc(2026, 12, 12, 22, 41),
+        );
+
+    Future<ListaDeLaPc> leer(String id) => armarListaDeLaPc(
+          id,
+          leerInvitados: (_) async => [
+            inv('a'),
+            inv('b'),
+            inv('c', adentro: false),
+          ],
+          // c tiene un deshacer sin subir; z es de otro evento.
+          leerSinSubir: (_) async => {'b', 'c', 'z'},
+        );
+
+    test('lleva solo a los que entraron, y cuáles no subieron', () async {
+      final lista = await leer(eventoMasivo);
+      expect([for (final i in lista.adentro) i.id], ['a', 'b']);
+      expect(lista.sinSubir, {'b'});
+    });
+
+    test('viaja por el puente y el tótem la lee igual', () async {
+      final r = await PuenteFichaTotem.responder(
+        const MethodCall(PuenteFichaTotem.metodoLista, eventoMasivo),
+        armar,
+        lista: leer,
+      );
+      final lista = ListaDeLaPc.decodificar(r)!;
+      expect(lista.eventoId, eventoMasivo);
+      expect([for (final i in lista.adentro) i.id], ['a', 'b']);
+      expect(lista.adentro.first.numeroMesa, '12');
+      expect(lista.adentro.first.updatedAt, DateTime.utc(2026, 12, 12, 22, 41));
+      expect(lista.sinSubir, {'b'});
+      expect(lecturasDeAlumnos, 0, reason: 'no arma la ficha');
+    });
+
+    test('sin quién la arme, o con la base fallando, contesta nada', () async {
+      const call = MethodCall(PuenteFichaTotem.metodoLista, eventoMasivo);
+      expect(await PuenteFichaTotem.responder(call, armar), isNull);
+      expect(
+        await PuenteFichaTotem.responder(call, armar,
+            lista: (_) async => throw StateError('la base está ocupada')),
+        isNull,
+      );
+      expect(
+        await PuenteFichaTotem.responder(
+          const MethodCall(PuenteFichaTotem.metodoLista, 'corto'),
+          armar,
+          lista: leer,
+        ),
+        isNull,
+      );
+    });
+
+    test('lo que no se puede leer no rompe al tótem', () {
+      expect(ListaDeLaPc.decodificar(null), isNull);
+      expect(ListaDeLaPc.decodificar('{"evento_id": 3}'), isNull);
+      expect(ListaDeLaPc.decodificar('no es json'), isNull);
     });
   });
 

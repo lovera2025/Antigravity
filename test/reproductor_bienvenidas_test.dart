@@ -186,4 +186,21 @@ void main() {
     expect(avisos, antes, reason: 'un aviso repetido no cambia nada');
     n.r.dispose();
   });
+
+  testWidgets('abierto sin internet, la lista de la PC llega sin bienvenidas',
+      (tester) async {
+    final r = ReproductorBienvenidas()..noPudoLeer();
+    var avisos = 0;
+    r.addListener(() => avisos++);
+    expect(r.leyoDeLaPc([_inv('acosta'), _inv('benitez')]), isTrue);
+    await tester.pump();
+    expect(avisos, greaterThan(0), reason: 'la pantalla redibuja la cuenta');
+    expect(r.ingresados, hasLength(2));
+    expect(r.actual, isNull);
+    expect(r.conectado, isFalse);
+    // Ya con la nube leída, no se toma más.
+    r.leyo([_inv('acosta')]);
+    expect(r.leyoDeLaPc([_inv('zapata')]), isFalse);
+    r.dispose();
+  });
 }

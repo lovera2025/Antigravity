@@ -566,7 +566,30 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     debugPrint('Stream error: $error');
     if (!mounted || _pausado) return;
     _reproductor.noPudoLeer();
+    _leerDeLaPc();
     _reconnectWithBackoff();
+  }
+
+  bool _pidiendoLaLista = false;
+
+  /// Si todavía no pudo leer la nube, le pide a la ventana principal quién ya
+  /// entró según la base de la PC. Así, abierto sin internet, no arranca con
+  /// la lista vacía. Se pide en cada intento fallido hasta que lea la nube:
+  /// es una consulta a la base de la PC, y lo que llegue repetido no cambia
+  /// nada.
+  Future<void> _leerDeLaPc() async {
+    if (widget.windowId == null || _pidiendoLaLista) return;
+    if (_reproductor.leyoDeLaNube) return;
+    final evento = _eventoId;
+    if (evento.length != 36) return;
+    _pidiendoLaLista = true;
+    try {
+      final lista = await PuenteFichaTotem.pedirLista(evento);
+      if (!mounted || _pausado || lista == null || evento != _eventoId) return;
+      _reproductor.leyoDeLaPc(lista.adentro, sinSubir: lista.sinSubir);
+    } finally {
+      _pidiendoLaLista = false;
+    }
   }
 
   void _reconnectWithBackoff() {

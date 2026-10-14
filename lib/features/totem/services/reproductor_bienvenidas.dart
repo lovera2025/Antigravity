@@ -88,6 +88,17 @@ class ReproductorBienvenidas extends ChangeNotifier {
     if (estaba != sala.conectado) _avisar();
   }
 
+  /// Si ya leyó la nube desde que se abrió o se reinició.
+  bool get leyoDeLaNube => sala.leyoDeLaNube;
+
+  /// Lo que tiene la base de esta PC, mientras no pudo leer la nube
+  /// ([IngresosTotem.leyoDeLaPc]). Devuelve si la tomó.
+  bool leyoDeLaPc(List<Invitado> lectura, {Set<String> sinSubir = const {}}) {
+    final tomada = sala.leyoDeLaPc(lectura, sinSubir: sinSubir);
+    if (tomada) _avisar();
+    return tomada;
+  }
+
   /// Se borró a alguien o se deshizo su ingreso.
   void baja(String id) {
     final habia = sala.enPantalla;

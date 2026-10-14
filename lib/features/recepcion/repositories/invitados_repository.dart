@@ -222,6 +222,19 @@ class InvitadosRepository {
     return rows.map(Invitado.fromJson).toList();
   }
 
+  /// Los invitados del evento que tienen un cambio esperando subir a la nube:
+  /// un ingreso marcado sin internet, por ejemplo.
+  Future<Set<String>> idsSinSubir(String eventoId) async {
+    final db = await LocalDatabase.instance;
+    final filas = await db.rawQuery(
+      'SELECT DISTINCT q.registro_id AS id FROM _sync_queue q '
+      'JOIN invitados i ON i.id = q.registro_id '
+      "WHERE q.tabla = 'invitados' AND i.evento_id = ?",
+      [eventoId],
+    );
+    return {for (final f in filas) f['id'] as String};
+  }
+
   /// Escribe la lista de la puerta armada desde los alumnos ([planListaPuerta]).
   ///
   /// Una transacción. A las filas nuevas se les pone todo; a las existentes,

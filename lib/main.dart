@@ -22,8 +22,10 @@ import 'features/recepcion/operador_view.dart';
 import 'features/recepcion/lista_invitados_screen.dart';
 import 'features/recepcion/op_checkin_screen.dart';
 import 'features/recepcion/recepcion_unified_screen.dart';
+import 'features/recepcion/repositories/invitados_repository.dart';
 import 'features/totem/totem_display.dart';
 import 'features/totem/totem_checkin_screen.dart';
+import 'features/totem/services/lista_de_la_pc.dart';
 import 'features/totem/services/puente_ficha.dart';
 import 'features/eventos/repositories/contratos_repository.dart';
 import 'features/eventos/repositories/eventos_repository.dart';
@@ -574,7 +576,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
     super.initState();
     // La ventana del tótem le pide a esta la ficha del evento: quién es
     // alumno, con quién viene, su mesa, sus sillas, su música y el salón del
-    // plano. Sale de la base de esta PC, así que anda sin internet.
+    // plano. Y, si abre sin poder leer la nube, quién ya entró. Sale de la
+    // base de esta PC, así que anda sin internet.
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       PuenteFichaTotem.atenderEnLaVentanaPrincipal(
@@ -588,6 +591,11 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
           ),
           leerPlano: (id) async =>
               (await ref.read(leerPlanoDeLaFiestaProvider)(id))?.armadoONull,
+        ),
+        lista: (eventoId) => armarListaDeLaPc(
+          eventoId,
+          leerInvitados: ref.read(invitadosRepositoryProvider).getLocalesByEvento,
+          leerSinSubir: ref.read(invitadosRepositoryProvider).idsSinSubir,
         ),
       );
     }

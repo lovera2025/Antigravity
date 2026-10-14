@@ -169,4 +169,16 @@ void main() {
     expect(j.numeroMesa, '12');
     expect(j.estadoIngreso, EstadoIngreso.ingresado);
   });
+
+  // Sección 5: lo que el tótem que abre sin internet tiene que cuidar.
+  test('sin internet, el ingreso queda entre los que esperan subir, y solo en '
+      'su evento', () async {
+    const otro = 'eeeeeeee-0000-4000-8000-00000000000a';
+    await repo.ingresarDesdeLaPuerta(eventoId: _ev, id: juan, nombre: 'PÉREZ, JUAN');
+    await repo.agregar(eventoId: otro, nombreCompleto: 'DE OTRA FIESTA');
+
+    expect(await repo.idsSinSubir(_ev), {juan});
+    expect(await repo.idsSinSubir(otro), hasLength(1));
+    expect((await repo.idsSinSubir(otro)).contains(juan), isFalse);
+  });
 }

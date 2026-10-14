@@ -430,6 +430,100 @@ void main() {
     });
   });
 
+  // Sección 5 de la 6.0.0: el tótem que abre sin internet toma de la base de
+  // la PC quién ya entró, en vez de arrancar con la lista vacía.
+  group('abierto sin internet: lo que tiene la PC', () {
+    final t0 = DateTime(2026, 12, 12, 23);
+    DateTime en(int segundos) => t0.add(Duration(seconds: segundos));
+
+    IngresosTotem sinInternet() => IngresosTotem()..noPudoLeer(t0);
+
+    test('los que ya entraron aparecen sin bienvenida', () {
+      final sala = sinInternet();
+      expect(sala.leyoDeLaPc([_inv('a'), _inv('b'), _inv('c', adentro: false)]),
+          isTrue);
+      expect(sala.cola, isEmpty);
+      expect(_ids(sala.ingresados), ['b', 'a']);
+      expect(sala.conectado, isFalse, reason: 'sigue sin poder leer la nube');
+      expect(sala.leyoDeLaNube, isFalse);
+    });
+
+    test('una vez que leyó la nube, lo de la PC no se usa más', () {
+      final sala = IngresosTotem()..leyo([_inv('a')], ahora: t0);
+      sala.noPudoLeer(en(10));
+      expect(sala.leyoDeLaPc([_inv('a'), _inv('z')]), isFalse);
+      expect(_ids(sala.ingresados), ['a'], reason: 'z no aparece');
+    });
+
+    test('pedirla de nuevo no cambia nada', () {
+      final sala = sinInternet()..leyoDeLaPc([_inv('a'), _inv('b')]);
+      sala.leyoDeLaPc([_inv('a'), _inv('b')]);
+      expect(_ids(sala.ingresados), ['b', 'a']);
+      expect(sala.cola, isEmpty);
+    });
+
+    test('lo que marca después esta PC se saluda por el puente, una vez', () {
+      final sala = sinInternet()..leyoDeLaPc([_inv('a')]);
+      expect(sala.aviso(_inv('a'), porElPuente: true), isFalse,
+          reason: 'ya estaba adentro');
+      expect(sala.aviso(_inv('b'), porElPuente: true), isTrue);
+      expect(_ids(sala.cola), ['b']);
+    });
+
+    test('vuelve internet: la primera lectura de la nube va en silencio', () {
+      final sala = sinInternet()..leyoDeLaPc([_inv('a')]);
+      // La otra PC marcó a d y e mientras tanto; esta PC no los tenía.
+      sala.leyo([_inv('a'), _inv('d'), _inv('e')], ahora: en(20));
+      expect(sala.cola, isEmpty, reason: 'nadie se saluda tarde');
+      expect(_ids(sala.ingresados), ['e', 'd', 'a']);
+      expect(sala.conectado, isTrue);
+      expect(sala.leyoDeLaNube, isTrue);
+    });
+
+    test('lo marcado sin internet no se pierde ni se saluda dos veces', () {
+      // b lo marcó esta PC sin internet, antes de abrir el tótem.
+      final sala = sinInternet()
+        ..leyoDeLaPc([_inv('a'), _inv('b')], sinSubir: {'b'});
+      // Vuelve internet: la nube todavía no tiene a b.
+      sala.leyo([_inv('a'), _inv('b', adentro: false)], ahora: en(30));
+      expect(_ids(sala.ingresados), ['b', 'a'], reason: 'b sigue adentro');
+      // Esta PC sube a b, y la nube ya lo trae.
+      sala.leyo([_inv('a'), _inv('b')], ahora: en(35));
+      expect(sala.cola, isEmpty, reason: 'b no se saluda de nuevo');
+      // Y, ya confirmado, si otra PC lo deshace, sale.
+      sala.leyo([_inv('a'), _inv('b', adentro: false)], ahora: en(40));
+      expect(_ids(sala.ingresados), ['a']);
+    });
+
+    test('lo que ya había subido sí sigue a la nube', () {
+      // a había subido; mientras esta PC estuvo sin internet, otra deshizo su
+      // ingreso.
+      final sala = sinInternet()..leyoDeLaPc([_inv('a'), _inv('b')], sinSubir: {'b'});
+      sala.leyo([_inv('a', adentro: false), _inv('b', adentro: false)],
+          ahora: en(30));
+      expect(_ids(sala.ingresados), ['b'], reason: 'b no subió todavía');
+    });
+
+    test('un deshacer sin subir no frena el saludo si otra PC lo marca', () {
+      // c tiene un cambio sin subir, pero es un deshacer: no está adentro.
+      final sala = sinInternet()
+        ..leyoDeLaPc([_inv('a'), _inv('c', adentro: false)], sinSubir: {'c'});
+      sala.leyo([_inv('a')], ahora: en(30));
+      sala.leyo([_inv('a'), _inv('c')], ahora: en(35));
+      expect(_ids(sala.cola), ['c'],
+          reason: 'si lo vuelven a marcar en otra PC, se lo saluda');
+    });
+
+    test('al cambiar de fiesta o volver de estar escondido, se puede pedir de nuevo',
+        () {
+      final sala = sinInternet()..leyo([_inv('a')], ahora: en(1));
+      sala.reiniciar();
+      sala.noPudoLeer(en(60));
+      expect(sala.leyoDeLaPc([_inv('x')]), isTrue);
+      expect(_ids(sala.ingresados), ['x']);
+    });
+  });
+
   // La cola que se acorta (pedido del usuario el 14-oct): 7 s si nadie
   // espera, 3 s si hay gente esperando.
   group('cuánto dura una bienvenida', () {
