@@ -16,6 +16,7 @@ import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
+import 'package:arguello_events/features/totem/services/foto_guardada.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -455,15 +456,18 @@ void main() {
           ),
         );
         expect(find.byWidgetPredicate(esDe<MemoryImage>), findsWidgets);
-        expect(find.byWidgetPredicate(esDe<NetworkImage>), findsNothing);
+        expect(find.byWidgetPredicate(esDe<FotoGuardada>), findsNothing);
       });
 
-      testWidgets('${estilo.nombre}: sin elegir, la guardada', (tester) async {
+      // Sección 5: la del evento, guardada en la PC, no la de internet.
+      testWidgets('${estilo.nombre}: sin elegir, la guardada en la PC',
+          (tester) async {
         await _montar(
           tester,
           EscenaTotem(estilo: estilo, cfg: conFoto, quieta: true),
         );
-        expect(find.byWidgetPredicate(esDe<NetworkImage>), findsWidgets);
+        expect(find.byWidgetPredicate(esDe<FotoGuardada>), findsWidgets);
+        expect(find.byWidgetPredicate(esDe<NetworkImage>), findsNothing);
         expect(find.byWidgetPredicate(esDe<MemoryImage>), findsNothing);
       });
     }

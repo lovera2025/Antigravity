@@ -8,6 +8,7 @@ import '../../plano/estilos/estilo_plano.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../plano/widgets/vista_plano.dart';
 import '../services/contenido_bienvenida.dart';
+import '../services/foto_guardada.dart';
 import '../services/plano_de_la_llegada.dart';
 import 'escena_cristal.dart';
 import 'escena_gala.dart';
@@ -196,8 +197,8 @@ class _EscenaTotemState extends State<EscenaTotem>
   Widget build(BuildContext context) {
     final color = widget.cfg.colorAcento;
     final escena = _escena;
-    final url = widget.cfg.imagenUrl;
-    final foto = widget.foto ?? (url == null ? null : NetworkImage(url));
+    // La guardada en la PC: sin internet se sigue viendo (sección 5).
+    final foto = widget.foto ?? fotoDelEvento(widget.cfg);
     final guia = _guiaPara(widget.llegada);
     final tema = guia == null ? null : temaPlanoDelTotem(widget.estilo, color);
     return LayoutBuilder(
