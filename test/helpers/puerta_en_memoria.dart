@@ -19,7 +19,9 @@ import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/repositories/planos_evento_repository.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
+import 'package:arguello_events/features/recepcion/providers/sin_internet_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
+import 'package:arguello_events/features/recepcion/services/lista_sin_internet.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -75,6 +77,61 @@ Evento eventoDePrueba(String id, String modalidad) => Evento(
 class ConexionApagada extends ConnectivityService {
   @override
   AppConnectivity get currentStatus => AppConnectivity.offline;
+}
+
+/// Una conexión que la prueba corta o vuelve a poner ([poner]).
+class ConexionDePrueba extends ConnectivityService {
+  ConexionDePrueba([this.estado = AppConnectivity.online]);
+  AppConnectivity estado;
+  final _cambios = StreamController<AppConnectivity>.broadcast();
+
+  @override
+  AppConnectivity get currentStatus => estado;
+
+  @override
+  Stream<AppConnectivity> get stream => _cambios.stream;
+
+  void poner(AppConnectivity nuevo) {
+    estado = nuevo;
+    _cambios.add(nuevo);
+  }
+}
+
+/// La hora de las pruebas de "Lista para trabajar sin internet".
+final ahoraDePrueba = DateTime(2026, 12, 12, 21, 40);
+
+/// Con qué se pone al día el evento, en memoria: qué bajó, qué foto hay y
+/// cuántos ingresos esperan subir.
+class SinInternetEnMemoria {
+  var bajaLista = true;
+  var bajanAlumnos = true;
+  var bajaFoto = true;
+  final fotosGuardadas = <String>{};
+  var sinSubir = 0;
+  final alDia = <String, DateTime>{};
+  var listasBajadas = 0;
+  var alumnosBajados = 0;
+  DateTime ahora = ahoraDePrueba;
+
+  AccesosPuerta get accesos => AccesosPuerta(
+        bajarLista: (_) async {
+          listasBajadas++;
+          return bajaLista;
+        },
+        bajarAlumnos: () async {
+          alumnosBajados++;
+          return bajanAlumnos;
+        },
+        guardarFoto: (url, _) async {
+          if (bajaFoto) fotosGuardadas.add(url);
+          return fotosGuardadas.contains(url);
+        },
+        fotoGuardada: (url, _) async => fotosGuardadas.contains(url),
+        contarSinSubir: (_) async => sinSubir,
+        leerAlDia: (id) async => alDia[id],
+        anotarAlDia: (id, cuando) async => alDia[id] = cuando,
+        ahora: () => ahora,
+      );
 }
 
 /// La lista de la puerta de esta PC, en memoria, y lo que se pidió marcar.
@@ -229,12 +286,23 @@ class PuertaEnMemoria {
   /// El plano de la fiesta masiva: siempre puesto, así nadie lee la base real.
   final PlanosEnMemoria planos;
   final motor = MotorDePrueba();
+
+  /// La conexión de la PC: con internet, salvo que la prueba la corte.
+  final conexion = ConexionDePrueba();
+
+  /// "Lista para trabajar sin internet", sin base, nube ni carpeta de fotos.
+  final sinInternet = SinInternetEnMemoria();
   var actualizado = 0;
   var agregar = 0;
   var vaciar = 0;
 
   /// El panel del evento, con los reemplazos puestos.
-  Widget panel(String eventoId, {ThemeData? tema}) => recepcion(
+  Widget panel(
+    String eventoId, {
+    ThemeData? tema,
+    Map<String, TotemConfig> config = const {},
+  }) =>
+      recepcion(
         Scaffold(
           body: PanelPuerta(
             eventoId: eventoId,
@@ -246,6 +314,7 @@ class PuertaEnMemoria {
           ),
         ),
         tema: tema,
+        config: config,
       );
 
   /// [home] con los reemplazos puestos: los eventos, la lista de la puerta,
@@ -272,6 +341,8 @@ class PuertaEnMemoria {
           sillasRepartoRepositoryProvider.overrideWithValue(sillas),
           planosEventoRepositoryProvider.overrideWithValue(planos),
           syncEngineProvider.overrideWithValue(motor),
+          connectivityServiceProvider.overrideWithValue(conexion),
+          accesosPuertaProvider.overrideWithValue(sinInternet.accesos),
           for (final evento in [eventoMasivo, eventoParticular])
             totemConfigProvider(evento).overrideWith(
               (ref) => Stream.value(

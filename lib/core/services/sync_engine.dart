@@ -1595,7 +1595,10 @@ class SyncEngine {
   }
 
   /// Descarga y upsert de una tabla. Soporta pull incremental mediante _sync_meta.
-  Future<void> _pullTable(
+  ///
+  /// Devuelve si bajó bien (también si no había nada nuevo). Si falló, además
+  /// la anota en [_tablasConFalloPull].
+  Future<bool> _pullTable(
     Database db,
     String table,
     String? orderBy, {
@@ -1662,7 +1665,7 @@ class SyncEngine {
         // otro lado del filtro a las filas escritas en la diferencia entre los
         // dos relojes. No mover nada no cuesta un request de más: la próxima
         // pasada pide el mismo rango y vuelve a venir vacía.
-        return;
+        return true;
       }
 
       // No pisar registros con cambios locales pendientes de subir.
@@ -2045,6 +2048,7 @@ class SyncEngine {
       debugPrint(
         '  📥 $table: $stored registros${skipped > 0 ? " ($skipped corruptos omitidos)" : ""}',
       );
+      return true;
     } catch (e) {
       // No se relanza: el watermark no avanzó, así que el próximo ciclo
       // reintenta el mismo rango y nada se pierde. Pero se anota, para que
@@ -2052,6 +2056,37 @@ class SyncEngine {
       // informar "sincronizado".
       _tablasConFalloPull.add(table);
       debugPrint('  ⚠️ Error pull $table: $e');
+      return false;
+    }
+  }
+
+  /// Las tablas que Recepción necesita de un evento masivo: el evento, los
+  /// alumnos, cómo repartió cada familia sus sillas y el plano.
+  static const tablasDeLaPuerta = [
+    'eventos',
+    'contratos_alumnos',
+    'sillas_reparto',
+    'planos_evento',
+  ];
+
+  /// Baja ya las [tablasDeLaPuerta], para "Lista para trabajar sin internet"
+  /// (sección 5 de la 6.0.0). Devuelve si bajaron todas.
+  ///
+  /// No espera al ciclo ni cambia el estado del motor: si el ciclo está
+  /// bajando las mismas tablas a la vez no pasa nada, porque escribir dos
+  /// veces la misma fila deja lo mismo.
+  Future<bool> bajarParaLaPuerta() async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return false;
+    try {
+      final db = await LocalDatabase.instance;
+      final bien = await Future.wait([
+        for (final tabla in tablasDeLaPuerta)
+          _pullTable(db, tabla, 'updated_at'),
+      ]);
+      return bien.every((b) => b);
+    } catch (e) {
+      debugPrint('⚠️ No bajaron las tablas de la puerta: $e');
+      return false;
     }
   }
 

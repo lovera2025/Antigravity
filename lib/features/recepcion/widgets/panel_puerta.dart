@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../providers/recepcion_provider.dart';
 import '../repositories/invitados_repository.dart';
 import '../services/puerta_del_evento.dart';
+import 'linea_sin_internet.dart';
 
 /// El panel de Recepción de un evento: el progreso, la búsqueda, los filtros y
 /// la lista con "Ingresar" por persona.
@@ -104,6 +106,14 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _progreso(p),
+        // La web se sirve desde internet: sin internet no anda, no hay nada
+        // que decir.
+        if (!kIsWeb)
+          LineaSinInternet(
+            eventoId: widget.eventoId,
+            personas: p.total,
+            adentro: p.adentro,
+          ),
         if (p.masivo && !p.sorteado) _avisoSinSortear(),
         _barra(p),
         if (_aviso != null) _lineaAviso(_aviso!),

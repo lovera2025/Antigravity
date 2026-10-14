@@ -753,11 +753,12 @@ class InvitadosRepository {
 
   // ── SYNC ──────────────────────────────────────────────────────────────────
 
-  Future<void> _pullByEvento(Database db, String eventoId) async {
+  /// Baja la lista del evento entera. Devuelve si bajó bien.
+  Future<bool> _pullByEvento(Database db, String eventoId) async {
     // Blindaje: Si el ID no es un UUID válido de 36 caracteres, abortamos para evitar error 22P02 en Supabase
     if (eventoId.length != 36) {
       debugPrint('🚫 Abortando pull de invitados: ID malformado ($eventoId)');
-      return;
+      return false;
     }
     try {
       // Paginado: PostgREST corta en 1000 filas, y una fiesta con las familias
@@ -827,8 +828,10 @@ class InvitadosRepository {
       
       await batch.commit(noResult: true);
       debugPrint('📥 Invitados: ${response.length} sincronizados para evento $eventoId');
+      return true;
     } catch (e) {
       debugPrint('⚠️ Error pull invitados: $e');
+      return false;
     }
   }
 
@@ -836,6 +839,24 @@ class InvitadosRepository {
   Future<void> forceRefresh(String eventoId) async {
     final db = await LocalDatabase.instance;
     await _pullByEvento(db, eventoId);
+  }
+
+  /// Baja la lista de la puerta del evento entera, para "Lista para trabajar
+  /// sin internet" (sección 5 de la 6.0.0). Devuelve si bajó bien.
+  ///
+  /// Hacía falta: [getByEvento] la baja solo si la PC no tiene ninguna fila de
+  /// ese evento, así que una lista cargada o cambiada después en otra PC podía
+  /// quedar incompleta acá hasta que alguien marcara un ingreso. Sin internet
+  /// no intenta nada.
+  Future<bool> bajarListaDelEvento(String eventoId) async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return false;
+    final db = await LocalDatabase.instance;
+    final bien = await _pullByEvento(db, eventoId);
+    if (bien) {
+      _hasInitialPull.add(eventoId);
+      _notifyChanges(eventoId);
+    }
+    return bien;
   }
 
   // ── STREAM ────────────────────────────────────────────────────────────────
