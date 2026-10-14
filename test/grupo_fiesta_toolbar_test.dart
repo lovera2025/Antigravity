@@ -48,6 +48,7 @@ void main() {
                 onPlanillaMora: conMora > 0 ? () => pedidos.add('mora') : null,
                 alumnosConMora: conMora,
                 onEntradas: () => pedidos.add('entradas'),
+                onAcompanantesYMusica: () => pedidos.add('delegado'),
               ),
             ),
           ),
@@ -145,6 +146,27 @@ void main() {
     expect(pedidos, ['planilla', 'plano impreso', 'entrega', 'mora']);
   });
 
+  // El Excel que completa el delegado va en PLANILLAS: es donde se busca "la
+  // planilla para el delegado", y no agrega un botón a la barra.
+  testWidgets('PLANILLAS trae también Acompañantes y música, al final',
+      (tester) async {
+    final pedidos = await mostrar(tester);
+    await tester.tap(find.byKey(const Key('fiesta_planillas')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Excel para el delegado: exportar e importar'),
+      findsOneWidget,
+    );
+    // Va después de las planillas para imprimir.
+    expect(
+      tester.getTopLeft(find.text('Acompañantes y música')).dy,
+      greaterThan(tester.getTopLeft(find.text('Planilla de mora')).dy),
+    );
+    await tester.tap(find.text('Acompañantes y música'));
+    await tester.pumpAndSettle();
+    expect(pedidos, ['delegado']);
+  });
+
   testWidgets('lo que no se puede queda apagado y dice por qué',
       (tester) async {
     final pedidos = await mostrar(
@@ -195,6 +217,24 @@ void main() {
       expect(pedidos, isEmpty);
       // El menú sigue abierto: tocar algo apagado no hace nada.
       expect(find.text('Historial de las mesas'), findsOneWidget);
+    });
+
+    testWidgets('Acompañantes y música queda apagado y dice por qué',
+        (tester) async {
+      final pedidos = await mostrar(tester, esJefe: false);
+      await tester.tap(find.byKey(const Key('fiesta_planillas')));
+      await tester.pumpAndSettle();
+      // El motivo reemplaza al detalle de siempre, y es el único del menú.
+      expect(find.text('Solo en modo jefe'), findsOneWidget);
+      expect(
+        find.text('Excel para el delegado: exportar e importar'),
+        findsNothing,
+      );
+      await tester.tap(find.text('Acompañantes y música'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(pedidos, isEmpty);
+      // El menú sigue abierto: tocar algo apagado no hace nada.
+      expect(find.text('Planilla de entrega'), findsOneWidget);
     });
 
     testWidgets('el Historial se sigue pudiendo abrir', (tester) async {

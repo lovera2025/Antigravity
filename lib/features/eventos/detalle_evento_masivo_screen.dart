@@ -62,6 +62,9 @@ import '../../core/services/connectivity_service.dart';
 import '../recepcion/repositories/invitados_repository.dart';
 import '../recepcion/services/lista_puerta.dart';
 import '../recepcion/services/puerta_al_dia.dart';
+import 'services/planilla_delegado_archivos.dart';
+import 'utils/evento_presentacion.dart';
+import 'widgets/acompanantes_musica_dialog.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/chip_mesas_sillas.dart';
@@ -1316,6 +1319,7 @@ class _DetalleEventoMasivoScreenState
               : () => _exportarPlanillaMora(moraPorAlumno),
           alumnosConMora: alumnosConMora.length,
           onEntradas: _abrirRetiroEntradas,
+          onAcompanantesYMusica: _abrirAcompanantesYMusica,
         );
         // Los contadores y REGISTRAR se llevan lo que piden; el grupo de la
         // fiesta usa lo que sobra, y si no le alcanza para los nombres muestra
@@ -4183,6 +4187,83 @@ class _DetalleEventoMasivoScreenState
 
   /// Devuelve los números de la copia guardada al deshacer, solo a quienes
   /// siguen sin mesa y sin pisar ningún número que hoy esté ocupado.
+  /// PLANILLAS → "Acompañantes y música": el Excel que completa el delegado
+  /// de esta institución, para exportar y para importar de vuelta.
+  ///
+  /// Lo carga solo el jefe. El renglón ya llega apagado sin modo jefe; acá
+  /// están las otras dos llaves: al abrir y, otra vez, justo antes de guardar.
+  /// Lo que decide —qué se carga y qué no— está en `planilla_delegado.dart`.
+  Future<void> _abrirAcompanantesYMusica() async {
+    void soloJefe() {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '$kSoloEnModoJefe: los acompañantes y la música los carga el jefe.',
+          ),
+        ),
+      );
+    }
+
+    if (!ref.read(esRolJefeProvider)) return soloJefe();
+    final eventoId = widget.evento.id;
+    final contratos = ref.read(contratosRepositoryProvider);
+    final List<ContratoAlumno> alumnos;
+    try {
+      alumnos = await contratos.getByEvento(eventoId);
+    } catch (e) {
+      debugPrint('No se pudieron leer los alumnos para el Excel: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudieron leer los alumnos. Probá de nuevo.'),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final importo = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AcompanantesMusicaDialog(
+        eventoId: eventoId,
+        institucion: EventoPresentacion.institucionOEventoParaPdf(
+          evento: widget.evento,
+          institucionAlumno: [
+            for (final a in alumnos)
+              if (!a.esBajaTemporal && (a.institucion ?? '').trim().isNotEmpty)
+                a.institucion,
+          ].firstOrNull,
+        ),
+        alumnos: alumnos,
+        onGuardarArchivo: guardarPlanillaDelegado,
+        onElegirArchivo: elegirPlanillaDelegado,
+        onImportar: (cambios) async {
+          if (!ref.read(esRolJefeProvider)) {
+            throw StateError(kSoloEnModoJefe);
+          }
+          final desde = DateTime.now().toUtc();
+          await contratos.cargarAcompanantesYMusica({
+            for (final c in cambios) c.alumno.id: c.datos,
+          });
+          // Con la fiesta sorteada, los acompañantes entran a la lista de la
+          // puerta. Antes de subir, para que viaje junto.
+          final puerta = await ref.read(puertaAlDiaProvider).trasLosAlumnos(
+            eventoId,
+            [for (final c in cambios) c.alumno.id],
+          );
+          await ref
+              .read(cajaAutoSyncServiceProvider)
+              .afterMassiveMutation(startedAt: desde, isPayment: false);
+          return puerta.fallo || !puerta.sinSorteo ? '${puerta.renglon}.' : null;
+        },
+      ),
+    );
+    if (importo == true && mounted) await _fetchDatos(cargaSilenciosa: true);
+  }
+
   /// Lo que se suma al aviso de un cambio del salón sobre la lista de la
   /// puerta, ya con su separador. Vacío si no hay nada para decir.
   String _renglonPuerta(PuertaAlDiaResultado puerta) =>

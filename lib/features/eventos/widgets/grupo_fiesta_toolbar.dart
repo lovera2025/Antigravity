@@ -46,6 +46,11 @@ class GrupoFiestaToolbar extends StatelessWidget {
 
   final VoidCallback onEntradas;
 
+  /// El Excel que completa el delegado: acompañantes y música. Va en
+  /// PLANILLAS porque es una planilla, aunque no se imprima. Solo en modo
+  /// jefe: sin él queda a la vista, apagado, con [kSoloEnModoJefe].
+  final VoidCallback onAcompanantesYMusica;
+
   const GrupoFiestaToolbar({
     super.key,
     required this.compacto,
@@ -61,6 +66,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
     required this.onPlanillaMora,
     required this.alumnosConMora,
     required this.onEntradas,
+    required this.onAcompanantesYMusica,
   });
 
   /// El ancho que piden los cuatro botones con su nombre. Con menos, van solo
@@ -216,6 +222,16 @@ class GrupoFiestaToolbar extends StatelessWidget {
             detalle: onPlanillaMora == null
                 ? 'Nadie debe mora'
                 : '$alumnosConMora alumno(s) para llamar',
+          ),
+          const PopupMenuDivider(),
+          _item(
+            accion: esJefe ? onAcompanantesYMusica : null,
+            icono: Icons.music_note_outlined,
+            color: Colors.deepPurple,
+            titulo: 'Acompañantes y música',
+            detalle: esJefe
+                ? 'Excel para el delegado: exportar e importar'
+                : kSoloEnModoJefe,
           ),
         ],
         child: _cara(

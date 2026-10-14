@@ -20,4 +20,9 @@
 /// El casillero "N° de mesa" de Editar alumno entra en la misma regla: sin
 /// modo jefe es de solo lectura (`CasilleroNumeroMesa`), y al guardar se toma
 /// el número que el alumno ya tenía (`numeroMesaParaGuardar`).
+///
+/// Los acompañantes y la música de cada alumno, igual (6.0.0): los carga el
+/// jefe, a mano en esa ficha (`acompanantesParaGuardar`, `musicaParaGuardar`)
+/// o de a muchos con el Excel del delegado (PLANILLAS → "Acompañantes y
+/// música").
 const kSoloEnModoJefe = 'Solo en modo jefe';

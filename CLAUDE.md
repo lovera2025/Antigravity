@@ -180,6 +180,20 @@ las pone de acuerdo sola:
   DNI, y los alumnos no lo tienen**: con el QR a la vista, cualquiera puede marcar a otro. Se cierra con el tótem
   nuevo (sin QR en masivos) y con el check-in en el servidor.
 
+**Acompañantes y música se cargan con un Excel por institución** (v6.0.0): PLANILLAS ▾ → "Acompañantes y música",
+solo en modo jefe. Lo completa un delegado; ver "Qué pasó el 13-oct" del CONTEXTO de la versión.
+- Lo que decide está en `eventos/services/planilla_delegado.dart`, sin pantalla ni base: `armar`, `leer` y
+  `comparar`. **`comparar` no escribe:** es el simulacro que la ventana muestra antes de guardar.
+- **Del alumno se escriben solo `nombres_acompanantes`, `cantidad_acompanantes` y `musica_elegida`**, por
+  `cargarAcompanantesYMusica`, que rechaza cualquier otra clave. Un Excel no cambia un nombre ni una división.
+- **Una institución no pisa a otra:** el archivo lleva el id de su fiesta y un código por alumno (el principio de
+  su id). El alumno se busca por el principio del código, no por el código entero.
+- **La coma no separa acompañantes** (los nombres son "APELLIDO, NOMBRE"), y un casillero vacío nunca borra.
+- El Excel sale protegido (`planilla_delegado_bloqueo.dart`): el paquete `excel` no sabe, así que se escribe
+  después sobre el XML. **Es una ayuda, no la garantía**: Google Sheets puede no respetarlo. Si se toca cómo se
+  arma el archivo, abrirlo con el Excel de verdad antes de darlo por bueno.
+- `tool/simulacro_acompanantes_musica_test.dart` lo prueba entero sobre una copia de la base real.
+
 **Recepción y el tótem nuevos van en la 6.0.0**, por partes (decisión del 13-oct-2026; antes eran "para diciembre").
 Están diseñados y aprobados con maquetas: son los seis pendientes de "Tótem y Recepción" en
 `docs/pendientes/PENDIENTES.md`. El orden está en `docs/CONTEXTO_v6.0.0_2026-10-11.md`.
@@ -232,6 +246,11 @@ históricos y la pantalla se ve como siempre.
     instalada tiene que estar cerrada, y se le pide al usuario: no se cierra desde acá;
   - **volver atrás es reinstalar la versión anterior sobre la misma base**: por eso una migración no puede cambiar
     nada de lo que la versión anterior lee.
+
+- **Lo que se carga de a muchos no puede viajar con cada edición del alumno.** `datosEdicionAlumno` manda el
+  número de mesa, los acompañantes y la música **solo si alguien los cambió a mano**. Editar alumno manda la ficha
+  entera: una PC que todavía no bajó el sorteo o el Excel del delegado los mandaría vacíos al editar un teléfono, y
+  los borraría en la nube y en las demás. Un dato nuevo que se cargue de a muchos tiene que entrar en esa regla.
 
 - **Las tablas que se sincronizan no llevan CHECK nuevos en la nube.** El motor toma cualquier "violates" como un
   padre que falta: reencola el evento y la fila queda trabada para siempre. Los valores válidos los controla la

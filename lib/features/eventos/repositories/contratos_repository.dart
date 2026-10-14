@@ -264,6 +264,42 @@ class ContratosRepository {
     });
   }
 
+  /// Carga los acompañantes y la música que vinieron en el Excel del delegado
+  /// (`planilla_delegado.dart`), en **una sola transacción**: o entran todos
+  /// los alumnos, o ninguno.
+  ///
+  /// [datosPorContrato] trae, por alumno, **solo lo que cambia** de
+  /// `nombres_acompanantes`, `cantidad_acompanantes` y `musica_elegida`. No se
+  /// escribe nada más de su ficha, y por eso no se manda la fila entera: lo que
+  /// sube es eso, combinado con lo que ya esperaba en la cola (un pago
+  /// pendiente no se pisa). Cualquier otra clave se rechaza.
+  Future<void> cargarAcompanantesYMusica(
+    Map<String, Map<String, dynamic>> datosPorContrato,
+  ) async {
+    const permitidas = {
+      'nombres_acompanantes',
+      'cantidad_acompanantes',
+      'musica_elegida',
+    };
+    for (final datos in datosPorContrato.values) {
+      final demas = datos.keys.toSet().difference(permitidas);
+      if (demas.isNotEmpty) {
+        throw ArgumentError(
+          'Del Excel del delegado solo se cargan acompañantes y música, y '
+          'vino también: ${demas.join(', ')}',
+        );
+      }
+    }
+    if (datosPorContrato.isEmpty) return;
+    final db = await LocalDatabase.instance;
+    await db.transaction((txn) async {
+      for (final e in datosPorContrato.entries) {
+        if (e.value.isEmpty) continue;
+        await _actualizarContratoEn(txn, e.key, e.value);
+      }
+    });
+  }
+
   /// Cuántos alumnos del evento tienen en la nube un número de mesa distinto
   /// del de esta PC, sin que acá haya un cambio propio esperando subir. Si da
   /// más de cero, otra PC sorteó (o cambió mesas) y todavía no llegó: sortear

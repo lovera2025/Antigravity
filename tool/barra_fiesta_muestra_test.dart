@@ -180,6 +180,7 @@ Widget _barra(
               onPlanillaMora: () {},
               alumnosConMora: 14,
               onEntradas: () {},
+              onAcompanantesYMusica: () {},
             ),
           ),
           SizedBox(width: compacto ? 6 : 8),

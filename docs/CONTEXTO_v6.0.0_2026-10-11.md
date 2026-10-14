@@ -157,7 +157,7 @@ recomienda y se sigue.
 | # | Parte | Estado |
 |---|---|---|
 | 1 | La puerta sigue al sorteo | **hecha el 13-oct** |
-| 2 | Acompañantes y música por Excel, con el simulacro | falta |
+| 2 | Acompañantes y música por Excel, con el simulacro | **hecha el 13-oct** |
 | 3 | La nota como ventana al centro, y las dos preguntas pendientes | falta |
 | 4 | Tótem: que no se desconecte ni salude tarde (`pendientes/totem-comunicacion.md`) | falta |
 | 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | falta |
@@ -201,9 +201,63 @@ particular (los ids se ven iguales y `eventos` no es público), y cambiar eso pa
 particulares. Se cierra en las partes 5 (sin QR en masivos) y 9 (el check-in en el servidor). Quedó anotado en
 `docs/pendientes/rls-invitados.md`.
 
+### La parte 2: acompañantes y música por Excel
+
+**Qué cambió para el usuario:** en la fiesta de cada institución, PLANILLAS ▾ → "Acompañantes y música" (solo en
+modo jefe) abre una ventana con cuántos alumnos ya tienen algo cargado y dos botones.
+- **EXPORTAR EXCEL** guarda `Acompañantes y música - <INSTITUCIÓN>.xlsx`: todos los alumnos de esa institución tal
+  cual están en el sistema, menos los dados de baja, por división y apellido. Columnas: N°, Alumno, División,
+  Acompañantes (hasta 2), Música y Código.
+- **El Excel va cerrado:** la hoja está protegida (clave `delegado`, para que no se saque con un clic), solo los
+  casilleros amarillos se dejan escribir, y el de Acompañantes rechaza un tercero con "Máximo 2 acompañantes".
+- **IMPORTAR EXCEL empieza siempre como simulacro:** la ventana "Antes de guardar" dice cuántos se cargan, cuántos
+  ya estaban, cuántos vinieron vacíos y qué hay que revisar, con cómo se leyó cada uno. Recién IMPORTAR guarda,
+  todos juntos o ninguno.
+- **En Editar alumno, los acompañantes y la música quedaron solo para el jefe**, como el número de mesa.
+
+**Las reglas:**
+- Una institución no pisa a otra: el archivo lleva el código de su fiesta y el de cada alumno. Un Excel de otra
+  institución no entra, aunque le hayan borrado el renglón que lo dice.
+- Del alumno se escriben solo acompañantes y música. Un nombre o una división cambiados en el Excel se ignoran.
+- Un casillero vacío nunca borra. Con 3 o más acompañantes, ese alumno no se carga y va a "Revisar".
+- Se separan con barra, punto y coma, "+", "&", renglón nuevo o " y ". **La coma no separa** (los nombres del
+  sistema son "APELLIDO, NOMBRE"): se toma como una persona y se avisa.
+- Cada renglón se empareja por el código y además se compara el nombre: si no coinciden, no se carga.
+- Si el alumno ya tenía algo distinto, se muestra antes → después y hay que tildar para poder importar.
+
+**El arreglo que hacía falta:** Editar alumno mandaba de nuevo la lista de acompañantes con cada edición. Una PC que
+todavía no bajó lo importado la habría mandado vacía al editar un teléfono, y lo habría borrado en la nube y en las
+demás. Ahora acompañantes y música viajan solo si alguien los cambió a mano (`datosEdicionAlumno`), como el número
+de mesa. De paso: vaciar la música a propósito ahora sí la borra, y quien tenía acompañantes "sin nombre" ya no
+pierde la cuenta al editar otra cosa.
+
+**Cómo se comprobó:**
+- **Con el Excel de verdad de esta PC (16.0):** el archivo abre sin avisos; no deja escribir en el nombre ni en el
+  código; sí en los dos amarillos; la regla del máximo está en todos los renglones; no se desprotege sin la clave.
+  Lo que guarda Excel se vuelve a leer bien: quedó como archivo de prueba en `test/datos/`.
+- **El simulacro con los datos reales** (`tool/simulacro_acompanantes_musica_test.dart`), sobre una copia de la
+  base: 9 instituciones, 636 alumnos activos. Exportó cada una, la completó con datos inventados (a propósito, uno
+  con tres acompañantes y uno con el nombre cambiado), la importó y comparó la base entera: solo cambiaron
+  acompañantes y música de los alumnos cargados, y lo que queda para subir. Los 72 cruces (el Excel de una en
+  otra) fueron rechazados. La base real quedó con el mismo SHA-256.
+- 1.832 tests en la suite; `flutter analyze` sigue en 313.
+
+**Piezas:** `planilla_delegado.dart` (`armar`, `leer`, `separarAcompanantes`, `comparar`),
+`planilla_delegado_bloqueo.dart` (`bloquearPlanilla`: el paquete `excel` no sabe proteger, se escribe después con
+`archive` y `xml`), `planilla_delegado_archivos.dart`, `acompanantes_musica_dialog.dart` y
+`ContratosRepository.cargarAcompanantesYMusica`. **Sin cambios en la base ni en la nube.**
+
+**Para tener en cuenta:**
+- En la nube `nombres_acompanantes` es `text[]` y nunca guardó un nombre (0 de 643 el 13-oct). Va por el mismo
+  camino que Editar alumno, pero la primera prueba de verdad es la primera importación ya con la 6.0.0 instalada:
+  conviene que sea la institución más chica, mirando que la cola quede en 0 y que aparezca en la otra PC.
+- Google Sheets puede no respetar la protección de la hoja. La garantía está al importar, que no depende de ella.
+- El usuario preguntó por qué la ventana se llama "Antes de guardar"; se le explicó y se le ofreció cambiarle el
+  nombre. No pidió cambiarlo.
+
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, las partes 2 a 10 del camino de arriba. Después:
+**No se publica sin su "publicamos".** Antes, las partes 3 a 10 del camino de arriba. Después:
 
 1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
@@ -248,8 +302,9 @@ docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 13-oct" y
 aprobado está en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-expressive-nautilus.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
-se corrieron. Va todo en una sola versión, por partes: está hecha la parte 1
-(la puerta sigue al sorteo). Seguí por la parte que toque del camino, con su
+se corrieron. Va todo en una sola versión, por partes: están hechas la parte 1
+(la puerta sigue al sorteo) y la 2 (el Excel de acompañantes y música). Seguí
+por la parte que toque del camino, con su
 plan corto, y avisame al terminar cada una con cómo quedó, un commit y un push.
 Recepción y el tótem nuevos también van en la 6.0.0: sus diseños ya están
 aprobados en docs/pendientes/.

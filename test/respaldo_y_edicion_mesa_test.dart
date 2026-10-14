@@ -467,4 +467,145 @@ void main() {
       );
     });
   });
+
+  // Los acompañantes y la música se cargan de a cientos con el Excel del
+  // delegado. Si viajaran con cada edición, una PC que todavía no bajó esa
+  // carga los mandaría vacíos al editar un teléfono, y los borraría en todas.
+  group('Editar alumno: acompañantes y música solo si se cambiaron', () {
+    final antes = alumno('a', mesa: '12').copyWith(
+      nombresAcompanantes: ['ANA PEREZ', 'HUGO PEREZ'],
+      cantidadAcompanantes: 2,
+      musicaElegida: 'Viva la vida',
+    );
+
+    Map<String, dynamic> datos(ContratoAlumno editado) => datosEdicionAlumno(
+          antes: antes,
+          editado: editado,
+          numeroMesaEscrito: '12',
+        );
+
+    test('editar el teléfono no manda acompañantes ni música', () {
+      final d = datos(antes.copyWith(telefono: '3777123456'));
+      expect(d['telefono'], '3777123456');
+      expect(d.containsKey('nombres_acompanantes'), isFalse);
+      expect(d.containsKey('cantidad_acompanantes'), isFalse);
+      expect(d.containsKey('musica_elegida'), isFalse);
+    });
+
+    test('una PC que no bajó lo importado no lo borra al editar otra cosa', () {
+      // En esta PC el alumno todavía figura sin nada: se edita su teléfono.
+      final sinBajar = alumno('a', mesa: '12');
+      final d = datosEdicionAlumno(
+        antes: sinBajar,
+        editado: sinBajar.copyWith(telefono: '3777123456'),
+        numeroMesaEscrito: '12',
+      );
+      expect(d.containsKey('nombres_acompanantes'), isFalse);
+      expect(d.containsKey('cantidad_acompanantes'), isFalse);
+      expect(d.containsKey('musica_elegida'), isFalse);
+    });
+
+    test('cambiar un acompañante manda la lista y la cantidad', () {
+      final d = datos(
+        antes.copyWith(
+          nombresAcompanantes: ['ANA PEREZ'],
+          cantidadAcompanantes: 1,
+        ),
+      );
+      expect(d['nombres_acompanantes'], ['ANA PEREZ']);
+      expect(d['cantidad_acompanantes'], 1);
+      expect(d.containsKey('musica_elegida'), isFalse);
+    });
+
+    test('cambiar la música la manda, y nada de los acompañantes', () {
+      final d = datos(antes.copyWith(musicaElegida: 'Titanium'));
+      expect(d['musica_elegida'], 'Titanium');
+      expect(d.containsKey('nombres_acompanantes'), isFalse);
+    });
+
+    test('vaciar la música a propósito la borra', () {
+      final d = datos(antes.copyWith(musicaElegida: '  '));
+      expect(d.containsKey('musica_elegida'), isTrue);
+      expect(d['musica_elegida'], isNull);
+    });
+
+    test('quien tenía acompañantes sin nombre no pierde la cuenta', () {
+      // "2 sin nombre": la cantidad está, los nombres no. Antes, editar
+      // cualquier cosa la dejaba en cero.
+      final sinNombres = alumno('a').copyWith(cantidadAcompanantes: 2);
+      final d = datosEdicionAlumno(
+        antes: sinNombres,
+        editado: sinNombres.copyWith(
+          telefono: '3777123456',
+          cantidadAcompanantes: 0,
+        ),
+        numeroMesaEscrito: '',
+      );
+      expect(d.containsKey('cantidad_acompanantes'), isFalse);
+    });
+  });
+
+  // Los carga el jefe: a mano en la ficha, o con el Excel del delegado.
+  group('Editar alumno: acompañantes y música los cambia solo el jefe', () {
+    test('sin modo jefe quedan los acompañantes que tenía', () {
+      expect(
+        acompanantesParaGuardar(
+          esJefe: false,
+          antes: ['ANA PEREZ'],
+          escritos: ['OTRA PERSONA', 'Y OTRA'],
+        ),
+        ['ANA PEREZ'],
+      );
+      expect(
+        acompanantesParaGuardar(
+          esJefe: true,
+          antes: ['ANA PEREZ'],
+          escritos: ['OTRA PERSONA'],
+        ),
+        ['OTRA PERSONA'],
+      );
+    });
+
+    test('sin modo jefe queda la música que tenía', () {
+      expect(
+        musicaParaGuardar(esJefe: false, antes: 'Viva la vida', escrita: 'X'),
+        'Viva la vida',
+      );
+      expect(
+        musicaParaGuardar(esJefe: true, antes: 'Viva la vida', escrita: 'X'),
+        'X',
+      );
+    });
+
+    test('en un alta sin modo jefe, el alumno entra sin nada de eso', () {
+      expect(
+        acompanantesParaGuardar(esJefe: false, antes: null, escritos: ['X']),
+        isEmpty,
+      );
+      expect(musicaParaGuardar(esJefe: false, antes: null, escrita: 'X'), '');
+    });
+
+    testWidgets('sin modo jefe la música se ve, no se escribe y dice por qué',
+        (tester) async {
+      final controller = TextEditingController(text: 'Viva la vida');
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CasilleroSoloJefe(
+              key: const Key('musica_elegida'),
+              controller: controller,
+              esJefe: false,
+              decoration: const InputDecoration(labelText: 'Música Elegida'),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Viva la vida'), findsOneWidget);
+      expect(find.text('Solo en modo jefe'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('musica_elegida')), 'X');
+      await tester.pump();
+      expect(controller.text, 'Viva la vida');
+    });
+  });
 }

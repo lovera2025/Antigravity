@@ -135,4 +135,19 @@ void main() {
     };
     expect(quienes, {pantallaFiesta, pantallaPlano});
   });
+
+  test('lo que se importa del Excel del delegado llega a la puerta', () {
+    // Los acompañantes son filas de la lista de la puerta: con la fiesta ya
+    // sorteada, cargarlos sin avisarle dejaría a Recepción sin esas personas.
+    final fiesta = leer(pantallaFiesta);
+    final i = fiesta.indexOf('Future<void> _abrirAcompanantesYMusica() async {');
+    final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));
+    final guardado = cuerpo.indexOf('cargarAcompanantesYMusica(');
+    final puerta = cuerpo.indexOf('.trasLosAlumnos(');
+    final subida = cuerpo.indexOf('.afterMassiveMutation(');
+    expect(guardado, greaterThanOrEqualTo(0));
+    expect(puerta, greaterThan(guardado));
+    // Antes de subir, para que viaje junto.
+    expect(subida, greaterThan(puerta));
+  });
 }

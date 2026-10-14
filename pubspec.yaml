@@ -63,6 +63,8 @@ dependencies:
   package_info_plus: ^9.0.0
   uuid: ^4.5.3
   excel: ^4.0.6
+  # Para cerrar el Excel del delegado (planilla_delegado_bloqueo.dart): ya venía con `excel`.
+  xml: ^6.6.1
   desktop_multi_window: ^0.2.0
   http: ^1.2.2
   # SQLite nativo en Android/iOS (la PC usa sqflite_common_ffi en local_database.dart).

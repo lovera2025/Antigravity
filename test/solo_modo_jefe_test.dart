@@ -145,4 +145,83 @@ void main() {
     // con los números, por `asignarNumerosMesa`.
     expect(leer(pantallaFiesta), isNot(contains('planos.guardar(')));
   });
+
+  test('Editar alumno: acompañantes y música pasan por la llave', () {
+    final fuente =
+        leer('lib/features/eventos/widgets/modal_alumno_premium.dart');
+    final guardar = fuente.substring(fuente.indexOf('void _submit() async {'));
+    final hastaElDibujo = guardar.substring(0, guardar.indexOf('Widget build('));
+    // Al guardar, lo escrito en la ficha se lee en un solo lugar: lo que se le
+    // pasa a cada llave, que sin modo jefe devuelve lo que el alumno ya tenía.
+    expect(
+      hastaElDibujo,
+      contains('''
+      final acompanantes = acompanantesParaGuardar(
+        esJefe: ref.read(esRolJefeProvider),
+        antes: widget.alumno?.nombresAcompanantes,
+        escritos: _acompanantes,
+      );'''),
+    );
+    expect(
+      hastaElDibujo,
+      contains('''
+      final musica = musicaParaGuardar(
+        esJefe: ref.read(esRolJefeProvider),
+        antes: widget.alumno?.musicaElegida,
+        escrita: _musicaElegidaCtrl.text,
+      ).trim();'''),
+    );
+    expect(
+      RegExp(r'_musicaElegidaCtrl\.text').allMatches(hastaElDibujo).length,
+      1,
+      reason: 'la música se lee por fuera de musicaParaGuardar',
+    );
+    expect(
+      RegExp(r'\b_acompanantes\b').allMatches(hastaElDibujo).length,
+      1,
+      reason: 'los acompañantes se leen por fuera de acompanantesParaGuardar',
+    );
+    // En la ficha, sin modo jefe no se agregan ni se sacan.
+    expect(fuente, contains('enabled: esJefe,'));
+    expect(fuente, contains('onPressed: !esJefe'));
+    expect(fuente, contains('onDeleted: !esJefe'));
+  });
+
+  test('el Excel del delegado lo carga solo el jefe, con las tres llaves', () {
+    // 1. El renglón de PLANILLAS llega apagado sin modo jefe.
+    final barra =
+        leer('lib/features/eventos/widgets/grupo_fiesta_toolbar.dart');
+    expect(barra, contains('accion: esJefe ? onAcompanantesYMusica : null,'));
+
+    final fiesta = leer(pantallaFiesta);
+    final i = fiesta.indexOf('Future<void> _abrirAcompanantesYMusica() async {');
+    expect(i, greaterThanOrEqualTo(0));
+    final cuerpo = fiesta.substring(i, fiesta.indexOf('\n  }\n', i));
+    // 2. Al abrir.
+    expect(cuerpo, contains('if (!ref.read(esRolJefeProvider)) return soloJefe();'));
+    // 3. Otra vez justo antes de guardar, y antes que el guardado.
+    final llave = cuerpo.indexOf('''
+          if (!ref.read(esRolJefeProvider)) {
+            throw StateError(kSoloEnModoJefe);
+          }''');
+    expect(llave, greaterThanOrEqualTo(0));
+    expect(
+      cuerpo.indexOf('cargarAcompanantesYMusica('),
+      greaterThan(llave),
+    );
+  });
+
+  test('nadie más carga acompañantes y música de a muchos', () {
+    final quienes = {
+      for (final f in Directory('lib').listSync(recursive: true))
+        if (f is File &&
+            f.path.endsWith('.dart') &&
+            f.readAsStringSync().contains('cargarAcompanantesYMusica('))
+          f.path.replaceAll('\\', '/'),
+    };
+    expect(quienes, {
+      pantallaFiesta,
+      'lib/features/eventos/repositories/contratos_repository.dart',
+    });
+  });
 }

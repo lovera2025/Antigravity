@@ -23,18 +23,51 @@ import '../../recepcion/services/puerta_al_dia.dart';
 /// siempre, una PC que todavía no bajó el sorteo pisaría los números con lo que
 /// tenía (vacío o viejo) al editar cualquier otra cosa del alumno. Vaciarlo a
 /// propósito lo libera (`null`).
+///
+/// **Los acompañantes y la música, igual** (6.0.0). Se cargan de a cientos
+/// desde el Excel del delegado (`planilla_delegado.dart`): una PC que todavía
+/// no bajó esa carga los mandaría vacíos al editar un teléfono, y los borraría
+/// en la nube y en las demás. Vaciar la música a propósito la borra (`null`).
 Map<String, dynamic> datosEdicionAlumno({
   required ContratoAlumno antes,
   required ContratoAlumno editado,
   required String numeroMesaEscrito,
 }) {
-  final datos = editado.toJson()..remove('numero_mesa');
+  final datos = editado.toJson()
+    ..remove('numero_mesa')
+    ..remove('nombres_acompanantes')
+    ..remove('cantidad_acompanantes')
+    ..remove('musica_elegida');
   final mesaAntes = antes.numeroMesa?.trim() ?? '';
   final mesaAhora = numeroMesaEscrito.trim();
   if (mesaAhora != mesaAntes) {
     datos['numero_mesa'] = mesaAhora.isEmpty ? null : mesaAhora;
   }
+  if (!_mismosAcompanantes(antes, editado)) {
+    datos['nombres_acompanantes'] = editado.nombresAcompanantes;
+    datos['cantidad_acompanantes'] = editado.nombresAcompanantes.length;
+  }
+  final musicaAntes = antes.musicaElegida?.trim() ?? '';
+  final musicaAhora = editado.musicaElegida?.trim() ?? '';
+  if (musicaAhora != musicaAntes) {
+    datos['musica_elegida'] = musicaAhora.isEmpty ? null : musicaAhora;
+  }
   return datos;
+}
+
+/// Si los dos tienen los mismos acompañantes con nombre, en el mismo orden.
+bool _mismosAcompanantes(ContratoAlumno antes, ContratoAlumno editado) {
+  List<String> limpios(List<String> nombres) => [
+        for (final n in nombres)
+          if (n.trim().isNotEmpty) n.trim(),
+      ];
+  final a = limpios(antes.nombresAcompanantes);
+  final b = limpios(editado.nombresAcompanantes);
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// Si lo que se editó de un alumno cambia lo que dice la lista de la puerta:
@@ -45,19 +78,9 @@ bool edicionCambiaLaPuerta({
   required ContratoAlumno editado,
   required String numeroMesaEscrito,
 }) {
-  List<String> limpios(List<String> nombres) => [
-        for (final n in nombres)
-          if (n.trim().isNotEmpty) n.trim(),
-      ];
-  final a = limpios(antes.nombresAcompanantes);
-  final b = limpios(editado.nombresAcompanantes);
-  var mismosAcompanantes = a.length == b.length;
-  for (var i = 0; mismosAcompanantes && i < a.length; i++) {
-    mismosAcompanantes = a[i] == b[i];
-  }
   return antes.nombreAlumno.trim() != editado.nombreAlumno.trim() ||
       (antes.numeroMesa?.trim() ?? '') != numeroMesaEscrito.trim() ||
-      !mismosAcompanantes;
+      !_mismosAcompanantes(antes, editado);
 }
 
 /// El número de mesa que se toma al guardar un alumno, según quién guarda.
@@ -73,6 +96,27 @@ String numeroMesaParaGuardar({
   required String escrito,
 }) =>
     esJefe ? escrito : (antes ?? '');
+
+/// Los acompañantes que se toman al guardar un alumno, según quién guarda.
+///
+/// Los carga solo el jefe (a mano acá, o de a muchos con el Excel del
+/// delegado). Sin modo jefe quedan los que el alumno ya tenía ([antes]; ninguno
+/// en un alta), aunque en la ficha haya quedado otra cosa.
+List<String> acompanantesParaGuardar({
+  required bool esJefe,
+  required List<String>? antes,
+  required List<String> escritos,
+}) =>
+    esJefe ? escritos : (antes ?? const []);
+
+/// La música que se toma al guardar un alumno, según quién guarda. Igual que
+/// [acompanantesParaGuardar].
+String musicaParaGuardar({
+  required bool esJefe,
+  required String? antes,
+  required String escrita,
+}) =>
+    esJefe ? escrita : (antes ?? '');
 
 /// El casillero del número de mesa de Editar alumno.
 ///
@@ -92,11 +136,35 @@ class CasilleroNumeroMesa extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => TextFormField(
+  Widget build(BuildContext context) => CasilleroSoloJefe(
         key: const Key('numero_mesa'),
         controller: controller,
-        // Solo lectura y no apagado: el número se tiene que seguir leyendo
-        // bien, que es lo que el operario viene a mirar.
+        esJefe: esJefe,
+        decoration: decoration,
+      );
+}
+
+/// Un casillero de Editar alumno que escribe solo el jefe: el número de mesa
+/// y la música elegida.
+///
+/// Sin modo jefe es de solo lectura y no apagado —lo escrito se tiene que
+/// seguir leyendo bien, que es lo que el operario viene a mirar—, con el
+/// motivo debajo y un candado.
+class CasilleroSoloJefe extends StatelessWidget {
+  final TextEditingController controller;
+  final bool esJefe;
+  final InputDecoration decoration;
+
+  const CasilleroSoloJefe({
+    super.key,
+    required this.controller,
+    required this.esJefe,
+    required this.decoration,
+  });
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+        controller: controller,
         readOnly: !esJefe,
         decoration: esJefe
             ? decoration
@@ -399,6 +467,18 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
         antes: widget.alumno?.numeroMesa,
         escrito: _numeroMesaCtrl.text,
       );
+      // Los acompañantes y la música, también: sin modo jefe quedan los que
+      // tenía.
+      final acompanantes = acompanantesParaGuardar(
+        esJefe: ref.read(esRolJefeProvider),
+        antes: widget.alumno?.nombresAcompanantes,
+        escritos: _acompanantes,
+      );
+      final musica = musicaParaGuardar(
+        esJefe: ref.read(esRolJefeProvider),
+        antes: widget.alumno?.musicaElegida,
+        escrita: _musicaElegidaCtrl.text,
+      ).trim();
 
       final nombre = _nombreCtrl.text.trim();
       final mesaCuotas = int.tryParse(_mesaCuotasCtrl.text) ?? 1;
@@ -469,10 +549,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           telefono: _telefonoCtrl.text.trim(),
           institucion: _institucionParaPersistir(),
           cursoDivision: _cursoDivisionCtrl.text.trim(),
-          musicaElegida: _musicaElegidaCtrl.text.trim(),
+          musicaElegida: musica,
           numeroMesa: numeroMesa.trim(),
-          nombresAcompanantes: _acompanantes,
-          cantidadAcompanantes: _acompanantes.length,
+          nombresAcompanantes: acompanantes,
+          cantidadAcompanantes: acompanantes.length,
           montoTotalPactado: totalGeneralEfectivo,
           saldoDeudor: nuevoSaldoDeudor,
           totalCuotas: planCuotasEfectivo,
@@ -512,8 +592,8 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           id: UuidUtils.generate(),
           eventoId: widget.evento.id,
           nombreAlumno: nombre,
-          cantidadAcompanantes: _acompanantes.length,
-          nombresAcompanantes: _acompanantes,
+          cantidadAcompanantes: acompanantes.length,
+          nombresAcompanantes: acompanantes,
           montoTotalPactado: totalGeneralEfectivo,
           saldoDeudor: totalGeneralEfectivo,
           porcentajeDescuento: 0.0,
@@ -529,9 +609,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
           cursoDivision: _cursoDivisionCtrl.text.trim().isNotEmpty
               ? _cursoDivisionCtrl.text.trim()
               : null,
-          musicaElegida: _musicaElegidaCtrl.text.trim().isNotEmpty
-              ? _musicaElegidaCtrl.text.trim()
-              : null,
+          musicaElegida: musica.isNotEmpty ? musica : null,
           numeroMesa: numeroMesa.trim().isNotEmpty ? numeroMesa.trim() : null,
           telefono: _telefonoCtrl.text.trim().isNotEmpty
               ? _telefonoCtrl.text.trim()
@@ -692,8 +770,10 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
+                          CasilleroSoloJefe(
+                            key: const Key('musica_elegida'),
                             controller: _musicaElegidaCtrl,
+                            esJefe: esJefe,
                             decoration: _premiumInputDecoration(
                               'Música Elegida',
                               isDark,
@@ -729,10 +809,16 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                             children: [
                               Expanded(
                                 child: TextFormField(
+                                  key: const Key('acompanante_nuevo'),
                                   controller: _acompNombreCtrl,
+                                  // Los carga el jefe: sin modo jefe se ven
+                                  // los que hay y no se agrega ni se saca.
+                                  enabled: esJefe,
                                   decoration: _premiumInputDecoration(
                                     'Agregar nombre de acompañante',
                                     isDark,
+                                  ).copyWith(
+                                    helperText: esJefe ? null : kSoloEnModoJefe,
                                   ),
                                   onFieldSubmitted: (val) {
                                     if (val.trim().isNotEmpty) {
@@ -746,16 +832,20 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               ),
                               const SizedBox(width: 12),
                               ElevatedButton(
-                                onPressed: () {
-                                  if (_acompNombreCtrl.text.trim().isNotEmpty) {
-                                    setState(() {
-                                      _acompanantes.add(
-                                        _acompNombreCtrl.text.trim(),
-                                      );
-                                      _acompNombreCtrl.clear();
-                                    });
-                                  }
-                                },
+                                onPressed: !esJefe
+                                    ? null
+                                    : () {
+                                        if (_acompNombreCtrl.text
+                                            .trim()
+                                            .isNotEmpty) {
+                                          setState(() {
+                                            _acompanantes.add(
+                                              _acompNombreCtrl.text.trim(),
+                                            );
+                                            _acompNombreCtrl.clear();
+                                          });
+                                        }
+                                      },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: gold.withValues(alpha: 0.2),
                                   foregroundColor: gold,
@@ -796,9 +886,12 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                         borderRadius: BorderRadius.circular(8),
                                         side: BorderSide.none,
                                       ),
-                                      onDeleted: () => setState(
-                                        () => _acompanantes.remove(name),
-                                      ),
+                                      onDeleted: !esJefe
+                                          ? null
+                                          : () => setState(
+                                                () =>
+                                                    _acompanantes.remove(name),
+                                              ),
                                     ),
                                   )
                                   .toList(),
