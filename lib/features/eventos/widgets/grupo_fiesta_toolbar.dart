@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../recepcion/services/lista_puerta.dart';
 
+/// Lo que se separa cada menú de su botón. Pegado, el borde del menú pisaba el
+/// de abajo de la barra.
+const _aireDelMenu = Offset(0, 6);
+
 /// Las herramientas de la fiesta, a la vista en la barra del evento masivo:
 /// PLANO, SORTEO, PLANILLAS y ENTRADAS, al lado de MÁS.
 ///
@@ -141,6 +145,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
         key: const Key('fiesta_sorteo'),
         tooltip: 'Sorteo de mesas',
         position: PopupMenuPosition.under,
+        offset: _aireDelMenu,
         shape: _formaMenu,
         onSelected: (accion) => accion(),
         itemBuilder: (context) => [
@@ -188,6 +193,7 @@ class GrupoFiestaToolbar extends StatelessWidget {
         key: const Key('fiesta_planillas'),
         tooltip: 'Planillas para imprimir',
         position: PopupMenuPosition.under,
+        offset: _aireDelMenu,
         shape: _formaMenu,
         onSelected: (accion) => accion(),
         itemBuilder: (context) => [
@@ -350,6 +356,7 @@ class BotonMasFiesta extends StatelessWidget {
       key: const Key('fiesta_mas'),
       tooltip: 'Más acciones',
       position: PopupMenuPosition.under,
+      offset: _aireDelMenu,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(compacto ? 12 : 16),
       ),

@@ -32,6 +32,10 @@ import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
+/// Alto de la ventana en las muestras con un menú abierto: la barra y, debajo,
+/// lugar para el menú más largo (PLANILLAS, con cinco renglones).
+const double _altoConMenu = 480;
+
 Widget _pastilla(String texto, IconData icono, Color color, bool compacto) =>
     Container(
       margin: EdgeInsets.only(right: compacto ? 6 : 10),
@@ -238,9 +242,14 @@ void main() {
           theme: ThemeData(fontFamily: FuentesPlano.linea, useMaterial3: true),
           home: Scaffold(
             backgroundColor: Colors.white,
+            // La barra va arriba, con su alto de siempre: suelta, se estira y
+            // queda al medio de la ventana, y al menú no le queda lugar abajo.
             body: Align(
               alignment: Alignment.topLeft,
-              child: _barra(ancho, conCopia: conCopia, esJefe: esJefe),
+              child: SizedBox(
+                height: 76,
+                child: _barra(ancho, conCopia: conCopia, esJefe: esJefe),
+              ),
             ),
           ),
         ),
@@ -250,6 +259,18 @@ void main() {
     if (menu != null) {
       await tester.tap(find.byKey(Key(menu)));
       await tester.pumpAndSettle();
+      // El menú tiene que entrar debajo de su botón. Si la ventana de la
+      // muestra es baja, Flutter lo corre para arriba y tapa la barra: eso no
+      // pasa en la app, y el usuario lo leyó como un defecto del programa.
+      final boton = tester.getRect(find.byKey(Key(menu)));
+      final primero = tester.getRect(
+        find.byWidgetPredicate((w) => w is PopupMenuEntry).first,
+      );
+      expect(
+        primero.top,
+        greaterThanOrEqualTo(boton.bottom - 1),
+        reason: 'El menú no entra debajo del botón: subir _altoConMenu.',
+      );
     }
     expect(tester.takeException(), isNull);
 
@@ -285,7 +306,7 @@ void main() {
       tester,
       archivo: 'Barra_menu_sorteo.png',
       ancho: 1366,
-      alto: 330,
+      alto: _altoConMenu,
       menu: 'fiesta_sorteo',
       conCopia: true,
     );
@@ -296,7 +317,7 @@ void main() {
       tester,
       archivo: 'Barra_menu_sorteo_operario.png',
       ancho: 1366,
-      alto: 330,
+      alto: _altoConMenu,
       menu: 'fiesta_sorteo',
       conCopia: true,
       esJefe: false,
@@ -308,7 +329,7 @@ void main() {
       tester,
       archivo: 'Barra_menu_planillas.png',
       ancho: 1366,
-      alto: 330,
+      alto: _altoConMenu,
       menu: 'fiesta_planillas',
     );
   });
@@ -318,7 +339,7 @@ void main() {
       tester,
       archivo: 'Barra_menu_mas.png',
       ancho: 1366,
-      alto: 290,
+      alto: _altoConMenu,
       menu: 'fiesta_mas',
     );
   });
