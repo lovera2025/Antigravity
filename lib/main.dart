@@ -24,6 +24,12 @@ import 'features/recepcion/op_checkin_screen.dart';
 import 'features/recepcion/recepcion_unified_screen.dart';
 import 'features/totem/totem_display.dart';
 import 'features/totem/totem_checkin_screen.dart';
+import 'features/totem/services/puente_ficha.dart';
+import 'features/eventos/repositories/contratos_repository.dart';
+import 'features/eventos/repositories/eventos_repository.dart';
+import 'features/eventos/repositories/sillas_reparto_repository.dart';
+import 'features/recepcion/providers/recepcion_provider.dart'
+    show leerAlumnosDeLaPuerta;
 import 'features/asesor/asesor_home_screen.dart';
 import 'features/common/providers/user_role_provider.dart';
 import 'features/common/widgets/operational_sync_coordinator.dart';
@@ -561,6 +567,28 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
 
   /// Evita invalidar el rol en cada rebuild del [StreamBuilder] (podía provocar ciclos de actualización).
   String? _invalidatedRoleForUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    // La ventana del tótem le pide a esta la ficha del evento: quién es
+    // alumno, con quién viene, su mesa, sus sillas y su música. Sale de la base
+    // de esta PC, así que anda sin internet.
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      PuenteFichaTotem.atenderEnLaVentanaPrincipal(
+        (eventoId) => armarFichaTotem(
+          eventoId,
+          leerEvento: ref.read(eventosRepositoryProvider).getById,
+          leerAlumnos: (id) => leerAlumnosDeLaPuerta(
+            ref.read(contratosRepositoryProvider),
+            ref.read(sillasRepartoRepositoryProvider),
+            id,
+          ),
+        ),
+      );
+    }
+  }
 
   /// Rehidrata sesión desde disco si el stream de auth tarda o falla (p. ej. sin internet).
   Session? _effectiveSession(

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:ui';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -9,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
 import '../../core/services/totem_config_cache.dart';
@@ -18,8 +16,13 @@ import '../../models/totem_config.dart';
 import '../../../main.dart' show kWebBaseUrl;
 import 'providers/totem_config_provider.dart';
 import 'services/bienvenidas_totem.dart';
+import 'services/contenido_bienvenida.dart';
+import 'services/ficha_totem.dart';
+import 'services/puente_ficha.dart';
 import 'totem_orientation.dart';
 import 'widgets/aviso_sin_internet.dart';
+import 'widgets/portada_totem.dart';
+import 'widgets/tarjeta_bienvenida.dart';
 
 class TotemDisplay extends ConsumerStatefulWidget {
   final String eventoId;
@@ -100,8 +103,30 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   /// Orden: más recientes primero.
   List<Invitado> get _ingresados => _sala.ingresados;
 
-  Invitado? _current;
+  /// La bienvenida que se dibuja: la que está en pantalla y, mientras se va,
+  /// la que se está yendo ([_saliendo]). Para [IngresosTotem], la que se va
+  /// ya terminó: el que llega en ese momento espera la suya.
+  BienvenidaTotem? _current;
+  bool _saliendo = false;
   final _recentIds = <String>{};      // destacados con brillo dorado
+
+  /// Lo que la ventana principal sabe de cada persona del evento: si es
+  /// masivo, quién es alumno, con quién viene, su mesa, sus sillas y su
+  /// música (`ficha_totem.dart`). Solo en la ventana del escritorio: la web no
+  /// tiene ventana principal a quién pedírsela.
+  FichaTotem? _ficha;
+
+  /// Vuelve a pedir la ficha cada minuto: un sorteo, un alumno nuevo o el
+  /// Excel del delegado pueden cambiarla con el tótem abierto.
+  Timer? _fichaTimer;
+
+  /// El QR para que cada invitado se busque. **En un masivo no va**: los
+  /// alumnos no tienen DNI y cualquiera podía marcar a otro. Ver
+  /// [hayQrEnElTotem].
+  bool get _mostrarQr => hayQrEnElTotem(
+        enLaVentanaDelEscritorio: widget.windowId != null,
+        ficha: _ficha,
+      );
 
   // ── Timers ─────────────────────────────────────────────────────────────────
   Timer? _displayTimer;
@@ -135,9 +160,47 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     svc = widget.svc ?? SupabaseService();
     _setupAnimations();
     _connect();
-    _setupInterWindowChannel();
+    // Solo en su propia ventana. Montado en la ventana principal (la ruta
+    // `/totem_display`) le sacaría a esa ventana el manejador que contesta la
+    // ficha del evento: hay uno solo por ventana.
+    if (widget.windowId != null) _setupInterWindowChannel();
+    _pedirFicha();
+    _iniciarFichaPeriodica();
     _cargarOrientacion();
     _programarOcultadoControles();
+  }
+
+  // ── La ficha del evento ────────────────────────────────────────────────────
+
+  /// Le pide la ficha a la ventana principal. Sale de la base de la PC: anda
+  /// sin internet. Si no llega, se sigue con la que había.
+  Future<void> _pedirFicha() async {
+    if (widget.windowId == null || _pausado) return;
+    final evento = _eventoId;
+    if (evento.length != 36) return;
+    final ficha = await PuenteFichaTotem.pedir(evento);
+    if (!mounted || ficha == null || evento != _eventoId) return;
+    setState(() {
+      _ficha = ficha;
+      _sala.familiaDe = (i) => ficha.familiaDe(i.id);
+    });
+  }
+
+  void _iniciarFichaPeriodica() {
+    _fichaTimer?.cancel();
+    if (widget.windowId == null) return;
+    _fichaTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _pedirFicha(),
+    );
+  }
+
+  /// En un masivo, si llegó alguien que la ficha no tiene: un alumno o un
+  /// acompañante cargado después de que se pidió.
+  bool _fichaNoConoce(Iterable<Invitado> personas) {
+    final ficha = _ficha;
+    if (ficha == null || !ficha.masivo) return false;
+    return personas.any((i) => ficha.de(i.id) == null);
   }
 
   // ── Orientación ────────────────────────────────────────────────────────────
@@ -303,14 +366,22 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
       _sala.reiniciar();
       _recentIds.clear();
       _current = null;
+      _saliendo = false;
       _reconnectAttempts = 0;
       // Evita un frame con el branding del evento anterior.
       _cfg = TotemConfig.defaults(nuevo);
+      // La ficha es del evento anterior: hasta que llegue la nueva, cada uno
+      // es su propia familia y no hay QR.
+      _ficha = null;
+      _sala.familiaDe = cadaUnoSuFamilia;
     });
 
     _cargarOrientacion();
     // Escondido, se conecta recién al volver a mostrarse.
-    if (!_pausado) _connect();
+    if (!_pausado) {
+      _connect();
+      _pedirFicha();
+    }
   }
 
   /// Corta todo lo que habla con la nube. Ver [_pausado].
@@ -321,6 +392,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     _reconciliarTimer?.cancel();
     _reconnectTimer?.cancel();
     _displayTimer?.cancel();
+    _fichaTimer?.cancel();
     // `removeChannel` y no solo `unsubscribe`: sin canales, el cliente suelta
     // el socket de Realtime.
     final canal = _broadcastChannel;
@@ -331,6 +403,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
       _pausado = true;
       _sala.pausar();
       _current = null;
+      _saliendo = false;
     });
   }
 
@@ -345,6 +418,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
       _reconnectAttempts = 0;
     });
     _connect();
+    // Mientras estuvo escondido pudo cambiar: un sorteo, un alumno nuevo.
+    _pedirFicha();
+    _iniciarFichaPeriodica();
   }
 
   /// Aplica una config recién guardada desde el editor.
@@ -376,16 +452,47 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   void _handleManualIncoming(Invitado guest, {bool porElPuente = false}) {
     if (!mounted) return;
     var nuevo = false;
-    setState(() => nuevo = _sala.aviso(guest, porElPuente: porElPuente));
-    if (nuevo && _current == null) _showNext();
+    setState(() {
+      nuevo = _sala.aviso(
+        guest,
+        porElPuente: porElPuente,
+        ahora: DateTime.now(),
+      );
+      // Si se sumó a la tarjeta de su familia, también se lo destaca.
+      if (nuevo && _sala.enPantalla?.tiene(guest.id) == true) {
+        _destacar([guest.id]);
+      }
+    });
+    if (nuevo) _despuesDeLlegar();
+  }
+
+  /// Llegó alguien: a la tarjeta de su familia o a la cola. Si no hay nadie
+  /// en pantalla, se saluda al que sigue; si hay, puede que su tarjeta tenga
+  /// que irse antes (hay cola) o quedarse un poco más (se sumó alguien).
+  ///
+  /// Si la ficha no conoce a alguien de la cola, se la pide de nuevo antes de
+  /// saludar, como mucho un segundo: es un alumno o un acompañante cargado
+  /// después, y sin la ficha se lo saludaría sin su familia ni sus sillas.
+  Future<void> _despuesDeLlegar() async {
+    if (_current == null && _fichaNoConoce(_queue)) {
+      await _pedirFicha().timeout(const Duration(seconds: 1), onTimeout: () {});
+      if (!mounted || _pausado) return;
+    }
+    if (_current == null) {
+      _showNext();
+    } else {
+      _programarFin();
+    }
   }
 
   void _handleListReset() {
     if (!mounted) return;
+    _displayTimer?.cancel();
     setState(() {
       _sala.vaciar();
       _recentIds.clear();
       _current = null;
+      _saliendo = false;
     });
   }
 
@@ -594,11 +701,27 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   /// en la misma PC, sin esperar a la nube.
   void _handleGuestRemoved(String invitadoId) {
     if (!mounted) return;
+    var seVacio = false;
     setState(() {
+      final enPantalla = _sala.enPantalla;
       _sala.baja(invitadoId);
       _recentIds.remove(invitadoId);
-      if (_current?.id == invitadoId) _current = null;
+      // Era el único de la tarjeta: la tarjeta se va enseguida, sin animación,
+      // como siempre.
+      seVacio = enPantalla != null && _sala.enPantalla == null;
+      if (seVacio) {
+        _displayTimer?.cancel();
+        _entryCtrl.reset();
+        _current = null;
+        _saliendo = false;
+      }
     });
+    if (seVacio && _queue.isNotEmpty) {
+      _showNext();
+    } else if (_current != null) {
+      // Si era el único que esperaba, la tarjeta vuelve a durar lo de siempre.
+      _programarFin();
+    }
   }
 
   /// Una lectura completa de los invitados, del stream o de la relectura.
@@ -607,11 +730,13 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
   /// lo decide [IngresosTotem]. Acá solo se le cuenta que se leyó.
   void _onData(List<Invitado> invitados) {
     if (!mounted) return;
+    final antes = _queue.length + (_sala.enPantalla?.personas.length ?? 0);
     setState(() {
-      _sala.leyo(invitados, ahora: DateTime.now(), enPantalla: _current?.id);
+      _sala.leyo(invitados, ahora: DateTime.now());
       _reconnectAttempts = 0;
     });
-    if (_current == null && _queue.isNotEmpty) _showNext();
+    final despues = _queue.length + (_sala.enPantalla?.personas.length ?? 0);
+    if (despues != antes) _despuesDeLlegar();
   }
 
   void _onError(dynamic error) {
@@ -634,30 +759,60 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
 
   // ── Mostrar tarjeta de bienvenida ──────────────────────────────────────────
 
+  /// Saluda al que sigue en la cola, con los de su familia que esperaban.
+  /// Cuánto dura lo decide [IngresosTotem] ([finDeBienvenida]): 7 s si nadie
+  /// espera, 3 s si hay cola.
   void _showNext() {
-    if (_queue.isEmpty || !mounted) return;
+    if (!mounted || _pausado || _current != null) return;
+    final siguiente = _sala.siguiente(DateTime.now());
+    if (siguiente == null) return;
 
-    final next = _queue.removeAt(0);
     setState(() {
-      _current = next;
-      _recentIds.add(next.id);
+      _current = siguiente;
+      _saliendo = false;
+      _destacar([for (final i in siguiente.personas) i.id]);
     });
     _entryCtrl.forward(from: 0);
+    _programarFin();
+  }
 
+  /// Los que acaban de llegar brillan en la lista dos minutos.
+  void _destacar(List<String> ids) {
+    _recentIds.addAll(ids);
     Timer(const Duration(minutes: 2), () {
-      if (mounted) setState(() => _recentIds.remove(next.id));
+      if (mounted) setState(() => _recentIds.removeAll(ids));
     });
+  }
 
+  /// Vuelve a poner la hora en que se va la tarjeta. Se llama cada vez que
+  /// cambia la cola o se suma alguien: con gente esperando, la que está en
+  /// pantalla se acorta; si ya pasaron los 3 s, se va enseguida.
+  void _programarFin() {
     _displayTimer?.cancel();
-    _displayTimer = Timer(const Duration(seconds: 7), () {
+    final fin = _sala.fin;
+    if (!mounted || _current == null || _saliendo || fin == null) return;
+    final falta = fin.difference(DateTime.now());
+    _displayTimer = Timer(
+      falta.isNegative ? Duration.zero : falta,
+      _terminarBienvenida,
+    );
+  }
+
+  void _terminarBienvenida() {
+    if (!mounted || _current == null || _saliendo) return;
+    // Para la cola, la tarjeta ya terminó: el que llega mientras se va espera
+    // la suya.
+    _sala.termino();
+    _saliendo = true;
+    _entryCtrl.reverse().then((_) {
       if (!mounted) return;
-      _entryCtrl.reverse().then((_) {
-        if (!mounted) return;
-        setState(() => _current = null);
-        if (_queue.isNotEmpty) {
-          Future.delayed(const Duration(milliseconds: 300), _showNext);
-        }
+      setState(() {
+        _current = null;
+        _saliendo = false;
       });
+      if (_queue.isNotEmpty) {
+        Future.delayed(const Duration(milliseconds: 300), _showNext);
+      }
     });
   }
 
@@ -669,6 +824,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     _reconnectTimer?.cancel();
     _ocultarControlesTimer?.cancel();
     _reconciliarTimer?.cancel();
+    _fichaTimer?.cancel();
     _entryCtrl.dispose();
     _pulseCtrl.dispose();
     _particleCtrl.dispose();
@@ -714,7 +870,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
               if (isWidescreen)
                 Row(
                   children: [
-                    Expanded(flex: 60, child: _buildQRSection(constraints)),
+                    Expanded(flex: 60, child: _buildPortada(constraints)),
                     Expanded(
                       flex: 40,
                       child: Padding(
@@ -727,7 +883,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
               else
                 Column(
                   children: [
-                    Expanded(flex: 62, child: _buildQRSection(constraints)),
+                    Expanded(flex: 62, child: _buildPortada(constraints)),
                     Expanded(flex: 38, child: _buildIngresadosPanel()),
                   ],
                 ),
@@ -742,6 +898,16 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
       ),
     );
   }
+
+  /// Foto, título, subtítulo y, solo en un particular, el QR
+  /// (`widgets/portada_totem.dart`).
+  Widget _buildPortada(BoxConstraints constraints) => PortadaTotem(
+        cfg: _cfg,
+        qrUrl: _mostrarQr ? '$kWebBaseUrl/lista?evento=$_eventoId' : null,
+        apaisado: _esWidescreen(constraints),
+        escala: _escala(constraints),
+        pulso: _pulseCtrl,
+      );
 
   /// Decide el layout. En `auto` conserva el criterio histórico (la forma de
   /// la ventana); si el operador eligió una orientación, manda esa.
@@ -856,202 +1022,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
     );
   }
 
-  /// Foto principal del evento.
-  ///
-  /// Con `imagen_url` cargada muestra la foto en círculo, con borde y
-  /// resplandor del color de acento — es la cara del evento, la de la
-  /// quinceañera o los novios. Sin foto cae al logo de la empresa tintado en
-  /// perla, que es exactamente lo que se veía antes de que esto existiera.
-  Widget _buildPortada(double scale) {
-    final lado = 150 * scale;
-    final tieneFoto = _cfg.imagenUrl != null;
-
-    final Widget contenido = tieneFoto
-        ? ClipOval(
-            child: Image.network(
-              _cfg.imagenUrl!,
-              width: lado,
-              height: lado,
-              fit: BoxFit.cover,
-              // Nunca dejamos un hueco: mientras baja, y si falla, se ve el logo.
-              loadingBuilder: (context, child, progreso) =>
-                  progreso == null ? child : _logoEmpresa(lado),
-              errorBuilder: (_, _, _) => _logoEmpresa(lado),
-            ),
-          )
-        : _logoEmpresa(lado);
-
-    return FadeTransition(
-      opacity: _pulseCtrl.drive(
-        // La foto se muestra plena; el logo mantiene su respiración tenue.
-        Tween(begin: tieneFoto ? 0.92 : 0.3, end: tieneFoto ? 1.0 : 0.6),
-      ),
-      child: Container(
-        width: lado,
-        height: lado,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: tieneFoto
-              ? Border.all(color: _gold.withValues(alpha: 0.65), width: 3)
-              : null,
-          boxShadow: [
-            BoxShadow(
-              color: tieneFoto
-                  ? _gold.withValues(alpha: 0.28)
-                  : const Color(0xFFE2E2E2).withValues(alpha: 0.1),
-              blurRadius: 40,
-              spreadRadius: 10,
-            ),
-          ],
-        ),
-        child: contenido,
-      ),
-    );
-  }
-
-  Widget _logoEmpresa(double lado) => Image.asset(
-        'assets/icons/logo-transparent-final.png',
-        width: lado,
-        height: lado,
-        fit: BoxFit.contain,
-        color: const Color(0xFFF2F0EB), // Plata Perla
-        errorBuilder: (_, _, _) => Icon(
-          Icons.celebration_rounded,
-          size: lado * 0.6,
-          color: const Color(0xFFF2F0EB),
-        ),
-      );
-
-  // ── Sección superior: Portada + QR ────────────────────────────────────────
-
-  Widget _buildQRSection(BoxConstraints constraints) {
-    final qrUrl = '$kWebBaseUrl/lista?evento=$_eventoId';
-    final isWidescreen = _esWidescreen(constraints);
-    final scale = _escala(constraints);
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: isWidescreen ? 48 : 20),
-      alignment: Alignment.center,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 20),
-
-            // Foto del evento, o el logo de la empresa si nadie cargó una.
-            _buildPortada(scale),
-
-            const SizedBox(height: 20),
-            Text(
-              _cfg.titulo,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.oswald(
-                fontSize: 38 * scale,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 8,
-                color: const Color(0xFFE2E2E2).withValues(alpha: 0.4),
-              ),
-            ),
-            if (_cfg.subtitulo.isNotEmpty) ...[
-              SizedBox(height: 8 * scale),
-              Text(
-                _cfg.subtitulo.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 15 * scale,
-                  fontWeight: FontWeight.w200,
-                  letterSpacing: 9,
-                  color: _gold.withValues(alpha: 0.85),
-                ),
-              ),
-            ],
-            SizedBox(height: 36 * scale),
-            // QR en contenedor Glassmorphic de Lujo
-            AnimatedBuilder(
-              animation: _pulseCtrl,
-              builder: (_, child) => Transform.scale(
-                scale: 1.0 + (_pulseCtrl.value * 0.02),
-                child: child,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: const Color(0xFFE2E2E2).withValues(alpha: 0.3),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 30,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: QrImageView(
-                            data: qrUrl,
-                            version: QrVersions.auto,
-                            size: 180 * scale,
-                            eyeStyle: const QrEyeStyle(
-                              eyeShape: QrEyeShape.square,
-                              color: Color(0xFF121212),
-                            ),
-                            dataModuleStyle: const QrDataModuleStyle(
-                              dataModuleShape: QrDataModuleShape.square,
-                              color: Color(0xFF121212),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'BIENVENIDO',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.oswald(
-                            fontSize: 14 * scale,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 6,
-                            color: const Color(0xFFE2E2E2),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _cfg.mensajeQr,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.outfit(
-                            fontSize: 10 * scale,
-                            fontWeight: FontWeight.w300,
-                            letterSpacing: 2,
-                            color: const Color(0xFFE2E2E2).withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ── Panel inferior: cascade animada de ingresados ─────────────────────────
 
   Widget _buildIngresadosPanel() {
@@ -1145,7 +1115,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
 
   Widget _buildWelcomeCard(BoxConstraints constraints) {
     final scale = _escala(constraints);
-    const perla = Color(0xFFE2E2E2);
 
     return Positioned.fill(
       child: AnimatedBuilder(
@@ -1192,225 +1161,25 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay> with TickerProvider
                 ),
 
               // ── Tarjeta central ───────────────────────────────────────────
+              // Lo que dice lo decide ContenidoBienvenida; cómo se ve,
+              // TarjetaBienvenida (los dos con sus tests).
               Center(
-                child: Transform.scale(
-                  scale: _cardScale.value.clamp(0.0, 1.05),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 28),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 38,
-                      vertical: 42,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: _cfg.gradienteCard,
-                      ),
-                      borderRadius: BorderRadius.circular(36),
-                      border: Border.all(
-                        color: _gold.withValues(alpha: 0.50),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _gold.withValues(alpha: 0.32),
-                          blurRadius: 70,
-                          spreadRadius: 18,
-                        ),
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          blurRadius: 30,
-                          spreadRadius: -4,
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(34),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          // Shimmer periódico
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _ShimmerPainter(_shimmerCtrl.value),
-                            ),
-                          ),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // La foto del evento si la hay; si no, el
-                              // apretón de manos de siempre.
-                              FadeTransition(
-                                opacity: _iconFade,
-                                child: _cfg.imagenUrl != null
-                                    ? Container(
-                                        width: 128 * scale,
-                                        height: 128 * scale,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: _gold.withValues(alpha: 0.75),
-                                            width: 3,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color:
-                                                  _gold.withValues(alpha: 0.45),
-                                              blurRadius: 40,
-                                              spreadRadius: 6,
-                                            ),
-                                          ],
-                                        ),
-                                        child: ClipOval(
-                                          child: Image.network(
-                                            _cfg.imagenUrl!,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, _, _) => Center(
-                                              child: Text(
-                                                '🤝',
-                                                style: TextStyle(
-                                                    fontSize: 62 * scale),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : Container(
-                                        padding: EdgeInsets.all(20 * scale),
-                                        decoration: BoxDecoration(
-                                          color: perla.withValues(alpha: 0.12),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: perla.withValues(alpha: 0.30),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '🤝',
-                                          style:
-                                              TextStyle(fontSize: 72 * scale),
-                                        ),
-                                      ),
-                              ),
-                              SizedBox(height: 22 * scale),
-
-                              // El saludo del evento, con slide desde abajo
-                              ClipRect(
-                                child: SlideTransition(
-                                  position: _titleSlide,
-                                  child: FadeTransition(
-                                    opacity: _titleFade,
-                                    child: Text(
-                                      _cfg.mensajeBienvenida,
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.oswald(
-                                        fontSize: 50 * scale,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 2,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 18 * scale),
-
-                              // Nombre — reveal desde el centro hacia afuera
-                              ClipRect(
-                                child: Align(
-                                  alignment: Alignment.center,
-                                  widthFactor: _nameReveal.value.clamp(0.0, 1.0),
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 22 * scale,
-                                      vertical: 11 * scale,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          perla.withValues(alpha: 0.22),
-                                          perla.withValues(alpha: 0.08),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: perla.withValues(alpha: 0.40),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      _current!.nombreCompleto,
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 42 * scale,
-                                        fontWeight: FontWeight.w800,
-                                        color: perla,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              // Mesa — desliza desde la derecha
-                              if (_current!.numeroMesa != null) ...[
-                                SizedBox(height: 22 * scale),
-                                ClipRect(
-                                  child: SlideTransition(
-                                    position: _mesaSlide,
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          padding: EdgeInsets.all(10 * scale),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.07),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(
-                                            Icons.table_restaurant_rounded,
-                                            color: Colors.white60,
-                                            size: 24 * scale,
-                                          ),
-                                        ),
-                                        SizedBox(width: 14 * scale),
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Tu mesa',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 14 * scale,
-                                                fontWeight: FontWeight.w400,
-                                                color: Colors.white54,
-                                                letterSpacing: 1,
-                                              ),
-                                            ),
-                                            Text(
-                                              'Nº ${_current!.numeroMesa}',
-                                              style: GoogleFonts.oswald(
-                                                fontSize: 34 * scale,
-                                                fontWeight: FontWeight.w700,
-                                                color: Colors.white,
-                                                letterSpacing: 1,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+                child: TarjetaBienvenida(
+                  contenido: ContenidoBienvenida.armar(
+                    _current!,
+                    ficha: _ficha,
+                    cfg: _cfg,
                   ),
+                  cfg: _cfg,
+                  escala: scale,
+                  enCamino: _sala.enCamino,
+                  tamanio: _cardScale,
+                  apareceFoto: _iconFade,
+                  apareceSaludo: _titleFade,
+                  subeSaludo: _titleSlide,
+                  abreNombre: _nameReveal,
+                  entraMesa: _mesaSlide,
+                  brillo: _shimmerCtrl,
                 ),
               ),
             ],
@@ -1905,45 +1674,6 @@ class _ParticlePainter extends CustomPainter {
   @override
   bool shouldRepaint(_ParticlePainter old) =>
       old.t != t || old._gold != _gold;
-}
-
-// ── Barrido de brillo diagonal (shimmer) ─────────────────────────────────
-
-class _ShimmerPainter extends CustomPainter {
-  final double t;
-  const _ShimmerPainter(this.t);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Dispara una sola vez por ciclo en la ventana 0.0 → 0.28
-    const windowEnd = 0.28;
-    if (t > windowEnd) return;
-
-    final localT = t / windowEnd;
-    final sweepX = -size.width * 0.45 + localT * size.width * 1.9;
-
-    final shader = LinearGradient(
-      colors: [
-        Colors.transparent,
-        Colors.white.withValues(alpha: 0.10),
-        Colors.white.withValues(alpha: 0.18),
-        Colors.white.withValues(alpha: 0.10),
-        Colors.transparent,
-      ],
-      stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
-      transform: const GradientRotation(0.45),
-    ).createShader(
-      Rect.fromLTWH(sweepX, 0, size.width * 0.55, size.height),
-    );
-
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..shader = shader,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ShimmerPainter old) => old.t != t;
 }
 
 // ── Botón de salida para modo tótem web ──────────────────────────────────────

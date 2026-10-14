@@ -1,0 +1,64 @@
+-- 2026-10-14 — Dos columnas nuevas en `totem_config`: la apariencia del tótem y
+-- si la bienvenida muestra la música de cada alumno. Van con la 6.0.0.
+--
+-- **Solo agrega columnas vacías a una tabla que ya existe.** No toca ninguna
+-- fila ni ninguna otra tabla. La 5.0.0 no las conoce: no las lee, y como su
+-- guardado de Personalizar es un upsert que no las nombra, tampoco las pisa.
+-- Se puede correr a cualquier hora.
+--
+-- **Hay que correrlo antes de instalar la 6.0.0.** La 6.0.0 manda
+-- `mostrar_musica` al guardar Personalizar: sin la columna, guardar falla.
+--
+--   mostrar_musica  boolean. Vacía (las filas de antes) = prendida.
+--   estilo          text: neon | cristal | poster | gala. Vacía = según el tipo
+--                   del evento. La usa la parte de las cuatro apariencias.
+--
+-- **Sin CHECK en `estilo`, a propósito**, como en `planos_evento.estilo`: los
+-- valores válidos los controla la app, y una apariencia nueva no tiene que
+-- esperar otro SQL. (`totem_config` no pasa por la cola de subida, así que
+-- tampoco la traba un "violates"; es solo para no repetir el trabajo.)
+--
+-- Correrlo dos veces es inocuo: todo es `if not exists`.
+-- **No se agrega nada a la publicación de Realtime.**
+--
+-- Cómo correrlo (SQL Editor):
+--   1. Correr la consulta "ANTES" de la sección 2 y anotar los números.
+--   2. Correr este archivo entero.
+--   3. Correr las consultas de la sección 2 y comparar.
+
+-- ── 1. Las columnas ─────────────────────────────────────────────────────────
+--
+-- ROLLBACK: alter table public.totem_config drop column if exists mostrar_musica;
+alter table public.totem_config add column if not exists mostrar_musica boolean;
+
+-- ROLLBACK: alter table public.totem_config drop column if exists estilo;
+alter table public.totem_config add column if not exists estilo text;
+
+-- ── 2. Verificación ─────────────────────────────────────────────────────────
+--
+-- ANTES y DESPUÉS de correr el archivo: estos conteos tienen que dar igual. Si
+-- cambia uno solo, algo tocó datos que no debía.
+--
+--   select
+--     (select count(*) from public.contratos_alumnos)         as contratos,
+--     (select count(*) from public.pagos_contrato_alumno)     as pagos,
+--     (select count(*) from public.notas_operativas_contrato) as notas,
+--     (select count(*) from public.invitados)                 as invitados,
+--     (select count(*) from public.eventos)                   as eventos,
+--     (select count(*) from public.totem_config)              as totem_config;
+--
+-- DESPUÉS: las dos columnas, vacías en todas las filas. Tiene que devolver dos
+-- filas, `mostrar_musica` boolean y `estilo` text:
+--
+--   select column_name, data_type from information_schema.columns
+--   where table_schema = 'public' and table_name = 'totem_config'
+--     and column_name in ('mostrar_musica', 'estilo');
+--
+--   select count(*) filter (where mostrar_musica is not null) as con_musica,
+--          count(*) filter (where estilo is not null)         as con_estilo
+--   from public.totem_config;   -- los dos en 0
+--
+-- Y que `totem_config` sigue fuera de Realtime (tiene que devolver cero filas):
+--
+--   select tablename from pg_publication_tables
+--   where pubname = 'supabase_realtime' and tablename = 'totem_config';

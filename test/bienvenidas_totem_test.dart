@@ -291,30 +291,31 @@ void main() {
 
     test('el que se está saludando no se encola de nuevo', () {
       final sala = IngresosTotem()..leyo(const [], ahora: t0);
-      sala.aviso(_inv('a'));
-      expect(saludados(sala), ['a']);
+      sala.aviso(_inv('a'), ahora: en(0));
+      expect(_ids(sala.siguiente(en(0))!.personas), ['a']);
       // Una lectura vieja lo saca, y la siguiente lo trae: sigue en pantalla.
-      sala.leyo([_inv('a', adentro: false)], ahora: en(1), enPantalla: 'a');
-      sala.leyo([_inv('a')], ahora: en(2), enPantalla: 'a');
+      sala.leyo([_inv('a', adentro: false)], ahora: en(1));
+      sala.leyo([_inv('a')], ahora: en(2));
       expect(sala.cola, isEmpty);
+      expect(_ids(sala.enPantalla!.personas), ['a'], reason: 'una sola vez');
       expect(_ids(sala.ingresados), ['a'], reason: 'vuelve a la lista');
       // Terminó su bienvenida: la lectura siguiente no lo saluda otra vez.
+      sala.termino();
       sala.leyo([_inv('a')], ahora: en(70));
       expect(sala.cola, isEmpty);
     });
 
     test('el que espera en la cola tampoco se saluda dos veces', () {
       final sala = IngresosTotem()..leyo(const [], ahora: t0);
-      sala.aviso(_inv('a'));
-      sala.aviso(_inv('b'));
+      sala.aviso(_inv('a'), ahora: en(0));
+      sala.aviso(_inv('b'), ahora: en(0));
       // `a` pasa a la pantalla y `b` espera. Llega una lectura vieja.
-      sala.cola.removeAt(0);
+      sala.siguiente(en(0));
       sala.leyo(
         [_inv('a', adentro: false), _inv('b', adentro: false)],
         ahora: en(1),
-        enPantalla: 'a',
       );
-      sala.leyo([_inv('a'), _inv('b')], ahora: en(2), enPantalla: 'a');
+      sala.leyo([_inv('a'), _inv('b')], ahora: en(2));
       expect(_ids(sala.cola), ['b'], reason: 'b sigue esperando, una vez');
       expect(saludados(sala), ['b']);
       sala.leyo([_inv('a'), _inv('b')], ahora: en(70));
@@ -426,6 +427,220 @@ void main() {
       sala.leyo([_inv('x'), _inv('y')], ahora: en(600));
       expect(sala.cola, isEmpty);
       expect(_ids(sala.ingresados), ['y', 'x']);
+    });
+  });
+
+  // La cola que se acorta (pedido del usuario el 14-oct): 7 s si nadie
+  // espera, 3 s si hay gente esperando.
+  group('cuánto dura una bienvenida', () {
+    final t0 = DateTime(2026, 12, 12, 22);
+    DateTime en(int ms) => t0.add(Duration(milliseconds: ms));
+
+    test('7 s si nadie espera, 3 s si hay cola', () {
+      expect(finDeBienvenida(empezo: t0, hayCola: false), en(7000));
+      expect(finDeBienvenida(empezo: t0, hayCola: true), en(3000));
+    });
+
+    test('el que se suma a la tarjeta le da 3 s más, como mínimo', () {
+      // Se suma a los 6 s, sin cola: la tarjeta sigue hasta los 9.
+      expect(
+        finDeBienvenida(empezo: t0, hayCola: false, seSumo: en(6000)),
+        en(9000),
+      );
+      // Se suma a los 2 s: los 7 s de siempre alcanzan.
+      expect(
+        finDeBienvenida(empezo: t0, hayCola: false, seSumo: en(2000)),
+        en(7000),
+      );
+      // Con cola, igual se lo deja leer.
+      expect(
+        finDeBienvenida(empezo: t0, hayCola: true, seSumo: en(2500)),
+        en(5500),
+      );
+    });
+
+    test('llega alguien a los 2 s: la que está se va a los 3', () {
+      final sala = IngresosTotem()..leyo(const [], ahora: t0);
+      sala.aviso(_inv('a'), ahora: en(0));
+      sala.siguiente(en(0));
+      expect(sala.fin, en(7000), reason: 'sola, 7 s');
+      sala.aviso(_inv('b'), ahora: en(2000));
+      expect(sala.fin, en(3000));
+      expect(sala.enCamino, 1);
+    });
+
+    test('llega alguien a los 5 s: la que está se va enseguida', () {
+      final sala = IngresosTotem()..leyo(const [], ahora: t0);
+      sala.aviso(_inv('a'), ahora: en(0));
+      sala.siguiente(en(0));
+      sala.aviso(_inv('b'), ahora: en(5000));
+      // Ya pasó: la pantalla la termina en el momento.
+      expect(sala.fin!.isBefore(en(5000)), isTrue);
+    });
+
+    test('la que entra con gente esperando dura 3 s; la última, 7', () {
+      final sala = IngresosTotem()..leyo(const [], ahora: t0);
+      for (final id in ['a', 'b', 'c']) {
+        sala.aviso(_inv(id), ahora: en(0));
+      }
+      expect(_ids(sala.siguiente(en(0))!.personas), ['a']);
+      expect(sala.fin, en(3000));
+      expect(sala.enCamino, 2);
+      sala.termino();
+      sala.siguiente(en(4000));
+      expect(sala.fin, en(7000), reason: 'b: todavía espera c');
+      sala.termino();
+      sala.siguiente(en(8000));
+      expect(sala.fin, en(15000), reason: 'c: nadie espera');
+      expect(sala.enCamino, 0);
+    });
+
+    test('sin nadie en pantalla no hay fin', () {
+      final sala = IngresosTotem()..leyo(const [], ahora: t0);
+      expect(sala.fin, isNull);
+      expect(sala.siguiente(t0), isNull);
+    });
+  });
+
+  // En un masivo, el alumno y sus acompañantes se saludan juntos. De qué
+  // familia es cada uno lo dice la ficha del evento.
+  group('la familia junta', () {
+    final t0 = DateTime(2026, 12, 12, 22);
+    DateTime en(int ms) => t0.add(Duration(milliseconds: ms));
+
+    /// "perez" y "perez-1", "perez-2"... son la familia de "perez".
+    String familia(Invitado i) => i.id.split('-').first;
+
+    IngresosTotem sala() => IngresosTotem()
+      ..familiaDe = familia
+      ..leyo(const [], ahora: t0);
+
+    test('los que esperan juntos se saludan en una sola tarjeta', () {
+      final s = sala();
+      s.aviso(_inv('garcia'), ahora: en(0));
+      s.aviso(_inv('perez'), ahora: en(0));
+      s.aviso(_inv('acosta'), ahora: en(0));
+      s.aviso(_inv('perez-1'), ahora: en(0));
+      s.aviso(_inv('perez-2'), ahora: en(0));
+      expect(_ids(s.siguiente(en(0))!.personas), ['garcia']);
+      s.termino();
+      final b = s.siguiente(en(4000))!;
+      expect(b.familia, 'perez');
+      expect(_ids(b.personas), ['perez', 'perez-1', 'perez-2']);
+      expect(_ids(s.cola), ['acosta'], reason: 'los de otra familia, después');
+    });
+
+    test('el que se marca mientras está la tarjeta, se suma a ella', () {
+      final s = sala();
+      s.aviso(_inv('perez'), ahora: en(0));
+      s.siguiente(en(0));
+      expect(s.aviso(_inv('perez-1'), ahora: en(1500)), isTrue);
+      expect(s.aviso(_inv('perez-2'), ahora: en(3000)), isTrue);
+      expect(_ids(s.enPantalla!.personas), ['perez', 'perez-1', 'perez-2']);
+      expect(s.cola, isEmpty);
+      expect(s.fin, en(7000), reason: 'los 3 s del último entran en los 7');
+      expect(_ids(s.ingresados), ['perez-2', 'perez-1', 'perez']);
+    });
+
+    test('si se suma tarde, la tarjeta se queda 3 s más', () {
+      final s = sala();
+      s.aviso(_inv('perez'), ahora: en(0));
+      s.siguiente(en(0));
+      s.aviso(_inv('perez-1'), ahora: en(6500));
+      expect(s.fin, en(9500));
+    });
+
+    test('mientras la tarjeta se va, el de la familia espera la suya', () {
+      final s = sala();
+      s.aviso(_inv('perez'), ahora: en(0));
+      s.siguiente(en(0));
+      s.termino();
+      s.aviso(_inv('perez-1'), ahora: en(7200));
+      expect(_ids(s.cola), ['perez-1']);
+    });
+
+    test('lo que trae la nube también se suma a la tarjeta de su familia', () {
+      final s = sala();
+      s.aviso(_inv('perez'), porElPuente: true, ahora: en(0));
+      s.siguiente(en(0));
+      // La otra PC marcó a la acompañante; llega por la relectura.
+      s.leyo([_inv('perez'), _inv('perez-1'), _inv('garcia')], ahora: en(2000));
+      expect(_ids(s.enPantalla!.personas), ['perez', 'perez-1']);
+      expect(_ids(s.cola), ['garcia']);
+      expect(s.fin, en(5000), reason: 'hay cola, y la que se sumó se lee 3 s');
+    });
+
+    test('un particular: cada uno su tarjeta', () {
+      final s = IngresosTotem()..leyo(const [], ahora: t0);
+      s.aviso(_inv('perez'), ahora: en(0));
+      s.aviso(_inv('perez-1'), ahora: en(0));
+      expect(_ids(s.siguiente(en(0))!.personas), ['perez']);
+      expect(_ids(s.cola), ['perez-1']);
+    });
+
+    test('sacar al único de la tarjeta la saca de la pantalla', () {
+      final s = sala();
+      s.aviso(_inv('perez'), ahora: en(0));
+      s.aviso(_inv('perez-1'), ahora: en(0));
+      s.siguiente(en(0));
+      s.baja('perez-1');
+      expect(_ids(s.enPantalla!.personas), ['perez']);
+      s.baja('perez');
+      expect(s.enPantalla, isNull);
+    });
+
+    test('vaciar, pausar o cambiar de fiesta no deja a nadie en pantalla', () {
+      for (final corte in <void Function(IngresosTotem)>[
+        (s) => s.vaciar(),
+        (s) => s.pausar(),
+        (s) => s.reiniciar(),
+      ]) {
+        final s = sala();
+        s.aviso(_inv('perez'), ahora: en(0));
+        s.siguiente(en(0));
+        corte(s);
+        expect(s.enPantalla, isNull);
+        expect(s.fin, isNull);
+      }
+    });
+
+    test('una noche: cuatro familias de golpe y una que se completa', () {
+      final s = sala();
+      // Recepción marca rápido: Acosta (2), Benítez, Fernández, García y la
+      // acompañante de Benítez.
+      for (final (ms, id) in [
+        (0, 'acosta'),
+        (300, 'acosta-1'),
+        (600, 'benitez'),
+        (900, 'fernandez'),
+        (1200, 'garcia'),
+        (1800, 'benitez-1'),
+      ]) {
+        s.aviso(_inv(id), ahora: en(ms));
+        if (s.enPantalla == null) s.siguiente(en(ms));
+      }
+      // Acosta salió sola y su acompañante se sumó a los 300 ms.
+      expect(_ids(s.enPantalla!.personas), ['acosta', 'acosta-1']);
+      expect(s.enCamino, 4);
+      expect(s.fin, en(3300), reason: 'hay cola: 3 s desde que se sumó María');
+
+      final tarjetas = <List<String>>[];
+      var ahora = 3300;
+      while (s.enPantalla != null) {
+        tarjetas.add(_ids(s.enPantalla!.personas));
+        final fin = s.fin!;
+        ahora = fin.difference(t0).inMilliseconds + 1200; // se va y 0,3 s
+        s.termino();
+        s.siguiente(en(ahora));
+      }
+      expect(tarjetas, [
+        ['acosta', 'acosta-1'],
+        ['benitez', 'benitez-1'],
+        ['fernandez'],
+        ['garcia'],
+      ]);
+      // Con 7 s fijos eran seis tarjetas y unos 50 s; así, cuatro y unos 21.
+      expect(ahora, lessThan(25000));
     });
   });
 }

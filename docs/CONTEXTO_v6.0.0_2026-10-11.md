@@ -16,8 +16,8 @@ y caja no cambian.
 
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
-**"Qué pasó el 13-oct"**, más abajo. **Hechas las partes 1 a 4; sigue la 5** (las cuatro apariencias del tótem).
-Lo de este encabezado es cómo quedó el 11-oct.
+**"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
+las secciones 1 y 2; sigue la 3** (las cuatro apariencias del tótem). Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -369,8 +369,8 @@ vaciarla al deshacer todo) sigue igual.
 | # | Sección | Estado |
 |---|---|---|
 | 1 | Recepción distingue particular y masivo (el panel del operador de la parte 6, más lo del masivo) | **hecha el 14-oct** |
-| 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **sigue esta** |
-| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | falta |
+| 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **hecha el 14-oct** |
+| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **sigue esta** |
 | 4 | El plano con la guía en la llegada | falta |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
 | 6 | Modo kiosco (parte 7) | falta |
@@ -378,8 +378,9 @@ vaciarla al deshacer todo) sigue igual.
 | 8 | Cerrar la lista de la puerta (parte 9) | falta |
 | 9 | Verificación, instalador, la web y publicar (partes 10 y 11) | falta |
 
-La nube: en la sección 2 o 3, dos columnas en `totem_config` (`estilo` y `mostrar_musica`), en un solo SQL, con
-su OK en el momento.
+La nube: las dos columnas de `totem_config` (`estilo` y `mostrar_musica`) quedaron en un solo SQL en la sección 2
+(`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`). **Falta correrlo**, con su OK en el
+momento; tiene que estar antes de instalar.
 
 ### La sección 1: Recepción distingue particular y masivo
 
@@ -446,16 +447,117 @@ su OK en el momento.
 - El tótem de esta PC, al ingresar a alguien sin fila, recibe la mesa por el puente; el panel viejo de Recepción
   (`totem_panel.dart`), que lee la fila, lo ve sin mesa hasta que el salón la pone. Se rehace en la sección 3.
 
+### La sección 2: el tótem distingue particular y masivo
+
+Plan aprobado: `C:\Users\lover\.claude\plans\purrfect-waddling-micali.md`, con una maqueta para tocar. **Programado
+y subido; sin publicar.**
+
+**Qué cambió para el usuario.** Se ve en el tótem (Inicio → TÓTEM → el evento) al marcar en Recepción:
+- **Un masivo no muestra el QR.** La espera queda con la foto, el título y el subtítulo, un poco más grandes. Un
+  particular sigue con el QR.
+- **La familia se saluda junta:** el alumno en grande y "con GÓMEZ, ANA y PÉREZ, LUIS" debajo. Los que esperaban se
+  juntan en una tarjeta, y el que se marca mientras está la tarjeta de su familia se suma a ella.
+- **Debajo de la mesa, las sillas:** "10 sillas (8 + 2 extra)", "14: 10 sillas · 15: 9 sillas". Sin el "reparto a
+  confirmar", que es para el operador.
+- **El acompañante que llega solo:** su nombre y "acompaña a PÉREZ, JUAN MARTÍN".
+- **La música del alumno**, con su ícono, si está cargada y la casilla está prendida.
+- **Antes del sorteo, el saludo sin mesa.** Tampoco hay mesa para el alumno que quedó sin mesa. En el salón nunca se
+  dice "sin mesa".
+- **La cola se acorta:**
+  - una tarjeta dura 7 s si nadie espera y 3 s si hay gente esperando, también la que ya estaba en pantalla;
+  - el que se suma a su familia se queda al menos 3 s;
+  - debajo de la tarjeta, "2 más en camino".
+- **"¡Bienvenidos!"** cuando son varios, si el saludo es el de siempre. Un saludo escrito a mano no se toca.
+- **Personalizar tótem, en un masivo**, tiene la casilla **"Mostrar la música de cada alumno"** (viene prendida) en
+  lugar de "Texto del QR". La miniatura de arriba deja de mostrar el QR.
+
+**Cómo se arma:**
+- **La ficha del evento** (`totem/services/ficha_totem.dart`):
+  - por cada persona del masivo lleva el nombre, la familia (el id del alumno), si es el alumno, la mesa, las
+    sillas, la música (solo en el alumno) y a quién acompaña;
+  - se arma con `PuertaDelEvento`, lo mismo que ve Recepción. Las bajas y lo cargado a mano no entran;
+  - de un particular dice solo que es particular;
+  - por el puente, una institución de 1.200 personas viaja en menos de 250 KB.
+- **La pide el tótem y la contesta la ventana principal** (`PuenteFichaTotem`, método `ficha_totem`).
+  - Es el primer mensaje que va del tótem a la ventana principal. El manejador se registra en `AuthWrapper`
+    (`main.dart`) y lee la base de la PC: anda sin internet.
+  - No se empuja: un mensaje mandado mientras la ventana del tótem recién nace lo contesta el manejador provisorio
+    de `main.dart` y se pierde sin error.
+  - Se pide al abrir, al reanudar, al cambiar de evento y cada 60 s. También cuando llega alguien que la ficha no
+    tiene: en ese caso se espera la respuesta como mucho 1 s antes de saludarlo.
+- **La cola y la familia** (`IngresosTotem`, en `bienvenidas_totem.dart`):
+  - `siguiente` pone en pantalla al primero de la cola con los de su familia;
+  - el que llega con su familia en pantalla se suma a la tarjeta;
+  - `finDeBienvenida` dice cuándo se va la tarjeta. La pantalla solo reprograma el temporizador (`_programarFin`).
+- **Lo que dice la tarjeta:** `ContenidoBienvenida` (`contenido_bienvenida.dart`). Si la ficha conoce a la persona,
+  manda la ficha, también cuando dice que no tiene mesa: la fila puede traer la mesa de un sorteo que se deshizo.
+- **La tarjeta y la portada pasaron a widgets propios**, `TarjetaBienvenida` y `PortadaTotem`. La pantalla
+  (`totem_display.dart`) bajó de 2.058 a 1.788 líneas, y estas piezas se pueden montar en un test.
+  - `hayQrEnElTotem` decide el QR. En la ventana del escritorio, mientras no llega la ficha no se muestra: llega en
+    milisegundos, debajo del fundido de apertura. En la web, como siempre.
+- **El tótem escucha el puente solo en su propia ventana.** Montado en la ventana principal (la ruta
+  `/totem_display`, que hoy nadie usa) le habría sacado a esa ventana el manejador de la ficha.
+- `leerAlumnosDeLaPuerta` (`recepcion_provider.dart`) es la lectura de los alumnos y los repartos que comparten
+  Recepción y la ficha.
+
+**Lo que decidí yo, y conviene decirle:**
+- **La letra de la tarjeta y de la portada pasó de Oswald a Outfit**, la que viene con la app. Oswald se baja de
+  internet: sin internet el tótem saludaba con la letra de repuesto, y los tests no pueden usarla. La forma, los
+  colores y las animaciones son los mismos.
+- **Sin foto del evento, la tarjeta muestra el logo de la empresa**, como la espera, en lugar del emoji del apretón
+  de manos (que además no se ve en todas las PCs).
+- **En un masivo, Personalizar esconde "Texto del QR"**: no hay QR que lo muestre.
+- **La columna `estilo` va sin CHECK**, como `planos_evento.estilo`: los valores los controla la app, y una
+  apariencia nueva no espera otro SQL. El diseño del 24-sep lo tenía con CHECK.
+
+**La nube:** `supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql` agrega `mostrar_musica` y
+`estilo` a `totem_config`, vacías. Sin la columna, **guardar Personalizar con la 6.0.0 falla**: hay que correrlo antes
+de instalar. La 5.0.0 no lo nota. `test/totem_config_test.dart` falla si `TotemConfig.toJson` manda una clave que
+no está en los SQL. **Falta correrlo, con su OK.**
+
+**Cómo se comprobó:**
+- `test/ficha_totem_test.dart` (16), `test/tarjeta_bienvenida_test.dart` (23; la tarjeta a 1080×1920, 1920×1080 y
+  360×640 sin desbordes), `test/puente_ficha_test.dart` (8) y `test/totem_config_test.dart` (6).
+  `test/bienvenidas_totem_test.dart` pasó de 30 a 45: la familia, los 7 s y 3 s, y una noche con cuatro familias de
+  golpe (cuatro tarjetas en unos 21 s; con la regla de antes eran seis y unos 50 s).
+- **2.001 tests** en la suite (eran 1.933). `flutter analyze` sigue en 312.
+- **Once roturas a propósito, todas vistas:**
+  - la familia que no se junta;
+  - la tarjeta que no se acorta;
+  - el que se suma sin sus 3 s;
+  - el de la familia que va a la cola;
+  - el QR en un masivo;
+  - la música con la casilla apagada;
+  - la mesa vieja de la fila;
+  - sin "acompaña a";
+  - el "a confirmar" en el tótem;
+  - lo cargado a mano en la ficha;
+  - una fila vieja que apaga la música.
+- **Muestras** en `build/muestras_6.0.0/totem/` (`tool/totem_muestra_test.dart`, con los widgets de la app):
+  - `Totem_bienvenidas.png`: la familia con cola, un acompañante solo, sin sortear y un particular;
+  - `Totem_espera.png`: con y sin QR;
+  - `Personalizar_musica.png`: la casilla.
+- **No se probó en la app.** La prueba real es el ensayo: marcar en Recepción a un alumno y sus acompañantes, uno
+  tras otro, y mirar el tótem.
+
+**Lo que no se tocó:**
+- El panel del tótem dentro de Recepción (`totem_panel.dart`): sigue con el QR, la cola de 7 s y sin ficha. Se
+  rehace en la sección 3.
+- La lista "YA LLEGARON": sale en la sección 3.
+- El tótem por el navegador: sin ficha, con QR también en un masivo, hasta la sección 8.
+- Una familia que se completa cuando su tarjeta ya se está yendo tiene una tarjeta nueva para el que llegó tarde.
+
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, las secciones 2 a 8 del orden del 14-oct. Después:
+**No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
 
 1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
      `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
      correr cuando él diga;
-   - las dos columnas de `totem_config` (`estilo` y `mostrar_musica`, secciones 2 y 3) y las funciones de la
-     puerta (sección 8).
+   - las dos columnas de `totem_config` (`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`,
+     escrito en la sección 2: **sin él, guardar Personalizar con la 6.0.0 falla**) y las funciones de la puerta
+     (sección 8).
    Antes y después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y
    30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
 2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
@@ -498,17 +600,22 @@ Seguimos con la 6.0.0 de Junior Eventos. Leé primero
 docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
 "Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El último
 plan aprobado está en
+C:\Users\lover\.claude\plans\purrfect-waddling-micali.md (la sección 2); el
+camino de las secciones, en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
 se corrieron. Va todo en una sola versión, por partes. El objetivo de lo que
 falta: que Recepción y el tótem distingan un evento particular de uno masivo
-(se dice "evento masivo", no "fiesta de alumnos"). Está hecha la sección 1
-(Recepción distingue particular y masivo). Seguí por la sección 2: el tótem
-distingue particular y masivo (la ficha por el puente con la mesa, las sillas
-debajo, "acompaña a" y la música; sin QR en masivos; la familia saludada junta
-y la cola que se acorta; la casilla de la música en Personalizar). Primero su
-plan corto y una maqueta, y avisame al terminar con cómo quedó, un commit y un
-push. Los diseños aprobados están en docs/pendientes/.
+(se dice "evento masivo", no "fiesta de alumnos"). Están hechas la sección 1
+(Recepción distingue particular y masivo) y la 2 (el tótem distingue
+particular y masivo: la ficha por el puente, la familia junta, la cola que se
+acorta, sin QR en masivos y la música en Personalizar). Seguí por la sección 3:
+las cuatro apariencias del tótem (Neón, Cristal, Póster y Gala), dibujando lo
+de la sección 2, Personalizar con las cuatro tarjetas y la vista del tótem al
+lado de Recepción. Primero su plan corto y una maqueta, y avisame al terminar
+con cómo quedó, un commit y un push. Los diseños aprobados están en
+docs/pendientes/ (sobre todo totem-apariencias.md). Falta correr en la nube el
+SQL de totem_config de la sección 2, con mi OK.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).

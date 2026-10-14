@@ -50,9 +50,10 @@ priorizó el sorteo de noviembre. El contexto está en
 [CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24](../CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md).
 
 - [El tótem con cuatro apariencias](totem-apariencias.md) — Neón, Cristal,
-  Póster y Gala, elegibles por evento, sin "Ya llegaron" y con QR solo en
-  particulares. Trae el código de los shaders aprobados y la migración de
-  `totem_config.estilo`.
+  Póster y Gala, elegibles por evento, sin "Ya llegaron". Trae el código de los
+  shaders aprobados. **Lo común quedó hecho el 14-oct** (sección 2): QR solo en
+  particulares, la cola con "N más en camino", la familia junta, las sillas y la
+  música, y el SQL de `totem_config.estilo` escrito (falta correrlo).
 - [Recepción más amigable](recepcion-redisenio.md) — **el panel del operador
   quedó hecho el 14-oct** (búsqueda con Enter, filtros, "Ingresar" por fila, y
   particular o masivo). Falta la vista del tótem al lado (solo la paleta) y los

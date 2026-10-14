@@ -62,16 +62,14 @@ principal es frío (azul mayor que rojo y mayor que 0,6).
 
 Una columna nueva, `totem_config.estilo`: `neon`, `cristal`, `poster` o `gala`. Vacía, va según el tipo del evento.
 
-```sql
--- ROLLBACK: alter table public.totem_config drop constraint if exists totem_config_estilo_check;
--- ROLLBACK: alter table public.totem_config drop column if exists estilo;
-alter table public.totem_config add column if not exists estilo text;
-alter table public.totem_config add constraint totem_config_estilo_check
-  check (estilo is null or estilo in ('neon', 'cristal', 'poster', 'gala'));
-```
+**El SQL ya está escrito** (14-oct, sección 2 del orden nuevo):
+`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`, junto con `mostrar_musica`. Va **sin CHECK**
+en `estilo`, como `planos_evento.estilo`: los valores los controla la app y una apariencia nueva no espera otro SQL.
+Falta correrlo, con el OK del usuario.
 
 - **Hay que correrla antes de usar la versión nueva.** `TotemConfigRepository.guardar` hace un upsert con
-  `toJson()`, y si la columna no existe, guardar la personalización falla.
+  `toJson()`, y si la columna no existe, guardar la personalización falla. Al sumar `estilo` a `toJson`, sumarlo
+  también a `test/totem_config_test.dart`, que compara las claves con el SQL.
 - **La 4.9.9 y la 5.0.0 conviven:** ignoran la columna al leer, y su upsert no la manda, así que no la pisan.
 - `TotemConfig` y `TotemConfigCache` suman `estilo`.
 - `gradientePanel` queda sin uso y sale.

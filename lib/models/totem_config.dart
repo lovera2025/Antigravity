@@ -30,16 +30,26 @@ class TotemConfig {
   final String mensajeQr;
   final String? imagenUrl;
   final Color colorAcento;
+
+  /// En un evento masivo, si la bienvenida muestra la música que eligió cada
+  /// alumno. Prendida salvo que alguien la apague en Personalizar: vacía en la
+  /// nube (una fila de antes de la 6.0.0) también cuenta como prendida.
+  final bool mostrarMusica;
   final DateTime? updatedAt;
+
+  /// El saludo de siempre. Si nadie lo cambió y entra una familia, se dice
+  /// en plural.
+  static const saludoPorDefecto = '¡Bienvenido!';
 
   const TotemConfig({
     required this.eventoId,
     this.titulo = 'JUNIOR EVENTOS',
     this.subtitulo = '',
-    this.mensajeBienvenida = '¡Bienvenido!',
+    this.mensajeBienvenida = saludoPorDefecto,
     this.mensajeQr = 'ESCANEÁ PARA INGRESAR',
     this.imagenUrl,
     this.colorAcento = acentoPorDefecto,
+    this.mostrarMusica = true,
     this.updatedAt,
   });
 
@@ -60,10 +70,11 @@ class TotemConfig {
       eventoId: json['evento_id'] as String,
       titulo: texto('titulo', 'JUNIOR EVENTOS'),
       subtitulo: texto('subtitulo', ''),
-      mensajeBienvenida: texto('mensaje_bienvenida', '¡Bienvenido!'),
+      mensajeBienvenida: texto('mensaje_bienvenida', saludoPorDefecto),
       mensajeQr: texto('mensaje_qr', 'ESCANEÁ PARA INGRESAR'),
       imagenUrl: (imagen == null || imagen.trim().isEmpty) ? null : imagen,
       colorAcento: parseHex(json['color_acento'] as String?),
+      mostrarMusica: json['mostrar_musica'] != false,
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'].toString())
           : null,
@@ -78,6 +89,10 @@ class TotemConfig {
         'mensaje_qr': mensajeQr,
         'imagen_url': imagenUrl,
         'color_acento': colorAcentoHex,
+        // Necesita la columna en la nube (SQL de la 6.0.0,
+        // `20261014120000_totem_config_estilo_y_musica.sql`): sin ella,
+        // guardar Personalizar falla. Se corre antes de instalar.
+        'mostrar_musica': mostrarMusica,
         'updated_at': updatedAt?.toIso8601String(),
       };
 
@@ -89,6 +104,7 @@ class TotemConfig {
     String? imagenUrl,
     bool limpiarImagen = false,
     Color? colorAcento,
+    bool? mostrarMusica,
   }) {
     return TotemConfig(
       eventoId: eventoId,
@@ -98,6 +114,7 @@ class TotemConfig {
       mensajeQr: mensajeQr ?? this.mensajeQr,
       imagenUrl: limpiarImagen ? null : (imagenUrl ?? this.imagenUrl),
       colorAcento: colorAcento ?? this.colorAcento,
+      mostrarMusica: mostrarMusica ?? this.mostrarMusica,
       updatedAt: updatedAt,
     );
   }

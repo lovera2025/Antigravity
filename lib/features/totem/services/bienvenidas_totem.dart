@@ -33,6 +33,63 @@ Duration esperaDeReintento(int intentos) {
   return Duration(seconds: 2 << n);
 }
 
+// La cola que se acorta (pedido del usuario el 14-oct): una bienvenida dura
+// 7 s si nadie espera; si hay gente esperando, 3 s. Con 7 s fijos, una puerta
+// que marca una familia cada 5 s atrasa el tótem sin vuelta.
+
+/// Lo que dura una bienvenida cuando nadie espera.
+const kBienvenidaSola = Duration(seconds: 7);
+
+/// Lo que dura cuando hay gente esperando, también la que ya estaba en
+/// pantalla cuando llegó alguien.
+const kBienvenidaConCola = Duration(seconds: 3);
+
+/// Lo que se queda la tarjeta, como mínimo, cuando se le suma alguien de la
+/// familia: que se alcance a leer su nombre.
+const kSumarseALaTarjeta = Duration(seconds: 3);
+
+/// Cuándo termina la bienvenida que está en pantalla.
+///
+/// [empezo] es cuando apareció; [hayCola], si alguien espera la suya ahora;
+/// [seSumo], la última vez que se le sumó alguien de la familia. Si ya pasó,
+/// la pantalla la termina enseguida.
+DateTime finDeBienvenida({
+  required DateTime empezo,
+  required bool hayCola,
+  DateTime? seSumo,
+}) {
+  final fin = empezo.add(hayCola ? kBienvenidaConCola : kBienvenidaSola);
+  if (seSumo == null) return fin;
+  final minimo = seSumo.add(kSumarseALaTarjeta);
+  return minimo.isAfter(fin) ? minimo : fin;
+}
+
+/// Cada persona es su propia familia: un particular, o sin la ficha del evento.
+String cadaUnoSuFamilia(Invitado i) => i.id;
+
+/// La bienvenida que está en pantalla: una persona, o una familia que entró
+/// junta.
+class BienvenidaTotem {
+  /// El id del alumno, en un masivo; el de la persona, si no.
+  final String familia;
+
+  /// En el orden en que llegaron.
+  final List<Invitado> personas;
+
+  final DateTime empezo;
+
+  /// La última vez que se le sumó alguien de la familia.
+  DateTime? seSumo;
+
+  BienvenidaTotem({
+    required this.familia,
+    required List<Invitado> personas,
+    required this.empezo,
+  }) : personas = [...personas];
+
+  bool tiene(String id) => personas.any((p) => p.id == id);
+}
+
 /// Lo que hay que hacer con una lectura de la nube.
 class LecturaResuelta {
   /// Ingresos nuevos que llevan bienvenida, en el orden en que vinieron.
@@ -102,18 +159,74 @@ LecturaResuelta resolverLectura({
 }
 
 /// Lo que el tótem sabe de los ingresos de la fiesta que está mostrando: la
-/// lista, la cola de bienvenidas y si viene pudiendo leer la nube.
+/// lista, la cola de bienvenidas, la bienvenida en pantalla y si viene
+/// pudiendo leer la nube.
 ///
 /// No dibuja ni habla con la nube: la pantalla le cuenta lo que pasó (leyó, no
-/// pudo leer, llegó un aviso) y dibuja lo que queda acá. Así el recorrido
-/// entero —un corte, lo que se marca mientras tanto, la vuelta— se prueba sin
-/// montar la pantalla.
+/// pudo leer, llegó un aviso, terminó una bienvenida) y dibuja lo que queda
+/// acá. Así el recorrido entero —un corte, lo que se marca mientras tanto, la
+/// vuelta, una familia que entra de a uno— se prueba sin montar la pantalla.
 class IngresosTotem {
   /// Los que ya llegaron, los más recientes primero.
   final List<Invitado> ingresados = [];
 
   /// Los que esperan su bienvenida, en orden.
   final List<Invitado> cola = [];
+
+  /// De qué familia es cada uno. En un masivo la da la ficha del evento: el
+  /// alumno y sus acompañantes se saludan juntos.
+  String Function(Invitado) familiaDe = cadaUnoSuFamilia;
+
+  /// La bienvenida que está en pantalla. Null mientras no se saluda a nadie,
+  /// y también mientras la tarjeta se va: lo que llega en ese momento espera
+  /// la suya.
+  BienvenidaTotem? enPantalla;
+
+  /// Cuándo termina la bienvenida en pantalla ([finDeBienvenida]).
+  DateTime? get fin {
+    final b = enPantalla;
+    if (b == null) return null;
+    return finDeBienvenida(
+      empezo: b.empezo,
+      hayCola: cola.isNotEmpty,
+      seSumo: b.seSumo,
+    );
+  }
+
+  /// Cuántos esperan su bienvenida: "N más en camino".
+  int get enCamino => cola.length;
+
+  /// Pone en pantalla al primero de la cola y a los de su familia que
+  /// esperaban. Null si no espera nadie.
+  BienvenidaTotem? siguiente(DateTime ahora) {
+    if (cola.isEmpty) return null;
+    final familia = familiaDe(cola.first);
+    final juntos = [
+      for (final i in cola)
+        if (familiaDe(i) == familia) i,
+    ];
+    cola.removeWhere((i) => familiaDe(i) == familia);
+    return enPantalla = BienvenidaTotem(
+      familia: familia,
+      personas: juntos,
+      empezo: ahora,
+    );
+  }
+
+  /// La tarjeta empezó a irse.
+  void termino() => enPantalla = null;
+
+  /// Alguien que lleva bienvenida: a la tarjeta, si es de la familia que se
+  /// está saludando; si no, a la cola.
+  void _llega(Invitado i, DateTime ahora) {
+    final b = enPantalla;
+    if (b != null && familiaDe(i) == b.familia) {
+      if (!b.tiene(i.id)) b.personas.add(i);
+      b.seSumo = ahora;
+      return;
+    }
+    cola.add(i);
+  }
 
   /// Los ingresados que ya se saludaron o ya están en la lista.
   final _vistos = <String>{};
@@ -130,19 +243,15 @@ class IngresosTotem {
   bool get conectado => _cortadoDesde == null;
 
   /// Llegó una lectura completa de los invitados, del stream o de la
-  /// relectura. [enPantalla] es el que se está saludando en este momento.
-  void leyo(
-    List<Invitado> lectura, {
-    required DateTime ahora,
-    String? enPantalla,
-  }) {
+  /// relectura.
+  void leyo(List<Invitado> lectura, {required DateTime ahora}) {
     final desde = _cortadoDesde;
     final r = resolverLectura(
       lectura: lectura,
       vistos: _vistos,
       delPuente: _delPuente,
       enCurso: {
-        ?enPantalla,
+        ...?enPantalla?.personas.map((i) => i.id),
         for (final i in cola) i.id,
       },
       enSilencio: lecturaEnSilencio(
@@ -166,7 +275,9 @@ class IngresosTotem {
       _vistos.add(i.id);
     }
     ingresados.insertAll(0, nuevos.reversed);
-    cola.addAll(r.saludar);
+    for (final i in r.saludar) {
+      _llega(i, ahora);
+    }
   }
 
   /// No se pudo leer la nube. El corte se cuenta desde el primer fallo.
@@ -174,29 +285,40 @@ class IngresosTotem {
 
   /// Llegó un aviso de ingreso, sin esperar a la nube: por el puente entre
   /// ventanas ([porElPuente], lo marcó esta misma PC) o por el canal de avisos
-  /// (lo marcó otra PC o un celular). Devuelve si era nuevo.
-  bool aviso(Invitado invitado, {bool porElPuente = false}) {
+  /// (lo marcó otra PC o un celular). Devuelve si era nuevo: si va a la
+  /// tarjeta de su familia o a la cola, lo dice [enPantalla].
+  bool aviso(
+    Invitado invitado, {
+    bool porElPuente = false,
+    DateTime? ahora,
+  }) {
     // Aunque ya esté saludado: lo que marcó esta PC puede no haber subido.
     if (porElPuente) _delPuente.add(invitado.id);
     if (!_vistos.add(invitado.id)) return false;
-    cola.add(invitado);
+    _llega(invitado, ahora ?? DateTime.now());
     ingresados.insert(0, invitado);
     return true;
   }
 
   /// Se borró a alguien o se deshizo su ingreso. Si lo vuelven a marcar, se lo
-  /// saluda de nuevo.
+  /// saluda de nuevo. Si era el único de la tarjeta, la tarjeta se va.
   void baja(String id) {
     ingresados.removeWhere((i) => i.id == id);
     cola.removeWhere((i) => i.id == id);
     _vistos.remove(id);
     _delPuente.remove(id);
+    final b = enPantalla;
+    if (b != null) {
+      b.personas.removeWhere((i) => i.id == id);
+      if (b.personas.isEmpty) enPantalla = null;
+    }
   }
 
   /// Se vació la lista o se deshicieron todos los ingresos.
   void vaciar() {
     ingresados.clear();
     cola.clear();
+    enPantalla = null;
     _vistos.clear();
     _delPuente.clear();
   }
@@ -212,6 +334,7 @@ class IngresosTotem {
   /// La ventana se esconde: nadie queda esperando su bienvenida.
   void pausar() {
     cola.clear();
+    enPantalla = null;
     _cortadoDesde = null;
   }
 }

@@ -244,6 +244,25 @@ nube; `totem_display.dart` solo le cuenta lo que pasó (`leyo`, `noPudoLeer`, `a
 - El aviso de que no hay internet va en la barra del operador (`AvisoSinInternet`), no a la vista del salón.
 - **`totem_panel.dart` no usa nada de esto**: sigue con su lógica de antes hasta que se rehaga Recepción.
 
+**El tótem distingue particular de masivo por la ficha del evento** (v6.0.0, sección 2). La lista de la puerta solo
+tiene nombre y mesa; quién es alumno, con quién viene, sus sillas y su música están en los alumnos, en la base de la
+PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve Recepción (`PuertaDelEvento`).
+- **La pide el tótem; la ventana principal contesta** (`PuenteFichaTotem`, método `ficha_totem`, con el manejador
+  que se registra en `AuthWrapper`). Lo que se le manda a una ventana que recién nace lo traga el manejador
+  provisorio de `main.dart` sin error: por eso no se empuja. Se pide al abrir, al reanudar, al cambiar de evento,
+  cada 60 s y cuando llega alguien que la ficha no tiene. Sale de la PC: anda sin internet.
+- **La web (`?totem`) no tiene ficha**: saluda con la fila y sigue con el QR (`hayQrEnElTotem`).
+- **La familia se saluda junta y la cola se acorta**, en `IngresosTotem`: `siguiente` junta a los de la misma
+  familia, el que llega con su familia en pantalla se suma a la tarjeta, y `finDeBienvenida` da 7 s sin cola, 3 s
+  con cola y 3 s más al que se suma. La pantalla solo reprograma el temporizador (`_programarFin`).
+- Lo que dice la tarjeta lo decide `ContenidoBienvenida`; la tarjeta y la portada son widgets aparte
+  (`TarjetaBienvenida`, `PortadaTotem`), con tests y muestras. **Su letra es Outfit regular o negrita**, la que viene
+  con la app: con Oswald un test con `allowRuntimeFetching = false` falla, y sin internet no está.
+- **Si la ficha conoce a la persona, la ficha manda**, también cuando dice que no tiene mesa: la fila puede traer
+  la mesa de un sorteo que se deshizo. En el salón nunca se dice "sin mesa".
+- La música se prende o apaga en Personalizar (`totem_config.mostrar_musica`; vacía = prendida). **Guardar
+  Personalizar necesita la columna en la nube**: `test/totem_config_test.dart` compara `toJson` con el SQL.
+
 **Un aviso que no llega no quiere decir que la ventana murió.** `KioskLauncher` reintenta y, si igual no llega,
 pregunta si la ventana sigue abierta: solo la olvida si ya no existe. Olvidarla de más dejaba a Recepción sin
 avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le habla a las ventanas por
@@ -261,7 +280,8 @@ duplicadas). Cualquier cambio visual hay que hacerlo dos veces:
 - `totem_panel.dart` — panel embebido en Recepción. Va por SQLite.
 
 El tótem **muestra** un QR, no lo lee: no hay dependencia de cámara. El QR apunta
-a `/lista?evento=<id>`, que abre el invitado en su celular. Al confirmar el
+a `/lista?evento=<id>`, que abre el invitado en su celular. **Desde la 6.0.0, solo en
+los particulares** (`hayQrEnElTotem`); `totem_panel.dart` todavía lo muestra siempre. Al confirmar el
 check-in, esa pantalla emite un broadcast por el canal `totem_<eventoId>`, que es
 el bus de baja latencia que evita esperar la replicación de Postgres.
 

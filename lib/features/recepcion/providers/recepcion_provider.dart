@@ -91,6 +91,19 @@ class AlumnosDeLaPuerta {
   const AlumnosDeLaPuerta(this.alumnos, this.repartos);
 }
 
+/// Los alumnos de un evento y sus repartos de sillas, de la base de esta PC.
+/// Lo leen Recepción ([alumnosDeLaPuertaProvider]) y la ficha del tótem.
+Future<AlumnosDeLaPuerta> leerAlumnosDeLaPuerta(
+  ContratosRepository contratos,
+  SillasRepartoRepository sillas,
+  String eventoId,
+) async {
+  final alumnos = await contratos.getByEvento(eventoId);
+  final repartos =
+      await sillas.obtenerPorContratoIds([for (final a in alumnos) a.id]);
+  return AlumnosDeLaPuerta(alumnos, repartos);
+}
+
 /// Lo que bajó de la otra PC y cambia lo que se ve en la puerta de un masivo.
 const _tablasDeLaPuerta = {'contratos_alumnos', 'sillas_reparto'};
 
@@ -116,12 +129,8 @@ final alumnosDeLaPuertaProvider = StreamProvider.autoDispose
     cadena = cadena.then((_) async {
       if (controller.isClosed) return;
       try {
-        final alumnos = await contratos.getByEvento(eventoId);
-        final repartos = await sillas
-            .obtenerPorContratoIds([for (final a in alumnos) a.id]);
-        if (!controller.isClosed) {
-          controller.add(AlumnosDeLaPuerta(alumnos, repartos));
-        }
+        final leidos = await leerAlumnosDeLaPuerta(contratos, sillas, eventoId);
+        if (!controller.isClosed) controller.add(leidos);
       } catch (e, st) {
         if (!controller.isClosed) controller.addError(e, st);
       }

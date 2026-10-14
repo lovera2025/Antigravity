@@ -7,6 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/kiosk_launcher.dart';
 import '../../../models/totem_config.dart';
+import '../../recepcion/providers/recepcion_provider.dart'
+    show eventosActivosProvider;
 import '../providers/totem_config_provider.dart';
 import '../repositories/totem_config_repository.dart';
 
@@ -63,6 +65,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
   late final TextEditingController _hex;
 
   late Color _acento;
+  late bool _mostrarMusica;
   String? _imagenUrl;
 
   /// Foto elegida y todavía no subida. Se sube recién al guardar para no dejar
@@ -86,6 +89,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     _mensajeQr = TextEditingController(text: cfg.mensajeQr);
     _hex = TextEditingController(text: cfg.colorAcentoHex);
     _acento = cfg.colorAcento;
+    _mostrarMusica = cfg.mostrarMusica;
     _imagenUrl = cfg.imagenUrl;
   }
 
@@ -112,6 +116,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
             : _mensajeQr.text.trim(),
         imagenUrl: _quitarImagen ? null : _imagenUrl,
         colorAcento: _acento,
+        mostrarMusica: _mostrarMusica,
       );
 
   // ── Imagen ────────────────────────────────────────────────────────────────
@@ -198,6 +203,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
         mensajeQr: _preview.mensajeQr,
         imagenUrl: url,
         colorAcento: _acento,
+        mostrarMusica: _mostrarMusica,
       );
 
       final guardada = await repo.guardar(cfg);
@@ -228,6 +234,15 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     final inset = MediaQuery.of(context).viewInsets.bottom;
     final bottom = MediaQuery.of(context).padding.bottom;
     final cfg = _preview;
+    // En un masivo el tótem no muestra QR (su texto no se usa) y puede mostrar
+    // la música de cada alumno.
+    final masivo = ref
+            .watch(eventosActivosProvider)
+            .value
+            ?.where((e) => e.id == widget.eventoId)
+            .firstOrNull
+            ?.modalidad ==
+        'masivo';
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -275,7 +290,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _seccionFotoYPreview(cfg),
+                        _seccionFotoYPreview(cfg, masivo: masivo),
                         const SizedBox(height: 20),
                         _campo(_titulo, 'Título', 'JUNIOR EVENTOS'),
                         const SizedBox(height: 12),
@@ -283,7 +298,15 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
                         const SizedBox(height: 12),
                         _campo(_bienvenida, 'Saludo al ingresar', '¡Bienvenido!'),
                         const SizedBox(height: 12),
-                        _campo(_mensajeQr, 'Texto del QR', 'ESCANEÁ PARA INGRESAR'),
+                        if (masivo)
+                          CasillaMusicaTotem(
+                            valor: _mostrarMusica,
+                            onChanged: _guardando
+                                ? null
+                                : (v) => setState(() => _mostrarMusica = v),
+                          )
+                        else
+                          _campo(_mensajeQr, 'Texto del QR', 'ESCANEÁ PARA INGRESAR'),
                         const SizedBox(height: 20),
                         _seccionColor(),
                       ],
@@ -384,11 +407,11 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     );
   }
 
-  Widget _seccionFotoYPreview(TotemConfig cfg) {
+  Widget _seccionFotoYPreview(TotemConfig cfg, {required bool masivo}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _previewPantalla(cfg),
+        _previewPantalla(cfg, masivo: masivo),
         const SizedBox(width: 16),
         Expanded(
           child: Column(
@@ -450,7 +473,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
   /// Reusa `gradienteCard` y `acentoConAlpha` del propio modelo, así que el
   /// preview no puede desincronizarse de lo que dibuja el tótem. **No** se
   /// embebe un `TotemDisplay` real: rearrancaría streams, canales y animaciones.
-  Widget _previewPantalla(TotemConfig cfg) {
+  Widget _previewPantalla(TotemConfig cfg, {required bool masivo}) {
     return Container(
       width: 108,
       height: 192,
@@ -502,19 +525,22 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
               ),
             ],
             const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: cfg.acentoConAlpha(0.16),
-                borderRadius: BorderRadius.circular(6),
+            // En un masivo el tótem no muestra el QR.
+            if (!masivo)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: cfg.acentoConAlpha(0.16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  cfg.mensajeQr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: cfg.colorAcento, fontSize: 7),
+                ),
               ),
-              child: Text(
-                cfg.mensajeQr,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: cfg.colorAcento, fontSize: 7),
-              ),
-            ),
           ],
         ),
       ),
@@ -662,6 +688,67 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// La casilla de la música, en Personalizar de un evento masivo.
+///
+/// Prendida, la bienvenida del tótem muestra la canción que eligió cada
+/// alumno, si está cargada (con el Excel del delegado o en su ficha).
+class CasillaMusicaTotem extends StatelessWidget {
+  final bool valor;
+
+  /// Null mientras se guarda.
+  final ValueChanged<bool>? onChanged;
+
+  const CasillaMusicaTotem({
+    super.key,
+    required this.valor,
+    required this.onChanged,
+  });
+
+  static const titulo = 'Mostrar la música de cada alumno';
+  static const explicacion =
+      'Al saludar, el tótem muestra la canción que eligió, si está cargada.';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.music_note_rounded, color: _gold.withValues(alpha: 0.9)),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  titulo,
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  explicacion,
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: valor,
+            onChanged: onChanged,
+            activeThumbColor: Colors.black,
+            activeTrackColor: _gold,
+          ),
+        ],
+      ),
     );
   }
 }
