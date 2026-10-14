@@ -65,7 +65,7 @@ Una columna nueva, `totem_config.estilo`: `neon`, `cristal`, `poster` o `gala`. 
 **El SQL ya está escrito** (14-oct, sección 2 del orden nuevo):
 `supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`, junto con `mostrar_musica`. Va **sin CHECK**
 en `estilo`, como `planos_evento.estilo`: los valores los controla la app y una apariencia nueva no espera otro SQL.
-Falta correrlo, con el OK del usuario.
+**Corrido en la nube el 14-oct**, con su OK: las columnas ya existen, vacías.
 
 - **Hay que correrla antes de usar la versión nueva.** `TotemConfigRepository.guardar` hace un upsert con
   `toJson()`, y si la columna no existe, guardar la personalización falla. Al sumar `estilo` a `toJson`, sumarlo

@@ -379,8 +379,7 @@ vaciarla al deshacer todo) sigue igual.
 | 9 | Verificación, instalador, la web y publicar (partes 10 y 11) | falta |
 
 La nube: las dos columnas de `totem_config` (`estilo` y `mostrar_musica`) quedaron en un solo SQL en la sección 2
-(`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`). **Falta correrlo**, con su OK en el
-momento; tiene que estar antes de instalar.
+(`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`). **Corrido el 14-oct a las 8:50, con su OK**: antes y después 643 contratos, 4.043 pagos, 26 notas, 10 invitados, 30 eventos y 1 fila de `totem_config`; las dos columnas quedaron vacías y fuera de Realtime.
 
 ### La sección 1: Recepción distingue particular y masivo
 
@@ -513,7 +512,7 @@ y subido; sin publicar.**
 **La nube:** `supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql` agrega `mostrar_musica` y
 `estilo` a `totem_config`, vacías. Sin la columna, **guardar Personalizar con la 6.0.0 falla**: hay que correrlo antes
 de instalar. La 5.0.0 no lo nota. `test/totem_config_test.dart` falla si `TotemConfig.toJson` manda una clave que
-no está en los SQL. **Falta correrlo, con su OK.**
+no está en los SQL. **Corrido el 14-oct a las 8:50, con su OK**: antes y después 643 contratos, 4.043 pagos, 26 notas, 10 invitados, 30 eventos y 1 fila de `totem_config`; las dos columnas quedaron vacías y fuera de Realtime.
 
 **Cómo se comprobó:**
 - `test/ficha_totem_test.dart` (16), `test/tarjeta_bienvenida_test.dart` (23; la tarjeta a 1080×1920, 1920×1080 y
@@ -555,9 +554,9 @@ no está en los SQL. **Falta correrlo, con su OK.**
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
      `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
      correr cuando él diga;
-   - las dos columnas de `totem_config` (`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`,
-     escrito en la sección 2: **sin él, guardar Personalizar con la 6.0.0 falla**) y las funciones de la puerta
-     (sección 8).
+   - las dos columnas de `totem_config` (`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`):
+     **ya corrido el 14-oct**; queda nombrado para saber que no hay que repetirlo (correrlo de nuevo es inocuo);
+   - las funciones de la puerta (sección 8).
    Antes y después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y
    30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
 2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
@@ -614,8 +613,8 @@ las cuatro apariencias del tótem (Neón, Cristal, Póster y Gala), dibujando lo
 de la sección 2, Personalizar con las cuatro tarjetas y la vista del tótem al
 lado de Recepción. Primero su plan corto y una maqueta, y avisame al terminar
 con cómo quedó, un commit y un push. Los diseños aprobados están en
-docs/pendientes/ (sobre todo totem-apariencias.md). Falta correr en la nube el
-SQL de totem_config de la sección 2, con mi OK.
+docs/pendientes/ (sobre todo totem-apariencias.md). El SQL de totem_config de
+la sección 2 ya está corrido en la nube.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).
