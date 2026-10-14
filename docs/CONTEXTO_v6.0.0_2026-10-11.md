@@ -17,8 +17,8 @@ y caja no cambian.
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
-las secciones 1 y 2 y el paso 3a** (el tótem del salón con las cuatro apariencias); **siguen el 3b (Personalizar) y
-el 3c (Recepción)**. Lo de este encabezado es cómo quedó el 11-oct.
+las secciones 1 y 2 y los pasos 3a** (el tótem del salón con las cuatro apariencias) **y 3b** (Personalizar con las
+cuatro tarjetas); **sigue el 3c (Recepción)**. Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -371,7 +371,7 @@ vaciarla al deshacer todo) sigue igual.
 |---|---|---|
 | 1 | Recepción distingue particular y masivo (el panel del operador de la parte 6, más lo del masivo) | **hecha el 14-oct** |
 | 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **hecha el 14-oct** |
-| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **en curso:** 3a (el tótem del salón) hecha el 14-oct; siguen 3b (Personalizar) y 3c (Recepción) |
+| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **en curso:** 3a (el tótem del salón) y 3b (Personalizar) hechas el 14-oct; sigue 3c (Recepción) |
 | 4 | El plano con la guía en la llegada | falta |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
 | 6 | Modo kiosco (parte 7) | falta |
@@ -641,6 +641,90 @@ automático") y dio el **OK para bajar cuatro letras**. **Programado y subido; s
 - Personalizar todavía no deja elegir la apariencia: la conserva.
 - `totem_panel.dart` (Recepción y la pantalla del asesor) sigue con la cara vieja hasta la 3c.
 
+### La sección 3b: Personalizar con las cuatro apariencias
+
+Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md` (el detalle del 3b del plan de
+la sección 3). Lo pidió con "donde nos quedamos?" y aprobó el plan; cada cambio lo aprobó a mano. **Programado y
+subido; sin publicar.**
+
+**Qué cambió para el usuario** (Inicio → RECEPCIÓN → el evento → paleta "Personalizar tótem"):
+- **Se elige la apariencia** entre cuatro tarjetas, Neón, Cristal, Póster y Gala:
+  - cada una muestra la espera con la foto, el título y el color de ese evento;
+  - si nadie eligió, la del tipo viene marcada con "va esta si no elegís".
+- **A la izquierda (o arriba), "Vista del tótem · Neón"**: la escena de verdad, con su fondo animado. Sigue al
+  instante lo que se escribe, el color y una foto recién elegida, antes de guardarla.
+- **"Ver una llegada"** muestra 7 s una llegada de ejemplo y vuelve la espera:
+  - en un masivo, PÉREZ, JUAN MARTÍN con dos acompañantes, mesa 12, "10 sillas (8 + 2 extra)" y la música si está
+    prendida;
+  - en un particular, GONZÁLEZ, MARÍA en la mesa 4.
+- **Vertical / Horizontal** debajo de la vista. Arranca como quedó el tótem del evento en esa PC; no guarda nada.
+- **En la PC (más de 1.024 px), ventana al centro**; en tablet y celular, hoja a pantalla completa.
+- **Un error al guardar se dice en palabras:** "No se pudo guardar. Revisá la conexión e intentá de nuevo."
+  Guardar sigue necesitando internet, como siempre: se hace en la oficina, no en la puerta.
+- Al guardar, el tótem cambia al instante por el puente, como antes. **Sin SQL nuevo:** la columna `estilo` ya
+  estaba (14-oct).
+
+**Cómo se arma:**
+- **`totem_config_sheet.dart`, rehecho.** `showTotemConfigSheet` no cambió de forma: elige ventana u hoja con
+  `CortesPantalla` (`common/utils/cortes_pantalla.dart`, 600 y 1.024 px), que va a usar también Recepción en la 3c.
+  - El cuerpo es `PersonalizarTotem`, con dos acomodos.
+  - Las tarjetas son `TarjetaApariencia`: una `EscenaTotem` quieta en 9:16.
+  - La vista grande es la `EscenaTotem` animada.
+  - "Ver una llegada" la arma `LlegadaDeEjemplo.para`, con `ContenidoBienvenida.armar`, lo mismo que el salón:
+    dice el plural, la mesa, las sillas y la música como las diría el tótem.
+- **`EscenaTotem.foto`:** una foto que manda sobre `cfg.imagenUrl` (la recién elegida). `DatosEscena.foto` la lleva
+  resuelta; `FotoEvento` y el fondo del Póster la usan. En el salón no cambia nada: sin `foto`, la URL.
+- **Las letras:** salió `GoogleFonts.oswald` (pedía la seminegrita, que no viene con la app). Van la Oswald de la app
+  (`FuentesTotem.cartelera`) y Outfit.
+- Si no se toca una tarjeta, se conserva lo guardado, también una clave que esta versión no conoce.
+- `PersonalizarTotem.elegirFoto` reemplaza al selector de archivos en los tests, como `FondoTotem.cargar`.
+
+**Decisiones mías, dichas en el plan:**
+- **Las tarjetas quietas y la vista animada:** cinco fondos animados a la vez cargan una PC de oficina.
+- **No se vuelve a "sin elegir":** se toca la tarjeta del tipo.
+- **Lo que no se guardó se pierde al cerrar**, como antes.
+
+**Cómo se comprobó:**
+- `test/personalizar_totem_test.dart` (27) monta Personalizar entero, abierto desde un botón como la paleta de
+  Recepción, con `test/helpers/personalizar_en_memoria.dart`. Prueba:
+  - la ventana en 1366 × 768, la hoja en 390 y 800 px;
+  - sin desbordes en 360 × 640, 800 × 1280 y 1366 × 768, en masivo y particular, vertical, horizontal y con la
+    llegada;
+  - la marcada si nadie eligió;
+  - elegir y guardar, también en el celular;
+  - conservar lo guardado (vacío, `poster` y una desconocida);
+  - las tarjetas quietas;
+  - el título, el color y la foto recién elegida en la vista y las tarjetas;
+  - la llegada de ejemplo, que se va a los 7 s, sigue al cambiar de apariencia y va sin música con la casilla
+    apagada;
+  - el QR solo en particulares;
+  - la orientación guardada;
+  - el error en palabras.
+- `test/escena_totem_test.dart` suma 8: en las cuatro apariencias, la foto recién elegida manda, y sin ella va la
+  guardada.
+- **2.096 tests** en la suite (eran 2.061); `flutter analyze` sigue en 312.
+- **Diez roturas a propósito, todas vistas:**
+  - la elección que no se guarda;
+  - la tarjeta que no cambia la vista;
+  - la ventana en el celular;
+  - el error con el texto técnico;
+  - la llegada que no vuelve;
+  - la foto nueva que no se ve (en la hoja y en la escena);
+  - el QR en un masivo;
+  - las tarjetas animadas;
+  - sin el rótulo.
+- **Muestras**, con los fondos y las letras de verdad, en `build/muestras_6.0.0/totem/`:
+  - `Personalizar_PC.png`;
+  - `Personalizar_llegada.png`;
+  - `Personalizar_celular.png`;
+  - `Personalizar_celular_tarjetas.png`.
+
+  Salen de `tool/totem_muestra_test.dart`.
+- Sin shaders nuevos, así que no se volvió a compilar para Windows y la web. **No se probó en la app.**
+
+**Lo que no se tocó (sigue la 3c):** `totem_panel.dart`, la vista vieja de Recepción y del asesor, con sus botones
+flotantes. La paleta de Recepción abre el Personalizar nuevo.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
@@ -706,10 +790,10 @@ falta: que Recepción y el tótem distingan un evento particular de uno masivo
 particular y masivo: la ficha por el puente, la familia junta, la cola que se
 acorta, sin QR en masivos y la música en Personalizar). La sección 3 va en tres
 pasos con el plan ya aprobado (purrfect-waddling-micali.md, la sección 3
-arriba): está hecho el 3a (el tótem del salón con las cuatro apariencias).
-Seguí por el 3b (Personalizar con las cuatro tarjetas, "Ver una llegada" y la
-ventana al centro en la PC) y después el 3c (Recepción con la vista del tótem
-al lado, TotemLocal, los cortes de pantalla y sacar totem_panel.dart). Avisame
+arriba): están hechos el 3a (el tótem del salón con las cuatro apariencias) y
+el 3b (Personalizar con las cuatro tarjetas y "Ver una llegada"). Seguí por el
+3c (Recepción con la vista del tótem al lado, TotemLocal, los cortes de
+pantalla de CortesPantalla y sacar totem_panel.dart). Avisame
 al terminar cada uno con cómo quedó, un commit y un push. Cada cambio lo
 apruebo yo a mano: no quiero modo automático.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los

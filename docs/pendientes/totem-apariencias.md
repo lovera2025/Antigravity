@@ -1,9 +1,9 @@
 # El tótem con cuatro apariencias: Neón, Cristal, Póster y Gala
 
-**Estado:** en parte. **El tótem del salón con las cuatro quedó hecho el 2026-10-14** (sección 3a de la 6.0.0; el
-detalle, en "La sección 3a" de [CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md)). Faltan Personalizar con las
-cuatro tarjetas (3b), la vista del tótem en Recepción (3c) y el plano con la guía (sección 4). Salió distinto de lo de
-abajo en dos cosas:
+**Estado:** en parte. **El tótem del salón con las cuatro y Personalizar con las cuatro tarjetas quedaron hechos el
+2026-10-14** (secciones 3a y 3b de la 6.0.0; el detalle, en "La sección 3a" y "La sección 3b" de
+[CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md)). Faltan la vista del tótem en Recepción (3c) y el plano con la
+guía (sección 4). Salió distinto de lo de abajo en dos cosas:
 - en Gala las cifras van alineadas (`FontFeature.liningFigures()`), porque las de Cormorant hacían leer "I2";
 - en Neón lo que se lee va arriba del horizonte y el QR sobre el piso.
 **Postergado el:** 2026-09-24

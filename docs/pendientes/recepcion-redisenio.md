@@ -2,10 +2,11 @@
 
 **Estado:** en parte. **El panel del operador quedó hecho el 2026-10-14**, en la 6.0.0, junto con lo de distinguir un
 evento particular de uno masivo (sección 1 del orden del 14-oct; el detalle, en "Qué pasó el 14-oct" de
-[CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md)). Falta la vista del tótem al lado (con las apariencias), los
-cortes por pantalla y Personalizar. Salió distinto de lo de abajo: la tarjeta del evento sigue siendo el selector de
-siempre (ahora dice si es masivo o particular), y en el menú ⋮ de cada fila hay solo "Eliminar": Recepción nunca tuvo
-cómo editar a un invitado.
+[CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md)). **Personalizar quedó hecho el mismo día** (sección 3b, ver
+"La sección 3b" del CONTEXTO), con los cortes ya puestos en `CortesPantalla`. Falta la vista del tótem al lado (con
+las apariencias) y los cortes de Recepción (3c). Salió distinto de lo de abajo: la tarjeta del evento sigue siendo el
+selector de siempre (ahora dice si es masivo o particular), y en el menú ⋮ de cada fila hay solo "Eliminar":
+Recepción nunca tuvo cómo editar a un invitado.
 **Postergado el:** 2026-09-24
 
 ## Por qué se postergó

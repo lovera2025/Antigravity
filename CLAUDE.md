@@ -285,6 +285,16 @@ PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve
 - Sin "YA LLEGARON" en el salón. Cuántos llegaron va en la barra del operador.
 - En la ventana del escritorio, si nadie eligió apariencia, la pantalla queda en negro hasta que llega la ficha (no
   se sabe si es masivo); a los 3 s se sigue sin ella.
+- **Personalizar tótem** (`totem_config_sheet.dart`, sección 3b) se dibuja con las mismas escenas, así que no puede
+  mentir:
+  - cuatro tarjetas (`TarjetaApariencia`, quietas) y la vista grande animada, con "Ver una llegada"
+    (`LlegadaDeEjemplo`, armada con `ContenidoBienvenida.armar`);
+  - en la PC es ventana al centro y si no, hoja a pantalla completa. El corte está en `CortesPantalla`
+    (`common/utils/cortes_pantalla.dart`): 600 y 1.024 px, para todo lo de Recepción;
+  - una foto recién elegida va por `EscenaTotem.foto`, antes de subirla;
+  - **si no se toca una tarjeta, `estilo` se guarda como estaba**, porque la config se arma campo por campo;
+  - se prueba entera con `test/helpers/personalizar_en_memoria.dart`, y `PersonalizarTotem.elegirFoto` reemplaza al
+    selector de archivos.
 
 **Un aviso que no llega no quiere decir que la ventana murió.** `KioskLauncher` reintenta y, si igual no llega,
 pregunta si la ventana sigue abierta: solo la olvida si ya no existe. Olvidarla de más dejaba a Recepción sin

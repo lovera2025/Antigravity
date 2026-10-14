@@ -46,7 +46,7 @@ class EscenaGala extends EscenaEstilo {
               painter: _Anillo(giro: d.reloj * 0.15, color: d.color, u: u),
               child: Center(
                 child: FotoEvento(
-                  url: d.cfg.imagenUrl,
+                  imagen: d.foto,
                   lado: u * 5.4,
                   borde: d.color.withValues(alpha: 0.7),
                   grosor: u * 0.04,

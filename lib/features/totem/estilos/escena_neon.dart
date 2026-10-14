@@ -48,7 +48,7 @@ class EscenaNeon extends EscenaEstilo {
         mainAxisSize: MainAxisSize.min,
         children: [
           FotoEvento(
-            url: d.cfg.imagenUrl,
+            imagen: d.foto,
             lado: u * 5.2,
             borde: d.color,
             grosor: u * 0.12,

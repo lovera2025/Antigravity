@@ -16,16 +16,16 @@ class EscenaPoster extends EscenaEstilo {
 
   @override
   List<Widget> capasDeFondo(DatosEscena d) {
-    final url = d.cfg.imagenUrl;
+    final foto = d.foto;
     return [
-      if (url != null)
+      if (foto != null)
         Opacity(
           opacity: 1 - 0.45 * d.entrada,
           child: Transform.scale(
             // Zoom lento, de ida y vuelta.
             scale: 1.04 + 0.04 * math.sin(d.reloj * 0.1),
-            child: Image.network(
-              url,
+            child: Image(
+              image: foto,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),

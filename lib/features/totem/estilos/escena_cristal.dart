@@ -45,7 +45,7 @@ class EscenaCristal extends EscenaEstilo {
           mainAxisSize: MainAxisSize.min,
           children: [
             FotoEvento(
-              url: d.cfg.imagenUrl,
+              imagen: d.foto,
               lado: u * 4.6,
               borde: d.color,
               grosor: u * 0.1,

@@ -12,6 +12,10 @@
 // - Totem_horizontal.png: la llegada en una pantalla apaisada.
 // - Totem_sin_internet.png: el aviso de la barra del operador.
 // - Personalizar_musica.png: la casilla de la música en Personalizar.
+// - Personalizar_PC.png: Personalizar en la PC, recién abierta (un masivo).
+// - Personalizar_llegada.png: con Gala elegida y "Ver una llegada".
+// - Personalizar_celular.png y Personalizar_celular_tarjetas.png: en el
+//   celular (un particular), recién abierta y deslizada hasta las tarjetas.
 //
 // Las escenas, los fondos (los shaders de verdad) y las letras son los de la
 // app. La pantalla entera del tótem lee la nube y no se monta en una prueba.
@@ -41,6 +45,7 @@ import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import '../test/helpers/ficha_de_prueba.dart';
+import '../test/helpers/personalizar_en_memoria.dart';
 import '../test/helpers/puerta_en_memoria.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
@@ -379,4 +384,96 @@ void main() {
       'Personalizar_musica.png',
     );
   });
+
+  group('Personalizar con las cuatro apariencias', () {
+    testWidgets('en la PC, recién abierta', (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(1366, 768),
+        guardada: _masivo,
+        archivo: 'Personalizar_PC.png',
+      );
+    });
+
+    testWidgets('en la PC, con Gala elegida y una llegada', (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(1366, 768),
+        guardada: _masivo,
+        archivo: 'Personalizar_llegada.png',
+        antes: (tester) async {
+          await tester.tap(find.byKey(const ValueKey('apariencia_gala')));
+          await tester.pump();
+          await tester.tap(find.byKey(const ValueKey('ver_una_llegada')));
+          await tester.pump();
+          await tester.pump(EscenaTotem.entrada);
+        },
+      );
+    });
+
+    testWidgets('en el celular, un particular, recién abierta', (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(390, 844),
+        guardada: _particular,
+        archivo: 'Personalizar_celular.png',
+      );
+    });
+
+    testWidgets('en el celular, deslizada hasta las tarjetas', (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(390, 844),
+        guardada: _particular,
+        archivo: 'Personalizar_celular_tarjetas.png',
+        antes: (tester) async {
+          await tester.drag(
+            find.byType(SingleChildScrollView).last,
+            const Offset(0, -420),
+          );
+          await tester.pump();
+        },
+      );
+    });
+  });
+}
+
+/// Abre Personalizar desde un botón, como la paleta de Recepción, hace [antes]
+/// y la guarda. Falla si algo no entra.
+Future<void> _sacarPersonalizar(
+  WidgetTester tester,
+  Size tam, {
+  required TotemConfig guardada,
+  required String archivo,
+  Future<void> Function(WidgetTester)? antes,
+}) async {
+  final clave = GlobalKey();
+  tester.view.physicalSize = tam;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: clave,
+      child: anfitrionPersonalizar(
+        eventoId: guardada.eventoId,
+        guardada: guardada,
+        repo: RepoTotemEnMemoria(),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump();
+  await tester.tap(find.text(abrirPersonalizar));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  if (antes != null) await antes(tester);
+  // El logo de la empresa es una imagen: hay que dejar que se lea del disco.
+  await tester.runAsync(() async {
+    for (final e in find.byType(Image).evaluate()) {
+      await precacheImage((e.widget as Image).image, e);
+    }
+  });
+  await tester.pump(const Duration(milliseconds: 16));
+  expect(tester.takeException(), isNull);
+  await _guardar(tester, clave, archivo);
 }

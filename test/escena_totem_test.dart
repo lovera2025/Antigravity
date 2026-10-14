@@ -16,6 +16,7 @@ import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import 'helpers/ficha_de_prueba.dart';
+import 'helpers/personalizar_en_memoria.dart' show fotoDePrueba;
 import 'helpers/puerta_en_memoria.dart';
 
 const _masivo = TotemConfig(
@@ -265,6 +266,37 @@ void main() {
       });
     });
   }
+
+  group('la foto', () {
+    bool esDe<T extends ImageProvider>(Widget w) => w is Image && w.image is T;
+    final conFoto = _masivo.copyWith(imagenUrl: 'https://ejemplo.test/foto.jpg');
+
+    for (final estilo in EstiloTotem.values) {
+      testWidgets('${estilo.nombre}: la recién elegida manda sobre la guardada',
+          (tester) async {
+        await _montar(
+          tester,
+          EscenaTotem(
+            estilo: estilo,
+            cfg: conFoto,
+            foto: MemoryImage(fotoDePrueba),
+            quieta: true,
+          ),
+        );
+        expect(find.byWidgetPredicate(esDe<MemoryImage>), findsWidgets);
+        expect(find.byWidgetPredicate(esDe<NetworkImage>), findsNothing);
+      });
+
+      testWidgets('${estilo.nombre}: sin elegir, la guardada', (tester) async {
+        await _montar(
+          tester,
+          EscenaTotem(estilo: estilo, cfg: conFoto, quieta: true),
+        );
+        expect(find.byWidgetPredicate(esDe<NetworkImage>), findsWidgets);
+        expect(find.byWidgetPredicate(esDe<MemoryImage>), findsNothing);
+      });
+    }
+  });
 
   testWidgets('si el fondo no carga, la escena se ve igual (con el degradé)',
       (tester) async {

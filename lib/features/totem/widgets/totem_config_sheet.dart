@@ -1,26 +1,38 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/services/kiosk_launcher.dart';
+import '../../../main.dart' show kWebBaseUrl;
+import '../../../models/invitado.dart';
 import '../../../models/totem_config.dart';
+import '../../common/utils/cortes_pantalla.dart';
 import '../../recepcion/providers/recepcion_provider.dart'
     show eventosActivosProvider;
+import '../estilos/escena_totem.dart';
+import '../estilos/fuentes_totem.dart';
+import '../estilos/totem_estilo.dart';
 import '../providers/totem_config_provider.dart';
 import '../repositories/totem_config_repository.dart';
+import '../services/bienvenidas_totem.dart';
+import '../services/contenido_bienvenida.dart';
+import '../services/ficha_totem.dart';
+import '../totem_orientation.dart';
 
 const _gold = TotemConfig.acentoPorDefecto;
+const _fondo = Color(0xFF141414);
 
 /// Paleta curada.
 ///
 /// Se eligieron a mano en vez de sumar un color picker: el acento no se mira en
-/// un monitor sino **proyectado** en un salón, y `gradientePanel` /
-/// `gradienteCard` derivan el fondo del tono elegido. Una rueda libre deja pasar
-/// combinaciones que quedan ilegibles a cinco metros. Para el color exacto de
-/// una marca está el campo de hex.
+/// un monitor sino **proyectado** en un salón, y los fondos del tótem derivan
+/// del tono elegido. Una rueda libre deja pasar combinaciones que quedan
+/// ilegibles a cinco metros. Para el color exacto de una marca está el campo de
+/// hex.
 const List<({String nombre, Color color})> _paleta = [
   (nombre: 'Dorado', color: _gold),
   (nombre: 'Perla', color: Color(0xFFE8E3D3)),
@@ -34,30 +46,140 @@ const List<({String nombre, Color color})> _paleta = [
   (nombre: 'Naranja', color: Color(0xFFFF9F1C)),
 ];
 
-/// Editor de la identidad visual del tótem para un evento.
+/// Personalizar el tótem de un evento: la apariencia, la foto, los textos y el
+/// color, mirando el tótem de verdad.
+///
+/// En la PC (más de [CortesPantalla.pc]) abre como ventana al centro, con la
+/// vista grande a la izquierda; en tablet y celular, como hoja a pantalla
+/// completa, con la vista arriba.
 Future<void> showTotemConfigSheet({
   required BuildContext context,
   required String eventoId,
 }) async {
+  if (CortesPantalla.esPc(MediaQuery.sizeOf(context).width)) {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      builder: (_) => PersonalizarTotem(eventoId: eventoId, enVentana: true),
+    );
+    return;
+  }
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _TotemConfigSheetBody(eventoId: eventoId),
+    builder: (_) => PersonalizarTotem(eventoId: eventoId, enVentana: false),
   );
 }
 
-class _TotemConfigSheetBody extends ConsumerStatefulWidget {
-  final String eventoId;
+/// Lo que se ve al tocar "Ver una llegada": una llegada inventada, armada con
+/// lo mismo que arma la del salón ([ContenidoBienvenida.armar]), así que dice
+/// el saludo, la mesa, las sillas y la música como las diría el tótem.
+abstract final class LlegadaDeEjemplo {
+  /// Lo que dura en la vista: lo de una bienvenida sin cola.
+  static const dura = kBienvenidaSola;
 
-  const _TotemConfigSheetBody({required this.eventoId});
+  /// En un masivo, una familia (el alumno y dos acompañantes) con su mesa, sus
+  /// sillas y la música si está prendida. En un particular, una persona con
+  /// su mesa.
+  static ContenidoBienvenida para({
+    required bool masivo,
+    required TotemConfig cfg,
+  }) {
+    Invitado fila(String id, String nombre, String mesa) => Invitado(
+          id: id,
+          eventoId: cfg.eventoId,
+          nombreCompleto: nombre,
+          dni: '',
+          numeroMesa: mesa,
+          estadoIngreso: EstadoIngreso.ingresado,
+        );
+    final empezo = DateTime(2026, 12, 12, 22);
 
-  @override
-  ConsumerState<_TotemConfigSheetBody> createState() =>
-      _TotemConfigSheetBodyState();
+    if (!masivo) {
+      return ContenidoBienvenida.armar(
+        BienvenidaTotem(
+          familia: 'ejemplo',
+          personas: [fila('ejemplo', 'GONZÁLEZ, MARÍA', '4')],
+          empezo: empezo,
+        ),
+        ficha: FichaTotem.particular(cfg.eventoId),
+        cfg: cfg,
+      );
+    }
+
+    const alumno = 'ejemplo-alumno';
+    const titular = 'PÉREZ, JUAN MARTÍN';
+    PersonaFicha persona(String id, String nombre, {bool esAlumno = false}) =>
+        PersonaFicha(
+          id: id,
+          nombre: nombre,
+          familia: alumno,
+          esAlumno: esAlumno,
+          mesa: '12',
+          sillas: '10 sillas (8 + 2 extra)',
+          musica: esAlumno ? 'Tusa · Karol G' : null,
+          titular: esAlumno ? null : titular,
+        );
+    final personas = [
+      persona(alumno, titular, esAlumno: true),
+      persona('ejemplo-1', 'GÓMEZ, ANA'),
+      persona('ejemplo-2', 'PÉREZ, LUIS'),
+    ];
+    return ContenidoBienvenida.armar(
+      BienvenidaTotem(
+        familia: alumno,
+        personas: [for (final p in personas) fila(p.id, p.nombre, '12')],
+        empezo: empezo,
+      ),
+      ficha: FichaTotem(
+        eventoId: cfg.eventoId,
+        masivo: true,
+        personas: {for (final p in personas) p.id: p},
+      ),
+      cfg: cfg,
+    );
+  }
 }
 
-class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
+/// Lo que abre [showTotemConfigSheet].
+class PersonalizarTotem extends ConsumerStatefulWidget {
+  final String eventoId;
+
+  /// En la PC: ventana al centro, con la vista a la izquierda. Si no, hoja a
+  /// pantalla completa, con la vista arriba.
+  final bool enVentana;
+
+  const PersonalizarTotem({
+    super.key,
+    required this.eventoId,
+    required this.enVentana,
+  });
+
+  /// Lo que se dice si no se pudo guardar. Sin el texto de la excepción.
+  static const errorAlGuardar =
+      'No se pudo guardar. Revisá la conexión e intentá de nuevo.';
+
+  /// Cómo se elige la foto. Solo los tests lo cambian.
+  @visibleForTesting
+  static Future<FilePickerResult?> Function() elegirFoto = _conElSelector;
+
+  static Future<FilePickerResult?> _conElSelector() =>
+      // `withData: true` es obligatorio: en web `PlatformFile.path` siempre es
+      // null. El resto del repo usa `.path` y por eso no anda del lado web.
+      FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: TotemConfigRepository.tiposPermitidos.keys.toList(),
+        withData: true,
+        dialogTitle: 'Elegí la foto del evento',
+      );
+
+  @override
+  ConsumerState<PersonalizarTotem> createState() => _PersonalizarTotemState();
+}
+
+class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   late final TextEditingController _titulo;
   late final TextEditingController _subtitulo;
   late final TextEditingController _bienvenida;
@@ -67,19 +189,34 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
   late Color _acento;
   late bool _mostrarMusica;
 
-  /// La apariencia guardada. Se conserva al guardar: la config se arma campo
-  /// por campo, y un campo que falte acá se borra en la nube.
+  /// La apariencia: la guardada, o la que se tocó. Si no se toca ninguna se
+  /// conserva tal cual, también vacía: la config se arma campo por campo, y un
+  /// campo que falte acá se borra en la nube.
   String? _estilo;
   String? _imagenUrl;
 
   /// Foto elegida y todavía no subida. Se sube recién al guardar para no dejar
-  /// archivos huérfanos en el bucket si el usuario cancela.
+  /// archivos huérfanos en el bucket si el usuario cancela. Mientras tanto se
+  /// ve en la vista y en las tarjetas.
   Uint8List? _imagenNueva;
   String? _extensionNueva;
   bool _quitarImagen = false;
 
   bool _guardando = false;
   String? _error;
+
+  /// La vista apaisada. Arranca como quedó el tótem de este evento en esta PC;
+  /// no se guarda.
+  bool _apaisada = false;
+  bool _seGiro = false;
+
+  /// "Ver una llegada": la llegada de ejemplo en la vista grande.
+  bool _conLlegada = false;
+  bool _llegadaSaliendo = false;
+  Object _claveLlegada = Object();
+  DateTime? _llegadaEmpezo;
+  DateTime? _llegadaFin;
+  Timer? _temporizador;
 
   @override
   void initState() {
@@ -96,10 +233,17 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     _mostrarMusica = cfg.mostrarMusica;
     _estilo = cfg.estilo;
     _imagenUrl = cfg.imagenUrl;
+
+    TotemOrientationStore.load(widget.eventoId).then((o) {
+      if (mounted && !_seGiro && o == TotemOrientation.horizontal) {
+        setState(() => _apaisada = true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _temporizador?.cancel();
     _titulo.dispose();
     _subtitulo.dispose();
     _bienvenida.dispose();
@@ -108,13 +252,13 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     super.dispose();
   }
 
-  /// Config tal como quedaría, para el preview y para guardar.
+  /// Config tal como quedaría, para la vista y para guardar.
   TotemConfig get _preview => TotemConfig(
         eventoId: widget.eventoId,
         titulo: _titulo.text.trim().isEmpty ? 'JUNIOR EVENTOS' : _titulo.text.trim(),
         subtitulo: _subtitulo.text.trim(),
         mensajeBienvenida: _bienvenida.text.trim().isEmpty
-            ? '¡Bienvenido!'
+            ? TotemConfig.saludoPorDefecto
             : _bienvenida.text.trim(),
         mensajeQr: _mensajeQr.text.trim().isEmpty
             ? 'ESCANEÁ PARA INGRESAR'
@@ -125,19 +269,49 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
         estilo: _estilo,
       );
 
+  /// La foto recién elegida, que manda sobre la guardada.
+  ImageProvider? get _foto =>
+      _imagenNueva == null ? null : MemoryImage(_imagenNueva!);
+
+  /// El QR de la espera: solo en un particular, como en el salón.
+  String? _qrUrl(bool masivo) =>
+      masivo ? null : '$kWebBaseUrl/lista?evento=${widget.eventoId}';
+
+  /// La que se ve: la elegida, o la del tipo de evento si nadie eligió.
+  EstiloTotem _estiloQueSeVe(bool masivo) =>
+      EstiloTotem.desdeClave(_estilo) ??
+      EstiloTotem.porDefecto(masivo: masivo);
+
+  // ── Ver una llegada ───────────────────────────────────────────────────────
+
+  void _verLlegada() {
+    _temporizador?.cancel();
+    final ahora = DateTime.now();
+    setState(() {
+      _conLlegada = true;
+      _llegadaSaliendo = false;
+      _claveLlegada = Object();
+      _llegadaEmpezo = ahora;
+      _llegadaFin = ahora.add(LlegadaDeEjemplo.dura);
+    });
+    _temporizador = Timer(LlegadaDeEjemplo.dura, () {
+      if (!mounted) return;
+      setState(() => _llegadaSaliendo = true);
+      _temporizador = Timer(EscenaTotem.salida, () {
+        if (!mounted) return;
+        setState(() {
+          _conLlegada = false;
+          _llegadaSaliendo = false;
+        });
+      });
+    });
+  }
+
   // ── Imagen ────────────────────────────────────────────────────────────────
 
   Future<void> _elegirImagen() async {
-    // `withData: true` es obligatorio: en web `PlatformFile.path` siempre es
-    // null. El resto del repo usa `.path` y por eso no anda del lado web.
-    final resultado = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: TotemConfigRepository.tiposPermitidos.keys.toList(),
-      withData: true,
-      dialogTitle: 'Elegí la foto del evento',
-    );
-
-    if (resultado == null || resultado.files.isEmpty) return;
+    final resultado = await PersonalizarTotem.elegirFoto();
+    if (!mounted || resultado == null || resultado.files.isEmpty) return;
     final archivo = resultado.files.single;
     final bytes = archivo.bytes;
 
@@ -227,8 +401,9 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
         const SnackBar(content: Text('Tótem actualizado.')),
       );
     } catch (e) {
+      debugPrint('Personalizar tótem: no se pudo guardar: $e');
       if (!mounted) return;
-      setState(() => _error = 'No se pudo guardar: $e');
+      setState(() => _error = PersonalizarTotem.errorAlGuardar);
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
@@ -238,8 +413,6 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
 
   @override
   Widget build(BuildContext context) {
-    final inset = MediaQuery.of(context).viewInsets.bottom;
-    final bottom = MediaQuery.of(context).padding.bottom;
     final cfg = _preview;
     // En un masivo el tótem no muestra QR (su texto no se usa) y puede mostrar
     // la música de cada alumno.
@@ -250,110 +423,57 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
             .firstOrNull
             ?.modalidad ==
         'masivo';
+    final estilo = _estiloQueSeVe(masivo);
+    return widget.enVentana
+        ? _ventana(cfg, estilo, masivo)
+        : _hoja(cfg, estilo, masivo);
+  }
 
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: inset),
-      child: Container(
+  /// En la PC: ventana al centro, la vista a la izquierda y lo que se elige a
+  /// la derecha.
+  Widget _ventana(TotemConfig cfg, EstiloTotem estilo, bool masivo) {
+    final alto = MediaQuery.sizeOf(context).height;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
+          maxWidth: 1180,
+          maxHeight: math.min(820, alto - 48),
         ),
-        decoration: BoxDecoration(
-          color: const Color(0xFF141414),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(color: _gold.withValues(alpha: 0.28)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 28,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
+        child: _marco(
+          redondeo: BorderRadius.circular(24),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(22, 12, 22, 18 + bottom),
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 20),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
                 _encabezado(),
-                const SizedBox(height: 18),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _seccionFotoYPreview(cfg, masivo: masivo),
-                        const SizedBox(height: 20),
-                        _campo(_titulo, 'Título', 'JUNIOR EVENTOS'),
-                        const SizedBox(height: 12),
-                        _campo(_subtitulo, 'Subtítulo', 'Los 15 de Sofía'),
-                        const SizedBox(height: 12),
-                        _campo(_bienvenida, 'Saludo al ingresar', '¡Bienvenido!'),
-                        const SizedBox(height: 12),
-                        if (masivo)
-                          CasillaMusicaTotem(
-                            valor: _mostrarMusica,
-                            onChanged: _guardando
-                                ? null
-                                : (v) => setState(() => _mostrarMusica = v),
-                          )
-                        else
-                          _campo(_mensajeQr, 'Texto del QR', 'ESCANEÁ PARA INGRESAR'),
-                        const SizedBox(height: 20),
-                        _seccionColor(),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                  ),
-                ],
                 const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _guardando ? null : _guardar,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _gold,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: _guardando
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
-                          ),
-                        )
-                      : const Icon(Icons.check_rounded),
-                  label: Text(
-                    _guardando ? 'GUARDANDO…' : 'GUARDAR',
-                    style: GoogleFonts.oswald(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                    ),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: 400,
+                        child: _vista(cfg, estilo, masivo, llenar: true),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: _ajustes(cfg, estilo, masivo),
+                              ),
+                            ),
+                            ..._pie(),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -364,12 +484,84 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     );
   }
 
+  /// En tablet y celular: hoja a pantalla completa, la vista arriba.
+  Widget _hoja(TotemConfig cfg, EstiloTotem estilo, bool masivo) {
+    final inset = MediaQuery.viewInsetsOf(context).bottom;
+    return LayoutBuilder(
+      builder: (context, c) => AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: inset),
+        child: SizedBox(
+          height: c.maxHeight,
+          child: _marco(
+            redondeo: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _encabezado(),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _vista(cfg, estilo, masivo, llenar: false),
+                            const SizedBox(height: 24),
+                            _ajustes(cfg, estilo, masivo),
+                          ],
+                        ),
+                      ),
+                    ),
+                    ..._pie(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _marco({required BorderRadius redondeo, required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _fondo,
+        borderRadius: redondeo,
+        border: Border.all(color: _gold.withValues(alpha: 0.28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 28,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
   Widget _encabezado() {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
@@ -379,209 +571,322 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _gold.withValues(alpha: 0.35)),
           ),
           child: Icon(
             Icons.palette_rounded,
             color: _gold.withValues(alpha: 0.95),
-            size: 26,
+            size: 22,
           ),
         ),
         const SizedBox(width: 14),
-        Expanded(
+        const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'PERSONALIZAR TÓTEM',
-                style: GoogleFonts.oswald(
-                  fontSize: 13,
+                style: TextStyle(
+                  fontFamily: FuentesTotem.cartelera,
+                  fontSize: 14,
                   color: _gold,
                   letterSpacing: 2,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 2),
-              const Text(
+              SizedBox(height: 2),
+              Text(
                 'Lo que ven los invitados en la pantalla del salón.',
                 style: TextStyle(color: Colors.white54, fontSize: 12),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _seccionFotoYPreview(TotemConfig cfg, {required bool masivo}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _previewPantalla(cfg, masivo: masivo),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'FOTO DEL EVENTO',
-                style: GoogleFonts.oswald(
-                  fontSize: 12,
-                  color: Colors.white70,
-                  letterSpacing: 1.6,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Para un quince, la foto de la quinceañera. '
-                'Si no cargás ninguna se usa el logo.',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _guardando ? null : _elegirImagen,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _gold,
-                  side: BorderSide(color: _gold.withValues(alpha: 0.5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.image_outlined, size: 18),
-                label: const Text('Elegir foto'),
-              ),
-              if (cfg.imagenUrl != null || _imagenNueva != null) ...[
-                const SizedBox(height: 6),
-                TextButton.icon(
-                  onPressed: _guardando ? null : _quitarFoto,
-                  style: TextButton.styleFrom(foregroundColor: Colors.white38),
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('Quitar foto'),
-                ),
-              ],
-              const SizedBox(height: 4),
-              Text(
-                'JPG, PNG o WEBP · hasta 5 MB',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
+        IconButton(
+          tooltip: 'Cerrar',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close_rounded, color: Colors.white54),
         ),
       ],
     );
   }
 
-  /// Maqueta chica de la pantalla del salón.
-  ///
-  /// Reusa `gradienteCard` y `acentoConAlpha` del propio modelo, así que el
-  /// preview no puede desincronizarse de lo que dibuja el tótem. **No** se
-  /// embebe un `TotemDisplay` real: rearrancaría streams, canales y animaciones.
-  Widget _previewPantalla(TotemConfig cfg, {required bool masivo}) {
-    return Container(
-      width: 108,
-      height: 192,
+  /// La vista grande del tótem, animada, con la llave vertical/horizontal y
+  /// "Ver una llegada". [llenar]: ocupa el alto que tenga (la ventana).
+  Widget _vista(
+    TotemConfig cfg,
+    EstiloTotem estilo,
+    bool masivo, {
+    required bool llenar,
+  }) {
+    final escena = Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: cfg.gradienteCard,
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cfg.acentoConAlpha(0.45)),
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      child: EscenaTotem(
+        key: const ValueKey('vista_totem'),
+        estilo: estilo,
+        cfg: cfg,
+        foto: _foto,
+        qrUrl: _qrUrl(masivo),
+        llegada: _conLlegada
+            ? LlegadaDeEjemplo.para(masivo: masivo, cfg: cfg)
+            : null,
+        claveLlegada: _claveLlegada,
+        saliendo: _llegadaSaliendo,
+        empezo: _llegadaEmpezo,
+        fin: _llegadaFin,
+      ),
+    );
+
+    final Widget pantalla;
+    if (llenar) {
+      pantalla = Expanded(
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: _apaisada ? 16 / 9 : 9 / 16,
+            child: escena,
+          ),
+        ),
+      );
+    } else if (_apaisada) {
+      pantalla = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: AspectRatio(aspectRatio: 16 / 9, child: escena),
+        ),
+      );
+    } else {
+      final alto =
+          (MediaQuery.sizeOf(context).height * 0.45).clamp(220.0, 460.0);
+      pantalla = Center(
+        child: SizedBox(height: alto, width: alto * 9 / 16, child: escena),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'VISTA DEL TÓTEM · ${estilo.nombre.toUpperCase()}',
+          textAlign: TextAlign.center,
+          style: _estiloRotulo,
+        ),
+        const SizedBox(height: 10),
+        pantalla,
+        const SizedBox(height: 12),
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 8,
           children: [
-            Container(
-              width: 54,
-              height: 54,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: cfg.acentoConAlpha(0.6), width: 2),
-              ),
-              child: _miniatura(cfg),
+            _LlaveOrientacion(
+              apaisada: _apaisada,
+              onChanged: (v) => setState(() {
+                _apaisada = v;
+                _seGiro = true;
+              }),
             ),
-            const SizedBox(height: 8),
-            Text(
-              cfg.titulo,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.oswald(
-                color: cfg.colorAcento,
-                fontSize: 10,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (cfg.subtitulo.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                cfg.subtitulo,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white60, fontSize: 8),
-              ),
-            ],
-            const Spacer(),
-            // En un masivo el tótem no muestra el QR.
-            if (!masivo)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: cfg.acentoConAlpha(0.16),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  cfg.mensajeQr,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: cfg.colorAcento, fontSize: 7),
+            OutlinedButton.icon(
+              key: const ValueKey('ver_una_llegada'),
+              onPressed: _verLlegada,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _gold,
+                minimumSize: const Size(0, 44),
+                side: BorderSide(color: _gold.withValues(alpha: 0.5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(99),
                 ),
               ),
+              icon: const Icon(Icons.play_arrow_rounded, size: 20),
+              label: const Text('Ver una llegada'),
+            ),
           ],
         ),
-      ),
+      ],
     );
   }
 
-  Widget _miniatura(TotemConfig cfg) {
-    if (_imagenNueva != null) {
-      return Image.memory(_imagenNueva!, fit: BoxFit.cover);
-    }
-    if (cfg.imagenUrl != null) {
-      return Image.network(
-        cfg.imagenUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _placeholderFoto(cfg),
-      );
-    }
-    return _placeholderFoto(cfg);
+  /// Las tarjetas, la foto, los textos y el color.
+  Widget _ajustes(TotemConfig cfg, EstiloTotem estilo, bool masivo) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('APARIENCIA', style: _estiloRotulo),
+        const SizedBox(height: 4),
+        const Text(
+          'Tocá una para verla en grande. Se usa en este evento.',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 12),
+        _tarjetas(cfg, estilo, masivo),
+        const SizedBox(height: 24),
+        _seccionFoto(cfg),
+        const SizedBox(height: 20),
+        _campo(_titulo, 'Título', 'PROMOCIÓN 2026'),
+        const SizedBox(height: 12),
+        _campo(_subtitulo, 'Subtítulo', 'Los 15 de Sofía'),
+        const SizedBox(height: 12),
+        _campo(_bienvenida, 'Saludo al ingresar', TotemConfig.saludoPorDefecto),
+        const SizedBox(height: 12),
+        if (masivo)
+          CasillaMusicaTotem(
+            valor: _mostrarMusica,
+            onChanged: _guardando
+                ? null
+                : (v) => setState(() => _mostrarMusica = v),
+          )
+        else
+          _campo(_mensajeQr, 'Texto del QR', 'ESCANEÁ PARA INGRESAR'),
+        const SizedBox(height: 20),
+        _seccionColor(),
+      ],
+    );
   }
 
-  Widget _placeholderFoto(TotemConfig cfg) => ColoredBox(
-        color: cfg.acentoConAlpha(0.12),
-        child: Icon(
-          Icons.celebration_rounded,
-          color: cfg.acentoConAlpha(0.7),
-          size: 22,
+  Widget _tarjetas(TotemConfig cfg, EstiloTotem visto, bool masivo) {
+    final nadieEligio = EstiloTotem.desdeClave(_estilo) == null;
+    final porDefecto = EstiloTotem.porDefecto(masivo: masivo);
+    return LayoutBuilder(
+      builder: (context, c) {
+        const espacio = 10.0;
+        final ancho = math.min(128.0, (c.maxWidth - espacio * 3) / 4);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final e in EstiloTotem.values) ...[
+              if (e != EstiloTotem.values.first) const SizedBox(width: espacio),
+              TarjetaApariencia(
+                key: ValueKey('apariencia_${e.clave}'),
+                estilo: e,
+                cfg: cfg,
+                foto: _foto,
+                qrUrl: _qrUrl(masivo),
+                ancho: ancho,
+                elegida: e == visto,
+                vaSiNoElegis: nadieEligio && e == porDefecto,
+                onTap: _guardando
+                    ? null
+                    : () => setState(() => _estilo = e.clave),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  List<Widget> _pie() => [
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _error!,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+          ),
+        ],
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _guardando ? null : _guardar,
+          style: FilledButton.styleFrom(
+            backgroundColor: _gold,
+            foregroundColor: Colors.black,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          icon: _guardando
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
+              : const Icon(Icons.check_rounded),
+          label: Text(
+            _guardando ? 'GUARDANDO…' : 'GUARDAR',
+            style: const TextStyle(
+              fontFamily: FuentesTotem.cartelera,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+            ),
+          ),
         ),
-      );
+      ];
+
+  static const _estiloRotulo = TextStyle(
+    fontFamily: FuentesTotem.cartelera,
+    fontSize: 12,
+    color: Colors.white70,
+    letterSpacing: 1.6,
+  );
+
+  Widget _seccionFoto(TotemConfig cfg) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('FOTO DEL EVENTO', style: _estiloRotulo),
+        const SizedBox(height: 4),
+        const Text(
+          'Para un quince, la foto de la quinceañera. '
+          'Si no cargás ninguna se usa el logo.',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _guardando ? null : _elegirImagen,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _gold,
+                minimumSize: const Size(0, 44),
+                side: BorderSide(color: _gold.withValues(alpha: 0.5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.image_outlined, size: 18),
+              label: const Text('Elegir foto'),
+            ),
+            if (cfg.imagenUrl != null || _imagenNueva != null)
+              TextButton.icon(
+                onPressed: _guardando ? null : _quitarFoto,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white54,
+                  minimumSize: const Size(0, 44),
+                ),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Quitar foto'),
+              ),
+            Text(
+              'JPG, PNG o WEBP · hasta 5 MB',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.3),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 
   Widget _campo(TextEditingController ctrl, String label, String hint) {
     return TextField(
       controller: ctrl,
       enabled: !_guardando,
-      onChanged: (_) => setState(() {}), // el preview sigue lo que se tipea
+      onChanged: (_) => setState(() {}), // la vista sigue lo que se tipea
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
@@ -607,14 +912,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'COLOR DE ACENTO',
-          style: GoogleFonts.oswald(
-            fontSize: 12,
-            color: Colors.white70,
-            letterSpacing: 1.6,
-          ),
-        ),
+        Text('COLOR DE ACENTO', style: _estiloRotulo),
         const SizedBox(height: 10),
         Wrap(
           spacing: 10,
@@ -695,6 +993,186 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Una de las cuatro apariencias en Personalizar: la espera, quieta, con la
+/// foto, el título y el color de este evento, y su nombre debajo.
+///
+/// Es la escena de verdad ([EscenaTotem]), así que no puede mentir. Va quieta:
+/// cinco fondos animados a la vez cargan una PC de oficina, y la vista grande
+/// ya muestra el movimiento.
+class TarjetaApariencia extends StatelessWidget {
+  final EstiloTotem estilo;
+  final TotemConfig cfg;
+  final ImageProvider? foto;
+  final String? qrUrl;
+  final double ancho;
+  final bool elegida;
+
+  /// Nadie eligió y es la del tipo de evento: la que va si no se elige otra.
+  final bool vaSiNoElegis;
+
+  /// Null mientras se guarda.
+  final VoidCallback? onTap;
+
+  const TarjetaApariencia({
+    super.key,
+    required this.estilo,
+    required this.cfg,
+    required this.foto,
+    required this.qrUrl,
+    required this.ancho,
+    required this.elegida,
+    required this.vaSiNoElegis,
+    required this.onTap,
+  });
+
+  static const rotuloPorDefecto = 'va esta si no elegís';
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: elegida,
+      label: 'Apariencia ${estilo.nombre}',
+      child: MouseRegion(
+        cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: ancho,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: ancho,
+                  height: ancho * 16 / 9,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: elegida
+                          ? _gold
+                          : Colors.white.withValues(alpha: 0.14),
+                      width: elegida ? 2.5 : 1,
+                    ),
+                  ),
+                  child: IgnorePointer(
+                    child: EscenaTotem(
+                      estilo: estilo,
+                      cfg: cfg,
+                      foto: foto,
+                      qrUrl: qrUrl,
+                      quieta: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (elegida) ...[
+                      const Icon(Icons.check_circle_rounded,
+                          size: 15, color: _gold),
+                      const SizedBox(width: 4),
+                    ],
+                    Flexible(
+                      child: Text(
+                        estilo.nombre,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FuentesTotem.linea,
+                          fontSize: 13,
+                          fontWeight:
+                              elegida ? FontWeight.w700 : FontWeight.w400,
+                          color: elegida ? Colors.white : Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (vaSiNoElegis)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 2),
+                    child: Text(
+                      rotuloPorDefecto,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white38, fontSize: 10.5),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Vertical u horizontal, para la vista de Personalizar. No guarda nada.
+class _LlaveOrientacion extends StatelessWidget {
+  final bool apaisada;
+  final ValueChanged<bool> onChanged;
+
+  const _LlaveOrientacion({required this.apaisada, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget opcion(bool valor, IconData icono, String texto) {
+      final activa = apaisada == valor;
+      return Semantics(
+        button: true,
+        selected: activa,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(99),
+          onTap: () => onChanged(valor),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 38),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: activa ? _gold.withValues(alpha: 0.18) : null,
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icono,
+                    size: 16, color: activa ? _gold : Colors.white54),
+                const SizedBox(width: 6),
+                Text(
+                  texto,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: activa ? Colors.white : Colors.white54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          opcion(false, Icons.stay_current_portrait_rounded, 'Vertical'),
+          opcion(true, Icons.stay_current_landscape_rounded, 'Horizontal'),
+        ],
+      ),
     );
   }
 }

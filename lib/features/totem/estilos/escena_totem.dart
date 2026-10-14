@@ -24,6 +24,10 @@ class EscenaTotem extends StatefulWidget {
   final EstiloTotem estilo;
   final TotemConfig cfg;
 
+  /// La foto del evento, si manda sobre la de [cfg]: en Personalizar, la
+  /// recién elegida, que todavía no se subió. Null: la de `cfg.imagenUrl`.
+  final ImageProvider? foto;
+
   /// El QR de la espera. Null: sin QR (un evento masivo).
   final String? qrUrl;
 
@@ -54,6 +58,7 @@ class EscenaTotem extends StatefulWidget {
     super.key,
     required this.estilo,
     required this.cfg,
+    this.foto,
     this.qrUrl,
     this.llegada,
     this.claveLlegada,
@@ -148,6 +153,8 @@ class _EscenaTotemState extends State<EscenaTotem>
   Widget build(BuildContext context) {
     final color = widget.cfg.colorAcento;
     final escena = _escena;
+    final url = widget.cfg.imagenUrl;
+    final foto = widget.foto ?? (url == null ? null : NetworkImage(url));
     return LayoutBuilder(
       builder: (context, c) {
         final ancho = c.maxWidth.isFinite ? c.maxWidth : 1080.0;
@@ -166,6 +173,7 @@ class _EscenaTotemState extends State<EscenaTotem>
               final datos = DatosEscena(
                 cfg: widget.cfg,
                 estilo: widget.estilo,
+                foto: foto,
                 color: color,
                 segundo: segundoNeon(color),
                 u: u,
@@ -252,6 +260,10 @@ class DatosEscena {
   final TotemConfig cfg;
   final EstiloTotem estilo;
 
+  /// La foto del evento (la de [cfg], o la que se acaba de elegir en
+  /// Personalizar). Null: sin foto.
+  final ImageProvider? foto;
+
   /// El color del evento y el segundo neón ([segundoNeon]).
   final Color color;
   final Color segundo;
@@ -276,6 +288,7 @@ class DatosEscena {
   const DatosEscena({
     required this.cfg,
     required this.estilo,
+    required this.foto,
     required this.color,
     required this.segundo,
     required this.u,
@@ -340,14 +353,14 @@ class Centrado extends StatelessWidget {
 /// La foto del evento en un círculo; sin foto, o si no baja, el logo de la
 /// empresa.
 class FotoEvento extends StatelessWidget {
-  final String? url;
+  final ImageProvider? imagen;
   final double lado;
   final Color borde;
   final double grosor;
 
   const FotoEvento({
     super.key,
-    required this.url,
+    required this.imagen,
     required this.lado,
     required this.borde,
     this.grosor = 2,
@@ -377,10 +390,10 @@ class FotoEvento extends StatelessWidget {
         border: Border.all(color: borde, width: grosor),
       ),
       child: ClipOval(
-        child: url == null
+        child: imagen == null
             ? logo
-            : Image.network(
-                url!,
+            : Image(
+                image: imagen!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => logo,
               ),
