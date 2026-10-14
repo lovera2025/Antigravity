@@ -11,4 +11,6 @@ abstract final class CortesPantalla {
   static const double pc = 1024;
 
   static bool esPc(double ancho) => ancho > pc;
+
+  static bool esCelular(double ancho) => ancho < celular;
 }

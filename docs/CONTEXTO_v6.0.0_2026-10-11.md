@@ -17,8 +17,9 @@ y caja no cambian.
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
-las secciones 1 y 2 y los pasos 3a** (el tótem del salón con las cuatro apariencias) **y 3b** (Personalizar con las
-cuatro tarjetas); **sigue el 3c (Recepción)**. Lo de este encabezado es cómo quedó el 11-oct.
+las secciones 1, 2 y 3** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
+del tótem en Recepción); **sigue la 4 (el plano con la guía en la llegada)**. Lo de este encabezado es cómo quedó el
+11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -371,7 +372,7 @@ vaciarla al deshacer todo) sigue igual.
 |---|---|---|
 | 1 | Recepción distingue particular y masivo (el panel del operador de la parte 6, más lo del masivo) | **hecha el 14-oct** |
 | 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **hecha el 14-oct** |
-| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **en curso:** 3a (el tótem del salón) y 3b (Personalizar) hechas el 14-oct; sigue 3c (Recepción) |
+| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **hecha el 14-oct**, en tres pasos: 3a (el tótem del salón), 3b (Personalizar) y 3c (Recepción) |
 | 4 | El plano con la guía en la llegada | falta |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
 | 6 | Modo kiosco (parte 7) | falta |
@@ -725,6 +726,105 @@ subido; sin publicar.**
 **Lo que no se tocó (sigue la 3c):** `totem_panel.dart`, la vista vieja de Recepción y del asesor, con sus botones
 flotantes. La paleta de Recepción abre el Personalizar nuevo.
 
+### La sección 3c: Recepción con la vista del tótem al lado
+
+Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md` (la 3c arriba). Dijo "seguí
+acá" al terminar el 3b. Antes de aprobar preguntó si los SQL ya se habían corrido: se miró la nube en ese momento
+(solo lectura) y se le contestó que el de `totem_config` sí (14-oct) y los dos de la Fase 2 y la Fase 3 no, y que van
+antes de instalar. Cada cambio lo aprobó a mano. **Programado y subido; sin publicar. Con esto la sección 3 queda
+cerrada.**
+
+**Qué cambió para el usuario** (Inicio → RECEPCIÓN → el evento):
+- **En la PC (más de 1.024 px), la lista a la izquierda (60 %) y "Vista del tótem · Neón" a la derecha.**
+  - Es la pantalla del salón en chico, en la apariencia del evento, vertical u horizontal como quedó ese tótem.
+  - Saluda a la familia junta, con la mesa, las sillas, la música, 7 s o 3 s con cola y "N más en camino".
+  - El QR, solo en particulares.
+  - En una notebook de 1.366 antes salían pestañas; ahora va lado a lado.
+- **En una tablet (600 a 1.024 px), pestañas RECEPCIÓN y TÓTEM.** La vista corre solo con su pestaña abierta; al
+  volver, no saluda a los que entraron mientras tanto.
+- **En el celular, la lista sola**, a pantalla completa, con la paleta arriba en la barra. Antes iba en una caja de
+  500 px con el tótem viejo debajo.
+- **Sobre la vista, un solo botón: la paleta.** Salieron los otros siete:
+  - los tres modos (panel, pantalla completa, foco) y su `PopScope`;
+  - cerrar, maximizar y minimizar la ventana del tótem. Maximizar y minimizar no hacían nada; el tótem del salón se
+    cierra con el botón de su propia barra.
+- **Inicio del asesor → Tótem** muestra la misma escena, a pantalla completa.
+- **Anda sin internet:** un ingreso en esta PC hace saludar a la vista al instante, con la mesa de los alumnos aunque
+  la fila de la puerta no la tenga.
+
+**Cómo se arma:**
+- **`TotemLocal`** (`totem/widgets/totem_local.dart`): la escena alimentada desde la base de la PC.
+  - Escucha con `ref.listenManual` lo mismo que la lista de Recepción: `invitadosStreamProvider` y
+    `puertaDelEventoProvider` → `FichaTotem.desdePuerta`.
+  - La cola y los tiempos los pone `ReproductorBienvenidas`, el mismo del salón; la tarjeta la arma
+    `ContenidoBienvenida.armar`.
+  - La apariencia sale de `estiloDelEventoProvider` (y `eventoMasivoProvider`): mientras no se sabe el tipo, negro.
+  - `encuadrar`: 9:16 o 16:9 según `TotemOrientationStore` del evento.
+  - Va con la clave del evento.
+- **`VistaDelTotem`** (`recepcion/widgets/vista_del_totem.dart`): el título con la apariencia, la paleta
+  (`BotonPersonalizarTotem`, con `puedePersonalizarTotemProvider`) y `TotemLocal` encuadrado.
+- **`recepcion_unified_screen.dart`**: los cortes salen de `CortesPantalla` (suma `esCelular`).
+- **Salieron:**
+  - `totem_panel.dart` (1.480 líneas);
+  - `KioskLauncher.maximize` y `minimize`;
+  - del modelo, los degradés del panel viejo (`gradientePanel`, `gradienteCard`, `acentoConAlpha`,
+    `usaAcentoPorDefecto`). Sin cambios en la base.
+
+**Decisiones mías, dichas en el plan:**
+- la lista al 60 %;
+- la vista de la tablet solo con su pestaña abierta;
+- el título "RECEPCIÓN UNIFICADA" queda.
+
+**Cómo se comprobó:**
+- `test/totem_local_test.dart` (10), con la puerta en memoria y sin internet:
+  - los que ya habían entrado al abrir no se saludan;
+  - un alumno sin fila se saluda con la mesa 12 y sus sillas;
+  - la familia, en una tarjeta;
+  - dos familias, con "1 más en camino" y la de 3 s;
+  - Neón sin QR en un masivo, Cristal con QR en un particular;
+  - la elegida manda;
+  - encuadrada vertical y horizontal;
+  - al salir suelta la lista y los temporizadores.
+- `test/recepcion_pantalla_test.dart` (13) monta Recepción entera con `PuertaEnMemoria.recepcion`, que arma los
+  reemplazos y que ahora usa también el panel. Prueba:
+  - los cortes, en 599/600 y 1.024/1.025 px;
+  - las pestañas;
+  - el 60 %;
+  - un solo botón sobre la vista y ningún flotante;
+  - sin el permiso, sin paleta;
+  - la paleta abre Personalizar;
+  - sin evento;
+  - de punta a punta: buscar "bruno", Enter, y la vista saluda a GARCÍA, BRUNO en la mesa 17;
+  - sin desbordes en 360, 800 y 1.366 px.
+- **2.119 tests** en la suite (eran 2.096); `flutter analyze` sigue en 312.
+- **Once roturas a propósito, todas vistas:**
+  - un botón de más;
+  - el corte de la tablet y el de la PC corridos;
+  - la primera lectura que saluda;
+  - la familia que no se junta;
+  - el QR en un masivo;
+  - la vista que no suelta sus temporizadores;
+  - la mesa de la fila y no de los alumnos;
+  - siempre vertical;
+  - la paleta arriba fuera del celular;
+  - la lista sin su 60 %.
+- **`flutter build windows` y `flutter build web`, los dos bien.** No se abrió la app ni se publicó nada.
+- **Muestras** en `build/muestras_6.0.0/recepcion/`, desde `tool/recepcion_muestra_test.dart`, con los fondos de
+  verdad:
+  - `Recepcion_PC.png`;
+  - `Recepcion_tablet_totem.png`;
+  - `Recepcion_celular.png`.
+- **No se probó en la app.** La prueba de verdad es el ensayo.
+
+**Lo que quedó igual, y dónde va:**
+- **La vista lee la base de la PC, que no se corta.** Lo que baja de otra PC después de un corte llega todo junto y
+  se saluda en cola, de a 3 s, como hacía el panel viejo. Va con la sección 7 (dos puestos).
+- La foto del evento sigue siendo `Image.network`: sin internet cae al logo. Va con la sección 5.
+
+**Un tropiezo de la sesión, sin consecuencias:** se cortó a mano una corrida de la suite y su `flutter test` quedó
+andando con el candado de Flutter tomado. La corrida siguiente esperó diez minutos. Se cerró ese proceso (era de la
+prueba) y la suite corrió en 51 s.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
@@ -776,10 +876,11 @@ flotantes. La paleta de Recepción abre el Personalizar nuevo.
 ```text
 Seguimos con la 6.0.0 de Junior Eventos. Leé primero
 docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
-"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El último
-plan aprobado está en
-C:\Users\lover\.claude\plans\purrfect-waddling-micali.md (la sección 3 arriba,
-la 2 abajo); el camino de las secciones, en
+"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. Los
+últimos planes aprobados están en
+C:\Users\lover\.claude\plans\purrfect-waddling-micali.md (la sección 3) y
+C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md (sus pasos
+3b y 3c); el camino de las secciones, en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
 corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no. Va
@@ -788,12 +889,12 @@ falta: que Recepción y el tótem distingan un evento particular de uno masivo
 (se dice "evento masivo", no "fiesta de alumnos"). Están hechas la sección 1
 (Recepción distingue particular y masivo) y la 2 (el tótem distingue
 particular y masivo: la ficha por el puente, la familia junta, la cola que se
-acorta, sin QR en masivos y la música en Personalizar). La sección 3 va en tres
-pasos con el plan ya aprobado (purrfect-waddling-micali.md, la sección 3
-arriba): están hechos el 3a (el tótem del salón con las cuatro apariencias) y
-el 3b (Personalizar con las cuatro tarjetas y "Ver una llegada"). Seguí por el
-3c (Recepción con la vista del tótem al lado, TotemLocal, los cortes de
-pantalla de CortesPantalla y sacar totem_panel.dart). Avisame
+acorta, sin QR en masivos y la música en Personalizar). La sección 3 está
+hecha entera, en tres pasos (el tótem del salón con las cuatro apariencias,
+Personalizar con las cuatro tarjetas y la vista del tótem en Recepción, con
+TotemLocal; totem_panel.dart ya no existe). Seguí por la
+sección 4 (el plano con la guía en la llegada), con su plan corto y una
+maqueta antes de programar. Avisame
 al terminar cada uno con cómo quedó, un commit y un push. Cada cambio lo
 apruebo yo a mano: no quiero modo automático.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los

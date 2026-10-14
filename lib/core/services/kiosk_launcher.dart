@@ -267,23 +267,6 @@ class KioskLauncher {
     }
   }
 
-  static Future<void> maximize() async {
-    if (_totemWindowId != null) {
-      final isMaximized = await DesktopMultiWindow.invokeMethod(_totemWindowId!, 'isMaximized') as bool? ?? false;
-      if (isMaximized) {
-        await DesktopMultiWindow.invokeMethod(_totemWindowId!, 'unmaximize');
-      } else {
-        await DesktopMultiWindow.invokeMethod(_totemWindowId!, 'maximize');
-      }
-    }
-  }
-
-  static Future<void> minimize() async {
-    if (_totemWindowId != null) {
-      await DesktopMultiWindow.invokeMethod(_totemWindowId!, 'minimize', '');
-    }
-  }
-
   static Future<void> focus() async {
     if (_totemWindowId != null) {
       final activeIds = await ventanas.abiertas();

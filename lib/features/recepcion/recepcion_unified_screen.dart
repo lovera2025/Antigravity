@@ -6,14 +6,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border;
-import '../totem/totem_panel.dart';
-import '../totem/widgets/totem_config_sheet.dart';
-import '../common/providers/user_role_provider.dart';
+import '../common/utils/cortes_pantalla.dart';
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
 import 'services/puerta_del_evento.dart';
 import 'widgets/panel_puerta.dart';
-import '../../core/services/kiosk_launcher.dart';
+import 'widgets/vista_del_totem.dart';
 
 class RecepcionUnifiedScreen extends ConsumerStatefulWidget {
   const RecepcionUnifiedScreen({super.key});
@@ -24,32 +22,30 @@ class RecepcionUnifiedScreen extends ConsumerStatefulWidget {
 
 class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen> {
   static const _perla = Color(0xFFE2E2E2);
-  
-  TotemPanelMode _totemMode = TotemPanelMode.panel;
+
   int _selectedTab = 0;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final ancho = MediaQuery.sizeOf(context).width;
     final selectedEventId = ref.watch(selectedEventProvider);
+    // En el celular no hay vista del tótem: la paleta va arriba.
+    final paletaArriba = CortesPantalla.esCelular(ancho) &&
+        selectedEventId != null &&
+        ref.watch(puedePersonalizarTotemProvider);
 
-    return PopScope(
-      canPop: _totemMode == TotemPanelMode.panel,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _totemMode != TotemPanelMode.panel) {
-          setState(() => _totemMode = TotemPanelMode.panel);
-        }
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.door_front_door_rounded, size: 20, color: _perla),
-              const SizedBox(width: 10),
-              Text(
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.door_front_door_rounded, size: 20, color: _perla),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
                 'RECEPCIÓN UNIFICADA',
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.oswald(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
@@ -57,37 +53,49 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
                   color: _perla,
                 ),
               ),
-            ],
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),
-          ),
+            ),
+          ],
         ),
-        body: SafeArea(
-          child: _buildLayout(screenWidth, isDark, selectedEventId),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (paletaArriba)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: BotonPersonalizarTotem(eventoId: selectedEventId),
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: _buildLayout(ancho, isDark, selectedEventId),
       ),
     );
   }
 
-  Widget _buildLayout(double screenWidth, bool isDark, String? selectedEventId) {
-    if (screenWidth > 1400) {
+  /// Según la pantalla (`CortesPantalla`): en la PC, la lista y la vista del
+  /// tótem lado a lado; en una tablet, en pestañas; en el celular, la lista
+  /// sola.
+  Widget _buildLayout(double ancho, bool isDark, String? selectedEventId) {
+    if (CortesPantalla.esPc(ancho)) {
       return _buildSplitViewLayout(isDark, selectedEventId);
-    } else if (screenWidth > 800) {
-      return _buildTabsLayout(isDark, selectedEventId);
-    } else {
-      return _buildStackLayout(isDark, selectedEventId);
     }
+    if (!CortesPantalla.esCelular(ancho)) {
+      return _buildTabsLayout(isDark, selectedEventId);
+    }
+    return const OperadorViewContent();
   }
 
-  // ── SPLIT VIEW (screenWidth > 1400px) ──────────────────────────────────────
+  // ── PC: lado a lado ────────────────────────────────────────────────────────
 
   Widget _buildSplitViewLayout(bool isDark, String? selectedEventId) {
     return Row(
       children: [
+        // La lista se lleva el 60 %: la vista es la pantalla del salón en
+        // chico.
         Expanded(
-          flex: 45,
+          flex: 3,
           child: Container(
             decoration: BoxDecoration(
               border: Border(
@@ -100,16 +108,16 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
           ),
         ),
         Expanded(
-          flex: 55,
+          flex: 2,
           child: selectedEventId != null
-              ? _buildTotemWithModeButtons(selectedEventId, isDark)
+              ? VistaDelTotem(eventoId: selectedEventId)
               : _buildNoEventSelected(),
         ),
       ],
     );
   }
 
-  // ── TABS (800px < screenWidth <= 1400px) ────────────────────────────────
+  // ── Tablet: pestañas ───────────────────────────────────────────────────────
 
   Widget _buildTabsLayout(bool isDark, String? selectedEventId) {
     return Column(
@@ -135,8 +143,8 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
               ),
               Expanded(
                 child: _TabButton(
-                  label: 'VISTA TÓTEM',
-                  icon: Icons.monitor_rounded,
+                  label: 'TÓTEM',
+                  icon: Icons.tv_rounded,
                   isSelected: _selectedTab == 1,
                   onTap: () => setState(() => _selectedTab = 1),
                 ),
@@ -144,219 +152,15 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
             ],
           ),
         ),
+        // La vista corre solo mientras su pestaña está abierta. Al volver, su
+        // primera lectura va en silencio: los que entraron ya están en la
+        // lista.
         Expanded(
           child: _selectedTab == 0
               ? const OperadorViewContent()
               : (selectedEventId != null
-                  ? _buildTotemWithModeButtons(selectedEventId, isDark)
+                  ? VistaDelTotem(eventoId: selectedEventId)
                   : _buildNoEventSelected()),
-        ),
-      ],
-    );
-  }
-
-  // ── STACK VERTICAL (screenWidth < 800px) ────────────────────────────────
-
-  Widget _buildStackLayout(bool isDark, String? selectedEventId) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.door_front_door_rounded, color: _perla, size: 20),
-                          const SizedBox(width: 10),
-                          Text(
-                            'OPERADOR',
-                            style: GoogleFonts.oswald(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1,
-                              color: _perla,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 500,
-                        child: const OperadorViewContent(),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.tv_rounded, color: Colors.purpleAccent, size: 20),
-                          const SizedBox(width: 10),
-                          Text(
-                            'TÓTEM',
-                            style: GoogleFonts.oswald(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1,
-                              color: Colors.purpleAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      if (selectedEventId != null)
-                        _buildTotemWithModeButtons(selectedEventId, isDark)
-                      else
-                        _buildNoEventSelected(),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  // ── Totem con botones de modo ──────────────────────────────────────────────
-
-  Widget _buildTotemWithModeButtons(String eventoId, bool isDark) {
-    return Stack(
-      children: [
-        TotemPanel(
-          eventoId: eventoId,
-          onModeChanged: () {
-            setState(() {});
-          },
-          showModeButtons: true,
-        ),
-        Positioned(
-          top: 16,
-          right: 16,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ── Personalizar (foto y textos del evento) ────────────────────
-              // Va acá porque el operador ya está mirando el panel en vivo del
-              // mismo evento: edita y ve el resultado al lado, sin navegar.
-              if (ref.watch(userRoleProvider).maybeWhen(
-                    data: (d) => d.permisos.puedeTotem,
-                    orElse: () => false,
-                  )) ...[
-                Tooltip(
-                  message: 'Personalizar tótem',
-                  child: FloatingActionButton(
-                    mini: true,
-                    heroTag: 'config_totem',
-                    backgroundColor: _perla,
-                    onPressed: () => showTotemConfigSheet(
-                      context: context,
-                      eventoId: eventoId,
-                    ),
-                    child: const Icon(Icons.palette_rounded,
-                        color: Colors.black, size: 18),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(color: Colors.white12, height: 1),
-                const SizedBox(height: 12),
-              ],
-              // ── Controles de Ventana (Solo si hay tótem activo) ──────────
-              if (KioskLauncher.isTotemActive) ...[
-                Tooltip(
-                  message: 'Cerrar ventana del tótem',
-                  child: FloatingActionButton(
-                    mini: true,
-                    heroTag: 'close_totem',
-                    backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
-                    onPressed: () => KioskLauncher.close().then((_) => setState(() {})),
-                    child: const Icon(Icons.close, color: Colors.white, size: 18),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Tooltip(
-                  message: 'Maximizar / Restaurar tótem',
-                  child: FloatingActionButton(
-                    mini: true,
-                    heroTag: 'maximize_totem',
-                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.8),
-                    onPressed: () => KioskLauncher.maximize(),
-                    child: const Icon(Icons.fullscreen, color: Colors.white, size: 18),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Tooltip(
-                  message: 'Minimizar tótem',
-                  child: FloatingActionButton(
-                    mini: true,
-                    heroTag: 'minimize_totem',
-                    backgroundColor: Colors.orangeAccent.withValues(alpha: 0.8),
-                    onPressed: () => KioskLauncher.minimize(),
-                    child: const Icon(Icons.minimize, color: Colors.white, size: 18),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(color: Colors.white12, height: 1),
-                const SizedBox(height: 12),
-              ],
-              // ── Modos del panel embebido ───────────────────────────────────
-              FloatingActionButton(
-                mini: true,
-                heroTag: 'panel_mode',
-                backgroundColor: _totemMode == TotemPanelMode.panel ? _perla : Colors.grey,
-                tooltip: 'Vista panel',
-                onPressed: () => setState(() => _totemMode = TotemPanelMode.panel),
-                child: const Icon(Icons.dashboard, color: Colors.black, size: 18),
-              ),
-              const SizedBox(height: 8),
-              FloatingActionButton(
-                mini: true,
-                heroTag: 'fullscreen_mode',
-                backgroundColor: _totemMode == TotemPanelMode.fullscreen ? _perla : Colors.grey,
-                tooltip: 'Pantalla completa (en esta ventana)',
-                onPressed: () => setState(() => _totemMode = TotemPanelMode.fullscreen),
-                child: const Icon(Icons.fullscreen, color: Colors.black, size: 18),
-              ),
-              const SizedBox(height: 8),
-              FloatingActionButton(
-                mini: true,
-                heroTag: 'focus_mode',
-                backgroundColor: _totemMode == TotemPanelMode.focus ? _perla : Colors.grey,
-                tooltip: 'Modo foco',
-                onPressed: () => setState(() => _totemMode = TotemPanelMode.focus),
-                child: const Icon(Icons.visibility, color: Colors.black, size: 18),
-              ),
-            ],
-          ),
         ),
       ],
     );

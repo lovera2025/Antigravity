@@ -1,5 +1,6 @@
 // Recepción sin base ni red: los alumnos de una institución, la lista de la
-// puerta y quién entró, en memoria. Lo usan `test/panel_puerta_test.dart` y
+// puerta y quién entró, en memoria. Lo usan `test/panel_puerta_test.dart`,
+// `test/totem_local_test.dart`, `test/recepcion_pantalla_test.dart` y
 // `tool/recepcion_muestra_test.dart`, puestos por los mismos providers que usa
 // la app.
 import 'dart:async';
@@ -10,16 +11,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/common/providers/user_role_provider.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
+import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
+import 'package:arguello_events/models/totem_config.dart';
 
 const eventoMasivo = 'e0000000-0000-4000-8000-00000000000a';
 const eventoParticular = 'e0000000-0000-4000-8000-00000000000b';
@@ -196,7 +200,32 @@ class PuertaEnMemoria {
   var vaciar = 0;
 
   /// El panel del evento, con los reemplazos puestos.
-  Widget panel(String eventoId, {ThemeData? tema}) => ProviderScope(
+  Widget panel(String eventoId, {ThemeData? tema}) => recepcion(
+        Scaffold(
+          body: PanelPuerta(
+            eventoId: eventoId,
+            onActualizar: () => actualizado++,
+            onAgregar: () => agregar++,
+            onImportar: () {},
+            onExportar: () {},
+            onVaciar: () => vaciar++,
+          ),
+        ),
+        tema: tema,
+      );
+
+  /// [home] con los reemplazos puestos: los eventos, la lista de la puerta,
+  /// los alumnos, sus sillas y el motor; la personalización del tótem de cada
+  /// evento ([config], o la de siempre); el permiso del tótem ([puedeTotem]);
+  /// y en el selector de Recepción, [elegido].
+  Widget recepcion(
+    Widget home, {
+    ThemeData? tema,
+    String? elegido,
+    Map<String, TotemConfig> config = const {},
+    bool puedeTotem = true,
+  }) =>
+      ProviderScope(
         overrides: [
           eventosActivosProvider.overrideWith(
             (ref) async => [
@@ -208,21 +237,34 @@ class PuertaEnMemoria {
           contratosRepositoryProvider.overrideWithValue(contratos),
           sillasRepartoRepositoryProvider.overrideWithValue(sillas),
           syncEngineProvider.overrideWithValue(motor),
+          for (final evento in [eventoMasivo, eventoParticular])
+            totemConfigProvider(evento).overrideWith(
+              (ref) => Stream.value(
+                config[evento] ?? TotemConfig.defaults(evento),
+              ),
+            ),
+          userRoleProvider.overrideWith(
+            (ref) async => UserRoleState(
+              isLoading: false,
+              permisos: UserPermissions(puedeTotem: puedeTotem),
+            ),
+          ),
+          selectedEventProvider.overrideWith(() => _EventoElegido(elegido)),
         ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: tema ??
               ThemeData(brightness: Brightness.dark, useMaterial3: true),
-          home: Scaffold(
-            body: PanelPuerta(
-              eventoId: eventoId,
-              onActualizar: () => actualizado++,
-              onAgregar: () => agregar++,
-              onImportar: () {},
-              onExportar: () {},
-              onVaciar: () => vaciar++,
-            ),
-          ),
+          home: home,
         ),
       );
+}
+
+/// El evento ya elegido en el selector de Recepción.
+class _EventoElegido extends SelectedEventNotifier {
+  _EventoElegido(this.elegido);
+  final String? elegido;
+
+  @override
+  String? build() => elegido;
 }

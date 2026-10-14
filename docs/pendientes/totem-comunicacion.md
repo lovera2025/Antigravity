@@ -21,6 +21,11 @@
   a 32 y se queda ahí.
 - **No se tocó el panel del tótem que está adentro de Recepción** (`totem_panel.dart`): lee de la base de la PC, y
   después de un corte largo puede saludar de corrido a los que bajan juntos. Va con el rediseño de Recepción.
+  - **14-oct, sección 3c:** ese panel se borró. Recepción y la pantalla del asesor usan `TotemLocal`, con el mismo
+    `IngresosTotem`.
+  - **Lo de saludar de corrido sigue igual:** `TotemLocal` lee la base de la PC, que no se corta. Lo que baja de
+    otra PC después de un corte llega todo junto y se saluda en cola, de a 3 s. Va con la sección 7 (dos puestos,
+    [modo-local-sin-internet.md](modo-local-sin-internet.md)).
 - **No se probó con el tótem de verdad:** no se abre la app desde el código mientras la v73 no esté publicada. Lo
   prueban 43 tests y, de verdad, el ensayo: marcar ingresos, cortar el wifi un par de minutos, seguir marcando,
   volver a conectar y mirar que no salude a nadie de nuevo.

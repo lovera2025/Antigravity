@@ -3,25 +3,10 @@ import 'package:flutter/material.dart';
 /// Identidad visual del tótem para un evento puntual.
 ///
 /// Si un evento no tiene fila en `totem_config`, [TotemConfig.defaults]
-/// devuelve **exactamente** los literales que hoy están hardcodeados en
-/// `totem_display.dart` y `totem_panel.dart`, así que la pantalla se ve igual
-/// que siempre y no hay regresión.
+/// devuelve los textos y el dorado de siempre.
 class TotemConfig {
-  /// Dorado histórico de la app (`_gold` en totem_display.dart).
+  /// Dorado histórico de la app.
   static const Color acentoPorDefecto = Color(0xFFD4AF37);
-
-  /// Gradiente violeta del panel "YA LLEGARON" tal como está hoy.
-  static const List<Color> _panelPorDefecto = [
-    Color(0xFF1A0A2E),
-    Color(0xFF0D0618),
-    Color(0xFF080808),
-  ];
-
-  /// Gradiente violeta de la tarjeta de bienvenida tal como está hoy.
-  static const List<Color> _cardPorDefecto = [
-    Color(0xFF1C0F35),
-    Color(0xFF0C0518),
-  ];
 
   final String eventoId;
   final String titulo;
@@ -147,35 +132,4 @@ class TotemConfig {
     final rgb = colorAcento.toARGB32() & 0xFFFFFF;
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
-
-  bool get usaAcentoPorDefecto =>
-      colorAcento.toARGB32() == acentoPorDefecto.toARGB32();
-
-  /// Fondo del panel "YA LLEGARON".
-  ///
-  /// Con el dorado de siempre devuelve el violeta original, para que un tótem
-  /// sin configurar se vea exactamente como hoy. Con un acento elegido, deriva
-  /// el fondo de ese tono: si el acento es rosa, el panel deja de ser violeta.
-  List<Color> get gradientePanel {
-    if (usaAcentoPorDefecto) return _panelPorDefecto;
-    final base = HSLColor.fromColor(colorAcento);
-    return [
-      base.withSaturation(0.52).withLightness(0.11).toColor(),
-      base.withSaturation(0.48).withLightness(0.05).toColor(),
-      const Color(0xFF080808),
-    ];
-  }
-
-  /// Fondo de la tarjeta de bienvenida. Misma lógica que [gradientePanel].
-  List<Color> get gradienteCard {
-    if (usaAcentoPorDefecto) return _cardPorDefecto;
-    final base = HSLColor.fromColor(colorAcento);
-    return [
-      base.withSaturation(0.55).withLightness(0.13).toColor(),
-      base.withSaturation(0.50).withLightness(0.05).toColor(),
-    ];
-  }
-
-  /// Variante suave del acento, para bordes y resplandores.
-  Color acentoConAlpha(double alpha) => colorAcento.withValues(alpha: alpha);
 }

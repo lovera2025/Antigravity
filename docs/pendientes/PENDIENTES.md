@@ -54,12 +54,13 @@ priorizó el sorteo de noviembre. El contexto está en
   shaders aprobados. **Lo común quedó hecho el 14-oct** (sección 2): QR solo en
   particulares, la cola con "N más en camino", la familia junta, las sillas y la
   música, y la columna `totem_config.estilo` creada en la nube. **El tótem del
-  salón con las cuatro apariencias, también** (3a). Faltan Personalizar (3b) y
-  la vista en Recepción (3c).
-- [Recepción más amigable](recepcion-redisenio.md) — **el panel del operador
-  quedó hecho el 14-oct** (búsqueda con Enter, filtros, "Ingresar" por fila, y
-  particular o masivo). Falta la vista del tótem al lado (solo la paleta) y los
-  cortes para celular, tablet y PC.
+  salón con las cuatro apariencias, Personalizar con las cuatro tarjetas y la
+  vista en Recepción, también** (3a, 3b y 3c). Falta el plano con la guía en la
+  llegada (sección 4).
+- [Recepción más amigable](recepcion-redisenio.md) — **hecho el 14-oct**: el
+  panel del operador (búsqueda con Enter, filtros, "Ingresar" por fila, y
+  particular o masivo), Personalizar, la vista del tótem al lado (solo la
+  paleta) y los cortes para celular, tablet y PC.
 - [Modo kiosco en la ventana del tótem](totem-kiosco.md) — pantalla completa
   sin bordes, que se sale con Esc o doble clic. Necesita un canal nativo en el
   runner de Windows.

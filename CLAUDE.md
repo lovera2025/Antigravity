@@ -242,7 +242,7 @@ nube; `totem_display.dart` solo le cuenta lo que pasó (`leyo`, `noPudoLeer`, `a
   nuevo.
 - Se da por conectado cuando leyó, no al intentarlo: si no, la espera entre reintentos vuelve siempre a 2 s.
 - El aviso de que no hay internet va en la barra del operador (`AvisoSinInternet`), no a la vista del salón.
-- **`totem_panel.dart` no usa nada de esto**: sigue con su lógica de antes hasta que se rehaga Recepción.
+- `TotemLocal` (el tótem de Recepción y del asesor) usa lo mismo, alimentado desde la base de la PC.
 
 **El tótem distingue particular de masivo por la ficha del evento** (v6.0.0, sección 2). La lista de la puerta solo
 tiene nombre y mesa; quién es alumno, con quién viene, sus sillas y su música están en los alumnos, en la base de la
@@ -290,7 +290,7 @@ PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve
   - cuatro tarjetas (`TarjetaApariencia`, quietas) y la vista grande animada, con "Ver una llegada"
     (`LlegadaDeEjemplo`, armada con `ContenidoBienvenida.armar`);
   - en la PC es ventana al centro y si no, hoja a pantalla completa. El corte está en `CortesPantalla`
-    (`common/utils/cortes_pantalla.dart`): 600 y 1.024 px, para todo lo de Recepción;
+    (`common/utils/cortes_pantalla.dart`): 600 y 1.024 px, el mismo de la pantalla de Recepción;
   - una foto recién elegida va por `EscenaTotem.foto`, antes de subirla;
   - **si no se toca una tarjeta, `estilo` se guarda como estaba**, porque la config se arma campo por campo;
   - se prueba entera con `test/helpers/personalizar_en_memoria.dart`, y `PersonalizarTotem.elegirFoto` reemplaza al
@@ -304,19 +304,23 @@ avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le hab
 Las pantallas web y el tótem leen hasta 1000 invitados por evento (el "Max rows" de PostgREST). Ver
 `docs/pendientes/invitados-mas-de-1000-en-web.md`.
 
-Hay dos tótems:
+Hay dos tótems, y **lo visual se hace una sola vez**: los dos dibujan `EscenaTotem` con el mismo
+`ReproductorBienvenidas` y `ContenidoBienvenida`.
 
-- `totem_display.dart` — la pantalla del salón. Va por Supabase directo. Es la
-  que se usa en la ventana secundaria, en `?totem` y en la ruta
-  `/totem_display`. Desde la 6.0.0 dibuja las escenas de `estilos/`.
-- `totem_panel.dart` — panel embebido en Recepción y en la pantalla del asesor.
-  Va por SQLite. **Es la copia vieja** (cola de 7 s, QR siempre, "YA LLEGARON"):
-  en la sección 3c lo reemplaza `TotemLocal`, con la misma escena y el mismo
-  `ReproductorBienvenidas`, y se borra. Hasta entonces, no tocarlo.
+- `totem_display.dart` — la pantalla del salón. Va por Supabase directo y la ficha le llega por el puente. Es la
+  que se usa en la ventana secundaria, en `?totem` y en la ruta `/totem_display`.
+- `TotemLocal` (`totem/widgets/totem_local.dart`, sección 3c) — el tótem de esta PC. Lo usan la vista de Recepción
+  (`VistaDelTotem`) y la pantalla del asesor. Lee lo mismo que la lista de Recepción, de la base de la PC
+  (`invitadosStreamProvider` y `puertaDelEventoProvider` → `FichaTotem.desdePuerta`), así que anda sin internet y
+  saluda con la mesa aunque la fila de la puerta no la tenga. Va con la clave del evento.
+- **El panel viejo (`totem_panel.dart`, con sus modos y sus botones de ventana) ya no existe.** Recepción va
+  según `CortesPantalla`: en la PC, la lista (60 %) y la vista lado a lado; en una tablet, pestañas RECEPCIÓN y
+  TÓTEM; en el celular, la lista sola con la paleta arriba. Sobre la vista, un solo botón: la paleta.
+  `test/recepcion_pantalla_test.dart` monta Recepción entera con `PuertaEnMemoria.recepcion`.
 
 El tótem **muestra** un QR, no lo lee: no hay dependencia de cámara. El QR apunta
 a `/lista?evento=<id>`, que abre el invitado en su celular. **Desde la 6.0.0, solo en
-los particulares** (`hayQrEnElTotem`); `totem_panel.dart` todavía lo muestra siempre. Al confirmar el
+los particulares** (`hayQrEnElTotem`; en `TotemLocal`, según el tipo del evento). Al confirmar el
 check-in, esa pantalla emite un broadcast por el canal `totem_<eventoId>`, que es
 el bus de baja latencia que evita esperar la replicación de Postgres.
 
@@ -444,8 +448,8 @@ históricos y la pantalla se ve como siempre.
 
 `detalle_evento_masivo_screen.dart` (~9900), `pdf_service.dart` (~8800),
 `finanzas_view.dart` (~7600), `local_database.dart` (~3500 con todas las
-migraciones), `plano_evento_cuerpo.dart` (~2200), `totem_display.dart` (~900),
-`totem_panel.dart` (~1500). Leer por tramos, no enteros.
+migraciones), `plano_evento_cuerpo.dart` (~2200), `totem_display.dart` (~900).
+Leer por tramos, no enteros.
 
 ## SQL
 

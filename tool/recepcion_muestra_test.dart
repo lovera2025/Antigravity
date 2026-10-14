@@ -11,10 +11,14 @@
 // - Recepcion_3_buscar_y_enter.png: buscando "12" (la mesa de una familia) y
 //   apretando Enter: son tres, no ingresa a nadie y lo dice.
 // - Recepcion_4_particular.png: nombre, DNI y mesa, con Agregar.
+// - Recepcion_PC.png: la pantalla entera en la PC, la lista y la vista del
+//   tótem con una familia llegando.
+// - Recepcion_tablet_totem.png: en la tablet, la pestaña TÓTEM saludando.
+// - Recepcion_celular.png: en el celular, la lista sola con la paleta arriba.
 //
-// Es el panel de la app (`PanelPuerta`), con los reemplazos en memoria de
-// `test/helpers/puerta_en_memoria.dart`. A la izquierda de Recepción va el
-// selector del evento y a la derecha la vista del tótem: no salen acá.
+// Es el panel de la app (`PanelPuerta`) y la pantalla de Recepción, con los
+// reemplazos en memoria de `test/helpers/puerta_en_memoria.dart`. Las tres
+// últimas dibujan el tótem con los fondos de verdad.
 
 // ignore_for_file: avoid_print
 
@@ -28,9 +32,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/features/recepcion/recepcion_unified_screen.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
+import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
+import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
+import 'package:arguello_events/models/totem_config.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
 
@@ -199,5 +207,111 @@ void main() {
     final clave = await abrir(tester, mundo, eventoParticular);
     expect(find.text('AGREGAR'), findsOneWidget);
     await _guardar(tester, clave, 'Recepcion_4_particular.png', carpeta);
+  });
+
+  group('la pantalla entera, con la vista del tótem', () {
+    setUpAll(() async {
+      await cargarFuentesTotem();
+      // Oswald negrita, con el nombre con que la pide `google_fonts` (el
+      // título y las pestañas).
+      final oswald = FontLoader('Oswald_700')
+        ..addFont(rootBundle.load('assets/google_fonts/Oswald-Bold.ttf'));
+      await oswald.load();
+      await FondoTotem.precargar();
+    });
+
+    Future<GlobalKey> abrirPantalla(
+      WidgetTester tester,
+      PuertaEnMemoria mundo,
+      Size tam,
+    ) async {
+      final clave = GlobalKey();
+      tester.view.physicalSize = tam;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addTearDown(mundo.motor.bajo.close);
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: clave,
+          child: mundo.recepcion(
+            const RecepcionUnifiedScreen(),
+            elegido: eventoMasivo,
+            config: const {
+              eventoMasivo: TotemConfig(
+                eventoId: eventoMasivo,
+                titulo: 'PROMOCIÓN 2026',
+                subtitulo: 'Escuela Normal',
+              ),
+            },
+            tema: ThemeData(
+              brightness: Brightness.dark,
+              fontFamily: FuentesTotem.linea,
+              useMaterial3: true,
+            ),
+          ),
+        ),
+      );
+      await _asentar(tester);
+      return clave;
+    }
+
+    /// Lo que hace "Ingresar" en la lista, en la base de esta PC.
+    Future<void> ingresar(PuertaEnMemoria mundo, String alumno, int lugar,
+            String nombre) =>
+        mundo.invitados.ingresarDesdeLaPuerta(
+          eventoId: eventoMasivo,
+          id: idInvitadoPuerta(alumno, lugar),
+          nombre: nombre,
+        );
+
+    /// Espera la llegada y las imágenes (el logo), y falla si algo no entra.
+    Future<void> asentarLlegada(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1400));
+      await tester.runAsync(() async {
+        for (final e in find.byType(Image).evaluate()) {
+          await precacheImage((e.widget as Image).image, e);
+        }
+      });
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.takeException(), isNull);
+    }
+
+    testWidgets('en la PC, con una familia llegando', (tester) async {
+      final mundo = PuertaEnMemoria(
+        _supabase,
+        alumnos: _institucion(sorteada: true).cast(),
+      );
+      final clave = await abrirPantalla(tester, mundo, const Size(1366, 768));
+      await ingresar(mundo, 'perez', 0, 'PÉREZ, JUAN MARTÍN');
+      await ingresar(mundo, 'perez', 1, 'GÓMEZ, ANA');
+      await ingresar(mundo, 'perez', 2, 'PÉREZ, LUIS');
+      await asentarLlegada(tester);
+      expect(find.text('con GÓMEZ, ANA y PÉREZ, LUIS'), findsOneWidget);
+      await _guardar(tester, clave, 'Recepcion_PC.png', carpeta);
+    });
+
+    testWidgets('en la tablet, la pestaña TÓTEM', (tester) async {
+      final mundo = PuertaEnMemoria(
+        _supabase,
+        alumnos: _institucion(sorteada: true).cast(),
+      );
+      final clave = await abrirPantalla(tester, mundo, const Size(800, 1280));
+      await tester.tap(find.text('TÓTEM'));
+      await _asentar(tester);
+      await ingresar(mundo, 'acosta', 0, 'ACOSTA, LUCÍA');
+      await asentarLlegada(tester);
+      await _guardar(tester, clave, 'Recepcion_tablet_totem.png', carpeta);
+    });
+
+    testWidgets('en el celular, la lista sola', (tester) async {
+      final mundo = PuertaEnMemoria(
+        _supabase,
+        alumnos: _institucion(sorteada: true).cast(),
+      );
+      final clave = await abrirPantalla(tester, mundo, const Size(390, 844));
+      await asentarLlegada(tester);
+      await _guardar(tester, clave, 'Recepcion_celular.png', carpeta);
+    });
   });
 }

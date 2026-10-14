@@ -3,14 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/evento.dart';
 import '../recepcion/providers/recepcion_provider.dart';
-import 'totem_panel.dart';
+import 'widgets/totem_local.dart';
 
-/// Pantalla de lanzamiento del Tótem desde el Dashboard.
+/// El tótem a pantalla completa en el equipo del asesor (Inicio del asesor →
+/// Tótem).
 ///
-/// Muestra directamente el [TotemPanel] con el QR y la animación de bienvenida,
-/// y un selector de evento flotante en la parte inferior para elegir el evento activo.
-/// De esta forma, el operador puede activar el tótem desde el Dashboard
-/// y la animación se dispara apenas se produce un check-in.
+/// Es [TotemLocal], la misma escena del salón alimentada desde este equipo, con
+/// un selector de evento flotante abajo: saluda apenas se marca un ingreso.
 class TotemLauncherScreen extends ConsumerStatefulWidget {
   const TotemLauncherScreen({super.key});
 
@@ -31,11 +30,13 @@ class _TotemLauncherScreenState extends ConsumerState<TotemLauncherScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // ── Panel Tótem Full ───────────────────────────────────────────────
+          // ── El tótem, a pantalla completa ──────────────────────────────────
           if (selectedEventId != null)
-            TotemPanel(
-              eventoId: selectedEventId,
-              showModeButtons: false,
+            Positioned.fill(
+              child: TotemLocal(
+                key: ValueKey(selectedEventId),
+                eventoId: selectedEventId,
+              ),
             )
           else
             _buildWaitingState(),
