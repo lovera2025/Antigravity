@@ -383,18 +383,111 @@ class InvitadosRepository {
       _notifyChanges(invitado.eventoId);
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      Future.microtask(() async {
-        try {
-          await _supabase.from('invitados')
-              .update({'estado_ingreso': 'ingresado', 'updated_at': now})
-              .eq('id', invitadoId);
-          final dbInner = await LocalDatabase.instance;
-          await dbInner.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: ['invitados', invitadoId]);
-        } catch (e) {
-          debugPrint('⚠️ Sync check-in fallido: $e');
-        }
+    unawaited(_subirYa(invitadoId));
+  }
+
+  /// Marca el ingreso de alguien de un evento masivo, tenga o no su fila en la
+  /// lista de la puerta.
+  ///
+  /// En un masivo Recepción muestra a los alumnos desde la base de la PC, así
+  /// que antes del sorteo se puede marcar a alguien que todavía no está en la
+  /// lista. Si su fila ([id], el fijo de `idInvitadoPuerta`) no existe, se crea
+  /// ya marcada; si existe, se marca como siempre ([marcarIngreso]).
+  ///
+  /// **Lo que sube de una fila nueva no lleva la mesa.** Si la nube ya tenía la
+  /// fila (la armó el sorteo y esta PC todavía no la bajó), el upsert solo le
+  /// cambia el nombre y el ingreso: una PC atrasada no puede borrar ni cambiar
+  /// una mesa. La mesa de la lista la pone solo el salón (`PuertaAlDia`). Por
+  /// lo mismo la fila de esta PC queda sin mesa hasta que baje o el salón la
+  /// ponga; [mesa] va solo en el aviso al tótem, para que salude con ella.
+  Future<void> ingresarDesdeLaPuerta({
+    required String eventoId,
+    required String id,
+    required String nombre,
+    String? mesa,
+  }) async {
+    final db = await LocalDatabase.instance;
+    final now = DateTime.now().toUtc().toIso8601String();
+    var nueva = false;
+    await db.transaction((txn) async {
+      final hay = await txn.query(
+        'invitados',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (hay.isNotEmpty) return;
+      nueva = true;
+      final nube = {
+        'id': id,
+        'evento_id': eventoId,
+        'nombre_completo': nombre,
+        'estado_ingreso': 'ingresado',
+        'updated_at': now,
+      };
+      await txn.insert('invitados', {
+        ...nube,
+        'dni': '',
+        'numero_mesa': null,
+        'intentos_fallidos': 0,
+        'created_at': now,
       });
+      await SyncQueue.enqueue(
+        executor: txn,
+        tabla: 'invitados',
+        operacion: SyncOperation.insert,
+        registroId: id,
+        payload: nube,
+      );
+    });
+    if (!nueva) return marcarIngreso(id);
+
+    final row = await db.query('invitados', where: 'id = ?', whereArgs: [id]);
+    if (row.isNotEmpty) {
+      final aviso = Invitado.fromJson(row.first).toJson()
+        ..['numero_mesa'] = mesa;
+      if (KioskLauncher.isTotemActive) KioskLauncher.notifyGuestCheckin(aviso);
+      unawaited(_emitir(eventoId, 'checkin', aviso));
+    }
+    _notifyChanges(eventoId);
+    unawaited(_subirYa(id));
+  }
+
+  /// Sube ya lo que la cola tiene de esta fila, sin esperar al motor.
+  ///
+  /// Sube **lo que dice la cola**, no solo el último cambio: si la fila todavía
+  /// no llegó a la nube, la cola tiene su alta (con este cambio adentro) y un
+  /// `update` no encontraría nada. Antes se mandaba el `update` y se borraba la
+  /// entrada igual: una fila creada y marcada (o desmarcada) enseguida no
+  /// llegaba nunca a la nube. Y la saca solo si sigue siendo la que se leyó
+  /// ([SyncQueue.markCompleted]): un cambio hecho mientras subía queda para el
+  /// motor.
+  Future<void> _subirYa(String invitadoId) async {
+    if (_connectivity.currentStatus != AppConnectivity.online) return;
+    try {
+      final db = await LocalDatabase.instance;
+      final rows = await db.query(
+        '_sync_queue',
+        where: 'tabla = ? AND registro_id = ?',
+        whereArgs: ['invitados', invitadoId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final entrada = SyncQueueEntry.fromMap(rows.first);
+      final datos = Map<String, dynamic>.from(entrada.payload);
+      switch (entrada.operacion) {
+        case SyncOperation.insert:
+          await _supabase.from('invitados').upsert(datos);
+        case SyncOperation.update:
+          datos.remove('id');
+          await _supabase.from('invitados').update(datos).eq('id', invitadoId);
+        case SyncOperation.delete:
+          await _supabase.from('invitados').delete().eq('id', invitadoId);
+      }
+      await SyncQueue.markCompleted(entrada.id!, leidaCon: entrada.createdAt);
+    } catch (e) {
+      debugPrint('⚠️ Sync de la puerta fallido: $e');
     }
   }
 
@@ -432,19 +525,7 @@ class InvitadosRepository {
       _notifyChanges(invitado.eventoId);
     }
 
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      Future.microtask(() async {
-        try {
-          await _supabase.from('invitados')
-              .update({'estado_ingreso': 'pendiente', 'updated_at': now})
-              .eq('id', invitadoId);
-          final dbInner = await LocalDatabase.instance;
-          await dbInner.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: ['invitados', invitadoId]);
-        } catch (e) {
-          debugPrint('⚠️ Sync deshacer check-in fallido: $e');
-        }
-      });
-    }
+    unawaited(_subirYa(invitadoId));
   }
 
   /// Deshace TODOS los ingresos de un evento (vuelven a pendiente). Ideal para limpiar pruebas.

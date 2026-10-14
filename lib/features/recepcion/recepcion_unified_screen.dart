@@ -1,19 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border;
-import '../../core/services/sync_engine.dart';
-import '../../models/invitado.dart';
 import '../totem/totem_panel.dart';
 import '../totem/widgets/totem_config_sheet.dart';
 import '../common/providers/user_role_provider.dart';
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
+import 'services/puerta_del_evento.dart';
+import 'widgets/panel_puerta.dart';
 import '../../core/services/kiosk_launcher.dart';
 
 class RecepcionUnifiedScreen extends ConsumerStatefulWidget {
@@ -455,15 +454,6 @@ class OperadorViewContent extends ConsumerStatefulWidget {
 }
 
 class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
-  String? _searchQuery;
-  final _searchController = TextEditingController();
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -473,12 +463,21 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
     return Column(
       children: [
         _buildEventSelector(isDark, perla),
-        if (selectedEventId != null) ...[
-          _buildStats(selectedEventId, isDark, perla),
-          _buildActionBar(selectedEventId, isDark, perla),
-          _buildSearchBar(isDark, perla),
-          Expanded(child: _buildInvitadosList(selectedEventId, isDark, perla)),
-        ] else
+        if (selectedEventId != null)
+          // Con la clave del evento, cambiar de evento arranca la búsqueda y
+          // los filtros de cero.
+          Expanded(
+            child: PanelPuerta(
+              key: ValueKey(selectedEventId),
+              eventoId: selectedEventId,
+              onActualizar: () => _refreshList(selectedEventId),
+              onAgregar: () => _agregarInvitado(selectedEventId),
+              onImportar: () => _importarArchivo(selectedEventId),
+              onExportar: () => _exportarExcel(selectedEventId),
+              onVaciar: () => _confirmarVaciarLista(selectedEventId, context),
+            ),
+          )
+        else
           Expanded(
             child: Center(
               child: Column(
@@ -574,9 +573,9 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             items: eventos.map((evento) {
-              final cliente = evento.cliente?.nombreCompleto ?? 'Sin cliente';
-              final fecha = evento.fechaEvento;
-              final label = '$cliente — ${evento.tipoParaMostrar} (${fecha.day}/${fecha.month})';
+              // Con el tipo: Recepción muestra distinto un particular y un
+              // masivo.
+              final label = etiquetaEventoRecepcion(evento);
 
               return DropdownMenuItem<String>(
                 value: evento.id,
@@ -589,8 +588,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
             }).toList(),
             onChanged: (value) {
               ref.read(selectedEventProvider.notifier).select(value);
-              _searchController.clear();
-              setState(() => _searchQuery = null);
             },
             isExpanded: true,
           );
@@ -623,496 +620,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
     );
   }
 
-  Widget _buildStats(String eventoId, bool isDark, Color gold) {
-    final statsAsync = ref.watch(statsEventoProvider(eventoId));
-
-    return statsAsync.when(
-      data: (stats) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-          child: Row(
-            children: [
-              _buildStatItem('TOTAL', stats['total'] ?? 0, Icons.people_rounded, gold, isDark),
-              const SizedBox(width: 12),
-              _buildStatItem('INGRESADOS', stats['ingresados'] ?? 0, Icons.check_circle_outline_rounded, Colors.greenAccent, isDark),
-              const SizedBox(width: 12),
-              _buildStatItem('PENDIENTES', stats['pendientes'] ?? 0, Icons.hourglass_empty_rounded, Colors.orangeAccent, isDark),
-            ],
-          ),
-        );
-      },
-      loading: () => const SizedBox(height: 4),
-      error: (error, stack) => const SizedBox.shrink(),
-    );
-  }
-
-  Widget _buildStatItem(String label, int value, IconData icon, Color color, bool isDark) {
-    const perla = Color(0xFFE2E2E2);
-    return Expanded(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: isDark ? perla.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.02),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: color.withValues(alpha: 0.2),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.1),
-                  blurRadius: 20,
-                  spreadRadius: -10,
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, size: 16, color: color),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  label,
-                  style: GoogleFonts.oswald(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$value',
-                  style: GoogleFonts.outfit(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? perla : Colors.black,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar(bool isDark, Color gold) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Buscar por nombre...',
-          prefixIcon: Icon(Icons.search, color: gold, size: 20),
-          suffixIcon: _searchQuery != null
-              ? IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = null);
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: isDark
-              ? Colors.white.withValues(alpha: 0.03)
-              : Colors.black.withValues(alpha: 0.02),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: gold, width: 1.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-        onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
-      ),
-    );
-  }
-
-  Widget _buildInvitadosList(String eventoId, bool isDark, Color gold) {
-    final invitadosAsync = ref.watch(invitadosStreamProvider(eventoId));
-
-    return invitadosAsync.when(
-      data: (invitados) {
-        final filtered = _searchQuery == null || _searchQuery!.isEmpty
-            ? invitados
-            : invitados.where((i) => i.nombreCompleto.toLowerCase().contains(_searchQuery!)).toList();
-
-        if (filtered.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  _searchQuery != null ? Icons.search_off : Icons.people_outline,
-                  size: 80,
-                  color: isDark ? Colors.white12 : Colors.black12,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _searchQuery != null ? 'No se encontraron resultados' : 'No hay invitados registrados',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.white38 : Colors.black38,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final invitado = filtered[index];
-            return _buildInvitadoCard(invitado, isDark, gold);
-          },
-        );
-      },
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
-      ),
-      error: (error, stack) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.cloud_off_rounded, color: Colors.redAccent, size: 60),
-              const SizedBox(height: 16),
-              const Text(
-                'Error de conexión',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error.toString(),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white38 : Colors.black38,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => ref.invalidate(invitadosStreamProvider(eventoId)),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('REINTENTAR'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: gold,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInvitadoCard(Invitado invitado, bool isDark, Color perlaAccent) {
-    final isIngresado = invitado.estadoIngreso == EstadoIngreso.ingresado;
-    final perla = const Color(0xFFE2E2E2);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isIngresado
-              ? Colors.greenAccent.withValues(alpha: 0.2)
-              : (isDark ? perla.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.05)),
-          width: 1,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            leading: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: (isIngresado ? Colors.greenAccent : perla).withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: (isIngresado ? Colors.greenAccent : perla).withValues(alpha: 0.15),
-                ),
-              ),
-              child: Icon(
-                isIngresado ? Icons.check_circle_rounded : Icons.person_rounded,
-                color: isIngresado ? Colors.greenAccent : perla,
-                size: 22,
-              ),
-            ),
-            title: Text(
-              invitado.nombreCompleto.toUpperCase(),
-              style: GoogleFonts.oswald(
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
-                color: isIngresado ? (isDark ? Colors.white24 : Colors.black26) : (isDark ? perla : Colors.black),
-                decoration: isIngresado ? TextDecoration.lineThrough : null,
-              ),
-            ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.table_restaurant_rounded,
-                        size: 11,
-                        color: isDark ? Colors.white38 : Colors.black38,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'MESA: ${invitado.numeroMesa ?? "—"}',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white38 : Colors.black38,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isIngresado) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.greenAccent.withValues(alpha: 0.2),
-                        Colors.greenAccent.withValues(alpha: 0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.2)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'ADENTRO',
-                      style: GoogleFonts.oswald(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.greenAccent,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.orangeAccent, size: 20),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _confirmarDeshacerIngreso(invitado, context),
-                ),
-              ] else
-                ElevatedButton(
-                  onPressed: () => _marcarIngresado(invitado.id),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: perlaAccent.withValues(alpha: 0.1),
-                    foregroundColor: perlaAccent,
-                    elevation: 0,
-                    side: BorderSide(color: perlaAccent.withValues(alpha: 0.3)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    'REGISTRAR',
-                    style: GoogleFonts.oswald(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 4),
-              IconButton(
-                icon: Icon(Icons.delete_outline_rounded, 
-                  color: isDark ? Colors.white24 : Colors.black26, 
-                  size: 20),
-                visualDensity: VisualDensity.compact,
-                onPressed: () => _confirmarEliminarInvitado(invitado, context),
-              ),
-            ],
-          ),
-          onTap: isIngresado ? null : () => _marcarIngresado(invitado.id),
-        ),
-      ),
-    ),
-  );
-}
-
-  Future<void> _marcarIngresado(String invitadoId) async {
-    try {
-      final repo = ref.read(invitadosRepositoryProvider);
-      await repo.marcarIngreso(invitadoId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
-                SizedBox(width: 12),
-                Text(
-                  'Ingreso registrado correctamente',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            backgroundColor: Color(0xFF1A1A1A),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Error: ${e.toString()}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF1A1A1A),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _confirmarDeshacerIngreso(Invitado invitado, BuildContext context) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Deshacer Ingreso'),
-        content: Text('¿Estás seguro de deshacer el ingreso de ${invitado.nombreCompleto}? Volverá a la lista de pendientes.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DESHACER'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      try {
-        final repo = ref.read(invitadosRepositoryProvider);
-        await repo.deshacerIngreso(invitado.id);
-        
-        // Refrescar UI Stats
-        ref.invalidate(statsEventoProvider(invitado.eventoId));
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Se deshizo el ingreso correctamente'), backgroundColor: Colors.orangeAccent),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _confirmarEliminarInvitado(Invitado invitado, BuildContext context) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar Participante', style: TextStyle(color: Colors.redAccent)),
-        content: Text('¿Realmente deseas eliminar a ${invitado.nombreCompleto}? Esta acción no se puede deshacer.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ELIMINAR'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      try {
-        final repo = ref.read(invitadosRepositoryProvider);
-        await repo.eliminar(invitado.id);
-        
-        ref.invalidate(statsEventoProvider(invitado.eventoId));
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Participante eliminado correctamente'), backgroundColor: Colors.redAccent),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
-          );
-        }
-      }
-    }
-  }
-
   /// Vacía la lista de invitados del evento.
   ///
   /// No pide PIN: el operador que está en Recepción ya está autorizado y
@@ -1122,10 +629,11 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
   /// que escribir la palabra, porque ahí se pierde también el registro de quién
   /// llegó y a qué hora (los `accesos` se van por cascada).
   Future<void> _confirmarVaciarLista(String eventoId, BuildContext context) async {
-    final stats = ref.read(statsEventoProvider(eventoId)).maybeWhen(
-          data: (s) => s,
-          orElse: () => const <String, int>{},
-        );
+    // De la base de la PC y no de `statsEventoProvider`: ya nadie lo mira en
+    // pantalla, y leído así daba "vacía" con la lista llena.
+    final stats =
+        await ref.read(invitadosRepositoryProvider).getEstadisticas(eventoId);
+    if (!context.mounted) return;
     final total = stats['total'] ?? 0;
     final ingresados = stats['ingresados'] ?? 0;
 
@@ -1249,6 +757,8 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
       await repo.forceRefresh(eventoId);
       ref.invalidate(invitadosStreamProvider(eventoId));
       ref.invalidate(statsEventoProvider(eventoId));
+      // En un masivo, también los alumnos de la base de la PC.
+      ref.invalidate(alumnosDeLaPuertaProvider(eventoId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Lista actualizada'), backgroundColor: Colors.green, duration: Duration(seconds: 1)),
@@ -1261,105 +771,6 @@ class _OperadorViewContentState extends ConsumerState<OperadorViewContent> {
         );
       }
     }
-  }
-
-  // ── Barra de acciones ─────────────────────────────────────────────────────
-
-  Widget _buildActionBar(String eventoId, bool isDark, Color gold) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _refreshList(eventoId),
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('ACTUALIZAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white12 : Colors.black12,
-                foregroundColor: isDark ? Colors.white : Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _agregarInvitado(eventoId),
-              icon: const Icon(Icons.person_add_alt_1, size: 18),
-              label: const Text('AGREGAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: gold,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _importarArchivo(eventoId),
-              icon: const Icon(Icons.upload_file_rounded, size: 18),
-              label: const Text('IMPORTAR LISTA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _exportarExcel(eventoId),
-              icon: const Icon(Icons.table_view_rounded, size: 18),
-              label: const Text('EXPORTAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Vaciar la lista borra de verdad y es irreversible. Antes era un
-          // botón del mismo tamaño y al lado de EXPORTAR: de noche, en un salón
-          // y con pantalla táctil, un dedazo alcanzaba. Ahora hay que abrir el
-          // menú a propósito.
-          Tooltip(
-            message: 'Más acciones',
-            child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded, color: Colors.white70),
-              color: const Color(0xFF1E1E1E),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              onSelected: (v) {
-                if (v == 'vaciar') _confirmarVaciarLista(eventoId, context);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem<String>(
-                  value: 'vaciar',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.delete_sweep_rounded,
-                        color: Colors.redAccent, size: 20),
-                    title: Text('Vaciar lista',
-                        style: TextStyle(color: Colors.redAccent)),
-                    subtitle: Text('Borra todos los invitados',
-                        style: TextStyle(color: Colors.white38, fontSize: 11)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   // ── Agregar invitado manual ────────────────────────────────────────────────

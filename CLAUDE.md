@@ -185,6 +185,23 @@ las pone de acuerdo sola:
   DNI, y los alumnos no lo tienen**: con el QR a la vista, cualquiera puede marcar a otro. Se cierra con el tótem
   nuevo (sin QR en masivos) y con el check-in en el servidor.
 
+**Recepción distingue un evento particular de uno masivo** (v6.0.0, el objetivo del usuario desde el 14-oct-2026; se
+dice "evento masivo", no "fiesta de alumnos"). Lo decide `PuertaDelEvento` (`recepcion/services/puerta_del_evento.dart`);
+el panel es `PanelPuerta` (`recepcion/widgets/panel_puerta.dart`).
+- **Un particular** es su lista de la puerta tal cual: nombre, DNI y mesa.
+- **Un masivo sale de los alumnos de la base de la PC, no de la lista de la puerta**: así se ven con lo cargado en el
+  momento, antes y después del sorteo, menos los de baja. De la lista se toma solo quién entró, por el id fijo
+  (`filasPuertaDesdeAlumnos`, `idInvitadoPuerta`). Sin sortear, un aviso y sin mesa ni sillas; las sillas debajo de
+  la mesa salen de `SalonMesas.repartoSillas` con `RepartoDeSillas.vigente`, como en la planilla.
+- **Antes del sorteo una persona no tiene fila**: `ingresarDesdeLaPuerta` la crea al ingresarla. **Lo que sube no
+  lleva la mesa**: una PC atrasada no puede pisar una mesa del sorteo en la nube. La mesa de la lista la pone solo el
+  salón (`trasElSalon`).
+- **Subir ya (`_subirYa`) sube lo que dice la cola, no un `update` suelto**, y saca la entrada con `markCompleted`.
+  Antes marcar o deshacer un ingreso mandaba un `update` y borraba la entrada igual: una fila recién creada que no
+  estaba en la nube perdía su alta y no llegaba nunca.
+- El panel usa Outfit (`GoogleFonts.outfit`, que viene con la app): con Oswald, que se baja de internet, un test con
+  `allowRuntimeFetching = false` falla. Se prueba entero con `test/helpers/puerta_en_memoria.dart`.
+
 **Acompañantes y música se cargan con un Excel por institución** (v6.0.0): PLANILLAS ▾ → "Acompañantes y música",
 solo en modo jefe. Lo completa un delegado; ver "Qué pasó el 13-oct" del CONTEXTO de la versión.
 - Lo que decide está en `eventos/services/planilla_delegado.dart`, sin pantalla ni base: `armar`, `leer` y

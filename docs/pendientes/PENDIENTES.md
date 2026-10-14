@@ -40,8 +40,10 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 ### Tótem y Recepción para las fiestas de diciembre
 
 **Desde el 13-oct-2026 van en la 6.0.0**, por partes: el usuario los quiere en
-esa misma versión. El orden y el estado de cada uno están en "Qué pasó el
-13-oct" de [CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md).
+esa misma versión. **El 14-oct cambió el objetivo y el orden:** Recepción y el
+tótem tienen que distinguir un evento particular de uno masivo. El orden y el
+estado de cada sección están en "Qué pasó el 14-oct" de
+[CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md).
 
 Diseñados y aprobados con maquetas el 2026-09-24, y postergados porque se
 priorizó el sorteo de noviembre. El contexto está en
@@ -51,8 +53,9 @@ priorizó el sorteo de noviembre. El contexto está en
   Póster y Gala, elegibles por evento, sin "Ya llegaron" y con QR solo en
   particulares. Trae el código de los shaders aprobados y la migración de
   `totem_config.estilo`.
-- [Recepción más amigable](recepcion-redisenio.md) — búsqueda con Enter,
-  filtros, "Ingresar" por fila, solo la paleta sobre la vista del tótem, y
+- [Recepción más amigable](recepcion-redisenio.md) — **el panel del operador
+  quedó hecho el 14-oct** (búsqueda con Enter, filtros, "Ingresar" por fila, y
+  particular o masivo). Falta la vista del tótem al lado (solo la paleta) y los
   cortes para celular, tablet y PC.
 - [Modo kiosco en la ventana del tótem](totem-kiosco.md) — pantalla completa
   sin bordes, que se sale con Esc o doble clic. Necesita un canal nativo en el

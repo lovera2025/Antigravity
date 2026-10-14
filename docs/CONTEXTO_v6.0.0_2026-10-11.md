@@ -160,8 +160,8 @@ recomienda y se sigue.
 | 2 | Acompañantes y música por Excel, con el simulacro | **hecha el 13-oct** |
 | 3 | La nota como ventana al centro, y las dos preguntas pendientes | **hecha el 13-oct**; de las pantallas del recorrido todavía no dijo si cambia algo |
 | 4 | Tótem: que no se desconecte ni salude tarde (`pendientes/totem-comunicacion.md`) | **hecha el 13-oct** |
-| 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | **sigue esta** |
-| 6 | Recepción más amigable (`pendientes/recepcion-redisenio.md`) | falta |
+| 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | falta; **el 14-oct cambió el orden**, ver "Qué pasó el 14-oct" |
+| 6 | Recepción más amigable (`pendientes/recepcion-redisenio.md`) | el panel del operador, **hecho el 14-oct** (sección 1 del orden nuevo); falta la vista del tótem al lado |
 | 7 | Modo kiosco (`pendientes/totem-kiosco.md`) | falta |
 | 8 | Tótems vinculados (`pendientes/totems-vinculados.md`) | falta |
 | 8b | **Recepción y el tótem sin internet, con dos puestos** (`pendientes/modo-local-sin-internet.md`). Sumada el 13-oct a la noche; se diseña junto con la 8 | falta |
@@ -346,15 +346,116 @@ repetido. **Si quedaron dos ventanas, la de más se esconde y se pausa, no se ci
 - Si el stream trae una fila que no se puede leer, devuelve la lista vacía y el tótem la muestra vacía
   (`SupabaseService.streamInvitados`). No pasa con los datos de hoy; conviene mirarlo en la parte 5.
 
+## Qué pasó el 14-oct: Recepción y el tótem distinguen particular y masivo
+
+Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md`.
+
+**El objetivo, dicho por el usuario** (rechazó tres veces el plan de las apariencias hasta que quedó claro, y
+aprobó la maqueta "perfectamente así"): Recepción y el tótem tienen que **distinguir un evento particular de uno
+masivo**. Se dice "evento masivo", no "fiesta de alumnos": un masivo no tiene por qué ser de alumnos.
+- **Particular:** como siempre, nombre, DNI y mesa; el QR en el tótem.
+- **Masivo:** al elegir la institución se ven sus alumnos **menos los dados de baja, con lo cargado en ese
+  momento**. Si no se sorteó, un aviso, y sin mesa, sillas ni plano. Ya sorteado: la mesa y, **debajo, las sillas
+  que le tocan y cómo se repartieron en ese evento** (pedido suyo al ver la maqueta), el plano con la guía de dónde
+  se sienta. Acompañantes y música solo si están cargados; la música en el tótem se prende o se apaga en
+  Personalizar. Sin QR: los marca Recepción.
+
+**Cambia lo del 13-oct** ("si se deshace el sorteo, no muestran nada"): antes del sorteo y después de deshacerlo,
+Recepción muestra a los alumnos con el aviso. Lo que hace el salón con la lista de la puerta (armarla al sortear,
+vaciarla al deshacer todo) sigue igual.
+
+**El orden nuevo, una sección por chat** (lo que hace funcionar la puerta, primero):
+
+| # | Sección | Estado |
+|---|---|---|
+| 1 | Recepción distingue particular y masivo (el panel del operador de la parte 6, más lo del masivo) | **hecha el 14-oct** |
+| 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **sigue esta** |
+| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | falta |
+| 4 | El plano con la guía en la llegada | falta |
+| 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
+| 6 | Modo kiosco (parte 7) | falta |
+| 7 | Dos puestos en la puerta (partes 8 y 8b, paso 3) | falta |
+| 8 | Cerrar la lista de la puerta (parte 9) | falta |
+| 9 | Verificación, instalador, la web y publicar (partes 10 y 11) | falta |
+
+La nube: en la sección 2 o 3, dos columnas en `totem_config` (`estilo` y `mostrar_musica`), en un solo SQL, con
+su OK en el momento.
+
+### La sección 1: Recepción distingue particular y masivo
+
+**Qué cambió para el usuario** (Inicio → RECEPCIÓN → elegir el evento):
+- **El selector dice el tipo:** "… · MASIVO" o "… · PARTICULAR".
+- **Masivo:**
+  - la institución con sus alumnos sin las bajas ("2 dados de baja: no aparecen");
+  - el aviso amarillo si no se sorteó;
+  - cada alumno con su división, la mesa y debajo las sillas ("10 sillas (8 + 2 extra)", "14: 10 sillas · 15: 9
+    sillas", con "reparto a confirmar" si la familia no eligió), o "Sin mesa" si el evento se sorteó y él no tiene;
+  - la música con su nota, y sus acompañantes debajo, cada uno con su "Ingresar".
+  - No hay "Agregar" ni "Vaciar lista": la lista sale de los alumnos. Lo cargado a mano en esa lista aparece al
+    final, con "cargado a mano".
+- **Particular:** nombre, DNI (con puntos) y mesa, "AGREGAR", y en "Más ⋯" Importar, Exportar y "Vaciar lista…".
+- **En los dos:**
+  - arriba "312 de 1.100 adentro · faltan 788" con una barra, en lugar de las tres tarjetas;
+  - la búsqueda grande: por nombre en cualquier orden y sin importar acentos, mayúsculas ni la coma ("juan perez"
+    encuentra a "PÉREZ, JUAN"); un número de hasta tres cifras es la mesa; uno más largo, el DNI; se pueden
+    mezclar ("perez 12");
+  - **Enter ingresa** si queda una sola persona sin entrar que coincida, y deja la búsqueda vacía para la
+    siguiente. Si son varias dice cuántas; si la única ya entró, "ya ingresó a las 22:41";
+  - filtros Todos, Faltan y Adentro, con cuántos;
+  - "Adentro · 22:41" con deshacer al lado. El tacho ya no está a la vista: eliminar va por ⋮, con confirmación, y
+    solo en lo cargado a mano.
+- La letra del panel es Outfit, que viene con la app (anda sin internet). Sin el desenfoque de cada tarjeta, que
+  con 1.100 renglones pesaba.
+
+**Cómo se arma:**
+- `recepcion/services/puerta_del_evento.dart` (`PuertaDelEvento`): sin pantalla ni base. Un masivo sale de
+  `filasPuertaDesdeAlumnos` —los mismos ids fijos que arma el salón— cruzados con la lista de la puerta para saber
+  quién entró. Las sillas, con `SalonMesas.repartoSillas` y `RepartoDeSillas.vigente`, lo mismo que la planilla.
+  También la búsqueda (`ConsultaPuerta`, `normalizarPuerta`), los filtros y Enter (`alApretarEnter`).
+- `recepcion/widgets/panel_puerta.dart` (`PanelPuerta`): solo dibuja y llama a lo de siempre.
+- `alumnosDeLaPuertaProvider` y `puertaDelEventoProvider` (`recepcion_provider.dart`): los alumnos y el reparto de
+  sillas de la base de la PC, que se releen cuando baja un cambio de la otra PC; con `StreamController` y
+  `onCancel`.
+- **`InvitadosRepository.ingresarDesdeLaPuerta`:** antes del sorteo una persona no tiene fila en la lista de la
+  puerta; al ingresarla se crea, ya marcada. **Lo que sube no lleva la mesa**: si la nube ya tenía la fila (la armó
+  el sorteo y esta PC no la bajó), el upsert no la pisa. La mesa de la lista la pone solo el salón.
+- **Un arreglo que hacía falta para esto:** marcar y deshacer un ingreso subían con un `update` y borraban la
+  entrada de la cola igual. Con una fila recién creada que todavía no estaba en la nube, el `update` no encontraba
+  nada y el alta se borraba: la fila no llegaba nunca. Ahora `_subirYa` sube lo que dice la cola (el alta, si está)
+  y la saca solo si sigue siendo la que se leyó (`markCompleted`).
+- "Vaciar lista" contaba con las tarjetas de números, que ya no están: ahora cuenta en la base
+  (`getEstadisticas`). Leído como antes, daba "la lista ya está vacía" con la lista llena.
+
+**Cómo se comprobó:**
+- `test/puerta_del_evento_test.dart` (33), `test/ingresar_desde_la_puerta_test.dart` (5, sobre una base temporal) y
+  `test/panel_puerta_test.dart` (18, el panel entero con reemplazos en memoria de `test/helpers/puerta_en_memoria.dart`,
+  a 360, 800 y 1366 px). **1.933 tests** en la suite (eran 1.877); `flutter analyze` en 312 (eran 313).
+- **Ocho roturas a propósito**, todas vistas: la baja que no se cuenta, Enter con dos, la búsqueda con acentos, el
+  filtro Faltan, el reparto elegido, subir la mesa, pisar el nombre y la mesa de una fila, no marcar una fila que
+  existía. Una décima (mostrar la mesa antes del sorteo) no podía fallar: sin sorteo nadie tiene mesa. Ese resguardo
+  sobraba y se sacó.
+- Muestras en `build/muestras_6.0.0/recepcion/` (`tool/recepcion_muestra_test.dart`): masivo sin sortear, sorteado,
+  buscar "12" con Enter, y un particular.
+- **No se probó en la app** (no se corre desde el working tree, y es producción).
+
+**Lo que no se tocó:**
+- La vista del tótem al lado de Recepción (`TotemPanel` y sus botones de modo): va con la sección 3.
+- La ruta `/op` (`operador_view.dart`): es de la parte de cerrar la lista.
+- **No hay "Editar" en el menú ⋮:** Recepción nunca tuvo cómo editar a un invitado. En un masivo se corrige en la
+  ficha del alumno.
+- El tótem de esta PC, al ingresar a alguien sin fila, recibe la mesa por el puente; el panel viejo de Recepción
+  (`totem_panel.dart`), que lee la fila, lo ve sin mesa hasta que el salón la pone. Se rehace en la sección 3.
+
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, las partes 5 a 10 del camino de arriba. Después:
+**No se publica sin su "publicamos".** Antes, las secciones 2 a 8 del orden del 14-oct. Después:
 
 1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
      `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
      correr cuando él diga;
-   - la columna de la apariencia del tótem (parte 5) y las funciones de la puerta (parte 9).
+   - las dos columnas de `totem_config` (`estilo` y `mostrar_musica`, secciones 2 y 3) y las funciones de la
+     puerta (sección 8).
    Antes y después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y
    30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
 2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
@@ -394,19 +495,20 @@ repetido. **Si quedaron dos ventanas, la de más se esconde y se pausa, no se ci
 
 ```text
 Seguimos con la 6.0.0 de Junior Eventos. Leé primero
-docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 13-oct" y
-"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El plan
-aprobado está en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-expressive-nautilus.md.
+docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
+"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El último
+plan aprobado está en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
-se corrieron. Va todo en una sola versión, por partes: están hechas la parte 1
-(la puerta sigue al sorteo), la 2 (el Excel de acompañantes y música), la 3 (la
-nota como ventana al centro) y la 4 (el tótem no se desconecta ni saluda
-tarde). Seguí por la parte 5, las cuatro apariencias del tótem
-(docs/pendientes/totem-apariencias.md): primero su plan corto y una maqueta, y
-avisame al terminar con cómo quedó, un commit y un push. Recepción y el tótem
-nuevos también van en la 6.0.0: sus diseños ya están aprobados en
-docs/pendientes/.
+se corrieron. Va todo en una sola versión, por partes. El objetivo de lo que
+falta: que Recepción y el tótem distingan un evento particular de uno masivo
+(se dice "evento masivo", no "fiesta de alumnos"). Está hecha la sección 1
+(Recepción distingue particular y masivo). Seguí por la sección 2: el tótem
+distingue particular y masivo (la ficha por el puente con la mesa, las sillas
+debajo, "acompaña a" y la música; sin QR en masivos; la familia saludada junta
+y la cola que se acorta; la casilla de la música en Personalizar). Primero su
+plan corto y una maqueta, y avisame al terminar con cómo quedó, un commit y un
+push. Los diseños aprobados están en docs/pendientes/.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).

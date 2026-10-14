@@ -1,0 +1,228 @@
+// Recepción sin base ni red: los alumnos de una institución, la lista de la
+// puerta y quién entró, en memoria. Lo usan `test/panel_puerta_test.dart` y
+// `tool/recepcion_muestra_test.dart`, puestos por los mismos providers que usa
+// la app.
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:arguello_events/core/services/connectivity_service.dart';
+import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
+import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
+import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
+import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
+import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
+import 'package:arguello_events/models/contrato_alumno.dart';
+import 'package:arguello_events/models/evento.dart';
+import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/sillas_reparto.dart';
+
+const eventoMasivo = 'e0000000-0000-4000-8000-00000000000a';
+const eventoParticular = 'e0000000-0000-4000-8000-00000000000b';
+
+/// La hora con que se marca un ingreso en memoria: 22:41 en Argentina.
+final horaDeIngreso = DateTime.utc(2026, 12, 13, 1, 41);
+
+ContratoAlumno alumnoDePrueba(
+  String id,
+  String nombre, {
+  List<int> mesas = const [],
+  int extras = 0,
+  int sillas = 0,
+  List<String> acomp = const [],
+  String? musica,
+  String division = '5° B',
+}) =>
+    ContratoAlumno(
+      id: id,
+      eventoId: eventoMasivo,
+      nombreAlumno: nombre,
+      cantidadAcompanantes: acomp.length,
+      nombresAcompanantes: acomp,
+      montoTotalPactado: 300000,
+      saldoDeudor: 0,
+      mesaExtraPrecio: 70000.0 * extras,
+      mesaExtraCantidad: extras,
+      sillasExtraCantidad: sillas,
+      sillasExtraPrecioTotal: 8000.0 * sillas,
+      numeroMesa:
+          mesas.isEmpty ? null : MesasExtraUtils.formatearAsignacionMesas(mesas),
+      cursoDivision: division,
+      musicaElegida: musica,
+    );
+
+Evento eventoDePrueba(String id, String modalidad) => Evento(
+      id: id,
+      clienteId: 'c0000000-0000-4000-8000-000000000001',
+      tipo: 'Egresados',
+      fechaEvento: DateTime(2026, 12, 12),
+      estado: EstadoEvento.confirmado,
+      modalidad: modalidad,
+    );
+
+class ConexionApagada extends ConnectivityService {
+  @override
+  AppConnectivity get currentStatus => AppConnectivity.offline;
+}
+
+/// La lista de la puerta de esta PC, en memoria, y lo que se pidió marcar.
+class InvitadosEnMemoria extends InvitadosRepository {
+  InvitadosEnMemoria(SupabaseClient supabase, this.filas)
+      : super(supabase, ConexionApagada());
+
+  final List<Invitado> filas;
+  final _cambios = StreamController<void>.broadcast();
+  final marcados = <String>[];
+  final creados = <String>[];
+  final desmarcados = <String>[];
+  final eliminados = <String>[];
+
+  List<Invitado> _del(String eventoId) =>
+      filas.where((i) => i.eventoId == eventoId).toList();
+
+  @override
+  Stream<List<Invitado>> watchByEvento(String eventoId) {
+    late final StreamController<List<Invitado>> c;
+    StreamSubscription<void>? sub;
+    c = StreamController<List<Invitado>>(
+      onListen: () {
+        c.add(_del(eventoId));
+        sub = _cambios.stream.listen((_) => c.add(_del(eventoId)));
+      },
+      onCancel: () => sub?.cancel(),
+    );
+    return c.stream;
+  }
+
+  void _poner(String id, EstadoIngreso estado) {
+    final i = filas.indexWhere((f) => f.id == id);
+    filas[i] = filas[i].copyWith(estadoIngreso: estado, updatedAt: horaDeIngreso);
+    _cambios.add(null);
+  }
+
+  @override
+  Future<void> marcarIngreso(String invitadoId) async {
+    marcados.add(invitadoId);
+    _poner(invitadoId, EstadoIngreso.ingresado);
+  }
+
+  @override
+  Future<void> ingresarDesdeLaPuerta({
+    required String eventoId,
+    required String id,
+    required String nombre,
+    String? mesa,
+  }) async {
+    creados.add(id);
+    filas.add(Invitado(
+      id: id,
+      eventoId: eventoId,
+      nombreCompleto: nombre,
+      dni: '',
+      estadoIngreso: EstadoIngreso.ingresado,
+      updatedAt: horaDeIngreso,
+    ));
+    _cambios.add(null);
+  }
+
+  @override
+  Future<void> deshacerIngreso(String invitadoId) async {
+    desmarcados.add(invitadoId);
+    _poner(invitadoId, EstadoIngreso.pendiente);
+  }
+
+  @override
+  Future<void> eliminar(String id) async {
+    eliminados.add(id);
+    filas.removeWhere((f) => f.id == id);
+    _cambios.add(null);
+  }
+}
+
+class ContratosEnMemoria extends ContratosRepository {
+  ContratosEnMemoria(SupabaseClient supabase, this.alumnos)
+      : super(supabase, ConexionApagada());
+  List<ContratoAlumno> alumnos;
+
+  @override
+  Future<List<ContratoAlumno>> getByEvento(String eventoId) async =>
+      eventoId == eventoMasivo ? alumnos : const [];
+}
+
+class SillasEnMemoria extends SillasRepartoRepository {
+  SillasEnMemoria([this.repartos = const {}]);
+  final Map<String, SillasReparto> repartos;
+
+  @override
+  Future<Map<String, SillasReparto>> obtenerPorContratoIds(
+    List<String> ids,
+  ) async =>
+      repartos;
+}
+
+/// Del motor, Recepción solo escucha el aviso de "bajó algo de la otra PC".
+class MotorDePrueba implements SyncEngine {
+  final bajo = StreamController<Set<String>>.broadcast();
+
+  @override
+  Stream<Set<String>> get cambiosBajadosStream => bajo.stream;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
+/// Todo lo que rodea al panel en una prueba.
+class PuertaEnMemoria {
+  PuertaEnMemoria(
+    SupabaseClient supabase, {
+    required List<ContratoAlumno> alumnos,
+    List<Invitado>? filas,
+    Map<String, SillasReparto> repartos = const {},
+  })  : contratos = ContratosEnMemoria(supabase, alumnos),
+        invitados = InvitadosEnMemoria(supabase, filas ?? []),
+        sillas = SillasEnMemoria(repartos);
+
+  final ContratosEnMemoria contratos;
+  final InvitadosEnMemoria invitados;
+  final SillasEnMemoria sillas;
+  final motor = MotorDePrueba();
+  var actualizado = 0;
+  var agregar = 0;
+  var vaciar = 0;
+
+  /// El panel del evento, con los reemplazos puestos.
+  Widget panel(String eventoId, {ThemeData? tema}) => ProviderScope(
+        overrides: [
+          eventosActivosProvider.overrideWith(
+            (ref) async => [
+              eventoDePrueba(eventoMasivo, 'masivo'),
+              eventoDePrueba(eventoParticular, 'particular'),
+            ],
+          ),
+          invitadosRepositoryProvider.overrideWithValue(invitados),
+          contratosRepositoryProvider.overrideWithValue(contratos),
+          sillasRepartoRepositoryProvider.overrideWithValue(sillas),
+          syncEngineProvider.overrideWithValue(motor),
+        ],
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: tema ??
+              ThemeData(brightness: Brightness.dark, useMaterial3: true),
+          home: Scaffold(
+            body: PanelPuerta(
+              eventoId: eventoId,
+              onActualizar: () => actualizado++,
+              onAgregar: () => agregar++,
+              onImportar: () {},
+              onExportar: () {},
+              onVaciar: () => vaciar++,
+            ),
+          ),
+        ),
+      );
+}
