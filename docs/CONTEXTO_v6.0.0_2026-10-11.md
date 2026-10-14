@@ -17,7 +17,8 @@ y caja no cambian.
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
-las secciones 1 y 2; sigue la 3** (las cuatro apariencias del tótem). Lo de este encabezado es cómo quedó el 11-oct.
+las secciones 1 y 2 y el paso 3a** (el tótem del salón con las cuatro apariencias); **siguen el 3b (Personalizar) y
+el 3c (Recepción)**. Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
