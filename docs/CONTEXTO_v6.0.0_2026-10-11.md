@@ -370,7 +370,7 @@ vaciarla al deshacer todo) sigue igual.
 |---|---|---|
 | 1 | Recepción distingue particular y masivo (el panel del operador de la parte 6, más lo del masivo) | **hecha el 14-oct** |
 | 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **hecha el 14-oct** |
-| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **sigue esta** |
+| 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **en curso:** 3a (el tótem del salón) hecha el 14-oct; siguen 3b (Personalizar) y 3c (Recepción) |
 | 4 | El plano con la guía en la llegada | falta |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
 | 6 | Modo kiosco (parte 7) | falta |
@@ -546,6 +546,100 @@ no está en los SQL. **Corrido el 14-oct a las 8:50, con su OK**: antes y despu�
 - El tótem por el navegador: sin ficha, con QR también en un masivo, hasta la sección 8.
 - Una familia que se completa cuando su tarjeta ya se está yendo tiene una tarjeta nueva para el que llegó tarde.
 
+### La sección 3a: el tótem del salón con las cuatro apariencias
+
+Plan aprobado: `C:\Users\lover\.claude\plans\purrfect-waddling-micali.md` (la sección 3 arriba). El usuario vio una
+maqueta con las cuatro apariencias y los fondos de verdad. Pidió **aprobar cada cambio a mano** ("que no sea modo
+automático") y dio el **OK para bajar cuatro letras**. **Programado y subido; sin publicar.**
+
+**Qué cambió para el usuario** (Inicio → TÓTEM → el evento):
+- **El tótem tiene cuatro apariencias, Neón, Cristal, Póster y Gala**, con los fondos animados aprobados el 24-sep.
+  Si nadie eligió, **Neón en un masivo y Cristal en un particular**. Elegirla en Personalizar es la 3b.
+- **La espera es a pantalla completa:** la foto (o el logo), el título partido en dos ("PROMOCIÓN" chico, "2026"
+  grande), el subtítulo y el saludo. El QR, solo en un particular.
+- **Cada apariencia tiene su llegada:**
+  - **Neón:** el cartel cursivo titila al prenderse, el nombre se enciende letra por letra y el círculo de la mesa
+    se dibuja;
+  - **Cristal:** la tarjeta de vidrio se da vuelta;
+  - **Póster:** el nombre sube y la mesa entra en una franja inclinada del color del evento;
+  - **Gala:** el nombre aparece letra por letra y la mesa va en un medallón que se dibuja.
+  En todas: la familia, la mesa con las sillas debajo, la música, "N más en camino" y **una línea abajo que marca
+  el tiempo**.
+- **Sale "YA LLEGARON" del salón.** El contador también sale de la vista del público: pasó a la barra del operador
+  ("34 LLEGARON").
+- **Las letras de la barra y de las cuatro apariencias van dentro del programa.** Con Oswald adentro, también las
+  pantallas que la usan (Recepción, Personalizar) la tienen sin internet.
+
+**Cómo se arma:**
+- **`lib/features/totem/estilos/`:**
+  - `totem_estilo.dart`: la apariencia elegida o la del tipo de evento, el segundo neón, el título partido y
+    `hayQrEnElTotem`;
+  - `fuentes_totem.dart`: las familias `Totem*`;
+  - `fondo_totem.dart`: el shader, cargado una vez, con el degradé de respaldo;
+  - `escena_totem.dart` y una escena por apariencia.
+- **`shaders/totem_*.frag`:** los fondos del pendiente, pasados a Flutter.
+  - Cada uno usa todos sus uniformes: uno sin usar lo saca el compilador y se corren las posiciones.
+  - Neón calcula el ancho de la grilla en vez de `fwidth`.
+- **`ReproductorBienvenidas`** (`totem/services/`): los tiempos que estaban en la pantalla. Lo va a compartir la
+  vista de Recepción en la 3c.
+- **`totem_display.dart`** bajó de 1.788 a unas 900 líneas: quedan la conexión, el puente, la orientación y la barra
+  del operador.
+- **Salen** `TarjetaBienvenida` y `PortadaTotem` (las piezas intermedias de la sección 2). Sus tests de contenido
+  quedaron en `test/contenido_bienvenida_test.dart`.
+- **`TotemConfig.estilo`** se lee y se guarda. **Personalizar la conserva al guardar:** arma la config campo por
+  campo, y un campo que faltara se borraba en la nube. La columna de la nube ya estaba (el SQL de la sección 2).
+
+**Lo que apareció al mirar las muestras, y se arregló:**
+- **En Gala, el "12" del medallón se leía "I2":** las cifras de Cormorant son de estilo antiguo. En pantalla se piden
+  las alineadas (`FontFeature.liningFigures()`); en el PDF no se puede, por eso ahí van en Outfit.
+- **En Neón, las sillas, la música y el QR caían sobre la línea brillante del horizonte.** Ahora lo que se lee va
+  arriba del horizonte y el QR, sobre el piso de la grilla.
+- Encontrado leyendo el código: si alguien llegaba mientras una tarjeta se iba, se cancelaba la salida y la tarjeta
+  quedaba trabada. Se arregló antes de probarlo, y un test lo cubre.
+
+**Decisiones mías:**
+- En la ventana del escritorio, si nadie eligió apariencia, **la pantalla queda en negro hasta que llega la ficha**:
+  sin ella no se sabe si el evento es masivo, y mostrar Cristal para cambiar enseguida a Neón se vería mal. Llega en
+  milisegundos, debajo de la apertura; a los 3 s se sigue sin ella.
+- En la web, si se eligió vertical u horizontal y la pantalla dice otra cosa, la escena se encuadra en el medio.
+
+**Cómo se comprobó:**
+- `test/escena_totem_test.dart` (48): las cuatro apariencias en espera y llegada, a 1080×1920, 1920×1080 y 360×640,
+  sin desbordes. Cubren la familia, dos mesas, sin mesa, el acompañante solo, un nombre muy largo, cinco
+  acompañantes de nombre largo (que sin achicarse no entran), el QR, sin "YA LLEGARON", el degradé de respaldo y la
+  entrada y salida animadas.
+- `test/fondo_totem_test.dart` (6): cada shader compila y dibuja; si no carga, el degradé.
+- `test/reproductor_bienvenidas_test.dart` (9), con el reloj de los tests: los 7 s y 3 s, la salida, la familia que
+  se suma, el que llega mientras se va, la espera de la ficha.
+- `test/totem_config_test.dart` suma la apariencia.
+- **2.061 tests** en la suite (eran 2.001); `flutter analyze` sigue en 312.
+- **Once roturas a propósito, todas vistas:**
+  - una apariencia que no se achica;
+  - el degradé de respaldo que no se pinta;
+  - la apariencia por defecto al revés;
+  - una clave desconocida;
+  - el QR en un masivo;
+  - el título que no se parte;
+  - la tarjeta que se traba al irse;
+  - la cola que no se acorta;
+  - no esperar la ficha;
+  - sin "N más en camino";
+  - la apariencia que no se guarda.
+
+  La primera no la veía ningún test, porque todos los casos entraban; se sumó el de los cinco acompañantes.
+- **`flutter build windows` y `flutter build web`, los dos bien**: los cuatro fondos compilan para las PCs y para la
+  web. No se abrió la app ni se publicó nada.
+- **Muestras** con los fondos de verdad, en `build/muestras_6.0.0/totem/`. Reemplazan las de la sección 2:
+  - `Totem_espera_masivo.png`;
+  - `Totem_llegada_familia.png`;
+  - `Totem_particular.png`;
+  - `Totem_horizontal.png`.
+- **No se probó en la app.**
+
+**Lo que no se tocó (siguen 3b y 3c):**
+- Personalizar todavía no deja elegir la apariencia: la conserva.
+- `totem_panel.dart` (Recepción y la pantalla del asesor) sigue con la cara vieja hasta la 3c.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
@@ -608,13 +702,15 @@ falta: que Recepción y el tótem distingan un evento particular de uno masivo
 (se dice "evento masivo", no "fiesta de alumnos"). Están hechas la sección 1
 (Recepción distingue particular y masivo) y la 2 (el tótem distingue
 particular y masivo: la ficha por el puente, la familia junta, la cola que se
-acorta, sin QR en masivos y la música en Personalizar). Seguí por la sección 3:
-las cuatro apariencias del tótem (Neón, Cristal, Póster y Gala), dibujando lo
-de la sección 2, Personalizar con las cuatro tarjetas y la vista del tótem al
-lado de Recepción. Primero su plan corto y una maqueta, y avisame al terminar
-con cómo quedó, un commit y un push. Los diseños aprobados están en
-docs/pendientes/ (sobre todo totem-apariencias.md). El SQL de totem_config de
-la sección 2 ya está corrido en la nube.
+acorta, sin QR en masivos y la música en Personalizar). La sección 3 va en tres
+pasos con el plan ya aprobado (purrfect-waddling-micali.md, la sección 3
+arriba): está hecho el 3a (el tótem del salón con las cuatro apariencias).
+Seguí por el 3b (Personalizar con las cuatro tarjetas, "Ver una llegada" y la
+ventana al centro en la PC) y después el 3c (Recepción con la vista del tótem
+al lado, TotemLocal, los cortes de pantalla y sacar totem_panel.dart). Avisame
+al terminar cada uno con cómo quedó, un commit y un push. Cada cambio lo
+apruebo yo a mano: no quiero modo automático. El SQL de totem_config ya está
+corrido.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).

@@ -35,6 +35,10 @@ class TotemConfig {
   /// alumno. Prendida salvo que alguien la apague en Personalizar: vacía en la
   /// nube (una fila de antes de la 6.0.0) también cuenta como prendida.
   final bool mostrarMusica;
+
+  /// La apariencia elegida en Personalizar (`neon`, `cristal`, `poster` o
+  /// `gala`, ver `EstiloTotem`). Null: la del tipo de evento.
+  final String? estilo;
   final DateTime? updatedAt;
 
   /// El saludo de siempre. Si nadie lo cambió y entra una familia, se dice
@@ -50,6 +54,7 @@ class TotemConfig {
     this.imagenUrl,
     this.colorAcento = acentoPorDefecto,
     this.mostrarMusica = true,
+    this.estilo,
     this.updatedAt,
   });
 
@@ -65,6 +70,7 @@ class TotemConfig {
     }
 
     final imagen = json['imagen_url'] as String?;
+    final estilo = json['estilo'];
 
     return TotemConfig(
       eventoId: json['evento_id'] as String,
@@ -75,6 +81,7 @@ class TotemConfig {
       imagenUrl: (imagen == null || imagen.trim().isEmpty) ? null : imagen,
       colorAcento: parseHex(json['color_acento'] as String?),
       mostrarMusica: json['mostrar_musica'] != false,
+      estilo: estilo is String && estilo.trim().isNotEmpty ? estilo.trim() : null,
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'].toString())
           : null,
@@ -93,6 +100,7 @@ class TotemConfig {
         // `20261014120000_totem_config_estilo_y_musica.sql`): sin ella,
         // guardar Personalizar falla. Se corre antes de instalar.
         'mostrar_musica': mostrarMusica,
+        'estilo': estilo,
         'updated_at': updatedAt?.toIso8601String(),
       };
 
@@ -105,6 +113,8 @@ class TotemConfig {
     bool limpiarImagen = false,
     Color? colorAcento,
     bool? mostrarMusica,
+    String? estilo,
+    bool limpiarEstilo = false,
   }) {
     return TotemConfig(
       eventoId: eventoId,
@@ -115,6 +125,7 @@ class TotemConfig {
       imagenUrl: limpiarImagen ? null : (imagenUrl ?? this.imagenUrl),
       colorAcento: colorAcento ?? this.colorAcento,
       mostrarMusica: mostrarMusica ?? this.mostrarMusica,
+      estilo: limpiarEstilo ? null : (estilo ?? this.estilo),
       updatedAt: updatedAt,
     );
   }

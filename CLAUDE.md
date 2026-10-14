@@ -263,6 +263,29 @@ PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve
 - La música se prende o apaga en Personalizar (`totem_config.mostrar_musica`; vacía = prendida). **Guardar
   Personalizar necesita la columna en la nube**: `test/totem_config_test.dart` compara `toJson` con el SQL.
 
+**Cuatro apariencias: Neón, Cristal, Póster y Gala** (v6.0.0, sección 3a; diseño en
+`docs/pendientes/totem-apariencias.md`). Todo en `lib/features/totem/estilos/`.
+- **La apariencia:** la elegida en Personalizar (`totem_config.estilo`) o, si nadie eligió, Neón en un masivo y
+  Cristal en un particular (`estiloDelTotem`). Una clave vacía o desconocida va a la del tipo: nunca una pantalla rota.
+- **La pantalla es una escena** (`EscenaTotem`): la espera a pantalla completa o una llegada, sobre su fondo animado.
+  Cada apariencia es una `EscenaEstilo` (`escena_neon.dart`, …). Todo se mide en `u`, un 27avo del ancho de una
+  pantalla vertical, así se ve igual en la tele y en chico. Lo que no entra se achica entero (`Centrado`).
+- **Los fondos son shaders** (`shaders/totem_*.frag`, declarados en `pubspec.yaml`). `FondoTotem` los carga una vez
+  y, si una PC no puede, pinta un degradé del color. **Cada shader usa todos sus uniformes**: uno sin usar lo saca
+  el compilador y se corren las posiciones de `setFloat`. En Neón la grilla calcula su ancho en vez de `fwidth`.
+  `flutter test` los compila, así que los tests y las muestras los dibujan de verdad.
+- **Las letras van dentro de la app** (`fuentes_totem.dart`, familias `Totem*` en `pubspec.yaml`): Tilt Neon,
+  Neonderthaw, Cormorant Garamond y Oswald. Sin `google_fonts` en el tótem. **En Gala se piden las cifras
+  alineadas** (`FontFeature.liningFigures()`): las de Cormorant son antiguas y "12" se leía "I2".
+- **En Neón lo que se lee va arriba del horizonte del fondo** (el 67 % de arriba) y el QR va sobre el piso: sobre la
+  línea brillante no se lee.
+- **`ReproductorBienvenidas`** pone los tiempos de la cola (la tarjeta en pantalla, cuándo se va, la siguiente).
+  Mientras una tarjeta se va, su temporizador es el de la salida: **no se lo cancela** al llegar alguien, o la
+  tarjeta queda trabada.
+- Sin "YA LLEGARON" en el salón. Cuántos llegaron va en la barra del operador.
+- En la ventana del escritorio, si nadie eligió apariencia, la pantalla queda en negro hasta que llega la ficha (no
+  se sabe si es masivo); a los 3 s se sigue sin ella.
+
 **Un aviso que no llega no quiere decir que la ventana murió.** `KioskLauncher` reintenta y, si igual no llega,
 pregunta si la ventana sigue abierta: solo la olvida si ya no existe. Olvidarla de más dejaba a Recepción sin
 avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le habla a las ventanas por
@@ -271,13 +294,15 @@ avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le hab
 Las pantallas web y el tótem leen hasta 1000 invitados por evento (el "Max rows" de PostgREST). Ver
 `docs/pendientes/invitados-mas-de-1000-en-web.md`.
 
-Hay **dos implementaciones casi idénticas** que no comparten código (~800 líneas
-duplicadas). Cualquier cambio visual hay que hacerlo dos veces:
+Hay dos tótems:
 
 - `totem_display.dart` — la pantalla del salón. Va por Supabase directo. Es la
   que se usa en la ventana secundaria, en `?totem` y en la ruta
-  `/totem_display`.
-- `totem_panel.dart` — panel embebido en Recepción. Va por SQLite.
+  `/totem_display`. Desde la 6.0.0 dibuja las escenas de `estilos/`.
+- `totem_panel.dart` — panel embebido en Recepción y en la pantalla del asesor.
+  Va por SQLite. **Es la copia vieja** (cola de 7 s, QR siempre, "YA LLEGARON"):
+  en la sección 3c lo reemplaza `TotemLocal`, con la misma escena y el mismo
+  `ReproductorBienvenidas`, y se borra. Hasta entonces, no tocarlo.
 
 El tótem **muestra** un QR, no lo lee: no hay dependencia de cámara. El QR apunta
 a `/lista?evento=<id>`, que abre el invitado en su celular. **Desde la 6.0.0, solo en
@@ -409,7 +434,7 @@ históricos y la pantalla se ve como siempre.
 
 `detalle_evento_masivo_screen.dart` (~9900), `pdf_service.dart` (~8800),
 `finanzas_view.dart` (~7600), `local_database.dart` (~3500 con todas las
-migraciones), `plano_evento_cuerpo.dart` (~2200), `totem_display.dart` (~2200),
+migraciones), `plano_evento_cuerpo.dart` (~2200), `totem_display.dart` (~900),
 `totem_panel.dart` (~1500). Leer por tramos, no enteros.
 
 ## SQL

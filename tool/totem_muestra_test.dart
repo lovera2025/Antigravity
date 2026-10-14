@@ -1,21 +1,20 @@
-// Arnés manual: dibuja piezas del tótem con datos inventados y guarda PNG para
-// mirarlas sin levantar la app.
+// Arnés manual: dibuja el tótem con datos inventados y guarda PNG para mirarlo
+// sin levantar la app.
 //
 //   flutter test tool/totem_muestra_test.dart --dart-define=salida=<carpeta>
 //
-// Salen:
-// - Totem_sin_internet.png: el aviso de la barra del operador, en la ventana
-//   del tótem y en la web.
-// - Totem_bienvenidas.png: la bienvenida en cuatro casos, lado a lado (son
-//   momentos distintos de la noche, no opciones): la familia junta de un
-//   masivo, un acompañante solo, un masivo sin sortear y un particular.
-// - Totem_espera.png: la parte de arriba de la pantalla de espera, en un masivo
-//   (sin QR) y en un particular (con QR).
+// Salen (en cada una, las cuatro apariencias lado a lado: Neón, Cristal,
+// Póster y Gala):
+// - Totem_espera_masivo.png: la espera de un evento masivo, sin QR.
+// - Totem_llegada_familia.png: la familia que llega, con mesa, sillas, música y
+//   "2 más en camino".
+// - Totem_particular.png: la espera de un particular, con el QR, y una llegada.
+// - Totem_horizontal.png: la llegada en una pantalla apaisada.
+// - Totem_sin_internet.png: el aviso de la barra del operador.
 // - Personalizar_musica.png: la casilla de la música en Personalizar.
 //
-// La tarjeta, la portada y la casilla son las de la app. El fondo es el negro
-// del tótem con su resplandor, sin lo demás: la pantalla entera lee de la nube
-// y no se puede montar en una prueba.
+// Las escenas, los fondos (los shaders de verdad) y las letras son los de la
+// app. La pantalla entera del tótem lee la nube y no se monta en una prueba.
 
 // ignore_for_file: avoid_print
 
@@ -29,13 +28,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
-import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
+import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
+import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
+import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
 import 'package:arguello_events/features/totem/widgets/aviso_sin_internet.dart';
-import 'package:arguello_events/features/totem/widgets/portada_totem.dart';
-import 'package:arguello_events/features/totem/widgets/tarjeta_bienvenida.dart';
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
@@ -46,35 +46,54 @@ import '../test/helpers/puerta_en_memoria.dart';
 const _salida = String.fromEnvironment('salida', defaultValue: '');
 
 /// Una pantalla vertical de tótem, achicada: 1080×1920 a la mitad.
-const _pantalla = Size(540, 960);
+const _vertical = Size(540, 960);
+const _apaisada = Size(960, 540);
+const _hueco = 24.0;
 
 final _carpeta = _salida.isNotEmpty
     ? _salida
     : Directory.systemTemp.createTempSync('totem_muestra').path;
 
+const _masivo = TotemConfig(
+  eventoId: eventoMasivo,
+  titulo: 'PROMOCIÓN 2026',
+  subtitulo: 'Escuela Normal',
+);
+const _particular = TotemConfig(
+  eventoId: eventoParticular,
+  titulo: 'GÓMEZ · RÍOS',
+  subtitulo: 'Nos casamos',
+  colorAcento: Color(0xFFFF8FB1),
+);
+
 Future<void> _cargarLetras() async {
-  await cargarFuentesPlano();
+  await cargarFuentesTotem();
   final iconos = FontLoader('MaterialIcons')
     ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
   await iconos.load();
-  // Outfit regular y negrita, con el nombre con que las pide `google_fonts`.
-  // En la app las encuentra solas entre los archivos; acá hay que tenerlas
-  // cargadas antes de dibujar, o el primer cuadro sale con la letra de prueba.
-  for (final (nombre, archivo) in [
-    ('Outfit_regular', 'Outfit-Regular.ttf'),
-    ('Outfit_700', 'Outfit-Bold.ttf'),
-  ]) {
-    final f = FontLoader(nombre)
-      ..addFont(rootBundle.load('assets/google_fonts/$archivo'));
-    await f.load();
-  }
+  // Outfit negrita, con el nombre con que la pide `google_fonts` (el aviso sin
+  // internet la usa así).
+  final negrita = FontLoader('Outfit_700')
+    ..addFont(rootBundle.load('assets/google_fonts/Outfit-Bold.ttf'));
+  await negrita.load();
 }
 
-Future<void> _guardar(
-  WidgetTester tester,
-  GlobalKey clave,
-  String archivo,
-) async {
+ContenidoBienvenida _llegada(
+  List<Invitado> personas,
+  FichaTotem ficha,
+  TotemConfig cfg,
+) =>
+    ContenidoBienvenida.armar(
+      BienvenidaTotem(
+        familia: personas.first.id,
+        personas: personas,
+        empezo: DateTime(2026, 12, 12, 22),
+      ),
+      ficha: ficha,
+      cfg: cfg,
+    );
+
+Future<void> _guardar(WidgetTester tester, GlobalKey clave, String archivo) async {
   await tester.runAsync(() async {
     final boundary =
         clave.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -86,8 +105,8 @@ Future<void> _guardar(
   });
 }
 
-/// Monta [hijo] del tamaño [tam], espera a que carguen las imágenes y lo
-/// guarda.
+/// Monta [hijo] del tamaño [tam], espera las imágenes y lo guarda. Falla si
+/// algo no entra.
 Future<void> _sacar(
   WidgetTester tester,
   Size tam,
@@ -104,7 +123,7 @@ Future<void> _sacar(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(fontFamily: FuentesPlano.linea, useMaterial3: true),
-        home: Scaffold(backgroundColor: const Color(0xFF050505), body: hijo),
+        home: Scaffold(backgroundColor: const Color(0xFF0E0E10), body: hijo),
       ),
     ),
   );
@@ -114,77 +133,180 @@ Future<void> _sacar(
       await precacheImage((e.widget as Image).image, e);
     }
   });
-  await tester.pumpAndSettle();
+  await tester.pump();
   expect(tester.takeException(), isNull);
   await _guardar(tester, clave, archivo);
 }
 
-Widget _rotulo(String texto) => Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-      child: Text(
-        texto,
-        style: GoogleFonts.outfit(
-          color: Colors.white70,
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-
-/// Una pantalla de tótem con su rótulo arriba.
-Widget _panel(String rotulo, Widget pantalla, {double alto = 960}) => Column(
+/// Las cuatro apariencias lado a lado, cada una con su nombre arriba.
+Widget _cuatro(
+  Size pantalla,
+  Widget Function(EstiloTotem) escena, {
+  int porFila = 4,
+}) {
+  final filas = <List<EstiloTotem>>[];
+  for (var i = 0; i < EstiloTotem.values.length; i += porFila) {
+    filas.add(EstiloTotem.values.sublist(i, i + porFila));
+  }
+  return Padding(
+    padding: const EdgeInsets.all(_hueco),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _rotulo(rotulo),
-        Container(
-          width: _pantalla.width,
-          height: alto,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            border: Border.all(color: const Color(0xFF2A2A2A), width: 2),
-          ),
-          child: pantalla,
-        ),
-      ],
-    );
-
-/// Lo que se ve durante una bienvenida: el negro, el resplandor del color del
-/// evento y la tarjeta.
-Widget _bienvenida(ContenidoBienvenida c, TotemConfig cfg, {int enCamino = 0}) =>
-    Stack(
-      children: [
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                radius: 1.1,
-                colors: [
-                  cfg.colorAcento.withValues(alpha: 0.42),
-                  Colors.transparent,
-                ],
-              ),
+        for (final fila in filas)
+          Padding(
+            padding: const EdgeInsets.only(bottom: _hueco),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final e in fila)
+                  Padding(
+                    padding: const EdgeInsets.only(right: _hueco),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            e.nombre,
+                            style: const TextStyle(
+                              fontFamily: FuentesTotem.linea,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 22,
+                              color: Colors.white70,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: pantalla.width,
+                          height: pantalla.height,
+                          child: escena(e),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
-        ),
-        Center(
-          child: TarjetaBienvenida(
-            contenido: c,
-            cfg: cfg,
-            escala: _pantalla.width / 620,
-            enCamino: enCamino,
-          ),
-        ),
       ],
+    ),
+  );
+}
+
+/// Lo que mide [_cuatro]: el margen, y cada pantalla con su nombre arriba (48)
+/// y su hueco. [veces], si van varias [_cuatro] una debajo de la otra.
+Size _lienzo(Size pantalla, {int columnas = 4, int filas = 1, int veces = 1}) =>
+    Size(
+      2 * _hueco + columnas * (pantalla.width + _hueco),
+      veces * (2 * _hueco + filas * (pantalla.height + 48 + _hueco)),
     );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   // Sin esto `google_fonts` intenta bajar la letra y la prueba se cuelga.
-  // Outfit regular y negrita vienen con la app.
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  setUpAll(_cargarLetras);
+  setUpAll(() async {
+    await _cargarLetras();
+    await FondoTotem.precargar();
+  });
+
+  final ficha = fichaDePrueba();
+  final familia = _llegada(
+    [filaDe('perez'), filaDe('perez', 1), filaDe('perez', 2)],
+    ficha,
+    _masivo,
+  );
+
+  testWidgets('la espera de un masivo', (tester) async {
+    await _sacar(
+      tester,
+      _lienzo(_vertical),
+      _cuatro(
+        _vertical,
+        (e) => EscenaTotem(estilo: e, cfg: _masivo, quieta: true, tiempoFijo: 6),
+      ),
+      'Totem_espera_masivo.png',
+    );
+  });
+
+  testWidgets('la familia que llega', (tester) async {
+    await _sacar(
+      tester,
+      _lienzo(_vertical),
+      _cuatro(
+        _vertical,
+        (e) => EscenaTotem(
+          estilo: e,
+          cfg: _masivo,
+          quieta: true,
+          tiempoFijo: 6,
+          llegada: familia,
+          enCamino: 2,
+        ),
+      ),
+      'Totem_llegada_familia.png',
+    );
+  });
+
+  testWidgets('un particular: la espera con QR y una llegada', (tester) async {
+    final lopez = _llegada(
+      [filaSuelta('i1', 'LÓPEZ, MARTA', mesa: '4')],
+      const FichaTotem.particular(eventoParticular),
+      _particular,
+    );
+    await _sacar(
+      tester,
+      _lienzo(_vertical, veces: 2),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cuatro(
+            _vertical,
+            (e) => EscenaTotem(
+              estilo: e,
+              cfg: _particular,
+              quieta: true,
+              tiempoFijo: 9,
+              qrUrl:
+                  'https://arguello-events.vercel.app/lista?evento=$eventoParticular',
+            ),
+          ),
+          _cuatro(
+            _vertical,
+            (e) => EscenaTotem(
+              estilo: e,
+              cfg: _particular,
+              quieta: true,
+              tiempoFijo: 9,
+              llegada: lopez,
+            ),
+          ),
+        ],
+      ),
+      'Totem_particular.png',
+    );
+  });
+
+  testWidgets('la llegada en una pantalla apaisada', (tester) async {
+    await _sacar(
+      tester,
+      _lienzo(_apaisada, columnas: 2, filas: 2),
+      _cuatro(
+        _apaisada,
+        porFila: 2,
+        (e) => EscenaTotem(
+          estilo: e,
+          cfg: _masivo,
+          quieta: true,
+          tiempoFijo: 6,
+          llegada: familia,
+          enCamino: 2,
+        ),
+      ),
+      'Totem_horizontal.png',
+    );
+  });
 
   testWidgets('el aviso de que no hay internet', (tester) async {
     Widget renglon(String donde, bool conPuente) => Padding(
@@ -219,139 +341,6 @@ void main() {
     );
   });
 
-  testWidgets('la bienvenida, en cuatro momentos', (tester) async {
-    final t0 = DateTime(2026, 12, 12, 22);
-    const masivo = TotemConfig(
-      eventoId: eventoMasivo,
-      titulo: 'PROMOCIÓN 2026',
-      subtitulo: 'Escuela Normal',
-    );
-    const particular = TotemConfig(
-      eventoId: eventoParticular,
-      titulo: 'GÓMEZ · RÍOS',
-      subtitulo: 'Nos casamos',
-      colorAcento: Color(0xFFFF8FB1),
-    );
-    final ficha = fichaDePrueba();
-    final sinSortear = fichaDePrueba(sorteado: false);
-    ContenidoBienvenida armar(
-      List<Invitado> personas,
-      FichaTotem f,
-      TotemConfig cfg,
-    ) =>
-        ContenidoBienvenida.armar(
-          BienvenidaTotem(
-            familia: personas.first.id,
-            personas: personas,
-            empezo: t0,
-          ),
-          ficha: f,
-          cfg: cfg,
-        );
-
-    await _sacar(
-      tester,
-      Size(_pantalla.width * 4 + 24 * 5, _pantalla.height + 110),
-      Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _panel(
-              'Masivo: la familia junta, con cola',
-              _bienvenida(
-                armar(
-                  [filaDe('perez'), filaDe('perez', 1), filaDe('perez', 2)],
-                  ficha,
-                  masivo,
-                ),
-                masivo,
-                enCamino: 2,
-              ),
-            ),
-            const SizedBox(width: 24),
-            _panel(
-              'Masivo: un acompañante solo',
-              _bienvenida(armar([filaDe('perez', 1)], ficha, masivo), masivo),
-            ),
-            const SizedBox(width: 24),
-            _panel(
-              'Masivo sin sortear',
-              _bienvenida(
-                armar(
-                  [filaDe('acosta', 0, sinSortear), filaDe('acosta', 1, sinSortear)],
-                  sinSortear,
-                  masivo,
-                ),
-                masivo,
-              ),
-            ),
-            const SizedBox(width: 24),
-            _panel(
-              'Particular',
-              _bienvenida(
-                armar(
-                  [filaSuelta('i1', 'LÓPEZ, MARTA', mesa: '4')],
-                  const FichaTotem.particular(eventoParticular),
-                  particular,
-                ),
-                particular,
-              ),
-            ),
-          ],
-        ),
-      ),
-      'Totem_bienvenidas.png',
-    );
-  });
-
-  testWidgets('la espera, con y sin QR', (tester) async {
-    // En la pantalla vertical la portada ocupa el 62 % de arriba; debajo
-    // sigue la lista "YA LLEGARON", que en esta sección no cambia.
-    const alto = 595.0;
-    const masivo = TotemConfig(
-      eventoId: eventoMasivo,
-      titulo: 'PROMOCIÓN 2026',
-      subtitulo: 'Escuela Normal',
-    );
-    const particular = TotemConfig(
-      eventoId: eventoParticular,
-      titulo: 'GÓMEZ · RÍOS',
-      subtitulo: 'Nos casamos',
-      colorAcento: Color(0xFFFF8FB1),
-    );
-    Widget portada(TotemConfig cfg, String? qr) => PortadaTotem(
-          cfg: cfg,
-          qrUrl: qr,
-          apaisado: false,
-          escala: _pantalla.width / 620,
-          pulso: const AlwaysStoppedAnimation(1),
-        );
-    await _sacar(
-      tester,
-      Size(_pantalla.width * 2 + 24 * 3, alto + 110),
-      Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _panel('Masivo: sin QR', portada(masivo, null), alto: alto),
-            const SizedBox(width: 24),
-            _panel(
-              'Particular: con QR, como siempre',
-              portada(
-                particular,
-                'https://arguello-events.vercel.app/lista?evento=$eventoParticular',
-              ),
-              alto: alto,
-            ),
-          ],
-        ),
-      ),
-      'Totem_espera.png',
-    );
-  });
-
   testWidgets('la casilla de la música en Personalizar', (tester) async {
     await _sacar(
       tester,
@@ -370,10 +359,11 @@ void main() {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              const Text(
                 'PERSONALIZAR TÓTEM · en un evento masivo, en lugar de '
                 '"Texto del QR"',
-                style: GoogleFonts.outfit(
+                style: TextStyle(
+                  fontFamily: FuentesTotem.linea,
                   color: TotemConfig.acentoPorDefecto,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,

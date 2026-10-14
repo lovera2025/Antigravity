@@ -114,6 +114,35 @@ flutter:
         - asset: assets/google_fonts/Outfit-Regular.ttf
         - asset: assets/google_fonts/Outfit-Bold.ttf
           weight: 700
+    # Las letras de las cuatro apariencias del tótem (Neón, Cristal, Póster y
+    # Gala), dentro de la app por la misma razón. En los tests y en tool/ se
+    # registran con `cargarFuentesTotem()`.
+    - family: TotemTubo
+      fonts:
+        - asset: assets/google_fonts/TiltNeon-Regular.ttf
+    - family: TotemCartel
+      fonts:
+        - asset: assets/google_fonts/Neonderthaw-Regular.ttf
+    - family: TotemGala
+      fonts:
+        - asset: assets/google_fonts/CormorantGaramond-SemiBold.ttf
+          weight: 600
+        - asset: assets/google_fonts/CormorantGaramond-MediumItalic.ttf
+          weight: 500
+          style: italic
+    - family: TotemCartelera
+      fonts:
+        - asset: assets/google_fonts/Oswald-Regular.ttf
+        - asset: assets/google_fonts/Oswald-Bold.ttf
+          weight: 700
+
+  # Los fondos animados de las cuatro apariencias del tótem
+  # (`lib/features/totem/estilos/fondo_totem.dart`).
+  shaders:
+    - shaders/totem_neon.frag
+    - shaders/totem_cristal.frag
+    - shaders/totem_poster.frag
+    - shaders/totem_gala.frag
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

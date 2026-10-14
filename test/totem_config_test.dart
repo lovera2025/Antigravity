@@ -39,6 +39,26 @@ void main() {
     });
   });
 
+  group('la apariencia', () {
+    test('vacía: la del tipo de evento', () {
+      expect(TotemConfig.fromJson({'evento_id': _ev}).estilo, isNull);
+      expect(TotemConfig.fromJson({'evento_id': _ev, 'estilo': '  '}).estilo,
+          isNull);
+    });
+
+    test('se guarda y se lee', () {
+      final cfg = const TotemConfig(eventoId: _ev).copyWith(estilo: 'gala');
+      expect(cfg.toJson()['estilo'], 'gala');
+      expect(TotemConfig.fromJson(cfg.toJson()).estilo, 'gala');
+    });
+
+    test('copyWith la conserva, y limpiarEstilo vuelve a la del tipo', () {
+      const gala = TotemConfig(eventoId: _ev, estilo: 'gala');
+      expect(gala.copyWith(titulo: 'OTRO').estilo, 'gala');
+      expect(gala.copyWith(limpiarEstilo: true).estilo, isNull);
+    });
+  });
+
   // Guardar Personalizar es un upsert con todo lo de `toJson`: una clave sin
   // su columna en la nube hace fallar el guardado. Las columnas salen de los
   // SQL versionados.

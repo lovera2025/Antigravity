@@ -1,17 +1,12 @@
-// Lo que dice la bienvenida del tótem (`contenido_bienvenida.dart`) y cómo se
-// ve (`tarjeta_bienvenida.dart`), y la pantalla de espera con y sin QR
-// (`portada_totem.dart`). La pantalla entera del tótem lee la nube y no se
-// puede montar en un test; estas piezas sí, y de ahí salen las muestras.
-import 'package:flutter/material.dart';
+// Lo que dice la bienvenida del tótem (`contenido_bienvenida.dart`) y cuándo
+// hay QR (`hayQrEnElTotem`). Cómo se ve en cada apariencia está en
+// `test/escena_totem_test.dart`.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
-import 'package:arguello_events/features/totem/widgets/portada_totem.dart';
-import 'package:arguello_events/features/totem/widgets/tarjeta_bienvenida.dart';
+import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -225,124 +220,6 @@ void main() {
         hayQrEnElTotem(enLaVentanaDelEscritorio: false, ficha: null),
         isTrue,
       );
-    });
-  });
-
-  group('cómo se ve', () {
-    setUpAll(() {
-      // Outfit regular y negrita vienen con la app: anda sin internet.
-      GoogleFonts.config.allowRuntimeFetching = false;
-    });
-
-    Future<void> montar(
-      WidgetTester tester,
-      Widget hijo, {
-      Size tamano = const Size(1080, 1920),
-    }) async {
-      tester.view.physicalSize = tamano;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            backgroundColor: Colors.black,
-            body: Center(child: hijo),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
-
-    final familia = _armar([
-      filaDe('perez'),
-      filaDe('perez', 1),
-      filaDe('perez', 2),
-    ]);
-
-    for (final (nombre, tamano, escala) in [
-      ('vertical', const Size(1080, 1920), 1.74),
-      ('apaisada', const Size(1920, 1080), 1.38),
-      ('chica', const Size(360, 640), 0.7),
-    ]) {
-      testWidgets('la familia entera, sin desbordes, en pantalla $nombre',
-          (tester) async {
-        await montar(
-          tester,
-          TarjetaBienvenida(
-            contenido: familia,
-            cfg: _cfg,
-            escala: escala,
-            enCamino: 3,
-          ),
-          tamano: tamano,
-        );
-        expect(tester.takeException(), isNull);
-        expect(find.text('¡Bienvenidos!'), findsOneWidget);
-        expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
-        expect(find.text('con GÓMEZ, ANA y PÉREZ, LUIS'), findsOneWidget);
-        expect(find.text('Nº 12'), findsOneWidget);
-        expect(find.text('10 sillas (8 + 2 extra)'), findsOneWidget);
-        expect(find.text('Tusa · Karol G'), findsOneWidget);
-        expect(find.byIcon(Icons.music_note_rounded), findsOneWidget);
-        expect(find.text('3 más en camino'), findsOneWidget);
-        // Las sillas van debajo de la mesa, y la música debajo de las sillas.
-        final mesa = tester.getTopLeft(find.text('Nº 12')).dy;
-        final sillas = tester.getTopLeft(find.text('10 sillas (8 + 2 extra)')).dy;
-        final musica = tester.getTopLeft(find.text('Tusa · Karol G')).dy;
-        expect(sillas, greaterThan(mesa));
-        expect(musica, greaterThan(sillas));
-      });
-    }
-
-    testWidgets('sin mesa no hay recuadro de mesa', (tester) async {
-      await montar(
-        tester,
-        TarjetaBienvenida(
-          contenido: _armar([filaDe('sosa')]),
-          cfg: _cfg,
-          escala: 1.5,
-        ),
-      );
-      expect(find.text('SOSA, EMILIA'), findsOneWidget);
-      expect(find.textContaining('Nº'), findsNothing);
-      expect(find.byIcon(Icons.table_restaurant_rounded), findsNothing);
-      expect(find.textContaining('más en camino'), findsNothing);
-    });
-
-    testWidgets('el acompañante solo dice a quién acompaña', (tester) async {
-      await montar(
-        tester,
-        TarjetaBienvenida(
-          contenido: _armar([filaDe('perez', 1)]),
-          cfg: _cfg,
-          escala: 1.5,
-        ),
-      );
-      expect(find.text('acompaña a PÉREZ, JUAN MARTÍN'), findsOneWidget);
-      expect(find.byIcon(Icons.music_note_rounded), findsNothing);
-    });
-
-    testWidgets('la espera de un masivo no tiene QR; la de un particular, sí',
-        (tester) async {
-      for (final (qr, esperado) in [
-        (null, findsNothing),
-        ('https://arguello-events.vercel.app/lista?evento=$eventoParticular',
-            findsOneWidget),
-      ]) {
-        await montar(
-          tester,
-          PortadaTotem(
-            cfg: _cfg.copyWith(titulo: 'PROMOCIÓN 2026', subtitulo: 'Escuela Normal'),
-            qrUrl: qr,
-            apaisado: false,
-            escala: 1.5,
-          ),
-        );
-        expect(tester.takeException(), isNull);
-        expect(find.byType(QrImageView), esperado);
-        expect(find.text('PROMOCIÓN 2026'), findsOneWidget);
-        expect(find.text('ESCUELA NORMAL'), findsOneWidget);
-      }
     });
   });
 }

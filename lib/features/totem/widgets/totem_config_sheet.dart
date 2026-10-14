@@ -66,6 +66,10 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
 
   late Color _acento;
   late bool _mostrarMusica;
+
+  /// La apariencia guardada. Se conserva al guardar: la config se arma campo
+  /// por campo, y un campo que falte acá se borra en la nube.
+  String? _estilo;
   String? _imagenUrl;
 
   /// Foto elegida y todavía no subida. Se sube recién al guardar para no dejar
@@ -90,6 +94,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
     _hex = TextEditingController(text: cfg.colorAcentoHex);
     _acento = cfg.colorAcento;
     _mostrarMusica = cfg.mostrarMusica;
+    _estilo = cfg.estilo;
     _imagenUrl = cfg.imagenUrl;
   }
 
@@ -117,6 +122,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
         imagenUrl: _quitarImagen ? null : _imagenUrl,
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
+        estilo: _estilo,
       );
 
   // ── Imagen ────────────────────────────────────────────────────────────────
@@ -204,6 +210,7 @@ class _TotemConfigSheetBodyState extends ConsumerState<_TotemConfigSheetBody> {
         imagenUrl: url,
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
+        estilo: _estilo,
       );
 
       final guardada = await repo.guardar(cfg);

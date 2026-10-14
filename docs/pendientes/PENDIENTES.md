@@ -53,7 +53,9 @@ priorizó el sorteo de noviembre. El contexto está en
   Póster y Gala, elegibles por evento, sin "Ya llegaron". Trae el código de los
   shaders aprobados. **Lo común quedó hecho el 14-oct** (sección 2): QR solo en
   particulares, la cola con "N más en camino", la familia junta, las sillas y la
-  música, y la columna `totem_config.estilo` creada en la nube.
+  música, y la columna `totem_config.estilo` creada en la nube. **El tótem del
+  salón con las cuatro apariencias, también** (3a). Faltan Personalizar (3b) y
+  la vista en Recepción (3c).
 - [Recepción más amigable](recepcion-redisenio.md) — **el panel del operador
   quedó hecho el 14-oct** (búsqueda con Enter, filtros, "Ingresar" por fila, y
   particular o masivo). Falta la vista del tótem al lado (solo la paleta) y los
