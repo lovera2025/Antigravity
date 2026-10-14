@@ -1,6 +1,8 @@
 # Recepción y el tótem sin internet (modo local)
 
-**Estado:** pendiente. **Va en la 6.0.0** (decisión del usuario del 2026-10-13).
+**Estado:** a medias. **Va en la 6.0.0** (decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos**
+(14-oct, sección 5: ver "La sección 5" en `docs/CONTEXTO_v6.0.0_2026-10-11.md`). **Falta el 3, dos puestos por la
+red del salón** (sección 7), y lo del 4 hay que decírselo.
 **Postergado el:** 2026-09-24
 
 ## Qué pidió el usuario
@@ -30,7 +32,7 @@ Cómo le pega a cada parte que falta:
 
 | Parte | Qué tiene que cuidar |
 |---|---|
-| 5 · Apariencias | La apariencia y los textos ya viajan por el puente (`notifyConfigUpdated`) y se guardan (`TotemConfigCache`). **La foto del evento es `Image.network`:** sin internet cae al logo. Hay que guardarla en la PC. El plano y la guía de la llegada salen de lo que ya está en la PC, no de una consulta a la nube. |
+| 5 · Apariencias | La apariencia y los textos ya viajan por el puente (`notifyConfigUpdated`) y se guardan (`TotemConfigCache`). **La foto del evento queda guardada en la PC** (`FotoGuardada`, hecho el 14-oct). El plano y la guía de la llegada salen de lo que ya está en la PC, no de una consulta a la nube. |
 | 6 · Recepción | Ya lee de la base de la PC. Lo nuevo (búsqueda, filtros, "Ingresar" por fila) también. |
 | 7 · Kiosco | Es de la ventana: no usa la nube. |
 | 8 · Tótems vinculados | "Transmitir en:" y la lista de tótems prendidos hoy están pensados por la nube. Se diseñan junto con este pendiente: el vínculo entre un puesto y un tótem tiene que andar por la nube **y** por la red del salón. |
@@ -42,12 +44,12 @@ Cómo le pega a cada parte que falta:
 |---|---|
 | Recepción en una PC, con la lista ya bajada | **Anda.** Marca en la base de la PC y encola; sube sola al volver (`InvitadosRepository.marcarIngreso`). |
 | El tótem en la ventana de esa misma PC | **Anda.** Recibe el ingreso por el puente (`KioskLauncher.notifyGuestCheckin`) y saluda al instante. Desde la parte 4 no saluda de nuevo al volver internet. |
-| El tótem, si se lo abre ya sin internet | Saluda, pero **la lista de los que ya llegaron arranca vacía**: la carga inicial lee Supabase (`totem_display.dart`, `_connect` y `_reconciliar`). |
+| El tótem, si se lo abre ya sin internet | **Anda** (14-oct): si no puede leer la nube, le pide a la PC quién ya entró (`lista_totem`, `IngresosTotem.leyoDeLaPc`). Antes la lista arrancaba vacía. |
 | Dos PCs de Recepción | **No se ven.** Se coordinan solo por la nube (`_emitir` manda `checkin`, `guest_removed` y `list_reset` por el canal `totem_<eventoId>`, y `subscribeToChanges` escucha la tabla). Cada una marca por su lado y se juntan al volver. |
 | Un tótem en otra PC | **No se entera** de nada hasta que vuelve internet. |
 | El tótem en una tele por el navegador, `/lista`, `?buscar`, `/op` | **No andan.** La web se sirve desde internet y lee Supabase directo. |
 | Celulares y tablets | **No andan.** Usan la web; la app de Android nunca se publicó. |
-| Abrir el programa sin internet | La sesión se rehidrata del disco (`AuthWrapper._effectiveSession`, `main.dart:566`) y el rol está cacheado. **Falta probarlo** con la sesión vencida: quedó anotado en la Fase 0 del 24-sep y nunca se hizo. |
+| Abrir el programa sin internet | **Anda, con la sesión vencida** (comprobado el 14-oct con la librería de Supabase y la red cortada, `test/sesion_sin_internet_test.dart`; la decisión está en `sesionParaEntrar`). Con un router sin salida a internet tardaba 12 s en "Verificando permisos...": ahora 3 s si la PC recuerda el rol. Falta verlo en el ensayo. |
 
 Un router sin internet hoy no cambia nada: las PCs no se hablan entre ellas por la red del salón.
 
@@ -55,7 +57,7 @@ Un router sin internet hoy no cambia nada: las PCs no se hablan entre ellas por 
 
 Va con su plan corto y su maqueta cuando le toque. Lo de abajo es el punto de partida, no el diseño cerrado.
 
-### 1. Una PC, completa sin internet
+### 1. Una PC, completa sin internet — **hecho el 14-oct** (5a, 5b y 5c)
 
 - **Que el tótem abra con la lista aunque no haya internet.** Recepción ya tiene la lista en su base: al abrir o
   reanudar el tótem se la pasa por el puente (un mensaje nuevo, al lado de `guest_checkin`). El tótem la toma como
@@ -64,7 +66,7 @@ Va con su plan corto y su maqueta cuando le toque. Lo de abajo es el punto de pa
 - **Probar abrir el programa sin internet con la sesión vencida**, y arreglar lo que aparezca. Si no deja entrar, no
   sirve nada de lo demás.
 
-### 2. Saber que está lista para trabajar sin internet
+### 2. Saber que está lista para trabajar sin internet — **hecho el 14-oct** (5d, la línea debajo del progreso)
 
 Hoy no hay forma de saber, antes de la fiesta, si esa PC tiene todo. En Recepción, a la vista:
 - cuántas personas tiene la lista de esa fiesta en esta PC y a qué hora se puso al día;

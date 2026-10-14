@@ -68,8 +68,10 @@ priorizó el sorteo de noviembre. El contexto está en
   bienvenida a los de su puerta, para que dos recepciones no se pisen con mucha
   gente.
 - [Recepción y el tótem sin internet (modo local)](modo-local-sin-internet.md) —
-  con los datos ya bajados tienen que seguir andando sin internet. Hoy anda con
-  una PC; dos puestos se ven solo por la nube. Pedido el 24-sep y otra vez el
+  con los datos ya bajados tienen que seguir andando sin internet. Una PC
+  completa quedó hecha el 14-oct (el tótem abre con la lista, la foto guardada,
+  entrar con la sesión vencida y "Lista para trabajar sin internet"); falta que
+  dos puestos se vean por la red del salón. Pedido el 24-sep y otra vez el
   13-oct; trae **la regla que vale para todas las partes que faltan**.
 - [Cerrar la lista de la puerta a los anónimos](rls-invitados.md) — hoy
   cualquiera con la clave pública lee y cambia `invitados`, DNI incluido. Se

@@ -17,9 +17,9 @@ y caja no cambian.
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
-las secciones 1 a 4** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
-del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada); **sigue la 5 (una PC completa sin
-internet)**. Lo de este encabezado es cómo quedó el 11-oct.
+las secciones 1 a 5** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
+del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada; la 5, una PC completa sin internet);
+**sigue la 6 (el modo kiosco)**. Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -374,7 +374,7 @@ vaciarla al deshacer todo) sigue igual.
 | 2 | El tótem distingue particular y masivo: la ficha por el puente (mesa, sillas debajo, "acompaña a", música), sin QR en masivos, saludo sin mesa antes del sorteo, la familia saludada junta, la cola que se acorta (7 s solo, 3 s con cola), la casilla de la música | **hecha el 14-oct** |
 | 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **hecha el 14-oct**, en tres pasos: 3a (el tótem del salón), 3b (Personalizar) y 3c (Recepción) |
 | 4 | El plano con la guía en la llegada | **hecha el 14-oct**, en dos pasos: 4a (la mesa en el plano) y 4b (el camino desde el ingreso) |
-| 5 | Una PC completa sin internet (8b, pasos 1 y 2) | falta |
+| 5 | Una PC completa sin internet (8b, pasos 1 y 2) | **hecha el 14-oct**, en cuatro pasos: 5a (el tótem abre con la lista), 5b (la foto guardada), 5c (entrar con la sesión vencida) y 5d ("Lista para trabajar sin internet") |
 | 6 | Modo kiosco (parte 7) | falta |
 | 7 | Dos puestos en la puerta (partes 8 y 8b, paso 3) | falta |
 | 8 | Cerrar la lista de la puerta (parte 9) | falta |
@@ -938,6 +938,104 @@ su commit: **4a** (`4ae3d57`) y **4b** (`51818fb`). **Programado y subido; sin p
 (`respaldo_4b.dart`) en la raíz del proyecto, porque se corrió desde otra carpeta. Se vio porque `flutter analyze`
 subió a 333; se borró (era idéntica al archivo del camino) y volvió a 312. No llegó a ningún commit.
 
+### La sección 5: una PC completa sin internet
+
+14-oct, otro chat. Pidió "seguí con la sección 5 hasta terminar y ahí actualizás contexto". Sin archivo de plan: el
+plan corto se le pasó en el chat (después de que preguntara "¿estás haciendo el plan?": se había empezado a
+programar sin mostrárselo; ver la memoria `plan-antes-de-programar`). La línea de Recepción se decidió con una
+maqueta de dos opciones: **eligió la A, una línea debajo del progreso** (la B era una pastilla arriba a la derecha).
+Cuatro pasos, cada uno con su commit: **5a** (`245c547`), **5b** (`3039b07`), **5c** (`5d78edd`) y **5d**
+(`566a3f3`). **Programado y subido; sin publicar.** Es lo que en `docs/pendientes/modo-local-sin-internet.md` son los
+pasos 1 y 2.
+
+**Qué cambió para el usuario:**
+- **5a · El tótem del salón abre con la lista aunque no haya internet.** Antes, abierto sin internet, arrancaba vacío
+  ("0 LLEGARON" con la fiesta empezada). Ahora, si no puede leer la nube, le pide a la PC quién ya entró y lo pone
+  en la lista sin saludar. Lo que esta PC marcó sin internet no se saluda de nuevo cuando vuelve la conexión.
+- **5b · La foto del evento queda guardada en la PC** (`Documentos\Junior Eventos\fotos_totem\<evento>\`) la primera
+  vez que se ve: el tótem, Recepción y Personalizar la siguen mostrando sin internet. Si se cambia la foto y no hay
+  internet para bajar la nueva, se ve la anterior en lugar del logo. La vieja se borra recién cuando la nueva quedó
+  guardada.
+- **5c · El programa entra sin internet con la sesión vencida.** Es lo de todos los días: el permiso de Supabase
+  dura una hora, así que el programa abierto al otro día arranca con la sesión vencida. Ya entraba (la librería no
+  la borra si no puede renovarla por falta de internet); ahora está **comprobado con la librería de verdad y la red
+  cortada**, y la decisión quedó en un solo lugar (`sesionParaEntrar`).
+  - **Apareció y se arregló:** con red pero sin salida a internet (un router solo en el salón) el programa quedaba
+    **12 segundos en "Verificando permisos..."**. Ahora, si la PC recuerda el rol, espera la nube como mucho 3 s y
+    entra con el recordado; si la nube contesta después, el recordado queda al día para la próxima.
+  - Si el servidor rechaza la sesión (alguien la cerró), va al login, como antes.
+- **5d · "Lista para trabajar sin internet" en Recepción.** Una línea debajo de "312 de 1.100 adentro", que se toca
+  para ver el detalle (personas en esta PC, al día, foto del tótem, ingresos sin subir):
+  - con internet y todo en la PC: "Lista para trabajar sin internet · al día 21:40", en verde;
+  - con internet y algo que falta: "Todavía no está lista…: falta guardar la foto del tótem", o que no se pudo
+    bajar la lista, en ámbar;
+  - sin internet: "Sin internet · se sigue con lo de esta PC (al día 21:32) · 12 ingresos sin subir: se suben solos
+    al volver";
+  - sin internet y sin la lista: "Sin internet, y esta PC no tiene la lista de este evento: conectala un momento a
+    internet".
+
+  **Al abrir el evento con internet, Recepción lo pone al día**: baja la lista de la puerta entera, en un masivo
+  también el evento, los alumnos, sus sillas y el plano, y guarda la foto. Lo repite cada 5 minutos y cuando vuelve
+  internet. **Esto arregló algo que estaba:** Recepción bajaba la lista solo si la PC no tenía ninguna fila de ese
+  evento, así que una lista cargada o cambiada después en otra PC podía quedar incompleta hasta que alguien marcara
+  un ingreso. La línea no sale en la web (sin internet la web no anda).
+- Sin SQL, sin cambios en la base. Lo nuevo de la PC: la carpeta de fotos y, en las preferencias, la hora en que
+  cada evento se puso al día (`puerta_al_dia_v1_<evento>`).
+
+**Cómo se arma:**
+- **5a:**
+  - `IngresosTotem.leyoDeLaPc`: siempre en silencio; no se usa si ya leyó la nube; cuida lo que no subió como lo
+    avisado por el puente; no da por conectado.
+  - La lista viaja en `ListaDeLaPc` (solo los que entraron y cuáles no subieron), por el puente con un segundo
+    mensaje, `lista_totem` (`PuenteFichaTotem.metodoLista`). **La pide el tótem**, como la ficha: en cada intento
+    fallido de leer la nube, hasta que la lea.
+  - En la ventana principal la arma `armarListaDeLaPc` con `getLocalesByEvento` e `idsSinSubir` (nuevo en
+    `InvitadosRepository`: los del evento con algo en la cola).
+- **5b:** `FotoGuardada` (un `ImageProvider`) y `FotosDelTotem` (`totem/services/foto_guardada.dart`). `EscenaTotem`
+  usa `fotoDelEvento(cfg)`: en la web sigue siendo `NetworkImage`. Cada foto se guarda con el nombre de su dirección
+  (cambia con `?v=` al subir otra); dos pantallas que la piden a la vez la bajan una vez; solo se guarda lo que la
+  nube dice que es una imagen.
+- **5c:**
+  - `sesionParaEntrar` (`features/auth/sesion_sin_internet.dart`) salió de `AuthWrapper`, sin cambiar lo que hacía.
+  - `userRoleProvider` lee `supabaseProvider` (para poder probarlo) y espera `kEsperaDelRolRecordado` (3 s) si hay
+    rol recordado.
+- **5d:**
+  - Lo que dice la línea: `EstadoSinInternet.de` (`recepcion/services/lista_sin_internet.dart`, pura).
+  - Cuándo se pone al día: `PuestaAlDiaPuerta`, con `AccesosPuerta` para reemplazarla en los tests.
+  - `puestaAlDiaProvider` (`recepcion/providers/sin_internet_provider.dart`) la conecta con la conexión, el tipo de
+    evento y la foto del tótem; arranca cuando se sabe si es masivo.
+  - `LineaSinInternet` (`recepcion/widgets/linea_sin_internet.dart`) la dibuja, dentro de `PanelPuerta`.
+  - Bajadas nuevas que dicen si salieron bien: `InvitadosRepository.bajarListaDelEvento` y
+    `SyncEngine.bajarParaLaPuerta` (las `tablasDeLaPuerta`). `_pullTable` y `_pullByEvento` ahora devuelven si
+    bajaron, sin cambiar lo que hacen.
+
+**Cómo se comprobó:**
+- Tests nuevos o ampliados:
+  - `test/bienvenidas_totem_test.dart`, `test/reproductor_bienvenidas_test.dart`, `test/puente_ficha_test.dart` e
+    `test/ingresar_desde_la_puerta_test.dart` (5a);
+  - `test/foto_guardada_test.dart` (13) y `test/escena_totem_test.dart` (5b);
+  - `test/sesion_sin_internet_test.dart` (9): **la librería de Supabase de verdad**, haciendo lo mismo que al abrir
+    el programa con la sesión de ayer y la red cortada; la renovación al volver internet; el rechazo; el rol sin red,
+    con un router sin salida (en menos de 4 s) y con internet;
+  - `test/lista_sin_internet_test.dart` (27) y `test/puesta_al_dia_nube_test.dart` (6, sobre una base temporal y
+    una nube simulada) (5d).
+- **2.233 tests** en la suite (eran 2.163); `flutter analyze` sigue en 312; `flutter build windows` y `web` bien.
+- **Roturas a propósito: 37** (8 de la 5a, 8 de la 5b, 7 de la 5c, 14 de la 5d). **34 las vio algún test**; las
+  otras tres no podían fallar y se le dijeron: en la 5a, el silencio de la lectura de la PC (desde ahí no hay cómo
+  saludar) y un filtro que repetía el de `armarListaDeLaPc` (se sacó); en la 5c, entrar con una sesión rechazada (no
+  queda ninguna con qué entrar). Una de la 5d no la veía nadie al principio (cortarse internet mientras baja): se le
+  agregó su test y ahora se ve.
+- **Muestras** en `build/muestras_6.0.0/sin_internet/` (`tool/sin_internet_muestra_test.dart`): `SinInternet_1_lista`,
+  `_2_falta_la_foto`, `_3_sin_internet` y `_4_sin_la_lista`.
+- **No se probó en la app** (no se corre desde el working tree, y es producción). La prueba de verdad es el ensayo:
+  con todo bajado, sacar el cable de internet, cerrar y abrir el programa, abrir Recepción y el tótem, marcar
+  ingresos, y volver a enchufar.
+
+**Tropiezos de la sesión, sin consecuencias:** dos pruebas se colgaban. Una era del programa: la descarga de la foto
+se quedaba esperándose a sí misma (`whenComplete` con `=>` devolvía la misma descarga); se vio en la prueba y se
+arregló antes de subir. La otra era de la herramienta de pruebas (dibujar una imagen dentro de `testWidgets`); se
+pasó a `test`.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
@@ -963,7 +1061,10 @@ subió a 333; se borró (era idéntica al archivo del camino) y volvió a 312. N
    vieja queda en blanco.
 8. **El ensayo:** armar el plano, sortear una institución, mirar en otra PC que está lo mismo, abrir Recepción y el
    tótem, marcar ingresos, y al final SORTEO ▾ → Deshacer sorteo → Todo. Tiene que quedar sin mesas y con la lista
-   vacía, en las PCs y en la nube.
+   vacía, en las PCs y en la nube. **Y sin internet** (sección 5): con Recepción diciendo "Lista para trabajar sin
+   internet", sacar el cable, cerrar y abrir el programa (tiene que entrar en unos segundos), abrir el tótem (con la
+   lista y la foto), marcar ingresos, y volver a enchufar: la línea tiene que pasar de "N ingresos sin subir" a
+   lista, y la nube quedar igual que la PC.
 9. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
@@ -973,6 +1074,12 @@ subió a 333; se borró (era idéntica al archivo del camino) y volvió a 312. N
   marca igual, sin camino.
 - **Las imágenes de la sección 4** (`Totem_llegada_plano.png` y su horizontal): se le mandaron al cerrar el chat;
   todavía no opinó.
+- **Las imágenes de la sección 5** (`build/muestras_6.0.0/sin_internet/SinInternet_1..4.png`): se le mandaron al
+  cerrar el chat; todavía no opinó.
+- **Si quiere, una prueba real de entrar sin internet, ya, con la 5.0.0 instalada** (no cambia datos): más de una
+  hora después de cerrar el programa, sacar internet, abrirlo y ver que entra y que Recepción muestra la lista. Con
+  la 5.0.0 entra igual (eso no cambió), pero con un router sin salida a internet tarda unos 12 s en "Verificando
+  permisos..."; con la 6.0.0, unos 3 s. Se le ofreció; no es obligatoria.
 
 - **Si cambiaría algo de las pantallas del recorrido** (`build/muestras_6.0.0/recorrido/Recorrido.html`, 33
   pantallas; abrírselo en Edge). No preguntarle "¿cambiarías algo?" a secas: no lo entendió. Mostrarle primero.
@@ -996,10 +1103,9 @@ subió a 333; se borró (era idéntica al archivo del camino) y volvió a 312. N
 Seguimos con la 6.0.0 de Junior Eventos. Leé primero
 docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
 "Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El
-último plan aprobado está en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-abundant-parasol.md (la
-sección 4 arriba; los pasos 3b y 3c abajo); el camino de las secciones, en
-C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md.
+camino de las secciones está en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md; lo
+hecho en cada una, en el CONTEXTO (la sección 5 no tuvo archivo de plan).
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
 corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no (lo
 confirmé mirando la nube el 14-oct: esas cinco tablas no existen). Van antes
@@ -1009,16 +1115,17 @@ uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
 las secciones 1 (Recepción distingue particular y masivo), 2 (el tótem
 distingue particular y masivo), 3 (las cuatro apariencias en el tótem,
 Personalizar y la vista del tótem en Recepción con TotemLocal;
-totem_panel.dart ya no existe) y 4 (en la llegada de un masivo, el plano con
-la mesa encendida y el camino desde el Ingreso). Seguí por la sección 5: una
-PC completa sin internet (el tótem abre con la lista aunque no haya
-internet, la foto guardada en la PC, entrar con la sesión vencida y "Lista
-para trabajar sin internet"); está en "1. Una PC, completa sin internet" de
-docs/pendientes/modo-local-sin-internet.md. Hacé primero su plan corto y, si
-trae algo nuevo a la vista, una maqueta. Después siguen la 6 (kiosco), la 7
-(dos puestos), la 8 (cerrar la lista de la puerta) y la 9 (verificación y
-publicar). Avisame al terminar cada paso con cómo quedó, un commit y un
-push. Cada cambio lo apruebo yo a mano: no quiero modo automático.
+totem_panel.dart ya no existe), 4 (en la llegada de un masivo, el plano con
+la mesa encendida y el camino desde el Ingreso) y 5 (una PC completa sin
+internet: el tótem abre con la lista, la foto guardada en la PC, entrar con
+la sesión vencida y "Lista para trabajar sin internet" en Recepción). Seguí
+por la sección 6: el modo kiosco de la ventana del tótem
+(docs/pendientes/totem-kiosco.md). ANTES DE PROGRAMAR, mostrame el plan corto
+y esperá mi OK; si trae algo nuevo a la vista, una maqueta. Después siguen
+la 7 (dos puestos en la puerta, con y sin internet: el paso 3 de
+docs/pendientes/modo-local-sin-internet.md), la 8 (cerrar la lista de la
+puerta) y la 9 (verificación y publicar). Avisame al terminar cada paso con
+cómo quedó, un commit y un push. Cada cambio lo apruebo yo.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).
