@@ -13,6 +13,7 @@ import 'dart:convert';
 
 import 'core/services/instalacion_id.dart';
 import 'features/auth/login_screen.dart';
+import 'features/auth/sesion_sin_internet.dart';
 import 'features/caja_sesiones/providers/app_role_provider.dart';
 import 'features/caja_sesiones/widgets/role_gate_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
@@ -601,23 +602,6 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
     }
   }
 
-  /// Rehidrata sesión desde disco si el stream de auth tarda o falla (p. ej. sin internet).
-  Session? _effectiveSession(
-    AsyncSnapshot<AuthState> snapshot,
-    SupabaseClient supabase,
-  ) {
-    if (snapshot.data?.session != null) {
-      return snapshot.data!.session;
-    }
-    if (snapshot.hasError) {
-      return supabase.auth.currentSession;
-    }
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return supabase.auth.currentSession;
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final supabase = ref.watch(supabaseProvider);
@@ -625,7 +609,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
     return StreamBuilder<AuthState>(
       stream: supabase.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        final session = _effectiveSession(snapshot, supabase);
+        // Sin internet y con la sesión vencida, entra con la guardada.
+        final session = sesionParaEntrar(snapshot, supabase.auth.currentSession);
 
         if (session != null) {
           final uid = session.user.id;

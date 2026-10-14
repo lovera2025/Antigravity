@@ -4,13 +4,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/user_role_cache.dart';
+import '../../../main.dart' show supabaseProvider;
 import '../models/user_role_state.dart';
 
 export '../models/user_role_state.dart';
 
 /// Provider que consulta el rol y permisos (Supabase + caché local para sin red).
+///
+/// Sin internet, o con la red del salón sin salida a internet, el rol sale de
+/// lo recordado en la PC: con eso se entra con la sesión vencida
+/// (`sesionParaEntrar`). Lee [supabaseProvider] para que el test lo pruebe con
+/// la red cortada.
 final userRoleProvider = FutureProvider.autoDispose<UserRoleState>((ref) async {
-  final supabase = Supabase.instance.client;
+  final supabase = ref.watch(supabaseProvider);
   final user = supabase.auth.currentUser;
 
   if (user == null) {
@@ -29,22 +35,38 @@ final userRoleProvider = FutureProvider.autoDispose<UserRoleState>((ref) async {
     return const UserRoleState(isAdmin: false, isLoading: false);
   }
 
-  try {
-    final state = await _fetchRoleFromSupabase(supabase, user.id).timeout(
-      const Duration(seconds: 12),
-    );
+  final consulta = _fetchRoleFromSupabase(supabase, user.id)
+      .timeout(const Duration(seconds: 12))
+      .then((state) async {
     await UserRoleCache.save(state, user.id);
     return state;
-  } catch (e) {
-    debugPrint('❌ Error fetching user role: $e');
-    final cached = await UserRoleCache.load(user.id);
-    if (cached != null) {
-      debugPrint('📦 Rol desde caché (red o timeout)');
+  });
+
+  // Con el rol recordado en la PC, la nube se espera poco. Con la red del
+  // salón sin salida a internet (un router solo) la PC cree que hay internet,
+  // y la consulta tardaba los 12 s enteros: "Verificando permisos..." antes de
+  // poder entrar. Si contesta tarde, lo recordado queda al día para la próxima.
+  final cached = await UserRoleCache.load(user.id);
+  if (cached != null) {
+    try {
+      return await consulta.timeout(kEsperaDelRolRecordado);
+    } catch (e) {
+      debugPrint('📦 Rol desde caché (la nube no contestó a tiempo: $e)');
+      consulta.ignore();
       return cached;
     }
+  }
+
+  try {
+    return await consulta;
+  } catch (e) {
+    debugPrint('❌ Error fetching user role: $e');
     return const UserRoleState(isAdmin: false, isLoading: false);
   }
 });
+
+/// Cuánto se espera a la nube para el rol cuando la PC ya lo tiene recordado.
+const kEsperaDelRolRecordado = Duration(seconds: 3);
 
 Future<UserRoleState> _fetchRoleFromSupabase(
   SupabaseClient supabase,
