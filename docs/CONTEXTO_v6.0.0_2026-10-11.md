@@ -372,6 +372,20 @@ repetido. **Si quedaron dos ventanas, la de más se esconde y se pausa, no se ci
 - **Si cambiaría algo de las pantallas del recorrido** (`build/muestras_6.0.0/recorrido/Recorrido.html`, 33
   pantallas; abrírselo en Edge). No preguntarle "¿cambiarías algo?" a secas: no lo entendió. Mostrarle primero.
   (Lo de la nota resuelta ya lo contestó: queda con el tilde verde.)
+- **Dos puestos de Recepción sin internet (el "modo local con router").** El 13-oct preguntó si había quedado: el
+  24-sep había pedido "que se carguen todos los alumnos con internet primero y después se pueda manejar sin
+  internet" y "quizás con un router alcanzará para modo local". **Quedó a medias, y se le dijo así:**
+  - **Una PC, sí:** con la lista ya bajada, Recepción busca y marca sin internet, y el tótem de esa misma PC saluda
+    por el puente. Si el tótem se abre sin internet saluda igual, pero la lista de los que ya llegaron arranca
+    vacía (esa la lee de la nube).
+  - **Dos PCs, no:** se ven solo a través de la nube. Sin internet cada una marca por su lado y se juntan al
+    volver; lo de la segunda no llega al tótem. Un router sin internet hoy no cambia nada.
+  - **La web** (el tótem en una tele, los celulares, `/op`) depende entera de internet.
+  - **No está en el camino de la 6.0.0** ni escrito como pendiente (`totems-vinculados.md` lo nombra como "otro
+    pendiente, todavía sin escribir"). Se le recomendó internet de respaldo (un router 4G o el celular
+    compartiendo datos) antes que programar la red local, que no se puede probar sin dos PCs en red. **Falta que
+    diga si en el salón hay señal** y si igual lo quiere en esta versión.
+  - Falta también una prueba que la Fase 0 dejó anotada: abrir la app sin internet con la sesión vencida.
 - La página 6 del Canva: la Normal ya tiene **137 mesas cargadas** (116 con lo pagado el 11-oct), y su armado del
   Canva tiene la hoja B provisoria. Mientras tanto está el armado a medida del playón, y las mesas que falten se
   agregan en Acomodar.
