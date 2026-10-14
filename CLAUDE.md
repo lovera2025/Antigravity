@@ -148,6 +148,11 @@ servicios y diálogos con sus tests.
 
 **Las muestras.** `tool/*_muestra_test.dart` sacan imágenes y PDF con datos inventados; todos aceptan
 `--dart-define=salida=<carpeta>`. La carpeta `build/` no va a git: sirve para dejarlas donde el usuario las abra.
+- **Una muestra con un menú abierto necesita una ventana alta.** Si el menú no entra debajo de su botón, Flutter
+  lo corre para arriba y tapa la barra: la imagen muestra algo que en la app no pasa. `barra_fiesta_muestra_test.dart`
+  falla si el menú no cuelga debajo.
+- **Un HTML con muchas imágenes no se ve en el panel de la app** (ni con las imágenes adentro, por el tope de
+  512 KB, ni al lado): se le abre al usuario en el navegador de la PC. Una imagen suelta sí la ve en el chat.
 
 ## El tótem
 
@@ -204,6 +209,23 @@ oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados
 **Escondido, el tótem se pausa.** `KioskLauncher.close()` manda `pausar` antes de esconder la ventana: suelta
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
 nube tiene que cortarse en `_pausar()`.
+
+**A quién saluda el tótem no lo decide la pantalla** (v6.0.0). `IngresosTotem`
+(`totem/services/bienvenidas_totem.dart`) lleva la lista, la cola de bienvenidas y si se viene pudiendo leer la
+nube; `totem_display.dart` solo le cuenta lo que pasó (`leyo`, `noPudoLeer`, `aviso`, `baja`, `vaciar`).
+- La primera lectura va en silencio, y también la primera después de un corte de más de un minuto: los que
+  entraron mientras tanto van a la lista sin bienvenida atrasada. Un corte más corto no se come ningún saludo.
+- **Lo que avisó esta PC por el puente no lo deshace la nube.** Sin internet el ingreso llega al tótem por el
+  puente pero sube después; al volver, el tótem leía primero, lo sacaba de la lista y, al subir, lo saludaba de
+  nuevo.
+- Se da por conectado cuando leyó, no al intentarlo: si no, la espera entre reintentos vuelve siempre a 2 s.
+- El aviso de que no hay internet va en la barra del operador (`AvisoSinInternet`), no a la vista del salón.
+- **`totem_panel.dart` no usa nada de esto**: sigue con su lógica de antes hasta que se rehaga Recepción.
+
+**Un aviso que no llega no quiere decir que la ventana murió.** `KioskLauncher` reintenta y, si igual no llega,
+pregunta si la ventana sigue abierta: solo la olvida si ya no existe. Olvidarla de más dejaba a Recepción sin
+avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le habla a las ventanas por
+`VentanasTotem`, que los tests reemplazan (`test/kiosk_launcher_test.dart`).
 
 Las pantallas web y el tótem leen hasta 1000 invitados por evento (el "Max rows" de PostgREST). Ver
 `docs/pendientes/invitados-mas-de-1000-en-web.md`.

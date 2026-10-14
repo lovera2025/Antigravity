@@ -15,17 +15,17 @@ y caja no cambian.
 > Plan aprobado: `C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`.
 
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
-la puerta que sigue al sorteo (hecha), el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
-**"Qué pasó el 13-oct"**, más abajo. Lo de este encabezado es cómo quedó el 11-oct.
+la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
+**"Qué pasó el 13-oct"**, más abajo. **Hechas las partes 1 a 4; sigue la 5** (las cuatro apariencias del tótem).
+Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
   minutos; la carpeta no va a git.
 - No hay release `v6.0.0` en GitHub y los dos SQL de la nube no se corrieron.
-- El usuario tiene para mirar las pantallas (`build/muestras_6.0.0/Recorrido_6.0.0.html`, 26 pantallas numeradas).
-  **Todavía no opinó.**
-- **La nota de un alumno: eligió la B**, la ventana al centro (`build/muestras_6.0.0/Nota_dos_opciones.png`). Lo
-  dijo al cerrar el chat y pidió dejarlo anotado: **está elegido y sin aplicar.**
+- El usuario tiene para mirar las pantallas: desde el 13-oct, `build/muestras_6.0.0/recorrido/Recorrido.html`
+  (33 pantallas numeradas; se abre en Edge, no en el panel de la app). **Todavía no dijo si cambiaría algo.**
+- **La nota de un alumno: eligió la B**, la ventana al centro. Aplicada el 13-oct (`b463b4f`).
 - El 11-oct pidió frenar ahí y seguir en otro chat. El texto para pegar está al final.
 
 ---
@@ -158,9 +158,9 @@ recomienda y se sigue.
 |---|---|---|
 | 1 | La puerta sigue al sorteo | **hecha el 13-oct** |
 | 2 | Acompañantes y música por Excel, con el simulacro | **hecha el 13-oct** |
-| 3 | La nota como ventana al centro, y las dos preguntas pendientes | la nota, **hecha el 13-oct**; faltan sus dos respuestas |
-| 4 | Tótem: que no se desconecte ni salude tarde (`pendientes/totem-comunicacion.md`) | falta |
-| 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | falta |
+| 3 | La nota como ventana al centro, y las dos preguntas pendientes | **hecha el 13-oct**; de las pantallas del recorrido todavía no dijo si cambia algo |
+| 4 | Tótem: que no se desconecte ni salude tarde (`pendientes/totem-comunicacion.md`) | **hecha el 13-oct** |
+| 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | **sigue esta** |
 | 6 | Recepción más amigable (`pendientes/recepcion-redisenio.md`) | falta |
 | 7 | Modo kiosco (`pendientes/totem-kiosco.md`) | falta |
 | 8 | Tótems vinculados (`pendientes/totems-vinculados.md`) | falta |
@@ -168,7 +168,7 @@ recomienda y se sigue.
 | 10 | Verificación, documentación, instalador y la web armada | falta |
 | 11 | Publicar, instalar, la web, cerrar los permisos y el ensayo | falta |
 
-De la 4 a la 9 son, a ojo, entre 8 y 10 secciones de trabajo como las de la Fase 3. Cada una arranca con su plan
+De la 5 a la 9 son, a ojo, entre 7 y 9 secciones de trabajo como las de la Fase 3. Cada una arranca con su plan
 corto leyendo su archivo de diseño (aprobado con maquetas el 24-sep). Para preguntarle en su momento: (5) qué estilo
 de plano usan Cristal y Póster en la llegada; (8) cómo se reparte la puerta; (9) qué pasa con la pantalla `/op`.
 
@@ -261,13 +261,89 @@ pierde la cuenta al editar otra cosa.
 ### La parte 3: la nota como ventana al centro
 
 `kNotaComoVentana` quedó en `true` (la opción B, que el usuario eligió el 11-oct). La nota de un alumno se abre
-como una ventana al centro en vez de la hoja de abajo; el contenido es el mismo. Siguen sin contestar sus dos
-preguntas: qué cambiaría de las 26 pantallas del recorrido, y si una nota resuelta deja de llamar la atención en
-la grilla.
+como una ventana al centro en vez de la hoja de abajo; el contenido es el mismo.
+
+**Las dos preguntas del 11-oct, hechas el 13-oct a la noche:**
+- **La nota resuelta queda como está, con el tilde verde.** No se cambia nada en la grilla.
+- **Las pantallas del recorrido: no entendió la pregunta** ("¿qué cambiaría? no entiendo, o mostrame"). Al
+  mostrárselas apareció por qué nunca había opinado:
+  - `Recorrido_6.0.0.html` pesa 4,3 MB (las 26 imágenes van adentro) y **el panel de la app no abre páginas de más
+    de 512 KB**: le mostraba el texto crudo. Se le abrió en Edge (`Start-Process` sobre el archivo). Con las
+    imágenes en archivos al lado tampoco sirve: el panel muestra la página como una copia suelta y no las carga;
+  - leyó las pantallas numeradas **como opciones para elegir** ("la 1 me parece más prolija"). Son lugares del
+    mismo programa: ahora el recorrido lo dice en la primera línea;
+  - **las imágenes 2 a 5 estaban mal sacadas, no el programa:** en una ventana de 330 px de alto el menú no
+    entraba debajo del botón, Flutter lo corría para arriba y tapaba PLANO y SORTEO. Se volvieron a sacar, y la
+    muestra ahora falla si el menú no cuelga debajo (`tool/barra_fiesta_muestra_test.dart`). De paso, los tres
+    menús se abren con 6 px de aire (`94b5002`): pegados, el borde del menú pisaba el de la barra.
+- **El recorrido al día:** `build/muestras_6.0.0/recorrido/Recorrido.html`, 33 pantallas (las 26, con las cuatro
+  corregidas, y siete del 13-oct: el Excel del delegado, la nota al centro y el aviso del tótem). No va a git.
+  **Todavía no dijo si cambiaría algo; no frena nada.**
+
+### La parte 4: el tótem no se desconecta ni saluda tarde
+
+Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-compressed-avalanche.md`. Commit `0404bad`.
+**Sin cambios en la base ni en la nube, y sin pantallas ni botones nuevos.**
+
+**Qué cambió para el usuario:**
+- **Un aviso que no llega ya no desconecta el tótem.** Antes, con un solo mensaje perdido entre Recepción y la
+  ventana del tótem, Recepción dejaba de avisarle por el resto de la noche y escondía sus botones; al reabrirlo
+  nacía una segunda ventana. Ahora se reintenta y, si igual no llega, se mira si la ventana sigue abierta: **solo
+  se la olvida si ya no existe.** Y al abrir, si hay un tótem abierto que no estaba anotado, **se lo adopta**.
+- **Después de un corte de internet no saluda a nadie atrasado.** Si el corte duró más de un minuto, los que
+  entraron mientras tanto aparecen en la lista, arriba, sin bienvenida. **Un corte más corto no se come ningún
+  saludo.**
+- **Lo que se marca sin internet no se saluda dos veces.** Es lo que apareció al leer el código y no estaba
+  anotado: sin internet el ingreso llega al tótem por el puente entre ventanas y se saluda bien, pero a la nube
+  sube después. Al volver, el tótem leía primero, lo sacaba de la lista y, cuando subía, lo saludaba de nuevo.
+- **El público ya no ve "Reconectando..." en rojo** ni el cartel "ESTABLECIENDO CONEXIÓN — JUNIOR EVENTOS • ELITE
+  SYSTEM". El estado pasó a la barra del operador, la que aparece al mover el mouse sobre el tótem: "Sin internet:
+  esta PC sigue avisando al tótem" (en la web, "Sin internet: reconectando"). La pantalla abre con un fundido
+  desde negro.
+
+**Las reglas, que están en `lib/features/totem/services/bienvenidas_totem.dart`:**
+- `IngresosTotem` lleva la lista de los que llegaron, la cola de bienvenidas y si se viene pudiendo leer la nube.
+  **La pantalla no decide nada:** le cuenta lo que pasó (`leyo`, `noPudoLeer`, `aviso`, `baja`, `vaciar`) y dibuja.
+- La primera lectura va en silencio. La primera después de un corte de `kCorteLargoTotem` (un minuto) o más,
+  también. El corte se mide con el reloj de esa PC, desde el **primer** fallo: un error del stream o una relectura
+  que no pudo leer (la conexión muda).
+- Lo que avisó esta PC por el puente (`aviso(..., porElPuente: true)`) no lo saca una lectura de la nube que no lo
+  trae: queda protegido hasta que la nube lo confirme, o hasta que la misma PC avise que se deshizo o se borró.
+- El que se está saludando o espera en la cola, si una lectura vieja lo había sacado, vuelve a la lista sin otra
+  bienvenida. Antes se lo salteaba, y la lectura siguiente lo saludaba de nuevo.
+- **Se da por conectado cuando de verdad leyó**, no al intentarlo. Por eso la espera entre reintentos
+  (`esperaDeReintento`) ahora sí crece de 2 a 32 segundos; antes volvía siempre a 2.
+- Se sacó el recorte de los ya saludados al pasar de 1.000: hoy no se llega (el tótem lee hasta 1.000), pero al
+  subir ese tope habría saludado de nuevo a 500.
+
+**`KioskLauncher`** (`lib/core/services/kiosk_launcher.dart`) le habla a las ventanas por `VentanasTotem`, una
+interfaz chica que los tests reemplazan. Todos los avisos se reintentan una vez; el del otro lado ignora un ingreso
+repetido. **Si quedaron dos ventanas, la de más se esconde y se pausa, no se cierra:** es lo mismo que ya hace
+`close()` en las PCs; cerrar una ventana secundaria desde el programa no se pudo probar sin abrir la app.
+
+**Cómo se comprobó:**
+- 43 tests nuevos (`test/bienvenidas_totem_test.dart` y `test/kiosk_launcher_test.dart`), con la noche entera de
+  corrido: se corta internet, Recepción sigue marcando, vuelve a los cinco minutos con la nube atrasada, y nadie se
+  saluda tarde ni dos veces. **1.877 tests** en la suite; `flutter analyze` sigue en 313.
+- **Doce roturas a propósito** (el silencio del corte, la protección del puente, no olvidar la ventana, adoptarla,
+  los reintentos, el tope de la espera…): todas las vio algún test.
+- La imagen del aviso: `build/muestras_6.0.0/Totem_sin_internet.png` (`tool/totem_muestra_test.dart`).
+- **No se probó con el tótem de verdad.** La pantalla del tótem lee de la nube sin providers delante y todavía no
+  se puede montar en un test; lo que decide quedó afuera, probado. La prueba real es el ensayo: marcar ingresos,
+  cortar el wifi un par de minutos, seguir marcando, volver a conectar y mirar que no salude a nadie de nuevo.
+
+**Lo que no se tocó, a propósito:**
+- **El panel del tótem que está adentro de Recepción** (`totem_panel.dart`). Lee de la base de la PC; después de
+  un corte largo, cuando bajan juntos los ingresos de la otra PC, los puede saludar de corrido. Lo ve el operador,
+  no el salón, y se rehace en la parte 6.
+- Los botones "maximizar" y "minimizar" de Recepción, que no hacen nada: salen con la parte 6.
+- Lo que se marca en **otra** PC llega al tótem solo con internet, igual que antes.
+- Si el stream trae una fila que no se puede leer, devuelve la lista vacía y el tótem la muestra vacía
+  (`SupabaseService.streamInvitados`). No pasa con los datos de hoy; conviene mirarlo en la parte 5.
 
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, las partes 3 a 10 del camino de arriba. Después:
+**No se publica sin su "publicamos".** Antes, las partes 5 a 10 del camino de arriba. Después:
 
 1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
@@ -293,8 +369,9 @@ la grilla.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
 
-- **Las dos preguntas del 11-oct:** qué cambiaría de las 26 pantallas del recorrido, y si una nota resuelta deja de
-  llamar la atención en la grilla.
+- **Si cambiaría algo de las pantallas del recorrido** (`build/muestras_6.0.0/recorrido/Recorrido.html`, 33
+  pantallas; abrírselo en Edge). No preguntarle "¿cambiarías algo?" a secas: no lo entendió. Mostrarle primero.
+  (Lo de la nota resuelta ya lo contestó: queda con el tilde verde.)
 - La página 6 del Canva: la Normal ya tiene **137 mesas cargadas** (116 con lo pagado el 11-oct), y su armado del
   Canva tiene la hoja B provisoria. Mientras tanto está el armado a medida del playón, y las mesas que falten se
   agregan en Acomodar.
@@ -313,12 +390,15 @@ aprobado está en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-expressive-nautilus.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
 se corrieron. Va todo en una sola versión, por partes: están hechas la parte 1
-(la puerta sigue al sorteo), la 2 (el Excel de acompañantes y música) y la nota
-como ventana al centro. Preguntame las dos cosas que quedé debiendo del 11-oct
-y seguí por la parte 4 (el tótem), con su
-plan corto, y avisame al terminar cada una con cómo quedó, un commit y un push.
-Recepción y el tótem nuevos también van en la 6.0.0: sus diseños ya están
-aprobados en docs/pendientes/.
+(la puerta sigue al sorteo), la 2 (el Excel de acompañantes y música), la 3 (la
+nota como ventana al centro) y la 4 (el tótem no se desconecta ni saluda
+tarde). Seguí por la parte 5, las cuatro apariencias del tótem
+(docs/pendientes/totem-apariencias.md): primero su plan corto y una maqueta, y
+avisame al terminar con cómo quedó, un commit y un push. Recepción y el tótem
+nuevos también van en la 6.0.0: sus diseños ya están aprobados en
+docs/pendientes/.
+Las muestras con muchas imágenes abrímelas en Edge: el panel de la app no las
+muestra. Una imagen suelta sí la veo en el chat.
 Contestame primero lo que te pregunto, en una línea. Lo que tiene poco riesgo y
 vuelta atrás, recomendalo y seguí: no me lo preguntes como si fuera un peligro.
 No corras la app desde el working tree (la v73 migraría la base real). Lo que

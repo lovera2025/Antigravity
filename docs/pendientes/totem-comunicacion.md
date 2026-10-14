@@ -1,7 +1,29 @@
 # Que el tótem no se desconecte ni salude tarde
 
-**Estado:** pendiente
+**Estado:** hecho el 2026-10-13 (`0404bad`), en la 6.0.0. Sin publicar.
 **Postergado el:** 2026-09-24
+
+## Qué salió distinto de lo previsto
+
+- **Había una tercera forma de saludar tarde, que este archivo no tenía.** Sin internet, lo que se marca en esa PC
+  llega al tótem por el puente y se saluda bien; pero a la nube sube después. Al volver internet el tótem leía
+  primero, sacaba a esos de la lista y, cuando subían, los saludaba de nuevo. Ahora lo que avisó el puente queda
+  protegido hasta que la nube lo confirme.
+- **Poner `_initialized = false` al reconectar no alcanzaba:** la lista se rearmaba entera, en otro orden, y un
+  corte de dos segundos se comía el saludo del que justo entraba. Quedó así: el silencio es solo para un corte de
+  **más de un minuto**, y los que entraron mientras tanto se suman arriba sin mover a los demás.
+- **El corte también es una relectura que falla**, no solo un error del stream: cubre la conexión muda.
+- **La decisión salió de la pantalla.** `IngresosTotem` (`totem/services/bienvenidas_totem.dart`) lleva la lista,
+  la cola y el estado de la conexión, con sus tests; `totem_display.dart` solo le cuenta lo que pasó.
+- **El tótem de más se esconde y se pausa, no se cierra:** es lo mismo que hace `KioskLauncher.close()`, que ya
+  está probado en las PCs. Cerrar una ventana secundaria desde el programa no se pudo probar sin abrir la app.
+- La espera entre reintentos volvía siempre a 2 segundos (se reiniciaba al intentar, no al leer). Ahora crece de 2
+  a 32 y se queda ahí.
+- **No se tocó el panel del tótem que está adentro de Recepción** (`totem_panel.dart`): lee de la base de la PC, y
+  después de un corte largo puede saludar de corrido a los que bajan juntos. Va con el rediseño de Recepción.
+- **No se probó con el tótem de verdad:** no se abre la app desde el código mientras la v73 no esté publicada. Lo
+  prueban 43 tests y, de verdad, el ensayo: marcar ingresos, cortar el wifi un par de minutos, seguir marcando,
+  volver a conectar y mirar que no salude a nadie de nuevo.
 
 ## Por qué se postergó
 

@@ -47,10 +47,6 @@ Diseñados y aprobados con maquetas el 2026-09-24, y postergados porque se
 priorizó el sorteo de noviembre. El contexto está en
 [CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24](../CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md).
 
-- [Que el tótem no se desconecte ni salude tarde](totem-comunicacion.md) — un
-  aviso que falla una vez desconecta el tótem por el resto de la noche, y
-  después de un corte repite bienvenidas viejas. Va primero: es chico y toca las
-  mismas pantallas.
 - [El tótem con cuatro apariencias](totem-apariencias.md) — Neón, Cristal,
   Póster y Gala, elegibles por evento, sin "Ya llegaron" y con QR solo en
   particulares. Trae el código de los shaders aprobados y la migración de
@@ -71,6 +67,9 @@ priorizó el sorteo de noviembre. El contexto está en
 
 ## Hechos
 
+- [Que el tótem no se desconecte ni salude tarde](totem-comunicacion.md) — hecho
+  el 2026-10-13, en la 6.0.0. Apareció una tercera forma de saludar tarde que no
+  estaba anotada: lo que se marcaba sin internet se saludaba de nuevo al subir.
 - [Que los borrados crucen solos](borrados-que-cruzan.md) — hecho el
   2026-09-08.
 - [Cadencia del pull por niveles](pull-cadencia-por-niveles.md) — hecho el
