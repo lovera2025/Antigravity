@@ -694,11 +694,12 @@ Seguimos con la 6.0.0 de Junior Eventos. Leé primero
 docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
 "Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El último
 plan aprobado está en
-C:\Users\lover\.claude\plans\purrfect-waddling-micali.md (la sección 2); el
-camino de las secciones, en
+C:\Users\lover\.claude\plans\purrfect-waddling-micali.md (la sección 3 arriba,
+la 2 abajo); el camino de las secciones, en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md.
-La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
-se corrieron. Va todo en una sola versión, por partes. El objetivo de lo que
+La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
+corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no. Va
+todo en una sola versión, por partes. El objetivo de lo que
 falta: que Recepción y el tótem distingan un evento particular de uno masivo
 (se dice "evento masivo", no "fiesta de alumnos"). Están hechas la sección 1
 (Recepción distingue particular y masivo) y la 2 (el tótem distingue
@@ -710,8 +711,7 @@ Seguí por el 3b (Personalizar con las cuatro tarjetas, "Ver una llegada" y la
 ventana al centro en la PC) y después el 3c (Recepción con la vista del tótem
 al lado, TotemLocal, los cortes de pantalla y sacar totem_panel.dart). Avisame
 al terminar cada uno con cómo quedó, un commit y un push. Cada cambio lo
-apruebo yo a mano: no quiero modo automático. El SQL de totem_config ya está
-corrido.
+apruebo yo a mano: no quiero modo automático.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).
