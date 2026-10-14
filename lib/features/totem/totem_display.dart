@@ -642,6 +642,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
           llegada: actual == null
               ? null
               : ContenidoBienvenida.armar(actual, ficha: _ficha, cfg: _cfg),
+          plano: _ficha?.plano,
           claveLlegada: actual,
           saliendo: _reproductor.saliendo,
           enCamino: _reproductor.enCamino,

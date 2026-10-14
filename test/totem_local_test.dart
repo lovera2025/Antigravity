@@ -9,6 +9,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
@@ -42,11 +45,13 @@ Future<PuertaEnMemoria> _montar(
   bool encuadrar = false,
   Size tamano = const Size(540, 960),
   ValueNotifier<bool>? mostrar,
+  ArmadoSalon? plano,
 }) async {
   final mundo = PuertaEnMemoria(
     _supabase,
     alumnos: alumnosDeLaFicha(),
     filas: [...?filas],
+    plano: plano,
   );
   tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
@@ -166,6 +171,27 @@ void main() {
       }
       expect(find.text('GARCÍA, BRUNO'), findsOneWidget);
       expect(find.text('PÉREZ, JUAN MARTÍN'), findsNothing);
+    });
+
+    testWidgets('con el plano en la PC, saluda con la mesa en el salón',
+        (tester) async {
+      final salon = ArmadosPredefinidos.normal2aPagina3();
+      final mundo = await _montar(tester, plano: salon);
+      expect(mundo.planos.lecturas, greaterThan(0));
+      await _ingresar(mundo, 'perez');
+      await _verLlegada(tester);
+      expect(_escena(tester).plano, isNotNull);
+      final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
+      expect(vista.resaltadas, {12});
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('sin plano en la PC, la llegada de siempre', (tester) async {
+      final mundo = await _montar(tester);
+      await _ingresar(mundo, 'perez');
+      await _verLlegada(tester);
+      expect(find.byType(VistaPlano), findsNothing);
+      expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
     });
 
     testWidgets('la apariencia elegida en Personalizar manda', (tester) async {

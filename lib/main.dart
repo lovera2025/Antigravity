@@ -28,6 +28,7 @@ import 'features/totem/services/puente_ficha.dart';
 import 'features/eventos/repositories/contratos_repository.dart';
 import 'features/eventos/repositories/eventos_repository.dart';
 import 'features/eventos/repositories/sillas_reparto_repository.dart';
+import 'features/plano/repositories/planos_evento_repository.dart';
 import 'features/recepcion/providers/recepcion_provider.dart'
     show leerAlumnosDeLaPuerta;
 import 'features/asesor/asesor_home_screen.dart';
@@ -572,8 +573,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
   void initState() {
     super.initState();
     // La ventana del tótem le pide a esta la ficha del evento: quién es
-    // alumno, con quién viene, su mesa, sus sillas y su música. Sale de la base
-    // de esta PC, así que anda sin internet.
+    // alumno, con quién viene, su mesa, sus sillas, su música y el salón del
+    // plano. Sale de la base de esta PC, así que anda sin internet.
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       PuenteFichaTotem.atenderEnLaVentanaPrincipal(
@@ -585,6 +586,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
             ref.read(sillasRepartoRepositoryProvider),
             id,
           ),
+          leerPlano: (id) async =>
+              (await ref.read(leerPlanoDeLaFiestaProvider)(id))?.armadoONull,
         ),
       );
     }

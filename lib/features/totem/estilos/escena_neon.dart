@@ -18,9 +18,12 @@ class EscenaNeon extends EscenaEstilo {
   /// shader). Lo que se lee va arriba: sobre la línea brillante no se lee.
   static const horizonte = 0.67;
 
-  /// El margen de abajo que deja el contenido arriba del horizonte.
+  /// El margen de abajo que deja el contenido arriba del horizonte. Con el
+  /// plano abajo, el horizonte queda detrás del plano: alcanza un margen chico.
   static double _sobreElHorizonte(DatosEscena d) =>
-      d.alto * (1 - horizonte) + d.u;
+      d.conPlano && !d.planoAlCostado
+          ? d.u
+          : d.alto * (1 - horizonte) + d.u;
 
   /// Si la letra que titila está apagada en este instante: dos parpadeos
   /// cortos cada cuatro segundos.

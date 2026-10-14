@@ -15,6 +15,9 @@ import 'package:arguello_events/features/common/providers/user_role_provider.dar
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/repositories/planos_evento_repository.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
@@ -22,6 +25,7 @@ import 'package:arguello_events/features/totem/providers/totem_config_provider.d
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -168,6 +172,31 @@ class SillasEnMemoria extends SillasRepartoRepository {
       repartos;
 }
 
+/// El plano de la fiesta masiva en esta PC: su salón ([armado]), o ninguno.
+class PlanosEnMemoria implements PlanosEventoRepository {
+  PlanosEnMemoria([this.armado]);
+  ArmadoSalon? armado;
+  var lecturas = 0;
+
+  @override
+  Future<PlanoEvento?> obtener(String eventoId) async {
+    lecturas++;
+    final a = armado;
+    if (a == null || eventoId != eventoMasivo) return null;
+    return PlanoEvento.nuevo(
+      eventoId: eventoId,
+      armado: a,
+      estilo: EstiloPlano.gala,
+      modo: ModoSorteo.entera,
+      ahora: DateTime(2026, 11, 1),
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
 /// Del motor, Recepción solo escucha el aviso de "bajó algo de la otra PC".
 class MotorDePrueba implements SyncEngine {
   final bajo = StreamController<Set<String>>.broadcast();
@@ -187,13 +216,18 @@ class PuertaEnMemoria {
     required List<ContratoAlumno> alumnos,
     List<Invitado>? filas,
     Map<String, SillasReparto> repartos = const {},
+    ArmadoSalon? plano,
   })  : contratos = ContratosEnMemoria(supabase, alumnos),
         invitados = InvitadosEnMemoria(supabase, filas ?? []),
-        sillas = SillasEnMemoria(repartos);
+        sillas = SillasEnMemoria(repartos),
+        planos = PlanosEnMemoria(plano);
 
   final ContratosEnMemoria contratos;
   final InvitadosEnMemoria invitados;
   final SillasEnMemoria sillas;
+
+  /// El plano de la fiesta masiva: siempre puesto, así nadie lee la base real.
+  final PlanosEnMemoria planos;
   final motor = MotorDePrueba();
   var actualizado = 0;
   var agregar = 0;
@@ -236,6 +270,7 @@ class PuertaEnMemoria {
           invitadosRepositoryProvider.overrideWithValue(invitados),
           contratosRepositoryProvider.overrideWithValue(contratos),
           sillasRepartoRepositoryProvider.overrideWithValue(sillas),
+          planosEventoRepositoryProvider.overrideWithValue(planos),
           syncEngineProvider.overrideWithValue(motor),
           for (final evento in [eventoMasivo, eventoParticular])
             totemConfigProvider(evento).overrideWith(

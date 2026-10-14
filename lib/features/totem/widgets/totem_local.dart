@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/sync_engine.dart';
 import '../../../main.dart' show kWebBaseUrl;
+import '../../plano/modelo/armado_salon.dart';
+import '../../plano/repositories/planos_evento_repository.dart';
 import '../../recepcion/providers/recepcion_provider.dart';
+import '../../recepcion/services/puerta_del_evento.dart';
 import '../estilos/escena_totem.dart';
 import '../estilos/fondo_totem.dart';
 import '../estilos/totem_estilo.dart';
@@ -36,6 +40,63 @@ final estiloDelEventoProvider =
   return masivo == null ? null : EstiloTotem.porDefecto(masivo: masivo);
 });
 
+/// El salón del plano de la fiesta, de la base de esta PC. Null: sin plano.
+///
+/// Se vuelve a leer cuando baja un cambio del plano de otra PC y cada minuto,
+/// como la ficha del tótem del salón (lo que se acomodó en esta PC). Solo
+/// avisa si cambió.
+///
+/// Con `StreamController` y `onCancel`, no `async*`: un `async*` con `await
+/// for` no suelta la suscripción al cancelarlo (ver CLAUDE.md).
+final planoDelEventoProvider =
+    StreamProvider.autoDispose.family<ArmadoSalon?, String>((ref, eventoId) {
+  final leerPlano = ref.watch(leerPlanoDeLaFiestaProvider);
+  final motor = ref.watch(syncEngineProvider);
+
+  late final StreamController<ArmadoSalon?> controller;
+  StreamSubscription<Set<String>>? cambios;
+  Timer? cadaMinuto;
+  var cadena = Future<void>.value();
+  var leido = false;
+  String? ultimo;
+
+  void leer() {
+    cadena = cadena.then((_) async {
+      if (controller.isClosed) return;
+      try {
+        final p = await leerPlano(eventoId);
+        final json = p?.armadoJson;
+        if (controller.isClosed || (leido && json == ultimo)) return;
+        leido = true;
+        ultimo = json;
+        controller.add(p?.armadoONull);
+      } catch (e) {
+        debugPrint('El tótem no pudo leer el plano de la fiesta: $e');
+        if (!controller.isClosed && !leido) {
+          leido = true;
+          controller.add(null);
+        }
+      }
+    });
+  }
+
+  controller = StreamController<ArmadoSalon?>(
+    onListen: () {
+      cambios = motor.cambiosBajadosStream.listen((tablas) {
+        if (tablas.contains('planos_evento')) leer();
+      });
+      cadaMinuto = Timer.periodic(const Duration(minutes: 1), (_) => leer());
+      leer();
+    },
+    onCancel: () async {
+      cadaMinuto?.cancel();
+      await cambios?.cancel();
+    },
+  );
+  ref.onDispose(() => controller.close());
+  return controller.stream;
+});
+
 /// El tótem de esta PC: la escena del salón, alimentada desde la base de la
 /// PC. La usan la vista de Recepción y la pantalla del asesor.
 ///
@@ -64,6 +125,8 @@ class TotemLocal extends ConsumerStatefulWidget {
 class _TotemLocalState extends ConsumerState<TotemLocal> {
   final _reproductor = ReproductorBienvenidas(salida: EscenaTotem.salida);
   FichaTotem? _ficha;
+  PuertaDelEvento? _puerta;
+  ArmadoSalon? _plano;
   bool _apaisada = false;
   bool _iniciado = false;
 
@@ -78,7 +141,18 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
       puertaDelEventoProvider(widget.eventoId),
       (_, puerta) {
         final p = puerta.value;
-        if (p != null) _tomarFicha(FichaTotem.desdePuerta(widget.eventoId, p));
+        if (p == null) return;
+        _puerta = p;
+        _armarFicha();
+      },
+      fireImmediately: true,
+    );
+    ref.listenManual(
+      planoDelEventoProvider(widget.eventoId),
+      (_, plano) {
+        if (!plano.hasValue) return;
+        _plano = plano.value;
+        _armarFicha();
       },
       fireImmediately: true,
     );
@@ -102,7 +176,12 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
     _iniciado = true;
   }
 
-  void _tomarFicha(FichaTotem ficha) {
+  /// La ficha con lo último de la puerta y del plano.
+  void _armarFicha() {
+    final puerta = _puerta;
+    if (puerta == null) return;
+    final ficha =
+        FichaTotem.desdePuerta(widget.eventoId, puerta, plano: _plano);
     _reproductor.familiaDe = (i) => ficha.familiaDe(i.id);
     // Durante `initState` todavía no se puede pedir que se redibuje.
     if (_iniciado) {
@@ -142,6 +221,7 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
                 llegada: actual == null
                     ? null
                     : ContenidoBienvenida.armar(actual, ficha: _ficha, cfg: cfg),
+                plano: _ficha?.plano,
                 claveLlegada: actual,
                 saliendo: _reproductor.saliendo,
                 enCamino: _reproductor.enCamino,

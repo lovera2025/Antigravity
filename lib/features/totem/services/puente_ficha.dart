@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/evento.dart';
+import '../../plano/modelo/armado_salon.dart';
 import '../../recepcion/providers/recepcion_provider.dart'
     show AlumnosDeLaPuerta;
 import '../../recepcion/services/puerta_del_evento.dart';
@@ -74,16 +75,24 @@ class PuenteFichaTotem {
 /// La ficha de un evento con lo que hay en la base de esta PC: lo mismo que
 /// ve Recepción ([PuertaDelEvento]).
 ///
-/// De un masivo lee los alumnos y cómo repartió cada familia sus sillas. Quién
-/// entró no hace falta: eso el tótem lo sabe por su cuenta.
+/// De un masivo lee los alumnos y cómo repartió cada familia sus sillas, y el
+/// salón de su plano ([leerPlano]). Quién entró no hace falta: eso el tótem lo
+/// sabe por su cuenta. Si el plano no se puede leer, la ficha va sin él.
 Future<FichaTotem> armarFichaTotem(
   String eventoId, {
   required Future<Evento?> Function(String eventoId) leerEvento,
   required Future<AlumnosDeLaPuerta> Function(String eventoId) leerAlumnos,
+  Future<ArmadoSalon?> Function(String eventoId)? leerPlano,
 }) async {
   final evento = await leerEvento(eventoId);
   if (evento?.modalidad != 'masivo') return FichaTotem.particular(eventoId);
   final a = await leerAlumnos(eventoId);
+  ArmadoSalon? plano;
+  try {
+    plano = await leerPlano?.call(eventoId);
+  } catch (e) {
+    debugPrint('La ficha del tótem va sin plano: $e');
+  }
   return FichaTotem.desdePuerta(
     eventoId,
     PuertaDelEvento.masivo(
@@ -91,5 +100,6 @@ Future<FichaTotem> armarFichaTotem(
       repartos: a.repartos,
       invitados: const [],
     ),
+    plano: plano,
   );
 }

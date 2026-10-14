@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+
+import '../../plano/modelo/armado_salon.dart';
 import '../../recepcion/services/puerta_del_evento.dart';
 
 /// Lo que el tótem sabe de cada persona de un evento para saludarla completa.
@@ -23,16 +26,22 @@ class FichaTotem {
   /// En un particular está vacía: el tótem usa la fila, como siempre.
   final Map<String, PersonaFicha> personas;
 
+  /// El salón de la fiesta (el armado de su plano, con lo que se acomodó a
+  /// mano), para mostrar en la llegada dónde queda la mesa. Null: sin plano.
+  final ArmadoSalon? plano;
+
   const FichaTotem({
     required this.eventoId,
     required this.masivo,
     this.personas = const {},
+    this.plano,
   });
 
   /// Un evento particular: el tótem saluda con lo que dice la lista.
   const FichaTotem.particular(this.eventoId)
       : masivo = false,
-        personas = const {};
+        personas = const {},
+        plano = null;
 
   /// La ficha de lo que se ve en Recepción.
   ///
@@ -40,7 +49,13 @@ class FichaTotem {
   /// con nombre. Lo cargado a mano en esa lista no entra: el tótem lo saluda
   /// con su fila, como en un particular. Las sillas van sin el "a confirmar"
   /// de Recepción: eso es para el operador, no para el salón.
-  factory FichaTotem.desdePuerta(String eventoId, PuertaDelEvento puerta) {
+  ///
+  /// [plano] va solo en un masivo: un particular no tiene plano.
+  factory FichaTotem.desdePuerta(
+    String eventoId,
+    PuertaDelEvento puerta, {
+    ArmadoSalon? plano,
+  }) {
     if (!puerta.masivo) return FichaTotem.particular(eventoId);
     final personas = <String, PersonaFicha>{};
     for (final g in puerta.grupos) {
@@ -67,7 +82,12 @@ class FichaTotem {
         );
       }
     }
-    return FichaTotem(eventoId: eventoId, masivo: true, personas: personas);
+    return FichaTotem(
+      eventoId: eventoId,
+      masivo: true,
+      personas: personas,
+      plano: plano,
+    );
   }
 
   PersonaFicha? de(String id) => personas[id];
@@ -76,13 +96,16 @@ class FichaTotem {
   /// ficha (un particular, lo cargado a mano) es su propia familia.
   String familiaDe(String id) => personas[id]?.familia ?? id;
 
+  // Un armado de 140 mesas suma unos 15 KB.
   Map<String, dynamic> toJson() => {
         'evento_id': eventoId,
         'masivo': masivo,
         'personas': [for (final p in personas.values) p.toJson()],
+        if (plano != null) 'plano': plano!.toJson(),
       };
 
-  /// `null` si no se puede leer: el tótem sigue con la que tenía.
+  /// `null` si no se puede leer: el tótem sigue con la que tenía. Un plano que
+  /// no se puede leer no tira la ficha: va sin plano.
   static FichaTotem? fromJson(Object? json) {
     if (json is! Map) return null;
     final evento = json['evento_id'];
@@ -99,7 +122,19 @@ class FichaTotem {
       eventoId: evento,
       masivo: json['masivo'] == true,
       personas: personas,
+      plano: _leerPlano(json['plano']),
     );
+  }
+
+  static ArmadoSalon? _leerPlano(Object? json) {
+    if (json is! Map) return null;
+    try {
+      final armado = ArmadoSalon.fromJson(Map<String, dynamic>.from(json));
+      return armado.mesas.isEmpty ? null : armado;
+    } catch (e) {
+      debugPrint('El plano de la ficha del tótem no se puede leer: $e');
+      return null;
+    }
   }
 
   /// Lo que viaja por el puente.

@@ -106,3 +106,11 @@ class PlanosEventoRepository {
 final planosEventoRepositoryProvider = Provider<PlanosEventoRepository>(
   (ref) => PlanosEventoRepository(ref.watch(supabaseProvider)),
 );
+
+/// Para quien solo lee el plano de una fiesta, de la base de esta PC (el
+/// tótem y su ficha): no da cómo guardarlo. Guardar el salón es del jefe, desde
+/// la fiesta y la pantalla del plano (`test/solo_modo_jefe_test.dart`).
+final leerPlanoDeLaFiestaProvider =
+    Provider<Future<PlanoEvento?> Function(String eventoId)>(
+  (ref) => ref.watch(planosEventoRepositoryProvider).obtener,
+);

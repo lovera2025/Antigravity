@@ -12,6 +12,8 @@
 // - Totem_horizontal.png: la llegada en una pantalla apaisada.
 // - Totem_sin_internet.png: el aviso de la barra del operador.
 // - Personalizar_musica.png: la casilla de la música en Personalizar.
+// - Totem_llegada_plano.png y Totem_llegada_plano_horizontal.png: la familia
+//   que llega con el salón abajo (o a la derecha) y su mesa encendida.
 // - Personalizar_PC.png: Personalizar en la PC, recién abierta (un masivo).
 // - Personalizar_llegada.png: con Gala elegida y "Ver una llegada".
 // - Personalizar_celular.png y Personalizar_celular_tarjetas.png: en el
@@ -32,6 +34,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
@@ -383,6 +386,50 @@ void main() {
       ),
       'Personalizar_musica.png',
     );
+  });
+
+  group('la llegada con el plano', () {
+    final salon = ArmadosPredefinidos.normal2aPagina3();
+
+    testWidgets('vertical', (tester) async {
+      await _sacar(
+        tester,
+        _lienzo(_vertical),
+        _cuatro(
+          _vertical,
+          (e) => EscenaTotem(
+            estilo: e,
+            cfg: _masivo,
+            quieta: true,
+            tiempoFijo: 6,
+            llegada: familia,
+            enCamino: 2,
+            plano: salon,
+          ),
+        ),
+        'Totem_llegada_plano.png',
+      );
+    });
+
+    testWidgets('horizontal', (tester) async {
+      await _sacar(
+        tester,
+        _lienzo(_apaisada, columnas: 2, filas: 2),
+        _cuatro(
+          _apaisada,
+          (e) => EscenaTotem(
+            estilo: e,
+            cfg: _masivo,
+            quieta: true,
+            tiempoFijo: 6,
+            llegada: familia,
+            plano: salon,
+          ),
+          porFila: 2,
+        ),
+        'Totem_llegada_plano_horizontal.png',
+      );
+    });
   });
 
   group('Personalizar con las cuatro apariencias', () {

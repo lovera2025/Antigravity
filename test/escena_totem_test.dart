@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/features/totem/estilos/plano_del_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
@@ -266,6 +270,141 @@ void main() {
       });
     });
   }
+
+  group('el plano en la llegada de un masivo', () {
+    final salon = ArmadosPredefinidos.normal2aPagina3();
+    final familia = [filaDe('perez'), filaDe('perez', 1), filaDe('perez', 2)];
+
+    for (final estilo in EstiloTotem.values) {
+      for (final MapEntry(key: nombre, value: tamano) in _tamanos.entries) {
+        testWidgets('${estilo.nombre}, pantalla $nombre: la mesa en el plano',
+            (tester) async {
+          await _montar(
+            tester,
+            EscenaTotem(
+              estilo: estilo,
+              cfg: _masivo,
+              quieta: true,
+              enCamino: 1,
+              llegada: _llegada(familia),
+              plano: salon,
+            ),
+            tamano: tamano,
+          );
+          expect(tester.takeException(), isNull);
+          final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
+          expect(vista.resaltadas, {12});
+          expect(vista.hoja, salon.mesa(12)!.hoja);
+          // Lo de la llegada sigue estando.
+          expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
+          expect(find.text('10 sillas (8 + 2 extra)'), findsOneWidget);
+          expect(find.text('1 más en camino'), findsOneWidget);
+          // El plano va abajo, o a la derecha en una pantalla apaisada.
+          final plano = tester.getRect(find.byType(PanelPlano));
+          final nombreEn = tester.getRect(find.text('PÉREZ, JUAN MARTÍN'));
+          if (tamano.width > tamano.height) {
+            expect(plano.left, greaterThanOrEqualTo(nombreEn.right));
+          } else {
+            expect(plano.top, greaterThanOrEqualTo(nombreEn.bottom));
+          }
+        });
+      }
+    }
+
+    testWidgets('sin plano, sin mesa o con un número que no está: como antes',
+        (tester) async {
+      for (final (llegada, plano) in [
+        (_llegada(familia), null),
+        (_llegada([filaDe('sosa')]), salon),
+        (
+          _llegada(
+            [filaSuelta('i1', 'LÓPEZ, MARTA', mesa: '999')],
+            ficha: const FichaTotem.particular(eventoParticular),
+            cfg: _particular,
+          ),
+          salon,
+        ),
+      ]) {
+        await _montar(
+          tester,
+          EscenaTotem(
+            estilo: EstiloTotem.neon,
+            cfg: _masivo,
+            quieta: true,
+            llegada: llegada,
+            plano: plano,
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        expect(find.byType(PanelPlano), findsNothing);
+      }
+    });
+
+    testWidgets('en la espera no hay plano', (tester) async {
+      await _montar(
+        tester,
+        EscenaTotem(
+          estilo: EstiloTotem.gala,
+          cfg: _masivo,
+          quieta: true,
+          plano: salon,
+        ),
+      );
+      expect(find.byType(PanelPlano), findsNothing);
+    });
+
+    test('el tema del plano se arma una vez por apariencia y color', () {
+      for (final e in EstiloTotem.values) {
+        final a = temaPlanoDelTotem(e, const Color(0xFFD4AF37));
+        expect(identical(a, temaPlanoDelTotem(e, const Color(0xFFD4AF37))),
+            isTrue,
+            reason: e.nombre);
+        expect(a.resaltado, const Color(0xFFD4AF37));
+        expect(a.divisiones, [const Color(0xFFD4AF37)]);
+        expect(
+          identical(a, temaPlanoDelTotem(e, const Color(0xFFFF8FB1))),
+          isFalse,
+        );
+      }
+      // Un color oscuro lleva el número claro, y uno claro, oscuro.
+      expect(
+        temaPlanoDelTotem(EstiloTotem.neon, const Color(0xFF1B1464))
+            .resaltadoNumero,
+        const Color(0xFFFFFFFF),
+      );
+      expect(
+        temaPlanoDelTotem(EstiloTotem.neon, const Color(0xFFE8E3D3))
+            .resaltadoNumero,
+        const Color(0xFF1A1406),
+      );
+    });
+
+    testWidgets('animada: el plano se arma una vez por llegada, no por cuadro',
+        (tester) async {
+      EscenaTotem.planosArmados = 0;
+      final llegada = _llegada(familia);
+      final clave = Object();
+      await _montar(
+        tester,
+        EscenaTotem(
+          estilo: EstiloTotem.neon,
+          cfg: _masivo,
+          llegada: llegada,
+          claveLlegada: clave,
+          plano: salon,
+        ),
+      );
+      TemaPlano? tema;
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        final t = tester.widget<VistaPlano>(find.byType(VistaPlano)).tema;
+        if (tema != null) expect(identical(t, tema), isTrue);
+        tema = t;
+      }
+      expect(EscenaTotem.planosArmados, 1);
+      expect(tester.takeException(), isNull);
+    });
+  });
 
   group('la foto', () {
     bool esDe<T extends ImageProvider>(Widget w) => w is Image && w.image is T;

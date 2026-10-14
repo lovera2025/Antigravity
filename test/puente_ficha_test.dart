@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
 import 'package:arguello_events/features/totem/services/puente_ficha.dart';
@@ -53,6 +54,59 @@ void main() {
     final ficha = await armar('e0000000-0000-4000-8000-0000000000ff');
     expect(ficha.masivo, isFalse);
     expect(lecturasDeAlumnos, 0);
+  });
+
+  group('el plano de la fiesta', () {
+    final salon = ArmadosPredefinidos.normal2aPagina3();
+
+    test('un masivo lleva el salón de su plano', () async {
+      final ficha = await armarFichaTotem(
+        eventoMasivo,
+        leerEvento: (id) async => eventos[id],
+        leerAlumnos: (id) => leerAlumnosDeLaPuerta(contratos, sillas, id),
+        leerPlano: (id) async => id == eventoMasivo ? salon : null,
+      );
+      expect(ficha.plano, same(salon));
+    });
+
+    test('si el plano no se puede leer, la ficha va sin él', () async {
+      final ficha = await armarFichaTotem(
+        eventoMasivo,
+        leerEvento: (id) async => eventos[id],
+        leerAlumnos: (id) => leerAlumnosDeLaPuerta(contratos, sillas, id),
+        leerPlano: (id) async => throw StateError('base cerrada'),
+      );
+      expect(ficha.plano, isNull);
+      expect(ficha.de(idDe('perez')), isNotNull);
+    });
+
+    test('un particular no lo lee', () async {
+      var lecturas = 0;
+      final ficha = await armarFichaTotem(
+        eventoParticular,
+        leerEvento: (id) async => eventos[id],
+        leerAlumnos: (id) => leerAlumnosDeLaPuerta(contratos, sillas, id),
+        leerPlano: (id) async {
+          lecturas++;
+          return salon;
+        },
+      );
+      expect(ficha.plano, isNull);
+      expect(lecturas, 0);
+    });
+
+    test('viaja por el puente hasta la ventana del tótem', () async {
+      final r = await PuenteFichaTotem.responder(
+        const MethodCall(PuenteFichaTotem.metodo, eventoMasivo),
+        (id) => armarFichaTotem(
+          id,
+          leerEvento: (id) async => eventos[id],
+          leerAlumnos: (id) => leerAlumnosDeLaPuerta(contratos, sillas, id),
+          leerPlano: (id) async => salon,
+        ),
+      );
+      expect(FichaTotem.decodificar(r)!.plano!.numeros, salon.numeros);
+    });
   });
 
   group('lo que contesta la ventana principal', () {

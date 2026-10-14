@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../models/totem_config.dart';
+import '../../plano/estilos/estilo_plano.dart';
+import '../../plano/modelo/armado_salon.dart';
+import '../../plano/widgets/vista_plano.dart';
 import '../services/contenido_bienvenida.dart';
+import '../services/plano_de_la_llegada.dart';
 import 'escena_cristal.dart';
 import 'escena_gala.dart';
 import 'escena_neon.dart';
 import 'escena_poster.dart';
 import 'fondo_totem.dart';
 import 'fuentes_totem.dart';
+import 'plano_del_totem.dart';
 import 'totem_estilo.dart';
 
 /// Lo que se ve en el tótem: la espera o una llegada, en la apariencia del
@@ -33,6 +38,11 @@ class EscenaTotem extends StatefulWidget {
 
   /// La llegada que se muestra; null en la espera.
   final ContenidoBienvenida? llegada;
+
+  /// El salón de la fiesta: en la llegada de un masivo, abajo (o al costado)
+  /// va el plano con la mesa de la familia encendida. Null: sin plano (un
+  /// particular, el tótem por el navegador).
+  final ArmadoSalon? plano;
 
   /// Qué llegada es: si cambia, la animación de entrada vuelve a empezar.
   final Object? claveLlegada;
@@ -61,6 +71,7 @@ class EscenaTotem extends StatefulWidget {
     this.foto,
     this.qrUrl,
     this.llegada,
+    this.plano,
     this.claveLlegada,
     this.saliendo = false,
     this.enCamino = 0,
@@ -76,6 +87,11 @@ class EscenaTotem extends StatefulWidget {
 
   /// Lo que tarda en irse. Quien la usa espera esto antes de la siguiente.
   static const salida = Duration(milliseconds: 700);
+
+  /// Cuántas veces se armó el plano de una llegada. Solo los tests: se arma
+  /// una vez por llegada, no en cada cuadro.
+  @visibleForTesting
+  static int planosArmados = 0;
 
   @override
   State<EscenaTotem> createState() => _EscenaTotemState();
@@ -133,6 +149,28 @@ class _EscenaTotemState extends State<EscenaTotem>
     super.dispose();
   }
 
+  // El plano de la llegada se arma una vez por llegada (y por plano), no en
+  // cada cuadro.
+  PlanoDeLaLlegada? _guia;
+  ArmadoSalon? _guiaPlano;
+  String? _guiaMesa;
+  String? _guiaNombre;
+
+  PlanoDeLaLlegada? _guiaPara(ContenidoBienvenida? c) {
+    if (c == null || widget.plano == null) return null;
+    final nombre = c.nombres.isEmpty ? '' : c.nombres.first;
+    if (!identical(_guiaPlano, widget.plano) ||
+        _guiaMesa != c.mesa ||
+        _guiaNombre != nombre) {
+      _guiaPlano = widget.plano;
+      _guiaMesa = c.mesa;
+      _guiaNombre = nombre;
+      _guia = PlanoDeLaLlegada.para(widget.plano, mesa: c.mesa, nombre: nombre);
+      EscenaTotem.planosArmados++;
+    }
+    return _guia;
+  }
+
   EscenaEstilo get _escena => switch (widget.estilo) {
         EstiloTotem.neon => const EscenaNeon(),
         EstiloTotem.cristal => const EscenaCristal(),
@@ -155,6 +193,8 @@ class _EscenaTotemState extends State<EscenaTotem>
     final escena = _escena;
     final url = widget.cfg.imagenUrl;
     final foto = widget.foto ?? (url == null ? null : NetworkImage(url));
+    final guia = _guiaPara(widget.llegada);
+    final tema = guia == null ? null : temaPlanoDelTotem(widget.estilo, color);
     return LayoutBuilder(
       builder: (context, c) {
         final ancho = c.maxWidth.isFinite ? c.maxWidth : 1080.0;
@@ -207,7 +247,9 @@ class _EscenaTotemState extends State<EscenaTotem>
                   if (llegada != null && e > 0)
                     Opacity(
                       opacity: (e * 1.8).clamp(0.0, 1.0),
-                      child: escena.llegada(datos, llegada),
+                      child: guia == null || tema == null
+                          ? escena.llegada(datos, llegada)
+                          : _conPlano(escena, datos, llegada, guia, tema),
                     ),
                   if (llegada != null && widget.enCamino > 0)
                     Positioned(
@@ -248,6 +290,60 @@ class _EscenaTotemState extends State<EscenaTotem>
     );
   }
 
+  /// La llegada con el plano: en una pantalla vertical, la llegada arriba y el
+  /// plano abajo; apaisada, la llegada a la izquierda y el plano a la derecha.
+  /// Abajo de todo quedan "N más en camino" y la línea del tiempo.
+  Widget _conPlano(
+    EscenaEstilo escena,
+    DatosEscena d,
+    ContenidoBienvenida c,
+    PlanoDeLaLlegada guia,
+    TemaPlano tema,
+  ) {
+    final u = d.u;
+    final Rect llegada;
+    final Rect plano;
+    if (d.apaisado) {
+      final mitad = d.ancho * 0.5;
+      llegada = Rect.fromLTWH(0, 0, mitad, d.alto);
+      plano = Rect.fromLTRB(mitad, u * 1.6, d.ancho - u * 1.2, d.alto - u * 3.4);
+    } else {
+      final corte = d.alto * 0.5;
+      llegada = Rect.fromLTWH(0, 0, d.ancho, corte);
+      plano = Rect.fromLTRB(
+        u * 1.2,
+        corte + u * 0.4,
+        d.ancho - u * 1.2,
+        d.alto - u * 3.4,
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fromRect(
+          rect: llegada,
+          child: escena.llegada(
+            d.conPlanoEn(llegada.size, alCostado: d.apaisado),
+            c,
+          ),
+        ),
+        Positioned.fromRect(
+          rect: plano,
+          child: Opacity(
+            opacity: d.tramo(0.35, 0.8),
+            child: PanelPlano(
+              guia: guia,
+              tema: tema,
+              borde: d.color,
+              u: u,
+              animar: !widget.quieta,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// El fogonazo del fondo: sube y baja cerca de 1,15 s después de empezar.
   static double _fogonazo(double e) {
     final t = e * EscenaTotem.entrada.inMilliseconds / 1000;
@@ -285,6 +381,14 @@ class DatosEscena {
   /// Segundos de un reloj que da vueltas: lo que titila, gira o brilla.
   final double reloj;
 
+  /// La llegada va en una parte de la pantalla: en la otra está el plano.
+  /// [ancho] y [alto] son los de esa parte.
+  final bool conPlano;
+
+  /// El plano va al costado (pantalla apaisada) y no abajo: lo de abajo de la
+  /// pantalla, como el horizonte de Neón, sigue a la vista.
+  final bool planoAlCostado;
+
   const DatosEscena({
     required this.cfg,
     required this.estilo,
@@ -299,7 +403,33 @@ class DatosEscena {
     required this.enCamino,
     required this.entrada,
     required this.reloj,
+    this.conPlano = false,
+    this.planoAlCostado = false,
   });
+
+  /// Lo mismo, para la parte de la pantalla que deja el plano.
+  ///
+  /// La medida sale de esa parte (una llegada mide unos 22 × 24 [u]), y nunca
+  /// es menor que la de la pantalla entera: en una vertical queda igual, y en
+  /// una apaisada la mitad izquierda se aprovecha entera. Lo que no entre lo
+  /// achica `Centrado`.
+  DatosEscena conPlanoEn(Size parte, {required bool alCostado}) => DatosEscena(
+        cfg: cfg,
+        estilo: estilo,
+        foto: foto,
+        color: color,
+        segundo: segundo,
+        u: math.max(u, math.min(parte.width / 22, parte.height / 24)),
+        ancho: parte.width,
+        alto: parte.height,
+        apaisado: parte.width > parte.height * 1.2,
+        qrUrl: qrUrl,
+        enCamino: enCamino,
+        entrada: entrada,
+        reloj: reloj,
+        conPlano: true,
+        planoAlCostado: alCostado,
+      );
 
   /// La parte de [entrada] que va de [desde] a [hasta], de 0 a 1.
   double tramo(double desde, double hasta, {Curve curva = Curves.easeOut}) =>
@@ -322,6 +452,55 @@ abstract class EscenaEstilo {
 }
 
 // ── Piezas comunes ─────────────────────────────────────────────────────────
+
+/// El plano en la llegada: la hoja de la mesa de la familia, con su mesa
+/// encendida, en el tema de la apariencia ([temaPlanoDelTotem]).
+class PanelPlano extends StatelessWidget {
+  final PlanoDeLaLlegada guia;
+  final TemaPlano tema;
+
+  /// El color del evento: el borde del panel.
+  final Color borde;
+  final double u;
+
+  /// False: quieto (tests y muestras).
+  final bool animar;
+
+  const PanelPlano({
+    super.key,
+    required this.guia,
+    required this.tema,
+    required this.borde,
+    required this.u,
+    this.animar = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final redondeo = BorderRadius.circular(u * 0.6);
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        borderRadius: redondeo,
+        border: Border.all(
+          color: borde.withValues(alpha: 0.35),
+          width: math.max(1, u * 0.05),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: redondeo,
+        child: VistaPlano(
+          armado: guia.armado,
+          hoja: guia.hoja,
+          tema: tema,
+          estado: guia.estado,
+          resaltadas: guia.mesas,
+          animar: animar,
+        ),
+      ),
+    );
+  }
+}
 
 /// Lo que va en el medio de la pantalla, que nunca se corta: si no entra, se
 /// achica entero. A lo ancho, los textos se parten en renglones.

@@ -135,6 +135,12 @@ void main() {
       pantallaPlano,
       'lib/features/plano/repositories/planos_evento_repository.dart',
     });
+    // El tótem lee el plano por una puerta que solo deja leer.
+    expect(
+      File('lib/features/plano/repositories/planos_evento_repository.dart')
+          .readAsStringSync(),
+      contains('(ref) => ref.watch(planosEventoRepositoryProvider).obtener,'),
+    );
     expect(archivosCon('PlanosEventoRepository.guardarEn('), {
       'lib/features/eventos/repositories/contratos_repository.dart',
     });

@@ -3,6 +3,7 @@
 // su música. Sin pantalla ni base.
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
@@ -185,6 +186,59 @@ void main() {
       final kb = ficha.codificar().length / 1024;
       expect(kb, lessThan(250));
       expect(FichaTotem.decodificar(ficha.codificar())!.personas.length, 1200);
+    });
+  });
+
+  group('el plano de la fiesta', () {
+    final salon = ArmadosPredefinidos.normal2aPagina3();
+    PuertaDelEvento masivo() => PuertaDelEvento.masivo(
+          alumnos: alumnosDeLaFicha(),
+          invitados: const [],
+        );
+
+    test('va y vuelve por el puente, con sus mesas, hojas e ingreso', () {
+      final ficha = FichaTotem.desdePuerta(eventoMasivo, masivo(), plano: salon);
+      final vuelta = FichaTotem.decodificar(ficha.codificar())!.plano!;
+      expect(vuelta.numeros, salon.numeros);
+      expect(vuelta.hojas.map((h) => h.id), salon.hojas.map((h) => h.id));
+      expect(vuelta.sectores.length, salon.sectores.length);
+      expect(vuelta.ingreso!.x, salon.ingreso!.x);
+      for (final m in salon.mesas) {
+        expect(vuelta.mesa(m.numero)!.x, m.x);
+        expect(vuelta.mesa(m.numero)!.y, m.y);
+      }
+    });
+
+    test('un particular no lleva plano, aunque se lo pasen', () {
+      final ficha = FichaTotem.desdePuerta(
+        eventoParticular,
+        PuertaDelEvento.particular(const []),
+        plano: salon,
+      );
+      expect(ficha.plano, isNull);
+      expect(FichaTotem.decodificar(ficha.codificar())!.plano, isNull);
+    });
+
+    test('un plano que no se puede leer no tira la ficha: va sin plano', () {
+      for (final roto in ['"plano": 3', '"plano": {"mesas": "no"}',
+          '"plano": {"hojas": [], "mesas": []}']) {
+        final ficha = FichaTotem.decodificar(
+          '{"evento_id": "e", "masivo": true, "personas": '
+          '[{"id": "x", "n": "PÉREZ, JUAN", "a": true}], $roto}',
+        );
+        expect(ficha, isNotNull, reason: roto);
+        expect(ficha!.plano, isNull, reason: roto);
+        expect(ficha.de('x'), isNotNull, reason: roto);
+      }
+    });
+
+    test('un salón de 140 mesas suma menos de 25 KB', () {
+      final sinPlano = FichaTotem.desdePuerta(eventoMasivo, masivo());
+      final conPlano =
+          FichaTotem.desdePuerta(eventoMasivo, masivo(), plano: salon);
+      final kb =
+          (conPlano.codificar().length - sinPlano.codificar().length) / 1024;
+      expect(kb, lessThan(25));
     });
   });
 }
