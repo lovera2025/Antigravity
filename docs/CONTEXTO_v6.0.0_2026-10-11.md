@@ -14,7 +14,9 @@ y caja no cambian.
 > (sillas, entradas, registro del sorteo).
 > Plan aprobado: `C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`.
 
-**Estado: programada, verificada y documentada. SIN PUBLICAR.** Las PCs siguen con la 5.0.0.
+**Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
+la puerta que sigue al sorteo (hecha), el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
+**"Qué pasó el 13-oct"**, más abajo. Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -50,15 +52,15 @@ intermedias: por eso salta de la 5.0.0 a la 6.0.0 y junta más de 80 commits.
 | **El reparto de sillas ("2P · 1A") se elige con las mesas ya sorteadas** | Columna MESA |
 | **Lo que cambia el salón, solo en modo jefe**; lo demás se ve, se imprime y se entrega | Toda la fiesta |
 | **La nota de un alumno dice cuándo se escribió** y cuándo se tocó por última vez | El ícono de la nota en la grilla (al pasar el mouse) y la hoja de la nota |
-| "Pasar a la lista de la puerta", **trabado hasta diciembre** | MÁS |
+| **La lista de la puerta sigue al sorteo:** se arma al sortear y se vacía al deshacer (13-oct) | Sola; a mano, en MÁS |
 | El recibo reimpreso cuenta bien las cuotas (lo de GAUNA) | Recibos |
 | Mi Empresa: lo disponible en efectivo y en transferencia, las extracciones aparte y el bolsillo arreglado | Mi Empresa |
 | La cola de subida no pierde un cambio hecho mientras subía el anterior, y lo trabado se reintenta todo junto | Sincronización |
 | Editar o borrar una nota de mora condonada ahora llega a la nube y a las otras PCs | Sincronización |
 
 **Lo que no cambia:** cómo se cobra, las cuentas, los saldos, la mora, la caja, la web, Recepción y el tótem. Una
-fiesta sin plano sortea igual que en la 5.0.0. **Recepción y el tótem nuevos siguen pendientes, para diciembre**
-(`docs/pendientes/PENDIENTES.md`).
+fiesta sin plano sortea igual que en la 5.0.0. **Recepción y el tótem nuevos pasaron a esta versión el 13-oct** y
+todavía no están programados (`docs/pendientes/PENDIENTES.md`).
 
 ## Dónde está
 
@@ -121,66 +123,140 @@ El detalle está en "Qué pasó el 11-oct" y "Qué pasó el 11-oct, a la tarde" 
    - quedó anotado como pendiente que el borrado de una nota no le llega a una PC que estaba cerrada
      (`docs/pendientes/notas-borradas-en-pc-cerrada.md`).
 
+## Qué pasó el 13-oct: la 6.0.0 creció
+
+Plan aprobado: `C:\Users\lover\.claude\plans\donde-nos-quedamos-expressive-nautilus.md`.
+
+**Lo que decidió el usuario ese día:**
+- **Todo va en la 6.0.0, también Recepción y el tótem nuevos**, y se hace por partes, "para que todo salga bien".
+  El 24 y 25-sep habían quedado para diciembre; ese día aclaró que los quiere en esta versión ("capaz en ese
+  momento me expresé mal"). La 6.0.0 se publica cuando cierre la última parte.
+- **La lógica del sorteo y la puerta:** se sortea una institución, sube a la nube, queda en cualquier PC que se abra
+  sin pisarse, y Recepción y el tótem la muestran. Si se deshace el sorteo, no muestran nada.
+- **Exportar e importar un Excel por institución** para que un delegado complete acompañantes (máximo 2) y música.
+  Lo que quedó cerrado, viendo maquetas:
+  - se llega por **PLANILLAS ▾ → "Acompañantes y música"**, solo en modo jefe;
+  - salen todos los alumnos de esa institución tal cual están en el sistema, **menos los dados de baja**;
+  - **una sola columna "Acompañantes (hasta 2)"** y otra de música: dos columnas "Acompañante 1" y "Acompañante 2"
+    le parecieron mal;
+  - el Excel va cerrado salvo esos dos casilleros, y al importar solo se escriben esos datos;
+  - si un alumno ya tenía algo cargado vale el Excel, mostrando antes lo que cambia;
+  - en Editar alumno, acompañantes y música también quedan solo para el jefe;
+  - quiere una prueba de exportar e importar "en dry-run" con sus datos.
+- **La regla de "después de las 20 hs" ya no corre:** lo que haya que subir a la nube se le avisa y se hace en el
+  momento, con su OK.
+- **Un ensayo con una institución real** (sortear, verla en Recepción y en el tótem, y deshacer): con la que él
+  elija. Mientras la 6.0.0 no esté, se puede hacer con la 5.0.0 instalada, que tiene el paso a mano.
+
+**Lo que se le dijo y conviene no repetir como pregunta:** le asustó que se le preguntara con qué institución
+ensayar ("¿por qué me estás preguntando? me estás asustando"). Lo que tiene poco riesgo y vuelta atrás se le
+recomienda y se sigue.
+
+### El camino
+
+| # | Parte | Estado |
+|---|---|---|
+| 1 | La puerta sigue al sorteo | **hecha el 13-oct** |
+| 2 | Acompañantes y música por Excel, con el simulacro | falta |
+| 3 | La nota como ventana al centro, y las dos preguntas pendientes | falta |
+| 4 | Tótem: que no se desconecte ni salude tarde (`pendientes/totem-comunicacion.md`) | falta |
+| 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | falta |
+| 6 | Recepción más amigable (`pendientes/recepcion-redisenio.md`) | falta |
+| 7 | Modo kiosco (`pendientes/totem-kiosco.md`) | falta |
+| 8 | Tótems vinculados (`pendientes/totems-vinculados.md`) | falta |
+| 9 | Cerrar la lista de la puerta (`pendientes/rls-invitados.md`; funciones en la nube) | falta |
+| 10 | Verificación, documentación, instalador y la web armada | falta |
+| 11 | Publicar, instalar, la web, cerrar los permisos y el ensayo | falta |
+
+De la 4 a la 9 son, a ojo, entre 8 y 10 secciones de trabajo como las de la Fase 3. Cada una arranca con su plan
+corto leyendo su archivo de diseño (aprobado con maquetas el 24-sep). Para preguntarle en su momento: (5) qué estilo
+de plano usan Cristal y Póster en la llegada; (8) cómo se reparte la puerta; (9) qué pasa con la pantalla `/op`.
+
+### La parte 1: la puerta sigue al sorteo
+
+**Qué cambió para el usuario:** al sortear, restaurar o cambiar una familia de mesa, la lista de la puerta de esa
+fiesta se arma o se corrige sola, y el aviso lo dice ("Recepción y el tótem ya tienen la lista: 112 persona(s)").
+Al deshacer el sorteo entero, se vacía sola. Antes había que acordarse de MÁS → "Pasar a la lista de la puerta", que
+en la 6.0.0 además estaba trabado, y la lista nunca se vaciaba.
+
+- **La regla:** la fiesta está en la lista solo mientras algún alumno activo tenga mesa.
+- **Quién la arma y la vacía:** solo las dos pantallas del salón (`trasElSalon`), que son del jefe y miran la nube
+  antes de guardar. Una baja, un nombre corregido o un alumno nuevo corrigen solo sus filas (`trasLosAlumnos`), y
+  en una PC donde nadie tiene mesa no hacen nada: así una PC atrasada no puede vaciar la puerta de una institución.
+- **El aviso de Deshacer** dice que Recepción y el tótem dejan de mostrar a la institución y, si hay gente marcada
+  como adentro, cuántos ingresos se pierden.
+- **Un alumno eliminado** se lleva sus filas en ese momento.
+- **Si la lista no se pudo poner al día**, las mesas quedan guardadas igual y el aviso dice cómo arreglarlo.
+- Piezas: `lista_puerta.dart` (`planListaPuerta`, `hayMesasSorteadas`, `renglonesPlanPuerta`),
+  `puerta_al_dia.dart` (`PuertaAlDia` y su provider) e `InvitadosRepository.aplicarListaPuerta`, que ahora también
+  saca filas.
+- Tests: 1.753 en la suite (eran 1.712). `test/puerta_sigue_al_salon_test.dart` falla si aparece un guardado de
+  mesas que no deja la puerta al día. `flutter analyze` sigue en 313 avisos.
+- **Sin cambios en la base ni en la nube.**
+
+**Lo que apareció al revisar, y no se cerró ahí:** las pantallas `/lista` (la del QR) y `?buscar` marcan el ingreso
+sin pedir nada a quien no tiene DNI cargado, y los alumnos no lo tienen. Con el QR a la vista, cualquiera puede
+marcar a otro desde su celular. No se puede distinguir desde la web a un alumno de un invitado sin DNI de una fiesta
+particular (los ids se ven iguales y `eventos` no es público), y cambiar eso para todos cambiaba las fiestas
+particulares. Se cierra en las partes 5 (sin QR en masivos) y 9 (el check-in en el servidor). Quedó anotado en
+`docs/pendientes/rls-invitados.md`.
+
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** En orden:
+**No se publica sin su "publicamos".** Antes, las partes 2 a 10 del camino de arriba. Después:
 
-1. **Aplicar lo que ya eligió: la nota como ventana al centro (opción B).** Es pasar `kNotaComoVentana` a `true`
-   en `lib/features/eventos/widgets/nota_operativa_bottom_sheet.dart`. Después, la suite, y sacar de nuevo la
-   muestra (`tool/nota_operativa_muestra_test.dart`) para mostrarle cómo quedó.
-2. **Dos cosas que tiene que contestar el usuario:**
-   - **las pantallas:** qué cambiaría del recorrido (`Recorrido_6.0.0.html`), por número de pantalla;
-   - **la nota resuelta:** se le ofreció que deje de llamar la atención en la grilla (el ícono en gris clarito) sin
-     borrarse. Preguntó si convenía que "desaparezca"; se le recomendó no borrarla sola. No contestó.
-3. **Armar de nuevo el instalador** (`installer\build_installer.ps1`), después de los puntos 1 y 2. Antes, la suite
-   entera y `flutter analyze`.
-4. **Los dos SQL en la nube, con su OK en el momento** (un domingo sin cobros o después de las 20 hs). Antes y
-   después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y 30
-   eventos**, y tienen que dar igual. Después, las consultas de verificación del final de cada archivo (RLS
-   prendida, un trigger de insert y uno de update por tabla, la policy, y ninguna en Realtime).
-5. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
-   Crea el tag `v6.0.0` sobre la rama y sube el instalador. El texto de novedades (cinco renglones, acortado a
-   pedido) está también en el CONTEXTO de la Fase 3. No nombra lo de las notas: si el usuario quiere, se suma un
-   renglón. `build/` no va a git: si el archivo no está, se arma de nuevo desde el CONTEXTO.
-6. **Instalar:** primero la PC del usuario, para probarla; después la del operario y la de la oficina. Al abrir, la
-   app saca sola la copia y actualiza la base.
-7. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea ni se entregan entradas
-   hasta que todas tengan la 6.0.0**: la 5.0.0 no ve el plano, los repartos ni las entregas.
-8. **Después de instalar:** mirar en la nube que las tablas nuevas reciben filas y que la cola de subida queda en 0.
+1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
+   - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
+     `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
+     correr cuando él diga;
+   - la columna de la apariencia del tótem (parte 5) y las funciones de la puerta (parte 9).
+   Antes y después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y
+   30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
+2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
+   (`tool/verificar_migracion_v73_test.dart`): el 11-oct dio perfecto, pero desde entonces hubo cobros.
+3. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
+   El texto de novedades hay que rehacerlo: nombra solo lo del 11-oct.
+4. **Instalar:** primero la PC del usuario; después la del operario y la de la oficina.
+5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
+   importa ningún Excel hasta que todas tengan la 6.0.0.**
+6. **Publicar la web**, con su OK.
+7. **Cerrar los permisos de la lista de la puerta**, último: si se cierra antes, el tótem de una PC con la versión
+   vieja queda en blanco.
+8. **El ensayo:** armar el plano, sortear una institución, mirar en otra PC que está lo mismo, abrir Recepción y el
+   tótem, marcar ingresos, y al final SORTEO ▾ → Deshacer sorteo → Todo. Tiene que quedar sin mesas y con la lista
+   vacía, en las PCs y en la nube.
 9. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
 
+- **Las dos preguntas del 11-oct:** qué cambiaría de las 26 pantallas del recorrido, y si una nota resuelta deja de
+  llamar la atención en la grilla.
 - La página 6 del Canva: la Normal ya tiene **137 mesas cargadas** (116 con lo pagado el 11-oct), y su armado del
   Canva tiene la hoja B provisoria. Mientras tanto está el armado a medida del playón, y las mesas que falten se
   agregan en Acomodar.
 - Los cuatro lados del playón medidos con cinta (hoy son 30, 46 y 39 m, a ojo del satélite).
 - Las respuestas del jefe: qué armado usa cada escuela, las numeraciones, el pasto, y por división o entera.
-- La fecha del sorteo.
+- La fecha del sorteo. El 13-oct dijo que "falta un mes y alguito".
 - Cerca del sorteo: volver a sacar el control de mesas y sillas y verlo con él, nombre por nombre.
 
 ## Para seguir en otro chat, pegar
 
 ```text
 Seguimos con la 6.0.0 de Junior Eventos. Leé primero
-docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 11-oct, en
-orden" y "Lo que falta para publicar") y la memoria del proyecto. Está todo
-programado, verificado y documentado, hasta 3b63b55, con 1.712 tests en verde y
-el working tree limpio. NO está publicada: las PCs siguen con la 5.0.0 y los
-dos SQL de la nube no se corrieron.
-Lo primero: aplicá lo que ya elegí para la nota de un alumno, la opción B, que
-se abra como una ventana al centro (está preparada y sin prender), y mostrame
-cómo quedó. Después preguntame dos cosas que quedé debiendo: (1) qué cambiaría
-de las pantallas del recorrido (build/muestras_6.0.0/Recorrido_6.0.0.html, por
-número); (2) si una nota resuelta deja de llamar la atención en la grilla.
-Después: armá de nuevo el instalador (el que hay quedó viejo), y para publicar
-seguí los pasos del CONTEXTO, frenando en los dos SQL de la nube y antes del
-release para pedirme el OK. Instalo primero en mi PC, después el operario y la
-oficina.
-Trabajá por secciones: avisame cada cosa que termines y cómo quedó, con un
-commit y push por paso, y cuando te diga "actualizá el contexto" frená y dejá
-todo anotado. Contestame primero lo que te pregunto, en una línea. No corras la
-app desde el working tree (la v73 migraría la base real). Lo que toque la base
-real o la nube, con mi OK en el momento. Para volver atrás en el código está el
-tag antes-de-6.0.0.
+docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 13-oct" y
+"Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El plan
+aprobado está en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-expressive-nautilus.md.
+La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
+se corrieron. Va todo en una sola versión, por partes: está hecha la parte 1
+(la puerta sigue al sorteo). Seguí por la parte que toque del camino, con su
+plan corto, y avisame al terminar cada una con cómo quedó, un commit y un push.
+Recepción y el tótem nuevos también van en la 6.0.0: sus diseños ya están
+aprobados en docs/pendientes/.
+Contestame primero lo que te pregunto, en una línea. Lo que tiene poco riesgo y
+vuelta atrás, recomendalo y seguí: no me lo preguntes como si fuera un peligro.
+No corras la app desde el working tree (la v73 migraría la base real). Lo que
+toque la base real o la nube, con mi OK en el momento; ya no hay regla de
+horario. Para volver atrás en el código está el tag antes-de-6.0.0. Con
+"actualizá el contexto", frená y dejá todo anotado.
 ```

@@ -35,6 +35,7 @@ import 'package:arguello_events/features/plano/repositories/mesas_movimientos_re
 import 'package:arguello_events/features/plano/repositories/planos_evento_repository.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
+import 'package:arguello_events/features/recepcion/services/puerta_al_dia.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/entradas_retiro.dart';
@@ -267,6 +268,24 @@ class _Subida implements SubidaInmediata {
   Future<bool> queda(Map<String, Iterable<String>> registros) async => !sube;
 }
 
+/// La lista de la puerta: qué fiestas se pidió dejar al día, y si se pudo.
+class _Puerta implements PuertaAlDia {
+  bool anda = true;
+  final alDia = <String>[];
+
+  @override
+  Future<PuertaAlDiaResultado> trasElSalon(String eventoId) async {
+    alDia.add(eventoId);
+    return anda
+        ? const PuertaAlDiaResultado(personas: 3, sacadas: 0, sinSorteo: false)
+        : const PuertaAlDiaResultado.conFallo();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
 /// Todo lo que rodea a la pantalla en un test.
 class _Mundo {
   _Mundo(SupabaseClient supabase, {PlanoEvento? plano, required List<ContratoAlumno> alumnos})
@@ -280,6 +299,7 @@ class _Mundo {
   late final _Contratos contratos;
   final motor = _Motor();
   final subida = _Subida();
+  final puerta = _Puerta();
 
   /// El último plano guardado.
   PlanoEvento get guardado => planos.guardados.last;
@@ -330,6 +350,7 @@ Future<_Mundo> _abrir(
         connectivityServiceProvider.overrideWithValue(mundo.conexion),
         syncEngineProvider.overrideWithValue(mundo.motor),
         subidaInmediataProvider.overrideWithValue(mundo.subida),
+        puertaAlDiaProvider.overrideWithValue(mundo.puerta),
         contratosRepositoryProvider.overrideWithValue(mundo.contratos),
         planosEventoRepositoryProvider.overrideWithValue(mundo.planos),
         mesasMovimientosRepositoryProvider
@@ -847,6 +868,43 @@ void main() {
       expect(cambio.movimiento!.eventoId, _eventoId);
       expect(_dicho(tester), 'SOSA pasó a la 30.');
       expect(mundo.subida.pedidas, ['mesas_movimientos']);
+    });
+
+    // La puerta sigue al salón: Recepción y el tótem leen otra lista, y si no
+    // se pone al día con cada cambio siguen diciendo la mesa vieja.
+    testWidgets('mudar una familia deja al día la lista de la puerta',
+        (tester) async {
+      final mundo = await mudarASosa(tester);
+      expect(mundo.puerta.alDia, isEmpty);
+      await _guardar(tester, 'confirmar');
+      expect(mundo.puerta.alDia, [_eventoId]);
+    });
+
+    testWidgets('si la lista de la puerta no se pudo poner al día, lo dice y '
+        'dice cómo arreglarlo', (tester) async {
+      final mundo = await mudarASosa(tester);
+      mundo.puerta.anda = false;
+      await _guardar(tester, 'confirmar');
+
+      // Las mesas se guardaron igual: la lista es aparte.
+      expect(mundo.contratos.asignaciones.single.numeros, {'sosa': '30'});
+      expect(
+        _dicho(tester),
+        'SOSA pasó a la 30. La lista de la puerta no se pudo actualizar: tocá '
+        'MÁS → "Pasar a la lista de la puerta".',
+      );
+    });
+
+    testWidgets('fijar una mesa no toca la lista de la puerta: no cambió la '
+        'mesa de nadie', (tester) async {
+      final mundo = await _abrir(tester, alumnos: _sinSortear());
+      await _personalizar(tester);
+      await _tocarMesa(tester, 30);
+      await _guardar(tester, 'accion_dejar_libre');
+      await tester.enterText(find.byKey(const Key('motivo')), 'Columna');
+      await tester.pump();
+      await _guardar(tester, 'confirmar');
+      expect(mundo.puerta.alDia, isEmpty);
     });
 
     testWidgets('DESHACER, recién hecho el cambio, lo vuelve atrás con otro '

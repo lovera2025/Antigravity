@@ -229,12 +229,28 @@ class InvitadosRepository {
   /// que volver a pasar la lista con la fiesta empezada no deja a nadie afuera.
   /// Por la misma razón, lo que sube a la nube de una fila nueva no lleva
   /// `estado_ingreso`: si la otra PC ya la había creado y marcado, el upsert no
-  /// la pisa (la columna tiene su default en Supabase). No borra nada.
+  /// la pisa (la columna tiene su default en Supabase).
+  ///
+  /// En la misma transacción saca las filas de [PlanListaPuerta.sobrantes]:
+  /// las que salieron de los alumnos y ya no corresponden (una baja, un
+  /// acompañante quitado, o todas si se deshizo el sorteo). Es un borrado con
+  /// nombre y apellido —una lista de ids fijos por alumno y lugar—, nunca un
+  /// barrido del evento: lo cargado a mano en esa lista no se toca.
   Future<void> aplicarListaPuerta(String eventoId, PlanListaPuerta plan) async {
     if (!plan.hayCambios) return;
     final db = await LocalDatabase.instance;
     final now = DateTime.now().toUtc().toIso8601String();
     await db.transaction((txn) async {
+      for (final sobra in plan.sobrantes) {
+        await txn.delete('invitados', where: 'id = ?', whereArgs: [sobra.id]);
+        await SyncQueue.enqueue(
+          executor: txn,
+          tabla: 'invitados',
+          operacion: SyncOperation.delete,
+          registroId: sobra.id,
+          payload: {'id': sobra.id},
+        );
+      }
       for (final f in plan.nuevas) {
         final nube = {
           'id': f.id,
@@ -283,6 +299,21 @@ class InvitadosRepository {
         );
       }
     });
+    // Que el salón deje de proyectar a quien se sacó, sin esperar a la nube:
+    // si se fue la lista entera es un reset; si son pocos, uno por uno.
+    if (plan.sobrantes.isNotEmpty) {
+      if (plan.sinSorteo) {
+        if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset();
+        unawaited(_emitir(eventoId, 'list_reset', {'evento_id': eventoId}));
+      } else {
+        for (final sobra in plan.sobrantes) {
+          if (KioskLauncher.isTotemActive) {
+            KioskLauncher.notifyGuestRemoved(sobra.id);
+          }
+          unawaited(_emitir(eventoId, 'guest_removed', {'id': sobra.id}));
+        }
+      }
+    }
     _notifyChanges(eventoId);
   }
 

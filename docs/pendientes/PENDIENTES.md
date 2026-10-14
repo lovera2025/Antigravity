@@ -39,6 +39,10 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 
 ### Tótem y Recepción para las fiestas de diciembre
 
+**Desde el 13-oct-2026 van en la 6.0.0**, por partes: el usuario los quiere en
+esa misma versión. El orden y el estado de cada uno están en "Qué pasó el
+13-oct" de [CONTEXTO_v6.0.0](../CONTEXTO_v6.0.0_2026-10-11.md).
+
 Diseñados y aprobados con maquetas el 2026-09-24, y postergados porque se
 priorizó el sorteo de noviembre. El contexto está en
 [CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24](../CONTEXTO_MESAS_PLANO_RECEPCION_2026-09-24.md).

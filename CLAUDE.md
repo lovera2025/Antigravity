@@ -154,21 +154,35 @@ servicios y diálogos con sus tests.
 **La lista de la puerta es por evento**, y el tótem no distingue particular de masivo: lo que cambia es cómo se
 carga.
 - **Particulares:** a mano o por CSV, con DNI.
-- **Masivos (fiestas de alumnos):** desde los alumnos, con ⋮ → "Pasar a la lista de la puerta" (v4.9.9,
-  `lista_puerta.dart`). Lleva cada alumno y sus acompañantes con nombre, con la mesa del sorteo.
-  - Los ids son fijos por alumno y lugar, así que se puede repetir.
-  - Nunca toca `estado_ingreso` ni borra nada.
-  - El sorteo guarda la mesa en `contratos_alumnos`; el tótem la lee de `invitados`. Si se vuelve a sortear, hay que
-    volver a pasar la lista.
-  - **Hasta cerrar la RLS de `invitados` no se pasa la lista de ninguna fiesta.** Hoy cualquiera con la clave
-    pública la lee y la cambia, DNI incluido. Se cierra en diciembre con el tótem, porque el tótem lee como
-    anónimo ([docs/pendientes/rls-invitados.md](docs/pendientes/rls-invitados.md)).
-  - **Desde la 6.0.0 la app lo traba sola:** `kListaPuertaHabilitada = false` (`lista_puerta.dart`). El renglón de
-    MÁS queda apagado con su motivo, y un test falla si alguien prende la bandera. Pasarla a `true` es el último
-    paso de cerrar la RLS.
+- **Masivos (fiestas de alumnos):** desde los alumnos (`lista_puerta.dart`). Lleva cada alumno activo y sus
+  acompañantes con nombre, con la mesa del sorteo. Los ids son fijos por alumno y lugar (`idInvitadoPuerta`).
 
-**Recepción y el tótem nuevos están diseñados y sin programar**, para las fiestas de diciembre: son los seis
-pendientes de "Tótem y Recepción" en `docs/pendientes/PENDIENTES.md`. La 6.0.0 no los toca.
+**La puerta sigue al sorteo** (v6.0.0, pedido del usuario el 13-oct-2026). El sorteo guarda la mesa en
+`contratos_alumnos`; Recepción y el tótem leen `invitados`. `PuertaAlDia` (`recepcion/services/puerta_al_dia.dart`)
+las pone de acuerdo sola:
+- **La fiesta está en la lista de la puerta solo mientras algún alumno activo tenga mesa.** Al sortear, restaurar o
+  cambiar una familia de mesa se arma o se corrige; **al deshacer el sorteo entero se vacía**. Antes de sortear no
+  hay nadie.
+- **Armar o vaciar la lista entera (`trasElSalon`) solo lo llaman las dos pantallas del salón**, que son del jefe y
+  antes de guardar miran la nube. Una PC atrasada nunca vacía la lista: `planListaPuerta` con `soloDe` (una baja,
+  un nombre, un alumno nuevo: `trasLosAlumnos`) no hace nada si en esa PC nadie tiene mesa.
+- **Un guardado nuevo de mesas tiene que llamar a `trasElSalon`, antes de subir.** `test/puerta_sigue_al_salon_test.dart`
+  lee las dos pantallas y falla si aparece uno que no.
+- Solo se escriben y se sacan las filas que salieron de los alumnos. Lo cargado a mano en esa lista no se toca.
+  El ingreso de quien se queda no se toca; el de quien se saca se va con la fila, y el aviso de Deshacer lo dice
+  antes con el número.
+- Un alumno eliminado se lleva sus filas en ese momento (`trasEliminar`): después ya no hay de dónde sacar sus ids.
+- MÁS → "Pasar a la lista de la puerta" quedó para ponerla al día a mano. `kListaPuertaHabilitada` vuelve a
+  trabarlo todo en un solo lugar.
+- **Falta cerrar la RLS de `invitados`**, y va en la misma 6.0.0
+  ([docs/pendientes/rls-invitados.md](docs/pendientes/rls-invitados.md)): hoy cualquiera con la clave pública lee y
+  cambia esa tabla. Además, **las pantallas `/lista` y `?buscar` marcan el ingreso sin pedir nada a quien no tiene
+  DNI, y los alumnos no lo tienen**: con el QR a la vista, cualquiera puede marcar a otro. Se cierra con el tótem
+  nuevo (sin QR en masivos) y con el check-in en el servidor.
+
+**Recepción y el tótem nuevos van en la 6.0.0**, por partes (decisión del 13-oct-2026; antes eran "para diciembre").
+Están diseñados y aprobados con maquetas: son los seis pendientes de "Tótem y Recepción" en
+`docs/pendientes/PENDIENTES.md`. El orden está en `docs/CONTEXTO_v6.0.0_2026-10-11.md`.
 
 **El retiro de entradas** (v72, `retiro_entradas_screen.dart`) es otra cosa: la entrega de entradas y pulseras en la
 oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados`.
@@ -322,6 +336,7 @@ No hay CLI de Supabase configurado. Convención: cada sentencia riesgosa lleva s
 `ROLLBACK` escrito arriba, comentado, y el archivo termina con las consultas de
 verificación: los conteos de antes y después, que tienen que dar igual.
 
-**Los SQL de una versión se corren antes de instalarla**, después de las 20 hs y
-con el OK del usuario en el momento. Sin las tablas en la nube, lo que se cargue
-en las PCs queda trabado en la cola.
+**Los SQL de una versión se corren antes de instalarla**, con el OK del usuario
+en el momento. Sin las tablas en la nube, lo que se cargue en las PCs queda
+trabado en la cola. (La regla de "después de las 20 hs" la sacó el usuario el
+13-oct-2026: lo que solo agrega se puede correr a cualquier hora.)

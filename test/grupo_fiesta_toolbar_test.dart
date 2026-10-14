@@ -3,6 +3,7 @@
 import 'package:arguello_events/features/eventos/widgets/grupo_fiesta_toolbar.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
+import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -292,32 +293,34 @@ void main() {
       expect(pedidos, ['orden', 'seleccion']);
     });
 
-    testWidgets('la lista de la puerta está trabada y dice hasta cuándo',
+    testWidgets('la lista de la puerta anda, y dice para qué quedó',
         (tester) async {
-      // Sin decirle nada, el botón toma la bandera de la app.
+      // Sin decirle nada, el botón toma la bandera de la app: desde la 6.0.0
+      // la lista sigue sola al sorteo y este renglón la pone al día a mano.
       final pedidos = await mostrarMas(tester);
       await tester.tap(find.byKey(const Key('fiesta_mas')));
       await tester.pumpAndSettle();
       expect(
-        find.text(
-          'Se habilita en diciembre, cuando se cierren los permisos de la '
-          'lista',
-        ),
+        find.text('Ponerla al día a mano: ya sigue sola al sorteo'),
         findsOneWidget,
       );
+      await tester.tap(find.text('Pasar a la lista de la puerta'));
+      await tester.pumpAndSettle();
+      expect(pedidos, ['puerta']);
+    });
+
+    testWidgets('si se la traba, el renglón queda a la vista, apagado y con '
+        'el motivo', (tester) async {
+      final pedidos = await mostrarMas(tester, listaPuertaHabilitada: false);
+      await tester.tap(find.byKey(const Key('fiesta_mas')));
+      await tester.pumpAndSettle();
+      expect(find.text(kListaPuertaTrabadaLeyenda), findsOneWidget);
       await tester.tap(
         find.text('Pasar a la lista de la puerta'),
         warnIfMissed: false,
       );
       await tester.pumpAndSettle();
       expect(pedidos, isEmpty);
-    });
-
-    testWidgets('con la lista habilitada, el renglón vuelve a andar',
-        (tester) async {
-      final pedidos = await mostrarMas(tester, listaPuertaHabilitada: true);
-      await elegir(tester, 'fiesta_mas', 'Pasar a la lista de la puerta');
-      expect(pedidos, ['puerta']);
     });
   });
 

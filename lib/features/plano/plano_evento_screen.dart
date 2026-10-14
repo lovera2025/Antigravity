@@ -23,6 +23,7 @@ import '../eventos/repositories/sillas_reparto_repository.dart';
 import '../eventos/repositories/sorteos_mesas_repository.dart';
 import '../eventos/services/registro_sorteo.dart';
 import '../eventos/services/salon_mesas.dart';
+import '../recepcion/services/puerta_al_dia.dart';
 import 'estilos/estilo_plano.dart';
 import 'modelo/armado_salon.dart';
 import 'modelo/medidas_salon.dart';
@@ -899,6 +900,9 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         movimiento: renglon,
         plano: planoNuevo,
       );
+      // La puerta sigue al salón: Recepción y el tótem pasan a decir la mesa
+      // nueva. Antes de subir, para que viaje junto.
+      final puerta = await ref.read(puertaAlDiaProvider).trasElSalon(eventoId);
       await _cargar();
       final subio = await subida.subir(
             tabla: 'mesas_movimientos',
@@ -911,6 +915,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           });
       _decir(
         '${cambio.textoHecho((id) => _apellidoDe(id, alumnos))}'
+        '${puerta.fallo ? ' ${puerta.renglon}.' : ''}'
         '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
         accion: cambio.tipo == TipoMovimientoMesas.deshacer ? null : 'DESHACER',
         onAccion: cambio.tipo == TipoMovimientoMesas.deshacer

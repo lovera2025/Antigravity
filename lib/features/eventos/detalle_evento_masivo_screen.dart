@@ -61,6 +61,7 @@ import 'services/ultimos_sorteados.dart';
 import '../../core/services/connectivity_service.dart';
 import '../recepcion/repositories/invitados_repository.dart';
 import '../recepcion/services/lista_puerta.dart';
+import '../recepcion/services/puerta_al_dia.dart';
 import '../../models/mesa_extra_item.dart';
 import 'widgets/celda_mesa_alumno.dart';
 import 'widgets/chip_mesas_sillas.dart';
@@ -3245,6 +3246,11 @@ class _DetalleEventoMasivoScreenState
           };
         }
         await repo.actualizarContrato(alumno.id, updates);
+        // Con la fiesta sorteada, la puerta lo sigue: una baja sale de la
+        // lista con su familia, y al reincorporarse vuelve.
+        await ref
+            .read(puertaAlDiaProvider)
+            .trasLosAlumnos(widget.evento.id, [alumno.id]);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -3334,6 +3340,11 @@ class _DetalleEventoMasivoScreenState
       final repo = ref.read(contratosRepositoryProvider);
       try {
         await repo.eliminarContratoPermanente(alumno.id);
+        // Sus filas de la puerta se van con él: después ya no hay forma de
+        // saber cuáles eran.
+        await ref
+            .read(puertaAlDiaProvider)
+            .trasEliminar(widget.evento.id, alumno.id);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -3790,6 +3801,9 @@ class _DetalleEventoMasivoScreenState
           antes: UltimosSorteados.antesDe(alumnos, numeros),
         ),
       );
+      // La puerta sigue al sorteo. Antes de subir, para que viaje junto.
+      final puerta =
+          await ref.read(puertaAlDiaProvider).trasElSalon(widget.evento.id);
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
@@ -3822,7 +3836,8 @@ class _DetalleEventoMasivoScreenState
               '${separadas > 0 ? ' · $separadas con mesas separadas' : ''}'
               '${conSillas > 0 ? ' · $conSillas con sillas extra' : ''}'
               '${sinMesa > 0 ? ' · $sinMesa sin mesa por no tener nada pagado' : ''}'
-              '${soloBase > 0 ? ' · $soloBase con mesas extra sin pagar: solo mesa base' : ''}.',
+              '${soloBase > 0 ? ' · $soloBase con mesas extra sin pagar: solo mesa base' : ''}'
+              '${_renglonPuerta(puerta)}.',
             ),
           ),
         );
@@ -3929,6 +3944,9 @@ class _DetalleEventoMasivoScreenState
       registro: registro,
       plano: planoNuevo,
     );
+    // La puerta sigue al sorteo. Antes de subir, para que viaje junto.
+    final puerta =
+        await ref.read(puertaAlDiaProvider).trasElSalon(widget.evento.id);
     // El aviso de "quedó en esta PC" mira todo lo del sorteo, no solo su
     // renglón: los números y el plano también tienen que haber subido.
     final subio = await subirYa(
@@ -3964,6 +3982,7 @@ class _DetalleEventoMasivoScreenState
           '${sinMesa > 0 ? ' · $sinMesa sin mesa por no tener nada pagado' : ''}'
           '${soloBase > 0 ? ' · $soloBase con mesas extra sin pagar: solo mesa base' : ''}'
           '${resultado.avisos.isEmpty ? '' : ' · ${resultado.avisos.length} aviso(s)'}'
+          '${_renglonPuerta(puerta)}'
           '${subio ? '' : ' · guardado en esta PC; sube cuando vuelva la conexión'}.',
         ),
       ),
@@ -4043,10 +4062,15 @@ class _DetalleEventoMasivoScreenState
       return;
     }
 
+    // Al deshacer todo se vacía la lista de la puerta, y con ella los ingresos
+    // que alguien haya marcado: el aviso lo dice antes, con el número.
+    final adentro = await ref.read(puertaAlDiaProvider).adentro(eventoId);
+    if (!mounted) return;
     final alcance = await mostrarDeshacerSorteoDialog(
       context: context,
       conMesa: conMesa.length,
       ultimos: visto.ultimos,
+      adentroEnLaPuerta: adentro,
     );
     if (alcance == null || !mounted) return;
     final parcial = alcance == AlcanceDeshacer.ultimos;
@@ -4117,6 +4141,9 @@ class _DetalleEventoMasivoScreenState
                 ahora: ArTime.nowUtc(),
               ),
       );
+      // La puerta sigue al sorteo: si ya nadie tiene mesa, la lista de esta
+      // fiesta se vacía; si quedan, se corrige. Antes de subir.
+      final puerta = await ref.read(puertaAlDiaProvider).trasElSalon(eventoId);
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
@@ -4136,7 +4163,8 @@ class _DetalleEventoMasivoScreenState
           SnackBar(
             duration: const Duration(seconds: 8),
             content: Text(
-              '$hecho. Si fue un error: SORTEO → Restaurar sorteo anterior.',
+              '$hecho${_renglonPuerta(puerta)}. Si fue un error: SORTEO → '
+              'Restaurar sorteo anterior.',
             ),
           ),
         );
@@ -4155,10 +4183,19 @@ class _DetalleEventoMasivoScreenState
 
   /// Devuelve los números de la copia guardada al deshacer, solo a quienes
   /// siguen sin mesa y sin pisar ningún número que hoy esté ocupado.
-  /// Lleva los alumnos —y sus acompañantes con nombre— a la lista de la puerta
-  /// (`invitados`) con la mesa sorteada, para que el tótem, el QR y la búsqueda
-  /// digan dónde sentarse. Se puede repetir: actualiza las mismas filas, no
-  /// toca a quien ya ingresó y no borra nada.
+  /// Lo que se suma al aviso de un cambio del salón sobre la lista de la
+  /// puerta, ya con su separador. Vacío si no hay nada para decir.
+  String _renglonPuerta(PuertaAlDiaResultado puerta) =>
+      puerta.renglon.isEmpty ? '' : ' · ${puerta.renglon}';
+
+  /// Pone al día, a mano, la lista de la puerta (`invitados`) de esta fiesta:
+  /// los alumnos y sus acompañantes con nombre, con la mesa sorteada, para que
+  /// Recepción y el tótem digan dónde sentarse.
+  ///
+  /// La lista ya sigue sola al sorteo ([PuertaAlDia]); esto queda para lo que
+  /// no pasa por el salón, como un nombre que corrigió el operario. Muestra
+  /// antes lo que va a cambiar. No toca a quien ya ingresó, y solo saca las
+  /// filas que salieron de los alumnos y ya no corresponden.
   Future<void> _pasarListaPuerta() async {
     // Segunda traba, por si se llega acá sin pasar por el menú.
     if (!kListaPuertaHabilitada) {
@@ -4192,13 +4229,9 @@ class _DetalleEventoMasivoScreenState
     setState(() => _isLoading = true);
     PlanListaPuerta plan;
     try {
-      // Primero lo que cargó la otra PC, para comparar contra la lista real.
-      if (online) await invitadosRepo.forceRefresh(eventoId);
-      final alumnos = await ref.read(contratosRepositoryProvider).getByEvento(eventoId);
-      plan = planListaPuerta(
-        alumnos: alumnos,
-        existentes: await invitadosRepo.getLocalesByEvento(eventoId),
-      );
+      // Baja primero lo que cargó la otra PC, para comparar contra la lista
+      // real.
+      plan = await ref.read(puertaAlDiaProvider).comoQuedaria(eventoId);
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -4211,31 +4244,24 @@ class _DetalleEventoMasivoScreenState
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    final sinMesa = [...plan.nuevas, ...plan.aActualizar]
-        .where((f) => f.esAlumno && f.mesa == null)
-        .length;
-    final lineas = <String>[
-      if (plan.nuevas.isNotEmpty) '• ${plan.nuevas.length} persona(s) nuevas en la lista.',
-      if (plan.aActualizar.isNotEmpty)
-        '• ${plan.aActualizar.length} ya estaban: se actualiza su nombre o su mesa.',
-      if (plan.iguales > 0) '• ${plan.iguales} ya estaban al día.',
-      if (plan.yaIngresados > 0)
-        '• ${plan.yaIngresados} ya ingresaron: su ingreso no cambia.',
-      if (sinMesa > 0) '• $sinMesa alumno(s) todavía sin mesa sorteada.',
-      if (plan.sobrantes.isNotEmpty)
-        '• ${plan.sobrantes.length} de una pasada anterior ya no corresponden '
-            '(baja o acompañante quitado). No se borran: sacalos desde Recepción '
-            'si hace falta.',
-      if (!online)
-        '• Sin conexión: no se pudo mirar lo que cargó la otra PC.',
-    ];
+    final lineas = renglonesPlanPuerta(plan, conConexion: online);
 
     if (!plan.hayCambios) {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('La lista de la puerta ya está al día'),
-          content: Text(lineas.isEmpty ? 'No hay alumnos para pasar.' : lineas.join('\n')),
+          title: Text(
+            plan.sinSorteo
+                ? 'Esta fiesta todavía no está sorteada'
+                : 'La lista de la puerta ya está al día',
+          ),
+          content: Text(
+            plan.sinSorteo
+                ? 'La lista de la puerta se arma sola cuando se sortean las '
+                    'mesas. Hasta entonces Recepción y el tótem no muestran a '
+                    'esta institución.'
+                : lineas.join('\n'),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -4254,8 +4280,10 @@ class _DetalleEventoMasivoScreenState
         content: SizedBox(
           width: 440,
           child: Text(
-            'El tótem, el QR y la búsqueda de ${widget.evento.tipo} van a mostrar '
-            'a cada alumno y sus acompañantes con la mesa sorteada.\n\n'
+            '${plan.sinSorteo ? 'Esta fiesta ya no tiene mesas sorteadas: '
+                    'Recepción y el tótem dejan de mostrarla.' : 'Recepción y '
+                    'el tótem de ${widget.evento.tipo} van a mostrar a cada '
+                    'alumno y sus acompañantes con la mesa sorteada.'}\n\n'
             '${lineas.join('\n')}',
           ),
         ),
@@ -4279,8 +4307,7 @@ class _DetalleEventoMasivoScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Lista de la puerta al día: '
-            '${plan.nuevas.length + plan.aActualizar.length + plan.iguales} persona(s).',
+            'Lista de la puerta al día: ${plan.personas} persona(s).',
           ),
         ),
       );
@@ -4389,6 +4416,8 @@ class _DetalleEventoMasivoScreenState
                 ahora: ArTime.nowUtc(),
               ),
       );
+      // La puerta sigue al sorteo: vuelve la lista con las mesas restauradas.
+      final puerta = await ref.read(puertaAlDiaProvider).trasElSalon(eventoId);
       await ref
           .read(cajaAutoSyncServiceProvider)
           .afterMassiveMutation(
@@ -4401,7 +4430,7 @@ class _DetalleEventoMasivoScreenState
           SnackBar(
             content: Text(
               'Sorteo restaurado: ${plan.aRestaurar.length} alumno(s) con su '
-              'mesa de antes.',
+              'mesa de antes${_renglonPuerta(puerta)}.',
             ),
           ),
         );

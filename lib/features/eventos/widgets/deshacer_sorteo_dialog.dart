@@ -18,15 +18,23 @@ enum AlcanceDeshacer {
 /// Con [ultimos] y alguien que conservaría su mesa, ofrece "Solo los últimos
 /// sorteados" (que viene elegido: es lo que menos borra) o "Todo". Si no hay
 /// diferencia entre los dos, es el aviso de siempre.
+///
+/// [adentroEnLaPuerta] es cuántas personas de esta fiesta están marcadas como
+/// adentro en Recepción. Al deshacer todo, la lista de la puerta se vacía y
+/// esos ingresos se van con ella: el aviso lo dice con el número.
 Future<AlcanceDeshacer?> mostrarDeshacerSorteoDialog({
   required BuildContext context,
   required int conMesa,
   UltimosSorteados? ultimos,
+  int adentroEnLaPuerta = 0,
 }) =>
     showDialog<AlcanceDeshacer>(
       context: context,
-      builder: (context) =>
-          DeshacerSorteoDialog(conMesa: conMesa, ultimos: ultimos),
+      builder: (context) => DeshacerSorteoDialog(
+        conMesa: conMesa,
+        ultimos: ultimos,
+        adentroEnLaPuerta: adentroEnLaPuerta,
+      ),
     );
 
 class DeshacerSorteoDialog extends StatefulWidget {
@@ -34,10 +42,15 @@ class DeshacerSorteoDialog extends StatefulWidget {
   final int conMesa;
   final UltimosSorteados? ultimos;
 
+  /// Cuántos están marcados como adentro en Recepción (ver
+  /// [mostrarDeshacerSorteoDialog]).
+  final int adentroEnLaPuerta;
+
   const DeshacerSorteoDialog({
     super.key,
     required this.conMesa,
     this.ultimos,
+    this.adentroEnLaPuerta = 0,
   });
 
   @override
@@ -156,8 +169,26 @@ class _DeshacerSorteoDialogState extends State<DeshacerSorteoDialog> {
         Text(
           'Se van a borrar los números de mesa de ${widget.conMesa} alumno(s) '
           'de esta institución, incluidas las asignaciones a mano y las de '
-          'alumnos de baja.\n\n$_copia',
+          'alumnos de baja.\n\n'
+          'Recepción y el tótem dejan de mostrar a esta institución: su lista '
+          'de la puerta se vacía.\n\n$_copia',
         ),
+        if (widget.adentroEnLaPuerta > 0) ...[
+          const SizedBox(height: 10),
+          Text(
+            widget.adentroEnLaPuerta == 1
+                ? 'Hay 1 persona marcada como adentro en Recepción: ese '
+                    'ingreso se pierde con la lista.'
+                : 'Hay ${widget.adentroEnLaPuerta} personas marcadas como '
+                    'adentro en Recepción: esos ingresos se pierden con la '
+                    'lista.',
+            key: const Key('deshacer_adentro'),
+            style: const TextStyle(
+              color: Colors.redAccent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         CheckboxListTile(
           key: const Key('deshacer_entendido'),

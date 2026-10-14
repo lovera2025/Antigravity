@@ -12,6 +12,11 @@ import '../../eventos/services/salon_mesas.dart';
 ///
 /// Los ids son **fijos** por alumno y lugar (0 el alumno, 1.. sus acompañantes):
 /// pasar la lista otra vez actualiza las mismas filas en vez de duplicarlas.
+///
+/// Desde la 6.0.0 **la lista sigue al sorteo**: se arma sola cuando el jefe
+/// sortea o cambia una mesa, y se vacía sola cuando deshace el sorteo entero
+/// (`puerta_al_dia.dart`). MÁS → "Pasar a la lista de la puerta" queda para
+/// ponerla al día a mano.
 class FilaPuerta {
   final String id;
   final String nombre;
@@ -30,16 +35,16 @@ class FilaPuerta {
 
 /// Si se puede pasar la lista de la puerta de una fiesta de alumnos.
 ///
-/// **Trabado hasta cerrar la RLS de `invitados`** (diciembre, con el tótem):
-/// hoy cualquiera con la clave pública lee y cambia esa tabla, y la lista
-/// lleva el nombre de cada alumno y de sus acompañantes. Ver
-/// `docs/pendientes/rls-invitados.md`. Se pasa a `true` recién con la RLS
-/// cerrada; un test cuida que no se prenda antes sin querer.
-const bool kListaPuertaHabilitada = false;
+/// Estuvo en `false` hasta el 13-oct-2026, a la espera de cerrar la RLS de
+/// `invitados`. Ese día el usuario decidió que **la puerta sigue al sorteo**
+/// (ver [planListaPuerta]) dentro de la 6.0.0, y que la RLS se cierra en la
+/// misma versión (`docs/pendientes/rls-invitados.md`). Queda la bandera para
+/// poder trabarlo de nuevo en un solo lugar si hiciera falta.
+const bool kListaPuertaHabilitada = true;
 
-/// Lo que dice el menú y el aviso mientras [kListaPuertaHabilitada] es false.
+/// Lo que dice el menú y el aviso si [kListaPuertaHabilitada] vuelve a false.
 const String kListaPuertaTrabadaLeyenda =
-    'Se habilita en diciembre, cuando se cierren los permisos de la lista';
+    'Trabado hasta cerrar los permisos de la lista de la puerta';
 
 /// Hasta cuántos acompañantes por alumno se reconocen como "de la lista":
 /// alcanza de sobra (una familia son 10 lugares como mucho) y acota la
@@ -93,14 +98,20 @@ class PlanListaPuerta {
   final List<FilaPuerta> aActualizar;
   final int iguales;
 
-  /// Filas que armó una pasada anterior y ya no corresponden (alumno de baja,
-  /// acompañante que se sacó). **No se borran**: se informan, y si hay que
-  /// sacarlas lo hace una persona desde Recepción.
+  /// Filas que armó una pasada anterior y ya no corresponden: un alumno de
+  /// baja, un acompañante que se sacó, o todas si el sorteo se deshizo
+  /// ([sinSorteo]). **Se sacan de la lista**: son filas que salieron de los
+  /// alumnos, con su id fijo, así que siguen a los alumnos. Lo cargado a mano
+  /// nunca entra acá.
   final List<Invitado> sobrantes;
 
-  /// Los que ya ingresaron: se les puede corregir la mesa, pero su ingreso no
-  /// se toca nunca.
+  /// Los que ya ingresaron y se quedan: se les puede corregir la mesa, pero su
+  /// ingreso no se toca nunca.
   final int yaIngresados;
+
+  /// Ningún alumno activo tiene mesa: la fiesta no está sorteada, y por eso no
+  /// va en la lista de la puerta.
+  final bool sinSorteo;
 
   const PlanListaPuerta({
     required this.nuevas,
@@ -108,22 +119,102 @@ class PlanListaPuerta {
     required this.iguales,
     required this.sobrantes,
     required this.yaIngresados,
+    this.sinSorteo = false,
   });
 
-  bool get hayCambios => nuevas.isNotEmpty || aActualizar.isNotEmpty;
+  /// Nada para hacer.
+  const PlanListaPuerta.nada({this.sinSorteo = false})
+      : nuevas = const [],
+        aActualizar = const [],
+        iguales = 0,
+        sobrantes = const [],
+        yaIngresados = 0;
+
+  bool get hayCambios =>
+      nuevas.isNotEmpty || aActualizar.isNotEmpty || sobrantes.isNotEmpty;
   int get alumnos =>
       [...nuevas, ...aActualizar].where((f) => f.esAlumno).length;
+
+  /// Cuántas personas quedan en la lista de la puerta con este plan aplicado.
+  int get personas => nuevas.length + aActualizar.length + iguales;
+
+  /// De los que se sacan, cuántos están marcados como adentro. Al deshacer el
+  /// sorteo su ingreso se va con la fila: el aviso lo tiene que decir antes.
+  int get adentroQueSeVan => sobrantes
+      .where((i) => i.estadoIngreso == EstadoIngreso.ingresado)
+      .length;
 }
+
+/// Lo que se le muestra al que pasa la lista a mano, antes de confirmar: un
+/// renglón por cada cosa que va a pasar.
+List<String> renglonesPlanPuerta(
+  PlanListaPuerta plan, {
+  required bool conConexion,
+}) {
+  final sinMesa = [...plan.nuevas, ...plan.aActualizar]
+      .where((f) => f.esAlumno && f.mesa == null)
+      .length;
+  final adentro = plan.adentroQueSeVan;
+  return [
+    if (plan.nuevas.isNotEmpty)
+      '• ${plan.nuevas.length} persona(s) nuevas en la lista.',
+    if (plan.aActualizar.isNotEmpty)
+      '• ${plan.aActualizar.length} ya estaban: se actualiza su nombre o su '
+          'mesa.',
+    if (plan.iguales > 0) '• ${plan.iguales} ya estaban al día.',
+    if (plan.yaIngresados > 0)
+      '• ${plan.yaIngresados} ya ingresaron: su ingreso no cambia.',
+    if (sinMesa > 0) '• $sinMesa alumno(s) todavía sin mesa sorteada.',
+    if (plan.sobrantes.isNotEmpty)
+      '• ${plan.sobrantes.length} se sacan de la lista: '
+          '${plan.sinSorteo ? 'ya nadie tiene mesa' : 'ya no corresponden '
+              '(baja o acompañante quitado)'}.'
+          '${adentro > 0 ? ' $adentro de ellos están marcados como adentro: '
+              'ese ingreso se pierde.' : ''}',
+    if (!conConexion)
+      '• Sin conexión: no se pudo mirar lo que cargó la otra PC.',
+  ];
+}
+
+/// Si la fiesta está sorteada: algún alumno activo tiene mesa.
+bool hayMesasSorteadas(Iterable<ContratoAlumno> alumnos) => alumnos.any(
+      (a) =>
+          !a.esBajaTemporal &&
+          (SalonMesas.textoMesasPuerta(a) ?? '').isNotEmpty,
+    );
 
 /// Compara lo que debería haber con lo que hay.
 ///
+/// **La puerta sigue al sorteo.** Mientras algún alumno activo tenga mesa, la
+/// lista lleva a todos los activos y a sus acompañantes con nombre. Si nadie
+/// tiene mesa (no se sorteó, o se deshizo), no lleva a ninguno: lo que había
+/// armado una pasada anterior pasa a [PlanListaPuerta.sobrantes].
+///
 /// Solo mira nombre y mesa. Las filas cargadas a mano o por CSV (ids que no
 /// salen de [idInvitadoPuerta]) no se tocan ni se cuentan como sobrantes.
+///
+/// Con [soloDe], el plan se limita a las filas de esos alumnos (alguien les
+/// cambió el nombre, la mesa o los acompañantes). Ahí **nunca vacía**: si en
+/// esta PC nadie tiene mesa, no hace nada. Vaciar es cosa de deshacer el
+/// sorteo, que antes mira la nube; una PC que todavía no bajó el sorteo no
+/// puede sacar a una familia de la puerta por editar un teléfono.
 PlanListaPuerta planListaPuerta({
   required Iterable<ContratoAlumno> alumnos,
   required List<Invitado> existentes,
+  Set<String>? soloDe,
 }) {
-  final filas = filasPuertaDesdeAlumnos(alumnos);
+  final sorteada = hayMesasSorteadas(alumnos);
+  if (soloDe != null && !sorteada) {
+    return const PlanListaPuerta.nada(sinSorteo: true);
+  }
+  final delPlan = soloDe == null
+      ? alumnos.toList()
+      : [
+          for (final a in alumnos)
+            if (soloDe.contains(a.id)) a,
+        ];
+  final filas =
+      sorteada ? filasPuertaDesdeAlumnos(delPlan) : const <FilaPuerta>[];
   final porId = {for (final i in existentes) i.id: i};
   final nuevas = <FilaPuerta>[];
   final aActualizar = <FilaPuerta>[];
@@ -147,7 +238,7 @@ PlanListaPuerta planListaPuerta({
 
   final vigentes = {for (final f in filas) f.id};
   final generables = {
-    for (final a in alumnos)
+    for (final a in delPlan)
       for (var lugar = 0; lugar < kMaxLugaresPorAlumno; lugar++)
         idInvitadoPuerta(a.id, lugar),
   };
@@ -162,5 +253,6 @@ PlanListaPuerta planListaPuerta({
     iguales: iguales,
     sobrantes: sobrantes,
     yaIngresados: yaIngresados,
+    sinSorteo: !sorteada,
   );
 }

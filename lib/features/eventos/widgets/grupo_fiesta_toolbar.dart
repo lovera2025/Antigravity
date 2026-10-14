@@ -304,9 +304,10 @@ class GrupoFiestaToolbar extends StatelessWidget {
 /// El botón MÁS de la barra del evento masivo: lo que no es de la fiesta
 /// (ordenar, selección múltiple) y la lista de la puerta.
 ///
-/// "Pasar a la lista de la puerta" queda a la vista pero apagado mientras
-/// [kListaPuertaHabilitada] sea false, con el motivo escrito: así no parece
-/// que se perdió.
+/// La lista de la puerta sigue sola al sorteo; "Pasar a la lista de la
+/// puerta" la pone al día a mano. Si [kListaPuertaHabilitada] vuelve a false,
+/// queda a la vista pero apagado, con el motivo escrito: así no parece que se
+/// perdió.
 class BotonMasFiesta extends StatelessWidget {
   final bool compacto;
   final bool ordenAlfabetico;
@@ -381,7 +382,7 @@ class BotonMasFiesta extends StatelessWidget {
             title: const Text('Pasar a la lista de la puerta'),
             subtitle: Text(
               listaPuertaHabilitada
-                  ? 'Alumnos y familias con su mesa, para el tótem'
+                  ? 'Ponerla al día a mano: ya sigue sola al sorteo'
                   : kListaPuertaTrabadaLeyenda,
             ),
           ),

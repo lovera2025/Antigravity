@@ -15,6 +15,7 @@ import '../../../core/utils/uuid_utils.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../caja_sesiones/services/caja_auto_sync_service.dart';
+import '../../recepcion/services/puerta_al_dia.dart';
 
 /// Lo que se guarda al editar un alumno.
 ///
@@ -34,6 +35,29 @@ Map<String, dynamic> datosEdicionAlumno({
     datos['numero_mesa'] = mesaAhora.isEmpty ? null : mesaAhora;
   }
   return datos;
+}
+
+/// Si lo que se editó de un alumno cambia lo que dice la lista de la puerta:
+/// su nombre, su mesa o sus acompañantes. Lo demás (el teléfono, una silla, el
+/// plan de cuotas) no llega a Recepción ni al tótem.
+bool edicionCambiaLaPuerta({
+  required ContratoAlumno antes,
+  required ContratoAlumno editado,
+  required String numeroMesaEscrito,
+}) {
+  List<String> limpios(List<String> nombres) => [
+        for (final n in nombres)
+          if (n.trim().isNotEmpty) n.trim(),
+      ];
+  final a = limpios(antes.nombresAcompanantes);
+  final b = limpios(editado.nombresAcompanantes);
+  var mismosAcompanantes = a.length == b.length;
+  for (var i = 0; mismosAcompanantes && i < a.length; i++) {
+    mismosAcompanantes = a[i] == b[i];
+  }
+  return antes.nombreAlumno.trim() != editado.nombreAlumno.trim() ||
+      (antes.numeroMesa?.trim() ?? '') != numeroMesaEscrito.trim() ||
+      !mismosAcompanantes;
 }
 
 /// El número de mesa que se toma al guardar un alumno, según quién guarda.
@@ -471,6 +495,17 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
         );
         await repo.recalcularProgresoContrato(al.id);
         await repo.reconciliarMesasEstadoContrato(al.id);
+        // Con la fiesta sorteada, Recepción y el tótem lo siguen: su nombre,
+        // su mesa y sus acompañantes son lo que dice la puerta.
+        if (edicionCambiaLaPuerta(
+          antes: al,
+          editado: alumnoEditado,
+          numeroMesaEscrito: numeroMesa,
+        )) {
+          await ref
+              .read(puertaAlDiaProvider)
+              .trasLosAlumnos(widget.evento.id, [al.id]);
+        }
       } else {
         // Modo Creación
         final nuevoContrato = ContratoAlumno(
@@ -505,6 +540,11 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
         );
 
         await repo.registrarContrato(nuevoContrato);
+        // Un alumno que se anota con la fiesta ya sorteada entra a la lista de
+        // la puerta, todavía sin mesa.
+        await ref
+            .read(puertaAlDiaProvider)
+            .trasLosAlumnos(widget.evento.id, [nuevoContrato.id]);
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setDouble(

@@ -1,7 +1,29 @@
 # Cerrar la lista de la puerta a los anónimos
 
-**Estado:** pendiente
+**Estado:** pendiente — **va en la 6.0.0** (parte 9 del camino de `docs/CONTEXTO_v6.0.0_2026-10-11.md`)
 **Postergado el:** 2026-09-25
+
+## Qué cambió el 13-oct-2026
+
+- **Dejó de ser "para diciembre":** el usuario quiere Recepción y el tótem nuevos dentro de la 6.0.0, y esto con
+  ellos. El orden de abajo ("Qué hacer") sigue valiendo, y sigue yendo después del tótem nuevo.
+- **La regla de no pasar la lista ya no corre, y la bandera está prendida.** Desde ese día la lista de la puerta
+  **sigue al sorteo**: se arma sola al sortear y se vacía sola al deshacer (`PuertaAlDia`, ver `CLAUDE.md`). El
+  usuario lo pidió para poder ensayar con una institución real un mes antes. `kListaPuertaHabilitada` quedó en
+  `true`; el último paso de este pendiente ya no es prenderla.
+- **Por eso esto pasó a importar más:** desde el sorteo de verdad (noviembre) la lista queda cargada hasta la
+  fiesta, con el nombre y la mesa de cada alumno y sus acompañantes. Conviene tenerlo cerrado antes de ese sorteo.
+- **Apareció otro agujero, del mismo lugar.** `/lista` (`lista_invitados_screen.dart`, `_onSelect`) y `?buscar`
+  (`buscar_invitado_screen.dart`, `_onGoToDni`) **saltean la verificación si el invitado no tiene DNI cargado** y
+  marcan el ingreso directo. Los alumnos no tienen DNI (sus filas van con `dni` vacío), así que con el QR a la
+  vista cualquiera puede marcar a otro desde su celular.
+  - No se cerró en la pantalla porque desde la web no hay cómo distinguir a un alumno de un invitado sin DNI de una
+    fiesta particular: los ids de la puerta se ven igual que cualquier otro (`UuidUtils` les pone versión 4) y
+    `eventos` no es público. Cambiarlo para todos cambiaba las fiestas particulares.
+  - Se cierra con dos cosas que ya estaban decididas: el tótem nuevo **no muestra el QR en los masivos**
+    (`totem-apariencias.md`), y `puerta_checkin` compara el DNI **en el servidor** y no marca a quien no lo tiene.
+  - La app de escritorio ya lo rechaza (`validarDniYMarcarIngreso` devuelve `no_dni`), y `/op` lo deja pasar a
+    propósito: es el operador.
 
 ## Por qué se postergó
 

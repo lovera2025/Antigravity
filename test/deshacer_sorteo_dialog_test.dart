@@ -50,6 +50,7 @@ void main() {
     WidgetTester tester, {
     required int conMesa,
     UltimosSorteados? ultimos,
+    int adentro = 0,
   }) async {
     tester.view.physicalSize = const Size(1366, 768);
     tester.view.devicePixelRatio = 1;
@@ -65,6 +66,7 @@ void main() {
                   context: context,
                   conMesa: conMesa,
                   ultimos: ultimos,
+                  adentroEnLaPuerta: adentro,
                 ),
               ),
               child: const Text('abrir'),
@@ -216,5 +218,52 @@ void main() {
     );
     await abrir(tester, conMesa: 41, ultimos: ultimos);
     expect(find.text('DESHACER A 40 FAMILIAS'), findsOneWidget);
+  });
+
+  // Al deshacer todo, la lista de la puerta de esa fiesta se vacía sola.
+  group('la lista de la puerta', () {
+    testWidgets('"Todo" dice que Recepción y el tótem dejan de mostrarla',
+        (tester) async {
+      await abrir(tester, conMesa: 133);
+      expect(
+        find.textContaining(
+          'Recepción y el tótem dejan de mostrar a esta institución',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('deshacer_adentro')), findsNothing);
+    });
+
+    testWidgets('si hay gente marcada como adentro, lo dice con el número',
+        (tester) async {
+      await abrir(tester, conMesa: 133, adentro: 14);
+      expect(
+        find.text(
+          'Hay 14 personas marcadas como adentro en Recepción: esos ingresos '
+          'se pierden con la lista.',
+        ),
+        findsOneWidget,
+      );
+      // Sigue pidiendo la tilde: no se deshace de un toque.
+      expect(confirmarPrendido(tester), isFalse);
+    });
+
+    testWidgets('con una sola persona adentro, lo dice en singular',
+        (tester) async {
+      await abrir(tester, conMesa: 133, adentro: 1);
+      expect(
+        find.text(
+          'Hay 1 persona marcada como adentro en Recepción: ese ingreso se '
+          'pierde con la lista.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('al deshacer solo a los últimos no asusta: la lista se queda',
+        (tester) async {
+      await abrir(tester, conMesa: 3, ultimos: _ultimos(), adentro: 14);
+      expect(find.byKey(const Key('deshacer_adentro')), findsNothing);
+    });
   });
 }

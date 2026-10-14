@@ -397,4 +397,74 @@ void main() {
       expect(controller.text, '40');
     });
   });
+
+  // La lista de la puerta dice el nombre, la mesa y los acompañantes de cada
+  // alumno: solo un cambio en eso tiene que llegar a Recepción y al tótem.
+  group('Editar alumno: qué cambia lo que dice la puerta', () {
+    final antes = alumno('a', mesa: '12, 13').copyWith(
+      nombresAcompanantes: ['ANA PEREZ', 'HUGO PEREZ'],
+    );
+
+    bool cambia(ContratoAlumno editado, {String mesa = '12, 13'}) =>
+        edicionCambiaLaPuerta(
+          antes: antes,
+          editado: editado,
+          numeroMesaEscrito: mesa,
+        );
+
+    test('el teléfono, una silla o las cuotas no la cambian', () {
+      expect(
+        cambia(
+          antes.copyWith(
+            telefono: '3777123456',
+            sillasExtraCantidad: 2,
+            totalCuotas: 6,
+          ),
+        ),
+        isFalse,
+      );
+    });
+
+    test('el nombre, sí', () {
+      expect(cambia(antes.copyWith(nombreAlumno: 'OTRO NOMBRE')), isTrue);
+    });
+
+    test('la mesa escrita a mano, sí; con espacios de más, no', () {
+      expect(cambia(antes, mesa: '40'), isTrue);
+      expect(cambia(antes, mesa: ''), isTrue);
+      expect(cambia(antes, mesa: ' 12, 13 '), isFalse);
+    });
+
+    test('sumar, sacar o cambiar un acompañante, sí', () {
+      expect(
+        cambia(antes.copyWith(nombresAcompanantes: ['ANA PEREZ'])),
+        isTrue,
+      );
+      expect(
+        cambia(
+          antes.copyWith(
+            nombresAcompanantes: ['ANA PEREZ', 'HUGO PEREZ', 'TÍA NORA'],
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        cambia(
+          antes.copyWith(nombresAcompanantes: ['ANA PEREZ', 'HUGO PÉREZ']),
+        ),
+        isTrue,
+      );
+    });
+
+    test('los mismos acompañantes, con un renglón vacío de más, no', () {
+      expect(
+        cambia(
+          antes.copyWith(
+            nombresAcompanantes: [' ANA PEREZ ', '', 'HUGO PEREZ'],
+          ),
+        ),
+        isFalse,
+      );
+    });
+  });
 }
