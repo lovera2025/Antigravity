@@ -680,6 +680,28 @@ void main() {
       );
     });
 
+    test('la columna Código va escondida, y se sigue leyendo', () {
+      final bytes = exportarPlanillaDelegado(
+        eventoId: _normal,
+        institucion: 'NORMAL MARIANO ILOZA',
+        alumnos: _escuela(),
+      ).bytes;
+      final hoja = _xml(bytes, 'xl/worksheets/sheet1.xml');
+      // La sexta columna, y solo esa.
+      final escondidas = RegExp(r'<col [^>]*hidden="1"[^>]*/>')
+          .allMatches(hoja)
+          .map((m) => m.group(0)!)
+          .toList();
+      expect(escondidas, hasLength(1));
+      expect(escondidas.single, contains('min="6"'));
+      expect(escondidas.single, contains('max="6"'));
+      // El delegado no la ve, pero es lo que dice de quién es cada renglón.
+      expect(
+        PlanillaDelegado.leer(bytes).renglones.map((r) => r.codigo),
+        ['KA1000000', 'KB2000000', 'KC3000000', 'KD4000000'],
+      );
+    });
+
     test('la clave de la hoja se guarda como la guarda Excel', () {
       // Valores conocidos de esa cuenta: son los que escriben Excel y las
       // demás planillas de cálculo para estas claves.
@@ -751,6 +773,32 @@ void main() {
         'Música: Thunderstruck',
       ]);
       expect(r.revisar.single.motivo, contains('trae 3 acompañantes'));
+    });
+
+    // Lo mismo, con el Excel como sale ahora: la columna Código escondida. Ese
+    // día Excel no dejó volver a mostrarla sin la clave, y al guardar la
+    // conservó: es lo que dice de qué alumno es cada renglón.
+    test('lo que guarda el Excel de verdad con el código escondido, también',
+        () {
+      final leido = PlanillaDelegado.leer(
+        File('test/datos/planilla_guardada_por_excel_codigo_escondido.xlsx')
+            .readAsBytesSync(),
+      );
+      expect(leido.problema, isNull);
+      expect(leido.eventoId, _normal);
+      expect(leido.institucion, 'ESCUELA DE MUESTRA');
+      expect(leido.renglones, hasLength(12));
+      expect(leido.renglones.every((r) => r.codigo.startsWith('K')), isTrue);
+      expect(
+        leido.renglones
+            .take(3)
+            .map((r) => '${r.codigo}|${r.alumno}|${r.acompanantes}|${r.musica}'),
+        [
+          'K000000A1|ACOSTA, BRISA|Marta Acosta / Hugo Rios|Viva la vida',
+          'K000000A2|BENITEZ, JOAQUIN||',
+          'K000000A3|CABRAL, MILAGROS|Ana Cabral|',
+        ],
+      );
     });
   });
 }

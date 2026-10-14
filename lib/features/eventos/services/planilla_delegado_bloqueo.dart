@@ -16,8 +16,10 @@ import 'planilla_delegado.dart';
 ///
 /// - `xl/styles.xml`: los casilleros amarillos ([kColorCasilleroDelegado])
 ///   pasan a "sin bloquear";
-/// - la hoja: se protege, y la columna de Acompañantes lleva la regla de
-///   [kMaxAcompanantes] con su cartel.
+/// - la hoja: se protege, la columna de Acompañantes lleva la regla de
+///   [kMaxAcompanantes] con su cartel, y la columna Código se esconde: el
+///   delegado no tiene nada que hacer con ella. Sigue estando en el archivo,
+///   que es lo que dice de qué alumno es cada renglón.
 ///
 /// **Es una ayuda para el delegado, no la garantía.** Excel lo respeta (en la
 /// PC y en el celular); Google Sheets puede dejar escribir igual. La garantía
@@ -109,6 +111,22 @@ String _protegerHoja(String xml, int alumnos) {
 
   // El orden de los elementos de una hoja es fijo: la protección va justo
   // después de los datos, y las reglas después de las celdas combinadas.
+  // La columna Código, escondida. Con la hoja protegida no se puede volver a
+  // mostrar sin la clave.
+  final columnaCodigo = PlanillaDelegado.columnaCodigo + 1;
+  var escondida = false;
+  for (final col in raiz.findAllElements('col')) {
+    final desde = int.tryParse(col.getAttribute('min') ?? '') ?? 0;
+    final hasta = int.tryParse(col.getAttribute('max') ?? '') ?? 0;
+    if (desde == columnaCodigo && hasta == columnaCodigo) {
+      col.setAttribute('hidden', '1');
+      escondida = true;
+    }
+  }
+  if (!escondida) {
+    throw StateError('No está la columna Código para esconder.');
+  }
+
   final datos = raiz.findElements('sheetData').first;
   hijos.insert(
     hijos.indexOf(datos) + 1,

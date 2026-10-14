@@ -158,7 +158,7 @@ recomienda y se sigue.
 |---|---|---|
 | 1 | La puerta sigue al sorteo | **hecha el 13-oct** |
 | 2 | Acompañantes y música por Excel, con el simulacro | **hecha el 13-oct** |
-| 3 | La nota como ventana al centro, y las dos preguntas pendientes | falta |
+| 3 | La nota como ventana al centro, y las dos preguntas pendientes | la nota, **hecha el 13-oct**; faltan sus dos respuestas |
 | 4 | Tótem: que no se desconecte ni salude tarde (`pendientes/totem-comunicacion.md`) | falta |
 | 5 | Tótem: cuatro apariencias (`pendientes/totem-apariencias.md`; una columna en la nube) | falta |
 | 6 | Recepción más amigable (`pendientes/recepcion-redisenio.md`) | falta |
@@ -207,7 +207,8 @@ particulares. Se cierra en las partes 5 (sin QR en masivos) y 9 (el check-in en 
 modo jefe) abre una ventana con cuántos alumnos ya tienen algo cargado y dos botones.
 - **EXPORTAR EXCEL** guarda `Acompañantes y música - <INSTITUCIÓN>.xlsx`: todos los alumnos de esa institución tal
   cual están en el sistema, menos los dados de baja, por división y apellido. Columnas: N°, Alumno, División,
-  Acompañantes (hasta 2), Música y Código.
+  Acompañantes (hasta 2) y Música. La columna Código va **escondida**: el usuario preguntó para qué estaba al
+  lado de la música; es lo que dice de qué alumno es cada renglón, y el delegado no tiene nada que hacer con ella.
 - **El Excel va cerrado:** la hoja está protegida (clave `delegado`, para que no se saque con un clic), solo los
   casilleros amarillos se dejan escribir, y el de Acompañantes rechaza un tercero con "Máximo 2 acompañantes".
 - **IMPORTAR EXCEL empieza siempre como simulacro:** la ventana "Antes de guardar" dice cuántos se cargan, cuántos
@@ -254,6 +255,15 @@ pierde la cuenta al editar otra cosa.
 - Google Sheets puede no respetar la protección de la hoja. La garantía está al importar, que no depende de ella.
 - El usuario preguntó por qué la ventana se llama "Antes de guardar"; se le explicó y se le ofreció cambiarle el
   nombre. No pidió cambiarlo.
+- **Quién importa:** dijo "cuando complete el delegado me pase a mí, y yo la importe o el jefe lo importe". Es
+  quien esté en modo jefe (`esRolJefeProvider`: el rol jefe de la caja, o el modo jefe con PIN), sea él o el jefe.
+
+### La parte 3: la nota como ventana al centro
+
+`kNotaComoVentana` quedó en `true` (la opción B, que el usuario eligió el 11-oct). La nota de un alumno se abre
+como una ventana al centro en vez de la hoja de abajo; el contenido es el mismo. Siguen sin contestar sus dos
+preguntas: qué cambiaría de las 26 pantallas del recorrido, y si una nota resuelta deja de llamar la atención en
+la grilla.
 
 ## Lo que falta para publicar
 
@@ -303,8 +313,9 @@ aprobado está en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-expressive-nautilus.md.
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0 y los SQL de la nube no
 se corrieron. Va todo en una sola versión, por partes: están hechas la parte 1
-(la puerta sigue al sorteo) y la 2 (el Excel de acompañantes y música). Seguí
-por la parte que toque del camino, con su
+(la puerta sigue al sorteo), la 2 (el Excel de acompañantes y música) y la nota
+como ventana al centro. Preguntame las dos cosas que quedé debiendo del 11-oct
+y seguí por la parte 4 (el tótem), con su
 plan corto, y avisame al terminar cada una con cómo quedó, un commit y un push.
 Recepción y el tótem nuevos también van en la 6.0.0: sus diseños ya están
 aprobados en docs/pendientes/.

@@ -11,7 +11,10 @@ const _gold = Color(0xFFD4AF37);
 
 /// Cómo se abre la nota si quien llama no dice nada: `false`, la hoja que sube
 /// desde abajo; `true`, una ventana al centro de la pantalla.
-const bool kNotaComoVentana = false;
+///
+/// El usuario eligió la ventana al centro el 11-oct-2026, mirando las dos lado
+/// a lado (la "opción B").
+const bool kNotaComoVentana = true;
 
 /// La nota operativa de un alumno (no contable): crearla, editarla o borrarla.
 ///

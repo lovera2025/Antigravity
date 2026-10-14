@@ -188,9 +188,11 @@ class PlanillaDelegado {
   /// en la siguiente.
   static const filaEncabezados = 4;
 
-  /// La columna de Acompañantes y la de Música (contando desde 0).
+  /// La columna de Acompañantes, la de Música y la del Código (contando
+  /// desde 0).
   static const columnaAcompanantes = 3;
   static const columnaMusica = 4;
+  static const columnaCodigo = 5;
 
   /// Los nombres con algo escrito, sin espacios de más.
   static List<String> limpios(Iterable<String> nombres) => [
@@ -323,7 +325,7 @@ class PlanillaDelegado {
     escribir(
       0,
       2,
-      'No cambies los nombres ni la columna Código.  $_marcaPlanilla $eventoId',
+      'No cambies los nombres de los alumnos.  $_marcaPlanilla $eventoId',
       chico,
     );
     sheet.merge(en(0, 2), en(ultima, 2));
