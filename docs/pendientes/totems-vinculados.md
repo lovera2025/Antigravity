@@ -75,4 +75,5 @@ preguntar al jefe o a ajustar más adelante.
 - Los celulares y tablets usan la **app web** (Android nunca se publicó). "Transmitir en" les llega cuando se publique
   la web, que es aparte y con OK del usuario.
 - La presencia necesita internet. Sin internet queda solo el vínculo de la misma PC. El modo local con router es otro
-  pendiente, todavía sin escribir.
+  pendiente: [modo-local-sin-internet.md](modo-local-sin-internet.md), escrito el 13-oct-2026. **Se diseñan juntos:**
+  el vínculo entre un puesto y un tótem tiene que andar por la nube y por la red del salón.

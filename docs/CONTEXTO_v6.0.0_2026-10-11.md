@@ -164,11 +164,16 @@ recomienda y se sigue.
 | 6 | Recepción más amigable (`pendientes/recepcion-redisenio.md`) | falta |
 | 7 | Modo kiosco (`pendientes/totem-kiosco.md`) | falta |
 | 8 | Tótems vinculados (`pendientes/totems-vinculados.md`) | falta |
+| 8b | **Recepción y el tótem sin internet, con dos puestos** (`pendientes/modo-local-sin-internet.md`). Sumada el 13-oct a la noche; se diseña junto con la 8 | falta |
 | 9 | Cerrar la lista de la puerta (`pendientes/rls-invitados.md`; funciones en la nube) | falta |
 | 10 | Verificación, documentación, instalador y la web armada | falta |
 | 11 | Publicar, instalar, la web, cerrar los permisos y el ensayo | falta |
 
-De la 5 a la 9 son, a ojo, entre 7 y 9 secciones de trabajo como las de la Fase 3. Cada una arranca con su plan
+**La regla que vale para todas las que faltan** (pedido del usuario, 24-sep y 13-oct): **con los datos ya bajados,
+Recepción y el tótem tienen que seguir andando sin internet.** Nada nuevo puede necesitar la nube para marcar un
+ingreso o saludar. Qué tiene que cuidar cada parte está en la tabla de `pendientes/modo-local-sin-internet.md`.
+
+De la 5 a la 9 son, a ojo, entre 9 y 12 secciones de trabajo como las de la Fase 3. Cada una arranca con su plan
 corto leyendo su archivo de diseño (aprobado con maquetas el 24-sep). Para preguntarle en su momento: (5) qué estilo
 de plano usan Cristal y Póster en la llegada; (8) cómo se reparte la puerta; (9) qué pasa con la pantalla `/op`.
 
@@ -372,20 +377,11 @@ repetido. **Si quedaron dos ventanas, la de más se esconde y se pausa, no se ci
 - **Si cambiaría algo de las pantallas del recorrido** (`build/muestras_6.0.0/recorrido/Recorrido.html`, 33
   pantallas; abrírselo en Edge). No preguntarle "¿cambiarías algo?" a secas: no lo entendió. Mostrarle primero.
   (Lo de la nota resuelta ya lo contestó: queda con el tilde verde.)
-- **Dos puestos de Recepción sin internet (el "modo local con router").** El 13-oct preguntó si había quedado: el
-  24-sep había pedido "que se carguen todos los alumnos con internet primero y después se pueda manejar sin
-  internet" y "quizás con un router alcanzará para modo local". **Quedó a medias, y se le dijo así:**
-  - **Una PC, sí:** con la lista ya bajada, Recepción busca y marca sin internet, y el tótem de esa misma PC saluda
-    por el puente. Si el tótem se abre sin internet saluda igual, pero la lista de los que ya llegaron arranca
-    vacía (esa la lee de la nube).
-  - **Dos PCs, no:** se ven solo a través de la nube. Sin internet cada una marca por su lado y se juntan al
-    volver; lo de la segunda no llega al tótem. Un router sin internet hoy no cambia nada.
-  - **La web** (el tótem en una tele, los celulares, `/op`) depende entera de internet.
-  - **No está en el camino de la 6.0.0** ni escrito como pendiente (`totems-vinculados.md` lo nombra como "otro
-    pendiente, todavía sin escribir"). Se le recomendó internet de respaldo (un router 4G o el celular
-    compartiendo datos) antes que programar la red local, que no se puede probar sin dos PCs en red. **Falta que
-    diga si en el salón hay señal** y si igual lo quiere en esta versión.
-  - Falta también una prueba que la Fase 0 dejó anotada: abrir la app sin internet con la sesión vencida.
+- **Para la parte 8b (sin internet, con dos puestos):** cuántos puestos va a haber en la puerta y con qué
+  (notebooks, o contaba con celulares: los celulares no entran al modo local), en cuál va enchufado el tótem, y si
+  en el salón hay un router propio. **No preguntarle si lo quiere:** el 13-oct a la noche preguntó si operar sin
+  internet "había quedado", se le dijo que a medias (con una PC sí, con dos no) y lo pidió de nuevo, con todas las
+  letras. Se le recomendó además internet de respaldo (un router 4G o el celular); no lo descartó.
 - La página 6 del Canva: la Normal ya tiene **137 mesas cargadas** (116 con lo pagado el 11-oct), y su armado del
   Canva tiene la hoja B provisoria. Mientras tanto está el armado a medida del playón, y las mesas que falten se
   agregan en Acomodar.
@@ -411,6 +407,9 @@ tarde). Seguí por la parte 5, las cuatro apariencias del tótem
 avisame al terminar con cómo quedó, un commit y un push. Recepción y el tótem
 nuevos también van en la 6.0.0: sus diseños ya están aprobados en
 docs/pendientes/.
+Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
+datos ya bajados: la regla y lo que cuida cada parte están en
+docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).
 Las muestras con muchas imágenes abrímelas en Edge: el panel de la app no las
 muestra. Una imagen suelta sí la veo en el chat.
 Contestame primero lo que te pregunto, en una línea. Lo que tiene poco riesgo y

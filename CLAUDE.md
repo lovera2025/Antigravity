@@ -210,6 +210,11 @@ oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
 nube tiene que cortarse en `_pausar()`.
 
+**Con los datos ya bajados, Recepción y el tótem tienen que andar sin internet** (pedido del usuario el 24-sep y
+otra vez el 13-oct-2026). Nada nuevo puede necesitar la nube para marcar un ingreso o saludar: lo que el tótem
+muestra llega por el puente o está guardado en la PC. Hoy anda con una PC; dos puestos se ven solo por la nube, y
+eso es la parte 8b de la 6.0.0 (`docs/pendientes/modo-local-sin-internet.md`, con lo que cuida cada parte).
+
 **A quién saluda el tótem no lo decide la pantalla** (v6.0.0). `IngresosTotem`
 (`totem/services/bienvenidas_totem.dart`) lleva la lista, la cola de bienvenidas y si se viene pudiendo leer la
 nube; `totem_display.dart` solo le cuenta lo que pasó (`leyo`, `noPudoLeer`, `aviso`, `baja`, `vaciar`).
