@@ -1294,7 +1294,35 @@ escuchar ese canal y ver los DNI de los que entraban.
 
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, la sección 9 del orden del 14-oct (la verificación).
+**No se publica sin su "publicamos".** Antes, la sección 9 del orden del 14-oct (la verificación). Su plan,
+aprobado el 15-oct: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md` (9a anotar · 9b todo en verde ·
+9c la migración sobre una copia de su base · 9d el cobro igual que hoy · 9e novedades e instalador · 9f publicar con
+él presente · 9g cerrar).
+
+**Dos pedidos del 15-oct, al cerrar la sección 8.** Quedaron escritos en el plan de ese cierre y no llegaron acá;
+el 15-oct preguntó si seguían ("las pruebas del modal de cobro, como habíamos acordado"). Siguen:
+
+- **A. El cobro de los eventos masivos, igual que hoy, antes de armar el instalador.** La ventana de cobro, la mora
+  y lo que se imprime, para evitar errores después de instalar. Sobre una copia de su base de ese día, migrada a la
+  v73 (la real queda con el mismo SHA-256):
+  - lo que muestra la ventana y lo que sale en el papel de cada alumno activo (cuota, mesa, sillas, mora y
+    totales), con `DryRunCobroSimulator`, igual en la 5.0.0 (el tag `v5.0.0`, en una carpeta aparte) y en la 6.0.0;
+  - las operaciones del día de punta a punta, en las dos versiones: cobrar cuota, mesa, sillas y mora, un abono y
+    anular con motivo (`registrarPagosLote`, `anularPagosConMotivo`). El saldo, la mora, los pagos y la cola de
+    subida tienen que dar lo mismo;
+  - los tests de cobro y mora, y la suite entera, en verde;
+  - los conteos de la copia contra la nube (contratos, pagos, notas), iguales;
+  - **para que lo compruebe él:** el recibo, el resumen y la planilla de mora de 5 o 6 alumnos que elija, de las
+    dos versiones, lado a lado en Edge, con una lista corta de qué mirar en cada uno.
+
+  Lo que calcula la ventana no cambió desde la 5.0.0 (el simulador, las líneas del papel, la mora y el interés).
+  Sí cambiaron la base, el guardado de los contratos, el abono acumulado, la cola de subida y el recibo reimpreso:
+  eso es lo que se prueba. Si algo da distinto, se le muestra antes de tocar nada.
+- **B. Publicar con él presente.** No se corre ningún SQL ni se instala en ninguna PC sin preguntarle en ese
+  momento, diciendo antes qué hace y qué no. Él está cuando se actualiza cada PC.
+- Aparte, mirado el 15-oct: **el total de "¿Quiénes nos deben?" ya cuenta bien** ($100.166.921,17 = escuelas
+  $93.286.921,17 + particulares $6.880.000; los 14 alumnos en baja temporal, $3.940.000, no suman). No se cambia.
+
 **El instalador se arma con `installer\build_installer.ps1`**, que ahora también arma la página del celular: sin
 ella el instalador no compila (y la central no tendría qué darle al celular). Después:
 
@@ -1313,7 +1341,8 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
    (`tool/verificar_migracion_v73_test.dart`): el 11-oct dio perfecto, pero desde entonces hubo cobros.
 3. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
    El texto de novedades hay que rehacerlo: nombra solo lo del 11-oct.
-4. **Instalar:** primero la PC del usuario; después la del operario y la de la oficina.
+4. **Instalar, PC por PC, con él presente** (punto B): su PC, la del operario y la de la oficina. El orden lo
+   decide él en el momento.
 5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
    importa ningún Excel hasta que todas tengan la 6.0.0.**
 6. **Publicar la web**, con su OK.
@@ -1406,7 +1435,10 @@ celular el 15-oct y anduvo todo) y 8 (la lista de la puerta cerrada a los
 anónimos: el tótem lee por una función con su clave, la página del QR busca
 desde 3 letras y el DNI lo compara la nube, /op ya no se usa; programada el
 15-oct, el SQL sin correr). Seguí por la sección 9 (verificación y publicar,
-"Lo que falta para publicar").
+"Lo que falta para publicar"), con el plan aprobado en
+C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md. Trae dos
+pedidos míos: el cobro de los masivos probado igual que en la 5.0.0, con mis
+datos (punto A), y publicar conmigo presente (punto B).
 ANTES DE PROGRAMAR cada sección, mostrame el plan corto y esperá mi OK; si
 trae algo nuevo a la vista, una maqueta. Avisame al terminar cada paso con
 cómo quedó, un commit y un push. Cada cambio lo apruebo yo.
