@@ -1292,6 +1292,42 @@ escuchar ese canal y ver los DNI de los que entraban.
 - Probar la página del QR y el tótem por el navegador contra la nube de verdad: recién con el SQL corrido (el
   ensayo).
 
+### La sección 9: verificar y publicar (15-oct, en curso)
+
+Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó "dónde nos quedamos" y si seguían
+"las pruebas del modal de cobro, como habíamos acordado": sí, son el punto A de abajo.
+
+- **9a** (`9fc71f1`): los dos pedidos del cierre de la 8 anotados en "Lo que falta para publicar".
+- **9b** (`28fccc9`): 2.443 tests, `flutter analyze` en 312, `flutter build windows` y `web` bien. La primera
+  corrida dio un fallo: el test de dos celulares que ingresan a la misma persona a la vez suponía que llega
+  primero el pedido de Juli, y con la suite entera a veces llega el de Pato (el programa hacía bien). Ahora gana el
+  que llega. El analizador contaba 313 por la muestra de la página del QR: ya no.
+- **9c, su base de hoy sobre una copia:** la migración v73 perfecta otra vez (las 28 tablas iguales, las 5 nuevas
+  vacías, la vuelta a la 5.0.0 bien, la base real con el mismo SHA-256). La copia contra la nube, iguales:
+  643 contratos, $97.226.921,17 de saldos, 4.084 pagos (4.058 vigentes, $114.061.499,09) y el último pago tocado
+  a las 14:41:35 UTC. **Una sola diferencia, y no es de plata:** una nota operativa del 29-jul de RODRIGUEZ,
+  ALEXANDRO DANILO está en la nube y no en su PC (26 contra 27). Probablemente se borró en su PC antes del arreglo
+  del 11-oct y el borrado no subió. No se tocó; se le contó.
+- **Copia de seguridad, por pedido suyo:** `Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32`,
+  idéntica a la base (mismo SHA-256), con la app cerrada.
+- **9d, el cobro igual que hoy** (`tool/cobro_igual_que_hoy_test.dart`): el mismo archivo corre en la 5.0.0 (el tag
+  `v5.0.0` en una carpeta aparte, con las cuatro líneas de `3944fbe` para que no abra los PDF) y en la 6.0.0, sobre
+  la misma foto de su base, y cada una deja un JSON. **Dieron exactamente lo mismo:** los 643 alumnos (ficha,
+  recálculo desde los pagos, mora por cuota y de ficha, los 1.638 cobros del simulador y el recibo de su último
+  cobro), las seis operaciones del día (cuota, mesa, sillas, mora, abono y anular; la ficha, los pagos y lo que
+  queda para subir) y los 14 papeles. Los PDF tienen el mismo contenido; solo cambia el número interno de cada PDF
+  y, en el resumen, la hora en que se sacó. Comparación lado a lado, abierta en Edge:
+  `build/muestras_6.0.0/cobro/Comparar.html`. Los alumnos los elegí uno por tipo de cobro (ARANDA, SILVA, MACHUCA,
+  GOMEZ GIMENA, PEREZ MAIA); con `--dart-define=alumnos=...` salen otros.
+  - En la prueba no hay red: el resumen y la planilla de mora piden la Outfit a internet y caían a Helvetica. La
+    herramienta les deja la Outfit de la app en la memoria del paquete de PDF, sin bajar nada.
+  - La primera versión de la herramienta ponía la mora en una línea genérica y el resumen la rotulaba "de cuotas ya
+    pagadas". Ahora la arma como la ventana (`construirPreviewMora`, cada cuota vencida y la de ficha).
+- **Visto al mirar los papeles, igual en la 5.0.0 (ya sale así hoy):** en el resumen, la mora de la cuota que se
+  paga lleva una flechita `↳` que Outfit no tiene y sale un cuadradito (`pdf_service.dart`, en
+  `generarResumenAbonarAlumno`). No se tocó: cobros y papeles de cobro, solo si lo pide. Además, sin internet ese
+  resumen y la planilla de mora salen en Helvetica (miden distinto); el recibo no, porque lee la Outfit de la app.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, la sección 9 del orden del 14-oct (la verificación). Su plan,
@@ -1326,6 +1362,10 @@ el 15-oct preguntó si seguían ("las pruebas del modal de cobro, como habíamos
 **El instalador se arma con `installer\build_installer.ps1`**, que ahora también arma la página del celular: sin
 ella el instalador no compila (y la central no tendría qué darle al celular). Después:
 
+0. **Copias de seguridad, por las dudas** (pedido del 15-oct): la de su base ya está
+   (`Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32`, idéntica, mismo SHA-256). Antes de
+   los SQL, una copia de las tablas de plata de la nube (contratos, pagos, notas) a un archivo en su PC; y el día de
+   instalar, otra de la base de cada PC antes de instalar (la app saca la suya al migrar, esta es aparte).
 1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
      `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
