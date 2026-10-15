@@ -753,6 +753,19 @@ class MoraCuotaCalculator {
     required DateTime? fechaCobroAr,
     required DateTime? exencionActual,
     required bool reiniciaActual,
+
+    /// Toda la mora cobrada **antes** de este cobro (sin anuladas). Con ella,
+    /// cuando el cobro salda toda la mora y da la exención, el offset pasa a
+    /// cubrir **todo** lo cobrado: ya está usado, y no puede tapar la mora de
+    /// los meses que vienen. Sin ella (`null`) el offset solo suma lo de este
+    /// cobro, como antes.
+    ///
+    /// El caso: mora pagada en dos veces. MOLINA, CARLOS LAUTARO pagó $29.400
+    /// de mora el 22/09 (sin completar cuota, sin exención) y $52.850 el 13/10
+    /// (completó la cuota y saldó todo). El offset quedó en lo del 13/10 más lo
+    /// anterior a septiembre, y los $29.400 del 22/09 se volvían a descontar de
+    /// la mora de noviembre en adelante.
+    double? moraCobradaHistorialPreCobro,
   }) {
     final remanente = moraPendienteTrackedActual.clamp(0.0, double.infinity);
     var tracked = remanente;
@@ -821,6 +834,14 @@ class MoraCuotaCalculator {
         exentaHasta = calcularFechaExencion(fechaCobroAr);
         // Liquidó cuota base → reinicia; solo mora/abono → permanente.
         reinicia = cuotasBaseLiquidadasEnCobro > 0;
+        // Saldó toda la mora: todo lo cobrado hasta acá queda usado. Si una
+        // parte se cobró antes sin entrar al offset (mora pagada en dos
+        // veces), sin esto se volvía a descontar de la mora que viene.
+        final historialPre = moraCobradaHistorialPreCobro;
+        if (historialPre != null) {
+          final todoCobrado = historialPre + moraEsteCobro;
+          if (todoCobrado > offset + 0.01) offset = todoCobrado;
+        }
       }
     }
 

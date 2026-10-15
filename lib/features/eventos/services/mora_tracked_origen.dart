@@ -345,6 +345,7 @@ class MoraTrackedOrigen {
         fechaCobroAr: fechaLote,
         exencionActual: ultimaExencion,
         reiniciaActual: ultimaReinicia,
+        moraCobradaHistorialPreCobro: moraHistAcum,
       );
 
       if (cuotasLiquidadas > 0) {

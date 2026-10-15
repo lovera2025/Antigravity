@@ -109,6 +109,7 @@ ResolucionMoraCobro resolverMoraDeCobro({
     fechaCobroAr: fechaCobroAr,
     exencionActual: contratoPre.moraExentaHasta,
     reiniciaActual: contratoPre.moraExencionReinicia,
+    moraCobradaHistorialPreCobro: moraCobradaHistorial,
   );
 
   // Acá está el orden que importa: la mora que queda se mide sobre el estado

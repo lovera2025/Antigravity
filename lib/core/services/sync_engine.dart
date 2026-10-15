@@ -13,6 +13,7 @@ import 'instalacion_id.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
 import '../../features/mi_empresa/repositories/finanzas_repository.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
+import '../../features/eventos/services/revision_mora_constancia.dart';
 import '../../models/contrato_alumno.dart';
 
 /// Estado del motor de sincronización.
@@ -918,6 +919,48 @@ class SyncEngine {
   /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
   static const int ciclosEntrePullsLentos = 6;
 
+  /// Si ya corrió [revisarMora] en esta sesión del programa.
+  bool _moraRevisadaEnEstaSesion = false;
+
+  /// La revisión de la mora: rehace la ficha, lo ya usado (offset) y la
+  /// eximición de cada alumno desde sus pagos, **sube** lo que corrige y lo
+  /// anota en `revision_mora.txt`. No toca pagos, saldos ni cuotas, ni los
+  /// perdones (ver [MoraTrackedRecovery.reconciliarTodos]).
+  ///
+  /// Corre sola una vez por sesión, después de la primera bajada que sale
+  /// bien, y cada vez que alguien aprieta "Bajar" en el menú. Nunca tira: si
+  /// falla, la mora queda como estaba.
+  Future<void> revisarMora() async {
+    try {
+      final db = await LocalDatabase.instance;
+      final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
+        db: db,
+        encolarSync: true,
+        constancia: RevisionMoraConstancia.anotar,
+      );
+      if (recalibrados > 0) {
+        debugPrint(
+          '  🔧 Revisión de la mora: $recalibrados contrato(s) corregidos desde los pagos',
+        );
+      }
+      final exenciones =
+          await MoraTrackedRecovery.repararExencionDesdeHistorial(
+            db: db,
+            encolarSync: true,
+          );
+      if (exenciones > 0) {
+        debugPrint(
+          '  🔧 Revisión de la mora: $exenciones contrato(s) con eximición reparada',
+        );
+      }
+      if (recalibrados > 0 || exenciones > 0) {
+        await refreshPendingCount();
+      }
+    } catch (e) {
+      debugPrint('  ⚠️ Revisión de la mora: $e');
+    }
+  }
+
   /// Pull corto para la operación simultánea de cajas. Nunca sube la cola
   /// local: el jefe conserva sus pendientes manuales.
   ///
@@ -956,6 +999,14 @@ class SyncEngine {
       ]);
       FinanzasRepository.invalidateProyeccionCache();
       _lastPullTime = DateTime.now();
+      // Una vez por sesión, con los cobros recién bajados: la revisión de la
+      // mora. Antes corría solo si alguien apretaba "Bajar" en el menú, así
+      // que lo que corregía podía no correr nunca. Ahora corre sola al abrir
+      // el programa (también la primera vez, al instalar una versión nueva).
+      if (!_moraRevisadaEnEstaSesion && _tablasConFalloPull.isEmpty) {
+        _moraRevisadaEnEstaSesion = true;
+        await revisarMora();
+      }
       // Lo que sí bajó tiene que refrescar igual la pantalla, así que esto
       // devuelve true de todos modos: lo único que cambia es dejar de informar
       // "sincronizado" cuando alguna tabla no llegó.
@@ -1525,26 +1576,8 @@ class SyncEngine {
       _pullTable(db, 'mesas_movimientos', 'updated_at'),
     ]);
 
-    try {
-      final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
-        db: db,
-        encolarSync: true,
-      );
-      if (recalibrados > 0) {
-        debugPrint(
-          '  🔧 Post-pull mora: $recalibrados contrato(s) recalibrados desde historial',
-        );
-      }
-      final exenciones =
-          await MoraTrackedRecovery.repararExencionDesdeHistorial(db: db);
-      if (exenciones > 0) {
-        debugPrint(
-          '  🔧 Post-pull mora: $exenciones contrato(s) con exención reparada',
-        );
-      }
-    } catch (e) {
-      debugPrint('  ⚠️ Post-pull mora reconcile: $e');
-    }
+    _moraRevisadaEnEstaSesion = true;
+    await revisarMora();
 
     if (_tablasConFalloPull.isNotEmpty) {
       final fallidas = _tablasConFalloPull.toList()..sort();

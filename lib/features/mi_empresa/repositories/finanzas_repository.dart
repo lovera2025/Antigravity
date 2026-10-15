@@ -924,11 +924,29 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
           contrato: contrato,
           pagos: pagos,
         );
+        // Si el cobro anulado era el que había dado la eximición, se va con él
+        // (un perdón no se toca). Antes quedaba: MONTENEGRO, FRANCISCO NAHUEL
+        // siguió eximido hasta el 30/09 con su único cobro de mora anulado.
+        final exencion = MoraTrackedRecovery.exencionDeCobroAnulado(
+          contrato: contrato,
+          pagos: pagos,
+        );
+        final exencionCambios = exencion == null
+            ? const <String, Object?>{}
+            : {
+                'mora_exenta_hasta': exencion.hasta == null
+                    ? null
+                    : '${exencion.hasta!.year.toString().padLeft(4, '0')}-'
+                          '${exencion.hasta!.month.toString().padLeft(2, '0')}-'
+                          '${exencion.hasta!.day.toString().padLeft(2, '0')}',
+                'mora_exencion_reinicia': exencion.reinicia ? 1 : 0,
+              };
         await txn.update(
           'contratos_alumnos',
           {
             'mora_pendiente_tracked': objetivo.tracked,
             'mora_cobrada_offset': objetivo.offset,
+            ...exencionCambios,
             'updated_at': ArTime.nowUtcIso(),
           },
           where: 'id = ?',
@@ -943,6 +961,7 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
             'id': cid,
             'mora_pendiente_tracked': objetivo.tracked,
             'mora_cobrada_offset': objetivo.offset,
+            ...exencionCambios,
           },
         );
       }

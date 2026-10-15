@@ -190,6 +190,7 @@ class MoraTrackedRecovery {
         fechaCobroAr: fechaLote,
         exencionActual: ultimaExencion,
         reiniciaActual: ultimaReinicia,
+        moraCobradaHistorialPreCobro: moraHistAcum,
       );
 
       tracked = post.tracked;
@@ -327,9 +328,13 @@ class MoraTrackedRecovery {
   /// Detecta alumnos cuyo último cobro de mora saldó toda la pendiente en ese
   /// momento y les asigna [mora_exenta_hasta] + [mora_exencion_reinicia].
   /// No acorta ni vuelve `reinicia=true` sobre una exención local más protectora.
+  ///
+  /// [encolarSync]: sube la exención reparada. Sin eso quedaba solo en la PC
+  /// que la reparó, y las demás seguían calculando otra mora.
   static Future<int> repararExencionDesdeHistorial({
     required DatabaseExecutor db,
     bool soloEventosMasivosActivos = false,
+    bool encolarSync = false,
   }) async {
     final contratos =
         await _contratosParaReconciliar(db, soloEventosMasivosActivos);
@@ -345,27 +350,31 @@ class MoraTrackedRecovery {
         whereArgs: [contrato.id],
       );
 
-      final exencion = _calcularExencionDesdeHistorial(
-        contratoBase: contrato,
-        pagos: pagos,
-      );
+      // La misma regla que la revisión ([resolverExencion]): un perdón no se
+      // toca, y la de un cobro anulado se va.
+      final resolved = resolverExencion(contrato: contrato, pagos: pagos);
+      if (!resolved.escribir) continue;
 
-      final resolved = resolverExencionPreservandoLocal(
-        localHasta: contrato.moraExentaHasta,
-        localReinicia: contrato.moraExencionReinicia,
-        desdeHistorial: exencion,
-      );
-      if (!resolved.escribir || resolved.hasta == null) continue;
-
+      final cambios = {
+        'mora_exenta_hasta':
+            resolved.hasta == null ? null : _exentaHastaIso(resolved.hasta!),
+        'mora_exencion_reinicia': resolved.reinicia ? 1 : 0,
+      };
       await db.update(
         'contratos_alumnos',
-        {
-          'mora_exenta_hasta': _exentaHastaIso(resolved.hasta!),
-          'mora_exencion_reinicia': resolved.reinicia ? 1 : 0,
-        },
+        cambios,
         where: 'id = ?',
         whereArgs: [contrato.id],
       );
+      if (encolarSync) {
+        await SyncQueue.enqueue(
+          executor: db,
+          tabla: 'contratos_alumnos',
+          operacion: SyncOperation.update,
+          registroId: contrato.id,
+          payload: {'id': contrato.id, ...cambios},
+        );
+      }
       reparados++;
     }
     return reparados;
@@ -382,11 +391,133 @@ class MoraTrackedRecovery {
         pagos: pagos,
       );
 
+  /// La exención que dejó un cobro **que después se anuló**, y la que
+  /// corresponde sin él.
+  ///
+  /// Anular un cobro rehacía tracked y offset desde los pagos que quedan, pero
+  /// la exención que ese cobro había dado quedaba: MONTENEGRO, FRANCISCO NAHUEL
+  /// siguió eximido hasta el 30/09 aunque el cobro del 19/09, el que la dio, se
+  /// anuló entero.
+  ///
+  /// Es de un cobro anulado cuando el historial **con** las líneas anuladas da
+  /// exactamente la exención que tiene el contrato, y el historial sin ellas da
+  /// otra o ninguna. **Un perdón no se toca:** deja su ajuste de ficha
+  /// (`mora_tracked_ajuste`), y si no lo dejó, ningún historial reproduce su
+  /// fecha y su permanencia.
+  ///
+  /// `null`: no es de un cobro anulado, no se toca. Si lo es, la que
+  /// corresponde sin las anuladas (`hasta: null` = ninguna).
+  static ({DateTime? hasta, bool reinicia})? exencionDeCobroAnulado({
+    required ContratoAlumno contrato,
+    required List<Map<String, dynamic>> pagos,
+  }) {
+    final local = contrato.moraExentaHasta;
+    if (local == null) return null;
+    if (contrato.moraTrackedAjuste.abs() > 0.01) return null;
+    final hayAnuladas =
+        pagos.any((p) => ((p['anulado'] as num?)?.toInt() ?? 0) != 0);
+    if (!hayAnuladas) return null;
+
+    bool esLaLocal(({DateTime hasta, bool reinicia})? e) =>
+        e != null &&
+        _mismoDia(e.hasta, local) &&
+        e.reinicia == contrato.moraExencionReinicia;
+
+    final conAnuladas = _calcularExencionDesdeHistorial(
+      contratoBase: contrato,
+      pagos: [
+        for (final p in pagos) {...p, 'anulado': 0},
+      ],
+    );
+    if (!esLaLocal(conAnuladas)) return null;
+
+    final sinAnuladas = _calcularExencionDesdeHistorial(
+      contratoBase: contrato,
+      pagos: pagos,
+    );
+    if (esLaLocal(sinAnuladas)) return null;
+    return (hasta: sinAnuladas?.hasta, reinicia: sinAnuladas?.reinicia ?? true);
+  }
+
+  static bool _mismoDia(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// La eximición que tiene que quedar. Una sola regla para la revisión y la
+  /// reparación:
+  ///
+  /// - la de un cobro anulado se deshace ([exencionDeCobroAnulado]);
+  /// - la que vino de cobros la reemplaza la del último cobro que dio una: una
+  ///   eximición vieja no le pasa su "permanente" a una nueva. MONTENEGRO,
+  ///   GISEL tenía la del 24/07, permanente (ese cobro no completó cuota), y el
+  ///   21/08 saldó la mora completando la cuota 3 (esa vuelve a contar). Con
+  ///   "la permanente gana", su cuota 4 dejaba de sumar mora para siempre;
+  /// - la de un perdón (la que ningún cobro da, o con ajuste de ficha) se
+  ///   protege como siempre: la fecha más lejana, y la permanente gana.
+  ///
+  /// `escribir`: si hay que guardar algo distinto de lo que tiene el contrato.
+  static ({DateTime? hasta, bool reinicia, bool escribir}) resolverExencion({
+    required ContratoAlumno contrato,
+    required List<Map<String, dynamic>> pagos,
+  }) {
+    final deAnulado = exencionDeCobroAnulado(contrato: contrato, pagos: pagos);
+    if (deAnulado != null) {
+      return (
+        hasta: deAnulado.hasta,
+        reinicia: deAnulado.reinicia,
+        escribir: true,
+      );
+    }
+    final otorgadas = <({DateTime hasta, bool reinicia})>[];
+    final hist = _calcularExencionDesdeHistorial(
+      contratoBase: contrato,
+      pagos: pagos,
+      otorgadas: otorgadas,
+    );
+    final local = contrato.moraExentaHasta;
+    final localDeCobro = local != null &&
+        contrato.moraTrackedAjuste.abs() <= 0.01 &&
+        otorgadas.any(
+          (e) =>
+              _mismoDia(e.hasta, local) &&
+              e.reinicia == contrato.moraExencionReinicia,
+        );
+    if (localDeCobro && hist != null) {
+      final igual = _mismoDia(hist.hasta, local) &&
+          hist.reinicia == contrato.moraExencionReinicia;
+      return (hasta: hist.hasta, reinicia: hist.reinicia, escribir: !igual);
+    }
+    final r = resolverExencionPreservandoLocal(
+      localHasta: local,
+      localReinicia: contrato.moraExencionReinicia,
+      desdeHistorial: hist,
+    );
+    return (
+      hasta: r.hasta,
+      reinicia: r.reinicia,
+      escribir: r.escribir && r.hasta != null,
+    );
+  }
+
+  /// Mora cobrada (sin anuladas): lo que la cuenta descuenta por FIFO.
+  static double moraCobradaDelHistorial(List<Map<String, dynamic>> pagos) =>
+      _round2(
+        pagos
+            .where((p) => ((p['anulado'] as num?)?.toInt() ?? 0) == 0)
+            .where(_esMora)
+            .fold<double>(
+              0,
+              (s, p) => s + ((p['monto'] as num?)?.toDouble() ?? 0),
+            ),
+      );
+
   /// Calcula la fecha de exención para un contrato dado su historial.
   /// Retorna la fecha si el último lote con mora saldó toda la pendiente.
   static ({DateTime hasta, bool reinicia})? _calcularExencionDesdeHistorial({
     required ContratoAlumno contratoBase,
     required List<Map<String, dynamic>> pagos,
+
+    /// Si viene, se llena con cada exención que dio un cobro, en orden.
+    List<({DateTime hasta, bool reinicia})>? otorgadas,
   }) {
     var tracked = 0.0;
     var offset = 0.0;
@@ -448,8 +579,17 @@ class MoraTrackedRecovery {
         fechaCobroAr: fechaLote,
         exencionActual: ultimaExencion,
         reiniciaActual: ultimaReinicia,
+        moraCobradaHistorialPreCobro: moraHistAcum,
       );
 
+      final nueva = post.exentaHasta;
+      if (otorgadas != null &&
+          nueva != null &&
+          (ultimaExencion == null ||
+              !_mismoDia(nueva, ultimaExencion) ||
+              post.reinicia != ultimaReinicia)) {
+        otorgadas.add((hasta: nueva, reinicia: post.reinicia));
+      }
       tracked = post.tracked;
       offset = post.offset;
       ultimaExencion = post.exentaHasta;
@@ -462,18 +602,32 @@ class MoraTrackedRecovery {
     return (hasta: ultimaExencion, reinicia: ultimaReinicia);
   }
 
-  /// Recalibración masiva local: solo actualiza tracked/offset; no toca pagos.
-  /// [encolarSync]: sube [mora_pendiente_tracked] corregido a Supabase.
+  /// Recalibración masiva local: actualiza tracked, offset y exención desde el
+  /// historial de pagos; no toca pagos.
+  ///
+  /// [encolarSync]: sube **todo** lo que corrigió (tracked, offset y la
+  /// exención). Antes subía solo el tracked: un offset corregido quedaba en la
+  /// PC, y la próxima bajada del evento (donde la nube manda) lo volvía a
+  /// pisar. Así 13 alumnos con cobros de agosto quedaron con el offset en 0 en
+  /// todas las PCs y la mora que ya habían pagado se les descontaba de nuevo de
+  /// la de los meses siguientes (VERON, DALMA: $1.100 en vez de $33.000).
+  ///
   /// [soloEventosMasivosActivos]: limita a eventos masivos Confirmado/Planificacion.
+  ///
+  /// [constancia]: recibe un renglón por alumno corregido, con el antes y el
+  /// después (la app lo guarda en `revision_mora.txt`, junto a la base).
   static Future<int> reconciliarTodos({
     required DatabaseExecutor db,
     bool encolarSync = false,
     bool soloEventosMasivosActivos = false,
+    Future<void> Function(List<String> renglones)? constancia,
+    DateTime? ahoraAr,
   }) async {
     final contratos =
         await _contratosParaReconciliar(db, soloEventosMasivosActivos);
     var actualizados = 0;
     final nowUtc = DateTime.now().toUtc().toIso8601String();
+    final renglones = <String>[];
 
     for (final row in contratos) {
       final contrato = ContratoAlumno.fromJson(row);
@@ -488,10 +642,6 @@ class MoraTrackedRecovery {
         contrato: contrato,
         pagos: pagos,
       );
-      final exencion = calcularExencionDesdeHistorial(
-        contratoBase: contrato,
-        pagos: pagos,
-      );
       final trackedActual = contrato.moraPendienteTracked;
       final offsetActual = contrato.moraCobradaOffset;
       final trackedFinal = trackedEfectivo(
@@ -499,29 +649,34 @@ class MoraTrackedRecovery {
         ajuste: contrato.moraTrackedAjuste,
       );
 
-      final resolved = resolverExencionPreservandoLocal(
-        localHasta: contrato.moraExentaHasta,
-        localReinicia: contrato.moraExencionReinicia,
-        desdeHistorial: exencion,
-      );
+      // La exención: ver [resolverExencion] (un perdón no se toca).
+      DateTime? hastaFinal = contrato.moraExentaHasta;
+      var reiniciaFinal = contrato.moraExencionReinicia;
+      var exencionCambio = false;
+      final resuelta = resolverExencion(contrato: contrato, pagos: pagos);
+      if (resuelta.escribir) {
+        hastaFinal = resuelta.hasta;
+        reiniciaFinal = resuelta.reinicia;
+        exencionCambio = true;
+      }
 
       final trackedDiff = (trackedFinal - trackedActual).abs() > 0.01;
       final offsetDiff = (objetivo.offset - offsetActual).abs() > 0.01;
 
-      if (!trackedDiff && !offsetDiff && !resolved.escribir) {
+      if (!trackedDiff && !offsetDiff && !exencionCambio) {
         continue;
       }
 
+      final hastaIso = hastaFinal == null ? null : _exentaHastaIso(hastaFinal);
       final updates = <String, Object?>{
         'mora_pendiente_tracked': trackedFinal,
         'mora_cobrada_offset': objetivo.offset,
         'updated_at': nowUtc,
       };
-      // Solo escribe exención si el merge la mejora; nunca degrada admin.
       // No toca mora_tracked_ajuste: el perdón/poner admin tiene que sobrevivir.
-      if (resolved.escribir && resolved.hasta != null) {
-        updates['mora_exenta_hasta'] = _exentaHastaIso(resolved.hasta!);
-        updates['mora_exencion_reinicia'] = resolved.reinicia ? 1 : 0;
+      if (exencionCambio) {
+        updates['mora_exenta_hasta'] = hastaIso;
+        updates['mora_exencion_reinicia'] = reiniciaFinal ? 1 : 0;
       }
 
       await db.update(
@@ -532,7 +687,10 @@ class MoraTrackedRecovery {
       );
       actualizados++;
 
-      if (encolarSync && trackedDiff) {
+      if (encolarSync) {
+        // Va todo junto: la exención como par (hasta + reinicia) aunque no
+        // haya cambiado acá, porque puede ser la única copia (las de antes del
+        // 28/08 no llegaron nunca a la nube).
         await SyncQueue.enqueue(
           executor: db,
           tabla: 'contratos_alumnos',
@@ -541,11 +699,51 @@ class MoraTrackedRecovery {
           payload: {
             'id': contrato.id,
             'mora_pendiente_tracked': trackedFinal,
+            'mora_cobrada_offset': objetivo.offset,
+            'mora_exenta_hasta': hastaIso,
+            'mora_exencion_reinicia': reiniciaFinal ? 1 : 0,
           },
+        );
+      }
+
+      if (constancia != null) {
+        final cobrada = moraCobradaDelHistorial(pagos);
+        final despues = contrato.copyWith(
+          moraPendienteTracked: trackedFinal,
+          moraCobradaOffset: objetivo.offset,
+          moraExentaHasta: hastaFinal,
+          moraExencionReinicia: reiniciaFinal,
+        );
+        final moraAntes = MoraCuotaCalculator.moraPendienteOperativa(
+          contrato: contrato,
+          moraCobradaHistorial: cobrada,
+          ahoraAr: ahoraAr,
+        );
+        final moraDespues = MoraCuotaCalculator.moraPendienteOperativa(
+          contrato: despues,
+          moraCobradaHistorial: cobrada,
+          ahoraAr: ahoraAr,
+        );
+        String f(double v) => '\$${v.toStringAsFixed(0)}';
+        String ex(DateTime? d, bool r) =>
+            d == null ? 'sin' : '${_exentaHastaIso(d)}${r ? '' : ' permanente'}';
+        renglones.add(
+          '${contrato.nombreAlumno}: mora ${f(moraAntes)} -> ${f(moraDespues)}'
+          ' · ya usado ${f(offsetActual)} -> ${f(objetivo.offset)}'
+          ' · de ficha ${f(trackedActual)} -> ${f(trackedFinal)}'
+          ' · eximición ${ex(contrato.moraExentaHasta, contrato.moraExencionReinicia)}'
+          ' -> ${ex(hastaFinal, reiniciaFinal)}',
         );
       }
     }
 
+    if (constancia != null && renglones.isNotEmpty) {
+      try {
+        await constancia(renglones);
+      } catch (_) {
+        // La constancia es un aviso, no puede frenar la revisión.
+      }
+    }
     return actualizados;
   }
 }
