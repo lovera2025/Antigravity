@@ -1337,7 +1337,30 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó
 - **9e, el instalador:** armado de nuevo el 15-oct a las 15:54 con `installer\build_installer.ps1`, desde `5dd5f4c`
   (`installer/dist/Setup Junior Eventos v6.0.0.exe`, 36,3 MB, SHA-256 `9DD5501E…E77A6`). Lleva la página del
   celular. **Si cambia algo del programa antes de publicar, hay que armarlo otra vez.**
-- **Sigue el 9f, publicar con él presente**: nada se corre ni se instala sin preguntarle en el momento.
+- **9f, la nube (15-oct, 16:13, con su OK: "dale empezá por la nube").** Preguntó antes "¿qué se publicaría acá?":
+  nada que alguien vea; tablas y funciones nuevas.
+  - **La copia de la nube:** sin usuario no se pueden bajar contratos ni pagos (y no se usa su contraseña), así que
+    se comprobó renglón por renglón, por huellas MD5 por grupo, que la copia de su PC es igual a la nube: **los 4.084
+    pagos idénticos; los 643 contratos idénticos en plata, cuotas, mesa, sillas y mora de ficha**. Lo que la nube
+    tiene distinto quedó en `Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32.nube.txt`.
+  - **Apareció: 12 contratos con la eximición de mora distinta.** En su PC, `mora_exenta_hasta` = 31/08/2026; en la
+    nube, sin fecha (VEGA, FLAVIA CLARISA y VERON, DALMA además con "vuelve a contar" = no en la PC). **Causa:** las
+    columnas de la eximición se agregaron a la nube el 28-ago (migración `add_mora_exencion_columns_contratos_alumnos`);
+    lo cobrado antes no pudo subir la fecha. Es un resto de agosto, no una falla de ahora (las fechas de septiembre y
+    octubre coinciden). **A dos les cambia la mora de hoy:** BLANCO DI SI, JUAN FRANCISCO ($12.900 en su PC, $40.800
+    con lo de la nube) y VERON, DALMA ($1.100 / $42.900); los dos pagaron mora en agosto (el 5 y el 24), así que lo
+    correcto parece lo de su PC: en otra PC se les cobraría de nuevo mora ya pagada. **No se corrigió:** va con su
+    OK, por el camino de siempre (los nombrados, simulacro, copia y comparación).
+  - **Los tres SQL que solo agregan, corridos con `apply_migration`** (quedan en la lista de migraciones):
+    `sillas_retiro_sorteos`, `planos_y_cambios_de_mesa` y `puerta_funciones`. Verificados: las cinco tablas con RLS,
+    su policy y sus dos disparadores, fuera de Realtime; `claves_totem` vacía; las cinco funciones; un anónimo no
+    puede pedir la clave del tótem ("permission denied"). **Conteos iguales antes y después:** 643 contratos
+    ($97.226.921,17 de saldos), 4.084 pagos ($114.061.499,09 vigentes), 27 notas, 10 invitados, 0 accesos, 30
+    eventos, 1 `totem_config`. El anónimo sigue leyendo `invitados` (el tótem y la página del QR de la 5.0.0 siguen
+    andando): eso se cierra al final.
+  - Preguntó si la app ya trae exportar e importar acompañantes y música: sí, es la parte 2 (PLANILLAS ▾ →
+    "Acompañantes y música"), viene en el instalador y no necesita SQL.
+- **Sigue el 9f: el release, instalar PC por PC con él, la web, cerrar los permisos y el ensayo.**
 
 ## Lo que falta para publicar
 
@@ -1377,7 +1400,7 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
    (`Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32`, idéntica, mismo SHA-256). Antes de
    los SQL, una copia de las tablas de plata de la nube (contratos, pagos, notas) a un archivo en su PC; y el día de
    instalar, otra de la base de cada PC antes de instalar (la app saca la suya al migrar, esta es aparte).
-1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
+1. **La nube, lo que solo agrega — HECHO el 15-oct a las 16:13** (ver "La sección 9"), con su OK en el momento:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
      `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
      correr cuando él diga;
