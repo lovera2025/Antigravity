@@ -20,6 +20,10 @@ const kSaludarHasta = Duration(minutes: 1);
 
 enum QuePide { ingresar, deshacer }
 
+/// Lo que dice el celular de un ingreso que todavía no pudo mandarle a la
+/// central (`AccionesPuerta.marca`).
+const kPorMandar = 'por mandar';
+
 /// Un pedido de un celular.
 class PedidoPuerta {
   /// Lo pone el celular. Si llega dos veces (se cortó antes de la respuesta y

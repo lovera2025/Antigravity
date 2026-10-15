@@ -67,6 +67,9 @@ dependencies:
   xml: ^6.6.1
   desktop_multi_window: ^0.2.0
   http: ^1.2.2
+  # El celular de la puerta le habla a la notebook central por el wifi del
+  # router (`cliente_central.dart`). Ya venía con supabase_flutter.
+  web_socket_channel: ^3.0.3
   # SQLite nativo en Android/iOS (la PC usa sqflite_common_ffi en local_database.dart).
   sqflite: ^2.4.2
 

@@ -8,63 +8,19 @@ import 'package:arguello_events/models/invitado.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/celular_de_prueba.dart';
+import 'helpers/central_en_memoria.dart';
 
 /// La central de la puerta de verdad (`CentralPuerta`), escuchando solo en esta
 /// PC, con celulares de mentira que se conectan por la red como los de
-/// verdad. Lo único en memoria es la base ([_PcEnMemoria]).
-const _evento = 'e0000000-0000-4000-8000-00000000000b';
+/// verdad. Lo único en memoria es la base ([PcEnMemoria]).
+const _evento = eventoDeLaCentral;
 const _codigo = '4821';
-final _hora = DateTime.utc(2026, 12, 13, 1, 41);
+final _hora = horaDeLaCentral;
 
-Invitado _fila(String id, String nombre, {bool adentro = false}) => Invitado(
-      id: id,
-      eventoId: _evento,
-      nombreCompleto: nombre,
-      dni: '',
-      estadoIngreso:
-          adentro ? EstadoIngreso.ingresado : EstadoIngreso.pendiente,
-      updatedAt: adentro ? _hora : null,
-    );
-
-/// La base de la notebook: las filas de la puerta y lo que se le pidió.
-class _PcEnMemoria implements PuertaDeEstaPc {
-  final filas = <String, Invitado>{};
-  final ingresos = <(String, bool)>[];
-  final deshechos = <String>[];
-  var falla = false;
-
-  /// Cuánto tarda en marcar: para que dos pedidos se crucen.
-  var demora = Duration.zero;
-
-  @override
-  Future<Invitado?> fila(String id) async => filas[id];
-
-  @override
-  Future<void> ingresar(
-    String eventoId,
-    PersonaPuerta persona, {
-    required bool saludar,
-  }) async {
-    await Future<void>.delayed(demora);
-    if (falla) throw StateError('la base no anda');
-    ingresos.add((persona.id, saludar));
-    filas[persona.id] = _fila(persona.id, persona.nombre, adentro: true);
-  }
-
-  @override
-  Future<void> deshacer(String id) async {
-    await Future<void>.delayed(demora);
-    if (falla) throw StateError('la base no anda');
-    deshechos.add(id);
-    filas[id] = _fila(id, filas[id]!.nombreCompleto);
-  }
-
-  /// La lista como la armaría Recepción con estas filas.
-  PuertaDelEvento lista() => PuertaDelEvento.particular(filas.values.toList());
-}
+Invitado _fila(String id, String nombre) => filaDePrueba(id, nombre);
 
 void main() {
-  late _PcEnMemoria pc;
+  late PcEnMemoria pc;
   late CentralPuerta central;
   late int puerto;
   late DateTime ahora;
@@ -86,7 +42,7 @@ void main() {
   }
 
   setUp(() async {
-    pc = _PcEnMemoria()
+    pc = PcEnMemoria()
       ..filas['p1'] = _fila('p1', 'PÉREZ, JUAN')
       ..filas['p2'] = _fila('p2', 'ACOSTA, LUCÍA');
     ahora = DateTime(2026, 12, 12, 22);
@@ -273,6 +229,31 @@ void main() {
       final r = await c.pedirYEsperar('a2', QuePide.deshacer, 'p1');
       expect(r['hizo'], 'deshacer');
       expect(pc.deshechos, ['p1']);
+      expect(central.marcas.quien('p1'), isNull);
+    });
+
+    test('la lista que sale apenas se marca ya dice quién lo marcó', () async {
+      // Como la base de verdad: avisa el cambio en el momento de marcar.
+      pc.alCambiar = () => central.ponerPuerta(pc.lista());
+      final pato = await celular(id: 'cel-pato', nombre: 'Pato');
+      final juli = await celular();
+      await pato.espera('puerta');
+      await juli.pedirYEsperar('a1', QuePide.ingresar, 'p1');
+      final m = await pato.espera(
+        'puerta',
+        cumple: (m) => PuertaDelEvento.fromJson(
+              m['puerta'] as Map<String, dynamic>,
+              eventoId: _evento,
+            ).adentro ==
+            1,
+      );
+      expect(m['por'], {'p1': 'Juli'});
+    });
+
+    test('si la base falla, no queda anotado quién lo marcó', () async {
+      final c = await celular();
+      pc.falla = true;
+      await c.pedirYEsperar('a1', QuePide.ingresar, 'p1');
       expect(central.marcas.quien('p1'), isNull);
     });
 

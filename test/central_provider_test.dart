@@ -6,6 +6,7 @@ import 'package:arguello_events/features/eventos/repositories/contratos_reposito
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/recepcion/central/central_provider.dart';
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
+import 'package:arguello_events/features/recepcion/providers/acciones_puerta_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
@@ -160,6 +161,9 @@ void main() {
       expect(m['por'], {juan: 'Juli'});
     }
     expect(central().quienMarco(juan), 'Juli');
+    // La Recepción de la PC también lo dice, debajo de ADENTRO.
+    expect(container.read(accionesPuertaProvider).marca(juan), 'Juli');
+    expect(container.read(accionesPuertaProvider).enEstaPc, isTrue);
 
     // Pato lo busca después: ya entró.
     final otra = await pato.pedirYEsperar('b1', QuePide.ingresar, juan);

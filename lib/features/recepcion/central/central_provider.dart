@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../models/evento.dart';
 import '../../../models/invitado.dart';
 import '../providers/recepcion_provider.dart';
 import '../repositories/invitados_repository.dart';
@@ -140,6 +141,7 @@ class EstadoCentral {
 class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   CentralPuerta? _central;
   ProviderSubscription<AsyncValue<PuertaDelEvento>>? _lista;
+  ProviderSubscription<AsyncValue<List<Evento>>>? _evento;
   StreamSubscription<List<PuestoConectado>>? _puestos;
 
   @override
@@ -183,6 +185,14 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     // Desde el contenedor y no con `ref.listen`: Riverpod pausa lo que escucha
     // un provider cuando nadie lo mira, y la central tiene que seguir mandando
     // la lista aunque Recepción esté cerrada.
+    _evento = ref.container.listen<AsyncValue<List<Evento>>>(
+      eventosActivosProvider,
+      (_, eventos) {
+        final e = eventos.value?.where((e) => e.id == eventoId).firstOrNull;
+        central.ponerTitulo(e == null ? null : etiquetaEventoRecepcion(e));
+      },
+      fireImmediately: true,
+    );
     _lista = ref.container.listen<AsyncValue<PuertaDelEvento>>(
       puertaDelEventoProvider(eventoId),
       (_, lista) {
@@ -229,6 +239,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     _central = null;
     _lista?.close();
     _lista = null;
+    _evento?.close();
+    _evento = null;
     await _puestos?.cancel();
     _puestos = null;
     await central?.cerrar();

@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../central/pedidos_de_la_puerta.dart' show kPorMandar;
+import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
-import '../repositories/invitados_repository.dart';
 import '../services/puerta_del_evento.dart';
 import 'linea_sin_internet.dart';
 
@@ -17,7 +20,8 @@ import 'linea_sin_internet.dart';
 /// la lista cargada a mano o por CSV.
 ///
 /// Lo que decide —quién se ve, qué hace Enter— está en [PuertaDelEvento]; acá
-/// se dibuja y se llama a lo de siempre para marcar.
+/// se dibuja y se marca por [AccionesPuerta]: en la PC, la base; en el celular
+/// de la puerta, la notebook central.
 ///
 /// La letra es Outfit, que viene con la app: anda sin internet.
 class PanelPuerta extends ConsumerStatefulWidget {
@@ -62,9 +66,21 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   FiltroPuerta _filtro = FiltroPuerta.todos;
   _Aviso? _aviso;
   final _ocupados = <String>{};
+  StreamSubscription<String>? _avisosDeLaCentral;
+
+  @override
+  void initState() {
+    super.initState();
+    // Lo que contesta la central cuando no hizo lo pedido ("ya ingresó a las
+    // 22:41 · Pato"): puede llegar un rato después del toque.
+    _avisosDeLaCentral = ref.read(accionesPuertaProvider).avisos.listen((t) {
+      if (mounted) setState(() => _aviso = _Aviso(t));
+    });
+  }
 
   @override
   void dispose() {
+    unawaited(_avisosDeLaCentral?.cancel());
     _busqueda.dispose();
     _foco.dispose();
     super.dispose();
@@ -107,8 +123,9 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
       children: [
         _progreso(p),
         // La web se sirve desde internet: sin internet no anda, no hay nada
-        // que decir.
-        if (!kIsWeb)
+        // que decir. Y en el celular de la puerta marca la central, no esta
+        // pantalla.
+        if (!kIsWeb && ref.watch(accionesPuertaProvider).enEstaPc)
           LineaSinInternet(
             eventoId: widget.eventoId,
             personas: p.total,
@@ -262,6 +279,12 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
                   ),
                   onChanged: (_) => setState(() => _aviso = null),
                   onSubmitted: (_) => _enter(p),
+                  // En la web de un celular, Flutter suelta el teclado al
+                  // apoyar el dedo afuera, y eso se comía el toque: el primer
+                  // INGRESAR después de buscar no andaba. Se suelta al
+                  // levantarlo.
+                  onTapOutside: kIsWeb ? (_) {} : null,
+                  onTapUpOutside: kIsWeb ? (_) => _foco.unfocus() : null,
                 ),
               ),
               if (particular && widget.onAgregar != null) ...[
@@ -440,7 +463,8 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           _renglon(
             g.titular,
             detalle: _detalleTitular(g, p),
-            puedeEliminar: g.cargadoAMano,
+            puedeEliminar:
+                g.cargadoAMano && ref.watch(accionesPuertaProvider).puedeEliminar,
           ),
           for (final a in g.acompanantes)
             Padding(
@@ -611,14 +635,32 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   Widget _estado(PersonaPuerta persona) {
     final ocupado = _ocupados.contains(persona.id);
     if (persona.ingresado) {
+      // Quién lo ingresó ("Juli"), o que el celular todavía no lo mandó.
+      final marca = ref.watch(accionesPuertaProvider).marca(persona.id);
+      final porMandar = marca == kPorMandar;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            persona.textoHora == null
-                ? 'ADENTRO'
-                : 'ADENTRO · ${persona.textoHora}',
-            style: _letra(size: 12, negrita: true, color: _verde),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                persona.textoHora == null
+                    ? 'ADENTRO'
+                    : 'ADENTRO · ${persona.textoHora}',
+                style: _letra(size: 12, negrita: true, color: _verde),
+              ),
+              if (marca != null && marca.isNotEmpty)
+                Text(
+                  porMandar ? 'POR MANDAR' : marca,
+                  style: _letra(
+                    size: 11,
+                    negrita: porMandar,
+                    color: porMandar ? _ambar : _suave,
+                  ),
+                ),
+            ],
           ),
           IconButton(
             tooltip: 'Deshacer el ingreso',
@@ -691,17 +733,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     if (_ocupados.contains(persona.id)) return false;
     setState(() => _ocupados.add(persona.id));
     try {
-      final repo = ref.read(invitadosRepositoryProvider);
-      if (persona.fila != null) {
-        await repo.marcarIngreso(persona.id);
-      } else {
-        await repo.ingresarDesdeLaPuerta(
-          eventoId: widget.eventoId,
-          id: persona.id,
-          nombre: persona.nombre,
-          mesa: persona.mesa,
-        );
-      }
+      await ref.read(accionesPuertaProvider).ingresar(widget.eventoId, persona);
       if (mounted) {
         setState(() => _aviso = _Aviso('${persona.nombre} ingresó.', bien: true));
       }
@@ -742,7 +774,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     if (si != true || !mounted) return;
     setState(() => _ocupados.add(persona.id));
     try {
-      await ref.read(invitadosRepositoryProvider).deshacerIngreso(persona.id);
+      await ref.read(accionesPuertaProvider).deshacer(persona);
       if (mounted) {
         setState(() => _aviso = _Aviso('${persona.nombre} vuelve a faltar.'));
       }
@@ -782,7 +814,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     );
     if (si != true || !mounted) return;
     try {
-      await ref.read(invitadosRepositoryProvider).eliminar(persona.id);
+      await ref.read(accionesPuertaProvider).eliminar(persona);
       if (mounted) {
         setState(() => _aviso = _Aviso('${persona.nombre} salió de la lista.'));
       }

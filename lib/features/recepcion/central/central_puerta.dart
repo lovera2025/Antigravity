@@ -152,16 +152,31 @@ class CentralPuerta {
     return servidor.port;
   }
 
+  /// Cómo se llama el evento, para el encabezado del celular: "ESCUELA NORMAL —
+  /// Egresados (12/12) · masivo".
+  String? _titulo;
+
   /// La lista cambió (alguien entró, se sorteó, se cargó un acompañante): se
   /// les manda a todos los celulares.
   void ponerPuerta(PuertaDelEvento puerta) {
     _puerta = puerta;
+    _mandarLista();
+  }
+
+  void ponerTitulo(String? titulo) {
+    if (titulo == _titulo) return;
+    _titulo = titulo;
+    if (_puerta != null) _mandarLista();
+  }
+
+  void _mandarLista() {
     _version++;
     _lista = jsonEncode({
       't': 'puerta',
       'v': _version,
       'evento': eventoId,
-      'puerta': puerta.toJson(),
+      'titulo': _titulo,
+      'puerta': _puerta!.toJson(),
       'por': _marcas.todas,
     });
     for (final c in _conexiones) {
@@ -354,25 +369,34 @@ class CentralPuerta {
     final persona =
         puerta.personas.where((p) => p.id == pedido.personaId).firstOrNull;
     final DecisionPedido decision;
+    // Quién lo había marcado antes, para dejarlo como estaba si la base falla.
+    final antes = _marcas.quien(pedido.personaId);
     try {
       final fila = persona == null ? null : await _pc.fila(persona.id);
       decision = decidirPedido(
         pedido: pedido,
         persona: persona,
         fila: fila,
-        quien: _marcas.quien(pedido.personaId),
+        quien: antes,
       );
+      // Quién lo marcó se anota antes de marcar: la base avisa el cambio y la
+      // lista nueva sale enseguida, y tiene que salir con el nombre.
       switch (decision.hace) {
         case QueHaceLaCentral.ingresar:
-          await _pc.ingresar(eventoId, persona!, saludar: decision.saludar);
-          _marcas.ingreso(persona.id, puesto);
+          _marcas.ingreso(persona!.id, puesto);
+          await _pc.ingresar(eventoId, persona, saludar: decision.saludar);
         case QueHaceLaCentral.deshacer:
-          await _pc.deshacer(persona!.id);
-          _marcas.deshizo(persona.id);
+          _marcas.deshizo(persona!.id);
+          await _pc.deshacer(persona.id);
         case QueHaceLaCentral.nada:
           break;
       }
     } catch (e) {
+      if (antes == null) {
+        _marcas.deshizo(pedido.personaId);
+      } else {
+        _marcas.ingreso(pedido.personaId, antes);
+      }
       // No se guarda: el celular lo vuelve a mandar.
       debugPrint('Central de la puerta, pedido ${pedido.id}: $e');
       return noSePudo;
