@@ -114,6 +114,8 @@ void main() {
       ProviderScope(
         overrides: [
           supabaseInvitadosRepositoryProvider.overrideWithValue(
+            // Es una muestra, como un test: el analizador no cuenta tool/ como tests.
+            // ignore: invalid_use_of_visible_for_testing_member
             SupabaseInvitadosRepository.con(llamar: _nube, avisar: (_) async {}),
           ),
           totemConfigProvider(_ev).overrideWith(

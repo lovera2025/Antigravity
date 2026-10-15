@@ -212,13 +212,19 @@ void main() {
       final rj = await juli.espera('respuesta');
       final rp = await pato.espera('respuesta');
 
+      // Van por dos conexiones: con la PC cargada (la suite entera corriendo)
+      // a veces llega primero el de Pato. Gana el que llega primero.
+      final ganoJuli = rj['hizo'] == 'ingresar';
+      final (gano, perdio) = ganoJuli ? (rj, rp) : (rp, rj);
+      final quien = ganoJuli ? 'Juli' : 'Pato';
+
       expect(pc.ingresos, [('p1', true)]);
-      expect(rj['hizo'], 'ingresar');
-      expect(rp['hizo'], 'nada');
-      expect(rp['ok'], isTrue);
+      expect(gano['hizo'], 'ingresar');
+      expect(perdio['hizo'], 'nada');
+      expect(perdio['ok'], isTrue);
       expect(
-        rp['aviso'],
-        'PÉREZ, JUAN ya ingresó a las ${horaCorta(_hora)} · Juli.',
+        perdio['aviso'],
+        'PÉREZ, JUAN ya ingresó a las ${horaCorta(_hora)} · $quien.',
       );
     });
 
