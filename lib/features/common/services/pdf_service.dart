@@ -3306,8 +3306,10 @@ class PdfService {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
+                  // "→" y no "↳": la Outfit no tiene "↳" y en el papel salía
+                  // un cuadradito (test/signos_de_los_papeles_test.dart).
                   pw.Text(
-                    anidada ? '↳ $descFinal' : '· $descFinal',
+                    anidada ? '→ $descFinal' : '· $descFinal',
                     style: pw.TextStyle(
                       fontSize: d.fs(anidada ? 8 : 9),
                       color: anidada ? _greyText : _darkText,
