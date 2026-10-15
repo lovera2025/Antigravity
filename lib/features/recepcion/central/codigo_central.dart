@@ -40,10 +40,18 @@ class CodigoCentral {
     Random? azar,
   }) async {
     final cuando = ahora ?? DateTime.now();
+    return await vigente(eventoId, ahora: cuando) ??
+        await cambiar(eventoId, ahora: cuando, azar: azar);
+  }
+
+  /// El de [eventoId] si se sacó esta noche, sin sacar uno nuevo. Que haya
+  /// uno quiere decir que la central se usó: al reabrir el programa vuelve
+  /// sola (`CentralDeLaPuerta.reanudar`).
+  static Future<String?> vigente(String eventoId, {DateTime? ahora}) async {
+    final cuando = ahora ?? DateTime.now();
     try {
       final prefs = await SharedPreferences.getInstance();
-      final guardado = prefs.getString(_clave(eventoId));
-      final partes = guardado?.split('|');
+      final partes = prefs.getString(_clave(eventoId))?.split('|');
       if (partes != null && partes.length == 2) {
         final creado = DateTime.tryParse(partes[1]);
         if (creado != null &&
@@ -53,9 +61,9 @@ class CodigoCentral {
         }
       }
     } catch (e) {
-      debugPrint('CodigoCentral.delEvento: $e');
+      debugPrint('CodigoCentral.vigente: $e');
     }
-    return cambiar(eventoId, ahora: cuando, azar: azar);
+    return null;
   }
 
   /// Saca uno nuevo para [eventoId], distinto de [anterior]: los celulares que

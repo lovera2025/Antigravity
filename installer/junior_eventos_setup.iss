@@ -45,8 +45,15 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Crear acceso directo Junior Eventos en el escritorio"; GroupDescription: "Accesos directos:"
 
+[InstallDelete]
+; La página del celular se reemplaza entera: que no queden archivos de otra versión.
+Type: filesandordirs; Name: "{app}\puesto"
+
 [Files]
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; La página del celular de la puerta (build_installer.ps1 la arma en build\puesto).
+; La central la busca en la carpeta "puesto" al lado del programa (paginaDelCelularProvider).
+Source: "..\build\puesto\*"; DestDir: "{app}\puesto"; Excludes: "*.symbols"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 ; Icono del acceso = app .exe (recursos) — coherente con el instalador (mismo app_icon en el build).
@@ -55,7 +62,16 @@ Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyShortcutName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; Los celulares de la puerta entran a la notebook central por el wifi del router
+; (CentralPuerta, puertos 8787 a 8796). Sin esta regla Windows los bloquea, y la red
+; del router suele quedar como "pública": por eso profile=any. Se borra antes de
+; crearla para no juntar una por cada instalación.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - celulares de la puerta"""; Flags: runhidden; StatusMsg: "Preparando la puerta para los celulares..."
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Junior Eventos - celulares de la puerta"" dir=in action=allow program=""{app}\{#MyAppExeName}"" protocol=TCP localport=8787-8796 profile=any enable=yes"; Flags: runhidden; StatusMsg: "Preparando la puerta para los celulares..."
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - celulares de la puerta"""; Flags: runhidden; RunOnceId: "BorrarReglaCelulares"
 
 [Code]
 procedure InitializeWizard;

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,10 +8,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border;
 import '../common/utils/cortes_pantalla.dart';
+import 'central/central_provider.dart';
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
 import 'services/puerta_del_evento.dart';
 import 'widgets/panel_puerta.dart';
+import 'widgets/sumar_celular.dart';
 import 'widgets/vista_del_totem.dart';
 
 class RecepcionUnifiedScreen extends ConsumerStatefulWidget {
@@ -24,6 +27,21 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
   static const _perla = Color(0xFFE2E2E2);
 
   int _selectedTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Si en esta PC la central de la puerta se usó esta noche para el evento
+    // (la notebook se reinició), vuelve sola: los celulares se reconectan sin
+    // volver a escanear. Solo en el programa: la web no puede hacer de central.
+    if (!kIsWeb) {
+      ref.listenManual<String?>(selectedEventProvider, (_, eventoId) {
+        if (eventoId != null) {
+          ref.read(centralDeLaPuertaProvider.notifier).reanudar(eventoId);
+        }
+      }, fireImmediately: true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +79,9 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // La central de la puerta corre en el programa, no en la web.
+          if (!kIsWeb && selectedEventId != null)
+            BotonCelulares(eventoId: selectedEventId),
           if (paletaArriba)
             Padding(
               padding: const EdgeInsets.only(right: 8),

@@ -4,9 +4,11 @@
 // `tool/recepcion_muestra_test.dart`, puestos por los mismos providers que usa
 // la app.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
@@ -18,6 +20,7 @@ import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/repositories/planos_evento_repository.dart';
+import 'package:arguello_events/features/recepcion/central/central_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/sin_internet_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
@@ -146,6 +149,10 @@ class InvitadosEnMemoria extends InvitadosRepository {
   final desmarcados = <String>[];
   final eliminados = <String>[];
 
+  /// La hora con que se marca: la fija de las pruebas, o la de verdad en el
+  /// arnés.
+  DateTime Function() hora = () => horaDeIngreso;
+
   List<Invitado> _del(String eventoId) =>
       filas.where((i) => i.eventoId == eventoId).toList();
 
@@ -165,7 +172,7 @@ class InvitadosEnMemoria extends InvitadosRepository {
 
   void _poner(String id, EstadoIngreso estado) {
     final i = filas.indexWhere((f) => f.id == id);
-    filas[i] = filas[i].copyWith(estadoIngreso: estado, updatedAt: horaDeIngreso);
+    filas[i] = filas[i].copyWith(estadoIngreso: estado, updatedAt: hora());
     _cambios.add(null);
   }
 
@@ -202,7 +209,7 @@ class InvitadosEnMemoria extends InvitadosRepository {
       nombreCompleto: nombre,
       dni: '',
       estadoIngreso: EstadoIngreso.ingresado,
-      updatedAt: horaDeIngreso,
+      updatedAt: hora(),
     ));
     _cambios.add(null);
   }
@@ -309,6 +316,20 @@ class PuertaEnMemoria {
   var agregar = 0;
   var vaciar = 0;
 
+  /// El código de la central de la puerta si se usó esta noche, o null.
+  String? codigoCentral;
+
+  /// Las direcciones de la PC para los celulares: vacía, sin router.
+  List<String> direcciones = const ['192.168.0.10'];
+
+  /// Dónde escucha la central si se prende: solo en esta PC, en un puerto
+  /// libre, sin página del celular. El arnés `tool/central_puerta_prueba.dart`
+  /// la abre al wifi de verdad.
+  InternetAddress escuchaCentral = InternetAddress.loopbackIPv4;
+  int puertoCentral = 0;
+  Future<List<String>> Function()? leerDirecciones;
+  Directory? paginaDelCelular;
+
   /// El panel del evento, con los reemplazos puestos.
   Widget panel(
     String eventoId, {
@@ -340,6 +361,7 @@ class PuertaEnMemoria {
     String? elegido,
     Map<String, TotemConfig> config = const {},
     bool puedeTotem = true,
+    List<Override> extra = const [],
   }) =>
       ProviderScope(
         overrides: [
@@ -356,6 +378,17 @@ class PuertaEnMemoria {
           syncEngineProvider.overrideWithValue(motor),
           connectivityServiceProvider.overrideWithValue(conexion),
           accesosPuertaProvider.overrideWithValue(sinInternet.accesos),
+          // La central de la puerta no se usó esta noche ([codigoCentral]
+          // dice lo contrario), y si se prende, escucha solo en esta PC.
+          codigoVigenteCentralProvider
+              .overrideWithValue((_) async => codigoCentral),
+          codigoCentralProvider.overrideWithValue((_) async => '4821'),
+          escuchaCentralProvider.overrideWithValue(escuchaCentral),
+          puertoCentralProvider.overrideWithValue(puertoCentral),
+          direccionesDeEstaPcProvider.overrideWithValue(
+            leerDirecciones ?? () async => direcciones,
+          ),
+          paginaDelCelularProvider.overrideWithValue(paginaDelCelular),
           for (final evento in [eventoMasivo, eventoParticular])
             totemConfigProvider(evento).overrideWith(
               (ref) => Stream.value(
@@ -369,6 +402,7 @@ class PuertaEnMemoria {
             ),
           ),
           selectedEventProvider.overrideWith(() => _EventoElegido(elegido)),
+          ...extra,
         ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,

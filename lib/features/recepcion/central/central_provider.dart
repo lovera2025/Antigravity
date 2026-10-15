@@ -59,6 +59,12 @@ final codigoCentralProvider =
   (ref) => CodigoCentral.delEvento,
 );
 
+/// El código del evento si la central se usó esta noche, sin sacar uno nuevo.
+final codigoVigenteCentralProvider =
+    Provider<Future<String?> Function(String eventoId)>(
+  (ref) => CodigoCentral.vigente,
+);
+
 final cambiarCodigoCentralProvider =
     Provider<Future<String> Function(String eventoId, String anterior)>(
   (ref) => (eventoId, anterior) =>
@@ -213,6 +219,17 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       direcciones: direcciones,
       puestos: central.puestos,
     );
+  }
+
+  /// Si la central de [eventoId] se usó esta noche y no está prendida (la
+  /// notebook se reinició, o se cerró el programa), la vuelve a prender con el
+  /// mismo código: los celulares se reconectan solos, sin volver a escanear.
+  /// La llama Recepción al abrir el evento.
+  Future<void> reanudar(String eventoId) async {
+    if (_central != null) return;
+    final codigo = await ref.read(codigoVigenteCentralProvider)(eventoId);
+    if (codigo == null || _central != null) return;
+    await prender(eventoId);
   }
 
   /// Otro código: los celulares conectados tienen que volver a escanear.

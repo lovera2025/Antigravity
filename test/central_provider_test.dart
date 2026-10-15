@@ -31,6 +31,7 @@ void main() {
   late ProviderContainer container;
   const codigos = ['4821', '5555', '6666'];
   var siguiente = 0;
+  String? vigente;
   final celulares = <CelularDePrueba>[];
 
   /// Recepción en memoria y la central escuchando solo en esta PC (o en
@@ -53,6 +54,7 @@ void main() {
         direccionesDeEstaPcProvider
             .overrideWithValue(() async => ['192.168.0.10']),
         codigoCentralProvider.overrideWithValue((_) async => codigos[siguiente]),
+        codigoVigenteCentralProvider.overrideWithValue((_) async => vigente),
         cambiarCodigoCentralProvider.overrideWithValue(
           (_, _) async => codigos[++siguiente],
         ),
@@ -68,6 +70,7 @@ void main() {
       ],
     );
     siguiente = 0;
+    vigente = null;
     container = ProviderContainer(overrides: overrides());
   });
 
@@ -249,6 +252,32 @@ void main() {
     await central().apagar();
     expect(estado().prendida, isFalse);
     expect(await c.cerro(), WebSocketStatus.goingAway);
+  });
+
+  group('al reabrir Recepción', () {
+    test('si la central no se usó esta noche, no se prende sola', () async {
+      await central().reanudar(eventoMasivo);
+      expect(estado().prendida, isFalse);
+    });
+
+    test('si se usó (la notebook se reinició), vuelve sola con el mismo '
+        'código y los celulares se reconectan', () async {
+      vigente = '4821';
+      await central().reanudar(eventoMasivo);
+      expect(estado().prendida, isTrue);
+      expect(estado().codigo, '4821');
+      final c = await celular();
+      await c.espera('puerta');
+    });
+
+    test('si ya está prendida, no se toca', () async {
+      await central().prender(eventoMasivo);
+      final puerto = estado().puerto;
+      vigente = '4821';
+      await central().reanudar(eventoParticular);
+      expect(estado().eventoId, eventoMasivo);
+      expect(estado().puerto, puerto);
+    });
   });
 
   test('si no se puede abrir, lo dice en palabras', () async {

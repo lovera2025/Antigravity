@@ -23,6 +23,14 @@ Write-Host ">> flutter build windows --release (app $semver)" -ForegroundColor C
 flutter build windows --release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# La página del celular de la puerta (lib/puesto_main.dart). La sirve la
+# notebook central por el wifi del router, así que no puede pedir nada a
+# internet: sin CDN. El instalador la deja en {app}\puesto.
+$puesto = Join-Path $root "build\puesto"
+Write-Host ">> flutter build web -t lib/puesto_main.dart --no-web-resources-cdn" -ForegroundColor Cyan
+flutter build web --release -t lib/puesto_main.dart --no-web-resources-cdn -o "$puesto"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 $iscc = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
