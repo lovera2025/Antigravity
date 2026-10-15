@@ -510,7 +510,22 @@ históricos y la pantalla se ve como siempre.
   `mesa_extra_pagado` y `sillas_extra_pagado` son derivados y pueden no coincidir con los pagos. En sep-2026
   ARGUELLO, TOMAS daba $30.000 de base pagados según el contrato y no tenía ningún pago. Lo que manda es
   `grossHistoricoClaseCobro(pagos, clase)` (`cobro_abono_acumulado.dart`), lo mismo que usa el recálculo del saldo.
-  El sorteo de la v5.0.0 decide así (`pago_para_sorteo.dart`).
+  El sorteo de la v5.0.0 decide así (`pago_para_sorteo.dart`). (ARGUELLO era un contrato de prueba que quedó; el
+  usuario lo corrigió el 15-oct.)
+- **La mora que ya se pagó no se puede volver a descontar** (regla del usuario: la mora de un mes pagada no se
+  cobra más; la siguiente sí). Lo cuida el "ya usado" (`mora_cobrada_offset`): cuando un cobro salda toda la mora
+  y da la eximición, cubre **todo** lo cobrado (`postCobroTrackedOffset(moraCobradaHistorialPreCobro:)`). En
+  oct-2026 a 33 alumnos se les cobraba de menos (VERON, DALMA: $1.100 en vez de $33.000), por tres caminos:
+  - la revisión automática (`MoraTrackedRecovery.reconciliarTodos`) corregía en la PC pero **no subía** el "ya
+    usado" ni la eximición, y solo corría con "Bajar": ahora sube todo y corre sola una vez por sesión
+    (`SyncEngine.revisarMora`), con constancia en `revision_mora.txt`;
+  - la mora pagada en dos veces dejaba afuera la primera parte;
+  - anular un cobro dejaba su eximición.
+
+  **La eximición se resuelve con `resolverExencion`:** la de un cobro anulado se va; la que vino de cobros la
+  reemplaza la del último cobro; **la de un perdón (con ajuste de ficha, o que ningún cobro reproduce) no se toca**.
+  `test/revision_mora_test.dart` cuida las tres cosas; `tool/simulacro_revision_mora_test.dart` muestra qué cambia
+  con una copia de la base real.
 - **En un PDF, una columna de renglones dentro de una celda de tabla puede perder el último, sin avisar.** El
   paquete arma cada fila dos veces y, en la segunda, le da a la celda como tope exactamente lo que mide; si la suma
   de los renglones lo pasa por un redondeo, deja el último "para la hoja siguiente" y no lo dibuja. Así no salía

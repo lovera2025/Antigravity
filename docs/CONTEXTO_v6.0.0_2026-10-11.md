@@ -1362,6 +1362,72 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó
     "Acompañantes y música"), viene en el instalador y no necesita SQL.
 - **Sigue el 9f: el release, instalar PC por PC con él, la web, cerrar los permisos y el ensayo.**
 
+### La mora: la revisión automática arreglada (15-oct, a la tarde; programada, sin publicar)
+
+**Cómo apareció.** Comparando su PC con la nube aparecieron 12 contratos con una eximición de mora que la nube no
+tenía. Mirando VERON, DALMA con él, se vio el problema de fondo: **la mora que un alumno ya pagó se le volvía a
+descontar de la de los meses siguientes, y la app cobraba de menos.** VERON pagó el 24/08 la mora de julio
+($31.900); su PC le mostraba $1.100 en vez de $33.000 (agosto y septiembre: 45 y 15 días × $550). La prueba que
+le sirvió a él: en su ventana de cobro de BLANCO DI SI, la cuota 5 con 45 días decía $8.400 y la 6 con 15 días
+$4.500 (45 días tienen que ser el triple: $13.500).
+
+**Su regla, confirmada por él** (es la de la app): "cuando un alumno pagó la mora de un mes, esa mora ya no se
+cobra más; se cobra la siguiente si no se abonó". Los perdones están bien y no se tocan.
+
+**Por qué pasaba (tres causas):**
+1. **La revisión automática corregía pero no subía.** `MoraTrackedRecovery.reconciliarTodos` rehace ficha, "ya
+   usado" (`mora_cobrada_offset`) y eximición desde los pagos, pero subía solo la ficha, y la eximición reparada
+   nunca. Además **solo corría con "Bajar" del menú**: la bajada de cada 10 s no la llama. El 28/08 las columnas de
+   la mora llegaron a la nube vacías (migración `add_mora_exencion_columns_contratos_alumnos`, la 4.9.3 de ese
+   día) y a los cobros de agosto anteriores se les perdió el "ya usado" (y a algunos la fecha).
+2. **Mora pagada en dos veces** (pasa también hoy): una parte un día sin completar cuota, el resto otro día con la
+   cuota. `postCobroTrackedOffset` sumaba al "ya usado" solo lo del segundo cobro (MOLINA, CARLOS LAUTARO:
+   $29.400 del 22/09 fuera).
+3. **Anular un cobro dejaba su eximición** (MONTENEGRO, FRANCISCO NAHUEL, cobro del 19/09 anulado entero).
+   Y al revisar apareció un cuarto: la regla "la permanente gana" del merge, pensada para los perdones, le pasaba
+   la permanencia de una eximición vieja de un cobro a una nueva (MONTENEGRO, GISEL).
+
+**Qué se programó** (sin commit de publicación todavía; ver el commit de la mora):
+- `postCobroTrackedOffset(moraCobradaHistorialPreCobro:)`: cuando un cobro salda toda la mora y da la eximición,
+  el "ya usado" pasa a cubrir **todo** lo cobrado. Lo pasan el cobro (`resolverMoraDeCobro`), la revisión y
+  `MoraTrackedOrigen`.
+- `MoraTrackedRecovery.resolverExencion`: una sola regla para la revisión y la reparación. La de un cobro anulado
+  se deshace (`exencionDeCobroAnulado`); la que vino de cobros la reemplaza la del último cobro; **la de un perdón
+  (con ajuste de ficha, o que ningún cobro reproduce) se protege como siempre**.
+- `reconciliarTodos` y `repararExencionDesdeHistorial` **suben todo lo que corrigen** (ficha, "ya usado" y la
+  eximición como par) y dejan constancia en `Documentos\Junior Eventos\revision_mora.txt`
+  (`RevisionMoraConstancia`; no va en las notas porque hay una sola nota por alumno y la pisaría).
+- `SyncEngine.revisarMora()`: corre **sola una vez por sesión**, después de la primera bajada que sale bien, y con
+  "Bajar". Así la 6.0.0 corrige sola al abrirse por primera vez.
+- Anular un cobro (`anularPagosConMotivo`) deshace la eximición que ese cobro había dado.
+- Tests: `test/revision_mora_test.dart` (15, con los datos de VERON, MOLINA, MONTENEGRO y GISEL, un perdón con
+  ajuste y uno sin ajuste); 17 roturas a propósito, todas vistas. Suite: 2.467 tests; `flutter analyze` en 312.
+
+**Simulacro sobre una copia de su base** (`tool/simulacro_revision_mora_test.dart`; página
+`build/muestras_6.0.0/mora/Mora_corregida.html`, abierta en Edge): **33 alumnos corregidos**, la mora sube a 22,
+baja a 2 y queda igual a 9 (se corrigen por dentro); ningún perdón tocado; la revisión tarda 1,6 s. Entre los
+que suben: VERON $1.100 → $33.000, BLANCO DI SI $12.900 → $45.000, LEISTEIMI $0 → $24.000, DIAZ BORNIA $0 →
+$18.000. Bajan: MONTENEGRO, GISEL $40.250 → $36.750 (su cuota 4 vuelve a contar desde septiembre) y ARGUELLO,
+TOMAS (la ficha de abajo).
+
+**ARGUELLO, TOMAS:** su contrato era una prueba que quedó ($627.000 en 5 cuotas, saldo $597.000 sin pagos). **Él
+lo corrigió desde la app el 15-oct a las 17:29**: $340.000, 9 cuotas de $30.000, mesa extra $70.000 en 7 cuotas,
+saldo $340.000, igual que sus compañeros con mesa; en la nube a las 17:32. **Le queda una ficha de $108.058**
+(mora "de cuotas ya pagadas" sin ninguna cuota pagada), resto de la prueba: la revisión de la 6.0.0 la pone en $0
+sola. Quedó por calcular y mostrarle su mora con y sin esa ficha (el cálculo se cortó al pedir guardar el contexto).
+
+**Lo que queda de esto, en orden:**
+1. Que vea la página del simulacro (`Mora_corregida.html`) y diga si está de acuerdo; y lo de la ficha de
+   ARGUELLO (con la 6.0.0 queda en $0).
+2. **Volver a correr la comparación del cobro con la 5.0.0** (`tool/cobro_igual_que_hoy_test.dart`, la carpeta
+   de la 5.0.0 en el scratchpad o un `git worktree` nuevo del tag `v5.0.0`): el cobro cambió (la mora pagada en
+   dos veces), así que puede diferir solo donde corresponde.
+3. **Armar el instalador de nuevo**: el de las 15:54 quedó viejo.
+4. Al instalar: la revisión corre sola en la primera apertura; mirar `revision_mora.txt` en cada PC y la nube.
+   La mora de esos alumnos va a subir: avisar a quien cobra.
+5. Cuando haya un rato: de dónde salió el lote del 10/10 a las 12:00 que tocó a varios en la nube (CHAMORRO,
+   SOSA, FERNANDEZ MALENA, ARGUELLO).
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, la sección 9 del orden del 14-oct (la verificación). Su plan,
@@ -1414,7 +1480,8 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
 2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
    (`tool/verificar_migracion_v73_test.dart`): el 11-oct dio perfecto, pero desde entonces hubo cobros.
 3. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
-   El texto de novedades ya está rehecho (15-oct, 9e).
+   El texto de novedades ya está rehecho (15-oct, 9e). **Antes, armar el instalador de nuevo:** el de las 15:54 no
+   tiene la revisión de la mora arreglada.
 4. **Instalar, PC por PC, con él presente** (punto B): su PC, la del operario y la de la oficina. El orden lo
    decide él en el momento.
 5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
@@ -1486,11 +1553,20 @@ hecho en cada una, en el CONTEXTO (la sección 5 no tuvo archivo de plan; la 6
 está en C:\Users\lover\.claude\plans\quizas-seguimos-por-este-soft-sloth.md y
 la 7 en C:\Users\lover\.claude\plans\donde-nos-quedamos-snoopy-salamander.md
 y la 8 en C:\Users\lover\.claude\plans\donde-quedamos-cryptic-goblet.md).
-La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
-corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no (lo
-confirmé mirando la nube el 14-oct: esas cinco tablas no existen), ni los dos
-de la sección 8 (las funciones de la puerta, antes de instalar; cerrar los
-permisos, último, con todas las PCs y la web ya en la 6.0.0). Van con mi OK.
+La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya están
+corridos (15-oct, 16:13, con mi OK) todos los SQL que solo agregan: Fase 2,
+Fase 3, totem_config y las funciones de la puerta. Falta solo el de cerrar los
+permisos de la puerta, último, con todas las PCs y la web ya en la 6.0.0.
+De la sección 9 están hechos 9a a 9e (todo en verde, la migración perfecta
+sobre mi base, el cobro igual que en la 5.0.0, las novedades que dicté, el
+instalador) y la nube del 9f. En el medio apareció que la app cobraba mora de
+menos a unos 33 alumnos (la mora ya pagada se volvía a descontar): la revisión
+automática de la mora quedó arreglada en la 6.0.0 y corre sola al abrir el
+programa. Leé "La mora: la revisión automática arreglada" en el CONTEXTO: ahí
+está lo que queda (que vea el simulacro Mora_corregida.html, la ficha de
+ARGUELLO, TOMAS, volver a comparar el cobro con la 5.0.0, armar el instalador
+de nuevo) y después sigue publicar conmigo presente (release, instalar PC por
+PC, la web, cerrar los permisos, el ensayo).
 Va todo en una sola versión, por partes. El objetivo
 de lo que falta: que Recepción y el tótem distingan un evento particular de
 uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
@@ -1508,11 +1584,13 @@ internet, y lo marcado sin conexión se manda al volver; la probé con mi
 celular el 15-oct y anduvo todo) y 8 (la lista de la puerta cerrada a los
 anónimos: el tótem lee por una función con su clave, la página del QR busca
 desde 3 letras y el DNI lo compara la nube, /op ya no se usa; programada el
-15-oct, el SQL sin correr). Seguí por la sección 9 (verificación y publicar,
+15-oct, el SQL ya corrido). Seguí por la sección 9 (verificación y publicar,
 "Lo que falta para publicar"), con el plan aprobado en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md. Trae dos
 pedidos míos: el cobro de los masivos probado igual que en la 5.0.0, con mis
-datos (punto A), y publicar conmigo presente (punto B).
+datos (punto A, hecho), y publicar conmigo presente (punto B).
+La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se
+cobra la siguiente si no se abonó. Los perdones no se tocan.
 ANTES DE PROGRAMAR cada sección, mostrame el plan corto y esperá mi OK; si
 trae algo nuevo a la vista, una maqueta. Avisame al terminar cada paso con
 cómo quedó, un commit y un push. Cada cambio lo apruebo yo.
