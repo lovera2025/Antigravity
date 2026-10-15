@@ -13,6 +13,7 @@ import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/totem_orientation.dart';
+import 'package:arguello_events/features/totem/widgets/link_totem_navegador.dart';
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -379,6 +380,20 @@ void main() {
       expect(particular.musica, isNull);
       expect(particular.conQuien, isNull);
     });
+  });
+
+  // Sección 8: el tótem por el navegador lee con la clave que va en el link, y
+  // el link sale de acá.
+  testWidgets('al pie, el link del tótem por el navegador con su clave',
+      (tester) async {
+    await _abrir(tester, eventoId: eventoParticular);
+    final link = find.text(
+        'https://arguello-events.vercel.app/?totem&evento=$eventoParticular'
+        '&clave=$claveDePrueba');
+    await tester.ensureVisible(find.text(LinkTotemNavegador.titulo));
+    await tester.pump();
+    expect(link, findsOneWidget);
+    expect(find.text(LinkTotemNavegador.copiar), findsOneWidget);
   });
 
   group('el QR', () {

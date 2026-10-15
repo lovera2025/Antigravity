@@ -47,6 +47,10 @@ class InvitadosRepository {
   /// hecho desde el celular del invitado, cuando nadie tiene el panel abierto.
   /// `sendBroadcastMessage` no necesita suscripción: si el socket no está
   /// disponible, el cliente cae solo al endpoint REST de broadcast.
+  ///
+  /// **Sale sin el DNI ni los intentos**, lo mande quien lo mande: el canal lo
+  /// puede escuchar cualquiera que sepa el número del evento, y el tótem no los
+  /// usa. Hasta la 6.0.0 el aviso de cada ingreso llevaba el DNI.
   Future<void> _emitir(
     String eventoId,
     String evento,
@@ -56,8 +60,10 @@ class InvitadosRepository {
     // a Supabase.
     if (eventoId.length != 36) return;
     try {
-      await _canalEmisor(eventoId)
-          .sendBroadcastMessage(event: evento, payload: payload);
+      await _canalEmisor(eventoId).sendBroadcastMessage(
+        event: evento,
+        payload: Invitado.sinDatosPrivados(payload),
+      );
     } catch (e) {
       debugPrint('⚠️ Broadcast "$evento" falló: $e');
     }

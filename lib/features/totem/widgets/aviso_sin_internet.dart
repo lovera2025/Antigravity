@@ -13,10 +13,21 @@ class AvisoSinInternet extends StatelessWidget {
   /// web no hay puente.
   final bool conPuente;
 
-  const AvisoSinInternet({super.key, required this.conPuente});
+  /// El tótem por el navegador se abrió con un link sin la clave del tótem
+  /// (sección 8 de la 6.0.0): sin ella no puede leer la lista. No es un corte:
+  /// hay que abrir el link que da la PC.
+  final bool sinClave;
+
+  const AvisoSinInternet({
+    super.key,
+    required this.conPuente,
+    this.sinClave = false,
+  });
 
   static const sigueAvisando = 'Sin internet: esta PC sigue avisando al tótem';
   static const reconectando = 'Sin internet: reconectando';
+  static const faltaLaClave =
+      'Falta la clave: abrí el link de Personalizar tótem, en la PC';
 
   static const _color = Color(0xFFFFB74D);
 
@@ -32,11 +43,19 @@ class AvisoSinInternet extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cloud_off_rounded, color: _color, size: 18),
+          Icon(
+            sinClave ? Icons.key_off_rounded : Icons.cloud_off_rounded,
+            color: _color,
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              conPuente ? sigueAvisando : reconectando,
+              sinClave
+                  ? faltaLaClave
+                  : conPuente
+                      ? sigueAvisando
+                      : reconectando,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               // Negrita y no seminegrita: es el peso que viene con la app. El

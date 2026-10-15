@@ -11,7 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/features/totem/providers/clave_totem_provider.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
+import 'package:arguello_events/features/totem/services/clave_totem.dart';
 import 'package:arguello_events/features/totem/repositories/totem_config_repository.dart';
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
 import 'package:arguello_events/models/totem_config.dart';
@@ -54,6 +56,9 @@ Future<FilePickerResult?> elegirFotoDePrueba() async => FilePickerResult([
       ),
     ]);
 
+/// La clave del tótem que "da la nube" en los tests.
+const claveDePrueba = '0123456789abcdef0123456789abcdef';
+
 /// El texto del botón que abre Personalizar en [anfitrionPersonalizar].
 const abrirPersonalizar = 'Abrir Personalizar';
 
@@ -77,6 +82,10 @@ Widget anfitrionPersonalizar({
         totemConfigProvider(eventoId)
             .overrideWith((ref) => Stream.value(guardada)),
         totemConfigRepositoryProvider.overrideWithValue(repo),
+        // El link del tótem por el navegador, sin pedirle la clave a la nube.
+        claveTotemProvider.overrideWithValue(
+          ClaveTotem(pedirALaNube: (_) async => claveDePrueba),
+        ),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

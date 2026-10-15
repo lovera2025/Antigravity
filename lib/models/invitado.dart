@@ -49,6 +49,17 @@ class Invitado {
     };
   }
 
+  /// Lo que va en un aviso al tótem por el canal del evento: sin el DNI ni los
+  /// intentos. Ese canal lo puede escuchar cualquiera que sepa el número del
+  /// evento (está en el QR de los particulares).
+  Map<String, dynamic> paraAviso() => sinDatosPrivados(toJson());
+
+  /// [datos] sin el DNI ni los intentos, para mandarlo por el canal del evento.
+  static Map<String, dynamic> sinDatosPrivados(Map<String, dynamic> datos) =>
+      Map<String, dynamic>.of(datos)
+        ..remove('dni')
+        ..remove('intentos_fallidos');
+
   Invitado copyWith({
     String? id,
     String? eventoId,

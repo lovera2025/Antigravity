@@ -33,7 +33,7 @@ void main() {
     final pausar = cuerpo('Future<void> _pausar() async {');
     final sale = pausar.indexOf('await _kiosco?.salir();');
     expect(sale, isNot(-1), reason: 'pausar tiene que salir del kiosco');
-    expect(sale, lessThan(pausar.indexOf('_sub?.cancel()')),
+    expect(sale, lessThan(pausar.indexOf('_reconciliarTimer?.cancel()')),
         reason: 'antes de cortar nada');
   });
 

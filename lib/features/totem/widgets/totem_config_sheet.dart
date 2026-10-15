@@ -16,12 +16,14 @@ import '../../recepcion/providers/recepcion_provider.dart'
 import '../estilos/escena_totem.dart';
 import '../estilos/fuentes_totem.dart';
 import '../estilos/totem_estilo.dart';
+import '../providers/clave_totem_provider.dart';
 import '../providers/totem_config_provider.dart';
 import '../repositories/totem_config_repository.dart';
 import '../services/bienvenidas_totem.dart';
 import '../services/contenido_bienvenida.dart';
 import '../services/ficha_totem.dart';
 import '../totem_orientation.dart';
+import 'link_totem_navegador.dart';
 
 const _gold = TotemConfig.acentoPorDefecto;
 const _fondo = Color(0xFF141414);
@@ -745,6 +747,12 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
           _campo(_mensajeQr, 'Texto del QR', 'ESCANEÁ PARA INGRESAR'),
         const SizedBox(height: 20),
         _seccionColor(),
+        const SizedBox(height: 20),
+        LinkTotemNavegador(
+          eventoId: widget.eventoId,
+          base: kWebBaseUrl,
+          pedirClave: () => ref.read(claveTotemProvider).de(widget.eventoId),
+        ),
       ],
     );
   }

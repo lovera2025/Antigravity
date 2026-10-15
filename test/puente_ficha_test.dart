@@ -216,6 +216,68 @@ void main() {
     });
   });
 
+  // La clave del tótem (sección 8): la ventana del tótem no tiene usuario y se
+  // la pide a la principal para leer la lista de la nube.
+  group('la clave del tótem', () {
+    test('viaja por el puente', () async {
+      final pedidas = <String>[];
+      final r = await PuenteFichaTotem.responder(
+        const MethodCall(PuenteFichaTotem.metodoClave, eventoMasivo),
+        armar,
+        clave: (id) async {
+          pedidas.add(id);
+          return 'la-clave';
+        },
+      );
+      expect(r, 'la-clave');
+      expect(pedidas, [eventoMasivo]);
+      expect(lecturasDeAlumnos, 0, reason: 'no arma la ficha');
+    });
+
+    test('sin clave, o sin quién la dé, contesta nada', () async {
+      const call = MethodCall(PuenteFichaTotem.metodoClave, eventoMasivo);
+      expect(await PuenteFichaTotem.responder(call, armar), isNull);
+      expect(
+        await PuenteFichaTotem.responder(call, armar, clave: (_) async => null),
+        isNull,
+      );
+      expect(
+        await PuenteFichaTotem.responder(call, armar,
+            clave: (_) async => throw StateError('sin internet')),
+        isNull,
+      );
+    });
+
+    test('con un id que no es de evento no la pide', () async {
+      var pedidas = 0;
+      for (final arg in ['corto', 42, null]) {
+        expect(
+          await PuenteFichaTotem.responder(
+            MethodCall(PuenteFichaTotem.metodoClave, arg),
+            armar,
+            clave: (_) async {
+              pedidas++;
+              return 'la-clave';
+            },
+          ),
+          isNull,
+        );
+      }
+      expect(pedidas, 0);
+    });
+
+    test('si no anduvo, la principal la olvida', () async {
+      final olvidadas = <String>[];
+      final r = await PuenteFichaTotem.responder(
+        const MethodCall(PuenteFichaTotem.metodoClaveMala, eventoMasivo),
+        armar,
+        claveMala: (id) async => olvidadas.add(id),
+      );
+      expect(r, isNull);
+      expect(olvidadas, [eventoMasivo]);
+    });
+  });
+
   test('lee de la base de la PC lo cargado en el momento', () async {
     final antes = await armar(eventoMasivo);
     expect(antes.de(idDe('garcia', 1)), isNull);

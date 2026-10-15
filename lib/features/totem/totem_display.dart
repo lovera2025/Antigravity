@@ -8,6 +8,8 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
 import '../../core/services/totem_config_cache.dart';
+import 'providers/clave_totem_provider.dart';
+import 'services/lista_del_totem.dart';
 import '../../models/invitado.dart';
 import '../../models/totem_config.dart';
 import '../../../main.dart' show kWebBaseUrl;
@@ -45,6 +47,11 @@ class TotemDisplay extends ConsumerStatefulWidget {
   /// ([KioscoVentana]). El arnés `tool/kiosco_prueba.dart` usa la de verdad.
   final Kiosco? kiosco;
 
+  /// De dónde lee la lista de la nube. Null: por `totem_lista` con la clave
+  /// del tótem ([ListaDelTotem]), que en la ventana del escritorio se pide por
+  /// el puente y en la web viene en el link (`&clave=`).
+  final ListaDelTotem? lista;
+
   const TotemDisplay({
     required this.eventoId,
     super.key,
@@ -52,6 +59,7 @@ class TotemDisplay extends ConsumerStatefulWidget {
     this.showExitButton = false,
     this.windowId,
     this.kiosco,
+    this.lista,
   });
 
   @override
@@ -86,9 +94,20 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   // ── La apertura: la pantalla aparece de a poco desde el negro ──────────────
   late final AnimationController _aperturaCtrl;
 
-  // ── Stream / cola ──────────────────────────────────────────────────────────
-  StreamSubscription<List<Invitado>>? _sub;
+  // ── La nube ────────────────────────────────────────────────────────────────
+
+  /// La lista de la nube, por la función y con la clave: la tabla ya no se
+  /// lee (con los permisos cerrados, un anónimo la ve vacía y sin error).
+  late final ListaDelTotem _lista;
+
+  /// El canal de avisos del evento: los ingresos de otras PCs y celulares
+  /// llegan por acá al instante. Lo demás (una mesa nueva, un nombre
+  /// corregido) llega con la relectura.
   RealtimeChannel? _broadcastChannel;
+
+  /// El tótem por el navegador se abrió sin la clave en el link: lo dice la
+  /// barra del operador, que queda a la vista.
+  bool _sinClave = false;
 
   /// La lista de los que llegaron, la cola de bienvenidas, la tarjeta en
   /// pantalla y sus tiempos. Tiene sus tests en
@@ -117,13 +136,15 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
         ficha: _ficha,
       );
 
-  /// Reconciliación periódica contra la base.
+  /// Relectura periódica de la lista de la nube, cada [_cadaCuanto].
   ///
-  /// El tótem corre ocho horas sin que nadie lo mire. Si el websocket queda
-  /// mudo (no caído — mudo), el backoff no se entera porque solo reacciona a
-  /// errores explícitos, y la pantalla se congela con una lista vieja. Este
-  /// timer vuelve a leer la verdad cada minuto.
+  /// Desde la sección 8 no hay stream de la tabla: lo que no avisa el canal
+  /// (una mesa nueva, un nombre corregido, alguien borrado en otra PC) llega
+  /// con esto. Y el tótem corre ocho horas sin que nadie lo mire: si el canal
+  /// queda mudo, la pantalla no se congela con una lista vieja.
   Timer? _reconciliarTimer;
+
+  static const _cadaCuanto = Duration(seconds: 20);
 
   /// La ventana del tótem está escondida (se "cerró" desde Recepción o con su
   /// propio botón). `KioskLauncher.close()` solo la esconde, para que vuelva al
@@ -167,6 +188,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     super.initState();
     _setupSystemUI();
     svc = widget.svc ?? SupabaseService();
+    _lista = widget.lista ??
+        ListaDelTotem.deSupabase(
+          svc.client,
+          clave: _claveDelEvento,
+          claveMala: _olvidarClave,
+        );
     _aperturaCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -185,6 +212,28 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     _iniciarFichaPeriodica();
     _cargarOrientacion();
     _programarOcultadoControles();
+  }
+
+  // ── La clave del tótem ─────────────────────────────────────────────────────
+
+  /// La clave para leer la lista de la nube (`totem_lista`). En la ventana del
+  /// escritorio se la pide a la principal, que tiene usuario; en la web viene
+  /// en el link; en la ruta `/totem_display` (adentro de la principal) la pide
+  /// esta misma ventana.
+  Future<String?> _claveDelEvento(String eventoId) {
+    if (widget.windowId != null) return PuenteFichaTotem.pedirClave(eventoId);
+    if (kIsWeb) return Future.value(Uri.base.queryParameters['clave']);
+    return ref.read(claveTotemProvider).de(eventoId);
+  }
+
+  /// La nube dijo que la clave no es la del evento: quien la tenía guardada la
+  /// olvida y la pide de nuevo. La del link de la web no se puede cambiar.
+  Future<void> _olvidarClave(String eventoId) async {
+    if (widget.windowId != null) {
+      await PuenteFichaTotem.avisarClaveMala(eventoId);
+    } else if (!kIsWeb) {
+      await ref.read(claveTotemProvider).olvidar(eventoId);
+    }
   }
 
   // ── La ficha del evento ────────────────────────────────────────────────────
@@ -335,7 +384,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
           _reanudar();
           return null;
         case 'refresh':
-          if (!_pausado) _connect(); // Forzar reconexión del stream
+          if (!_pausado) _connect(); // Volver a leer ya
           return null;
         case 'list_reset':
           _handleListReset();
@@ -373,15 +422,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   void _cambiarEvento(String nuevo) {
     if (!mounted || nuevo == _eventoId) return;
 
-    _sub?.cancel();
-    _sub = null;
     _reconnectTimer?.cancel();
     _reconciliarTimer?.cancel();
 
     // IMPRESCINDIBLE: el canal se llama `totem_<eventoId>` y `_connect()` solo
     // lo crea si es null. Sin esto el tótem seguiría escuchando los check-ins
-    // del evento viejo, y sería un bug mudo porque la lista de Postgres sí
-    // cambia.
+    // del evento viejo, y sería un bug mudo porque la relectura sí cambia.
     _broadcastChannel?.unsubscribe();
     _broadcastChannel = null;
 
@@ -414,8 +460,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   Future<void> _pausar() async {
     await _kiosco?.salir();
     if (_pausado || !mounted) return;
-    _sub?.cancel();
-    _sub = null;
     _reconciliarTimer?.cancel();
     _reconnectTimer?.cancel();
     _fichaTimer?.cancel();
@@ -488,15 +532,14 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
 
   // ── Conexión y datos ───────────────────────────────────────────────────────
 
+  /// Se suscribe al canal de avisos del evento y lee la lista.
+  ///
+  /// **No escucha la tabla** (sección 8): con los permisos cerrados, a un
+  /// anónimo Realtime no le manda nada y una lectura le da la lista vacía sin
+  /// error, que sacaría a todos de la pantalla. La lista viene de `totem_lista`
+  /// ([_reconciliar]) y los ingresos, al instante, por el canal.
   void _connect() {
     try {
-      _sub?.cancel();
-      _sub = svc.streamInvitados(_eventoId).listen(
-        _onData,
-        onError: _onError,
-        cancelOnError: false,
-      );
-
       // Usar Supabase Realtime Broadcast para reacción INMEDIATA sin esperar replicación
       if (_broadcastChannel == null) {
         _broadcastChannel = svc.client.channel('totem_$_eventoId');
@@ -525,61 +568,50 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       // (`_onData`). Dándolo por bueno al intentar, la espera entre reintentos
       // volvía siempre a 2 segundos y el aviso de conexión parpadeaba.
 
-      // Al (re)conectar, repoblar de una. El stream solo avisa de lo que pasa
-      // de acá en adelante: si estuvimos caídos treinta segundos, todo lo que
-      // ocurrió en el medio no llega nunca.
+      // Al (re)conectar, leer de una: el canal solo avisa de lo que pasa de
+      // acá en adelante. Si estuvimos caídos treinta segundos, todo lo que
+      // ocurrió en el medio llega con esta lectura.
       _reconciliar();
       _iniciarReconciliacionPeriodica();
     } catch (e) {
-      debugPrint('Error connecting to stream: $e');
+      debugPrint('Error al conectar el tótem: $e');
       _onError(e);
     }
   }
 
   void _iniciarReconciliacionPeriodica() {
     _reconciliarTimer?.cancel();
-    _reconciliarTimer = Timer.periodic(
-      const Duration(seconds: 60),
-      (_) => _reconciliar(),
-    );
+    _reconciliarTimer = Timer.periodic(_cadaCuanto, (_) => _reconciliar());
   }
 
-  /// Vuelve a leer los invitados del evento y los pasa por el mismo camino que
-  /// el stream.
+  /// Lee la lista del evento de la nube ([ListaDelTotem], por la función y
+  /// con la clave) y la pasa por [_onData].
   ///
-  /// Reutiliza [_onData] a propósito: por ahí pasa todo lo que se lee, y es lo
-  /// que evita volver a disparar la bienvenida de gente que ya entró. Si esto
-  /// armara la lista por su cuenta, cada minuto se llenaría la pantalla de
-  /// saludos repetidos.
+  /// Todo lo que se lee pasa por [_onData] a propósito: es lo que evita volver
+  /// a disparar la bienvenida de gente que ya entró. Si esto armara la lista
+  /// por su cuenta, cada relectura llenaría la pantalla de saludos repetidos.
   Future<void> _reconciliar() async {
     if (!mounted || _pausado || _eventoId.length != 36) return;
     final evento = _eventoId;
-    final List<dynamic> filas;
+    final List<Invitado> invitados;
     try {
-      filas = await svc.client
-          .from('invitados')
-          .select()
-          .eq('evento_id', evento)
-          .order('nombre_completo');
+      invitados = await _lista.leer(evento);
     } catch (e) {
-      debugPrint('Reconciliación del tótem falló: $e');
-      // No poder leer es un corte, aunque el stream no haya dado error: es lo
-      // que pasa cuando la conexión queda muda.
-      if (mounted && !_pausado && evento == _eventoId) _onError(e);
+      debugPrint('El tótem no pudo leer la lista: $e');
+      if (!mounted || _pausado || evento != _eventoId) return;
+      // En la web sin la clave en el link no es un corte: lo dice la barra.
+      final sinClave = e is SinClaveDelTotem && kIsWeb;
+      if (sinClave != _sinClave) setState(() => _sinClave = sinClave);
+      // No poder leer es un corte: sigue con lo que sabe la PC y reintenta.
+      _onError(e);
       return;
     }
 
     // Mientras se esperaba la respuesta pudo cambiar el evento o esconderse la
     // ventana: esa lectura ya no es de lo que se está mostrando.
     if (!mounted || _pausado || evento != _eventoId) return;
-    try {
-      final invitados = filas
-          .map((f) => Invitado.fromJson(f as Map<String, dynamic>))
-          .toList();
-      _onData(invitados);
-    } catch (e) {
-      debugPrint('Reconciliación del tótem: no se pudo leer una fila: $e');
-    }
+    if (_sinClave) setState(() => _sinClave = false);
+    _onData(invitados);
   }
 
   /// Saca a un invitado de la pantalla al instante.
@@ -643,7 +675,6 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   @override
   void dispose() {
     _broadcastChannel?.unsubscribe();
-    _sub?.cancel();
     _reconnectTimer?.cancel();
     _ocultarControlesTimer?.cancel();
     _reconciliarTimer?.cancel();
@@ -784,11 +815,13 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
           onPointerDown: (_) => _mostrarControles(),
           child: Align(
             alignment: Alignment.topRight,
+            // Sin la clave en el link, la barra queda a la vista: es algo que
+            // hay que arreglar antes de la fiesta, no un corte que se pasa.
             child: AnimatedOpacity(
-              opacity: _controlesVisibles ? 1.0 : 0.0,
+              opacity: _controlesVisibles || _sinClave ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 400),
               child: IgnorePointer(
-                ignoring: !_controlesVisibles,
+                ignoring: !(_controlesVisibles || _sinClave),
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: AnimatedBuilder(
@@ -796,12 +829,13 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
                     builder: (context, _) => Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (!_reproductor.conectado) ...[
+                        if (!_reproductor.conectado || _sinClave) ...[
                           Flexible(
                             child: AvisoSinInternet(
                               // Solo la ventana del tótem tiene puente con
                               // Recepción; en la web no hay.
                               conPuente: widget.windowId != null,
+                              sinClave: _sinClave,
                             ),
                           ),
                           const SizedBox(width: 10),
