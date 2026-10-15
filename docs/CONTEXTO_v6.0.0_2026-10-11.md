@@ -17,9 +17,9 @@ y caja no cambian.
 **Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
-las secciones 1 a 5** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
-del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada; la 5, una PC completa sin internet);
-**sigue la 6 (el modo kiosco)**. Lo de este encabezado es cómo quedó el 11-oct.
+las secciones 1 a 6** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
+del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada; la 5, una PC completa sin internet; la
+6, el kiosco); **sigue la 7 (dos puestos en la puerta)**. Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -375,7 +375,7 @@ vaciarla al deshacer todo) sigue igual.
 | 3 | Las cuatro apariencias (parte 5), dibujando lo de la sección 2, y Personalizar con las cuatro tarjetas; la vista del tótem al lado de Recepción | **hecha el 14-oct**, en tres pasos: 3a (el tótem del salón), 3b (Personalizar) y 3c (Recepción) |
 | 4 | El plano con la guía en la llegada | **hecha el 14-oct**, en dos pasos: 4a (la mesa en el plano) y 4b (el camino desde el ingreso) |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | **hecha el 14-oct**, en cuatro pasos: 5a (el tótem abre con la lista), 5b (la foto guardada), 5c (entrar con la sesión vencida) y 5d ("Lista para trabajar sin internet") |
-| 6 | Modo kiosco (parte 7) | falta |
+| 6 | Modo kiosco (parte 7) | **hecha el 14-oct**, en dos pasos: 6a (la ventana del escritorio) y 6b (la web) |
 | 7 | Dos puestos en la puerta (partes 8 y 8b, paso 3) | falta |
 | 8 | Cerrar la lista de la puerta (parte 9) | falta |
 | 9 | Verificación, instalador, la web y publicar (partes 10 y 11) | falta |
@@ -1036,6 +1036,71 @@ se quedaba esperándose a sí misma (`whenComplete` con `=>` devolvía la misma 
 arregló antes de subir. La otra era de la herramienta de pruebas (dibujar una imagen dentro de `testWidgets`); se
 pasó a `test`.
 
+### La sección 6: el tótem en modo kiosco
+
+14-oct, mismo chat que la 5 ("seguimos por este chat hasta completar la sección 6"). Plan aprobado:
+`C:\Users\lover\.claude\plans\quizas-seguimos-por-este-soft-sloth.md`, con una maqueta de la ventana y del kiosco.
+Dos pasos: **6a** (`3111ce7`, la ventana del escritorio) y **6b** (`acbe9e0`, la web). **Programado y subido; sin
+publicar.** Era `docs/pendientes/totem-kiosco.md`.
+
+**Qué cambió para el usuario:**
+- **Inicio → TÓTEM**, como siempre. Se arrastra la ventana del tótem a la tele y, en la barra de arriba a la derecha
+  (aparece al mover el mouse), se toca **KIOSCO**:
+  - el tótem ocupa **la tele entera** en el monitor donde estaba la ventana, sin bordes, sin barra de título y sin la
+    barra de Windows;
+  - abajo, 3 s: "Pantalla completa · para salir: Esc o doble clic";
+  - **se sale con Esc, con doble clic en cualquier lugar o con SALIR DEL KIOSCO**;
+  - el puntero se esconde a los 3 s sin moverse;
+  - en kiosco no está el botón de girar: si se eligió vertical y la tele está acostada, va en 9:16 en el medio.
+- **Al cerrar el tótem** (su ✕, o desde la PC) **sale del kiosco antes de esconderse**; al volver aparece como
+  ventana, en el mismo lugar.
+- **En la web** (`?totem`): el primer toque pasa a pantalla completa del navegador; doble toque o Esc la dejan. Llega
+  cuando se publique la web.
+- Sin base, sin nube, sin SQL. Lo único nativo nuevo es del runner de Windows.
+
+**Cómo se arma:**
+- **Nativo** (`windows/runner/kiosco.cpp`, llamado desde `flutter_window.cpp`): con
+  `DesktopMultiWindowSetWindowCreatedCallback` le da a cada ventana secundaria el canal `junior_eventos/kiosco`
+  (`entrar`, `salir`, `estado`). Entrar guarda el lugar (`GetWindowPlacement`) y el estilo, saca
+  `WS_OVERLAPPEDWINDOW` y ocupa el monitor; salir los devuelve, sin mostrar una ventana escondida. Los canales no se
+  destruyen (el motor de la ventana ya no existe al cerrar el programa). La ventana principal no se toca.
+- **Dart:**
+  - `totem/services/kiosco.dart`: `Kiosco` (`KioscoVentana`, el canal), `ControladorKiosco` (en kiosco o no, los
+    avisos, los pedidos de a uno) y `DobleClic` (contado a mano, así los botones no esperan);
+  - `KioscoNavegador` (`kiosco_navegador*.dart`, importación condicional con `dart:js_interop`), que además pregunta
+    si el navegador la sacó por su cuenta (`activo`, `sincronizar`);
+  - `CapaKiosco` (`totem/widgets/capa_kiosco.dart`): Esc con `HardwareKeyboard`, doble clic, puntero, el aviso, y en
+    la web `entrarAlTocar`.
+- **`totem_display.dart`:** la píldora KIOSCO solo en la ventana; `_pausar()` sale del kiosco antes que nada y el
+  "pausar" de `KioskLauncher.close` contesta recién después; en kiosco no se gira ni se cambia la forma de la
+  ventana; en kiosco encuadra según la orientación, como la web.
+
+**Cómo se comprobó:**
+- `test/capa_kiosco_test.dart` (24) y `test/kiosco_en_el_totem_test.dart` (6, lee el archivo del tótem como
+  `solo_modo_jefe_test`, porque la pantalla no se puede montar). **2.263 tests** (eran 2.233); `flutter analyze` en
+  312; `flutter build windows` y `web` bien.
+- **Roturas a propósito: 22, todas vistas** (15 de la 6a, 7 de la 6b).
+- **La ventana de verdad, con el arnés `tool/kiosco_prueba.dart`** (`flutter run -d windows -t
+  tool/kiosco_prueba.dart`: abre `TotemDisplay` con un evento inventado y la nube apuntando a ningún lado; **no abre
+  la base** ni sube nada). Lo manejé yo con capturas, con su permiso:
+  - KIOSCO: ocupó los 2560 × 1440 de la pantalla, sin barra de título (estilo `0x14000000`) ni barra de Windows, con
+    el 9:16 en el medio y el aviso;
+  - Esc y doble clic: volvió a ser ventana, en el mismo lugar y tamaño;
+  - esconder estando en kiosco (como `KioskLauncher.close`, con un botón del arnés) y volver a mostrar: apareció como
+    ventana.
+  - **No se pudo tocar SALIR DEL KIOSCO ni la ✕ en kiosco:** en esa esquina estaba la ventana de Claude por encima, y
+    los clics le llegaban a ella. Hacen lo mismo que KIOSCO (`alternar`) y que esconder (`_pausar`), que sí se
+    probaron, y tienen sus tests. Queda para el ensayo.
+  - Una sola pantalla: lo de pasar la ventana a la tele también queda para el ensayo.
+- Capturas en `build/muestras_6.0.0/kiosco/` (`Kiosco_1_ventana_con_el_boton`, `_2_en_kiosco`,
+  `_3_vuelve_como_ventana`).
+
+**Tropiezos de la sesión, sin consecuencias:**
+- La primera vez, el permiso para manejar la ventana de prueba se rechazó, y el usuario dijo "hacela nomás": se pidió
+  de nuevo y se aceptó. El arnés figura como `arguello_events.exe`.
+- La barra del tótem se esconde a los 5 s y no recibe clics escondida: hay que mover el mouse antes de tocarla.
+- No se apretó Esc con la ventana de Claude adelante: le habría llegado a Claude.
+
 ## Lo que falta para publicar
 
 **No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
@@ -1064,7 +1129,9 @@ pasó a `test`.
    vacía, en las PCs y en la nube. **Y sin internet** (sección 5): con Recepción diciendo "Lista para trabajar sin
    internet", sacar el cable, cerrar y abrir el programa (tiene que entrar en unos segundos), abrir el tótem (con la
    lista y la foto), marcar ingresos, y volver a enchufar: la línea tiene que pasar de "N ingresos sin subir" a
-   lista, y la nube quedar igual que la PC.
+   lista, y la nube quedar igual que la PC. **Y el kiosco** (sección 6): arrastrar la ventana del tótem a la tele,
+   KIOSCO, y salir con Esc, doble clic, SALIR DEL KIOSCO y la ✕ (estos dos no se pudieron tocar en la prueba);
+   volver a abrirlo.
 9. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
@@ -1076,6 +1143,7 @@ pasó a `test`.
   todavía no opinó.
 - **Las imágenes de la sección 5** (`build/muestras_6.0.0/sin_internet/SinInternet_1..4.png`): se le mandaron al
   cerrar el chat; todavía no opinó.
+- **Las capturas de la sección 6** (`build/muestras_6.0.0/kiosco/`): se le mandaron al cerrar; todavía no opinó.
 - **Si quiere, una prueba real de entrar sin internet, ya, con la 5.0.0 instalada** (no cambia datos): más de una
   hora después de cerrar el programa, sacar internet, abrirlo y ver que entra y que Recepción muestra la lista. Con
   la 5.0.0 entra igual (eso no cambió), pero con un router sin salida a internet tarda unos 12 s en "Verificando
@@ -1105,7 +1173,8 @@ docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
 "Lo que falta para publicar"), CLAUDE.md y la memoria del proyecto. El
 camino de las secciones está en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md; lo
-hecho en cada una, en el CONTEXTO (la sección 5 no tuvo archivo de plan).
+hecho en cada una, en el CONTEXTO (la sección 5 no tuvo archivo de plan; la 6
+está en C:\Users\lover\.claude\plans\quizas-seguimos-por-este-soft-sloth.md).
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
 corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no (lo
 confirmé mirando la nube el 14-oct: esas cinco tablas no existen). Van antes
@@ -1118,13 +1187,15 @@ Personalizar y la vista del tótem en Recepción con TotemLocal;
 totem_panel.dart ya no existe), 4 (en la llegada de un masivo, el plano con
 la mesa encendida y el camino desde el Ingreso) y 5 (una PC completa sin
 internet: el tótem abre con la lista, la foto guardada en la PC, entrar con
-la sesión vencida y "Lista para trabajar sin internet" en Recepción). Seguí
-por la sección 6: el modo kiosco de la ventana del tótem
-(docs/pendientes/totem-kiosco.md). ANTES DE PROGRAMAR, mostrame el plan corto
-y esperá mi OK; si trae algo nuevo a la vista, una maqueta. Después siguen
-la 7 (dos puestos en la puerta, con y sin internet: el paso 3 de
-docs/pendientes/modo-local-sin-internet.md), la 8 (cerrar la lista de la
-puerta) y la 9 (verificación y publicar). Avisame al terminar cada paso con
+la sesión vencida y "Lista para trabajar sin internet" en Recepción) y 6 (el
+tótem en modo kiosco, en la ventana y en la web). Seguí por la sección 7: dos
+puestos en la puerta, con y sin internet (el paso 3 de
+docs/pendientes/modo-local-sin-internet.md y docs/pendientes/totems-vinculados.md;
+antes, preguntame cuántos puestos y con qué, dónde va el tótem y si hay router
+propio, que está en "Lo que sigue esperando del usuario"). ANTES DE
+PROGRAMAR, mostrame el plan corto y esperá mi OK; si trae algo nuevo a la
+vista, una maqueta. Después siguen la 8 (cerrar la lista de la puerta) y la
+9 (verificación y publicar). Avisame al terminar cada paso con
 cómo quedó, un commit y un push. Cada cambio lo apruebo yo.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en

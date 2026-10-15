@@ -227,6 +227,19 @@ oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
 nube tiene que cortarse en `_pausar()`.
 
+**El modo kiosco** (v6.0.0, sección 6): KIOSCO en la barra del tótem pone su ventana en pantalla completa en el
+monitor donde está; se sale con Esc, doble clic o SALIR DEL KIOSCO.
+- **La ventana secundaria no tiene `window_manager`:** el kiosco es un canal nativo del runner de Windows
+  (`windows/runner/kiosco.cpp`, `junior_eventos/kiosco`), puesto en cada ventana secundaria con
+  `DesktopMultiWindowSetWindowCreatedCallback`.
+- Lo que decide está en `totem/services/kiosco.dart` y `totem/widgets/capa_kiosco.dart`. **`_pausar()` sale del
+  kiosco antes que nada:** una ventana escondida no puede quedar sin bordes (`test/kiosco_en_el_totem_test.dart`).
+- En la web (`?totem`) el primer toque pide la pantalla completa del navegador (`KioscoNavegador`).
+- **El código nativo se prueba con el arnés `tool/kiosco_prueba.dart`** (`flutter run -d windows -t
+  tool/kiosco_prueba.dart`): abre el tótem de verdad con un evento inventado y sin abrir la base, así que sí se puede
+  correr desde el working tree. Para manejarlo con capturas, el permiso es para `arguello_events.exe`. La barra del
+  tótem se esconde a los 5 s y no recibe clics escondida: mover el mouse antes de tocarla.
+
 **Con los datos ya bajados, Recepción y el tótem tienen que andar sin internet** (pedido del usuario el 24-sep y
 otra vez el 13-oct-2026). Nada nuevo puede necesitar la nube para marcar un ingreso o saludar: lo que el tótem
 muestra llega por el puente o está guardado en la PC. Una PC completa anda (sección 5, 14-oct); dos puestos se ven

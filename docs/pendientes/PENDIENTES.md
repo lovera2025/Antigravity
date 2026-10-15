@@ -62,8 +62,9 @@ priorizó el sorteo de noviembre. El contexto está en
   particular o masivo), Personalizar, la vista del tótem al lado (solo la
   paleta) y los cortes para celular, tablet y PC.
 - [Modo kiosco en la ventana del tótem](totem-kiosco.md) — pantalla completa
-  sin bordes, que se sale con Esc o doble clic. Necesita un canal nativo en el
-  runner de Windows.
+  sin bordes, que se sale con Esc o doble clic. **Hecho el 14-oct** (sección 6
+  de la 6.0.0), con el canal nativo en el runner de Windows; falta verlo en la
+  tele, en el ensayo.
 - [Tótems vinculados a recepcionistas](totems-vinculados.md) — cada tótem da la
   bienvenida a los de su puerta, para que dos recepciones no se pisen con mucha
   gente.

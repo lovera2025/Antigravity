@@ -1,6 +1,7 @@
 # Modo kiosco en la ventana del tótem
 
-**Estado:** pendiente
+**Estado:** **hecho el 14-oct-2026** (sección 6 de la 6.0.0: `3111ce7` y `acbe9e0`; ver "La sección 6" en
+`docs/CONTEXTO_v6.0.0_2026-10-11.md`). Se hizo como dice abajo. Falta verlo en la tele de verdad, en el ensayo.
 **Postergado el:** 2026-09-24
 
 ## Por qué se postergó
