@@ -20,9 +20,11 @@ import 'services/bienvenidas_totem.dart';
 import 'services/contenido_bienvenida.dart';
 import 'services/ficha_totem.dart';
 import 'services/puente_ficha.dart';
+import 'services/kiosco.dart';
 import 'services/reproductor_bienvenidas.dart';
 import 'totem_orientation.dart';
 import 'widgets/aviso_sin_internet.dart';
+import 'widgets/capa_kiosco.dart';
 
 /// El tótem del salón: la ventana que se proyecta, la tele por el navegador
 /// (`?totem`) y la ruta `/totem_display`.
@@ -38,12 +40,17 @@ class TotemDisplay extends ConsumerStatefulWidget {
   final bool showExitButton;
   final int? windowId;
 
+  /// Cómo se pone la ventana en pantalla completa. Null: la de verdad
+  /// ([KioscoVentana]). El arnés `tool/kiosco_prueba.dart` usa la de verdad.
+  final Kiosco? kiosco;
+
   const TotemDisplay({
     required this.eventoId,
     super.key,
     this.svc,
     this.showExitButton = false,
     this.windowId,
+    this.kiosco,
   });
 
   @override
@@ -129,6 +136,19 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
 
+  /// El modo kiosco (sección 6): pantalla completa en la tele, solo en la
+  /// ventana del escritorio. Null en la web y en la ruta `/totem_display`.
+  late final ControladorKiosco? _kiosco = widget.windowId == null
+      ? null
+      : (ControladorKiosco(widget.kiosco ?? const KioscoVentana())
+        ..addListener(_cambioKiosco));
+
+  bool get _enKiosco => _kiosco?.enKiosco ?? false;
+
+  void _cambioKiosco() {
+    if (mounted) setState(() {});
+  }
+
   late final SupabaseService svc;
 
   @override
@@ -210,8 +230,10 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   }
 
   /// Cicla auto → vertical → horizontal. En la ventana secundaria de escritorio
-  /// además da vuelta la ventana de verdad, no solo el layout.
+  /// además da vuelta la ventana de verdad, no solo el layout. En kiosco no
+  /// está: la tele manda.
   Future<void> _girarPantalla() async {
+    if (_enKiosco) return;
     final siguiente = _orientacion.siguiente;
     setState(() => _orientacion = siguiente);
     _mostrarControles();
@@ -227,6 +249,8 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   Future<void> _aplicarFrameVentana(TotemOrientation orientacion) async {
     if (kIsWeb || widget.windowId == null) return;
     if (orientacion == TotemOrientation.auto) return;
+    // En kiosco la ventana ocupa la tele: no se le cambia la forma.
+    if (_enKiosco) return;
     if (!mounted) return;
 
     try {
@@ -292,7 +316,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     DesktopMultiWindow.setMethodHandler((call, fromWindowId) async {
       switch (call.method) {
         case 'pausar':
-          _pausar();
+          // `KioskLauncher.close` espera esto antes de esconder la ventana:
+          // sale del kiosco antes.
+          await _pausar();
           return null;
         case 'reanudar':
           _reanudar();
@@ -372,8 +398,10 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     }
   }
 
-  /// Corta todo lo que habla con la nube. Ver [_pausado].
-  void _pausar() {
+  /// Corta todo lo que habla con la nube. Ver [_pausado]. Antes, si estaba en
+  /// kiosco, vuelve a ser una ventana: al volver a abrirla aparece normal.
+  Future<void> _pausar() async {
+    await _kiosco?.salir();
     if (_pausado || !mounted) return;
     _sub?.cancel();
     _sub = null;
@@ -612,6 +640,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     _fichaTardoTimer?.cancel();
     _reproductor.dispose();
     _aperturaCtrl.dispose();
+    _kiosco?.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -639,15 +668,21 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
         !_fichaTardo &&
         EstiloTotem.desdeClave(_cfg.estilo) == null;
 
+    final pantalla = Stack(
+      children: [
+        if (!esperandoFicha) _encuadrado(_escena()),
+        _buildApertura(),
+        _buildFloatingControls(context),
+      ],
+    );
+    final kiosco = _kiosco;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          if (!esperandoFicha) _encuadrado(_escena()),
-          _buildApertura(),
-          _buildFloatingControls(context),
-        ],
-      ),
+      // En la ventana del escritorio: Esc o doble clic sacan del kiosco, y el
+      // puntero se esconde.
+      body: kiosco == null
+          ? pantalla
+          : CapaKiosco(controlador: kiosco, child: pantalla),
     );
   }
 
@@ -677,15 +712,16 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   }
 
   /// En la ventana del escritorio la ventana ya tiene la forma elegida. En la
-  /// web, si se eligió vertical u horizontal y la pantalla dice otra cosa, la
-  /// escena se encuadra en 9:16 o 16:9 en el medio.
+  /// web, y en kiosco (la ventana ocupa la tele), si se eligió vertical u
+  /// horizontal y la pantalla dice otra cosa, la escena se encuadra en 9:16 o
+  /// 16:9 en el medio.
   Widget _encuadrado(Widget escena) {
     final forzada = switch (_orientacion) {
       TotemOrientation.vertical => 9 / 16,
       TotemOrientation.horizontal => 16 / 9,
       TotemOrientation.auto => null,
     };
-    if (forzada == null || widget.windowId != null) {
+    if (forzada == null || (widget.windowId != null && !_enKiosco)) {
       return Positioned.fill(child: escena);
     }
     return Positioned.fill(
@@ -760,13 +796,28 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
                           etiqueta: _llegaron(_reproductor.ingresados.length),
                           color: _gold,
                         ),
-                        const SizedBox(width: 10),
-                        _ControlPill(
-                          icono: Icons.screen_rotation_rounded,
-                          etiqueta: _orientacion.etiqueta,
-                          color: _gold,
-                          onTap: _girarPantalla,
-                        ),
+                        // En kiosco la tele manda: no se gira.
+                        if (!_enKiosco) ...[
+                          const SizedBox(width: 10),
+                          _ControlPill(
+                            icono: Icons.screen_rotation_rounded,
+                            etiqueta: _orientacion.etiqueta,
+                            color: _gold,
+                            onTap: _girarPantalla,
+                          ),
+                        ],
+                        if (_kiosco != null) ...[
+                          const SizedBox(width: 10),
+                          _ControlPill(
+                            icono: _enKiosco
+                                ? Icons.fullscreen_exit_rounded
+                                : Icons.fullscreen_rounded,
+                            etiqueta:
+                                _enKiosco ? 'SALIR DEL KIOSCO' : 'KIOSCO',
+                            color: _gold,
+                            onTap: () => _kiosco.alternar(),
+                          ),
+                        ],
                         if (widget.showExitButton) ...[
                           const SizedBox(width: 10),
                           _ExitButton(
@@ -774,7 +825,8 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
                               SystemChrome.setEnabledSystemUIMode(
                                   SystemUiMode.edgeToEdge);
                               if (widget.windowId != null) {
-                                _pausar();
+                                // Sale del kiosco antes de esconderse.
+                                await _pausar();
                                 await WindowController.fromWindowId(
                                         widget.windowId!)
                                     .hide();
