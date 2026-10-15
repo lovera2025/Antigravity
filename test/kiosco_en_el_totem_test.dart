@@ -56,11 +56,24 @@ void main() {
       contains('if (_enKiosco) return;'),
     );
     expect(cuerpo('Future<void> _girarPantalla() async {'),
-        contains('if (_enKiosco) return;'));
+        contains('if (_kioscoDeVentana) return;'));
   });
 
-  test('el kiosco es solo de la ventana del escritorio', () {
-    expect(fuente, contains('late final ControladorKiosco? _kiosco = widget.windowId == null'));
-    expect(fuente, contains('CapaKiosco(controlador: kiosco, child: pantalla)'));
+  test('la ventana del tótem y la web tienen kiosco; la ruta de adentro no',
+      () {
+    final i = fuente.indexOf('late final ControladorKiosco? _kiosco =');
+    final decl = fuente.substring(i, fuente.indexOf(';', fuente.indexOf(': null', i)));
+    expect(decl, contains('widget.windowId != null'));
+    expect(decl, contains('KioscoVentana()'));
+    expect(decl, contains('kIsWeb'));
+    expect(decl, contains('KioscoNavegador()'));
+    expect(decl, endsWith(': null'),
+        reason: '`/totem_display` va dentro de la ventana principal');
+  });
+
+  test('en la web entra con el primer toque, sin botón', () {
+    expect(fuente, contains('entrarAlTocar: widget.windowId == null'));
+    expect(fuente, contains('if (_kiosco != null && widget.windowId != null)'),
+        reason: 'el botón KIOSCO es solo de la ventana del escritorio');
   });
 }

@@ -21,6 +21,7 @@ import 'services/contenido_bienvenida.dart';
 import 'services/ficha_totem.dart';
 import 'services/puente_ficha.dart';
 import 'services/kiosco.dart';
+import 'services/kiosco_navegador.dart';
 import 'services/reproductor_bienvenidas.dart';
 import 'totem_orientation.dart';
 import 'widgets/aviso_sin_internet.dart';
@@ -136,14 +137,24 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
 
-  /// El modo kiosco (sección 6): pantalla completa en la tele, solo en la
-  /// ventana del escritorio. Null en la web y en la ruta `/totem_display`.
-  late final ControladorKiosco? _kiosco = widget.windowId == null
-      ? null
-      : (ControladorKiosco(widget.kiosco ?? const KioscoVentana())
-        ..addListener(_cambioKiosco));
+  /// El modo kiosco (sección 6): pantalla completa en la tele. En la ventana
+  /// del escritorio, con el botón KIOSCO; en la web, con el primer toque. Null
+  /// en la ruta `/totem_display` (va dentro de la ventana principal).
+  late final ControladorKiosco? _kiosco = widget.windowId != null
+      ? (ControladorKiosco(widget.kiosco ?? const KioscoVentana())
+        ..addListener(_cambioKiosco))
+      : kIsWeb
+          ? (ControladorKiosco(
+              widget.kiosco ?? const KioscoNavegador(),
+              alEntrar: ControladorKiosco.avisoAlEntrarEnElNavegador,
+            )..addListener(_cambioKiosco))
+          : null;
 
   bool get _enKiosco => _kiosco?.enKiosco ?? false;
+
+  /// La ventana del escritorio en kiosco: ocupa la tele y no se la gira. En
+  /// la web girar sigue andando (encuadra la escena).
+  bool get _kioscoDeVentana => _enKiosco && widget.windowId != null;
 
   void _cambioKiosco() {
     if (mounted) setState(() {});
@@ -233,7 +244,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   /// además da vuelta la ventana de verdad, no solo el layout. En kiosco no
   /// está: la tele manda.
   Future<void> _girarPantalla() async {
-    if (_enKiosco) return;
+    if (_kioscoDeVentana) return;
     final siguiente = _orientacion.siguiente;
     setState(() => _orientacion = siguiente);
     _mostrarControles();
@@ -682,7 +693,11 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       // puntero se esconde.
       body: kiosco == null
           ? pantalla
-          : CapaKiosco(controlador: kiosco, child: pantalla),
+          : CapaKiosco(
+              controlador: kiosco,
+              entrarAlTocar: widget.windowId == null,
+              child: pantalla,
+            ),
     );
   }
 
@@ -797,7 +812,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
                           color: _gold,
                         ),
                         // En kiosco la tele manda: no se gira.
-                        if (!_enKiosco) ...[
+                        if (!_kioscoDeVentana) ...[
                           const SizedBox(width: 10),
                           _ControlPill(
                             icono: Icons.screen_rotation_rounded,
@@ -806,7 +821,8 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
                             onTap: _girarPantalla,
                           ),
                         ],
-                        if (_kiosco != null) ...[
+                        // En la web no hay botón: entra con el primer toque.
+                        if (_kiosco != null && widget.windowId != null) ...[
                           const SizedBox(width: 10),
                           _ControlPill(
                             icono: _enKiosco

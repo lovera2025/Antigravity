@@ -22,12 +22,18 @@ class CapaKiosco extends StatefulWidget {
   /// La hora, para el doble clic. Los tests ponen la suya.
   final DateTime Function() reloj;
 
+  /// En el navegador: el primer toque pone la pantalla completa (los
+  /// navegadores la dan solo desde un toque). Si el navegador la sacó por su
+  /// cuenta (Esc), el próximo toque la vuelve a poner.
+  final bool entrarAlTocar;
+
   const CapaKiosco({
     super.key,
     required this.controlador,
     required this.child,
     this.puntero = const Duration(seconds: 3),
     this.reloj = DateTime.now,
+    this.entrarAlTocar = false,
   });
 
   @override
@@ -101,6 +107,14 @@ class _CapaKioscoState extends State<CapaKiosco> {
 
   void _abajo(PointerDownEvent e) {
     _movio();
+    if (widget.entrarAlTocar) {
+      _c.sincronizar();
+      if (!_c.enKiosco) {
+        // Desde este mismo toque: si no, el navegador no la da.
+        unawaited(_c.entrar());
+        return;
+      }
+    }
     if (_c.enKiosco && _doble.toque(e.position, widget.reloj())) {
       unawaited(_c.salir());
     }

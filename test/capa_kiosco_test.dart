@@ -121,6 +121,27 @@ void main() {
       expect(v.pedidos, ['entrar', 'salir']);
     });
 
+    test('se entera si el navegador la sacó por su cuenta', () async {
+      final v = _Ventana()..activo = false;
+      final c = ControladorKiosco(v);
+      addTearDown(c.dispose);
+      await c.entrar();
+      expect(c.sincronizar(), isFalse, reason: 'sigue igual');
+      v.activo = false; // Esc en el navegador
+      expect(c.sincronizar(), isTrue);
+      expect(c.enKiosco, isFalse);
+      expect(c.aviso, isNull);
+    });
+
+    test('la ventana del escritorio no dice nada por su cuenta', () async {
+      final v = _Ventana();
+      final c = ControladorKiosco(v);
+      addTearDown(c.dispose);
+      await c.entrar();
+      expect(c.sincronizar(), isFalse);
+      expect(c.enKiosco, isTrue);
+    });
+
     test('dos entrar seguidos piden una sola vez', () async {
       final v = _Ventana();
       final c = ControladorKiosco(v);
@@ -262,6 +283,47 @@ void main() {
       await montar(tester);
       await tester.pump(const Duration(seconds: 10));
       expect(cursor(tester), MouseCursor.defer);
+      await cerrar(tester);
+    });
+
+    testWidgets('en el navegador, el primer toque pone la pantalla completa',
+        (tester) async {
+      ventana = _Ventana()..activo = false;
+      c = ControladorKiosco(ventana,
+          alEntrar: ControladorKiosco.avisoAlEntrarEnElNavegador);
+      ahora = DateTime(2026, 12, 12, 23);
+      await tester.pumpWidget(MaterialApp(
+        home: CapaKiosco(
+          controlador: c,
+          reloj: () => ahora,
+          entrarAlTocar: true,
+          child: const SizedBox.expand(),
+        ),
+      ));
+      await clic(tester);
+      expect(c.enKiosco, isTrue);
+      expect(find.text(ControladorKiosco.avisoAlEntrarEnElNavegador),
+          findsOneWidget);
+
+      // El navegador la saca con Esc, por su cuenta: el próximo toque la pone.
+      ventana.activo = false;
+      await clic(tester, despuesDe: 2000);
+      expect(c.enKiosco, isTrue);
+      expect(ventana.pedidos, ['entrar', 'entrar']);
+
+      // Doble toque: la saca.
+      await clic(tester, despuesDe: 2000);
+      await clic(tester, despuesDe: 150);
+      expect(c.enKiosco, isFalse);
+      expect(ventana.activo, isFalse);
+      await cerrar(tester);
+    });
+
+    testWidgets('en la ventana del escritorio un toque no la pone',
+        (tester) async {
+      await montar(tester);
+      await clic(tester);
+      expect(ventana.pedidos, isEmpty);
       await cerrar(tester);
     });
 
