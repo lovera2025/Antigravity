@@ -1334,6 +1334,10 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó
   versión se lograron corregir varios bugs vistos en la parte de eventos particulares y masivos", y tres renglones
   míos (el salón de los masivos, Recepción y el tótem sin internet, los celulares). Pidió firmar "L.M" y, al
   saber que el aviso ya trae "By L.M" abajo, eligió dejar solo ese.
+- **9e, el instalador:** armado de nuevo el 15-oct a las 15:54 con `installer\build_installer.ps1`, desde `5dd5f4c`
+  (`installer/dist/Setup Junior Eventos v6.0.0.exe`, 36,3 MB, SHA-256 `9DD5501E…E77A6`). Lleva la página del
+  celular. **Si cambia algo del programa antes de publicar, hay que armarlo otra vez.**
+- **Sigue el 9f, publicar con él presente**: nada se corre ni se instala sin preguntarle en el momento.
 
 ## Lo que falta para publicar
 
