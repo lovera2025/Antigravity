@@ -21,11 +21,10 @@ import 'features/splash/splash_screen.dart';
 import 'features/cotizacion/public_selection_screen.dart';
 import 'features/recepcion/operador_view.dart';
 import 'features/recepcion/lista_invitados_screen.dart';
-import 'features/recepcion/op_checkin_screen.dart';
+import 'features/recepcion/op_ya_no_se_usa.dart';
 import 'features/recepcion/recepcion_unified_screen.dart';
 import 'features/recepcion/repositories/invitados_repository.dart';
 import 'features/totem/totem_display.dart';
-import 'features/totem/totem_checkin_screen.dart';
 import 'features/totem/providers/clave_totem_provider.dart';
 import 'features/totem/services/lista_de_la_pc.dart';
 import 'features/totem/services/puente_ficha.dart';
@@ -207,7 +206,8 @@ class CatalogApp extends ConsumerWidget {
   }
 }
 
-/// App pública para operadores de recepción (check-in con PIN).
+/// `/op`: hasta la 6.0.0, recepción con un PIN. Ya no se usa (sección 8): dice
+/// dónde se suman ahora los celulares de la puerta.
 class OpApp extends ConsumerWidget {
   final String eventoId;
   const OpApp({required this.eventoId, super.key});
@@ -229,7 +229,7 @@ class OpApp extends ConsumerWidget {
       ],
       supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
-      home: OpCheckinScreen(eventoId: eventoId),
+      home: const OpYaNoSeUsa(),
     );
   }
 }
@@ -265,7 +265,8 @@ class TotemWebApp extends ConsumerWidget {
   }
 }
 
-/// App pública para el check-in de invitados via QR del tótem.
+/// `?buscar`: el self check-in por DNI. Desde la sección 8 es la misma página
+/// que la del QR (busca y anota por las funciones de la nube).
 class BuscarApp extends ConsumerWidget {
   final String eventoId;
   const BuscarApp({required this.eventoId, super.key});
@@ -287,7 +288,7 @@ class BuscarApp extends ConsumerWidget {
       ],
       supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
-      home: TotemCheckinScreen(eventoId: eventoId),
+      home: ListaInvitadosScreen(eventoId: eventoId),
     );
   }
 }

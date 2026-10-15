@@ -2,10 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../main.dart';
 import '../../core/utils/ar_time.dart';
@@ -34,6 +32,7 @@ import '../egresos/widgets/registrar_egreso_global_dialog.dart';
 import '../egresos/services/egreso_concepto_sugerencias.dart';
 import '../eventos/eventos_screen.dart';
 import '../eventos/presupuestos_screen.dart';
+import '../recepcion/op_ya_no_se_usa.dart' show kCelularesDesdeRecepcion;
 import 'repositories/finanzas_repository.dart';
 import 'models/compromiso_personal.dart';
 import 'providers/compromisos_personal_provider.dart';
@@ -174,12 +173,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   /// Capturado en [initState]: en [dispose] no se puede usar [ref] (Riverpod).
   late final AdminAuthNotifier _adminAuthNotifier;
 
-  // Tab OPERADORES: recepción check-in por evento
-  List<Map<String, dynamic>> _eventosParaOperadores = [];
-  String? _operadoresEventoId;
-  final _operadoresPinCtrl = TextEditingController();
-  bool _operadoresSavingPin = false;
-
   // Gestión de Asesores
   List<Map<String, dynamic>> _asesores = [];
   Set<String> _onlineUserIds = {};
@@ -271,7 +264,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     _tabController.addListener(_onTabControllerTick);
     final isAdmin = ref.read(adminAuthProvider).isAdmin;
     if (isAdmin) {
-      _fetchOperadores();
       _fetchAsesores();
       _setupPresenceListener();
     }
@@ -292,7 +284,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     unawaited(_adminAuthNotifier.recordMiEmpresaExit());
     _tabController.removeListener(_onTabControllerTick);
     _tabController.dispose();
-    _operadoresPinCtrl.dispose();
     _masterSearchCtrl.dispose();
     _ingresosListaSearchCtrl.dispose();
     _egresosListaSearchCtrl.dispose();
@@ -413,27 +404,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     debugPrint('🟢 Usuarios online: ${ids.length} → $ids');
   }
 
-  Future<void> _fetchOperadores() async {
-    final supabase = ref.read(supabaseProvider);
-    try {
-      final evRes = await supabase
-          .from('eventos')
-          .select('id, tipo, fecha_evento, clientes(nombre_completo), pin_operador')
-          .not('estado', 'eq', 'Cancelado')
-          .order('fecha_evento', ascending: false)
-          .limit(50);
-      if (mounted) {
-        setState(() {
-          _eventosParaOperadores = (evRes as List).cast<Map<String, dynamic>>();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cargar operadores: $e')));
-      }
-    }
-  }
-
   Future<void> _navegarAEvento(IngresoDetallado ing) async {
     if (ing.eventoId == null) return;
     
@@ -538,7 +508,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                   icon: Icon(Icons.refresh_rounded, size: _kFinanzasAppBarIconSize, color: gold),
                   onPressed: () async {
                     ref.read(finanzasProvider.notifier).recargar();
-                    _fetchOperadores();
                   },
                   tooltip: 'Actualizar',
                 ),
@@ -702,7 +671,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 forceVerification: needsReauth,
               );
               if (hasAccess && mounted) {
-                _fetchOperadores();
                 setState(() {
                   if (needsReauth) _needsMiEmpresaReauth = false;
                 });
@@ -6781,56 +6749,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
 
   // ── FAB Personal ──────────────────────────────────────────────────────────
 
-  // ── Tab OPERADORES (recepción check-in por evento) ───────────────────────────
-  String _labelEventoOp(Map<String, dynamic> ev) {
-    final cliente = ev['clientes']?['nombre_completo'] ?? 'Sin cliente';
-    final tipo = Evento.formatearTipo(ev['tipo'] as String?);
-    final fecha = ev['fecha_evento'] != null
-        ? DateTime.tryParse(ev['fecha_evento'])
-        : null;
-    final fechaStr = fecha != null
-        ? '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}'
-        : '';
-    return '$cliente · $tipo · $fechaStr';
-  }
-
-  void _generarPinOperadores() {
-    final pin = (1000 + Random().nextInt(9000)).toString();
-    setState(() => _operadoresPinCtrl.text = pin);
-    _guardarPinOperadores(pin);
-  }
-
-  Future<void> _guardarPinOperadores(String pin) async {
-    final eventoId = _operadoresEventoId;
-    if (eventoId == null) return;
-    setState(() => _operadoresSavingPin = true);
-    try {
-      await Supabase.instance.client
-          .from('eventos')
-          .update({'pin_operador': pin.isEmpty ? null : pin})
-          .eq('id', eventoId);
-      if (mounted) {
-        final idx = _eventosParaOperadores.indexWhere((e) => e['id'] == eventoId);
-        if (idx >= 0) _eventosParaOperadores[idx]['pin_operador'] = pin.isEmpty ? null : pin;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PIN guardado correctamente'),
-            backgroundColor: Color(0xFF00B894),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar PIN: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _operadoresSavingPin = false);
-    }
-  }
-
   /// Mostrar diálogo de permisos para un Asesor específico.
   Future<void> _showPermissionsDialog(String userId, String nombre) async {
     final supabase = ref.read(supabaseProvider);
@@ -6980,10 +6898,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
 
   Widget _buildOperadoresTab(bool isDark, Color gold) {
     const purple = Colors.purpleAccent;
-    final tienePinReal = _operadoresPinCtrl.text.trim().isNotEmpty;
-    final opUrl = _operadoresEventoId != null
-        ? '$kWebBaseUrl/op?evento=$_operadoresEventoId'
-        : '';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
@@ -7161,242 +7075,34 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
               Divider(color: isDark ? Colors.white12 : Colors.black12),
               const SizedBox(height: 24),
 
-              // ── SECCIÓN ORIGINAL: CHECK-IN POR EVENTO ────────────────
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: purple.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: purple.withValues(alpha: 0.3)),
-                    ),
-                    child: const Icon(Icons.login_rounded, color: purple, size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'RECEPCIÓN DE INVITADOS (CHECK-IN)',
-                          style: GoogleFonts.oswald(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: purple,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        Text(
-                          'Elegí un evento y configurá el PIN para que recepción marque ingresos con el link.',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: isDark ? Colors.white38 : Colors.black45,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              DropdownButtonFormField<String>(
-                initialValue: _operadoresEventoId,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: 'EVENTO',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              // ── LOS CELULARES DE LA PUERTA ───────────────────────────
+              // Hasta la 6.0.0 acá se ponía un PIN por evento y se pasaba el
+              // link de `/op`. Ya no andaba (la nube no le deja leer el evento
+              // a quien no tiene usuario) y ningún evento lo usaba: los
+              // celulares de la puerta se suman desde Recepción (sección 7).
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
                 ),
-                items: _eventosParaOperadores.map((ev) {
-                  return DropdownMenuItem<String>(
-                    value: ev['id'] as String,
-                    child: Text(
-                      _labelEventoOp(ev),
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val == null) return;
-                  Map<String, dynamic>? ev;
-                  for (final e in _eventosParaOperadores) {
-                    if (e['id'] == val) { ev = e; break; }
-                  }
-                  setState(() {
-                    _operadoresEventoId = val;
-                    _operadoresPinCtrl.text = (ev?['pin_operador']?.toString() ?? '').trim();
-                  });
-                },
-              ),
-              if (_operadoresEventoId != null) ...[
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: tienePinReal
-                        ? Colors.green.withValues(alpha: isDark ? 0.08 : 0.06)
-                        : Colors.orange.withValues(alpha: isDark ? 0.08 : 0.06),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: tienePinReal
-                          ? Colors.greenAccent.withValues(alpha: 0.3)
-                          : Colors.orange.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        tienePinReal ? Icons.lock_open_rounded : Icons.lock_rounded,
-                        color: tienePinReal ? Colors.greenAccent : Colors.orange,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          tienePinReal
-                              ? 'Recepción (check-in) habilitada con PIN'
-                              : 'Configurá un PIN para dar acceso',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: tienePinReal ? Colors.greenAccent : Colors.orange,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'PIN DE ACCESO',
-                  style: GoogleFonts.outfit(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                    color: isDark ? Colors.white38 : Colors.black45,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
+                child: Row(
                   children: [
+                    const Icon(Icons.phone_android_rounded, color: purple, size: 22),
+                    const SizedBox(width: 14),
                     Expanded(
-                      child: TextField(
-                        controller: _operadoresPinCtrl,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        style: GoogleFonts.oswald(fontSize: 24, letterSpacing: 6),
-                        decoration: InputDecoration(
-                          hintText: '0000',
-                          counterText: '',
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      child: Text(
+                        kCelularesDesdeRecepcion,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: isDark ? Colors.white70 : Colors.black87,
                         ),
-                        onSubmitted: (v) => _guardarPinOperadores(v.trim()),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    IconButton.filled(
-                      onPressed: _generarPinOperadores,
-                      style: IconButton.styleFrom(
-                        backgroundColor: purple.withValues(alpha: 0.15),
-                        foregroundColor: purple,
-                      ),
-                      icon: const Icon(Icons.casino_rounded, size: 22),
-                      tooltip: 'Generar PIN',
-                    ),
-                    const SizedBox(width: 6),
-                    _operadoresSavingPin
-                        ? const SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFD4AF37)),
-                          )
-                        : IconButton.filled(
-                            onPressed: () => _guardarPinOperadores(_operadoresPinCtrl.text.trim()),
-                            style: IconButton.styleFrom(
-                              backgroundColor: gold.withValues(alpha: 0.15),
-                              foregroundColor: gold,
-                            ),
-                            icon: const Icon(Icons.save_rounded, size: 22),
-                            tooltip: 'Guardar PIN',
-                          ),
                   ],
                 ),
-                if (tienePinReal && opUrl.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    'LINK PARA RECEPCIÓN',
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                      color: isDark ? Colors.white38 : Colors.black45,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          opUrl,
-                          style: GoogleFonts.outfit(fontSize: 12, color: gold, height: 1.4),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.copy_rounded, size: 16),
-                                label: const Text('COPIAR'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: gold,
-                                  side: BorderSide(color: gold.withValues(alpha: 0.4)),
-                                  textStyle: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700),
-                                ),
-                                onPressed: () {
-                                  Clipboard.setData(ClipboardData(text: opUrl));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Link copiado'), duration: Duration(seconds: 2)),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton.icon(
-                                icon: const Icon(Icons.share_rounded, size: 16),
-                                label: const Text('COMPARTIR'),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: purple.withValues(alpha: 0.8),
-                                  textStyle: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w700),
-                                ),
-                                onPressed: () async {
-                                  await SharePlus.instance.share(
-                                    ShareParams(
-                                      text: 'Acceso recepción (check-in):\n$opUrl\nPIN: ${_operadoresPinCtrl.text.trim()}\n\nAbrí el link, ingresá el PIN y marcá ingresos.',
-                                      subject: 'Acceso Recepción - Junior Eventos',
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ],
           ),
         ),

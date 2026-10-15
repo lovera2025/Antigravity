@@ -1,962 +1,718 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../models/invitado.dart';
+
 import '../../models/totem_config.dart';
-import '../../services/supabase_service_provider.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../totem/providers/totem_config_provider.dart';
+import 'repositories/supabase_invitados_repository.dart';
 
+/// La página del QR del tótem (`/lista?evento=<id>`, y también `?buscar`): el
+/// invitado de un evento particular se busca por su nombre y se anota con su
+/// DNI, en su celular.
+///
+/// **Desde la sección 8 de la 6.0.0 no baja la lista**: busca desde 3 letras
+/// (`puerta_buscar`) y el DNI lo compara la nube (`puerta_checkin`). Quien no
+/// tiene DNI cargado se anota en la recepción; antes entraba sin que le
+/// pidieran nada. En un evento masivo no aparece nadie (en masivos el tótem
+/// tampoco muestra el QR).
 class ListaInvitadosScreen extends ConsumerStatefulWidget {
   final String eventoId;
   const ListaInvitadosScreen({required this.eventoId, super.key});
 
+  static const faltanLetras =
+      'Escribí al menos 3 letras de tu nombre o apellido.';
+  static const noSePudoBuscar =
+      'No se pudo buscar. Revisá la conexión e intentá de nuevo.';
+  static const noSePudoVerificar =
+      'No se pudo verificar. Revisá la conexión e intentá de nuevo.';
+  static const escribiTuDni = 'Escribí tu DNI para seguir.';
+  static const aLaRecepcion = 'Acercate a la recepción y te anotan ahí.';
+  static const bloqueado =
+      'Se probó tres veces con otro DNI. Acercate a la recepción y te anotan ahí.';
+  static const enLaRecepcion = 'En este evento el ingreso es en la recepción.';
+  static const noTeEncontramos = 'No te encontramos. Acercate a la recepción.';
+  static const mesaPorAsignar = 'Tu mesa te la dicen en la recepción.';
+
+  static String noEncontrado(String texto) =>
+      'No encontramos "$texto". Probá con tu apellido o acercate a la recepción.';
+
+  static String dniNoCoincide(int quedan) => quedan == 1
+      ? 'Ese DNI no coincide. Te queda 1 intento.'
+      : 'Ese DNI no coincide. Te quedan $quedan intentos.';
+
   @override
-  ConsumerState<ListaInvitadosScreen> createState() => _ListaInvitadosScreenState();
+  ConsumerState<ListaInvitadosScreen> createState() =>
+      _ListaInvitadosScreenState();
 }
 
-enum _ListaState { loading, error, browsing, verifyingDni, welcome }
+enum _Paso { buscando, dni, bienvenida, aLaRecepcion }
 
-class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen>
-    with SingleTickerProviderStateMixin {
-  /// Misma config que el tótem del salón: el invitado ve en su celular la
-  /// misma foto y el mismo saludo que están proyectados en la pantalla.
+class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen> {
+  static const _fondo = Color(0xFFF2F0EB); // Gris perla
+  static const _tinta = Color(0xDE000000);
+  static const _tintaSuave = Color(0x8A000000);
+
+  /// Misma config que el tótem del salón: la misma foto, saludo y color.
   late TotemConfig _cfg = TotemConfig.defaults(widget.eventoId);
+  Color get _acento => _cfg.colorAcento;
 
-  Color get _gold => _cfg.colorAcento;
+  _Paso _paso = _Paso.buscando;
 
-  List<Invitado> _all = [];
-  List<Invitado> _filtered = [];
-  Invitado? _selected;
-  String _query = '';
-  _ListaState _state = _ListaState.loading;
-  String _errorMsg = '';
+  // ── Buscar ─────────────────────────────────────────────────────────────────
+  final _buscador = TextEditingController();
+  final _focoBuscador = FocusNode();
+  Timer? _espera;
+  int _pedido = 0;
+  bool _buscandoEnLaNube = false;
+  String? _errorBusqueda;
+  List<EncontradoEnLaPuerta>? _encontrados;
+  String _buscado = '';
 
-  final _searchCtrl = TextEditingController();
-  final _focusNode = FocusNode();
-  final _dniCtrl = TextEditingController();
-  final _dniFocusNode = FocusNode();
-  String _dniError = '';
-  int _dniIntentos = 0;
-  static const _maxIntentos = 3;
+  // ── El DNI ─────────────────────────────────────────────────────────────────
+  final _dni = TextEditingController();
+  final _focoDni = FocusNode();
+  EncontradoEnLaPuerta? _elegido;
+  bool _verificando = false;
+  String? _errorDni;
 
-  late final AnimationController _welcomeCtrl;
-  late final Animation<double> _welcomeFade;
-  late final Animation<Offset> _welcomeSlide;
+  // ── La bienvenida, o a la recepción ────────────────────────────────────────
+  String? _mesa;
+  String _porQueALaRecepcion = ListaInvitadosScreen.aLaRecepcion;
 
-  RealtimeChannel? _broadcastChannel;
-
-  @override
-  void initState() {
-    super.initState();
-    _welcomeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _welcomeFade = CurvedAnimation(parent: _welcomeCtrl, curve: Curves.easeOut);
-    _welcomeSlide = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _welcomeCtrl, curve: Curves.easeOutCubic));
-
-    // Configurar canal de emisión (broadcast) para avisar al tótem en tiempo real
-    if (widget.eventoId.isNotEmpty && widget.eventoId.length == 36) {
-      _broadcastChannel = Supabase.instance.client.channel('totem_${widget.eventoId}');
-      _broadcastChannel!.subscribe();
-    }
-
-    _load();
-  }
+  bool get _eventoValido => widget.eventoId.length == 36;
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
-    _focusNode.dispose();
-    _dniCtrl.dispose();
-    _dniFocusNode.dispose();
-    _welcomeCtrl.dispose();
-    _broadcastChannel?.unsubscribe();
+    _espera?.cancel();
+    _buscador.dispose();
+    _focoBuscador.dispose();
+    _dni.dispose();
+    _focoDni.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    if (widget.eventoId.isEmpty || widget.eventoId.length != 36) {
-      setState(() {
-        _state = _ListaState.error;
-        _errorMsg = widget.eventoId.length > 36 
-          ? 'Error de compatibilidad: ID de evento obsoleto.\nCerrá y volvé a abrir el QR en la PC.'
-          : 'No se especificó un evento válido.\nEscaneá el QR del tótem nuevamente.';
-      });
-      return;
-    }
+  // ── Buscar ─────────────────────────────────────────────────────────────────
 
-    try {
-      final repo = ref.read(supabaseInvitadosRepositoryProvider);
-      final invitados = await repo.getByEvento(widget.eventoId);
-      setState(() {
-        _all = invitados;
-        _filtered = _solosPendientes(invitados);
-        _state = _ListaState.browsing;
-      });
-    } catch (_) {
-      setState(() {
-        _state = _ListaState.error;
-        _errorMsg = 'No se pudo cargar la lista.\nVerificá tu conexión e intentá de nuevo.';
-      });
-    }
-  }
-
-  List<Invitado> _solosPendientes(List<Invitado> lista) =>
-      lista.where((i) => i.estadoIngreso == EstadoIngreso.pendiente).toList();
-
-  void _onSearch(String q) {
+  void _alEscribir(String texto) {
+    _espera?.cancel();
+    final faltan = SupabaseInvitadosRepository.letrasDe(texto) <
+        SupabaseInvitadosRepository.letrasParaBuscar;
     setState(() {
-      _query = q.toLowerCase().trim();
-      final pendientes = _solosPendientes(_all);
-      _filtered = _query.isEmpty
-          ? pendientes
-          : pendientes.where((i) => i.nombreCompleto.toLowerCase().contains(_query)).toList();
+      _errorBusqueda = null;
+      if (faltan) {
+        _pedido++;
+        _encontrados = null;
+        _buscandoEnLaNube = false;
+      }
     });
+    if (faltan) return;
+    _espera = Timer(const Duration(milliseconds: 300), () => _buscar(texto));
   }
 
-  void _onSelect(Invitado inv) {
-    // Si no tiene DNI cargado, saltear verificación
-    if (inv.dni.trim().isEmpty) {
-      _doWelcome(inv);
+  Future<void> _buscar(String texto) async {
+    final pedido = ++_pedido;
+    setState(() {
+      _buscandoEnLaNube = true;
+      _errorBusqueda = null;
+    });
+    try {
+      final r = await ref
+          .read(supabaseInvitadosRepositoryProvider)
+          .buscar(widget.eventoId, texto);
+      // Mientras tanto se siguió escribiendo: esta respuesta ya no va.
+      if (!mounted || pedido != _pedido) return;
+      setState(() {
+        _buscandoEnLaNube = false;
+        _encontrados = r;
+        _buscado = texto.trim();
+      });
+    } catch (e) {
+      debugPrint('La página del QR no pudo buscar: $e');
+      if (!mounted || pedido != _pedido) return;
+      setState(() {
+        _buscandoEnLaNube = false;
+        _errorBusqueda = ListaInvitadosScreen.noSePudoBuscar;
+      });
+    }
+  }
+
+  void _elegir(EncontradoEnLaPuerta e) {
+    _focoBuscador.unfocus();
+    if (e.ingresado) {
+      setState(() {
+        _elegido = e;
+        _mesa = e.mesa;
+        _paso = _Paso.bienvenida;
+      });
       return;
     }
-    _dniCtrl.clear();
-    _dniError = '';
-    _dniIntentos = 0;
+    if (!e.tieneDni) {
+      _aLaRecepcion(e, ListaInvitadosScreen.aLaRecepcion);
+      return;
+    }
+    _dni.clear();
     setState(() {
-      _selected = inv;
-      _state = _ListaState.verifyingDni;
+      _elegido = e;
+      _errorDni = null;
+      _paso = _Paso.dni;
     });
     Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) _dniFocusNode.requestFocus();
+      if (mounted) _focoDni.requestFocus();
     });
   }
 
-  void _doWelcome(Invitado inv) {
+  void _aLaRecepcion(EncontradoEnLaPuerta e, String porQue) {
     setState(() {
-      _selected = inv;
-      _state = _ListaState.welcome;
+      _elegido = e;
+      _porQueALaRecepcion = porQue;
+      _paso = _Paso.aLaRecepcion;
     });
-    _welcomeCtrl.forward(from: 0);
-    _registrarIngreso(inv);
   }
 
-  Future<void> _onVerifyDni() async {
-    if (_selected == null) return;
-    final ingresado = _dniCtrl.text.trim();
-    if (ingresado.isEmpty) {
-      setState(() => _dniError = 'Ingresá tu DNI para continuar.');
+  void _volverABuscar({bool limpiar = false}) {
+    setState(() {
+      _paso = _Paso.buscando;
+      _elegido = null;
+      _errorDni = null;
+      if (limpiar) {
+        _buscador.clear();
+        _encontrados = null;
+      }
+    });
+    // Lo que se ve de la búsqueda puede estar viejo (alguien entró).
+    if (!limpiar && _buscado.isNotEmpty) _buscar(_buscado);
+  }
+
+  // ── El DNI ─────────────────────────────────────────────────────────────────
+
+  Future<void> _ingresar() async {
+    final e = _elegido;
+    if (e == null || _verificando) return;
+    final dni = _dni.text.trim();
+    if (dni.isEmpty) {
+      setState(() => _errorDni = ListaInvitadosScreen.escribiTuDni);
       return;
     }
-
-    final correcto = _selected!.dni.trim();
-    if (ingresado == correcto) {
-      _doWelcome(_selected!);
-    } else {
-      _dniIntentos++;
-      if (_dniIntentos >= _maxIntentos) {
-        setState(() {
-          _dniError = 'Demasiados intentos fallidos. Consultá en recepción.';
-        });
-      } else {
-        setState(() {
-          _dniError = 'DNI incorrecto. Intento $_dniIntentos de $_maxIntentos.';
-          _dniCtrl.clear();
-        });
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) _dniFocusNode.requestFocus();
-        });
-      }
-    }
-  }
-
-  void _onCancelDni() {
     setState(() {
-      _selected = null;
-      _dniCtrl.clear();
-      _dniError = '';
-      _state = _ListaState.browsing;
+      _verificando = true;
+      _errorDni = null;
     });
-  }
-
-  Future<void> _registrarIngreso(Invitado inv) async {
-    if (inv.estadoIngreso == EstadoIngreso.ingresado) return;
+    final IngresoConDni r;
     try {
-      final svc = ref.read(supabaseServiceProvider);
-      await svc.marcarIngresado(inv.id);
-
-      // Disparar broadcast instantáneo al tótem para evitar la latencia del sync regular
-      if (_broadcastChannel != null) {
-        final checkedInGuest = inv.copyWith(estadoIngreso: EstadoIngreso.ingresado);
-        await _broadcastChannel!.sendBroadcastMessage(
-          event: 'checkin',
-          payload: checkedInGuest.toJson(),
-        );
-      }
-
-      // Marcar localmente como ingresado → desaparece de la lista al volver
-      if (mounted) {
+      r = await ref
+          .read(supabaseInvitadosRepositoryProvider)
+          .ingresarConDni(invitadoId: e.id, dni: dni);
+    } catch (err) {
+      debugPrint('La página del QR no pudo verificar el DNI: $err');
+      if (!mounted) return;
+      setState(() {
+        _verificando = false;
+        _errorDni = ListaInvitadosScreen.noSePudoVerificar;
+      });
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _verificando = false);
+    switch (r.resultado) {
+      case ResultadoIngreso.ok:
+      case ResultadoIngreso.yaIngresado:
         setState(() {
-          final idx = _all.indexWhere((i) => i.id == inv.id);
-          if (idx != -1) {
-            _all[idx] = _all[idx].copyWith(estadoIngreso: EstadoIngreso.ingresado);
-          }
-          final pendientes = _solosPendientes(_all);
-          _filtered = _query.isEmpty
-              ? pendientes
-              : pendientes
-                  .where((i) => i.nombreCompleto.toLowerCase().contains(_query))
-                  .toList();
+          _mesa = r.invitado?.numeroMesa ?? e.mesa;
+          _paso = _Paso.bienvenida;
         });
-      }
-    } catch (e) {
-      debugPrint('Error al registrar ingreso: $e');
+      case ResultadoIngreso.dniIncorrecto:
+        _dni.clear();
+        setState(() => _errorDni =
+            ListaInvitadosScreen.dniNoCoincide(r.quedan ?? 1));
+        _focoDni.requestFocus();
+      case ResultadoIngreso.bloqueado:
+        _aLaRecepcion(e, ListaInvitadosScreen.bloqueado);
+      case ResultadoIngreso.sinDni:
+        _aLaRecepcion(e, ListaInvitadosScreen.aLaRecepcion);
+      case ResultadoIngreso.masivo:
+        _aLaRecepcion(e, ListaInvitadosScreen.enLaRecepcion);
+      case ResultadoIngreso.noEncontrado:
+        _aLaRecepcion(e, ListaInvitadosScreen.noTeEncontramos);
     }
   }
 
-  void _onBack() {
-    setState(() {
-      _selected = null;
-      _state = _ListaState.browsing;
-    });
-  }
+  // ── Lo que se ve ───────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    // Misma fuente de verdad que el tótem: si el jefe cambia la foto o el
-    // saludo, el celular del invitado lo refleja al instante.
+    // Si el jefe cambia la foto o el saludo, el celular lo refleja.
     _cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
 
+    final cuerpo = !_eventoValido
+        ? _eventoQueNoSirve()
+        : switch (_paso) {
+            _Paso.buscando => _buscando(),
+            _Paso.dni => _pidiendoElDni(),
+            _Paso.bienvenida => _bienvenida(),
+            _Paso.aLaRecepcion => _aLaRecepcionVista(),
+          };
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F0EB), // Gris Perla
+      backgroundColor: _fondo,
       body: SafeArea(
-        child: switch (_state) {
-          _ListaState.loading => _buildLoading(),
-          _ListaState.error => _buildError(),
-          _ListaState.browsing => _buildBrowsing(),
-          _ListaState.verifyingDni => _buildDniVerification(),
-          _ListaState.welcome => _buildWelcome(),
-        },
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: cuerpo,
+          ),
+        ),
       ),
     );
   }
 
-  // ── LOADING ────────────────────────────────────────────────────────────────
+  TextStyle _titulo(double tamano, {Color? color}) => GoogleFonts.oswald(
+        fontSize: tamano,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.5,
+        color: color ?? _tinta,
+      );
 
-  Widget _buildLoading() {
-    return Center(
+  TextStyle _texto(double tamano, {Color? color, bool negrita = false}) =>
+      GoogleFonts.outfit(
+        fontSize: tamano,
+        fontWeight: negrita ? FontWeight.w700 : FontWeight.w400,
+        color: color ?? _tinta,
+        height: 1.4,
+      );
+
+  Widget _encabezado() => Column(
+        children: [
+          Text(
+            _cfg.titulo,
+            textAlign: TextAlign.center,
+            style: _titulo(22),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ENCONTRÁ TU LUGAR',
+            style: _titulo(12, color: _acento).copyWith(letterSpacing: 3),
+          ),
+        ],
+      );
+
+  Widget _eventoQueNoSirve() {
+    final viejo = widget.eventoId.length > 36;
+    return Padding(
+      padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(color: _gold, strokeWidth: 2),
-          const SizedBox(height: 24),
+          const Icon(Icons.qr_code_2_rounded, size: 56, color: _tintaSuave),
+          const SizedBox(height: 20),
           Text(
-            'SINCRONIZANDO...',
-            style: GoogleFonts.oswald(fontSize: 12, color: Colors.black26, letterSpacing: 2, fontWeight: FontWeight.w700),
+            viejo
+                ? 'Este QR es de una versión anterior.\nPedí el QR nuevo en la recepción.'
+                : 'No se especificó un evento válido.\nEscaneá el QR del tótem nuevamente.',
+            textAlign: TextAlign.center,
+            style: _texto(15, color: _tintaSuave),
           ),
         ],
       ),
     );
   }
 
-  // ── ERROR ──────────────────────────────────────────────────────────────────
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(36),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.wifi_off_rounded, color: Colors.redAccent, size: 56),
-            const SizedBox(height: 24),
-            Text(
-              _errorMsg,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 15,
-                color: Colors.white60,
-                height: 1.6,
-              ),
-            ),
-            const SizedBox(height: 32),
-            _GoldButton(
-              label: 'REINTENTAR',
-              icon: Icons.refresh_rounded,
-              onTap: () {
-                setState(() => _state = _ListaState.loading);
-                _load();
-              },
-            ),
-          ],
+  Widget _buscando() {
+    final encontrados = _encontrados;
+    final Widget debajo;
+    if (_errorBusqueda != null) {
+      debajo = _mensaje(
+        _errorBusqueda!,
+        icono: Icons.wifi_off_rounded,
+        accion: TextButton(
+          onPressed: () => _buscar(_buscador.text),
+          child: Text('REINTENTAR', style: _texto(13, color: _acento, negrita: true)),
         ),
-      ),
-    );
-  }
-
-  // ── BROWSING ───────────────────────────────────────────────────────────────
-
-  Widget _buildBrowsing() {
-    return Column(
-      children: [
-        // ── Header ─────────────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-          child: Column(
-            children: [
-              // Logo / marca
-              Text(
-                _cfg.titulo,
-                style: GoogleFonts.oswald(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 6,
-                  color: Colors.black.withValues(alpha: 0.8),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'LOCALIZÁ TU REGISTRO',
-                style: GoogleFonts.oswald(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 3,
-                  color: _gold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${_solosPendientes(_all).length} INVITADOS POR LLEGAR',
-                style: GoogleFonts.outfit(
-                  fontSize: 10,
-                  color: Colors.black26,
-                  letterSpacing: 1,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+      );
+    } else if (SupabaseInvitadosRepository.letrasDe(_buscador.text) <
+        SupabaseInvitadosRepository.letrasParaBuscar) {
+      debajo = _mensaje(ListaInvitadosScreen.faltanLetras,
+          icono: Icons.search_rounded);
+    } else if (encontrados == null) {
+      debajo = Padding(
+        padding: const EdgeInsets.only(top: 32),
+        child: CircularProgressIndicator(color: _acento, strokeWidth: 2),
+      );
+    } else if (encontrados.isEmpty) {
+      debajo = _mensaje(ListaInvitadosScreen.noEncontrado(_buscado),
+          icono: Icons.person_search_rounded);
+    } else {
+      debajo = Expanded(
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          itemCount: encontrados.length,
+          itemBuilder: (_, i) => _Encontrado(
+            encontrado: encontrados[i],
+            acento: _acento,
+            onTap: () => _elegir(encontrados[i]),
           ),
         ),
+      );
+    }
 
+    return Column(
+      children: [
+        const SizedBox(height: 32),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: _encabezado(),
+        ),
         const SizedBox(height: 22),
-
-        // ── Buscador ────────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: TextField(
-            controller: _searchCtrl,
-            focusNode: _focusNode,
-            style: GoogleFonts.outfit(color: Colors.black87, fontSize: 16),
-            onChanged: _onSearch,
+            key: const ValueKey('buscador'),
+            controller: _buscador,
+            focusNode: _focoBuscador,
+            autofocus: true,
+            onChanged: _alEscribir,
             textCapitalization: TextCapitalization.words,
+            style: _texto(16),
+            // En la web de un celular, Flutter suelta el teclado al apoyar el
+            // dedo afuera y eso se comía el toque en un nombre. Se suelta al
+            // levantarlo (como en `PanelPuerta`).
+            onTapOutside: kIsWeb ? (_) {} : null,
+            onTapUpOutside: kIsWeb ? (_) => _focoBuscador.unfocus() : null,
             decoration: InputDecoration(
-              hintText: 'ESCRIBÍ TU NOMBRE...',
-              hintStyle: GoogleFonts.outfit(color: Colors.black26, fontSize: 14),
-              prefixIcon: Icon(Icons.search_rounded, color: _gold, size: 22),
-              suffixIcon: _query.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.black26, size: 20),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        _onSearch('');
-                      },
+              hintText: 'Escribí tu nombre',
+              hintStyle: _texto(15, color: _tintaSuave),
+              prefixIcon: Icon(Icons.search_rounded, color: _acento),
+              suffixIcon: _buscandoEnLaNube && encontrados != null
+                  ? Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            color: _acento, strokeWidth: 2),
+                      ),
                     )
                   : null,
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.05)),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Color(0x14000000)),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.05)),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Color(0x14000000)),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide(color: _gold, width: 1.5),
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: _acento, width: 1.5),
               ),
             ),
           ),
         ),
-
         const SizedBox(height: 8),
-
-        // ── Lista ───────────────────────────────────────────────────────────
-        Expanded(
-          child: _filtered.isEmpty ? _buildEmpty() : _buildList(),
-        ),
+        debajo,
       ],
     );
   }
 
-  Widget _buildList() {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-      itemCount: _filtered.length,
-      itemBuilder: (_, i) => _InvitadoTile(
-        invitado: _filtered[i],
-        onTap: () => _onSelect(_filtered[i]),
-        acento: _gold,
-      ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 44),
+  Widget _mensaje(String texto, {required IconData icono, Widget? accion}) =>
+      Padding(
+        padding: const EdgeInsets.fromLTRB(36, 32, 36, 0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.person_search_rounded, size: 56, color: Colors.white10),
-            const SizedBox(height: 20),
-            Text(
-              _query.isEmpty
-                  ? 'No hay invitados en la lista aún'
-                  : 'No encontramos a "$_query"',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 15,
-                color: Colors.white30,
-                height: 1.5,
-              ),
-            ),
-            if (_query.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Revisá la ortografía o acercate\nal personal del evento',
+            Icon(icono, size: 40, color: const Color(0x42000000)),
+            const SizedBox(height: 12),
+            Text(texto,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: Colors.white24,
-                  height: 1.5,
-                ),
-              ),
-            ],
+                style: _texto(14, color: _tintaSuave)),
+            if (accion != null) ...[const SizedBox(height: 8), accion],
           ],
         ),
-      ),
-    );
-  }
+      );
 
-  // ── DNI VERIFICATION ───────────────────────────────────────────────────────
-
-  Widget _buildDniVerification() {
-    final inv = _selected!;
-    final bloqueado = _dniIntentos >= _maxIntentos;
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 48),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: _gold.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: _gold.withValues(alpha: 0.3), width: 1.5),
+  Widget _pidiendoElDni() {
+    final e = _elegido!;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
+      child: Column(
+        children: [
+          _encabezado(),
+          const SizedBox(height: 32),
+          Text('¿Sos vos?', style: _texto(14, color: _tintaSuave)),
+          const SizedBox(height: 4),
+          Text(e.nombre,
+              textAlign: TextAlign.center,
+              style: _texto(20, color: _acento, negrita: true)),
+          const SizedBox(height: 24),
+          TextField(
+            key: const ValueKey('dni'),
+            controller: _dni,
+            focusNode: _focoDni,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+            maxLength: 11,
+            textAlign: TextAlign.center,
+            style: _titulo(26).copyWith(letterSpacing: 4),
+            onChanged: (_) {
+              if (_errorDni != null) setState(() => _errorDni = null);
+            },
+            onSubmitted: (_) => _ingresar(),
+            onTapOutside: kIsWeb ? (_) {} : null,
+            onTapUpOutside: kIsWeb ? (_) => _focoDni.unfocus() : null,
+            decoration: InputDecoration(
+              hintText: 'Tu DNI',
+              hintStyle: _texto(18, color: _tintaSuave),
+              counterText: '',
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Color(0x14000000)),
               ),
-              child: Icon(Icons.badge_rounded, color: _gold, size: 52),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'VERIFICACIÓN ELITE',
-              style: GoogleFonts.oswald(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: Colors.black87,
-                letterSpacing: 3,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: _errorDni != null
+                      ? Colors.redAccent
+                      : const Color(0x14000000),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: _errorDni != null ? Colors.redAccent : _acento,
+                  width: 2,
+                ),
               ),
             ),
+          ),
+          if (_errorDni != null) ...[
             const SizedBox(height: 10),
-            Text(
-              inv.nombreCompleto.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: GoogleFonts.oswald(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: _gold,
-                letterSpacing: 1,
-              ),
-            ),
-            const SizedBox(height: 32),
-            if (!bloqueado) ...[
-              TextField(
-                controller: _dniCtrl,
-                focusNode: _dniFocusNode,
-                keyboardType: TextInputType.number,
-                maxLength: 8,
-                style: GoogleFonts.oswald(
-                  fontSize: 34,
-                  color: Colors.black87,
-                  letterSpacing: 8,
-                  fontWeight: FontWeight.w900,
-                ),
+            Text(_errorDni!,
                 textAlign: TextAlign.center,
-                onSubmitted: (_) => _onVerifyDni(),
-                decoration: InputDecoration(
-                  hintText: '••••••••',
-                  hintStyle: GoogleFonts.oswald(
-                    fontSize: 34,
-                    color: Colors.black12,
-                    letterSpacing: 8,
-                  ),
-                  counterText: '',
-                  labelText: 'DNI PARA ACCESO',
-                  labelStyle: GoogleFonts.oswald(
-                    fontSize: 10,
-                    color: Colors.black26,
-                    letterSpacing: 2,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.05)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(
-                      color: _dniError.isNotEmpty ? Colors.redAccent.withValues(alpha: 0.5) : Colors.black.withValues(alpha: 0.05),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(
-                      color: _dniError.isNotEmpty ? Colors.redAccent : _gold,
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-              if (_dniError.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _dniError,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    fontSize: 13,
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 28),
-              _GoldButton(
-                label: 'INGRESAR',
-                icon: Icons.login_rounded,
-                onTap: _onVerifyDni,
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(Icons.block_rounded, color: Colors.redAccent, size: 44),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Acceso bloqueado',
-                      style: GoogleFonts.oswald(
-                        fontSize: 22,
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Demasiados intentos fallidos.\nConsultá al personal del evento.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        color: Colors.white54,
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            TextButton.icon(
-              onPressed: _onCancelDni,
-              icon: const Icon(Icons.arrow_back_rounded, size: 16, color: Colors.white30),
-              label: Text(
-                'No soy yo, buscar de nuevo',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  color: Colors.white30,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
+                style: _texto(13, color: const Color(0xFFC62828), negrita: true)),
           ],
-        ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              key: const ValueKey('ingresar'),
+              onPressed: _verificando ? null : _ingresar,
+              style: FilledButton.styleFrom(
+                backgroundColor: _acento,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+              child: _verificando
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.black, strokeWidth: 2),
+                    )
+                  : Text('INGRESAR', style: _titulo(16, color: Colors.black)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _verificando ? null : () => _volverABuscar(),
+            child: Text('No soy yo, buscar de nuevo',
+                style: _texto(13, color: _tintaSuave)),
+          ),
+        ],
       ),
     );
   }
 
-  // ── WELCOME ────────────────────────────────────────────────────────────────
-
-  Widget _buildWelcome() {
-    final inv = _selected!;
-
-    return FadeTransition(
-      opacity: _welcomeFade,
-      child: SlideTransition(
-        position: _welcomeSlide,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 48),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // ── Foto del evento, o el ícono de siempre ─────────────────
-                Container(
-                  padding: EdgeInsets.all(_cfg.imagenUrl != null ? 0 : 26),
-                  decoration: BoxDecoration(
-                    color: _gold.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _gold.withValues(
-                          alpha: _cfg.imagenUrl != null ? 0.7 : 0.3),
-                      width: _cfg.imagenUrl != null ? 3 : 1.5,
+  Widget _bienvenida() {
+    final e = _elegido!;
+    final foto = _cfg.imagenUrl;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
+      child: Column(
+        children: [
+          Container(
+            width: 132,
+            height: 132,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _acento.withValues(alpha: 0.12),
+              border: Border.all(color: _acento.withValues(alpha: 0.6), width: 2),
+            ),
+            child: foto != null
+                ? ClipOval(
+                    child: Image.network(
+                      foto,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) =>
+                          Icon(Icons.celebration_rounded, color: _acento, size: 56),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _gold.withValues(alpha: 0.2),
-                        blurRadius: 48,
-                        spreadRadius: 8,
-                      ),
-                    ],
-                  ),
-                  child: _cfg.imagenUrl != null
-                      ? ClipOval(
-                          child: Image.network(
-                            _cfg.imagenUrl!,
-                            width: 138,
-                            height: 138,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Padding(
-                              padding: const EdgeInsets.all(26),
-                              child: Icon(Icons.celebration_rounded,
-                                  color: _gold, size: 64),
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.celebration_rounded,
-                          color: _gold,
-                          size: 64,
-                        ),
-                ),
+                  )
+                : Icon(Icons.celebration_rounded, color: _acento, size: 56),
+          ),
+          const SizedBox(height: 24),
+          Text(_cfg.mensajeBienvenida.toUpperCase(),
+              textAlign: TextAlign.center, style: _titulo(34)),
+          const SizedBox(height: 10),
+          Text(e.nombre,
+              textAlign: TextAlign.center,
+              style: _texto(22, color: _acento, negrita: true)),
+          const SizedBox(height: 22),
+          if (_mesa != null && _mesa!.trim().isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0x14000000)),
+              ),
+              child: Column(
+                children: [
+                  Text('TU MESA ES LA',
+                      style: _titulo(11, color: _tintaSuave)
+                          .copyWith(letterSpacing: 2)),
+                  Text(_mesa!, style: _titulo(52)),
+                ],
+              ),
+            )
+          else
+            Text(ListaInvitadosScreen.mesaPorAsignar,
+                textAlign: TextAlign.center,
+                style: _texto(14, color: _tintaSuave)),
+          const SizedBox(height: 24),
+          Text('¡Que disfrutes la fiesta!',
+              style: _texto(14, color: _tintaSuave)),
+          const SizedBox(height: 20),
+          TextButton(
+            onPressed: () => _volverABuscar(limpiar: true),
+            child: Text('Volver', style: _texto(13, color: _tintaSuave)),
+          ),
+        ],
+      ),
+    );
+  }
 
-                const SizedBox(height: 32),
+  Widget _aLaRecepcionVista() {
+    final e = _elegido!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
+      child: Column(
+        children: [
+          _encabezado(),
+          const Spacer(),
+          const Icon(Icons.how_to_reg_rounded, size: 48, color: _tintaSuave),
+          const SizedBox(height: 12),
+          Text(e.nombre,
+              textAlign: TextAlign.center, style: _texto(18, negrita: true)),
+          const SizedBox(height: 6),
+          Text(_porQueALaRecepcion,
+              textAlign: TextAlign.center,
+              style: _texto(15, color: _tintaSuave)),
+          const Spacer(),
+          OutlinedButton(
+            onPressed: () => _volverABuscar(limpiar: true),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _tinta,
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            ),
+            child: Text('Buscar de nuevo', style: _texto(14)),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-                // ── Bienvenida ─────────────────────────────────────────────
-                Text(
-                  _cfg.mensajeBienvenida.toUpperCase(),
-                  style: GoogleFonts.oswald(
-                    fontSize: 44,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.black.withValues(alpha: 0.8),
-                    letterSpacing: 4,
-                  ),
-                ),
+/// Un nombre que encontró la búsqueda.
+class _Encontrado extends StatelessWidget {
+  final EncontradoEnLaPuerta encontrado;
+  final Color acento;
+  final VoidCallback onTap;
 
-                const SizedBox(height: 6),
+  const _Encontrado({
+    required this.encontrado,
+    required this.acento,
+    required this.onTap,
+  });
 
-                Text(
-                  'LOCALIZAMOS TU REGISTRO',
-                  style: GoogleFonts.oswald(
-                    fontSize: 12,
-                    color: Colors.black26,
-                    letterSpacing: 3,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── Nombre ────────────────────────────────────────────────
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  decoration: BoxDecoration(
-                    color: _gold.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: _gold.withValues(alpha: 0.25)),
-                  ),
+  @override
+  Widget build(BuildContext context) {
+    final mesa = encontrado.mesa;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0x14000000)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Sos',
+                        encontrado.nombre,
                         style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          color: Colors.white30,
-                          letterSpacing: 2,
-                          fontWeight: FontWeight.w300,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xDE000000),
                         ),
                       ),
-                      const SizedBox(height: 6),
                       Text(
-                        inv.nombreCompleto,
-                        textAlign: TextAlign.center,
+                        mesa == null || mesa.trim().isEmpty
+                            ? 'Mesa por asignar'
+                            : 'Mesa $mesa',
                         style: GoogleFonts.outfit(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w800,
-                          color: _gold,
-                          letterSpacing: 0.3,
+                          fontSize: 12,
+                          color: const Color(0x8A000000),
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 14),
-
-                // ── Mesa ──────────────────────────────────────────────────
-                if (inv.numeroMesa != null)
+                if (encontrado.ingresado)
                   Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(99),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.table_restaurant_rounded,
-                            color: Colors.white54,
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'TU MESA ES LA',
-                              style: GoogleFonts.oswald(
-                                fontSize: 10,
-                                color: Colors.black26,
-                                letterSpacing: 2,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            Text(
-                              'Nº ${inv.numeroMesa}',
-                              style: GoogleFonts.oswald(
-                                fontSize: 52,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.black.withValues(alpha: 0.8),
-                                letterSpacing: 1,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    child: Text(
+                      'Ya ingresó',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF2E7D32),
+                      ),
                     ),
                   )
                 else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Text(
-                      'Mesa por asignar — consultá al personal',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        color: Colors.white30,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-
-                const SizedBox(height: 28),
-
-                Text(
-                  '¡Que disfrutes el evento!',
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    color: Colors.white24,
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.w300,
-                  ),
-                ),
-
-                const SizedBox(height: 36),
-
-                // ── Volver ────────────────────────────────────────────────
-                TextButton.icon(
-                  onPressed: _onBack,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18, color: Colors.white30),
-                  label: Text(
-                    'No soy yo, buscar de nuevo',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13,
-                      color: Colors.white30,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ),
+                  Icon(Icons.chevron_right_rounded,
+                      color: acento.withValues(alpha: 0.8)),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── WIDGETS AUXILIARES ──────────────────────────────────────────────────────
-
-class _InvitadoTile extends StatelessWidget {
-  final Invitado invitado;
-  final VoidCallback onTap;
-
-  /// Color de acento del evento (dorado por defecto).
-  final Color _gold;
-
-  const _InvitadoTile({
-    required this.invitado,
-    required this.onTap,
-    required Color acento,
-  }) : _gold = acento;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 9),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: _gold.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.person_rounded, color: _gold, size: 18),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    invitado.nombreCompleto,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  if (invitado.numeroMesa != null)
-                    Text(
-                      'Mesa Nº ${invitado.numeroMesa}',
-                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.white30),
-                    )
-                  else
-                    Text(
-                      'Mesa por asignar',
-                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.white24),
-                    ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 20),
-        ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GoldButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GoldButton({required this.label, required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          color: const Color(0xFFD4AF37),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFD4AF37).withValues(alpha: 0.25),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.black, size: 20),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: GoogleFonts.oswald(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-                letterSpacing: 2,
-              ),
-            ),
-          ],
         ),
       ),
     );
