@@ -188,11 +188,28 @@ void main() {
       final i = fuente.indexOf('Future<void> _reconciliar() async {');
       final reconciliar = fuente.substring(i, fuente.indexOf('\n  }\n', i));
       expect(reconciliar, contains('await _lista.leer(evento)'));
+      // La clave: en la ventana, por el puente; en la web, del link.
+      final c = fuente.indexOf('Future<String?> _claveDelEvento(String eventoId) {');
+      final clave = fuente.substring(c, fuente.indexOf('\n  }\n', c));
+      expect(clave,
+          contains('if (widget.windowId != null) return PuenteFichaTotem.pedirClave(eventoId);'));
+      expect(clave,
+          contains("if (kIsWeb) return Future.value(Uri.base.queryParameters['clave']);"));
       expect(fuente,
           contains('static const _cadaCuanto = Duration(seconds: 20);'));
       final p = fuente.indexOf('Future<void> _pausar() async {');
       expect(fuente.substring(p, fuente.indexOf('\n  }\n', p)),
           contains('_reconciliarTimer?.cancel();'));
+    });
+
+    test('la ventana principal le da la clave al tótem por el puente', () {
+      final main = _leer('lib/main.dart');
+      final i = main.indexOf('PuenteFichaTotem.atenderEnLaVentanaPrincipal(');
+      final atender = main.substring(i, main.indexOf('\n      );\n', i));
+      expect(atender,
+          contains('clave: (eventoId) => ref.read(claveTotemProvider).de(eventoId)'));
+      expect(atender,
+          contains('claveMala: (eventoId) => ref.read(claveTotemProvider).olvidar(eventoId)'));
     });
 
     test('?buscar es la página del QR, y /op ya no marca a nadie', () {
@@ -234,6 +251,12 @@ void main() {
       final json = invitado.toJson();
       Invitado.sinDatosPrivados(json);
       expect(json['dni'], '30111222');
+    });
+
+    test('la página del QR avisa con paraAviso', () {
+      final repo = _leer(
+          'lib/features/recepcion/repositories/supabase_invitados_repository.dart');
+      expect(repo, contains("sendBroadcastMessage(event: 'checkin', payload: inv.paraAviso())"));
     });
 
     test('Recepción los saca en el único lugar por donde salen los avisos', () {

@@ -1,7 +1,24 @@
 # Cerrar la lista de la puerta a los anónimos
 
-**Estado:** pendiente — **va en la 6.0.0** (parte 9 del camino de `docs/CONTEXTO_v6.0.0_2026-10-11.md`)
+**Estado:** **programado el 15-oct-2026** (sección 8 de la 6.0.0, sin publicar). Falta correr los dos SQL al
+publicar, en orden: `supabase/migrations/20261016120000_puerta_funciones.sql` antes de instalar, y
+`20261016130000_puerta_cerrar_permisos.sql` último, con todas las PCs y la web en la 6.0.0. Cómo quedó: "La
+sección 8" de `docs/CONTEXTO_v6.0.0_2026-10-11.md`.
 **Postergado el:** 2026-09-25
+
+## Qué se hizo el 15-oct-2026
+
+Lo de "Qué hacer", con estos cambios:
+- **La función del tótem se llama `totem_lista`** y la clave sale de una tabla nueva, `claves_totem`, que pide con
+  usuario la ventana principal (`totem_clave`) y le pasa al tótem por el puente. El tótem por el navegador la lleva
+  en el link, que se copia de Personalizar tótem.
+- **El tótem relee cada 20 s** (no cada minuto): sin el stream de la tabla, lo que no avisa el canal llega así.
+- **`/op` se apagó** (no hizo falta preguntar: ya no andaba y ningún evento tenía PIN).
+- **`?buscar` es la misma página que `/lista`.**
+- Apareció y se arregló: el aviso de cada ingreso al tótem llevaba el DNI.
+- Queda abierto el canal de avisos: [canal-totem-abierto.md](canal-totem-abierto.md).
+
+Lo de abajo es cómo estaba planteado.
 
 ## Qué cambió el 13-oct-2026
 

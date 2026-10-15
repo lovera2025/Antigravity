@@ -20,8 +20,8 @@ la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción
 las secciones 1 a 6** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
 del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada; la 5, una PC completa sin internet; la
 6, el kiosco; **la 7, los celulares de la puerta por una notebook central, hecha el 15-oct y probada con el celular
-del usuario**); siguen la 8 (cerrar la lista de la puerta) y la 9 (verificación y publicar). Lo de este encabezado es
-cómo quedó el 11-oct.
+del usuario**; **la 8, la lista de la puerta cerrada a los anónimos, programada el 15-oct**: su SQL se corre al
+publicar); sigue la 9 (verificación y publicar). Lo de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -379,7 +379,7 @@ vaciarla al deshacer todo) sigue igual.
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | **hecha el 14-oct**, en cuatro pasos: 5a (el tótem abre con la lista), 5b (la foto guardada), 5c (entrar con la sesión vencida) y 5d ("Lista para trabajar sin internet") |
 | 6 | Modo kiosco (parte 7) | **hecha el 14-oct**, en dos pasos: 6a (la ventana del escritorio) y 6b (la web) |
 | 7 | Los puestos de la puerta (partes 8 y 8b, paso 3): **celulares por una notebook central**, con y sin internet | **hecha el 15-oct** (7b la central, 7c el celular, 7d Recepción e instalador, 7e probada con su celular) |
-| 8 | Cerrar la lista de la puerta (parte 9) | falta |
+| 8 | Cerrar la lista de la puerta (parte 9) | **programada el 15-oct** (8b el SQL, probado en la nube en una transacción que se deshizo; 8c el tótem; 8d la página del QR, `?buscar` y `/op`). Los dos SQL se corren al publicar |
 | 9 | Verificación, instalador, la web y publicar (partes 10 y 11) | falta |
 
 La nube: las dos columnas de `totem_config` (`estilo` y `mostrar_musica`) quedaron en un solo SQL en la sección 2
@@ -1207,9 +1207,94 @@ siguen por la web, `/op`, que se cierra en la 8); una segunda tele (por ahora el
 había llegado a hacer nada); cortar una prueba larga de Flutter deja el `flutter_tester` escuchando en el puerto, y
 hay que cerrarlo a mano (`Get-NetTCPConnection -LocalPort 8799`).
 
+### La sección 8: la lista de la puerta cerrada a los anónimos
+
+15-oct, en un chat que empezó con "donde quedamos?". Plan aprobado:
+`C:\Users\lover\.claude\plans\donde-quedamos-cryptic-goblet.md`. Pidió que se lo resumiera antes de aprobarlo; vio la
+maqueta (la página del QR para tocar, la línea de Personalizar, Mi Empresa y `/op`) y dijo "la maqueta va así".
+Pasos: **8b** (`da28f57`, el SQL), **8c** (`e0772cd`, el tótem) y **8d** (`5df7a2b`, la página del QR, `?buscar` y
+`/op`). **Programado y subido; los SQL sin correr: van al publicar.**
+
+**Cómo estaba (mirado en la nube el 15-oct, solo lectura):** `invitados` tenía dos permisos para anónimos
+(`lectura_publica_invitados` y `actualizacion_publica_invitados`, los dos `true`): con la clave pública de la web
+**cualquiera leía y cambiaba la lista de todos los eventos, DNI incluido**. `accesos` dejaba anotar a cualquiera.
+`/op` ya no andaba (la nube no le deja leer `eventos` a un anónimo) y ningún evento tenía PIN.
+
+**Apareció leyendo el código, no estaba anotado:** el aviso de cada ingreso que va al tótem por el canal
+`totem_<evento>` **llevaba el DNI**. Quien supiera el número del evento (está en el QR de los particulares) podía
+escuchar ese canal y ver los DNI de los que entraban.
+
+**Qué cambió para el usuario:**
+- **Recepción, los celulares y el tótem de la notebook: igual**, con y sin internet.
+- **La página del QR** (el celular del invitado de un particular): arranca vacía, "Escribí tu nombre", y desde 3 letras
+  muestra hasta 10 con su mesa. Con DNI cargado lo pide y **lo compara la nube**; dice cuántos intentos quedan y al
+  tercero manda a la recepción. **Sin DNI cargado no entra: "Acercate a la recepción y te anotan ahí"** (antes entraba
+  sin que le pidieran nada). El que ya entró ve su mesa sin que le pidan nada. **En un masivo no aparece nadie.** De
+  paso: los nombres salían en blanco sobre el fondo claro y casi no se leían.
+- **`?buscar`** es la misma página.
+- **`/op`** dice "Esta página ya no se usa" y que el QR de CELULARES está en la PC de la recepción. En Mi Empresa →
+  OPERADORES, el bloque del PIN y el link de `/op` pasó a ser una línea: "Los celulares de la puerta se suman desde
+  Recepción → CELULARES". La columna `pin_operador` de `eventos` no se tocó.
+- **Personalizar tótem**, al pie: "En otra pantalla, por el navegador", con COPIAR LINK. El tótem por el navegador
+  (`?totem`) ahora necesita la clave del tótem en el link; antes ese link no se ofrecía en ningún lado. Sin la clave,
+  la barra del operador lo dice y queda a la vista.
+- **El aviso de cada ingreso al tótem viaja sin DNI** (de Recepción y de la página del QR).
+
+**Cómo se arma:**
+- **El SQL, en dos archivos** (sección "Lo que falta para publicar"):
+  - `supabase/migrations/20261016120000_puerta_funciones.sql`, **solo agrega**: la tabla `claves_totem` (una clave al
+    azar por evento, sin permisos: solo la usan las funciones; no es de la base de las PCs) y las funciones
+    `totem_clave` (solo con usuario: la crea si no hay), `totem_lista` (con la clave; sin DNI ni intentos; **con una
+    clave mala da error, nunca una lista vacía**), `puerta_buscar` (desde 3 letras, hasta 10; en un masivo, nadie) y
+    `puerta_checkin` (compara el DNI solo por sus números, cuenta los intentos, marca y anota en `accesos` con el DNI
+    tapado). `totem_lista` y `puerta_buscar` devuelven un solo JSON: no las corta el tope de 1000 filas.
+  - `supabase/migrations/20261016130000_puerta_cerrar_permisos.sql`: saca los tres permisos, cada uno con su
+    `ROLLBACK` arriba. **Va último.**
+- **El tótem** (`totem_display.dart`) ya no escucha ni lee la tabla: con los permisos cerrados, a un anónimo Realtime
+  no le manda nada y una lectura le da **la lista vacía sin error**, que sacaría a todos de la pantalla. Lee
+  `totem_lista` al abrir y cada 20 s (`ListaDelTotem`, en `totem/services/lista_del_totem.dart`; si no puede, tira) y
+  se entera al instante por el canal, como antes. **Sin internet o sin clave, igual que en la sección 5**: pide a la
+  PC quién ya entró.
+- **La clave** (`ClaveTotem`, `totem/services/clave_totem.dart`): la pide la ventana principal, que tiene usuario
+  (`totem_clave`), y queda guardada en la PC. La ventana del tótem se la pide por el puente (`clave_totem`, y
+  `clave_totem_mala` si la nube dijo que no es); la web la lee del link (`&clave=`); la ruta `/totem_display` la pide
+  ella misma. El link sale de `linkDelTotemWeb` y lo muestra `LinkTotemNavegador`.
+- **La página del QR** (`lista_invitados_screen.dart`) va por `SupabaseInvitadosRepository` (`buscar`,
+  `ingresarConDni`), que llama a las funciones y, si entró, avisa al tótem con `Invitado.paraAviso()`.
+- **El aviso sin DNI:** `InvitadosRepository._emitir` lo saca de todo lo que manda (`Invitado.sinDatosPrivados`).
+- Se borraron `op_checkin_screen.dart`, `totem_checkin_screen.dart` (el cast `as dynamic`), `supabase_service_provider.dart`
+  y `acceso_log.dart`; `SupabaseService` quedó en el cliente solo.
+
+**Cómo se comprobó:**
+- **El SQL en la nube, dentro de una transacción que se deshizo sola** (con su OK): las funciones, un evento y cuatro
+  invitados inventados y los permisos cerrados. Como anónimo: 0 filas de `invitados`, ningún cambio, `accesos` y la
+  clave rechazados; `totem_lista` con la clave, 3 filas sin DNI, y con una clave mala o de otro evento, error;
+  "go" no busca, "lau gomez" y "GÓM" encuentran, el masivo no muestra a nadie; sin DNI "no_dni", masivo "masivo",
+  con "30.111.222" entra, a la segunda "ya ingresó", tres DNI malos bloquean y después ni el bueno entra; `accesos`
+  con el DNI tapado (`***222`). **Antes y después: 643 contratos, 4.084 pagos, 27 notas, 10 invitados, 0 accesos, 30
+  eventos, sin `claves_totem` ni funciones y las 10 políticas de siempre.**
+- **Tests:** `puerta_cerrada_test.dart` (el SQL contra lo que llama la app, que nada sin usuario vuelva a leer la
+  tabla, el aviso sin DNI), `pagina_del_qr_test.dart` (la página entera con una nube de mentira que hace lo mismo que
+  el SQL), `lista_del_totem_test.dart`, `clave_totem_test.dart`, `link_totem_navegador_test.dart`, el puente y
+  Personalizar. Así apareció un error: REINTENTAR no borraba el aviso de "No se pudo buscar".
+- **2.443 tests** (eran 2.383); `flutter analyze` en 312, como antes; `flutter build windows` y `web` bien.
+- **Roturas a propósito: 24, todas vistas** (el SQL, el tótem leyendo la tabla, la clave, el aviso con DNI, la
+  página del QR, el puente, Personalizar).
+- Muestras: `build/muestras_6.0.0/puerta_cerrada/PaginaQR_1..4.png` (`tool/pagina_qr_muestra_test.dart`). Al
+  mirarlas se arreglaron dos detalles: "Tu DNI" salía espaciado, y el ícono de "Acercate a la recepción" era una
+  persona con tilde, que parecía decir "ya entraste".
+
+**Queda afuera:**
+- **El canal de avisos del tótem sigue abierto:** con el número del evento se puede hacer aparecer un saludo falso
+  en la pantalla. Es solo pantalla, no toca datos: `docs/pendientes/canal-totem-abierto.md`.
+- **Tres intentos malos bloquean al invitado** (como antes): alguien con el QR podría bloquear a otro a propósito.
+  Lo anotan en la recepción, que no mira los intentos.
+- Probar la página del QR y el tótem por el navegador contra la nube de verdad: recién con el SQL corrido (el
+  ensayo).
+
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, la sección 8 del orden del 14-oct.
+**No se publica sin su "publicamos".** Antes, la sección 9 del orden del 14-oct (la verificación).
 **El instalador se arma con `installer\build_installer.ps1`**, que ahora también arma la página del celular: sin
 ella el instalador no compila (y la central no tendría qué darle al celular). Después:
 
@@ -1219,9 +1304,11 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
      correr cuando él diga;
    - las dos columnas de `totem_config` (`supabase/migrations/20261014120000_totem_config_estilo_y_musica.sql`):
      **ya corrido el 14-oct**; queda nombrado para saber que no hay que repetirlo (correrlo de nuevo es inocuo);
-   - las funciones de la puerta (sección 8).
-   Antes y después de cada uno, los conteos: el 11-oct daban **643 contratos, 3.963 pagos, 26 notas, 7 invitados y
-   30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
+   - las funciones de la puerta (sección 8, `supabase/migrations/20261016120000_puerta_funciones.sql`): solo agrega
+     una tabla y cinco funciones. **Sin él, el tótem de la 6.0.0 no lee la nube** (sigue con lo de la PC) y la página
+     del QR no encuentra a nadie. Ya se probó en la nube dentro de una transacción que se deshizo.
+   Antes y después de cada uno, los conteos: el 15-oct daban **643 contratos, 4.084 pagos, 27 notas, 10 invitados,
+   0 accesos y 30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
 2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
    (`tool/verificar_migracion_v73_test.dart`): el 11-oct dio perfecto, pero desde entonces hubo cobros.
 3. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
@@ -1230,8 +1317,10 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
 5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
    importa ningún Excel hasta que todas tengan la 6.0.0.**
 6. **Publicar la web**, con su OK.
-7. **Cerrar los permisos de la lista de la puerta**, último: si se cierra antes, el tótem de una PC con la versión
-   vieja queda en blanco.
+7. **Cerrar los permisos de la lista de la puerta**, último, con su OK
+   (`supabase/migrations/20261016130000_puerta_cerrar_permisos.sql`): recién con **todas** las PCs en la 6.0.0 y la
+   web nueva publicada. Si se cierra antes, el tótem de una PC con la versión vieja y la página del QR vieja quedan
+   sin nadie en la lista. Después, la prueba como anónimo del final del archivo.
 8. **El ensayo:** armar el plano, sortear una institución, mirar en otra PC que está lo mismo, abrir Recepción y el
    tótem, marcar ingresos, y al final SORTEO ▾ → Deshacer sorteo → Todo. Tiene que quedar sin mesas y con la lista
    vacía, en las PCs y en la nube. **Y sin internet** (sección 5): con Recepción diciendo "Lista para trabajar sin
@@ -1243,7 +1332,10 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
    HDMI y conectada a ese wifi, Recepción → CELULARES; dos o tres celulares escanean el QR y marcan; uno corta el wifi,
    marca y vuelve; dos marcan a la misma persona; reiniciar la notebook en medio y ver que los celulares vuelven
    solos. Al final, con internet, la nube igual a la notebook. Con la versión instalada (con la regla del
-   cortafuegos), Windows no tiene que preguntar nada.
+   cortafuegos), Windows no tiene que preguntar nada. **Y la puerta cerrada** (sección 8, con los permisos ya
+   cerrados): el tótem de la PC muestra la lista y saluda; en un particular de prueba, escanear el QR, buscar con 3
+   letras, entrar con el DNI (y ver que sin DNI manda a la recepción); copiar el link de Personalizar tótem y abrirlo
+   en otro navegador: muestra la lista y saluda.
 9. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
@@ -1289,11 +1381,14 @@ camino de las secciones está en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md; lo
 hecho en cada una, en el CONTEXTO (la sección 5 no tuvo archivo de plan; la 6
 está en C:\Users\lover\.claude\plans\quizas-seguimos-por-este-soft-sloth.md y
-la 7 en C:\Users\lover\.claude\plans\donde-nos-quedamos-snoopy-salamander.md).
+la 7 en C:\Users\lover\.claude\plans\donde-nos-quedamos-snoopy-salamander.md
+y la 8 en C:\Users\lover\.claude\plans\donde-quedamos-cryptic-goblet.md).
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
 corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no (lo
-confirmé mirando la nube el 14-oct: esas cinco tablas no existen). Van antes
-de instalar, con mi OK. Va todo en una sola versión, por partes. El objetivo
+confirmé mirando la nube el 14-oct: esas cinco tablas no existen), ni los dos
+de la sección 8 (las funciones de la puerta, antes de instalar; cerrar los
+permisos, último, con todas las PCs y la web ya en la 6.0.0). Van con mi OK.
+Va todo en una sola versión, por partes. El objetivo
 de lo que falta: que Recepción y el tótem distingan un evento particular de
 uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
 las secciones 1 (Recepción distingue particular y masivo), 2 (el tótem
@@ -1307,9 +1402,11 @@ tótem en modo kiosco, en la ventana y en la web) y 7 (los celulares de la
 puerta: una notebook del salón hace de central, CELULARES en Recepción muestra
 un QR, el celular abre la lista en el navegador por el wifi del router, sin
 internet, y lo marcado sin conexión se manda al volver; la probé con mi
-celular el 15-oct y anduvo todo). Seguí por la sección 8 (cerrar la lista de
-la puerta: docs/pendientes/rls-invitados.md) y después la 9 (verificación y
-publicar).
+celular el 15-oct y anduvo todo) y 8 (la lista de la puerta cerrada a los
+anónimos: el tótem lee por una función con su clave, la página del QR busca
+desde 3 letras y el DNI lo compara la nube, /op ya no se usa; programada el
+15-oct, el SQL sin correr). Seguí por la sección 9 (verificación y publicar,
+"Lo que falta para publicar").
 ANTES DE PROGRAMAR cada sección, mostrame el plan corto y esperá mi OK; si
 trae algo nuevo a la vista, una maqueta. Avisame al terminar cada paso con
 cómo quedó, un commit y un push. Cada cambio lo apruebo yo.

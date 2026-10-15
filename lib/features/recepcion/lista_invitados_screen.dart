@@ -468,7 +468,8 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen> {
             onTapUpOutside: kIsWeb ? (_) => _focoDni.unfocus() : null,
             decoration: InputDecoration(
               hintText: 'Tu DNI',
-              hintStyle: _texto(18, color: _tintaSuave),
+              hintStyle:
+                  _texto(18, color: _tintaSuave).copyWith(letterSpacing: 0.5),
               counterText: '',
               filled: true,
               fillColor: Colors.white,
@@ -612,7 +613,7 @@ class _ListaInvitadosScreenState extends ConsumerState<ListaInvitadosScreen> {
         children: [
           _encabezado(),
           const Spacer(),
-          const Icon(Icons.how_to_reg_rounded, size: 48, color: _tintaSuave),
+          const Icon(Icons.support_agent_rounded, size: 48, color: _tintaSuave),
           const SizedBox(height: 12),
           Text(e.nombre,
               textAlign: TextAlign.center, style: _texto(18, negrita: true)),

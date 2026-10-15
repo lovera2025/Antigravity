@@ -38,7 +38,7 @@ Cómo le pega a cada parte que falta:
 | 6 · Recepción | Ya lee de la base de la PC. Lo nuevo (búsqueda, filtros, "Ingresar" por fila) también. |
 | 7 · Kiosco | Es de la ventana: no usa la nube. |
 | 8 · Tótems vinculados | "Transmitir en:" y la lista de tótems prendidos hoy están pensados por la nube. Se diseñan junto con este pendiente: el vínculo entre un puesto y un tótem tiene que andar por la nube **y** por la red del salón. |
-| 9 · Cerrar la puerta | El check-in en el servidor es para la web. El escritorio sigue marcando en su base y subiendo después: cerrar los permisos no puede dejar a una PC sin poder marcar cuando no hay internet. |
+| 9 · Cerrar la puerta | El check-in en el servidor es para la web. El escritorio sigue marcando en su base y subiendo después: cerrar los permisos no puede dejar a una PC sin poder marcar cuando no hay internet. **Programado el 15-oct (sección 8):** Recepción y la central no cambiaron; el tótem lee la nube por `totem_lista` con su clave, y sin internet o sin clave sigue con lo de la PC, como en la sección 5. La clave queda guardada en la PC. |
 
 ## Cómo está hoy
 

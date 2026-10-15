@@ -79,9 +79,14 @@ priorizó el sorteo de noviembre. El contexto está en
   el 24-sep y otra vez el 13-oct; trae **la regla que vale para todas las
   partes que faltan**.
 - [Cerrar la lista de la puerta a los anónimos](rls-invitados.md) — hoy
-  cualquiera con la clave pública lee y cambia `invitados`, DNI incluido. Se
-  cierra con el tótem, porque el tótem lee como anónimo. **Hasta entonces no se
-  pasa la lista de la puerta de ninguna fiesta.**
+  cualquiera con la clave pública lee y cambia `invitados`, DNI incluido.
+  **Programado el 15-oct** (sección 8): el tótem lee por una función con su
+  clave, la página del QR busca desde 3 letras y el DNI lo compara la nube.
+  Falta correr los dos SQL al publicar: las funciones antes de instalar, y
+  cerrar los permisos último.
+- [El canal de avisos del tótem, abierto](canal-totem-abierto.md) — con el
+  número del evento se puede hacer aparecer un saludo falso en la pantalla.
+  Solo pantalla, no datos; quedó afuera de la sección 8.
 
 ## Hechos
 

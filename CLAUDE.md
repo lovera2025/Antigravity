@@ -38,9 +38,9 @@ la versión 73) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
-- Web: `SupabaseInvitadosRepository` (Supabase directo).
-- No comparten interfaz: en `totem_checkin_screen.dart` se elige por `kIsWeb`
-  con un cast `as dynamic`.
+- Web sin usuario (la página del QR): `SupabaseInvitadosRepository`, que **no
+  lee la tabla**: busca y anota por funciones de la nube (ver "La lista de la
+  puerta, cerrada a los anónimos", abajo).
 
 **Rutas por URL en web** (`lib/main.dart:80-130`): se detectan con `contains()`
 sobre `Uri.base`, no con path parsing.
@@ -48,10 +48,10 @@ sobre `Uri.base`, no con path parsing.
 | URL | Pantalla | Login |
 |---|---|---|
 | `?cotizar` | Catálogo público | No |
-| `?totem&evento=<id>` | Tótem | **No** (deliberado: se proyecta desde una smart TV) |
-| `?lista&evento=<id>` | Lo que ve el invitado al escanear el QR | No |
-| `?buscar&evento=<id>` | Self check-in por DNI | No |
-| `/op?evento=<id>` | Operador con PIN | No |
+| `?totem&evento=<id>&clave=<k>` | Tótem (el link, con la clave, sale de Personalizar tótem) | **No** (deliberado: se proyecta desde una smart TV) |
+| `/lista?evento=<id>` | Lo que ve el invitado al escanear el QR: busca su nombre y entra con su DNI | No |
+| `?buscar&evento=<id>` | La misma página que `/lista` | No |
+| `/op?evento=<id>` | Ya no se usa: dice dónde se suman los celulares | No |
 
 **Ventana secundaria de escritorio.** El tótem nativo corre en otra ventana vía
 `desktop_multi_window` (`KioskLauncher`). Esa ventana **no** inicializa el
@@ -179,11 +179,24 @@ las pone de acuerdo sola:
 - Un alumno eliminado se lleva sus filas en ese momento (`trasEliminar`): después ya no hay de dónde sacar sus ids.
 - MÁS → "Pasar a la lista de la puerta" quedó para ponerla al día a mano. `kListaPuertaHabilitada` vuelve a
   trabarlo todo en un solo lugar.
-- **Falta cerrar la RLS de `invitados`**, y va en la misma 6.0.0
-  ([docs/pendientes/rls-invitados.md](docs/pendientes/rls-invitados.md)): hoy cualquiera con la clave pública lee y
-  cambia esa tabla. Además, **las pantallas `/lista` y `?buscar` marcan el ingreso sin pedir nada a quien no tiene
-  DNI, y los alumnos no lo tienen**: con el QR a la vista, cualquiera puede marcar a otro. Se cierra con el tótem
-  nuevo (sin QR en masivos) y con el check-in en el servidor.
+
+**La lista de la puerta, cerrada a los anónimos** (v6.0.0, sección 8; detalle en "La sección 8" del CONTEXTO).
+Quien no tiene usuario (la ventana del tótem, el tótem por el navegador, la página del QR y `?buscar`) **no lee ni
+cambia `invitados` ni anota en `accesos`**: va por las funciones de
+`supabase/migrations/20261016120000_puerta_funciones.sql`.
+- **El tótem** lee `totem_lista` con la clave del tótem (`ListaDelTotem`, cada 20 s, y al instante por el canal). La
+  clave (`ClaveTotem`, tabla `claves_totem`) la pide con usuario la ventana principal y se la da al tótem por el
+  puente (`clave_totem`); en la web viene en el link. **Sin internet o sin clave, sigue con lo de la PC.**
+- **La página del QR** busca desde 3 letras (`puerta_buscar`, en un masivo nadie) y el DNI lo compara la nube
+  (`puerta_checkin`). Quien no tiene DNI cargado se anota en la recepción.
+- **Con los permisos cerrados, un anónimo que lee la tabla recibe una lista vacía, sin error**, y el tótem sacaría a
+  todos. Nada nuevo sin usuario puede leer `invitados` ni escuchar su Realtime: `test/puerta_cerrada_test.dart`
+  lee esos archivos y compara el SQL con lo que llama la app.
+- **Lo que va por el canal `totem_<evento>` sale sin DNI ni intentos** (`Invitado.sinDatosPrivados`, en
+  `InvitadosRepository._emitir`; `paraAviso` en la página del QR). El canal sigue abierto a quien sepa el número
+  del evento: [docs/pendientes/canal-totem-abierto.md](docs/pendientes/canal-totem-abierto.md).
+- **Los dos SQL:** las funciones, antes de instalar (solo agregan); `20261016130000_puerta_cerrar_permisos.sql`,
+  **último**, con todas las PCs y la web en la 6.0.0: si no, el tótem viejo queda sin nadie en la lista.
 
 **Recepción distingue un evento particular de uno masivo** (v6.0.0, el objetivo del usuario desde el 14-oct-2026; se
 dice "evento masivo", no "fiesta de alumnos"). Lo decide `PuertaDelEvento` (`recepcion/services/puerta_del_evento.dart`);
@@ -369,14 +382,15 @@ pregunta si la ventana sigue abierta: solo la olvida si ya no existe. Olvidarla 
 avisarle al tótem toda la noche, y reabrirlo creaba una segunda ventana. Le habla a las ventanas por
 `VentanasTotem`, que los tests reemplazan (`test/kiosk_launcher_test.dart`).
 
-Las pantallas web y el tótem leen hasta 1000 invitados por evento (el "Max rows" de PostgREST). Ver
-`docs/pendientes/invitados-mas-de-1000-en-web.md`.
+La Recepción de la web lee hasta 1000 invitados por evento (el "Max rows" de PostgREST). Ver
+`docs/pendientes/invitados-mas-de-1000-en-web.md`. El tótem y la página del QR ya no: sus funciones devuelven un solo
+JSON.
 
 Hay dos tótems, y **lo visual se hace una sola vez**: los dos dibujan `EscenaTotem` con el mismo
 `ReproductorBienvenidas` y `ContenidoBienvenida`.
 
-- `totem_display.dart` — la pantalla del salón. Va por Supabase directo y la ficha le llega por el puente. Es la
-  que se usa en la ventana secundaria, en `?totem` y en la ruta `/totem_display`.
+- `totem_display.dart` — la pantalla del salón. Lee la nube por `totem_lista` con su clave y la ficha le llega por
+  el puente. Es la que se usa en la ventana secundaria, en `?totem` y en la ruta `/totem_display`.
 - `TotemLocal` (`totem/widgets/totem_local.dart`, sección 3c) — el tótem de esta PC. Lo usan la vista de Recepción
   (`VistaDelTotem`) y la pantalla del asesor. Lee lo mismo que la lista de Recepción, de la base de la PC
   (`invitadosStreamProvider` y `puertaDelEventoProvider` → `FichaTotem.desdePuerta`), así que anda sin internet y
@@ -389,7 +403,7 @@ Hay dos tótems, y **lo visual se hace una sola vez**: los dos dibujan `EscenaTo
 El tótem **muestra** un QR, no lo lee: no hay dependencia de cámara. El QR apunta
 a `/lista?evento=<id>`, que abre el invitado en su celular. **Desde la 6.0.0, solo en
 los particulares** (`hayQrEnElTotem`; en `TotemLocal`, según el tipo del evento). Al confirmar el
-check-in, esa pantalla emite un broadcast por el canal `totem_<eventoId>`, que es
+check-in, esa pantalla emite un broadcast (sin DNI) por el canal `totem_<eventoId>`, que es
 el bus de baja latencia que evita esperar la replicación de Postgres.
 
 Identidad visual por evento en la tabla `totem_config` (foto, título, subtítulo,
