@@ -66,14 +66,17 @@ priorizó el sorteo de noviembre. El contexto está en
   de la 6.0.0), con el canal nativo en el runner de Windows; falta verlo en la
   tele, en el ensayo.
 - [Tótems vinculados a recepcionistas](totems-vinculados.md) — cada tótem da la
-  bienvenida a los de su puerta, para que dos recepciones no se pisen con mucha
-  gente.
+  bienvenida a los de su puerta. **Lo de "que no se pisen" quedó resuelto el
+  15-oct** con la notebook central (sección 7); varios tótems, sin pedir de
+  nuevo.
 - [Recepción y el tótem sin internet (modo local)](modo-local-sin-internet.md) —
   con los datos ya bajados tienen que seguir andando sin internet. Una PC
   completa quedó hecha el 14-oct (el tótem abre con la lista, la foto guardada,
-  entrar con la sesión vencida y "Lista para trabajar sin internet"); falta que
-  dos puestos se vean por la red del salón. Pedido el 24-sep y otra vez el
-  13-oct; trae **la regla que vale para todas las partes que faltan**.
+  entrar con la sesión vencida y "Lista para trabajar sin internet"); **los
+  puestos, programados el 15-oct**: celulares por una notebook central en el
+  wifi del router (sección 7); falta probarlo con un celular de verdad. Pedido
+  el 24-sep y otra vez el 13-oct; trae **la regla que vale para todas las
+  partes que faltan**.
 - [Cerrar la lista de la puerta a los anónimos](rls-invitados.md) — hoy
   cualquiera con la clave pública lee y cambia `invitados`, DNI incluido. Se
   cierra con el tótem, porque el tótem lee como anónimo. **Hasta entonces no se

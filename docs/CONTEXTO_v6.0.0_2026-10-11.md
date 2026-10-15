@@ -19,7 +19,9 @@ la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
 las secciones 1 a 6** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
 del tótem en Recepción; la 4, el plano con la mesa y el camino en la llegada; la 5, una PC completa sin internet; la
-6, el kiosco); **sigue la 7 (dos puestos en la puerta)**. Lo de este encabezado es cómo quedó el 11-oct.
+6, el kiosco; **la 7, los celulares de la puerta por una notebook central, programada el 15-oct, falta la prueba con
+el celular del usuario**); después siguen la 8 (cerrar la lista de la puerta) y la 9 (verificación y publicar). Lo
+de este encabezado es cómo quedó el 11-oct.
 - `pubspec.yaml` en `6.0.0+57` y el `.iss` en `6.0.0` (`8ca3598`).
 - **El instalador hay que armarlo de nuevo.** El que está en `installer/dist/Setup Junior Eventos v6.0.0.exe` se
   armó antes de lo de las notas (`3b63b55`) y quedó viejo. Se arma con `installer\build_installer.ps1`, unos cinco
@@ -376,7 +378,7 @@ vaciarla al deshacer todo) sigue igual.
 | 4 | El plano con la guía en la llegada | **hecha el 14-oct**, en dos pasos: 4a (la mesa en el plano) y 4b (el camino desde el ingreso) |
 | 5 | Una PC completa sin internet (8b, pasos 1 y 2) | **hecha el 14-oct**, en cuatro pasos: 5a (el tótem abre con la lista), 5b (la foto guardada), 5c (entrar con la sesión vencida) y 5d ("Lista para trabajar sin internet") |
 | 6 | Modo kiosco (parte 7) | **hecha el 14-oct**, en dos pasos: 6a (la ventana del escritorio) y 6b (la web) |
-| 7 | Dos puestos en la puerta (partes 8 y 8b, paso 3) | falta |
+| 7 | Los puestos de la puerta (partes 8 y 8b, paso 3): **celulares por una notebook central**, con y sin internet | **programada el 15-oct** (7b la central, 7c el celular, 7d Recepción e instalador); **falta 7e, la prueba con su celular** |
 | 8 | Cerrar la lista de la puerta (parte 9) | falta |
 | 9 | Verificación, instalador, la web y publicar (partes 10 y 11) | falta |
 
@@ -1101,9 +1103,113 @@ publicar.** Era `docs/pendientes/totem-kiosco.md`.
 - La barra del tótem se esconde a los 5 s y no recibe clics escondida: hay que mover el mouse antes de tocarla.
 - No se apretó Esc con la ventana de Claude adelante: le habría llegado a Claude.
 
+### La sección 7: los celulares de la puerta, por una notebook central
+
+14-oct a la noche (plan) y 15-oct (programa), en un chat que empezó con "donde nos quedamos?". Plan aprobado:
+`C:\Users\lover\.claude\plans\donde-nos-quedamos-snoopy-salamander.md`, con maqueta. Pasos: **7b** (`adc96d0`, la
+central), **7c** (`1be0815`, el celular), **7d** (`70935aa` y `68f4826`, Recepción y el instalador). **Programado y
+subido; sin publicar. Falta la 7e, la prueba con el celular del usuario** (abajo).
+
+**Lo que contestó, y por qué cambió el diseño.** Antes de planear se le preguntó lo que estaba anotado en "Lo que
+sigue esperando del usuario": los puestos **van a ser casi seguro celulares** (más de dos; quizás alguna PC), **llevan
+router propio** aunque sea sin internet ("para que nos conectemos"), y **no sabe dónde va el tótem**. El pendiente
+proponía que las PCs se avisaran entre ellas por la red; con celulares no sirve: el celular usa la web, que se baja
+de internet. Se le propuso y aprobó **una notebook del salón como central**. No lo entendió a la primera ("eso de una
+notebook como central con QR no le entendí"): se le explicó con un dibujo y "cómo sería la noche", y le gustó ("le
+sentí una intuición como que podría funcionar"). Preguntó "¿sin internet se opera igual?": sí, el router no necesita
+internet. Descartada la app de Android (nunca se armó, habría que instalarla en cada celular y cada uno llevaría la
+base entera). En la maqueta eligió **la A: el botón arriba, con cuántos hay**.
+
+**Qué cambió para el usuario:**
+- **En la Recepción de la PC, arriba a la derecha, CELULARES** ("CELULARES · 2" con dos conectados). Abre "Sumar un
+  celular": el QR, la dirección y el código por si el QR no anda ("192.168.0.10:8787 y el código 4821"), la otra
+  dirección si la PC tiene más de una conexión, y quiénes están conectados ("Juli · 41 marcados", "Mati · sin señal
+  hace 3 min"). Sin router lo dice y deja probar de nuevo. "Cambiar el código" pregunta antes y desconecta a todos.
+  Solo en el programa, no en la web.
+- **El celular**, en el wifi del router, escanea el QR y se le abre la misma lista de Recepción en el navegador, sin
+  instalar nada. La primera vez pide un nombre (y el código si entró con la dirección). Arriba el evento y "Conectado
+  a la PC"; se busca, se ingresa y se deshace como en la PC. No se elimina a nadie desde el celular.
+- **Sin conexión con la PC se sigue marcando**: "Sin conexión con la PC · 2 por mandar" y "POR MANDAR" en cada uno.
+  Queda guardado en el celular aunque se cierre el navegador, y al volver se manda solo, en el orden en que se tocó
+  ("Conectado · se mandaron 2"). **Lo que llega más de un minuto tarde se marca sin saludar en el tótem** (la familia
+  ya pasó), igual que después de un corte.
+- **No se pisan**: hay una sola lista, la de la notebook. Si otro celular ya lo había ingresado: "GARCÍA, BRUNO ya
+  ingresó a las 22:41 · Juli". Debajo de ADENTRO va quién lo ingresó, también en la Recepción de la PC.
+- **Si la notebook se reinicia**, al abrir Recepción la central vuelve sola con el mismo código (dura 18 h) y los
+  celulares se reconectan sin volver a escanear.
+- **El tótem** de la notebook saluda a todos los que se marcan desde cualquier celular (por el puente de siempre).
+- **El instalador** arma la página del celular (`installer\build_installer.ps1`), la deja en `{app}\puesto` y crea la
+  regla del cortafuegos de Windows para los puertos 8787 a 8796, en cualquier red (la del router suele quedar como
+  "pública"). Al desinstalar la borra.
+- Sin cambios en la base ni en la nube. Sin SQL.
+
+**Cómo se arma:**
+- **La central** (`lib/features/recepcion/central/`): `CentralPuerta` (`central_puerta.dart`) es un servidor HTTP y
+  WebSocket dentro del programa (`dart:io`), en `/vivo?c=<código>&id=<celular>&p=<nombre>`. Le manda a cada celular
+  la lista (`PuertaDelEvento.toJson`, con `titulo` y `por`, quién marcó) apenas se conecta y en cada cambio. Atiende
+  los pedidos **de a uno**, mirando la base en ese momento (`decidirPedido`, en `pedidos_de_la_puerta.dart`), y los
+  hace por `InvitadosRepository` (`PuertaDeEstaPcConBase`): la cola de subida y el aviso al tótem quedan iguales.
+  También sirve la página del celular sin dejar salir de su carpeta.
+- **Reglas de la central:** un pedido repetido (mismo id) no se hace dos veces y se contesta igual; a quien la lista
+  tenía con fila y la base ya no, no se lo vuelve a crear; quién marcó (`MarcasDeLaNoche`, solo en memoria) **se
+  anota antes de marcar** (la lista nueva sale enseguida y tiene que salir con el nombre) y se deshace si la base
+  falla; cinco códigos mal seguidos frenan un minuto; cambiar el código cierra todas las conexiones.
+- **`CentralDeLaPuerta`** (`central_provider.dart`) la prende para un evento y le pasa la lista y el nombre del evento
+  con **`ref.container.listen`, no `ref.listen`**: Riverpod 3 pausa lo que escucha un provider que nadie mira, y la
+  central tiene que seguir aunque Recepción esté cerrada. `reanudar` la vuelve a prender si hay código de esta noche
+  (`CodigoCentral.vigente`). Lo que toca la red va por providers que las pruebas reemplazan
+  (`escuchaCentralProvider`, `puertoCentralProvider`, `direccionesDeEstaPcProvider`, los del código,
+  `paginaDelCelularProvider`): **las pruebas escuchan solo en esta PC**, así Windows no pregunta por el cortafuegos.
+- **El celular:** `ClienteCentral` (`cliente_central.dart`, con `web_socket_channel`) guarda lo pendiente en el
+  navegador, pone encima de la lista lo tocado y no contestado (`listaConCambios`), late cada 5 s y da la conexión por
+  caída a los 12 s sin noticias. Si la central no hizo nada ("ya ingresó"), vale lo de ella. `PantallaPuesto`
+  (`pantalla_puesto.dart`) es la pantalla; adentro va **`PanelPuerta`, el mismo de Recepción**: el panel marca por
+  `AccionesPuerta` (`providers/acciones_puerta_provider.dart`), que en la PC es la base y en el celular la central.
+- **La página del celular** es otra entrada, `lib/puesto_main.dart` (sin Supabase ni base), armada con
+  `flutter build web -t lib/puesto_main.dart --no-web-resources-cdn`: todo sale de la notebook. Pesa 54 MB en
+  carpeta, el celular baja unos 11 (el programa y el motor de dibujo), una vez.
+- **En la web de un celular, el primer toque después de escribir en la búsqueda no andaba**: Flutter suelta el
+  teclado al apoyar el dedo afuera y eso se comía el toque. El buscador de `PanelPuerta` lo suelta al levantarlo
+  (`onTapUpOutside`, solo en la web). Arregla también la Recepción de la web.
+- `sumar_celular.dart` (el botón y la ventana); `RecepcionUnifiedScreen` llama a `reanudar` al elegir evento.
+
+**Cómo se comprobó:**
+- **2.383 tests** (eran 2.263); `flutter analyze` en 312; `flutter build windows` bien, la página del celular armada,
+  y el instalador compila (38 MB, con la página adentro; se armó en una carpeta aparte y se borró).
+- **La central de verdad con celulares de mentira por la red** (`test/central_puerta_test.dart`), el celular de verdad
+  contra la central (`test/cliente_central_test.dart`: sin conexión, reinicio de la notebook, navegador cerrado,
+  central muda, código cambiado, dos pestañas), la central desde el programa (`central_provider_test.dart`), las
+  pantallas (`pantalla_puesto_test.dart`, `sumar_celular_test.dart`), el "sin saludar" con la base temporal y un
+  tótem de mentira (`ingreso_sin_saludo_test.dart`), y el instalador leído (`instalador_puesto_test.dart`).
+- **Roturas a propósito: 57, todas vistas** (26 de la 7b, 19 de la 7c, 12 de la 7d). Tres de la 7d al principio no
+  las vio nadie: una no rompía nada (la protección estaba dos veces) y dos mostraron pruebas flojas del instalador
+  (el texto también estaba en un comentario); se arreglaron las pruebas.
+- **En un navegador de verdad**, con la central de prueba (`tool/central_prueba_test.dart`, evento inventado, sin
+  base) y la página armada: abre sin pedir nada a internet, entra con el nombre, ingresa, se corta la central y se
+  sigue marcando ("2 por mandar"), vuelve y lo manda solo; dos "celulares" (dos pestañas con distinto origen) y la
+  misma persona sin conexión en los dos: entró una vez y al otro le dijo "ya ingresó a las 07:40 · Juli". Así
+  aparecieron los dos arreglos de arriba (quién marcó y el primer toque).
+- Muestras: `build/muestras_6.0.0/celulares/Celulares_1..6.png` (`tool/celulares_muestra_test.dart`).
+
+**Falta, la 7e: la prueba con su celular.** Con el arnés `tool/central_puerta_prueba.dart`
+(`flutter run -d windows -t tool/central_puerta_prueba.dart`, después de armar la página en `build\puesto`): abre la
+Recepción de verdad con un evento inventado, **sin abrir la base**, y la central escuchando en el wifi de la PC.
+Windows va a preguntar por el cortafuegos la primera vez (el arnés no tiene la regla del instalador): decir que sí.
+El celular, en el wifi de la casa: escanear el QR de CELULARES, ingresar, cortar el wifi del celular, ingresar,
+volverlo a prender, y mirar que llegue, que la vista del tótem salude y que la PC diga quién. Unos 10 minutos.
+
+**Queda afuera** (dicho en el plan): celulares sin ninguna PC en el salón y sin internet (no hay forma; con internet
+siguen por la web, `/op`, que se cierra en la 8); una segunda tele (por ahora el tótem va en la central).
+
+**Tropiezos de la sesión, sin consecuencias:** el chat se cortó por el límite de uso en medio de un `git add` (no
+había llegado a hacer nada); cortar una prueba larga de Flutter deja el `flutter_tester` escuchando en el puerto, y
+hay que cerrarlo a mano (`Get-NetTCPConnection -LocalPort 8799`).
+
 ## Lo que falta para publicar
 
-**No se publica sin su "publicamos".** Antes, las secciones 3 a 8 del orden del 14-oct. Después:
+**No se publica sin su "publicamos".** Antes, la 7e (la prueba con su celular) y la sección 8 del orden del 14-oct.
+**El instalador se arma con `installer\build_installer.ps1`**, que ahora también arma la página del celular: sin
+ella el instalador no compila (y la central no tendría qué darle al celular). Después:
 
 1. **La nube, lo que solo agrega**, con su OK en el momento y sin regla de horario:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
@@ -1131,7 +1237,11 @@ publicar.** Era `docs/pendientes/totem-kiosco.md`.
    lista y la foto), marcar ingresos, y volver a enchufar: la línea tiene que pasar de "N ingresos sin subir" a
    lista, y la nube quedar igual que la PC. **Y el kiosco** (sección 6): arrastrar la ventana del tótem a la tele,
    KIOSCO, y salir con Esc, doble clic, SALIR DEL KIOSCO y la ✕ (estos dos no se pudieron tocar en la prueba);
-   volver a abrirlo.
+   volver a abrirlo. **Y los celulares** (sección 7): el router propio sin internet, la notebook con la tele por
+   HDMI y conectada a ese wifi, Recepción → CELULARES; dos o tres celulares escanean el QR y marcan; uno corta el wifi,
+   marca y vuelve; dos marcan a la misma persona; reiniciar la notebook en medio y ver que los celulares vuelven
+   solos. Al final, con internet, la nube igual a la notebook. Con la versión instalada (con la regla del
+   cortafuegos), Windows no tiene que preguntar nada.
 9. Poner acá el estado en "publicada", con el tag y la fecha, y la memoria al día.
 
 ## Lo que sigue esperando del usuario (no frena publicar)
@@ -1144,6 +1254,11 @@ publicar.** Era `docs/pendientes/totem-kiosco.md`.
 - **Las imágenes de la sección 5** (`build/muestras_6.0.0/sin_internet/SinInternet_1..4.png`): se le mandaron al
   cerrar el chat; todavía no opinó.
 - **Las capturas de la sección 6** (`build/muestras_6.0.0/kiosco/`): se le mandaron al cerrar; todavía no opinó.
+- **La 7e: probar los celulares con su celular** (ver el final de "La sección 7"). Se fue a trabajar el 15-oct a la
+  mañana con la 7d terminada; queda para cuando vuelva, unos 10 minutos. **Las muestras de la sección 7**
+  (`build/muestras_6.0.0/celulares/Celulares_1..6.png`) se le mandaron al cerrar; todavía no opinó.
+- **Dónde va el tótem en un masivo** (dijo "todavía no sé"): la recomendación es la notebook central, con la tele
+  por HDMI. Una segunda tele, aparte, si hace falta.
 - **Si quiere, una prueba real de entrar sin internet, ya, con la 5.0.0 instalada** (no cambia datos): más de una
   hora después de cerrar el programa, sacar internet, abrirlo y ver que entra y que Recepción muestra la lista. Con
   la 5.0.0 entra igual (eso no cambió), pero con un router sin salida a internet tarda unos 12 s en "Verificando
@@ -1152,11 +1267,9 @@ publicar.** Era `docs/pendientes/totem-kiosco.md`.
 - **Si cambiaría algo de las pantallas del recorrido** (`build/muestras_6.0.0/recorrido/Recorrido.html`, 33
   pantallas; abrírselo en Edge). No preguntarle "¿cambiarías algo?" a secas: no lo entendió. Mostrarle primero.
   (Lo de la nota resuelta ya lo contestó: queda con el tilde verde.)
-- **Para la parte 8b (sin internet, con dos puestos):** cuántos puestos va a haber en la puerta y con qué
-  (notebooks, o contaba con celulares: los celulares no entran al modo local), en cuál va enchufado el tótem, y si
-  en el salón hay un router propio. **No preguntarle si lo quiere:** el 13-oct a la noche preguntó si operar sin
-  internet "había quedado", se le dijo que a medias (con una PC sí, con dos no) y lo pidió de nuevo, con todas las
-  letras. Se le recomendó además internet de respaldo (un router 4G o el celular); no lo descartó.
+- ~~Para la parte 8b: cuántos puestos, con qué, dónde va el tótem y si hay router~~: **contestado el 14-oct**
+  (celulares, más de dos; router propio; el tótem, no sabe). Ver "La sección 7". Se le había recomendado además
+  internet de respaldo (un router 4G o el celular); no lo descartó, y con la central no hace falta para la puerta.
 - La página 6 del Canva: la Normal ya tiene **137 mesas cargadas** (116 con lo pagado el 11-oct), y su armado del
   Canva tiene la hoja B provisoria. Mientras tanto está el armado a medida del playón, y las mesas que falten se
   agregan en Acomodar.
@@ -1174,7 +1287,8 @@ docs/CONTEXTO_v6.0.0_2026-10-11.md entero (sobre todo "Qué pasó el 14-oct" y
 camino de las secciones está en
 C:\Users\lover\.claude\plans\donde-nos-quedamos-gentle-hummingbird.md; lo
 hecho en cada una, en el CONTEXTO (la sección 5 no tuvo archivo de plan; la 6
-está en C:\Users\lover\.claude\plans\quizas-seguimos-por-este-soft-sloth.md).
+está en C:\Users\lover\.claude\plans\quizas-seguimos-por-este-soft-sloth.md y
+la 7 en C:\Users\lover\.claude\plans\donde-nos-quedamos-snoopy-salamander.md).
 La 6.0.0 NO está publicada: las PCs siguen con la 5.0.0. En la nube ya se
 corrió el SQL de totem_config (14-oct); los de la Fase 2 y la Fase 3, no (lo
 confirmé mirando la nube el 14-oct: esas cinco tablas no existen). Van antes
@@ -1187,21 +1301,23 @@ Personalizar y la vista del tótem en Recepción con TotemLocal;
 totem_panel.dart ya no existe), 4 (en la llegada de un masivo, el plano con
 la mesa encendida y el camino desde el Ingreso) y 5 (una PC completa sin
 internet: el tótem abre con la lista, la foto guardada en la PC, entrar con
-la sesión vencida y "Lista para trabajar sin internet" en Recepción) y 6 (el
-tótem en modo kiosco, en la ventana y en la web). Seguí por la sección 7: dos
-puestos en la puerta, con y sin internet (el paso 3 de
-docs/pendientes/modo-local-sin-internet.md y docs/pendientes/totems-vinculados.md;
-antes, preguntame cuántos puestos y con qué, dónde va el tótem y si hay router
-propio, que está en "Lo que sigue esperando del usuario"). ANTES DE
-PROGRAMAR, mostrame el plan corto y esperá mi OK; si trae algo nuevo a la
-vista, una maqueta. Después siguen la 8 (cerrar la lista de la puerta) y la
-9 (verificación y publicar). Avisame al terminar cada paso con
+la sesión vencida y "Lista para trabajar sin internet" en Recepción), 6 (el
+tótem en modo kiosco, en la ventana y en la web) y 7 (los celulares de la
+puerta: una notebook del salón hace de central, CELULARES en Recepción muestra
+un QR, el celular abre la lista en el navegador por el wifi del router, sin
+internet, y lo marcado sin conexión se manda al volver). De la 7 falta la 7e:
+probarla con mi celular con el arnés tool/central_puerta_prueba.dart (está
+explicado al final de "La sección 7"); empezá por ahí si te lo pido. Después
+siguen la 8 (cerrar la lista de la puerta) y la 9 (verificación y publicar).
+ANTES DE PROGRAMAR cada sección, mostrame el plan corto y esperá mi OK; si
+trae algo nuevo a la vista, una maqueta. Avisame al terminar cada paso con
 cómo quedó, un commit y un push. Cada cambio lo apruebo yo.
 Todo lo que falta de Recepción y el tótem tiene que andar sin internet con los
 datos ya bajados: la regla y lo que cuida cada parte están en
 docs/pendientes/modo-local-sin-internet.md (es la parte 8b del camino).
 Las muestras con muchas imágenes abrímelas en Edge: el panel de la app no las
-muestra. Una imagen suelta sí la veo en el chat.
+muestra. Una imagen suelta sí la veo en el chat. Si no entiendo algo nuevo,
+explicámelo con un dibujo y "cómo sería la noche".
 Contestame primero lo que te pregunto, en una línea. Lo que tiene poco riesgo y
 vuelta atrás, recomendalo y seguí: no me lo preguntes como si fuera un peligro.
 No corras la app desde el working tree (la v73 migraría la base real). Lo que

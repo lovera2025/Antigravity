@@ -1,7 +1,16 @@
 # Tótems vinculados a recepcionistas, para que no se pisen
 
-**Estado:** pendiente
+**Estado:** lo de "que no se pisen" quedó resuelto de otra forma el 15-oct (sección 7 de la 6.0.0); **lo de varios
+tótems, cada uno con su puerta, sigue pendiente** y sin pedir de nuevo.
 **Postergado el:** 2026-09-24
+
+> **Lo que cambió (15-oct).** El usuario contestó que los puestos van a ser celulares y que llevan router propio. Se
+> hizo una **notebook central** (`CentralPuerta`): los celulares le piden ingresar por el wifi del router, hay una
+> sola lista, y el segundo que ingresa a la misma persona recibe "ya ingresó a las 22:41 · Juli". El tótem va en la
+> central y saluda a todos. "Transmitir en:", la presencia por Supabase y "Solo mi puerta / Todas las puertas" (lo de
+> abajo) **no se hicieron**: con un solo tótem no hacen falta. Si un masivo necesita dos teles, se retoma desde acá,
+> pero por la central (no por la nube: tiene que andar sin internet). Ver "La sección 7" en
+> `docs/CONTEXTO_v6.0.0_2026-10-11.md`.
 
 ## Por qué se postergó
 

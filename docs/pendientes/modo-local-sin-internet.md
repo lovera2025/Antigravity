@@ -1,8 +1,10 @@
 # Recepción y el tótem sin internet (modo local)
 
-**Estado:** a medias. **Va en la 6.0.0** (decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos**
-(14-oct, sección 5: ver "La sección 5" en `docs/CONTEXTO_v6.0.0_2026-10-11.md`). **Falta el 3, dos puestos por la
-red del salón** (sección 7), y lo del 4 hay que decírselo.
+**Estado:** programado, falta probarlo con un celular de verdad. **Va en la 6.0.0** (decisión del usuario del
+2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra forma** (15-oct, sección 7):
+los puestos van a ser celulares, así que **una notebook del salón hace de central** y los celulares le hablan por el
+wifi del router; ver "La sección 7" en `docs/CONTEXTO_v6.0.0_2026-10-11.md`. Falta la 7e (la prueba con su celular)
+y el ensayo con el router de verdad. Lo del 4 se le dijo en el plan.
 **Postergado el:** 2026-09-24
 
 ## Qué pidió el usuario
@@ -75,7 +77,15 @@ Hoy no hay forma de saber, antes de la fiesta, si esa PC tiene todo. En Recepci�
 
 Sale de lo que ya existe: la lista en la base de la PC y la cola de subida.
 
-### 3. Dos puestos por la red del salón
+### 3. Dos puestos por la red del salón — **hecho de otra forma el 15-oct** (sección 7)
+
+**Lo que se hizo:** el usuario contestó que los puestos van a ser casi seguro celulares y que llevan router propio.
+Los celulares no pueden avisarse entre ellos (la web se baja de internet), así que una notebook del salón hace de
+**central** (`CentralPuerta`): sirve la página del celular y marca en su base todo lo que le piden. Hay una sola
+lista, así que no se pisan; lo marcado sin conexión queda en el celular y se manda al volver. El cortafuegos lo deja
+abierto el instalador, y el código de cuatro cifras del QR cumple lo de "un aviso no puede venir de cualquiera".
+
+Lo de abajo es lo que estaba pensado antes, para PCs: queda como registro.
 
 La idea más simple, y la que se recomienda: **los mismos avisos que hoy viajan por la nube, también por la red
 local.** Son tres (`checkin`, `guest_removed`, `list_reset`) y ya tienen un solo lugar de salida (`_emitir`, en
@@ -99,8 +109,9 @@ A decidir en su plan:
 
 ### 4. Lo que queda afuera, y hay que decírselo
 
-- **Celulares y tablets no entran al modo local.** Usan la web, que se sirve desde internet. Sin internet, los
-  puestos son PCs o notebooks con el programa instalado.
+- ~~Celulares y tablets no entran al modo local~~ (así estaba pensado el 13-oct). **Desde la sección 7 sí, por la
+  notebook central**: sin ninguna PC en el salón y sin internet, no. Una segunda notebook entra igual que un celular,
+  por el navegador.
 - **El tótem en una tele por el navegador tampoco.** La tele va como pantalla de una PC, por HDMI.
 - **Cargar o cambiar la lista necesita internet** para que llegue a la otra PC: sortear, importar el Excel, pasar a
   la lista de la puerta. Eso se hace antes, y es lo que el usuario ya da por sentado.
@@ -113,11 +124,13 @@ A decidir en su plan:
 - **Con dos PCs de verdad no hay otra forma que el ensayo:** las dos en el router, se saca el cable de internet, se
   marca en una y se mira la otra y el tótem. Se vuelve a enchufar y se mira que la nube quede igual que las PCs.
 
-## Para preguntarle cuando llegue su turno
+## Lo que se le preguntó (14-oct), y contestó
 
-- Cuántos puestos va a haber en la puerta y con qué (notebooks, o contaba con celulares).
-- En cuál va enchufado el tótem, y si va a haber más de uno.
-- Si en el salón hay un router propio o se usa el wifi del lugar.
+- Cuántos puestos y con qué: "no se sabe, más de dos podría ser; pueden ser unas PCs pero más probable es Android o
+  celulares".
+- Dónde va el tótem: "todavía no sé". Se recomienda la notebook central, con la tele por HDMI.
+- Router: "llevamos router propio por las dudas, aunque seguramente habrá wifi en ese salón; aunque sea sin
+  internet, para que nos conectemos".
 
 **No volver a preguntarle si lo quiere:** ya lo pidió dos veces. Se le recomendó además llevar internet de respaldo
 (un router 4G o el celular compartiendo datos); no lo descartó, pero lo que pidió es que ande sin internet.

@@ -242,8 +242,8 @@ monitor donde está; se sale con Esc, doble clic o SALIR DEL KIOSCO.
 
 **Con los datos ya bajados, Recepción y el tótem tienen que andar sin internet** (pedido del usuario el 24-sep y
 otra vez el 13-oct-2026). Nada nuevo puede necesitar la nube para marcar un ingreso o saludar: lo que el tótem
-muestra llega por el puente o está guardado en la PC. Una PC completa anda (sección 5, 14-oct); dos puestos se ven
-solo por la nube, y eso es la sección 7 (`docs/pendientes/modo-local-sin-internet.md`, con lo que cuida cada parte).
+muestra llega por el puente o está guardado en la PC. Una PC completa anda (sección 5, 14-oct); varios puestos, por
+la notebook central (sección 7, abajo). Lo que cuida cada parte: `docs/pendientes/modo-local-sin-internet.md`.
 - **El tótem que abre sin poder leer la nube le pide a la PC quién ya entró** (`lista_totem`, `ListaDeLaPc`,
   `IngresosTotem.leyoDeLaPc`): en silencio, solo hasta que lea la nube, y lo que esta PC no subió se cuida como lo
   avisado por el puente.
@@ -255,6 +255,32 @@ solo por la nube, y eso es la sección 7 (`docs/pendientes/modo-local-sin-intern
   al día, `PuestaAlDiaPuerta`. Al abrir el evento con internet baja la lista entera (`bajarListaDelEvento`:
   `getByEvento` solo baja si la PC no tiene ninguna fila) y, en un masivo, `SyncEngine.tablasDeLaPuerta`. **Un dato
   nuevo que la puerta necesite sin internet tiene que entrar en esa puesta al día.**
+
+**Los celulares de la puerta van por una notebook central** (v6.0.0, sección 7, 15-oct). Los puestos son celulares y
+llevan router propio: la notebook del salón (la de la tele) sirve la página del celular y marca en su base todo lo
+que le piden por el wifi, con o sin internet. Recepción → CELULARES ("Sumar un celular") muestra el QR.
+- Todo en `lib/features/recepcion/central/`. **`CentralPuerta`** es el servidor (`dart:io`, WebSocket en `/vivo`,
+  puertos 8787 a 8796); **`decidirPedido`** decide cada pedido con la base de ese momento, de a uno; marca por
+  `InvitadosRepository`, así la cola de subida y el aviso al tótem son los de siempre. Un ingreso que llega más de un
+  minuto tarde va con `saludar: false` (`marcarIngreso` e `ingresarDesdeLaPuerta` lo aceptan).
+- **`CentralDeLaPuerta` escucha con `ref.container.listen`, no con `ref.listen`**: Riverpod 3 pausa lo que escucha
+  un provider que nadie mira, y la central se quedaba sin lista al salir de Recepción.
+- **Quién marcó se anota antes de marcar** (`MarcasDeLaNoche`, solo en memoria): la base avisa el cambio y la lista
+  nueva sale enseguida; si se anotaba después, el otro celular no veía el nombre.
+- **El celular** (`ClienteCentral`, `PantallaPuesto`) usa el mismo `PanelPuerta` que la PC: el panel marca por
+  `AccionesPuerta` (`providers/acciones_puerta_provider.dart`), que en la PC es la base y en el celular la central.
+  Lo que no puede hacer el celular (eliminar, la línea "Lista para trabajar sin internet") lo dice `AccionesPuerta`.
+- **La página del celular es otra entrada**: `lib/puesto_main.dart`, armada con `flutter build web -t
+  lib/puesto_main.dart --no-web-resources-cdn` (sin CDN: en el salón no hay internet). La arma
+  `installer\build_installer.ps1` y el instalador la deja en `{app}\puesto`, con la regla del cortafuegos
+  (`test/instalador_puesto_test.dart` lee los dos archivos).
+- **En la web de un celular, `TextField` suelta el teclado al apoyar el dedo afuera y eso se come el toque.** El
+  buscador de `PanelPuerta` lo suelta al levantarlo (`onTapUpOutside`, solo en la web).
+- **Las pruebas escuchan solo en esta PC** (`escuchaCentralProvider` en `loopbackIPv4`): en todas las conexiones,
+  Windows abre el cartel del cortafuegos. Para mirar el celular en un navegador: `tool/central_prueba_test.dart`
+  (central con un evento inventado); para probar con un celular de verdad: `tool/central_puerta_prueba.dart`
+  (`flutter run -d windows`, Recepción en memoria, sin abrir la base). Cortar una prueba larga de Flutter deja el
+  `flutter_tester` con el puerto tomado: cerrarlo a mano.
 
 **A quién saluda el tótem no lo decide la pantalla** (v6.0.0). `IngresosTotem`
 (`totem/services/bienvenidas_totem.dart`) lleva la lista, la cola de bienvenidas y si se viene pudiendo leer la
