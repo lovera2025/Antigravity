@@ -171,6 +171,7 @@ void main() {
     expect(find.textContaining('no está conectada a ningún router'),
         findsOneWidget);
     expect(find.byType(QrImageView), findsNothing);
+    expect(find.textContaining('Cambiar el código'), findsNothing);
 
     await tester.tap(find.text('PROBAR DE NUEVO'));
     await tester.pump();

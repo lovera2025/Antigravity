@@ -1,8 +1,6 @@
 // La pantalla del celular de la puerta (`PantallaPuesto`), entera, con un
 // cliente de mentira al que la prueba le pone cada estado: la primera vez, la
 // lista, sin conexión, el código cambiado.
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,71 +12,8 @@ import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:arguello_events/models/invitado.dart';
 
+import 'helpers/cliente_de_prueba.dart';
 import 'helpers/puerta_en_memoria.dart';
-
-class _NadaGuardado implements GuardadoDelCelular {
-  @override
-  Future<String?> leer(String clave) async => null;
-
-  @override
-  Future<void> guardar(String clave, String? valor) async {}
-}
-
-/// El cliente, con el estado que pone la prueba y lo que se le pidió.
-class _ClienteDePrueba extends ClienteCentral {
-  _ClienteDePrueba()
-      : super(servidor: Uri.parse('http://127.0.0.1:1/'), guardado: _NadaGuardado());
-
-  EstadoDelPuesto e = EstadoDelPuesto.conectado;
-  PuertaDelEvento? p;
-  String? n = 'Juli';
-  String? cod = '4821';
-  String? tit = 'ESCUELA DE MUESTRA — Egresados (12/12) · masivo';
-  List<PedidoPendiente> pend = [];
-  int mandados = 0;
-  Map<String, String> marcas = {};
-
-  final ingresados = <String>[];
-  final deshechos = <String>[];
-  final datos = <(String, String?)>[];
-  var reconexiones = 0;
-  final avisosDePrueba = StreamController<String>.broadcast();
-
-  void cambio() => notifyListeners();
-
-  @override
-  EstadoDelPuesto get estado => e;
-  @override
-  PuertaDelEvento? get puerta => p;
-  @override
-  String? get eventoId => p == null ? null : eventoMasivo;
-  @override
-  String? get nombre => n;
-  @override
-  String? get codigo => cod;
-  @override
-  String? get titulo => tit;
-  @override
-  List<PedidoPendiente> get pendientes => pend;
-  @override
-  int get seMandaron => mandados;
-  @override
-  Stream<String> get avisos => avisosDePrueba.stream;
-  @override
-  String? marca(String personaId) => marcas[personaId];
-
-  @override
-  Future<void> ingresar(PersonaPuerta persona) async =>
-      ingresados.add(persona.id);
-  @override
-  Future<void> deshacer(PersonaPuerta persona) async =>
-      deshechos.add(persona.id);
-  @override
-  Future<void> ponerDatos({required String nombre, String? codigo}) async =>
-      datos.add((nombre, codigo));
-  @override
-  void reconectar() => reconexiones++;
-}
 
 const _juan = 'c1000000-0000-4000-8000-000000000001';
 const _lucia = 'c2000000-0000-4000-8000-000000000002';
@@ -117,7 +52,7 @@ PedidoPendiente _pendiente(String id) => PedidoPendiente(
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
 
-  late _ClienteDePrueba cliente;
+  late ClienteDePrueba cliente;
 
   Future<void> abrir(WidgetTester tester) async {
     // Un celular.
@@ -133,7 +68,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  setUp(() => cliente = _ClienteDePrueba());
+  setUp(() => cliente = ClienteDePrueba());
 
   group('la primera vez', () {
     testWidgets('con el código del QR, pide solo el nombre', (tester) async {

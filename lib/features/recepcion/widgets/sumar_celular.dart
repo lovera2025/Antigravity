@@ -151,7 +151,10 @@ class _VentanaSumarCelularState extends ConsumerState<VentanaSumarCelular> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  if (estado.prendida && estado.eventoId == widget.eventoId)
+                  // Solo con el QR a la vista: sin router no hay código que
+                  // cambiar.
+                  if (estado.eventoId == widget.eventoId &&
+                      estado.enlace != null)
                     TextButton(
                       onPressed: _cambiarCodigo,
                       child: Text(
