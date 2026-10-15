@@ -139,6 +139,34 @@ class PuertaDelEvento {
   static int _porNombre(GrupoPuerta x, GrupoPuerta y) =>
       x.titular._buscable.compareTo(y.titular._buscable);
 
+  /// Para mandársela a un celular por la red del salón (`CentralPuerta`).
+  ///
+  /// Lleva lo que la pantalla muestra, ya armado: el celular no tiene la base
+  /// ni sabe de alumnos. De la fila de cada persona va solo si entró y a qué
+  /// hora, que es lo único que se mira de ella.
+  Map<String, Object?> toJson() => {
+        'masivo': masivo,
+        'sorteado': sorteado,
+        'bajas': bajas,
+        'grupos': [for (final g in grupos) g._toJson()],
+      };
+
+  /// La que mandó la central ([toJson]). [eventoId] es el de la fiesta: las
+  /// filas de la puerta lo llevan.
+  factory PuertaDelEvento.fromJson(
+    Map<String, dynamic> json, {
+    required String eventoId,
+  }) =>
+      PuertaDelEvento._(
+        masivo: json['masivo'] as bool,
+        sorteado: json['sorteado'] as bool,
+        bajas: json['bajas'] as int,
+        grupos: [
+          for (final g in json['grupos'] as List)
+            GrupoPuerta._fromJson(g as Map<String, dynamic>, eventoId),
+        ],
+      );
+
   Iterable<PersonaPuerta> get personas => grupos.expand((g) => g.personas);
 
   int get total => personas.length;
@@ -267,6 +295,37 @@ class GrupoPuerta {
   });
 
   List<PersonaPuerta> get personas => [titular, ...acompanantes];
+
+  Map<String, Object?> _toJson() => {
+        'titular': titular._toJson(),
+        'acompanantes': [for (final a in acompanantes) a._toJson()],
+        'division': division,
+        'sinMesa': sinMesa,
+        'sillas': sillas,
+        'sillasAConfirmar': sillasAConfirmar,
+        'musica': musica,
+        'acompanantesSinNombre': acompanantesSinNombre,
+        'cargadoAMano': cargadoAMano,
+      };
+
+  factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) =>
+      GrupoPuerta._(
+        titular: PersonaPuerta._fromJson(
+          json['titular'] as Map<String, dynamic>,
+          eventoId,
+        ),
+        acompanantes: [
+          for (final a in json['acompanantes'] as List)
+            PersonaPuerta._fromJson(a as Map<String, dynamic>, eventoId),
+        ],
+        division: json['division'] as String?,
+        sinMesa: json['sinMesa'] as bool,
+        sillas: json['sillas'] as String?,
+        sillasAConfirmar: json['sillasAConfirmar'] as bool,
+        musica: json['musica'] as String?,
+        acompanantesSinNombre: json['acompanantesSinNombre'] as int,
+        cargadoAMano: json['cargadoAMano'] as bool,
+      );
 }
 
 /// Una persona que puede entrar.
@@ -331,6 +390,52 @@ class PersonaPuerta {
         fila: fila,
         acompanaA: acompanaA,
       );
+
+  /// De la fila va solo si existe, si entró y cuándo se tocó.
+  Map<String, Object?> _toJson() => {
+        'id': id,
+        'nombre': nombre,
+        'dni': dni,
+        'mesa': mesa,
+        'esAlumno': esAlumno,
+        'acompanaA': acompanaA,
+        'fila': fila == null
+            ? null
+            : {
+                'ingresado': ingresado,
+                'tocada': fila!.updatedAt?.toUtc().toIso8601String(),
+              },
+      };
+
+  factory PersonaPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
+    final id = json['id'] as String;
+    final nombre = json['nombre'] as String;
+    final dni = json['dni'] as String;
+    final mesa = json['mesa'] as String?;
+    final fila = json['fila'] as Map<String, dynamic>?;
+    final tocada = fila?['tocada'] as String?;
+    return PersonaPuerta._(
+      id: id,
+      nombre: nombre,
+      dni: dni,
+      mesa: mesa,
+      esAlumno: json['esAlumno'] as bool,
+      acompanaA: json['acompanaA'] as String?,
+      fila: fila == null
+          ? null
+          : Invitado(
+              id: id,
+              eventoId: eventoId,
+              nombreCompleto: nombre,
+              dni: dni,
+              numeroMesa: mesa,
+              estadoIngreso: fila['ingresado'] == true
+                  ? EstadoIngreso.ingresado
+                  : EstadoIngreso.pendiente,
+              updatedAt: tocada == null ? null : DateTime.parse(tocada),
+            ),
+    );
+  }
 
   bool get ingresado => fila?.estadoIngreso == EstadoIngreso.ingresado;
 

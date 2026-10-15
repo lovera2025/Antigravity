@@ -222,6 +222,19 @@ class InvitadosRepository {
     return rows.map(Invitado.fromJson).toList();
   }
 
+  /// Una fila de la lista de la puerta tal como está en esta PC, o null si no
+  /// existe. La central de la puerta la lee antes de cada pedido de un celular.
+  Future<Invitado?> getLocal(String id) async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query(
+      'invitados',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Invitado.fromJson(rows.first);
+  }
+
   /// Los invitados del evento que tienen un cambio esperando subir a la nube:
   /// un ingreso marcado sin internet, por ejemplo.
   Future<Set<String>> idsSinSubir(String eventoId) async {
@@ -360,7 +373,12 @@ class InvitadosRepository {
   }
 
   /// Marca un invitado como ingresado (check-in).
-  Future<void> marcarIngreso(String invitadoId) async {
+  ///
+  /// Con [saludar] en `false` no se le avisa a ningún tótem: es un ingreso que
+  /// llega tarde (un celular de la puerta que estuvo sin wifi, ver
+  /// `CentralPuerta`) y la familia ya pasó. Igual que después de un corte, en
+  /// el salón no se saluda a nadie atrasado.
+  Future<void> marcarIngreso(String invitadoId, {bool saludar = true}) async {
     final db = await LocalDatabase.instance;
     final now = DateTime.now().toUtc().toIso8601String();
 
@@ -383,15 +401,17 @@ class InvitadosRepository {
       
       // Si hay un tótem activo en esta misma PC, le avisamos por el puente local
       // para que la reacción sea instantánea (cero latencia de nube)
-      if (KioskLauncher.isTotemActive) {
+      if (saludar && KioskLauncher.isTotemActive) {
         KioskLauncher.notifyGuestCheckin(invitado.toJson());
       }
-      
+
       // Sincronización Realtime instantánea para Tótems remotos y Web (Broadcast).
       // Evita esperar la replicación de Postgres. Va sin `await`: el check-in en
       // la puerta es lo más sensible a latencia de toda la app y el fallback
       // REST agrega un viaje HTTP.
-      unawaited(_emitir(invitado.eventoId, 'checkin', invitado.toJson()));
+      if (saludar) {
+        unawaited(_emitir(invitado.eventoId, 'checkin', invitado.toJson()));
+      }
 
       _notifyChanges(invitado.eventoId);
     }
@@ -413,11 +433,14 @@ class InvitadosRepository {
   /// una mesa. La mesa de la lista la pone solo el salón (`PuertaAlDia`). Por
   /// lo mismo la fila de esta PC queda sin mesa hasta que baje o el salón la
   /// ponga; [mesa] va solo en el aviso al tótem, para que salude con ella.
+  ///
+  /// [saludar], como en [marcarIngreso].
   Future<void> ingresarDesdeLaPuerta({
     required String eventoId,
     required String id,
     required String nombre,
     String? mesa,
+    bool saludar = true,
   }) async {
     final db = await LocalDatabase.instance;
     final now = DateTime.now().toUtc().toIso8601String();
@@ -454,10 +477,10 @@ class InvitadosRepository {
         payload: nube,
       );
     });
-    if (!nueva) return marcarIngreso(id);
+    if (!nueva) return marcarIngreso(id, saludar: saludar);
 
     final row = await db.query('invitados', where: 'id = ?', whereArgs: [id]);
-    if (row.isNotEmpty) {
+    if (saludar && row.isNotEmpty) {
       final aviso = Invitado.fromJson(row.first).toJson()
         ..['numero_mesa'] = mesa;
       if (KioskLauncher.isTotemActive) KioskLauncher.notifyGuestCheckin(aviso);

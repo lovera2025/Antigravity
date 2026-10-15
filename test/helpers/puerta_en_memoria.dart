@@ -169,9 +169,17 @@ class InvitadosEnMemoria extends InvitadosRepository {
     _cambios.add(null);
   }
 
+  /// Los ingresos que se marcaron sin saludar en el tótem.
+  final sinSaludo = <String>[];
+
   @override
-  Future<void> marcarIngreso(String invitadoId) async {
+  Future<Invitado?> getLocal(String id) async =>
+      filas.where((f) => f.id == id).firstOrNull;
+
+  @override
+  Future<void> marcarIngreso(String invitadoId, {bool saludar = true}) async {
     marcados.add(invitadoId);
+    if (!saludar) sinSaludo.add(invitadoId);
     _poner(invitadoId, EstadoIngreso.ingresado);
   }
 
@@ -181,7 +189,12 @@ class InvitadosEnMemoria extends InvitadosRepository {
     required String id,
     required String nombre,
     String? mesa,
+    bool saludar = true,
   }) async {
+    if (filas.any((f) => f.id == id)) {
+      return marcarIngreso(id, saludar: saludar);
+    }
+    if (!saludar) sinSaludo.add(id);
     creados.add(id);
     filas.add(Invitado(
       id: id,
