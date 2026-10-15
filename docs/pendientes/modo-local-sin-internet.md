@@ -1,10 +1,10 @@
 # Recepción y el tótem sin internet (modo local)
 
-**Estado:** programado, falta probarlo con un celular de verdad. **Va en la 6.0.0** (decisión del usuario del
-2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra forma** (15-oct, sección 7):
-los puestos van a ser celulares, así que **una notebook del salón hace de central** y los celulares le hablan por el
-wifi del router; ver "La sección 7" en `docs/CONTEXTO_v6.0.0_2026-10-11.md`. Falta la 7e (la prueba con su celular)
-y el ensayo con el router de verdad. Lo del 4 se le dijo en el plan.
+**Estado:** hecho y probado con su celular (15-oct); falta solo el ensayo con el router de verdad. **Va en la 6.0.0**
+(decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra
+forma** (15-oct, sección 7): los puestos van a ser celulares (o tablets), así que **una notebook del salón hace de
+central** y los celulares le hablan por el wifi del router; ver "La sección 7" en
+`docs/CONTEXTO_v6.0.0_2026-10-11.md`. Lo del 4 se le dijo en el plan.
 **Postergado el:** 2026-09-24
 
 ## Qué pidió el usuario

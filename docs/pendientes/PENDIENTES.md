@@ -73,8 +73,9 @@ priorizó el sorteo de noviembre. El contexto está en
   con los datos ya bajados tienen que seguir andando sin internet. Una PC
   completa quedó hecha el 14-oct (el tótem abre con la lista, la foto guardada,
   entrar con la sesión vencida y "Lista para trabajar sin internet"); **los
-  puestos, programados el 15-oct**: celulares por una notebook central en el
-  wifi del router (sección 7); falta probarlo con un celular de verdad. Pedido
+  puestos, hechos el 15-oct**: celulares o tablets por una notebook central en
+  el wifi del router (sección 7), probado con su celular; falta el ensayo con
+  el router de verdad. Pedido
   el 24-sep y otra vez el 13-oct; trae **la regla que vale para todas las
   partes que faltan**.
 - [Cerrar la lista de la puerta a los anónimos](rls-invitados.md) — hoy
