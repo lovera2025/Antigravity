@@ -1323,10 +1323,17 @@ Plan: `C:\Users\lover\.claude\plans\donde-nos-quedamos-starry-fog.md`. Preguntó
     herramienta les deja la Outfit de la app en la memoria del paquete de PDF, sin bajar nada.
   - La primera versión de la herramienta ponía la mora en una línea genérica y el resumen la rotulaba "de cuotas ya
     pagadas". Ahora la arma como la ventana (`construirPreviewMora`, cada cuota vencida y la de ficha).
-- **Visto al mirar los papeles, igual en la 5.0.0 (ya sale así hoy):** en el resumen, la mora de la cuota que se
-  paga lleva una flechita `↳` que Outfit no tiene y sale un cuadradito (`pdf_service.dart`, en
-  `generarResumenAbonarAlumno`). No se tocó: cobros y papeles de cobro, solo si lo pide. Además, sin internet ese
-  resumen y la planilla de mora salen en Helvetica (miden distinto); el recibo no, porque lee la Outfit de la app.
+- **Visto al mirar los papeles, igual en la 5.0.0:** en el resumen, la mora de la cuota que se paga llevaba una
+  flechita `↳` que Outfit no tiene y salía un cuadradito. Preguntó si perjudicaba algo (no: es solo el dibujo, los
+  montos van en otra columna) y dijo "dale": ahora es `→` (`af29a57`), con `test/signos_de_los_papeles_test.dart`,
+  que lee los archivos de los papeles y falla si aparece un signo que la Outfit no tiene. Comprobado con sus datos:
+  todo lo demás igual a la 5.0.0; 2.452 tests. El espacio ancho del PDF de Rentabilidad tampoco está en la Outfit,
+  pero sale en blanco (se miró en un PDF de prueba): no hace falta tocarlo. Además, sin internet el resumen y la
+  planilla de mora salen en Helvetica (miden distinto); el recibo no, porque lee la Outfit de la app.
+- **9e, las novedades** (`build/novedades_6.0.0.md`, dictadas por él): "Mantenimiento y escalabilidad: en esta
+  versión se lograron corregir varios bugs vistos en la parte de eventos particulares y masivos", y tres renglones
+  míos (el salón de los masivos, Recepción y el tótem sin internet, los celulares). Pidió firmar "L.M" y, al
+  saber que el aviso ya trae "By L.M" abajo, eligió dejar solo ese.
 
 ## Lo que falta para publicar
 
@@ -1380,7 +1387,7 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
 2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
    (`tool/verificar_migracion_v73_test.dart`): el 11-oct dio perfecto, pero desde entonces hubo cobros.
 3. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
-   El texto de novedades hay que rehacerlo: nombra solo lo del 11-oct.
+   El texto de novedades ya está rehecho (15-oct, 9e).
 4. **Instalar, PC por PC, con él presente** (punto B): su PC, la del operario y la de la oficina. El orden lo
    decide él en el momento.
 5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
