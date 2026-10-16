@@ -15,6 +15,9 @@
 //   3. Anular un cobro dejaba la eximición que ese cobro había dado
 //      (MONTENEGRO, FRANCISCO NAHUEL).
 //
+// Y una que apareció con los datos de esa noche: la revisión le borraba la
+// ficha a quien ya había terminado de pagar (ALTAMIRANO, CELESTE ABIGAIL).
+//
 // Los datos son los de esos alumnos, con nombres de prueba. Corre contra una
 // base SQLite temporal: nunca toca la de producción.
 import 'dart:convert';
@@ -238,6 +241,33 @@ Future<void> _sembrarGisel(String a) async {
     ]) {
       await db.insert('pagos_contrato_alumno', p);
     }
+}
+
+/// ALTAMIRANO, CELESTE ABIGAIL: cuota única. Se acordó un precio de $407.000 y
+/// el 15/10 lo pagó entero, sin la mora: el cobro dejó $683.760 en la ficha
+/// (168 días desde el 30/04, al 1 % por día) para que el jefe los perdone como
+/// liquidación. Con [perdonada], el jefe ya la perdonó: la ficha en 0.
+Future<void> _sembrarAltamirano(String a, {bool perdonada = false}) async {
+  final db = await LocalDatabase.instance;
+  await db.insert('contratos_alumnos', {
+    'id': uid(a),
+    'evento_id': uid('evento'),
+    'nombre_alumno': a,
+    'monto_total_pactado': 407000,
+    'saldo_deudor': 0,
+    'cuotas_pagadas': 1,
+    'total_cuotas': 1,
+    'dia_vencimiento_mensual': 10,
+    'created_at': '2026-03-30T03:00:00+00:00',
+    'mora_pendiente_tracked': perdonada ? 0 : 683760,
+    'mora_cobrada_offset': 0,
+    'mora_exencion_reinicia': 1,
+    'mora_tracked_ajuste': 0,
+  });
+  await db.insert(
+    'pagos_contrato_alumno',
+    _pago(a, 1, '2026-10-15T21:47:00+00:00', 'Cuota Base (1/1)', 407000),
+  );
 }
 
 Future<ContratoAlumno> _contrato(String alumno) async {
@@ -552,6 +582,39 @@ void main() {
       expect((await _colaDe(a))!['mora_exencion_reinicia'], 1);
       expect((await _contrato(b)).moraExentaHasta, isNull);
       expect((await _colaDe(b))!['mora_exenta_hasta'], isNull);
+    });
+  });
+
+  group('quien ya terminó de pagar no se revisa', () {
+    test('ALTAMIRANO: la mora que dejó el cobro queda en la ficha hasta que el '
+        'jefe la perdone', () async {
+      const a = 'PRUEBA ALTAMIRANO';
+      await _sembrarAltamirano(a);
+      expect(await _moraDe(a), closeTo(683760, 0.01));
+
+      expect(await _revisar(), 0);
+      expect((await _contrato(a)).moraPendienteTracked, closeTo(683760, 0.01));
+      expect(await _moraDe(a), closeTo(683760, 0.01));
+      expect(await _colaDe(a), isNull, reason: 'No se sube nada: no cambió.');
+    });
+
+    test('ALTAMIRANO perdonada por el jefe: queda en 0 y no se revive',
+        () async {
+      const a = 'PRUEBA ALTAMIRANO PERDONADA';
+      await _sembrarAltamirano(a, perdonada: true);
+      expect(await _revisar(), 0);
+      expect(await _moraDe(a), closeTo(0, 0.01));
+      expect(await _colaDe(a), isNull);
+    });
+
+    test('con saldo, la misma revisión sigue corrigiendo', () async {
+      const a = 'PRUEBA ALTAMIRANO';
+      await _sembrarAltamirano(a);
+      const b = 'PRUEBA VERON';
+      await _sembrarVeron(b);
+      expect(await _revisar(), 1);
+      expect((await _contrato(b)).moraCobradaOffset, closeTo(31900, 0.01));
+      expect((await _contrato(a)).moraPendienteTracked, closeTo(683760, 0.01));
     });
   });
 

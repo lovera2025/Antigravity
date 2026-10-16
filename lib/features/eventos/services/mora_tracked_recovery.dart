@@ -631,6 +631,14 @@ class MoraTrackedRecovery {
 
     for (final row in contratos) {
       final contrato = ContratoAlumno.fromJson(row);
+      // Quien ya terminó de pagar no se revisa, como en
+      // [repararExencionDesdeHistorial]. Sin saldo no corre mora: queda solo la
+      // ficha, y la dejó el cobro o el perdón del jefe. Rehecha desde los pagos
+      // da siempre $0, porque el repaso usa el saldo de hoy. ALTAMIRANO,
+      // CELESTE ABIGAIL pagó el 15/10 los $407.000 acordados sin la mora; el
+      // cobro dejó $683.760 en la ficha para que el jefe los perdone como
+      // liquidación, y la revisión se los borraba sola.
+      if (contrato.saldoDeudor <= 0.01) continue;
       final pagos = await db.query(
         'pagos_contrato_alumno',
         where: 'contrato_alumno_id = ?',

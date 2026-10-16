@@ -526,6 +526,11 @@ históricos y la pantalla se ve como siempre.
   reemplaza la del último cobro; **la de un perdón (con ajuste de ficha, o que ningún cobro reproduce) no se toca**.
   `test/revision_mora_test.dart` cuida las tres cosas; `tool/simulacro_revision_mora_test.dart` muestra qué cambia
   con una copia de la base real.
+
+  **La revisión no toca a quien ya terminó de pagar** (saldo 0). Su ficha la dejó el cobro, y el jefe la perdona en
+  modo jefe como liquidación (queda en verde). El repaso de los cobros usa el saldo de hoy, y sin saldo da siempre
+  $0: le borraba la mora a ALTAMIRANO, CELESTE ABIGAIL (15-oct). No rehacerla con el saldo de cada cobro: los
+  perdones de esos alumnos se anotaron con la cuenta vieja (ajuste 0) y se revivirían.
 - **En un PDF, una columna de renglones dentro de una celda de tabla puede perder el último, sin avisar.** El
   paquete arma cada fila dos veces y, en la segunda, le da a la celda como tope exactamente lo que mide; si la suma
   de los renglones lo pasa por un redondeo, deja el último "para la hoja siguiente" y no lo dibuja. Así no salía
