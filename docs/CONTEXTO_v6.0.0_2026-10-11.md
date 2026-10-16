@@ -14,8 +14,9 @@ y caja no cambian.
 > (sillas, entradas, registro del sorteo).
 > Plan aprobado: `C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`.
 
-**Estado: PUBLICADA el 15-oct a las 22:28 (release `v6.0.0` en GitHub), SIN INSTALAR todavía:** las PCs siguen con
-la 5.0.0 hasta que él la instale, desde el 16-oct (ver "Lo que falta para publicar", punto 3). Faltan la web, cerrar
+**Estado: PUBLICADA el 15-oct a las 22:28 (release `v6.0.0` en GitHub) e INSTALADA en su PC de la casa a las
+22:31.** Las PCs de la oficina siguen con la 5.0.0: las instala él el 16-oct (ver "Lo que falta para publicar",
+punto 3). Faltan la web, cerrar
 los permisos de la puerta y el ensayo. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
@@ -1532,6 +1533,15 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
      https://github.com/lovera2025/Antigravity/releases/latest (o el instalador por pendrive, de `installer\dist`).
    - Como se publicó de noche, una PC puede instalarla a la mañana antes de que él llegue: lo sabe y lo aceptó. Al
      migrar, la app saca su copia sola (`antes_de_v73.db`).
+   - **Instalada en su PC de la casa el 15-oct a las 22:31** ("todo ok"). Comprobado: la app en `6.0.0+57`, la base
+     en la v73 con las cinco tablas nuevas, la copia `Documents\Junior Eventos\backups\antes_de_v73.db` (22:31:49),
+     la cola vacía. `revision_mora.txt` (22:31) corrigió a **los mismos 33** del simulacro, renglón por renglón, y
+     los subió: en la nube, 33 contratos cambiados desde las 22:30 (VERON con el "ya usado" en $31.900, las 12
+     eximiciones del 31-ago ya están, ARGUELLO con la ficha en 0, ALTAMIRANO sin tocar). Conteos de la nube iguales:
+     643 contratos, 4.104 pagos, 27 notas.
+   - Las PCs de la oficina con la 5.0.0 bajan esas correcciones solas, así que muestran la mora corregida desde
+     antes de instalar. Hasta instalar, mejor no tocar "Bajar" del menú en ellas: corre la revisión vieja (a
+     ALTAMIRANO le borraría la ficha y lo subiría).
 4. **Instalar las tres a la vez, con él presente** (punto B), el 16-oct en el trabajo: su PC, la del operario y la
    de la oficina, con una copia de la base de cada una antes. Así ninguna PC con la 5.0.0 cobra una mora en dos
    veces que quede mal otra vez.
@@ -1620,9 +1630,10 @@ se arregló que la revisión le borraba la mora a quien ya terminó de pagar
 (ALTAMIRANO: esa mora la perdona el jefe en modo jefe), y se armó el
 instalador de nuevo. ARGUELLO, TOMAS es el hijo del cliente y el alumno de
 prueba: nunca pagó nada de verdad. El release de la 6.0.0 quedó publicado el
-15-oct a las 22:28 (lo pedí yo). Sigue, conmigo presente desde el 16-oct en el
-trabajo: instalar las tres PCs (mirar revision_mora.txt en cada una), la web,
-cerrar los permisos y el ensayo.
+15-oct a las 22:28 (lo pedí yo) y la instalé en mi PC de la casa a las 22:31:
+la revisión de la mora corrigió y subió a los mismos 33. Sigue, conmigo
+presente desde el 16-oct en el trabajo: instalar las PCs de la oficina (mirar
+revision_mora.txt en cada una), la web, cerrar los permisos y el ensayo.
 Va todo en una sola versión, por partes. El objetivo
 de lo que falta: que Recepción y el tótem distingan un evento particular de
 uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
