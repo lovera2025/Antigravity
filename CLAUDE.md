@@ -7,7 +7,10 @@ con check-in por QR y un tótem que se proyecta en el salón.
   `installer/junior_eventos_setup.iss`).
 - Supabase: proyecto `bucnrydgojyzntgesxqb` (ArguelloApp). Credenciales en
   `lib/main.dart:29-34`.
-- Web deployada en `https://arguello-events.vercel.app` (`kWebBaseUrl`).
+- Web deployada en `https://arguello-events.vercel.app` (`kWebBaseUrl`). Se publica desde esta PC con la sesión de
+  Vercel del usuario: `flutter build web --release`, `build/web` copiado a `.vercel/output/static` con su
+  `config.json` (todas las rutas a `index.html`) y `npx vercel deploy --prebuilt --prod`. El detalle, en el punto 6
+  de "Lo que falta para publicar" del CONTEXTO de la 6.0.0.
 
 ## Antes de tocar nada: la rama
 
@@ -196,7 +199,8 @@ cambia `invitados` ni anota en `accesos`**: va por las funciones de
   `InvitadosRepository._emitir`; `paraAviso` en la página del QR). El canal sigue abierto a quien sepa el número
   del evento: [docs/pendientes/canal-totem-abierto.md](docs/pendientes/canal-totem-abierto.md).
 - **Los dos SQL:** las funciones, antes de instalar (solo agregan); `20261016130000_puerta_cerrar_permisos.sql`,
-  **último**, con todas las PCs y la web en la 6.0.0: si no, el tótem viejo queda sin nadie en la lista.
+  **último**, con todas las PCs y la web en la 6.0.0: si no, el tótem viejo queda sin nadie en la lista. **Los dos
+  corridos** (15-oct, el de cerrar a las 22:53, con la web nueva y antes de instalar la oficina: lo eligió el usuario).
 
 **Recepción distingue un evento particular de uno masivo** (v6.0.0, el objetivo del usuario desde el 14-oct-2026; se
 dice "evento masivo", no "fiesta de alumnos"). Lo decide `PuertaDelEvento` (`recepcion/services/puerta_del_evento.dart`);

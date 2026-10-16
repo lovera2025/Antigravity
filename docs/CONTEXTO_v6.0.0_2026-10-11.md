@@ -16,8 +16,8 @@ y caja no cambian.
 
 **Estado: PUBLICADA el 15-oct a las 22:28 (release `v6.0.0` en GitHub) e INSTALADA en su PC de la casa a las
 22:31.** Las PCs de la oficina siguen con la 5.0.0: las instala él el 16-oct (ver "Lo que falta para publicar",
-punto 3). Faltan la web, cerrar
-los permisos de la puerta y el ensayo. El 13-oct el usuario sumó a esta versión
+punto 3). **La web nueva se publicó el 15-oct a las 22:50 y los permisos de la puerta se cerraron a las 22:53**
+(puntos 6 y 7). Falta el ensayo. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
 las secciones 1 a 6** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
@@ -1547,11 +1547,33 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
    veces que quede mal otra vez.
 5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
    importa ningún Excel hasta que todas tengan la 6.0.0.**
-6. **Publicar la web**, con su OK.
-7. **Cerrar los permisos de la lista de la puerta**, último, con su OK
-   (`supabase/migrations/20261016130000_puerta_cerrar_permisos.sql`): recién con **todas** las PCs en la 6.0.0 y la
-   web nueva publicada. Si se cierra antes, el tótem de una PC con la versión vieja y la página del QR vieja quedan
-   sin nadie en la lista. Después, la prueba como anónimo del final del archivo.
+6. **Publicar la web — HECHO el 15-oct a las 22:50, por pedido suyo** ("fijate eso de la web y dejemos todo listo
+   ya"). Plan: `C:\Users\lover\.claude\plans\bueno-donde-nos-quedamos-jaunty-sedgewick.md`.
+   - **La que estaba era de marzo** (`version.json` en `1.0.0+1`, sin nada de la sección 8): la página del QR y el
+     tótem por link leían `invitados` directo. No había forma de publicar escrita en ningún lado.
+   - **Cómo se publica ahora (desde esta PC):** `flutter build web --release`; copiar `build/web` a
+     `.vercel/output/static` con un `.vercel/output/config.json` (`{"version":3,"routes":[{"handle":"filesystem"},
+     {"src":"/(.*)","dest":"/index.html"}]}`, lo mismo que el `vercel.json` de la raíz); y
+     `npx vercel deploy --prebuilt --prod --scope team_LpvcWbx8yYDjf8bRLpNYc7Uh`, desde la raíz (ahí está
+     `.vercel/project.json`, proyecto `arguello-events`). Vercel no compila nada: sube la carpeta tal cual. La
+     carpeta `.vercel` no va a git. Necesita la sesión de Vercel del usuario (`npx vercel login`, la hizo él con el
+     código en el navegador); la conexión de Vercel de Claude no tiene permiso en su equipo (403).
+   - Publicada: `arguello-events-gfudt0il0` (`dpl_28SoTjUQoUQT1r1Kt5mYknHYSdaY`), desde `91d0384`. La anterior, para
+     volver atrás desde Vercel: `arguello-events-jd585k4is`.
+   - Comprobada: `version.json` da `6.0.0`/`57`; `/lista` busca desde 3 letras (en un particular de prueba, sin
+     marcar a nadie); `?cotizar` abre; el tótem por link sin clave abre y avisa "Falta la clave" en la barra.
+7. **Cerrar los permisos de la lista de la puerta — HECHO el 15-oct a las 22:53**, con su OK en el momento y antes
+   de instalar las PCs de la oficina (lo eligió él: hasta instalarlas, el tótem de una PC con la 5.0.0 ve la lista
+   vacía; Recepción con usuario anda igual). `apply_migration` `puerta_cerrar_permisos` con
+   `supabase/migrations/20261016130000_puerta_cerrar_permisos.sql`.
+   - Conteos iguales antes y después: 643 contratos, 4.104 pagos, 27 notas, 10 invitados, 0 accesos, 30 eventos.
+     Ningún permiso de anónimos que cambie `invitados` o `accesos`; queda solo "Permitir lectura de accesos" (pide
+     usuario).
+   - La prueba como anónimo, en una transacción que se deshizo: ve 0 invitados, cambia 0, `puerta_buscar` contesta
+     y `totem_lista` con una clave mala dice "La clave del tótem no es la de este evento". Desde afuera, con la clave
+     pública de la web: leer `invitados` da `[]` y `puerta_buscar` encuentra. La página del QR publicada sigue
+     buscando después de cerrar.
+   - Para volver atrás: las tres líneas ROLLBACK del archivo.
 8. **El ensayo:** armar el plano, sortear una institución, mirar en otra PC que está lo mismo, abrir Recepción y el
    tótem, marcar ingresos, y al final SORTEO ▾ → Deshacer sorteo → Todo. Tiene que quedar sin mesas y con la lista
    vacía, en las PCs y en la nube. **Y sin internet** (sección 5): con Recepción diciendo "Lista para trabajar sin
@@ -1633,7 +1655,8 @@ prueba: nunca pagó nada de verdad. El release de la 6.0.0 quedó publicado el
 15-oct a las 22:28 (lo pedí yo) y la instalé en mi PC de la casa a las 22:31:
 la revisión de la mora corrigió y subió a los mismos 33. Sigue, conmigo
 presente desde el 16-oct en el trabajo: instalar las PCs de la oficina (mirar
-revision_mora.txt en cada una), la web, cerrar los permisos y el ensayo.
+revision_mora.txt en cada una) y el ensayo. La web nueva y el cierre de los
+permisos de la puerta ya quedaron hechos el 15-oct a la noche.
 Va todo en una sola versión, por partes. El objetivo
 de lo que falta: que Recepción y el tótem distingan un evento particular de
 uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
