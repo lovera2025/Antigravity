@@ -1410,23 +1410,57 @@ que suben: VERON $1.100 → $33.000, BLANCO DI SI $12.900 → $45.000, LEISTEIMI
 $18.000. Bajan: MONTENEGRO, GISEL $40.250 → $36.750 (su cuota 4 vuelve a contar desde septiembre) y ARGUELLO,
 TOMAS (la ficha de abajo).
 
-**ARGUELLO, TOMAS:** su contrato era una prueba que quedó ($627.000 en 5 cuotas, saldo $597.000 sin pagos). **Él
-lo corrigió desde la app el 15-oct a las 17:29**: $340.000, 9 cuotas de $30.000, mesa extra $70.000 en 7 cuotas,
-saldo $340.000, igual que sus compañeros con mesa; en la nube a las 17:32. **Le queda una ficha de $108.058**
-(mora "de cuotas ya pagadas" sin ninguna cuota pagada), resto de la prueba: la revisión de la 6.0.0 la pone en $0
-sola. Quedó por calcular y mostrarle su mora con y sin esa ficha (el cálculo se cortó al pedir guardar el contexto).
+**ARGUELLO, TOMAS es el hijo del cliente** (el que pidió la app) y el alumno con el que se prueba a propósito:
+**nunca pagó nada de verdad**, y sus números raros vienen de pruebas, no son un problema de datos. Él lo dejó como
+debe estar el 15-oct a las 17:29: lo de la Normal por defecto, $270.000 en 9 cuotas de $30.000, más la mesa
+agregada ($70.000 en 7) sin pagar; saldo $340.000. Le quedó una ficha de $108.058 de las pruebas.
+
+**15-oct a la noche: los chequeos con los datos al día** (plan aprobado:
+`C:\Users\lover\.claude\plans\bueno-donde-nos-quedamos-jaunty-sedgewick.md`). Pidió que se hicieran con sus datos
+de ese momento, por seguridad.
+- **La copia de su base**, con el programa cerrado y la real con el mismo SHA-256 antes y después. La primera
+  (21:29) no tenía los cobros de las otras PCs de 17:49 a 19:31: la PC estaba cerrada desde las 17:32. Abrió el
+  programa un minuto sin tocar "Bajar" (ese botón corre la revisión vieja y cambia el "antes") y la de las 21:47 quedó
+  **igual a la nube**: 643 contratos, 4.104 pagos (35 del día), $114.969.899,09 cobrados, 27 notas, la cola vacía.
+  Fila por fila, los pagos idénticos; los contratos, salvo los 12 de la eximición del 31-ago que la nube no tiene (los
+  de siempre: la revisión de la 6.0.0 los sube).
+- **El cobro igual que en la 5.0.0** (`tool/cobro_igual_que_hoy_test.dart`, la 5.0.0 como `git worktree` en el
+  scratchpad de la sesión de la tarde): exactamente lo mismo en los 643 alumnos (1.632 cobros simulados), las seis
+  operaciones y los 14 papeles.
+- **La migración** (`tool/verificar_migracion_v73_test.dart` con `--dart-define=base=` la copia): perfecta, y la
+  vuelta a la 5.0.0 con los mismos datos.
+- **Apareció un error de la revisión de la 6.0.0, y se arregló.** ALTAMIRANO, CELESTE ABIGAIL (Colegio Nacional,
+  cuota única) acordó con un compañero un precio de $407.000 y lo pagó el 15-oct a las 18:47, sin la mora; el cobro
+  dejó $683.760 en la ficha (168 días al 1 %) para que **el jefe la perdone en modo jefe, como liquidación, y quede
+  en verde** (así se trabaja, lo explicó él). La revisión se la borraba sola: repasa los cobros con el saldo de hoy
+  ($0) y sin saldo no hay mora. Le pasaba a cualquiera que terminara de pagar debiendo mora; en la 5.0.0 solo con
+  "Bajar", en la 6.0.0 en cada apertura. **Ahora la revisión no toca a quien ya terminó de pagar** (`saldoDeudor <=
+  0.01`, como ya hacía la reparación de la eximición). Se descartó rehacer la ficha con el saldo de cada cobro: los
+  perdones de esos alumnos se anotaron con la cuenta vieja (ajuste 0) y se habrían revivido. Tres tests nuevos en
+  `test/revision_mora_test.dart` (ella, ella perdonada, y la revisión sigue corrigiendo a quien tiene saldo); sin el
+  arreglo fallan dos.
+- **El simulacro otra vez, con el arreglo:** los mismos 33 con los mismos números ($696.408 → $800.300; suben 22,
+  bajan 2, igual 9), ningún perdón tocado. ARGUELLO queda en **$164.400**, lo mismo que los otros 15 de la Normal sin
+  ningún pago: la cuota base de $30.000 al 1 % por día desde el fin de abril, mayo, junio, julio, agosto y septiembre
+  (168, 137, 107, 76, 45 y 15 días). La mesa no genera mora (nunca generó). GONZALES DURAN, BRIANT ELIAS pagó a las
+  17:19 la cuota 5 sin mora porque la 5.0.0 le mostraba $0; con la 6.0.0 queda en $9.000, como antes del cobro.
+  Página: `build/muestras_6.0.0/mora_al_dia/Mora_corregida.html` (la abierta en Edge es la de las 21:29; los 33 son
+  los mismos).
+- **Todo en verde y el instalador de nuevo:** 2.470 tests, `flutter analyze` en 312, commit `8bb4a1f`; el
+  instalador armado a las 22:23 desde ese commit (`installer/dist/Setup Junior Eventos v6.0.0.exe`, 36,3 MB,
+  `6.0.0`). La copia de la plata quedó en su carpeta (ver "Lo que falta para publicar", punto 0).
+- Preguntó cuánto entró a la tarde: de 17:13 a 19:31, efectivo $831.650 (8 alumnos) y transferencia $76.750 (2,
+  con $3.750 de costo por transferencia); el día, $1.167.550 y $179.750. Sin particulares, alquileres ni gastos.
 
 **Lo que queda de esto, en orden:**
-1. Que vea la página del simulacro (`Mora_corregida.html`) y diga si está de acuerdo; y lo de la ficha de
-   ARGUELLO (con la 6.0.0 queda en $0).
-2. **Volver a correr la comparación del cobro con la 5.0.0** (`tool/cobro_igual_que_hoy_test.dart`, la carpeta
-   de la 5.0.0 en el scratchpad o un `git worktree` nuevo del tag `v5.0.0`): el cobro cambió (la mora pagada en
-   dos veces), así que puede diferir solo donde corresponde.
-3. **Armar el instalador de nuevo**: el de las 15:54 quedó viejo.
-4. Al instalar: la revisión corre sola en la primera apertura; mirar `revision_mora.txt` en cada PC y la nube.
+1. Al instalar: la revisión corre sola en la primera apertura; mirar `revision_mora.txt` en cada PC y la nube.
    La mora de esos alumnos va a subir: avisar a quien cobra.
-5. Cuando haya un rato: de dónde salió el lote del 10/10 a las 12:00 que tocó a varios en la nube (CHAMORRO,
+2. ALTAMIRANO: el jefe le perdona la mora en modo jefe cuando quiera (en la 5.0.0 o en la 6.0.0); la revisión lo
+   respeta.
+3. Cuando haya un rato: de dónde salió el lote del 10/10 a las 12:00 que tocó a varios en la nube (CHAMORRO,
    SOSA, FERNANDEZ MALENA, ARGUELLO).
+4. Aparte, sin tocar: en un plan de cuota única, la mora es el 1 % por día del total, sin tope (CHAS, ARON y
+   ESPINDOLA, BENJAMIN TOMAS tienen planes así). Es la cuenta de siempre, igual en la 5.0.0.
 
 ## Lo que falta para publicar
 
@@ -1463,9 +1497,11 @@ el 15-oct preguntó si seguían ("las pruebas del modal de cobro, como habíamos
 ella el instalador no compila (y la central no tendría qué darle al celular). Después:
 
 0. **Copias de seguridad, por las dudas** (pedido del 15-oct): la de su base ya está
-   (`Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32`, idéntica, mismo SHA-256). Antes de
-   los SQL, una copia de las tablas de plata de la nube (contratos, pagos, notas) a un archivo en su PC; y el día de
-   instalar, otra de la base de cada PC antes de instalar (la app saca la suya al migrar, esta es aparte).
+   (`Documents\Junior Eventos\data.db.bak.antes-de-6.0.0.2026-10-15T15-23-32`, idéntica, mismo SHA-256). **La de
+   la plata, hecha el 15-oct a las 22:21:** `data.db.bak.antes-de-6.0.0.2026-10-15T21-47`, la copia de su base de
+   las 21:47, igual a la nube (pagos fila por fila; contratos salvo las 12 eximiciones conocidas), con la nota
+   `.nube.txt` al lado. El día de instalar, otra de la base de cada PC antes de instalar (la app saca la suya al
+   migrar, esta es aparte).
 1. **La nube, lo que solo agrega — HECHO el 15-oct a las 16:13** (ver "La sección 9"), con su OK en el momento:
    - los dos SQL de siempre (`supabase/migrations/20260925120000_sillas_retiro_sorteos.sql` y
      `20260926120000_planos_y_cambios_de_mesa.sql`). Solo crean tablas nuevas y la 5.0.0 no las mira: se pueden
@@ -1477,13 +1513,16 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
      del QR no encuentra a nadie. Ya se probó en la nube dentro de una transacción que se deshizo.
    Antes y después de cada uno, los conteos: el 15-oct daban **643 contratos, 4.084 pagos, 27 notas, 10 invitados,
    0 accesos y 30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
-2. **Antes de publicar, la migración otra vez sobre una copia de su base de ese día**
-   (`tool/verificar_migracion_v73_test.dart`): el 11-oct dio perfecto, pero desde entonces hubo cobros.
-3. **El release:** `powershell -File tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`.
-   El texto de novedades ya está rehecho (15-oct, 9e). **Antes, armar el instalador de nuevo:** el de las 15:54 no
-   tiene la revisión de la mora arreglada.
-4. **Instalar, PC por PC, con él presente** (punto B): su PC, la del operario y la de la oficina. El orden lo
-   decide él en el momento.
+2. **La migración otra vez sobre una copia de su base — HECHA el 15-oct a las 21:56**, con la copia de las 21:47
+   (igual a la nube): perfecta. Ver "Los chequeos con los datos al día", en "La mora".
+3. **El release, el 16-oct en el trabajo, justo antes de instalar** (decidido el 15-oct): `powershell -File
+   tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`. Apenas se publica, todas las
+   PCs con la 5.0.0 muestran el aviso de versión nueva con DESCARGAR (`AppUpdateChecker`): publicado la noche
+   anterior, alguien podía instalarla a la mañana sin él. El instalador se armó de nuevo el 15-oct a la noche, con la
+   revisión de la mora arreglada.
+4. **Instalar las tres a la vez, con él presente** (punto B), el 16-oct en el trabajo: su PC, la del operario y la
+   de la oficina, con una copia de la base de cada una antes. Así ninguna PC con la 5.0.0 cobra una mora en dos
+   veces que quede mal otra vez.
 5. **Mientras una PC tenga la 5.0.0 y otra la 6.0.0** se cobra normal. **No se sortea, no se entregan entradas ni se
    importa ningún Excel hasta que todas tengan la 6.0.0.**
 6. **Publicar la web**, con su OK.
@@ -1562,11 +1601,16 @@ sobre mi base, el cobro igual que en la 5.0.0, las novedades que dicté, el
 instalador) y la nube del 9f. En el medio apareció que la app cobraba mora de
 menos a unos 33 alumnos (la mora ya pagada se volvía a descontar): la revisión
 automática de la mora quedó arreglada en la 6.0.0 y corre sola al abrir el
-programa. Leé "La mora: la revisión automática arreglada" en el CONTEXTO: ahí
-está lo que queda (que vea el simulacro Mora_corregida.html, la ficha de
-ARGUELLO, TOMAS, volver a comparar el cobro con la 5.0.0, armar el instalador
-de nuevo) y después sigue publicar conmigo presente (release, instalar PC por
-PC, la web, cerrar los permisos, el ensayo).
+programa. Leé "La mora: la revisión automática arreglada" en el CONTEXTO. El
+15-oct a la noche se rehicieron los chequeos con mis datos al día (el cobro
+igual que la 5.0.0, la migración perfecta, la mora: los mismos 33), apareció y
+se arregló que la revisión le borraba la mora a quien ya terminó de pagar
+(ALTAMIRANO: esa mora la perdona el jefe en modo jefe), y se armó el
+instalador de nuevo. ARGUELLO, TOMAS es el hijo del cliente y el alumno de
+prueba: nunca pagó nada de verdad. Sigue publicar conmigo presente, el 16-oct
+en el trabajo: el release justo antes de instalar (al publicarlo, las PCs
+muestran el aviso de versión nueva), las tres PCs a la vez, la web, cerrar los
+permisos y el ensayo.
 Va todo en una sola versión, por partes. El objetivo
 de lo que falta: que Recepción y el tótem distingan un evento particular de
 uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
