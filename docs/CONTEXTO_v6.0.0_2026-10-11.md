@@ -14,7 +14,9 @@ y caja no cambian.
 > (sillas, entradas, registro del sorteo).
 > Plan aprobado: `C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`.
 
-**Estado: SIN PUBLICAR, y creciendo.** Las PCs siguen con la 5.0.0. El 13-oct el usuario sumó a esta versión
+**Estado: PUBLICADA el 15-oct a las 22:28 (release `v6.0.0` en GitHub), SIN INSTALAR todavía:** las PCs siguen con
+la 5.0.0 hasta que él la instale, desde el 16-oct (ver "Lo que falta para publicar", punto 3). Faltan la web, cerrar
+los permisos de la puerta y el ensayo. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
 las secciones 1 a 6** (la 3 en tres pasos: el tótem del salón con las cuatro apariencias, Personalizar y la vista
@@ -1515,11 +1517,21 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
    0 accesos y 30 eventos**, y tienen que dar igual (se vuelven a contar ese día).
 2. **La migración otra vez sobre una copia de su base — HECHA el 15-oct a las 21:56**, con la copia de las 21:47
    (igual a la nube): perfecta. Ver "Los chequeos con los datos al día", en "La mora".
-3. **El release, el 16-oct en el trabajo, justo antes de instalar** (decidido el 15-oct): `powershell -File
-   tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`. Apenas se publica, todas las
-   PCs con la 5.0.0 muestran el aviso de versión nueva con DESCARGAR (`AppUpdateChecker`): publicado la noche
-   anterior, alguien podía instalarla a la mañana sin él. El instalador se armó de nuevo el 15-oct a la noche, con la
-   revisión de la mora arreglada.
+3. **El release — PUBLICADO el 15-oct a las 22:28, por pedido suyo** ("seguí con la publicación... publicala y que
+   las detecten; mañana me encargo, cuando llego lo instalo"): https://github.com/lovera2025/Antigravity/releases/tag/v6.0.0,
+   con `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.0.0.md`, sobre la rama en `4595dde`
+   (el instalador es de `8bb4a1f`; lo de en medio es solo documentación). Comprobado: `/releases/latest` da `v6.0.0`,
+   el asset `Setup.Junior.Eventos.v6.0.0.exe` pesa lo mismo que el armado (38.015.239 bytes) y se descarga.
+   - **Cómo lo ve cada PC con la 5.0.0** (`AppUpdateChecker`, solo en la pantalla principal del Admin,
+     `DashboardScreen`): pregunta a GitHub **una vez por día**, al abrir. Si esa pregunta falla (12 s sin respuesta,
+     antivirus o cortafuegos, o el tope de GitHub de 60 consultas por hora por conexión a internet, compartida por las
+     PCs de una misma oficina), no avisa nada y no vuelve a preguntar hasta el día siguiente. El botón "Buscar
+     actualización" pregunta otra vez y, si falla, dice "No se pudo consultar GitHub. Probá más tarde." (eso le
+     apareció en la PC del operario; en la del jefe lo toma al entrar). La pantalla del asesor no pregunta.
+   - Si una PC no lo detecta: cerrar y abrir el programa, "Buscar actualización", o bajarlo desde
+     https://github.com/lovera2025/Antigravity/releases/latest (o el instalador por pendrive, de `installer\dist`).
+   - Como se publicó de noche, una PC puede instalarla a la mañana antes de que él llegue: lo sabe y lo aceptó. Al
+     migrar, la app saca su copia sola (`antes_de_v73.db`).
 4. **Instalar las tres a la vez, con él presente** (punto B), el 16-oct en el trabajo: su PC, la del operario y la
    de la oficina, con una copia de la base de cada una antes. Así ninguna PC con la 5.0.0 cobra una mora en dos
    veces que quede mal otra vez.
@@ -1607,10 +1619,10 @@ igual que la 5.0.0, la migración perfecta, la mora: los mismos 33), apareció y
 se arregló que la revisión le borraba la mora a quien ya terminó de pagar
 (ALTAMIRANO: esa mora la perdona el jefe en modo jefe), y se armó el
 instalador de nuevo. ARGUELLO, TOMAS es el hijo del cliente y el alumno de
-prueba: nunca pagó nada de verdad. Sigue publicar conmigo presente, el 16-oct
-en el trabajo: el release justo antes de instalar (al publicarlo, las PCs
-muestran el aviso de versión nueva), las tres PCs a la vez, la web, cerrar los
-permisos y el ensayo.
+prueba: nunca pagó nada de verdad. El release de la 6.0.0 quedó publicado el
+15-oct a las 22:28 (lo pedí yo). Sigue, conmigo presente desde el 16-oct en el
+trabajo: instalar las tres PCs (mirar revision_mora.txt en cada una), la web,
+cerrar los permisos y el ensayo.
 Va todo en una sola versión, por partes. El objetivo
 de lo que falta: que Recepción y el tótem distingan un evento particular de
 uno masivo (se dice "evento masivo", no "fiesta de alumnos"). Están hechas
