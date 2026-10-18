@@ -92,6 +92,23 @@ class ElegirPlanoDialog extends StatefulWidget {
 /// lo que se le haya acomodado a mano.
 const _claveActual = '__actual__';
 
+const double _separacionTarjetas = 10;
+
+/// El ancho de cada tarjeta del armado, para que los renglones salgan parejos:
+/// seis tarjetas van de a tres y siete de a cuatro y tres. Antes iban de a
+/// cinco, y con el salón vacío (6.1.0) la sexta quedaba sola abajo. Ninguna
+/// baja de 180 px.
+double anchoTarjetaArmado(double disponible, int tarjetas) {
+  const minimo = 180.0;
+  const s = _separacionTarjetas;
+  if (!disponible.isFinite || tarjetas < 1) return minimo;
+  final porFila = ((disponible + s) / (minimo + s)).floor().clamp(1, tarjetas);
+  final filas = (tarjetas / porFila).ceil();
+  final enFila = (tarjetas / filas).ceil();
+  // Para abajo: con un pelo de más, el Wrap pasaría la última al otro renglón.
+  return ((disponible - s * (enFila - 1)) / enFila).floorToDouble();
+}
+
 class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
   static const double _lugarMaximo = 4.0;
 
@@ -123,11 +140,16 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
       _pasarela = ArmarAMedida.pasarelaDe(hoy) > 0;
     }
     _cantidadCtrl = TextEditingController(text: '$_cantidad');
-    // Lo recomendado ya viene elegido: el armado que la fiesta tiene o, la
-    // primera vez (o si se vino a armarlo de nuevo), el hecho a medida del
-    // playón, que siempre da las mesas justas.
-    _armado =
-        hoy != null && !rearmar ? _claveActual : ArmarAMedida.claveArmado;
+    // Lo recomendado ya viene elegido: el armado que la fiesta tiene; si se
+    // vino a armarlo de nuevo, el hecho a medida del playón; y la primera vez,
+    // el salón vacío (6.1.0, "el salón primero": el jefe arma el espacio y
+    // después pone las mesas; antes saltaban todas al tocar LISTO). Si ya hay
+    // familias con mesa, el hecho a medida, que da las mesas justas.
+    _armado = hoy != null && !rearmar
+        ? _claveActual
+        : rearmar || _vacioApagado != null
+            ? ArmarAMedida.claveArmado
+            : ArmarAMedida.claveVacio;
     _estilo = widget.actual?.estiloPlano ?? EstiloPlano.arquitecto;
     _modo = widget.actual?.modoSorteo ?? ModoSorteo.bloques;
   }
@@ -159,8 +181,23 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
     return _memo!;
   }
 
+  /// El salón vacío, con el playón y la distancia de la fiesta.
+  late final ArmadoSalon _vacio = ArmarAMedida.vacio(
+    widget.medidas.playon,
+    lugarM: widget.medidas.lugarMesaM,
+  );
+
+  /// Por qué no se puede elegir el salón vacío, o null si se puede. Con
+  /// familias ya sentadas (un sorteo hecho sin plano), sus números serían de
+  /// mesas que no existen. Si la fiesta ya tiene plano, el armado entero lo
+  /// traba [ElegirPlanoDialog.armadoTrabado].
+  String? get _vacioApagado => widget.ocupantes.isEmpty
+      ? null
+      : 'Ya hay familias con mesa: se quedarían sin la suya.';
+
   ArmadoSalon get _elegido {
     if (_armado == _claveActual) return _armadoActual!;
+    if (_armado == ArmarAMedida.claveVacio) return _vacio;
     if (_armado == ArmarAMedida.claveArmado) return _aMedida.armado;
     return ArmadosPredefinidos.porClave(_armado)!;
   }
@@ -252,6 +289,10 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
                         ),
                       ),
                     _armados(),
+                    if (_armado == ArmarAMedida.claveVacio) ...[
+                      const SizedBox(height: 12),
+                      _notaVacio(),
+                    ],
                     if (_armado == ArmarAMedida.claveArmado) ...[
                       const SizedBox(height: 12),
                       _panelAMedida(estado),
@@ -311,37 +352,47 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
     final actual = _armadoActual;
     final aMedida = _aMedida;
     final trabado = widget.armadoTrabado != null;
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        if (actual != null)
-          _tarjetaArmado(
-            clave: _claveActual,
-            nombre: 'Como está ahora',
-            armado: actual,
-            necesarias: widget.mesasNecesarias,
-            habilitada: true,
-          ),
-        _tarjetaArmado(
-          clave: ArmarAMedida.claveArmado,
-          nombre: 'A medida del playón',
-          armado: aMedida.armado,
-          necesarias: _cantidad,
-          habilitada: !trabado,
-          detalle: '${aMedida.puestas} '
-              '${aMedida.puestas == 1 ? 'mesa' : 'mesas'} a '
-              '${MedirSalon.metros(_lugar)}',
-        ),
-        for (final a in ArmadosPredefinidos.todos)
-          _tarjetaArmado(
-            clave: a.clave,
-            nombre: a.nombre,
-            armado: a,
-            necesarias: widget.mesasNecesarias,
-            habilitada: !trabado,
-          ),
-      ],
+    final cuantas = (actual != null ? 1 : 0) + 2 + ArmadosPredefinidos.todos.length;
+    return LayoutBuilder(
+      builder: (context, lugar) {
+        final ancho = anchoTarjetaArmado(lugar.maxWidth, cuantas);
+        return Wrap(
+          spacing: _separacionTarjetas,
+          runSpacing: _separacionTarjetas,
+          children: [
+            if (actual != null)
+              _tarjetaArmado(
+                clave: _claveActual,
+                nombre: 'Como está ahora',
+                armado: actual,
+                necesarias: widget.mesasNecesarias,
+                habilitada: true,
+                ancho: ancho,
+              ),
+            _tarjetaVacio(ancho),
+            _tarjetaArmado(
+              clave: ArmarAMedida.claveArmado,
+              nombre: 'A medida del playón',
+              armado: aMedida.armado,
+              necesarias: _cantidad,
+              habilitada: !trabado,
+              ancho: ancho,
+              detalle: '${aMedida.puestas} '
+                  '${aMedida.puestas == 1 ? 'mesa' : 'mesas'} a '
+                  '${MedirSalon.metros(_lugar)}',
+            ),
+            for (final a in ArmadosPredefinidos.todos)
+              _tarjetaArmado(
+                clave: a.clave,
+                nombre: a.nombre,
+                armado: a,
+                necesarias: widget.mesasNecesarias,
+                habilitada: !trabado,
+                ancho: ancho,
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -351,6 +402,7 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
     required ArmadoSalon armado,
     required int necesarias,
     required bool habilitada,
+    required double ancho,
     String? detalle,
   }) {
     final comunes = armado.cantidadComunes;
@@ -370,8 +422,7 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
             : ('Entra', Colors.green.shade700);
     return _Tarjeta(
       key: Key('armado_$clave'),
-      // Cinco entran en un renglón: las cuatro del jefe y la hecha a medida.
-      ancho: 188,
+      ancho: ancho,
       elegida: _armado == clave,
       onTap: habilitada ? () => setState(() => _armado = clave) : null,
       child: Column(
@@ -387,6 +438,63 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
           _Pastilla(texto: etiqueta, color: color),
         ],
       ),
+    );
+  }
+
+  /// El salón vacío no dice si entra la fiesta: las mesas se ponen después.
+  /// Apagado, dice por qué (lo que se traba se ve, con el motivo).
+  Widget _tarjetaVacio(double ancho) {
+    final trabado = widget.armadoTrabado != null;
+    final apagado = trabado ? null : _vacioApagado;
+    return _Tarjeta(
+      key: const Key('armado_${ArmarAMedida.claveVacio}'),
+      ancho: ancho,
+      elegida: _armado == ArmarAMedida.claveVacio,
+      onTap: trabado || apagado != null
+          ? null
+          : () => setState(() => _armado = ArmarAMedida.claveVacio),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Salón vacío',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            apagado ??
+                'El playón y el escenario, para armar el espacio. Las mesas '
+                    'se ponen después, desde Acomodar.',
+            style: TextStyle(
+              fontSize: 12,
+              color: apagado != null
+                  ? Colors.orange.shade800
+                  : Colors.grey.shade700,
+            ),
+          ),
+          if (apagado == null) ...[
+            const SizedBox(height: 6),
+            _Pastilla(texto: 'Mesas después', color: Colors.blueGrey.shade600),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Con qué playón arranca el salón vacío, y dónde se cambia.
+  Widget _notaVacio() {
+    final p = widget.medidas.playon;
+    final playon = p == PlayonReal.costaSurubi
+        ? 'el playón de Costa Surubí'
+        : 'el playón de la fiesta';
+    return Text(
+      'Arranca con $playon (${MedirSalon.metros(p.frenteM)} contra el '
+      'escenario, ${MedirSalon.metros(p.fondoM)} al fondo y '
+      '${MedirSalon.metros(p.profundidadM)} de profundidad), el escenario y el '
+      'Ingreso. Si la fiesta es en otro predio, el espacio se cambia en '
+      'Personalizar → Acomodar.',
+      key: const Key('nota_vacio'),
+      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
     );
   }
 

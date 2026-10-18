@@ -148,6 +148,66 @@ void main() {
     expect(r.plano.hechoPor, 'Jefe');
   });
 
+  // 6.1.0, "el salón primero": el salón vacío se guarda como cualquier armado.
+  group('el salón vacío', () {
+    final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+
+    test('la primera vez queda guardado sin mesas, y se vuelve a leer igual',
+        () {
+      final p = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: null,
+        armado: vacio,
+        estilo: EstiloPlano.arquitecto,
+        modo: ModoSorteo.bloques,
+        hayFamiliasConMesa: false,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+      ).plano;
+      expect(p.armadoClave, ArmarAMedida.claveVacio);
+      final leido = PlanoEvento.fromMap(p.toMap());
+      expect(leido.armado.mesas, isEmpty);
+      expect(leido.armado.sectores.length, 2);
+      expect(jsonEncode(leido.armado.toJson()), jsonEncode(vacio.toJson()));
+    });
+
+    test('sobre un plano sin familias sentadas: se vacía el armado y lo '
+        'cargado a mano sigue', () {
+      final previo = guardado();
+      final r = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: previo,
+        armado: vacio,
+        estilo: EstiloPlano.gala,
+        modo: ModoSorteo.entera,
+        hayFamiliasConMesa: false,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+      );
+      expect(r.conservoArmado, isFalse);
+      expect(r.plano.armadoClave, ArmarAMedida.claveVacio);
+      expect(r.plano.armado.mesas, isEmpty);
+      expect(r.plano.config.toJson(), previo.config.toJson());
+    });
+
+    test('con familias sentadas no vacía nada: el armado queda', () {
+      final previo = guardado();
+      final r = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: previo,
+        armado: vacio,
+        estilo: EstiloPlano.gala,
+        modo: ModoSorteo.entera,
+        hayFamiliasConMesa: true,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+      );
+      expect(r.conservoArmado, isTrue);
+      expect(r.plano.armadoJson, previo.armadoJson);
+      expect(r.plano.armado.mesas.length, pagina3.mesas.length);
+    });
+  });
+
   test('la fila que sale no deja vacía ninguna columna obligatoria', () {
     final m = aplicarEleccionAlPlano(
       eventoId: evento,

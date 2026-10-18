@@ -1127,6 +1127,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
             SemaforoPlano.entran => Colors.green.shade700,
             SemaforoPlano.revisar => Colors.orange.shade800,
             SemaforoPlano.faltan => Colors.red.shade700,
+            SemaforoPlano.sinMesas => Colors.blueGrey.shade600,
           };
     final aproximado = visto.medidas.playon.aproximado;
     final titulo =

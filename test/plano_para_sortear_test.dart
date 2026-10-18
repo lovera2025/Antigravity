@@ -1,9 +1,13 @@
 // Antes de sortear se lee el plano de la fiesta. Lo que pase ahí decide si el
 // sorteo se hace sobre el plano, como siempre, o si no se hace.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/plano_para_sortear.dart';
 import 'package:arguello_events/models/plano_evento.dart';
 
@@ -111,6 +115,53 @@ void main() {
       expect(r.sePuedeSeguir, isFalse);
       expect(r.plano, isNull);
       expect(r.problema, contains('elegí el armado de nuevo'));
+      expect(r.problemaParaSortear, r.problema);
     }
+  });
+
+  // 6.1.0, "el salón primero": el jefe arma el espacio y después pone las
+  // mesas. Mientras tanto no hay a qué mesas sortear.
+  group('el salón vacío', () {
+    PlanoEvento vacio() => PlanoEvento.nuevo(
+          eventoId: 'e0000000-0000-4000-8000-000000000001',
+          armado: ArmarAMedida.vacio(PlayonReal.costaSurubi),
+          estilo: EstiloPlano.gala,
+          modo: ModoSorteo.bloques,
+          ahora: ahora,
+        );
+
+    test('se lee, pero no se sortea: primero las mesas', () async {
+      final r =
+          await leerPlanoParaSortear(deLaNube: () async => vacio(), deEstaPc: ninguno);
+      // Se lee bien: deshacer o mirar el plano no se frena.
+      expect(r.sePuedeSeguir, isTrue);
+      expect(r.plano!.armado.mesas, isEmpty);
+      expect(
+        r.problemaParaSortear,
+        'El salón de esta fiesta todavía no tiene mesas. Abrí PLANO y ponelas '
+        'en Personalizar → Acomodar antes de sortear.',
+      );
+    });
+
+    // La pantalla de la fiesta no se puede montar en un test (son casi 10.000
+    // líneas): se lee su código. El SORTEO pregunta antes de abrir el diálogo
+    // y otra vez con el plano recién leído, y las dos veces tiene que mirar
+    // también el salón vacío.
+    test('el SORTEO de la fiesta frena con el salón vacío, las dos veces', () {
+      final codigo = File(
+        'lib/features/eventos/detalle_evento_masivo_screen.dart',
+      ).readAsStringSync();
+      expect('problemaParaSortear'.allMatches(codigo).length, 2);
+      expect(codigo, isNot(contains('sePuedeSeguir')));
+    });
+
+    test('con mesas, o sin plano, se sortea', () async {
+      final conMesas =
+          await leerPlanoParaSortear(deLaNube: () async => plano(), deEstaPc: ninguno);
+      expect(conMesas.problemaParaSortear, isNull);
+      final sinPlano =
+          await leerPlanoParaSortear(deLaNube: ninguno, deEstaPc: ninguno);
+      expect(sinPlano.problemaParaSortear, isNull);
+    });
   });
 }

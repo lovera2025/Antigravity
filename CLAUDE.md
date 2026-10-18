@@ -20,7 +20,7 @@ instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
-(hechos), y el salón primero (etapa 1 hecha), en una sola versión. La mora por
+(hechos), y el salón primero (etapas 1 y 2 hechas), en una sola versión. La mora por
 cuota suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
@@ -147,6 +147,13 @@ vacío y después pone las mesas con un botón.
 - **El escenario es un sector como los demás:** `conPlayon` ya no lo ata al frente.
 - **No agregar claves al JSON del armado:** la 6.0.0 lo reescribe entero y las perdería
   (`test/salon_convivencia_test.dart`).
+- **La primera vez, Estilo y armado viene con el salón vacío** (salvo familias ya sentadas sin plano: ahí apagado,
+  con el motivo).
+- **Un plano sin mesas se lee:** `PlanoEvento.armadoONull` da null solo si el armado no tiene hojas. **La 6.0.0 lo
+  toma por roto** (no sortea, el tótem va sin plano, PLANO ofrece elegirlo de nuevo): el plano se toca desde una PC
+  con la 6.1.0. Quien use el armado tiene que aguantar cero mesas.
+- **SORTEO no sortea un salón sin mesas** (`LecturaPlano.problemaParaSortear`, las dos veces que lee el plano;
+  `test/plano_para_sortear_test.dart` lee la pantalla de la fiesta). Deshacer no lo mira.
 
 **En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin

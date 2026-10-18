@@ -27,8 +27,9 @@ class AvisoPlano {
   const AvisoPlano(this.texto, {this.mesa, this.grave = false});
 }
 
-/// Cómo está el salón en una palabra, para el encabezado.
-enum SemaforoPlano { entran, revisar, faltan }
+/// Cómo está el salón en una palabra, para el encabezado. [sinMesas] es el
+/// salón vacío (6.1.0): el espacio armado, con las mesas todavía por poner.
+enum SemaforoPlano { entran, revisar, faltan, sinMesas }
 
 /// Todo lo que muestra la pantalla del plano de una fiesta, calculado con los
 /// datos del momento: las familias con sus mesas y sillas, lo que mide y lo
@@ -83,15 +84,19 @@ class PlanoDeLaFiesta {
   /// Entran, pero usando mesas del pasto.
   bool get usaPasto => faltan == 0 && mesasNecesarias > mesasComunes;
 
-  SemaforoPlano get semaforo => faltan > 0
-      ? SemaforoPlano.faltan
-      : avisos.any((a) => a.grave)
-          ? SemaforoPlano.revisar
-          : SemaforoPlano.entran;
+  SemaforoPlano get semaforo => armado.mesas.isEmpty
+      ? SemaforoPlano.sinMesas
+      : faltan > 0
+          ? SemaforoPlano.faltan
+          : avisos.any((a) => a.grave)
+              ? SemaforoPlano.revisar
+              : SemaforoPlano.entran;
 
   /// "Entran las 132", "Faltan 6 mesas", "Hay 2 cosas para revisar".
   String get titular {
     switch (semaforo) {
+      case SemaforoPlano.sinMesas:
+        return 'Sin mesas todavía';
       case SemaforoPlano.faltan:
         return faltan == 1 ? 'Falta 1 mesa' : 'Faltan $faltan mesas';
       case SemaforoPlano.revisar:
@@ -202,7 +207,12 @@ class PlanoDeLaFiesta {
     );
 
     final tiene = armado.mesas.length;
-    if (necesarias > tiene) {
+    if (tiene == 0) {
+      // El salón vacío no es un error: las mesas se ponen después.
+      avisos.add(const AvisoPlano(
+        'El salón está vacío: las mesas se ponen en Personalizar → Acomodar.',
+      ));
+    } else if (necesarias > tiene) {
       final n = necesarias - tiene;
       avisos.add(AvisoPlano(
         '${n == 1 ? 'Falta 1 mesa' : 'Faltan $n mesas'}: la fiesta necesita '

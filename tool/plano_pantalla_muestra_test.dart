@@ -9,7 +9,8 @@
 //   • Pantalla_plano_faltan.png: un armado donde la fiesta no entra;
 //   • Pantalla_plano_operario.png: la pantalla sin modo jefe;
 //   • Pantalla_plano_aviso.png: el aviso de lo que pasó, al lado de los botones;
-//   • Pasos_plano.png: la primera vez, con todo ya elegido;
+//   • Pantalla_plano_vacio.png: el salón vacío, antes de poner las mesas;
+//   • Pasos_plano.png: la primera vez, con todo ya elegido (el salón vacío);
 //   • Pasos_plano_trabado.png: con familias ya sentadas;
 //   • Personalizar_*.png: una familia elegida con lo que se le puede hacer, el
 //     momento de tocar a dónde se muda, la pestaña Medidas (como abre, y con
@@ -289,6 +290,21 @@ void main() {
       ),
       const Size(1440, 900),
       'Pantalla_plano_faltan.png',
+    );
+  });
+
+  // 6.1.0, "el salón primero": lo que queda al tocar LISTO la primera vez.
+  testWidgets('la pantalla con el salón vacío', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(
+        ArmarAMedida.vacio(PlayonReal.costaSurubi),
+        _escuela(132, sorteada: false),
+        EstiloPlano.arquitecto,
+        acciones: _sinHacer,
+      ),
+      const Size(1440, 900),
+      'Pantalla_plano_vacio.png',
     );
   });
 

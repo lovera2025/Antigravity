@@ -7,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/modelo/estado_plano.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/widgets/elegir_plano_dialog.dart';
@@ -27,6 +29,7 @@ Future<_Resultado> _abrir(
   String? trabado,
   bool rearmar = false,
   MedidasPlano medidas = const MedidasPlano(),
+  List<OcupantePlano> ocupantes = const [],
 }) async {
   tester.view.physicalSize = const Size(1400, 1000);
   tester.view.devicePixelRatio = 1;
@@ -47,6 +50,7 @@ Future<_Resultado> _abrir(
                   actual: actual,
                   armadoTrabado: trabado,
                   rearmar: rearmar,
+                  ocupantes: ocupantes,
                 );
                 r.cerrado = true;
               },
@@ -69,6 +73,19 @@ Future<void> _tocar(WidgetTester tester, String clave) async {
   await tester.pumpAndSettle();
   await tester.tap(donde);
   await tester.pumpAndSettle();
+}
+
+/// Abre la primera vez y elige "A medida del playón", que ya no viene elegido.
+Future<_Resultado> _abrirAMedida(WidgetTester tester, {int necesarias = 132}) async {
+  final r = await _abrir(tester, necesarias: necesarias);
+  await _tocar(tester, 'armado_${ArmarAMedida.claveArmado}');
+  return r;
+}
+
+/// Frente, fondo y profundidad del playón dibujado, en metros redondos.
+(int, int, int) _medidasDe(ArmadoSalon a) {
+  final p = ArmarAMedida.playonDe(a)!;
+  return (p.frenteM.round(), p.fondoM.round(), p.profundidadM.round());
 }
 
 String _textoDe(WidgetTester tester, String clave) =>
@@ -103,18 +120,109 @@ void main() {
       );
 
   group('la primera vez', () {
-    testWidgets('sin tocar nada, LISTO deja lo recomendado', (tester) async {
+    // 6.1.0, "el salón primero": antes venía "A medida del playón" y al tocar
+    // LISTO saltaban las 132 mesas. El jefe pidió armar primero el espacio.
+    testWidgets('sin tocar nada, LISTO deja el salón vacío: el espacio, sin '
+        'mesas', (tester) async {
       final r = await _abrir(tester);
       expect(find.textContaining('La fiesta necesita 132 mesas'), findsOneWidget);
+      expect(find.byKey(const Key('nota_vacio')), findsOneWidget);
+      // El panel de "A medida" no está: no hay mesas que contar.
+      expect(find.byKey(const Key('distancia')), findsNothing);
+      expect(find.textContaining('Salón vacío · Arquitecto'), findsOneWidget);
       await _tocar(tester, 'listo');
       expect(r.cerrado, isTrue);
       final e = r.eleccion!;
-      // A medida del playón, con las mesas justas de la fiesta.
+      expect(e.armado.clave, ArmarAMedida.claveVacio);
+      expect(e.armado.mesas, isEmpty);
+      expect(
+        [for (final s in e.armado.sectores) s.tipo],
+        [TipoSector.escenario, TipoSector.ingreso],
+      );
+      expect(_medidasDe(e.armado), (30, 46, 39));
+      expect(e.estilo, EstiloPlano.arquitecto);
+      expect(e.modo, ModoSorteo.bloques);
+    });
+
+    testWidgets('el salón vacío sale con el playón y la distancia de Medidas',
+        (tester) async {
+      const playon = PlayonReal(frenteM: 20, fondoM: 20, profundidadM: 25);
+      final r = await _abrir(
+        tester,
+        medidas: const MedidasPlano(lugarMesaM: 2.5, playon: playon),
+      );
+      expect(
+        _textoDe(tester, 'nota_vacio'),
+        startsWith('Arranca con el playón de la fiesta (20 m contra el '
+            'escenario, 20 m al fondo y 25 m de profundidad)'),
+      );
+      await _tocar(tester, 'listo');
+      final a = r.eleccion!.armado;
+      expect(_medidasDe(a), (20, 20, 25));
+      expect(a.lugarOriginalM, 2.5);
+    });
+
+    testWidgets('el salón vacío no dice si entra la fiesta: las mesas van '
+        'después', (tester) async {
+      await _abrir(tester);
+      expect(
+        _tarjeta(tester, ArmarAMedida.claveVacio),
+        [
+          'Salón vacío',
+          'El playón y el escenario, para armar el espacio. Las mesas se '
+              'ponen después, desde Acomodar.',
+          'Mesas después',
+        ],
+      );
+      expect(
+        _textoDe(tester, 'nota_vacio'),
+        startsWith('Arranca con el playón de Costa Surubí (30 m contra el '
+            'escenario, 46 m al fondo y 39 m de profundidad)'),
+      );
+    });
+
+    // Una fiesta sorteada sin plano: sus familias tienen números de mesa. En
+    // un salón sin mesas se quedarían sin la suya.
+    testWidgets('con familias ya sentadas, el salón vacío queda apagado con el '
+        'motivo y viene "A medida"', (tester) async {
+      final r = await _abrir(
+        tester,
+        ocupantes: const [
+          OcupantePlano(id: 'a1', nombre: 'PEREZ, ANA', numeros: [1, 2]),
+        ],
+      );
+      expect(
+        _tarjeta(tester, ArmarAMedida.claveVacio),
+        ['Salón vacío', 'Ya hay familias con mesa: se quedarían sin la suya.'],
+      );
+      expect(find.byKey(const Key('nota_vacio')), findsNothing);
+      await _tocar(tester, 'armado_${ArmarAMedida.claveVacio}');
+      await _tocar(tester, 'listo');
+      final e = r.eleccion!;
+      expect(e.armado.clave, ArmarAMedida.claveArmado);
+      expect(e.armado.mesas.length, 132);
+    });
+
+    testWidgets('se puede pasar a "A medida" y volver al salón vacío',
+        (tester) async {
+      final r = await _abrir(tester);
+      await _tocar(tester, 'armado_${ArmarAMedida.claveArmado}');
+      expect(find.byKey(const Key('nota_vacio')), findsNothing);
+      expect(find.byKey(const Key('distancia')), findsOneWidget);
+      await _tocar(tester, 'armado_${ArmarAMedida.claveVacio}');
+      expect(find.byKey(const Key('distancia')), findsNothing);
+      await _tocar(tester, 'listo');
+      expect(r.eleccion!.armado.clave, ArmarAMedida.claveVacio);
+    });
+
+    testWidgets('elegido "A medida", LISTO lo arma con las mesas justas',
+        (tester) async {
+      final r = await _abrirAMedida(tester);
+      await _tocar(tester, 'listo');
+      final e = r.eleccion!;
       expect(e.armado.clave, ArmarAMedida.claveArmado);
       expect(e.armado.mesas.length, 132);
       expect(e.armado.distanciaM(1, 2), closeTo(2.0, 1e-9));
-      expect(e.estilo, EstiloPlano.arquitecto);
-      expect(e.modo, ModoSorteo.bloques);
     });
 
     testWidgets('cada armado dice si entra la fiesta', (tester) async {
@@ -161,7 +269,7 @@ void main() {
   group('a medida del playón', () {
     testWidgets('dice cuántas entran, y cuántas faltan si no entran',
         (tester) async {
-      await _abrir(tester);
+      await _abrirAMedida(tester);
       expect(_textoDe(tester, 'resultado_medida'), 'Entran las 132 (hasta 284)');
 
       await tester.enterText(find.byKey(const Key('cantidad')), '300');
@@ -179,7 +287,7 @@ void main() {
 
     testWidgets('usar todo el playón separa las mesas lo más que se puede',
         (tester) async {
-      final r = await _abrir(tester);
+      final r = await _abrirAMedida(tester);
       await _tocar(tester, 'todo_el_playon');
       expect(find.textContaining('2,9 m'), findsWidgets);
       expect(_textoDe(tester, 'resultado_medida'), startsWith('Entran las 132'));
@@ -189,7 +297,7 @@ void main() {
     });
 
     testWidgets('sin pasarela entran más', (tester) async {
-      final r = await _abrir(tester);
+      final r = await _abrirAMedida(tester);
       await _tocar(tester, 'pasarela');
       final texto = _textoDe(tester, 'resultado_medida');
       final hasta = int.parse(RegExp(r'hasta (\d+)').firstMatch(texto)!.group(1)!);
@@ -200,7 +308,7 @@ void main() {
 
     testWidgets('una cantidad vacía o en cero no rompe: queda la anterior',
         (tester) async {
-      final r = await _abrir(tester);
+      final r = await _abrirAMedida(tester);
       await tester.enterText(find.byKey(const Key('cantidad')), '');
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('cantidad')), '0');
@@ -236,6 +344,7 @@ void main() {
       expect(find.textContaining('deshacer el sorteo'), findsOneWidget);
       await _tocar(tester, 'armado_${ArmadosPredefinidos.normal2aPagina3Clave}');
       await _tocar(tester, 'armado_${ArmarAMedida.claveArmado}');
+      await _tocar(tester, 'armado_${ArmarAMedida.claveVacio}');
       await _tocar(tester, 'estilo_gala');
       await _tocar(tester, 'listo');
       final e = r.eleccion!;
@@ -257,7 +366,7 @@ void main() {
       final r = await _abrir(tester, actual: roto);
       expect(find.byKey(const Key('armado___actual__')), findsNothing);
       await _tocar(tester, 'listo');
-      expect(r.eleccion!.armado.clave, ArmarAMedida.claveArmado);
+      expect(r.eleccion!.armado.clave, ArmarAMedida.claveVacio);
     });
   });
 
@@ -342,6 +451,31 @@ void main() {
       expect(_tarjeta(tester, '__actual__').first, 'Como está ahora');
       await _tocar(tester, 'listo');
       expect(jsonEncode(r.eleccion!.armado.toJson()), actual.armadoJson);
+    });
+  });
+
+  // Con el salón vacío son seis tarjetas, y de a cinco la sexta quedaba sola.
+  group('las tarjetas del armado van en renglones parejos', () {
+    test('seis de a tres, siete de a cuatro y tres; en angosto, de a menos',
+        () {
+      expect(anchoTarjetaArmado(992, 6), 324); // 3 + 3
+      expect(anchoTarjetaArmado(992, 7), 240); // 4 + 3
+      expect(anchoTarjetaArmado(500, 6), 245); // 2 + 2 + 2
+      expect(anchoTarjetaArmado(380, 6), 185); // 2 + 2 + 2
+      expect(anchoTarjetaArmado(150, 6), 150); // una por renglón
+    });
+
+    testWidgets('la primera vez, tres y tres', (tester) async {
+      await _abrir(tester);
+      double arriba(String clave) =>
+          tester.getTopLeft(find.byKey(Key('armado_$clave'))).dy;
+      final primera = arriba(ArmarAMedida.claveVacio);
+      expect(arriba(ArmarAMedida.claveArmado), primera);
+      expect(arriba(ArmadosPredefinidos.normal2aPagina3Clave), primera);
+      final segunda = arriba(ArmadosPredefinidos.normal2aPaginas45Clave);
+      expect(segunda, greaterThan(primera));
+      expect(arriba(ArmadosPredefinidos.normal2a2bClave), segunda);
+      expect(arriba(ArmadosPredefinidos.tecnica1a1bClave), segunda);
     });
   });
 

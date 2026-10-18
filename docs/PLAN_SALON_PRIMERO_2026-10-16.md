@@ -238,4 +238,33 @@ este salón. La fase 2 de la mora no va: eligió quedarse con la mora en fila (v
   eso el plano se toca desde una PC con la 6.1.0.
 - `test/salon_primero_cuentas_test.dart` (33 tests) y 13 roturas a propósito, todas vistas.
 
-**Sigue la etapa 2:** la tarjeta "Salón vacío" en Estilo y armado, y `aplicar_eleccion`.
+## 10. La etapa 2, hecha el 18-oct (la tarjeta "Salón vacío")
+
+- **Estilo y armado** (`elegir_plano_dialog.dart`) suma la tarjeta "Salón vacío", primera de la fila. **Viene elegida
+  la primera vez** (fiesta sin plano): al tocar LISTO ya no saltan las mesas. Con plano sigue "Como está ahora", y
+  desde el aviso de Medidas, "A medida".
+  - No dice si entra la fiesta: su pastilla es "Mesas después". Debajo, con qué playón arranca y que el espacio se
+    cambia en Acomodar.
+  - **Con familias ya sentadas y sin plano** (un sorteo hecho sin plano) queda apagada, con el motivo, y viene "A
+    medida": esas familias se quedarían sin su mesa. Con plano, el armado entero ya lo traba `armadoTrabado`.
+  - Con seis tarjetas, la sexta quedaba sola en un segundo renglón: ahora se reparten parejas
+    (`anchoTarjetaArmado`): seis de a tres, siete de a cuatro y tres.
+- `aplicar_eleccion` no cambió: el salón vacío se guarda como cualquier armado (tests nuevos).
+- **La pantalla del plano** dice "Sin mesas todavía" (`SemaforoPlano.sinMesas`, en gris azulado) y el aviso "El salón
+  está vacío…", que no es grave.
+- **SORTEO con el salón vacío no sortea** (`LecturaPlano.problemaParaSortear`): lo dice con la ventana de siempre de
+  la fiesta, antes de abrir el diálogo y otra vez con el plano recién leído. Corrección a la sección 7: decía
+  `AvisoDelPlano`, pero SORTEO está en la barra de la fiesta. Deshacer no lo mira. Un test lee
+  `detalle_evento_masivo_screen.dart` y exige las dos llamadas.
+- **Lo que no vio la etapa 1 (corrección a la sección 9):** hasta acá, `PlanoEvento.armadoONull` daba por **roto** a
+  todo armado sin mesas, así que un salón vacío guardado no se podía volver a abrir. Ahora lo roto es un armado sin
+  hojas. **En la 6.0.0 un salón vacío sigue leyéndose como roto**: no sortea, el tótem va sin plano y PLANO dice "El
+  armado de esta fiesta no se puede leer" y ofrece elegirlo de nuevo (si el jefe toca LISTO ahí, lo reemplaza por
+  "A medida"). No pierde plata ni familias, pero confirma la regla: **el plano se toca desde una PC con la 6.1.0**.
+  `salon_convivencia_test` probaba el modelo del armado, no esa regla de `PlanoEvento`; un salón ya acomodado (con
+  mesas) la 6.0.0 lo lee bien.
+- **Comprobado:** 2.555 tests, `flutter analyze` en 312 (los de siempre), 6 roturas a propósito, todas vistas, y las
+  muestras `Pasos_plano.png`, `Pasos_plano_trabado.png` y `Pantalla_plano_vacio.png`
+  (`build/muestras_6.1.0/salon_vacio/`).
+
+**Sigue la etapa 3:** las manijas sobre el dibujo (sectores y playón) y el panel sin las cuatro flechitas.

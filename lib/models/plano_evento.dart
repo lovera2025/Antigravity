@@ -383,8 +383,13 @@ class PlanoEvento {
   bool get tieneIdFijo => id == UuidUtils.planoEventoId(eventoId);
 
   /// El armado de esta fiesta, o null si su copia no se puede leer (un
-  /// `armado_json` roto o sin mesas). Quien lo use tiene que avisar y pedir
+  /// `armado_json` roto o sin hojas). Quien lo use tiene que avisar y pedir
   /// que se elija el armado de nuevo, no romper.
+  ///
+  /// **Un salón sin mesas sí se lee**: es el salón vacío de la 6.1.0 ("el salón
+  /// primero"), que el jefe arma antes de poner las mesas. La 6.0.0 lo toma por
+  /// roto: no sortea, el tótem va sin plano y PLANO pide elegir el armado de
+  /// nuevo. Por eso el plano se toca desde una PC con la 6.1.0.
   late final ArmadoSalon? armadoONull = _leerArmado();
 
   ArmadoSalon? _leerArmado() {
@@ -392,7 +397,7 @@ class PlanoEvento {
       final crudo = jsonDecode(armadoJson);
       if (crudo is! Map) return null;
       final a = ArmadoSalon.fromJson(Map<String, dynamic>.from(crudo));
-      return a.mesas.isEmpty ? null : a;
+      return a.hojas.isEmpty ? null : a;
     } catch (_) {
       return null;
     }

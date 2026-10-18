@@ -16,6 +16,16 @@ class LecturaPlano {
   const LecturaPlano.conProblema(String this.problema) : plano = null;
 
   bool get sePuedeSeguir => problema == null;
+
+  /// Por qué no se puede sortear, o null si se puede. Además de [problema]: un
+  /// salón sin mesas (el salón vacío de la 6.1.0, "el salón primero") no se
+  /// sortea. Deshacer no lo mira: se deshace con cualquier salón.
+  String? get problemaParaSortear =>
+      problema ??
+      (plano?.armadoONull?.mesas.isEmpty ?? false
+          ? 'El salón de esta fiesta todavía no tiene mesas. Abrí PLANO y '
+              'ponelas en Personalizar → Acomodar antes de sortear.'
+          : null);
 }
 
 /// Lee el plano de la fiesta para sortear: primero la nube, por si la otra PC

@@ -3707,8 +3707,10 @@ class _DetalleEventoMasivoScreenState
       if (seguir != true || !mounted) return;
     }
 
-    if (!lectura.sePuedeSeguir) {
-      await _avisarSorteo('No se puede sortear todavía', lectura.problema!);
+    // Con el salón vacío tampoco: primero se ponen las mesas.
+    final problema = lectura.problemaParaSortear;
+    if (problema != null) {
+      await _avisarSorteo('No se puede sortear todavía', problema);
       return;
     }
     var plano = lectura.plano;
@@ -3751,8 +3753,9 @@ class _DetalleEventoMasivoScreenState
       final lecturaFresca = await _leerPlano(eventoId, nube: hayRed);
       if (!mounted) return;
       setState(() => _isLoading = false);
-      if (!lecturaFresca.sePuedeSeguir) {
-        await _avisarSorteo('No se sorteó nada', lecturaFresca.problema!);
+      final problemaFresco = lecturaFresca.problemaParaSortear;
+      if (problemaFresco != null) {
+        await _avisarSorteo('No se sorteó nada', problemaFresco);
         return;
       }
       final planoFresco = lecturaFresca.plano;

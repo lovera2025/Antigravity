@@ -155,6 +155,34 @@ void main() {
       expect(p.avisos.first.grave, isTrue);
     });
 
+    // 6.1.0, "el salón primero": el salón vacío no es un error. Las mesas se
+    // ponen después.
+    test('el salón vacío: sin mesas todavía, sin nada grave', () {
+      final p = PlanoDeLaFiesta.desde(
+        armado: ArmarAMedida.vacio(PlayonReal.costaSurubi),
+        config: ConfigPlano.vacia,
+        alumnos: [for (var i = 0; i < 132; i++) alumno('f$i')],
+      );
+      expect(p.semaforo, SemaforoPlano.sinMesas);
+      expect(p.titular, 'Sin mesas todavía');
+      expect(p.avisos.map((a) => (a.texto, a.grave)), [
+        (
+          'El salón está vacío: las mesas se ponen en Personalizar → Acomodar.',
+          false,
+        ),
+      ]);
+      expect(p.detalle, '0 mesas · en el playón entran hasta 284');
+      // Una fiesta sin alumnos tampoco dice "Salón listo" sin mesas.
+      expect(
+        PlanoDeLaFiesta.desde(
+          armado: ArmarAMedida.vacio(PlayonReal.costaSurubi),
+          config: ConfigPlano.vacia,
+          alumnos: const [],
+        ).titular,
+        'Sin mesas todavía',
+      );
+    });
+
     test('con el pasto alcanza: entran, y se sabe que lo usa', () {
       final tecnica = ArmadosPredefinidos.tecnica1a1b();
       final p = PlanoDeLaFiesta.desde(

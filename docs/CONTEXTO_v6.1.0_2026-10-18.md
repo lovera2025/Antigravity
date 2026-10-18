@@ -20,13 +20,13 @@ corto y su OK antes de programar.
 2. ~~La mora de cada cuota guardada (fase 2)~~. **Descartada el 18-oct**: vio la maqueta con la mora en fila y cada
    cuota suelta, y eligió la fila (la A de [PLAN_MORA_POR_CUOTA](PLAN_MORA_POR_CUOTA_2026-10-18.md)). A cambio,
    **el aviso "Revisar la ficha", HECHO (`964b141`)**.
-3. **El salón primero, las mesas después**, las etapas de su plan. **La etapa 1 (las cuentas) HECHA el 18-oct**; ver
-   las secciones 8 y 9 del plan.
+3. **El salón primero, las mesas después**, las etapas de su plan. **Las etapas 1 (las cuentas) y 2 (la tarjeta
+   "Salón vacío") HECHAS el 18-oct**; ver las secciones 8, 9 y 10 del plan.
    - Las cuatro flechitas se sacan.
    - Mover un sector después de acomodar no reacomoda: se toca el botón.
    - **Los predios con nombre van en la 6.1.0**, como etapa nueva con maqueta.
    - "Volver al armado original" también en el salón vacío.
-   - **Sigue la etapa 2:** la tarjeta "Salón vacío" en Estilo y armado.
+   - **Sigue la etapa 3:** las manijas sobre el dibujo.
 4. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, y publicar con él presente.
 
 Sin la fase 2 la versión es más chica, pero el salón tiene sus etapas 2 a 6 más los predios: tampoco llega al lunes 20.
@@ -87,6 +87,21 @@ Las cuentas, sin pantalla: el salón vacío, las manijas, el escenario desatado 
 sectores, dentro del borde real. **Con el mismo playón da exactamente lo mismo que el armado a medida de hoy, mesa por
 mesa.** Detalle en la sección 9 de [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md).
 
+## El salón primero, etapa 2 (18-oct)
+
+La primera vez que el jefe toca PLANO, Estilo y armado viene con **"Salón vacío"** elegido: al tocar LISTO queda el
+playón con el escenario y el Ingreso, y ya no saltan las 132 mesas. Arriba dice "Sin mesas todavía", sin rojo. Detalle
+en la sección 10 de [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md).
+- Con familias ya sentadas y sin plano, el salón vacío queda apagado con el motivo.
+- **SORTEO no sortea un salón sin mesas:** lo dice con la ventana de siempre. Preguntó qué era "el freno del
+  sorteo"; se le explicó con la noche (arma el salón el lunes, el miércoles alguien toca SORTEO antes de poner las
+  mesas: sale el cartel y no se toca nada).
+- **Lo que encontré:** hasta acá un plano sin mesas se daba por roto, y un salón vacío guardado no se podía volver a
+  abrir; la etapa 1 no lo vio. Ahora se lee. **En la 6.0.0 se sigue viendo como roto** (no sortea, el tótem va sin
+  plano, PLANO ofrece elegir el armado de nuevo): no pierde nada, y confirma que el plano se toca desde una PC con la
+  6.1.0.
+- **Comprobado:** 2.555 tests, 6 roturas a propósito vistas, y tres muestras (dos se le mandaron).
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
@@ -114,11 +129,11 @@ docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/PLAN_SALON_PRIMERO_2026-10-16.md
 6.0.0 está publicada e instalada en las tres PCs. La 6.1.0 va en una sola
 versión con todo junto: las bajas temporales y el aviso "Revisar la ficha",
 HECHOS el 18-oct y sin instalar (la fase 2 de la mora por cuota la descarté:
-me quedo con la mora en fila); el salón primero, con la etapa 1 (las cuentas)
-HECHA el 18-oct; sigue la etapa 2 (la tarjeta "Salón vacío" en Estilo y
-armado), después las manijas, los botones, las muestras y los predios con
-nombre (etapa nueva, con maqueta); y al final la versión y publicar conmigo
-presente.
+me quedo con la mora en fila); el salón primero, con las etapas 1 (las
+cuentas) y 2 (la tarjeta "Salón vacío" en Estilo y armado) HECHAS el 18-oct;
+sigue la etapa 3 (las manijas sobre el dibujo), después los botones ACOMODAR y
+VACIAR, las muestras y los predios con nombre (etapa nueva, con maqueta); y al
+final la versión y publicar conmigo presente.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

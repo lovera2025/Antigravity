@@ -6,6 +6,7 @@ import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
 
@@ -188,6 +189,18 @@ void main() {
       expect(sin.armadoONull, isNull);
       // Y uno bueno se lee.
       expect(plano().armadoONull!.numeros.length, 78);
+    });
+
+    // 6.1.0, "el salón primero". Hasta la 6.0.0 un armado sin mesas se daba
+    // por roto: el salón vacío no se podía volver a abrir.
+    test('el salón vacío, sin mesas, se lee', () {
+      final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+      final p = PlanoEvento.fromMap(plano().toMap()
+        ..['armado_json'] = jsonEncode(vacio.toJson()));
+      expect(p.armadoONull, isNotNull);
+      expect(p.armado.mesas, isEmpty);
+      expect(p.armado.clave, ArmarAMedida.claveVacio);
+      expect(p.armado.sectores.length, 2);
     });
 
     test('un estilo desconocido no se pierde al guardar', () {

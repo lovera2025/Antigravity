@@ -570,8 +570,12 @@ void main() {
       expect(plano.eventoId, _eventoId);
       expect(plano.armadoONull, isNotNull);
       expect(find.text('Plano guardado.'), findsOneWidget);
-      // Y ya se ve.
+      // Y ya se ve: el salón vacío (6.1.0), sin mesas, que no es un error.
+      expect(plano.armado.clave, ArmarAMedida.claveVacio);
+      expect(plano.armado.mesas, isEmpty);
       expect(find.byType(VistaPlano), findsOneWidget);
+      expect(find.text('Sin mesas todavía'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('sin modo jefe no se ofrece armarlo: dice quién lo arma',
