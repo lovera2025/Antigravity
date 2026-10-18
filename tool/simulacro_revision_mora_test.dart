@@ -117,6 +117,8 @@ void main() {
     try {
       final db = await LocalDatabase.instance;
       final antes = await _foto(hoy);
+      // 6.1.0: las fichas que no se explican cuota por cuota, antes y después.
+      final sinExplicarAntes = await MoraTrackedRecovery.fichasSinExplicar(db);
 
       final reloj = Stopwatch()..start();
       final renglones = <String>[];
@@ -132,6 +134,8 @@ void main() {
       );
       reloj.stop();
       final despues = await _foto(hoy);
+      final sinExplicarDespues =
+          await MoraTrackedRecovery.fichasSinExplicar(db);
       final cola = (await db.rawQuery(
         "SELECT count(*) AS n FROM _sync_queue WHERE tabla = 'contratos_alumnos'",
       )).first['n'];
@@ -192,7 +196,13 @@ void main() {
         ..writeAll(cambios.map((c) => '  $c\n'))
         ..writeln()
         ..writeln('LA CONSTANCIA QUE QUEDARÍA EN revision_mora.txt')
-        ..writeAll(renglones.map((r) => '  $r\n'));
+        ..writeAll(renglones.map((r) => '  $r\n'))
+        ..writeln()
+        ..writeln('FICHAS QUE NO SE EXPLICAN CUOTA POR CUOTA (6.1.0)')
+        ..writeln('  antes de la revisión: ${sinExplicarAntes.length}')
+        ..writeAll(sinExplicarAntes.map((r) => '    $r\n'))
+        ..writeln('  después: ${sinExplicarDespues.length}')
+        ..writeAll(sinExplicarDespues.map((r) => '    $r\n'));
       print(b.toString());
       if (_salida.isNotEmpty) {
         Directory(_salida).createSync(recursive: true);

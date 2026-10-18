@@ -143,6 +143,27 @@ enum MoraOrigenRecorte {
 class MoraTrackedOrigen {
   MoraTrackedOrigen._();
 
+  /// Cuánto de la mora de la ficha ([tracked]) no se explica cuota por cuota
+  /// con lo que reconstruyó [inferir] ([origen]). 0 si se explica entera (un
+  /// peso de diferencia por redondeos no cuenta).
+  ///
+  /// La ventana de cobro y el perdón muestran la ficha cuota por cuota con esa
+  /// reconstrucción; lo que no se explica sale como un renglón genérico ("sin
+  /// origen identificado"). El 18-oct eran 50 de 51 fichas explicadas: la otra,
+  /// ESPINOZA, DENIS AIMARA, tenía $87.600 que la 6.0.0 había inventado (ver
+  /// `MoraTrackedRecovery.reconciliarTodos`). Esto avisa si vuelve a pasar.
+  static double sinExplicar({
+    required double tracked,
+    required List<MoraPendientePreviaDetalle> origen,
+  }) {
+    if (tracked <= 0.01) return 0;
+    final explicado = origen
+        .where((d) => d.numeroCuota > 0)
+        .fold<double>(0, (s, d) => s + d.montoAtribuido);
+    final falta = tracked - explicado;
+    return falta > 1 ? double.parse(falta.toStringAsFixed(2)) : 0;
+  }
+
   static bool _esMora(Map<String, dynamic> p) {
     final lk = (p['line_kind'] as String?)?.trim();
     final c = p['concepto']?.toString() ?? '';

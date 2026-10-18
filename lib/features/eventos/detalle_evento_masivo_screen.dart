@@ -151,6 +151,34 @@ class _DetalleEventoMasivoScreenState
   /// El tracked es un solo número en la ficha; esto dice de qué cuotas salió.
   /// Se calcula una vez por carga (no en cada rebuild de la grilla).
   Map<String, List<MoraPendientePreviaDetalle>> _arrastreMoraPorContrato = {};
+
+  /// Si [_arrastreMoraPorContrato] ya se reconstruyó una vez. Antes de eso,
+  /// toda ficha con mora parecería sin explicar (ver [_fichasSinExplicar]).
+  bool _arrastreMoraCargado = false;
+
+  /// Lo que la ficha de cada alumno no explica cuota por cuota, para el filtro
+  /// "Revisar la ficha" (6.1.0). Vacío hasta que se reconstruyó el arrastre.
+  Map<String, double> get _fichasSinExplicar {
+    if (!_arrastreMoraCargado) return const {};
+    return {
+      for (final a in _alumnos)
+        if (a.moraPendienteTracked > 0.01)
+          a.id: MoraTrackedOrigen.sinExplicar(
+            tracked: a.moraPendienteTracked,
+            origen: _arrastreMoraPorContrato[a.id] ?? const [],
+          ),
+    };
+  }
+
+  /// Cuántos alumnos del evento (bajas incluidas) tienen la ficha sin
+  /// explicar, para el menú del filtro de mora.
+  String _textoFichasARevisar() {
+    final sinExplicar = _fichasSinExplicar;
+    final n = _alumnos.where((a) => (sinExplicar[a.id] ?? 0) > 0.01).length;
+    if (!_arrastreMoraCargado) return 'revisando…';
+    return n == 0 ? 'ninguno' : (n == 1 ? '1 alumno' : '$n alumnos');
+  }
+
   String _busquedaAlumno = '';
   String? _cursoDivisionFiltro;
   FiltroMora _filtroMora = FiltroMora.todos;
@@ -302,8 +330,12 @@ class _DetalleEventoMasivoScreenState
     final conTracked =
         alumnos.where((a) => a.moraPendienteTracked > 0.01).toList();
     if (conTracked.isEmpty) {
-      if (mounted && _arrastreMoraPorContrato.isNotEmpty) {
-        setState(() => _arrastreMoraPorContrato = {});
+      if (mounted &&
+          (_arrastreMoraPorContrato.isNotEmpty || !_arrastreMoraCargado)) {
+        setState(() {
+          _arrastreMoraPorContrato = {};
+          _arrastreMoraCargado = true;
+        });
       }
       return;
     }
@@ -329,7 +361,10 @@ class _DetalleEventoMasivoScreenState
         if (detalle.isNotEmpty) out[a.id] = detalle;
       }
       if (!mounted) return;
-      setState(() => _arrastreMoraPorContrato = out);
+      setState(() {
+        _arrastreMoraPorContrato = out;
+        _arrastreMoraCargado = true;
+      });
     } catch (e) {
       debugPrint('⚠️ Error al reconstruir arrastre de mora: $e');
     }
@@ -1145,6 +1180,7 @@ class _DetalleEventoMasivoScreenState
           moraCobradaHistorial: _moraCobradaPorContrato[a.id] ?? 0.0,
         ),
     };
+    final sinExplicar = _fichasSinExplicar;
 
     // El chip cuenta lo mismo que la grilla muestra y lo mismo que la planilla
     // imprime: curso, búsqueda y filtro de mora. Antes ignoraba los tres y
@@ -1152,7 +1188,14 @@ class _DetalleEventoMasivoScreenState
     // 59 · $3.530.504 cuando abajo había 18 filas por $297.788.
     final alumnosConMora = _alumnos
         .where(_pasaCursoYBusqueda)
-        .where((a) => cumpleFiltroMora(a, moraPorAlumno, _filtroMoraEfectivo))
+        .where(
+          (a) => cumpleFiltroMora(
+            a,
+            moraPorAlumno,
+            _filtroMoraEfectivo,
+            sinExplicar: sinExplicar,
+          ),
+        )
         .toList();
     final totalMoraEvento = alumnosConMora.fold<double>(
       0,
@@ -1164,7 +1207,14 @@ class _DetalleEventoMasivoScreenState
     // que deben mora".
     final alumnosFiltrados = _alumnos
         .where(_pasaCursoYBusqueda)
-        .where((a) => cumpleFiltroMora(a, moraPorAlumno, _filtroMora))
+        .where(
+          (a) => cumpleFiltroMora(
+            a,
+            moraPorAlumno,
+            _filtroMora,
+            sinExplicar: sinExplicar,
+          ),
+        )
         .where(
           (a) =>
               !_soloSillasAConfirmar ||
@@ -2646,6 +2696,7 @@ class _DetalleEventoMasivoScreenState
   ) async {
     // Los mismos dos recortes que usa el chip que dispara esta exportación.
     final filtro = _filtroMoraEfectivo;
+    final sinExplicar = _fichasSinExplicar;
 
     MoraPdfFila filaDe(ContratoAlumno a) {
       final m = moraPorAlumno[a.id];
@@ -2668,9 +2719,18 @@ class _DetalleEventoMasivoScreenState
       );
     }
 
+    // Las bajas van solo en su bloque, aunque "Revisar la ficha" las incluya.
     final activos = _alumnos
+        .where((a) => !esBajaTemporal(a))
         .where(_pasaCursoYBusqueda)
-        .where((a) => cumpleFiltroMora(a, moraPorAlumno, filtro))
+        .where(
+          (a) => cumpleFiltroMora(
+            a,
+            moraPorAlumno,
+            filtro,
+            sinExplicar: sinExplicar,
+          ),
+        )
         .toList();
 
     // Baja temporal: suspendidos, fuera de los cobros. Quedan fuera del filtro
@@ -2877,7 +2937,11 @@ class _DetalleEventoMasivoScreenState
                     color: f == _filtroMora ? Colors.redAccent.shade700 : null,
                   ),
                   title: Text(f.label),
-                  subtitle: Text(f.ayuda),
+                  subtitle: Text(
+                    f == FiltroMora.revisarFicha
+                        ? '${f.ayuda} · ${_textoFichasARevisar()}'
+                        : f.ayuda,
+                  ),
                 ),
               ),
           ],

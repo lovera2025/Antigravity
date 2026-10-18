@@ -213,6 +213,18 @@ void main() {
       );
     });
 
+    test('la grilla le pasa a los filtros de mora las fichas sin explicar', () {
+      final s = File('lib/features/eventos/detalle_evento_masivo_screen.dart')
+          .readAsStringSync();
+      // Las tres: la grilla, el chip y la planilla.
+      expect('sinExplicar: sinExplicar'.allMatches(s).length, 3);
+      expect(
+        'cumpleFiltroMora('.allMatches(s).length,
+        3,
+        reason: 'un filtro nuevo de mora también necesita la lista',
+      );
+    });
+
     test('el [BAJA] no se duplica ni deja espacios', () {
       expect(
         BajaTemporal.alDarDeBaja(deBaja(), ahoraUtcIso: 'x')['nombre_alumno'],

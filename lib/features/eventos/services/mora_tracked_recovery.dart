@@ -8,6 +8,7 @@ import '../../../core/utils/pago_interes_mora.dart';
 import '../../../models/contrato_alumno.dart';
 import 'cobro_abono_acumulado.dart';
 import 'mora_cuota_calculator.dart';
+import 'mora_tracked_origen.dart';
 
 /// Recalcula [mora_pendiente_tracked] y [mora_cobrada_offset] desde el
 /// historial de pagos (reglas post-fix v50). No borra pagos ni cuotas.
@@ -767,5 +768,52 @@ class MoraTrackedRecovery {
       }
     }
     return actualizados;
+  }
+
+  /// Encabezado de [fichasSinExplicar] en `revision_mora.txt`.
+  static const queHizoFichasSinExplicar =
+      'la mora de la ficha no se explica cuota por cuota en';
+
+  /// Las fichas con mora que no se explica cuota por cuota (6.1.0): un renglón
+  /// por alumno, con la ficha y lo que falta explicar. La revisión que corre al
+  /// abrir el programa los anota en `revision_mora.txt`; en la grilla salen con
+  /// el filtro de mora "Revisar la ficha".
+  ///
+  /// La cuenta es la misma de la ventana de cobro: lo que reconstruye
+  /// [MoraTrackedOrigen.inferir] desde los pagos (ver
+  /// [MoraTrackedOrigen.sinExplicar]). Incluye a las bajas: ESPINOZA, DENIS
+  /// AIMARA estaba de baja cuando apareció.
+  static Future<List<String>> fichasSinExplicar(DatabaseExecutor db) async {
+    final contratos = await db.query(
+      'contratos_alumnos',
+      where: 'mora_pendiente_tracked > 0.01',
+    );
+    final renglones = <String>[];
+    for (final row in contratos) {
+      final contrato = ContratoAlumno.fromJson(row);
+      final pagos = await db.query(
+        'pagos_contrato_alumno',
+        where: 'contrato_alumno_id = ?',
+        whereArgs: [contrato.id],
+        orderBy: 'fecha_pago ASC',
+      );
+      final origen = MoraTrackedOrigen.inferir(
+        contratoBase: contrato,
+        pagos: pagos,
+        trackedMonto: contrato.moraPendienteTracked,
+        recorte: MoraOrigenRecorte.loQueQueda,
+      );
+      final falta = MoraTrackedOrigen.sinExplicar(
+        tracked: contrato.moraPendienteTracked,
+        origen: origen,
+      );
+      if (falta <= 0.01) continue;
+      renglones.add(
+        '${contrato.nombreAlumno}: mora en la ficha '
+        '\$${contrato.moraPendienteTracked.toStringAsFixed(0)}, '
+        'sin explicar \$${falta.toStringAsFixed(0)}',
+      );
+    }
+    return renglones;
   }
 }

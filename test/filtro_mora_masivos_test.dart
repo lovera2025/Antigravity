@@ -96,6 +96,25 @@ void main() {
       }
     });
 
+    test('revisar la ficha: solo los que tienen algo sin explicar, bajas '
+        'incluidas (6.1.0)', () {
+      // ESPINOZA, DENIS AIMARA estaba de baja cuando apareció.
+      final sinExplicar = {'FICHA': 0.0, 'AMBAS': 300.0, 'SUSPENDIDO': 87600.0};
+      bool revisa(ContratoAlumno a) => cumpleFiltroMora(
+            a,
+            mapa,
+            FiltroMora.revisarFicha,
+            sinExplicar: sinExplicar,
+          );
+      expect(revisa(ambas), isTrue);
+      expect(revisa(suspendido), isTrue);
+      expect(revisa(soloFicha), isFalse, reason: 'su ficha se explica entera');
+      expect(revisa(soloVencida), isFalse);
+      expect(revisa(alDia), isFalse);
+      // Sin la lista (todavía cargando), nadie.
+      expect(cumpleFiltroMora(ambas, mapa, FiltroMora.revisarFicha), isFalse);
+    });
+
     test('un alumno sin mora calculada no entra (y no explota)', () {
       final huerfano = alumno('SIN_DATO');
       expect(cumpleFiltroMora(huerfano, mapa, FiltroMora.conMora), isFalse);

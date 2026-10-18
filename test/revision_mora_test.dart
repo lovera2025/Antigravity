@@ -28,6 +28,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.dart';
+import 'package:arguello_events/features/eventos/services/mora_tracked_origen.dart';
 import 'package:arguello_events/features/eventos/services/mora_tracked_recovery.dart';
 import 'package:arguello_events/features/eventos/services/revision_mora_constancia.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -653,6 +654,71 @@ void main() {
       expect((await _contrato(veron)).moraCobradaOffset, closeTo(0, 0.01));
       expect(await _colaDe(veron), isNull);
     });
+
+    test('la ficha de DENIS no se explica cuota por cuota hasta que se revisa',
+        () async {
+      const denis = 'PRUEBA ESPINOZA DENIS';
+      const veron = 'PRUEBA VERON';
+      await sembrarDenis(denis);
+      await _sembrarVeron(veron);
+      final db = await LocalDatabase.instance;
+
+      expect(await MoraTrackedRecovery.fichasSinExplicar(db), [
+        '$denis: mora en la ficha \$87600, sin explicar \$87600',
+      ]);
+
+      await MoraTrackedRecovery.reconciliarTodos(
+        db: db,
+        ahoraAr: _hoy,
+        soloContratos: {uid(denis)},
+      );
+      expect(await MoraTrackedRecovery.fichasSinExplicar(db), isEmpty);
+    });
+  });
+
+  group('7. cuánto de una ficha queda sin explicar (6.1.0)', () {
+    MoraPendientePreviaDetalle de(int cuota, double monto) =>
+        MoraPendientePreviaDetalle(
+          numeroCuota: cuota,
+          mesLabel: 'Abr 2026',
+          montoAtribuido: monto,
+        );
+
+    test('explicada entera: 0', () {
+      expect(
+        MoraTrackedOrigen.sinExplicar(
+          tracked: 39900,
+          origen: [de(1, 24600), de(2, 15300)],
+        ),
+        0,
+      );
+    });
+
+    test('sin origen: toda', () {
+      expect(
+        MoraTrackedOrigen.sinExplicar(tracked: 87600, origen: const []),
+        87600,
+      );
+    });
+
+    test('el renglón genérico (cuota 0) no explica nada', () {
+      expect(
+        MoraTrackedOrigen.sinExplicar(tracked: 5000, origen: [de(0, 5000)]),
+        5000,
+      );
+    });
+
+    test('en parte: lo que falta; un peso de redondeo no cuenta', () {
+      expect(
+        MoraTrackedOrigen.sinExplicar(tracked: 10000, origen: [de(3, 7000)]),
+        3000,
+      );
+      expect(
+        MoraTrackedOrigen.sinExplicar(tracked: 10000, origen: [de(3, 9999.5)]),
+        0,
+      );
+      expect(MoraTrackedOrigen.sinExplicar(tracked: 0, origen: const []), 0);
+    });
   });
 
   group('quien ya terminó de pagar no se revisa', () {
@@ -723,6 +789,10 @@ void main() {
       // La de un alumno solo (al reincorporar una baja) revisa solo a ese.
       expect(llamada('MoraTrackedRecovery.reconciliarTodos('),
           contains('soloContratos: soloContratos'));
+      // Y la de todos anota las fichas que no se explican cuota por cuota.
+      expect(revisar, contains('MoraTrackedRecovery.fichasSinExplicar(db)'));
+      expect(revisar,
+          contains('queHizo: MoraTrackedRecovery.queHizoFichasSinExplicar'));
       expect(llamada('MoraTrackedRecovery.repararExencionDesdeHistorial('),
           contains('encolarSync: true'));
     });

@@ -21,7 +21,11 @@ enum FiltroMora {
   todos('Todos', 'Sin filtro de mora'),
   conMora('Con mora', 'Deben mora de cualquier tipo'),
   soloVencida('Mora de cuotas vencidas', 'Cuotas vencidas impagas'),
-  soloNoCobrada('Mora no cobrada al pagar', 'Quedó en ficha de cobros previos');
+  soloNoCobrada('Mora no cobrada al pagar', 'Quedó en ficha de cobros previos'),
+
+  /// La mora de la ficha no se explica cuota por cuota (6.1.0, ver
+  /// `MoraTrackedOrigen.sinExplicar`). Para que el jefe la mire.
+  revisarFicha('Revisar la ficha', 'Su mora no se explica cuota por cuota');
 
   const FiltroMora(this.label, this.ayuda);
 
@@ -71,12 +75,21 @@ bool cumpleCursoYBusqueda(
 /// Las bajas temporales nunca entran: están suspendidas y no se las llama para
 /// cobrar. Para la planilla se piden aparte, y quien decide si salen o no es el
 /// operador.
+///
+/// [sinExplicar]: lo que la ficha de cada alumno no explica cuota por cuota
+/// (`MoraTrackedOrigen.sinExplicar`). Solo lo usa [FiltroMora.revisarFicha],
+/// que **sí incluye a las bajas**: no es para llamar a nadie sino para revisar
+/// datos, y ESPINOZA, DENIS AIMARA estaba de baja cuando apareció.
 bool cumpleFiltroMora(
   ContratoAlumno a,
   Map<String, MoraDeAlumno> mora,
-  FiltroMora filtro,
-) {
+  FiltroMora filtro, {
+  Map<String, double> sinExplicar = const {},
+}) {
   if (filtro == FiltroMora.todos) return true;
+  if (filtro == FiltroMora.revisarFicha) {
+    return (sinExplicar[a.id] ?? 0) > 0.01;
+  }
   if (esBajaTemporal(a)) return false;
   final m = mora[a.id];
   if (m == null) return false;
@@ -87,6 +100,7 @@ bool cumpleFiltroMora(
       return moraVencidaDe(m) > 0.01;
     case FiltroMora.soloNoCobrada:
       return m.tracked > 0.01;
+    case FiltroMora.revisarFicha:
     case FiltroMora.todos:
       return true;
   }

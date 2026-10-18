@@ -963,6 +963,15 @@ class SyncEngine {
       if (recalibrados > 0 || exenciones > 0) {
         await refreshPendingCount();
       }
+      // Lo que quedó sin explicar cuota por cuota, después de corregir: solo
+      // en la revisión de todos, no en la de un alumno que se reincorpora.
+      if (soloContratos == null) {
+        final sinExplicar = await MoraTrackedRecovery.fichasSinExplicar(db);
+        await RevisionMoraConstancia.anotar(
+          sinExplicar,
+          queHizo: MoraTrackedRecovery.queHizoFichasSinExplicar,
+        );
+      }
     } catch (e) {
       debugPrint('  ⚠️ Revisión de la mora: $e');
     }
