@@ -40,8 +40,11 @@ class ContratoAlumno {
   /// Permite aislar la mora de la cuota actual de la mora acumulada de cuotas anteriores.
   final double moraCobradaOffset;
 
-  /// Si está seteada, la mora calendario se calcula como en este día (AR), no hoy.
-  /// Se fija al dar baja temporal; persiste al reincorporar hasta liquidar mora.
+  /// Día de la baja temporal, como la guardaban las versiones hasta la 6.0.0.
+  ///
+  /// Ya no se escribe ni cambia la cuenta: la mora corre siempre hasta hoy (ver
+  /// `MoraCuotaCalculator.fechaEfectivaMoraAr`). Se sigue leyendo y subiendo
+  /// para que una PC con la 6.0.0 no la pierda.
   final DateTime? moraFechaReferencia;
 
   /// Fecha AR hasta la cual la mora calendario no aplica (inclusive).
@@ -105,9 +108,6 @@ class ContratoAlumno {
 
   /// Alumno suspendido con prefijo [BAJA] en el nombre.
   bool get esBajaTemporal => nombreAlumno.trim().startsWith('[BAJA]');
-
-  /// Mora calendario congelada a [moraFechaReferencia].
-  bool get moraCongelada => moraFechaReferencia != null;
 
   static DateTime? _parseFechaDia(dynamic raw) {
     if (raw == null) return null;

@@ -31,7 +31,8 @@ enum FiltroMora {
   bool get activo => this != FiltroMora.todos;
 }
 
-/// El alumno está en **baja temporal**: suspendido, con la mora congelada.
+/// El alumno está en **baja temporal**: suspendido, fuera de los cobros y de
+/// los totales. Su mora sigue corriendo como la de cualquiera (6.1.0).
 ///
 /// Es la única baja que sigue existiendo como fila: la definitiva borra el
 /// contrato, así que esos alumnos no están en ninguna lista.
@@ -67,9 +68,9 @@ bool cumpleCursoYBusqueda(
 
 /// ¿Este alumno entra en [filtro]?
 ///
-/// Las bajas temporales nunca entran: están suspendidas, su mora está congelada
-/// y no se las llama para cobrar. Para la planilla se piden aparte, y quien
-/// decide si salen o no es el operador.
+/// Las bajas temporales nunca entran: están suspendidas y no se las llama para
+/// cobrar. Para la planilla se piden aparte, y quien decide si salen o no es el
+/// operador.
 bool cumpleFiltroMora(
   ContratoAlumno a,
   Map<String, MoraDeAlumno> mora,

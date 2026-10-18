@@ -1515,7 +1515,9 @@ void main() {
     });
   });
 
-  group('Baja temporal — mora congelada (v52)', () {
+  // Hasta la 6.0.0 la baja congelaba la mora al día de la baja (v52). Desde la
+  // 6.1.0 la fecha guardada no cambia la cuenta: ver baja_temporal_mora_test.
+  group('Baja temporal — la fecha guardada ya no congela', () {
     final contratoConDeuda = ContratoAlumno(
       id: 'freeze',
       eventoId: 'evt',
@@ -1537,17 +1539,17 @@ void main() {
       );
     });
 
-    test('fechaEfectivaMoraAr con referencia ignora hoy real', () {
+    test('fechaEfectivaMoraAr con la fecha de la baja guardada usa hoy', () {
       final c = contratoConDeuda.copyWith(
         moraFechaReferencia: DateTime(2026, 6, 30),
       );
       expect(
         MoraCuotaCalculator.fechaEfectivaMoraAr(c, DateTime(2026, 7, 20)),
-        DateTime(2026, 6, 30),
+        DateTime(2026, 7, 20),
       );
     });
 
-    test('mora congelada no crece entre día de baja y 20 días después', () {
+    test('la mora crece después del día de la baja, igual que sin ella', () {
       final c = contratoConDeuda.copyWith(
         moraFechaReferencia: DateTime(2026, 6, 30),
       );
@@ -1561,16 +1563,16 @@ void main() {
         moraCobradaHistorial: 0,
         ahoraAr: DateTime(2026, 7, 20),
       );
-      expect(simJul20, closeTo(alBaja, 0.01));
       expect(alBaja, greaterThan(0.01));
+      expect(simJul20, greaterThan(alBaja + 0.01));
 
-      final sinFreeze = c.copyWith(moraFechaReferencia: null);
-      final jul20Vivo = MoraCuotaCalculator.moraPendienteOperativa(
-        contrato: sinFreeze,
+      final sinFecha = c.copyWith(moraFechaReferencia: null);
+      final jul20SinFecha = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: sinFecha,
         moraCobradaHistorial: 0,
         ahoraAr: DateTime(2026, 7, 20),
       );
-      expect(jul20Vivo, greaterThan(alBaja + 0.01));
+      expect(simJul20, closeTo(jul20SinFecha, 0.01));
     });
 
     test('debeDescongelar cuando mora operativa queda en cero', () {

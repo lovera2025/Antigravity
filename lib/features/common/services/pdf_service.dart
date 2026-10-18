@@ -4709,7 +4709,7 @@ class PdfService {
     required DateTime generadoEn,
     required List<MoraPdfFila> filas,
 
-    /// Alumnos suspendidos con mora congelada. Van en su propio bloque al final
+    /// Alumnos en baja temporal. Van en su propio bloque al final
     /// y no se mezclan con los que sí hay que llamar.
     List<MoraPdfFila> bajas = const [],
 
@@ -4837,7 +4837,7 @@ class PdfService {
         if (suspendidos.isNotEmpty) ...[
           pw.SizedBox(height: d.sp(12)),
           pw.Text(
-            'BAJA TEMPORAL — MORA CONGELADA',
+            'BAJA TEMPORAL',
             style: pw.TextStyle(
               fontSize: d.fs(9.5, piso: 7),
               fontWeight: pw.FontWeight.bold,
@@ -4847,7 +4847,7 @@ class PdfService {
           ),
           pw.SizedBox(height: d.sp(2)),
           pw.Text(
-            'Suspendidos: su mora no crece. No entran en los totales de arriba.',
+            'Suspendidos: no entran en los totales de arriba. Si vuelven, deben esta mora.',
             style: pw.TextStyle(
               fontSize: d.fs(8, piso: 6.5),
               color: _greyText,

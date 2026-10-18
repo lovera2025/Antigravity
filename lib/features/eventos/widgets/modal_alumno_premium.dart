@@ -28,6 +28,11 @@ import '../../recepcion/services/puerta_al_dia.dart';
 /// desde el Excel del delegado (`planilla_delegado.dart`): una PC que todavía
 /// no bajó esa carga los mandaría vacíos al editar un teléfono, y los borraría
 /// en la nube y en las demás. Vaciar la música a propósito la borra (`null`).
+///
+/// **La mora, igual** (6.1.0): una PC que todavía no bajó un perdón o un arreglo
+/// de la nube volvía a subir su mora vieja al editar cualquier cosa. Así, el
+/// 16-oct, editar a TOÑANEZ, AGUSTINA desde la PC del jefe habría devuelto a la
+/// nube los $166.200 cargados a mano que ya se habían puesto en 0.
 Map<String, dynamic> datosEdicionAlumno({
   required ContratoAlumno antes,
   required ContratoAlumno editado,
@@ -38,6 +43,11 @@ Map<String, dynamic> datosEdicionAlumno({
     ..remove('nombres_acompanantes')
     ..remove('cantidad_acompanantes')
     ..remove('musica_elegida');
+  final moraAntes = antes.toJson();
+  for (final campo in camposMoraDelAlumno) {
+    final ahora = datos.remove(campo);
+    if (ahora != moraAntes[campo]) datos[campo] = ahora;
+  }
   final mesaAntes = antes.numeroMesa?.trim() ?? '';
   final mesaAhora = numeroMesaEscrito.trim();
   if (mesaAhora != mesaAntes) {
@@ -54,6 +64,17 @@ Map<String, dynamic> datosEdicionAlumno({
   }
   return datos;
 }
+
+/// Las columnas de la mora del alumno: Editar alumno las manda solo si
+/// cambiaron (ver [datosEdicionAlumno]).
+const camposMoraDelAlumno = [
+  'mora_pendiente_tracked',
+  'mora_cobrada_offset',
+  'mora_fecha_referencia',
+  'mora_exenta_hasta',
+  'mora_exencion_reinicia',
+  'mora_tracked_ajuste',
+];
 
 /// Si los dos tienen los mismos acompañantes con nombre, en el mismo orden.
 bool _mismosAcompanantes(ContratoAlumno antes, ContratoAlumno editado) {

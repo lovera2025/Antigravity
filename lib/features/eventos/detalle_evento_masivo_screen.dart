@@ -39,6 +39,7 @@ import 'repositories/eventos_repository.dart';
 import 'repositories/contratos_repository.dart';
 import '../../core/utils/ar_time.dart';
 import '../../core/utils/pago_interes_mora.dart';
+import 'services/baja_temporal.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/cronograma_cuotas_utils.dart';
 import 'services/cobro_mora_resolver.dart';
@@ -2672,7 +2673,7 @@ class _DetalleEventoMasivoScreenState
         .where((a) => cumpleFiltroMora(a, moraPorAlumno, filtro))
         .toList();
 
-    // Baja temporal: suspendidos con la mora congelada. Quedan fuera del filtro
+    // Baja temporal: suspendidos, fuera de los cobros. Quedan fuera del filtro
     // y del conteo; se buscan aparte porque quién sale en el papel lo decide el
     // operador, no el sistema. (Las bajas definitivas borran el contrato: esos
     // alumnos no están en ninguna lista.)
@@ -2730,7 +2731,7 @@ class _DetalleEventoMasivoScreenState
                     style: const TextStyle(fontSize: 13),
                   ),
                   subtitle: const Text(
-                    'Mora congelada. Van en un bloque aparte al final.',
+                    'No entran en el total. Van en un bloque aparte al final.',
                     style: TextStyle(fontSize: 11),
                   ),
                 ),
@@ -3161,17 +3162,15 @@ class _DetalleEventoMasivoScreenState
 
   Future<void> _toggleBajaTemporal(ContratoAlumno alumno) async {
     if (!mounted) return;
-    final bool esBaja = alumno.nombreAlumno.startsWith('[BAJA]');
-    final String nombreLimpio = alumno.nombreAlumno
-        .replaceFirst('[BAJA]', '')
-        .trim();
+    final bool esBaja = alumno.nombreAlumno.startsWith(BajaTemporal.prefijo);
+    final String nombreLimpio = BajaTemporal.nombreLimpio(alumno.nombreAlumno);
     final String msg = esBaja
         ? '¿Desea reincorporar a $nombreLimpio como alumno activo? '
-              'Podrá cobrarle cuando quiera; la mora seguirá congelada al día '
-              'de la baja hasta que liquide.'
+              'Vuelve a los cobros con la mora de cada cuota desde su '
+              'vencimiento, igual que la de cualquiera que no pagó.'
         : '¿Desea dar de baja temporal a $nombreLimpio? Se mantendrá en la '
-              'lista pero no contará para los saldos. Su saldo y mora quedarán '
-              'congelados como hoy hasta que cobre.';
+              'lista, pero sale de los cobros y de los totales mientras esté '
+              'de baja.';
     final String titulo = esBaja
         ? 'Reincorporar Alumno'
         : 'Confirmar Baja Temporal';
@@ -3236,20 +3235,21 @@ class _DetalleEventoMasivoScreenState
     if (confirmar == true) {
       final repo = ref.read(contratosRepositoryProvider);
       try {
-        final Map<String, dynamic> updates;
-        if (esBaja) {
-          updates = {'nombre_alumno': nombreLimpio};
-        } else {
-          final hoyAr = ArTime.nowAr();
-          final hoySolo = DateTime(hoyAr.year, hoyAr.month, hoyAr.day);
-          updates = {
-            'nombre_alumno': '[BAJA] ${alumno.nombreAlumno}',
-            'mora_fecha_referencia':
-                MoraCuotaCalculator.fechaReferenciaIsoDesde(hoySolo),
-            'baja_temporal_desde': ArTime.nowUtcIso(),
-          };
-        }
+        final updates = esBaja
+            ? BajaTemporal.alReincorporar(alumno)
+            : BajaTemporal.alDarDeBaja(
+                alumno,
+                ahoraUtcIso: ArTime.nowUtcIso(),
+              );
         await repo.actualizarContrato(alumno.id, updates);
+        if (esBaja) {
+          // Su ficha se rehace desde los pagos en el momento: la 6.0.0 la
+          // armaba contando la mora hasta el día de la baja (ver
+          // MoraTrackedRecovery.reconciliarTodos, soloContratos).
+          await ref
+              .read(syncEngineProvider)
+              .revisarMora(soloContratos: {alumno.id});
+        }
         // Con la fiesta sorteada, la puerta lo sigue: una baja sale de la
         // lista con su familia, y al reincorporarse vuelve.
         await ref
@@ -3260,8 +3260,8 @@ class _DetalleEventoMasivoScreenState
             SnackBar(
               content: Text(
                 esBaja
-                    ? 'Alumno reincorporado. La mora sigue congelada hasta que cobre.'
-                    : 'Alumno en baja temporal. Saldo y mora congelados desde hoy.',
+                    ? 'Alumno reincorporado. Su mora cuenta cuota por cuota, como la de cualquiera.'
+                    : 'Alumno en baja temporal. Sale de los cobros y de los totales.',
               ),
               backgroundColor: esBaja ? Colors.teal : Colors.orange,
             ),

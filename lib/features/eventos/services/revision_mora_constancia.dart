@@ -14,27 +14,35 @@ class RevisionMoraConstancia {
 
   static const archivo = 'revision_mora.txt';
 
-  static Future<void> anotar(List<String> renglones) async {
+  static const _queHizo = 'la revisión automática de la mora corrigió';
+
+  /// [queHizo] encabeza el bloque: "la revisión automática de la mora
+  /// corrigió" si no se dice otra cosa.
+  static Future<void> anotar(
+    List<String> renglones, {
+    String queHizo = _queHizo,
+  }) async {
     if (renglones.isEmpty) return;
     final base = File(await LocalDatabase.dbPath);
     final destino = File('${base.parent.path}${Platform.pathSeparator}$archivo');
     await destino.writeAsString(
-      textoDe(renglones, ArTime.nowAr()),
+      textoDe(renglones, ArTime.nowAr(), queHizo: queHizo),
       mode: FileMode.append,
       flush: true,
     );
   }
 
   /// El bloque que se agrega al archivo, aparte para poder probarlo.
-  static String textoDe(List<String> renglones, DateTime ahoraAr) {
+  static String textoDe(
+    List<String> renglones,
+    DateTime ahoraAr, {
+    String queHizo = _queHizo,
+  }) {
     String dos(int n) => n.toString().padLeft(2, '0');
     final cuando = '${dos(ahoraAr.day)}/${dos(ahoraAr.month)}/${ahoraAr.year} '
         '${dos(ahoraAr.hour)}:${dos(ahoraAr.minute)}';
     final b = StringBuffer()
-      ..writeln(
-        '$cuando · la revisión automática de la mora corrigió '
-        '${renglones.length} alumno(s):',
-      );
+      ..writeln('$cuando · $queHizo ${renglones.length} alumno(s):');
     for (final r in renglones) {
       b.writeln('  $r');
     }

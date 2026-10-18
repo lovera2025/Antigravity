@@ -616,15 +616,29 @@ class MoraTrackedRecovery {
   ///
   /// [constancia]: recibe un renglón por alumno corregido, con el antes y el
   /// después (la app lo guarda en `revision_mora.txt`, junto a la base).
+  ///
+  /// [soloContratos]: revisa solo esos. Lo usa reincorporar una baja temporal
+  /// (6.1.0): la 6.0.0 rehacía la ficha de una baja contando la mora hasta el
+  /// día de la baja también para los pagos viejos, y ESPINOZA, DENIS AIMARA
+  /// quedó con $87.600 de ficha por tres cuotas que había pagado antes de que
+  /// vencieran. Al volver se rehace en el momento, sin esperar a la próxima vez
+  /// que se abra el programa.
   static Future<int> reconciliarTodos({
     required DatabaseExecutor db,
     bool encolarSync = false,
     bool soloEventosMasivosActivos = false,
     Future<void> Function(List<String> renglones)? constancia,
     DateTime? ahoraAr,
+    Set<String>? soloContratos,
   }) async {
-    final contratos =
+    final todos =
         await _contratosParaReconciliar(db, soloEventosMasivosActivos);
+    final contratos = soloContratos == null
+        ? todos
+        : [
+            for (final r in todos)
+              if (soloContratos.contains(r['id'])) r,
+          ];
     var actualizados = 0;
     final nowUtc = DateTime.now().toUtc().toIso8601String();
     final renglones = <String>[];

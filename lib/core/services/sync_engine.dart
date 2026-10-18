@@ -9,6 +9,7 @@ import '../database/local_database.dart';
 import '../database/sync_queue.dart';
 import '../utils/uuid_utils.dart';
 import 'connectivity_service.dart';
+import 'contrato_al_bajar.dart';
 import 'instalacion_id.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
 import '../../features/mi_empresa/repositories/finanzas_repository.dart';
@@ -930,24 +931,30 @@ class SyncEngine {
   /// Corre sola una vez por sesión, después de la primera bajada que sale
   /// bien, y cada vez que alguien aprieta "Bajar" en el menú. Nunca tira: si
   /// falla, la mora queda como estaba.
-  Future<void> revisarMora() async {
+  ///
+  /// [soloContratos]: revisa solo esos alumnos, en el momento. Lo usa
+  /// reincorporar una baja temporal (ver [MoraTrackedRecovery.reconciliarTodos]).
+  Future<void> revisarMora({Set<String>? soloContratos}) async {
     try {
       final db = await LocalDatabase.instance;
       final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
         db: db,
         encolarSync: true,
         constancia: RevisionMoraConstancia.anotar,
+        soloContratos: soloContratos,
       );
       if (recalibrados > 0) {
         debugPrint(
           '  🔧 Revisión de la mora: $recalibrados contrato(s) corregidos desde los pagos',
         );
       }
-      final exenciones =
-          await MoraTrackedRecovery.repararExencionDesdeHistorial(
-            db: db,
-            encolarSync: true,
-          );
+      // La eximición de un alumno solo ya la resuelve la revisión de arriba.
+      final exenciones = soloContratos != null
+          ? 0
+          : await MoraTrackedRecovery.repararExencionDesdeHistorial(
+              db: db,
+              encolarSync: true,
+            );
       if (exenciones > 0) {
         debugPrint(
           '  🔧 Revisión de la mora: $exenciones contrato(s) con eximición reparada',
@@ -1750,23 +1757,12 @@ class SyncEngine {
         };
       }
 
-      Map<
-        String,
-        ({
-          double offset,
-          String? exentaHasta,
-          String? fechaReferencia,
-          int reinicia,
-          double trackedAjuste,
-        })
-      >?
-      preservedContratoMoraLocal;
+      Map<String, MoraLocalDelContrato>? preservedContratoMoraLocal;
       if (table == 'contratos_alumnos') {
         final localMoraRows = await db.query(
           'contratos_alumnos',
           columns: [
             'id',
-            'mora_cobrada_offset',
             'mora_exenta_hasta',
             'mora_fecha_referencia',
             'mora_exencion_reinicia',
@@ -1775,21 +1771,12 @@ class SyncEngine {
         );
         preservedContratoMoraLocal = {
           for (final r in localMoraRows)
-            r['id'] as String: (
-              offset: (r['mora_cobrada_offset'] as num?)?.toDouble() ?? 0,
-              exentaHasta: (r['mora_exenta_hasta'] as String?)?.trim(),
-              fechaReferencia: (r['mora_fecha_referencia'] as String?)?.trim(),
-              reinicia: () {
-                final v = r['mora_exencion_reinicia'];
-                if (v == null) return 1;
-                if (v is num) return v.toInt();
-                return int.tryParse(v.toString()) ?? 1;
-              }(),
-              trackedAjuste:
-                  (r['mora_tracked_ajuste'] as num?)?.toDouble() ?? 0,
-            ),
+            r['id'] as String: MoraLocalDelContrato.deFila(r),
         };
       }
+      // Ajustes de la mora que esta PC tenía y que la nube trae en 0: quedan
+      // escritos en `revision_mora.txt` (ver [ajusteQueSeVa]).
+      final ajustesQueSeFueron = <String>[];
 
       final batch = db.batch();
       int skipped = 0;
@@ -1928,44 +1915,16 @@ class SyncEngine {
         } else if (table == 'contratos_alumnos' &&
             preservedContratoMoraLocal != null) {
           final cid = cleanRow['id'] as String;
-          final insertRow = Map<String, dynamic>.from(cleanRow);
           final preserved = preservedContratoMoraLocal[cid];
-
-          // La nube ya tiene las columnas de mora, así que manda ella: las
-          // filas con cambios locales sin subir quedaron afuera más arriba,
-          // por el guard de pendingIds. Antes se forzaba el valor local acá y
-          // eso era correcto mientras la nube no las tuviera; ahora impediría
-          // que el perdón del jefe llegue a la máquina de operarios.
-          //
-          // La exención viaja como par (hasta + reinicia): de nada sirve la
-          // fecha sin la permanencia, porque la mora vuelve apenas la fecha
-          // pasa. Si la nube no la trae, es un perdón viejo que el
-          // `_cleanForRemote` anterior nunca dejó subir: se conserva el par
-          // local, que es la única copia que existe.
-          final cloudExenta = (insertRow['mora_exenta_hasta'] as String?)?.trim();
-          if (cloudExenta == null || cloudExenta.isEmpty) {
-            final localExenta = preserved?.exentaHasta;
-            if (localExenta != null && localExenta.isNotEmpty) {
-              insertRow['mora_exenta_hasta'] = localExenta;
-              insertRow['mora_exencion_reinicia'] = preserved?.reinicia ?? 1;
-            }
+          // Qué manda la nube y qué conserva la PC: ver [contratoAlBajar].
+          final insertRow = contratoAlBajar(cleanRow, preserved);
+          final seVa = ajusteQueSeVa(cleanRow, preserved);
+          if (seVa != null) {
+            ajustesQueSeFueron.add(renglonAjusteQueSeVa(
+              (cleanRow['nombre_alumno'] as String?) ?? cid,
+              seVa,
+            ));
           }
-
-          final cloudFechaRef =
-              (insertRow['mora_fecha_referencia'] as String?)?.trim();
-          if (cloudFechaRef == null || cloudFechaRef.isEmpty) {
-            final localFechaRef = preserved?.fechaReferencia;
-            if (localFechaRef != null && localFechaRef.isNotEmpty) {
-              insertRow['mora_fecha_referencia'] = localFechaRef;
-            }
-          }
-
-          final localAjuste = preserved?.trackedAjuste ?? 0;
-          final cloudAjuste =
-              (insertRow['mora_tracked_ajuste'] as num?)?.toDouble() ?? 0;
-          // Nube en 0 no pisa un perdón local que todavía no subió.
-          insertRow['mora_tracked_ajuste'] =
-              cloudAjuste.abs() > 0.01 ? cloudAjuste : localAjuste;
           batch.insert(
             table,
             insertRow,
@@ -1981,6 +1940,16 @@ class SyncEngine {
       }
       await batch.commit(noResult: true);
       if (novedades > 0) _anotarCambioBajado(table);
+      if (ajustesQueSeFueron.isNotEmpty) {
+        try {
+          await RevisionMoraConstancia.anotar(
+            ajustesQueSeFueron,
+            queHizo: queHizoAjustesQueSeFueron,
+          );
+        } catch (_) {
+          // La constancia es un aviso, no puede frenar la bajada.
+        }
+      }
 
       // Guardar última marca de tiempo de sincronización exitosa.
       //

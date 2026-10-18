@@ -86,7 +86,7 @@ void main() {
     });
 
     test('las bajas quedan afuera de todo filtro de mora', () {
-      // Están suspendidos y su mora está congelada: no se los llama.
+      // Están suspendidos: no se los llama para cobrar.
       for (final f in [
         FiltroMora.conMora,
         FiltroMora.soloVencida,

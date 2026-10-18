@@ -585,6 +585,76 @@ void main() {
     });
   });
 
+  group('6. al reincorporar una baja, se revisa en el momento (6.1.0)', () {
+    // ESPINOZA, DENIS AIMARA: pagó las cuotas 1, 2 y 3 antes de que vencieran
+    // (31/03, 13/05 y 10/06). La 6.0.0 le rehízo la ficha contando la mora
+    // hasta el día de su baja (05/09) también para esos pagos: 128, 97 y 67
+    // días, $87.600 que nunca existieron.
+    Future<void> sembrarDenis(String alumno) async {
+      final db = await LocalDatabase.instance;
+      await db.insert('contratos_alumnos', {
+        'id': uid(alumno),
+        'evento_id': uid('evento'),
+        'nombre_alumno': alumno,
+        'monto_total_pactado': 340000,
+        'saldo_deudor': 250000,
+        'cuotas_pagadas': 3,
+        'total_cuotas': 9,
+        'dia_vencimiento_mensual': 10,
+        'mesa_extra_precio': 70000,
+        'mesa_extra_cuotas': 7,
+        'mesa_extra_cantidad': 1,
+        'created_at': '2026-03-30T03:00:00+00:00',
+        'mora_pendiente_tracked': 87600,
+        'mora_cobrada_offset': 0,
+        'mora_exencion_reinicia': 1,
+        'mora_tracked_ajuste': 0,
+        'mora_fecha_referencia': '2026-09-05',
+      });
+      for (final p in [
+        _pago(alumno, 1, '2026-03-31T20:16:25.182781+00:00',
+            'Abono Cuota Base', 30000),
+        _pago(alumno, 2, '2026-05-13T20:02:30.414950+00:00',
+            'Cuota Base (2/9)', 30000),
+        _pago(alumno, 3, '2026-06-10T20:16:26.961114+00:00',
+            'Cuota Base (3/9)', 30000),
+      ]) {
+        await db.insert('pagos_contrato_alumno', p);
+      }
+    }
+
+    test('DENIS: la ficha de \$87.600 queda en 0 y sube; nadie más se toca',
+        () async {
+      const denis = 'PRUEBA ESPINOZA DENIS';
+      const veron = 'PRUEBA VERON';
+      await sembrarDenis(denis);
+      await _sembrarVeron(veron);
+
+      final db = await LocalDatabase.instance;
+      final renglones = <String>[];
+      final corregidos = await MoraTrackedRecovery.reconciliarTodos(
+        db: db,
+        encolarSync: true,
+        ahoraAr: _hoy,
+        soloContratos: {uid(denis)},
+        constancia: (r) async => renglones.addAll(r),
+      );
+
+      expect(corregidos, 1);
+      final c = await _contrato(denis);
+      expect(c.moraPendienteTracked, closeTo(0, 0.01));
+      // Le queda la mora de las cuotas 4, 5 y 6, que no pagó, al 15/10:
+      // 76, 45 y 15 días de $300.
+      expect(await _moraDe(denis), closeTo(40800, 0.01));
+      expect((await _colaDe(denis))!['mora_pendiente_tracked'], 0);
+      expect(renglones.single, contains('de ficha \$87600 -> \$0'));
+
+      // VERON también necesita la revisión, pero no se la pidieron.
+      expect((await _contrato(veron)).moraCobradaOffset, closeTo(0, 0.01));
+      expect(await _colaDe(veron), isNull);
+    });
+  });
+
   group('quien ya terminó de pagar no se revisa', () {
     test('ALTAMIRANO: la mora que dejó el cobro queda en la ficha hasta que el '
         'jefe la perdone', () async {
@@ -636,7 +706,7 @@ void main() {
         contains('await revisarMora()'),
       );
       final revisar = s.substring(
-        s.indexOf('Future<void> revisarMora()'),
+        s.indexOf('Future<void> revisarMora('),
         s.indexOf('Future<bool> pullOperationalUpdates('),
       );
       // Cada una de las dos revisiones, por separado, tiene que subir.
@@ -650,6 +720,9 @@ void main() {
           contains('encolarSync: true'));
       expect(llamada('MoraTrackedRecovery.reconciliarTodos('),
           contains('RevisionMoraConstancia.anotar'));
+      // La de un alumno solo (al reincorporar una baja) revisa solo a ese.
+      expect(llamada('MoraTrackedRecovery.reconciliarTodos('),
+          contains('soloContratos: soloContratos'));
       expect(llamada('MoraTrackedRecovery.repararExencionDesdeHistorial('),
           contains('encolarSync: true'));
     });

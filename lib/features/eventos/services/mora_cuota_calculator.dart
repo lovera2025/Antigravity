@@ -222,25 +222,27 @@ double interesSugeridoSimpleSobreMonto(
 class MoraCuotaCalculator {
   MoraCuotaCalculator._();
 
-  /// Día AR efectivo para mora calendario. Con [ContratoAlumno.moraFechaReferencia]
-  /// (baja temporal ampliada) el cálculo queda congelado en esa fecha.
+  /// Día AR hasta el que corre la mora calendario: hoy.
+  ///
+  /// [ContratoAlumno.moraFechaReferencia] ya no congela nada (6.1.0). La baja
+  /// temporal la guardaba con el día de la baja, y al reincorporar quedaba: el
+  /// alumno volvía con la mora cortada en ese día, muy por debajo de la de un
+  /// compañero que tampoco pagó (TOÑANEZ, AGUSTINA: $9.300 contra $166.200 al
+  /// 16-oct). La regla del usuario es que un reincorporado tenga exactamente la
+  /// mora de uno que nunca estuvo de baja, cuota por cuota desde su vencimiento.
+  ///
+  /// No alcanzaba con borrar la fecha al reincorporar: borrarla no cruza entre
+  /// PCs (el pull conserva la de la PC cuando la nube la trae vacía). Por eso la
+  /// fecha se ignora: las que quedaron guardadas no cambian nada.
   static DateTime fechaEfectivaMoraAr(ContratoAlumno a, [DateTime? ahoraAr]) {
-    final ref = a.moraFechaReferencia;
-    if (ref != null) {
-      return DateTime(ref.year, ref.month, ref.day);
-    }
     final hoy = ahoraAr ?? ArTime.nowAr();
     return DateTime(hoy.year, hoy.month, hoy.day);
   }
 
-  /// Fecha YYYY-MM-DD para persistir al suspender.
-  static String fechaReferenciaIsoDesde(DateTime diaAr) {
-    return '${diaAr.year.toString().padLeft(4, '0')}-'
-        '${diaAr.month.toString().padLeft(2, '0')}-'
-        '${diaAr.day.toString().padLeft(2, '0')}';
-  }
-
   /// Descongelar tras cobro si mora operativa o saldo quedaron en cero.
+  ///
+  /// Desde la 6.1.0 la fecha no cambia la cuenta; borrarla al saldar solo deja
+  /// la ficha prolija.
   static bool debeDescongelarMoraReferencia({
     required ContratoAlumno contrato,
     required double moraPendienteOperativaPost,
@@ -325,7 +327,7 @@ class MoraCuotaCalculator {
       );
     }
 
-    // `hoySolo` ya es día AR efectivo (congelado o hoy). Solo `createdAt` necesita conversión UTC.
+    // `hoySolo` ya es el día AR de hoy. Solo `createdAt` necesita conversión UTC.
     final inscAr = a.createdAt != null ? ArTime.toAr(a.createdAt!) : hoySolo;
     final tCuotas = a.totalCuotas > 0 ? a.totalCuotas : 1;
 
