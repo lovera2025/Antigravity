@@ -71,6 +71,12 @@ $23.100, $13.800 y $4.800: $166.200) están en `test/baja_temporal_mora_test.dar
 
 ## Fase 2: la mora de cada cuota guardada
 
+**18-oct: plan corto y maqueta hechos, decisión pendiente del usuario:**
+[PLAN_MORA_POR_CUOTA](../PLAN_MORA_POR_CUOTA_2026-10-18.md). Con la fase 1, la ventana ya muestra la mora cuota
+por cuota, pero en fila (de la más vieja a la más nueva). Lo único que agrega la fase 2 a la vista es cobrar o
+perdonar cada cuota suelta. Medido en su base: 50 de 51 fichas se explican cuota por cuota, y la que no es la de
+DENIS, que la fase 1 deja en $0. La recomendación es quedarse con la fila, salvo que la oficina necesite saltear.
+
 Va en la misma 6.1.0, como sección siguiente, **con su plan corto y una maqueta del cobro antes de programar**. La
 especificación propone:
 - una tabla `mora_cuotas_contrato`, con una fila por cuota que tuvo mora (pendiente, cobrada o condonada);
