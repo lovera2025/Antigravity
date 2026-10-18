@@ -191,6 +191,51 @@ Lo que el plan dice que existe, existe con esos nombres: el plan se puede seguir
   arrancar uno de cero, VACIAR EL SALÓN: nadie tiene mesa, porque el sorteo de práctica de Puerto Viejo (9:28) se
   deshizo a las 9:34.
 
-**18-oct: la 6.1.0 lleva todo junto** (lo decidió el usuario): la mora de las bajas temporales (fase 1, hecha), la
-mora por cuota (fase 2) y este salón. El orden: la fase 2 y después este plan. Ver
-[mora-por-cuota](pendientes/mora-por-cuota.md).
+**18-oct: la 6.1.0 lleva todo junto** (lo decidió el usuario): la mora de las bajas temporales (fase 1, hecha) y
+este salón. La fase 2 de la mora no va: eligió quedarse con la mora en fila (ver
+[mora-por-cuota](pendientes/mora-por-cuota.md)).
+
+## 8. Lo que decidió el usuario el 18-oct
+
+- **Las cuatro flechitas del panel se sacan.** Quedan las manijas sobre el dibujo y los casilleros Ancho y Fondo.
+- **Mover un sector después de acomodar no reacomoda solo:** se toca ACOMODAR OTRA VEZ.
+- **Los predios con nombre van en la 6.1.0** ("Buena Vista", "Costa Surubí"): guardar el espacio vacío para elegirlo
+  de punto de partida en otra fiesta. Cada fiesta sigue con su propio salón. **Es una etapa nueva**, con su maqueta
+  antes de programar: dónde se guardan (una tabla nueva, nada en `contratos_alumnos` ni claves nuevas en el JSON del
+  armado), cómo se elige en Estilo y armado, y qué pasa si se cambia un predio que ya usó una fiesta (la fiesta no
+  cambia: se copia).
+- **"Volver al armado original" también en el salón vacío**, aparte de VACIAR EL SALÓN. Preguntó "por si uno quiere
+  volver al inicio":
+  - **VACIAR EL SALÓN** saca las mesas y deja el espacio como el jefe lo armó;
+  - **VOLVER AL ARMADO ORIGINAL** vuelve al salón vacío como salió: el playón, el escenario al frente y el Ingreso.
+    Se van las mesas y los sectores agregados.
+- Preguntó si cada institución guarda su salón y se puede volver a abrir, cambiar y guardar: **sí, ya es así desde la
+  6.0.0** (una fila de `planos_evento` por fiesta).
+
+## 9. La etapa 1, hecha el 18-oct (las cuentas, sin pantalla)
+
+- **`ArmarAMedida.vacio(playon)`** (clave `vacio@1`): el borde, el escenario centrado al frente y el Ingreso de 4 × 2
+  m al fondo, al medio, a medio metro del fondo. Sin mesas.
+- **`ArmarAMedida.acomodar(armado, cantidad:)`**, el motor del botón ACOMODAR LAS MESAS.
+  - Dentro del borde de cada hoja, midiendo los costados a la altura de cada fila, y sin pisar ningún sector salvo la
+    pasarela: el círculo de la mesa más medio metro (`despejeSectorM`).
+  - Si el escenario no está arriba, hay filas de los dos lados.
+  - **Sobre el mismo playón da exactamente lo mismo que `armar`**, mesa por mesa: el test lo compara en ocho casos.
+- **Corrección a este plan:** los despejes son los de hoy, no los de la sección 3c: medio metro delante del escenario y
+  contra el borde, y 2,5 m a cada lado de la pasarela. Si fueran otros, el salón acomodado no daría igual que el armado
+  a medida.
+- **Las manijas** (`Manija`, en `editar_armado.dart`):
+  - `estirarSector` mueve un lado o una esquina, de a medio metro desde donde estaba, con un mínimo de medio metro;
+  - `moverPlayon` y `estirarPlayon` hacen lo mismo con el borde de cuatro puntos. Una esquina mueve solo ese punto,
+    y eso es "moverEsquina".
+  - La hoja crece sola con el borde, sin tope.
+- **El escenario desatado:** `conPlayon` (la pestaña Medidas) ya no le cambia el tamaño al escenario.
+- `playonDe`, `lugarDe` y `conPlayon` sirven también para el salón vacío. Su original es el salón vacío, y por eso
+  ahí no frena el aviso de "entran menos mesas".
+- **Convivencia con la 6.0.0:** `test/salon_convivencia_test.dart`, escrito con el modelo de la 6.0.0, lee y
+  reescribe un salón vacío, uno con el escenario corrido y el playón torcido, y uno acomodado, sin perder nada. En
+  la 6.0.0, un salón vacío no ofrece "Volver al armado original" y la pestaña Medidas no le redibuja el borde. Por
+  eso el plano se toca desde una PC con la 6.1.0.
+- `test/salon_primero_cuentas_test.dart` (33 tests) y 13 roturas a propósito, todas vistas.
+
+**Sigue la etapa 2:** la tarjeta "Salón vacío" en Estilo y armado, y `aplicar_eleccion`.

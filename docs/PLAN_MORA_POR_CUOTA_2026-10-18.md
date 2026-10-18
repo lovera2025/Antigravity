@@ -1,7 +1,12 @@
 # Plan: la fase 2 de la mora por cuota (6.1.0)
 
-Fecha: 18-oct-2026. Rama: `feature/v4.6-cierre-por-sesiones`. **Solo planeado: no hay nada programado.** Sale de la
-especificación del usuario del 16-oct (`docs/pendientes/mora-por-cuota.md`) y de lo medido el 18-oct en su base.
+Fecha: 18-oct-2026. Rama: `feature/v4.6-cierre-por-sesiones`. Sale de la especificación del usuario del 16-oct
+(`docs/pendientes/mora-por-cuota.md`) y de lo medido el 18-oct en su base.
+
+> **Decidido el 18-oct: la A.** El usuario se quedó con la mora en fila, como queda con la fase 1. La fase 2 no se
+> programa. A cambio se sumó el aviso "Revisar la ficha" (`964b141`): el filtro de mora de la grilla y
+> `revision_mora.txt` dicen si la mora de una ficha deja de explicarse cuota por cuota. Lo de abajo queda por si
+> algún día hace falta cobrar o perdonar cada cuota suelta.
 
 ## 1. Lo que hay hoy (con la fase 1)
 

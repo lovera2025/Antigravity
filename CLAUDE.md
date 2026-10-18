@@ -19,8 +19,9 @@ rama está ~170 commits adelante y va por la v6.1.0 (en curso; la 6.0.0 está
 instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
-**Lo que sigue es la 6.1.0:** las bajas temporales (hecha), la mora por cuota y el
-salón primero, en una sola versión. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
+**Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
+(hechos), y el salón primero (etapa 1 hecha), en una sola versión. La mora por
+cuota suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
 
@@ -136,6 +137,16 @@ entradas y traduce la salida.
   ese. Una familia se revierte solo si hoy tiene exactamente lo que ese sorteo le dejó.
 - **El número de una mesa que se sacó y se guardó no se vuelve a dar** (`ArmadoSalon.ultimoNumero`): ya pudo salir
   impreso.
+
+**El salón primero** (6.1.0, en curso; `docs/PLAN_SALON_PRIMERO_2026-10-16.md`): el jefe arma primero el espacio
+vacío y después pone las mesas con un botón.
+- **El salón vacío** es `ArmarAMedida.vacio` (clave `vacio@1`): el borde, el escenario y el Ingreso, sin mesas.
+- **Las mesas las pone `ArmarAMedida.acomodar`**: dentro del borde de cada hoja y sin pisar ningún sector salvo la
+  pasarela. **Sobre el mismo playón tiene que dar lo mismo que `armar`, mesa por mesa:** un test lo compara, así que un
+  cambio a una de las dos cuentas va en las dos.
+- **El escenario es un sector como los demás:** `conPlayon` ya no lo ata al frente.
+- **No agregar claves al JSON del armado:** la 6.0.0 lo reescribe entero y las perdería
+  (`test/salon_convivencia_test.dart`).
 
 **En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin

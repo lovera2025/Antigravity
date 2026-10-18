@@ -15,17 +15,21 @@ las del operario y del jefe el 16-oct). Lo de acá está programado en la rama, 
 **Una sola versión con todo junto**, que se publica cuando esté completa. Va en partes, una por chat, con el plan
 corto y su OK antes de programar.
 
-1. **Las bajas temporales (fase 1 de la mora por cuota).** **HECHA el 18-oct (`ffb8448`)**, programada y sin instalar. Ver abajo.
-2. **La mora de cada cuota guardada (fase 2).** Sigue. Antes de programar: el plan corto con las correcciones de
-   [mora-por-cuota](pendientes/mora-por-cuota.md) y una maqueta de la ventana de cobro.
-3. **El salón primero, las mesas después**, etapas 1 a 6 de su plan.
-   - Las tres preguntas del plan van con lo que recomiendo: predios con nombre, después; las cuatro flechitas,
-     sacarlas; mover un sector después de acomodar, solo con el botón.
-   - Lo que sumó la revisión del 16-oct está en la sección 7 del plan.
+1. **Las bajas temporales (fase 1 de la mora por cuota).** **HECHA el 18-oct (`ffb8448`)**, programada y sin
+   instalar. Ver abajo.
+2. ~~La mora de cada cuota guardada (fase 2)~~. **Descartada el 18-oct**: vio la maqueta con la mora en fila y cada
+   cuota suelta, y eligió la fila (la A de [PLAN_MORA_POR_CUOTA](PLAN_MORA_POR_CUOTA_2026-10-18.md)). A cambio,
+   **el aviso "Revisar la ficha", HECHO (`964b141`)**.
+3. **El salón primero, las mesas después**, las etapas de su plan. **La etapa 1 (las cuentas) HECHA el 18-oct**; ver
+   las secciones 8 y 9 del plan.
+   - Las cuatro flechitas se sacan.
+   - Mover un sector después de acomodar no reacomoda: se toca el botón.
+   - **Los predios con nombre van en la 6.1.0**, como etapa nueva con maqueta.
+   - "Volver al armado original" también en el salón vacío.
+   - **Sigue la etapa 2:** la tarjeta "Salón vacío" en Estilo y armado.
 4. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, y publicar con él presente.
 
-**Ojo:** con la fase 2 adentro, la 6.1.0 no llega al lunes 20 (el 16 había dicho "quizás el lunes"). Se le dijo el
-18-oct.
+Sin la fase 2 la versión es más chica, pero el salón tiene sus etapas 2 a 6 más los predios: tampoco llega al lunes 20.
 
 ## Qué pasó el 16-oct
 
@@ -65,6 +69,24 @@ Lo que se hizo, el porqué y lo comprobado: [mora-por-cuota](pendientes/mora-por
   - le dije que la revisión automática dejaba afuera a las bajas; la que corre al abrir el programa las incluye;
   - le dije que TOÑANEZ se había reincorporado a las 18:19; a esa hora fue el arreglo a mano en la nube.
 
+## El aviso "Revisar la ficha" (18-oct, `964b141`)
+
+Lo pidió al quedarse con la mora en fila.
+- **En la grilla:** el filtro de mora suma "Revisar la ficha", que lista a los alumnos cuya mora en la ficha no se
+  explica cuota por cuota, bajas incluidas. El menú dice cuántos son.
+- **Al abrir el programa:** la revisión los anota en `revision_mora.txt`.
+- La cuenta es `MoraTrackedOrigen.sinExplicar`, la misma de la ventana de cobro.
+- **Comprobado:** con la copia de su base, antes de la revisión aparece DENIS y después ninguno; 2.503 tests y 5
+  roturas vistas.
+- **Me equivoqué y lo corregí:** el filtro de mora deja afuera a las bajas, así que DENIS no habría aparecido. Lo vi al
+  armarle la muestra, antes de terminar.
+
+## El salón primero, etapa 1 (18-oct)
+
+Las cuentas, sin pantalla: el salón vacío, las manijas, el escenario desatado y acomodar las mesas esquivando los
+sectores, dentro del borde real. **Con el mismo playón da exactamente lo mismo que el armado a medida de hoy, mesa por
+mesa.** Detalle en la sección 9 de [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md).
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
@@ -87,16 +109,16 @@ Lo que se hizo, el porqué y lo comprobado: [mora-por-cuota](pendientes/mora-por
 
 ```text
 Seguimos con la 6.1.0 de Junior Eventos. Leé primero
-docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/pendientes/mora-por-cuota.md,
-CLAUDE.md y la memoria del proyecto. La 6.0.0 está publicada e instalada en
-las tres PCs. La 6.1.0 va en una sola versión con todo junto: (1) las bajas
-temporales, HECHA el 18-oct y sin instalar; (2) la mora de cada cuota
-guardada, la fase 2 de mi especificación, que es lo que sigue; (3) el salón
-primero (docs/PLAN_SALON_PRIMERO_2026-10-16.md); (4) la versión y publicar
-conmigo presente. Para la fase 2: mostrame primero el plan corto, con las
-correcciones que pide el proyecto (nada de columnas nuevas en
-contratos_alumnos, nada de CHECK en la tabla nueva, SQLite y no Drift), y una
-maqueta de la ventana de cobro; probala con mi base antes de instalar.
+docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/PLAN_SALON_PRIMERO_2026-10-16.md
+(sobre todo las secciones 7, 8 y 9), CLAUDE.md y la memoria del proyecto. La
+6.0.0 está publicada e instalada en las tres PCs. La 6.1.0 va en una sola
+versión con todo junto: las bajas temporales y el aviso "Revisar la ficha",
+HECHOS el 18-oct y sin instalar (la fase 2 de la mora por cuota la descarté:
+me quedo con la mora en fila); el salón primero, con la etapa 1 (las cuentas)
+HECHA el 18-oct; sigue la etapa 2 (la tarjeta "Salón vacío" en Estilo y
+armado), después las manijas, los botones, las muestras y los predios con
+nombre (etapa nueva, con maqueta); y al final la versión y publicar conmigo
+presente.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

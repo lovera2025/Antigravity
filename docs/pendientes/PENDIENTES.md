@@ -28,11 +28,12 @@ Una sola versión con todo junto, en este orden. El estado de cada parte está e
 [CONTEXTO_v6.1.0](../CONTEXTO_v6.1.0_2026-10-18.md).
 
 - [La mora por cuota y las bajas temporales](mora-por-cuota.md) — un alumno que vuelve de una baja tiene la
-  misma mora que uno que nunca estuvo de baja. **Fase 1 hecha el 18-oct**; la fase 2 (la mora de cada cuota
-  guardada en una tabla) es la sección siguiente, con las correcciones que pide el proyecto.
+  misma mora que uno que nunca estuvo de baja. **Fase 1 hecha el 18-oct**, más el aviso "Revisar la ficha"; la
+  fase 2 (cada cuota suelta) quedó descartada: el usuario eligió la mora en fila.
 - [El salón primero, las mesas después](../PLAN_SALON_PRIMERO_2026-10-16.md) — pedido del jefe el 16-oct: armar el
   espacio vacío, un botón que acomode las mesas, vaciar para probar, y manijas sobre el dibujo. Con su
-  [maqueta](../maqueta_salon_primero_2026-10-16.html) aprobada. Va después de la fase 2.
+  [maqueta](../maqueta_salon_primero_2026-10-16.html) aprobada. **Etapa 1 (las cuentas) hecha el 18-oct**; suma los
+  predios con nombre (sección 8 del plan).
 
 ### Otros
 
