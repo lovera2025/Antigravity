@@ -318,9 +318,10 @@ class SesionAcomodo {
     }
     // A medida se arma de nuevo con las mesas que hay: si se agregaron más de
     // las que entran en el hormigón, volver al original se llevaría algunas.
+    // El salón vacío vuelve sin mesas a propósito: eso no frena.
     final hay = _actual.cantidadComunes;
     final entran = original.cantidadComunes;
-    if (ArmarAMedida.lugarDe(_actual) != null && entran < hay) {
+    if (_actual.clave == ArmarAMedida.claveArmado && entran < hay) {
       return 'El salón tiene $hay mesas y armado de nuevo entran $entran: '
           'sacá las que sobran o marcalas de pasto.';
     }

@@ -79,6 +79,26 @@ class VistaPreviaSeparar {
   }
 }
 
+/// Una de las ocho manijas de un sector o del playón (6.1.0): los cuatro lados
+/// y las cuatro esquinas, por los puntos cardinales (el norte es arriba, del
+/// lado del escenario en el dibujo).
+enum Manija {
+  n,
+  s,
+  e,
+  o,
+  ne,
+  no,
+  se,
+  so;
+
+  bool get norte => this == n || this == ne || this == no;
+  bool get sur => this == s || this == se || this == so;
+  bool get este => this == e || this == ne || this == se;
+  bool get oeste => this == o || this == no || this == so;
+  bool get esEsquina => name.length == 2;
+}
+
 /// Acomodar el salón a mano: correr, agregar y sacar mesas, marcar pasto,
 /// mover sectores, y separar o juntar un grupo entero.
 ///
@@ -144,6 +164,13 @@ class EditarArmado {
         y0 = math.min(y0, s.caja.y - _margen);
         x1 = math.max(x1, s.caja.derecha + _margen);
         y1 = math.max(y1, s.caja.abajo + _margen);
+      }
+      // El borde del playón también: se mueve y se estira sin tope (6.1.0).
+      for (final p in h.contorno?.puntos ?? const <({double x, double y})>[]) {
+        x0 = math.min(x0, p.x - _margen);
+        y0 = math.min(y0, p.y - _margen);
+        x1 = math.max(x1, p.x + _margen);
+        y1 = math.max(y1, p.y + _margen);
       }
       final caja = RectPlano(x0, y0, x1 - x0, y1 - y0);
       if (caja != h.caja) cambio = true;
@@ -477,6 +504,124 @@ class EditarArmado {
     ]));
   }
 
+  /// Estira un sector desde una de sus ocho manijas (6.1.0): un lado mueve
+  /// solo ese lado y una esquina mueve sus dos lados; el de enfrente queda
+  /// quieto. Va de a medio metro **contando desde [desde]** (la caja al
+  /// empezar a arrastrar), y nunca mide menos de medio metro.
+  static ArmadoSalon estirarSector(
+    ArmadoSalon a,
+    int indice,
+    Manija manija,
+    double dxM,
+    double dyM, {
+    RectPlano? desde,
+  }) {
+    if (indice < 0 || indice >= a.sectores.length) return a;
+    final c = desde ?? a.sectores[indice].caja;
+    final dx = _pasoEspacio(a, dxM), dy = _pasoEspacio(a, dyM);
+    final min = a.aUnidades(pasoEspacioM);
+    var x0 = c.x, y0 = c.y, x1 = c.derecha, y1 = c.abajo;
+    if (manija.oeste) x0 = math.min(c.x + dx, x1 - min);
+    if (manija.este) x1 = math.max(c.derecha + dx, x0 + min);
+    if (manija.norte) y0 = math.min(c.y + dy, y1 - min);
+    if (manija.sur) y1 = math.max(c.abajo + dy, y0 + min);
+    return _conSector(
+      a,
+      indice,
+      (s) => s.copyWith(caja: RectPlano(x0, y0, x1 - x0, y1 - y0)),
+    );
+  }
+
+  // ── El playón ───────────────────────────────────────────────────────────
+
+  /// Corre el borde del playón de [hoja] entero, de a medio metro contando
+  /// desde [desde] (el borde al empezar a arrastrar). Las mesas y los sectores
+  /// no se mueven: se mueve el hormigón debajo de ellos. Sin tope: la hoja
+  /// crece sola.
+  static ArmadoSalon moverPlayon(
+    ArmadoSalon a,
+    String hoja,
+    double dxM,
+    double dyM, {
+    ContornoPlano? desde,
+  }) {
+    final h = a.hoja(hoja);
+    final c = desde ?? h?.contorno;
+    if (h == null || c == null) return a;
+    final dx = _pasoEspacio(a, dxM), dy = _pasoEspacio(a, dyM);
+    return _conContorno(a, hoja, [
+      for (final p in c.puntos) (x: p.x + dx, y: p.y + dy),
+    ]);
+  }
+
+  /// Estira el playón de [hoja] desde una de sus ocho manijas: un lado corre
+  /// ese lado entero (el frente, el fondo o un costado) y una esquina corre
+  /// solo ese punto, para un playón que no es un trapecio parejo. De a medio
+  /// metro contando desde [desde]; ningún lado queda de menos de medio metro.
+  /// Solo para un borde de cuatro puntos (arriba a la izquierda, arriba a la
+  /// derecha, abajo a la derecha, abajo a la izquierda), que es como se dibuja.
+  static ArmadoSalon estirarPlayon(
+    ArmadoSalon a,
+    String hoja,
+    Manija manija,
+    double dxM,
+    double dyM, {
+    ContornoPlano? desde,
+  }) {
+    final h = a.hoja(hoja);
+    final c = desde ?? h?.contorno;
+    if (h == null || c == null || c.puntos.length != 4) return a;
+    final dx = _pasoEspacio(a, dxM), dy = _pasoEspacio(a, dyM);
+    final min = a.aUnidades(pasoEspacioM);
+    final p = [...c.puntos];
+    final (ai, ad, bd, bi) = (p[0], p[1], p[2], p[3]);
+    double xIzq(double x, double tope) => math.min(x + dx, tope - min);
+    double xDer(double x, double tope) => math.max(x + dx, tope + min);
+    double yArr(double y, double tope) => math.min(y + dy, tope - min);
+    double yAba(double y, double tope) => math.max(y + dy, tope + min);
+    switch (manija) {
+      case Manija.n:
+        p[0] = (x: ai.x, y: yArr(ai.y, bi.y));
+        p[1] = (x: ad.x, y: yArr(ad.y, bd.y));
+      case Manija.s:
+        p[3] = (x: bi.x, y: yAba(bi.y, ai.y));
+        p[2] = (x: bd.x, y: yAba(bd.y, ad.y));
+      case Manija.o:
+        p[0] = (x: xIzq(ai.x, ad.x), y: ai.y);
+        p[3] = (x: xIzq(bi.x, bd.x), y: bi.y);
+      case Manija.e:
+        p[1] = (x: xDer(ad.x, ai.x), y: ad.y);
+        p[2] = (x: xDer(bd.x, bi.x), y: bd.y);
+      case Manija.no:
+        p[0] = (x: xIzq(ai.x, ad.x), y: yArr(ai.y, bi.y));
+      case Manija.ne:
+        p[1] = (x: xDer(ad.x, ai.x), y: yArr(ad.y, bd.y));
+      case Manija.se:
+        p[2] = (x: xDer(bd.x, bi.x), y: yAba(bd.y, ad.y));
+      case Manija.so:
+        p[3] = (x: xIzq(bi.x, bd.x), y: yAba(bi.y, ai.y));
+    }
+    return _conContorno(a, hoja, p);
+  }
+
+  static ArmadoSalon _conContorno(
+    ArmadoSalon a,
+    String hoja,
+    List<({double x, double y})> puntos,
+  ) =>
+      _conCajas(a.copyWith(hojas: [
+        for (final h in a.hojas)
+          h.id == hoja ? h.copyWith(contorno: ContornoPlano(puntos)) : h,
+      ]));
+
+  /// El playón y los sectores se mueven de a medio metro (las mesas, de a un
+  /// cuarto: ver [ajusteM]).
+  static const double pasoEspacioM = 0.5;
+
+  /// [metros] llevado al medio metro más cercano, en unidades del plano.
+  static double _pasoEspacio(ArmadoSalon a, double metros) =>
+      a.aUnidades((metros / pasoEspacioM).round() * pasoEspacioM);
+
   static ArmadoSalon sacarSector(ArmadoSalon a, int indice) =>
       indice < 0 || indice >= a.sectores.length
           ? a
@@ -805,6 +950,17 @@ class EditarArmado {
   /// quien llama lo tiene que mirar (la sesión de Acomodar no deja volver al
   /// original en ese caso).
   static ArmadoSalon? original(ArmadoSalon a) {
+    // El salón vacío vuelve a como salió (6.1.0): el playón que tiene, el
+    // escenario al frente y el Ingreso al fondo, sin mesas ni los sectores que
+    // se agregaron. VACIAR EL SALÓN, en cambio, saca las mesas y deja el
+    // espacio como el jefe lo armó. Lo pidió el usuario el 18-oct ("por si uno
+    // quiere volver al inicio").
+    if (a.clave == ArmarAMedida.claveVacio) {
+      return ArmarAMedida.vacio(
+        ArmarAMedida.playonDe(a) ?? PlayonReal.costaSurubi,
+        lugarM: a.lugarOriginalM ?? MedidasPlano.lugarPorDefectoM,
+      );
+    }
     final fabrica = ArmadosPredefinidos.porClave(a.clave);
     if (fabrica != null) return fabrica;
     final playon = ArmarAMedida.playonDe(a);

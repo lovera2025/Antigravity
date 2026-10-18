@@ -109,6 +109,21 @@ class ArmarAMedida {
 
   static const claveArmado = 'a_medida@1';
 
+  /// El salón vacío (6.1.0, "el salón primero"): el playón con el escenario y
+  /// el Ingreso, sin mesas. Las mesas se ponen después con [acomodar]. Una PC
+  /// con la 6.0.0 no conoce esta clave: abre el salón igual, pero no le ofrece
+  /// "Volver al armado original" (ver `test/salon_convivencia_test.dart`).
+  static const claveVacio = 'vacio@1';
+
+  /// Las claves de los salones con el borde del playón dibujado a medida.
+  static bool _esAMedida(ArmadoSalon a) =>
+      a.clave == claveArmado || a.clave == claveVacio;
+
+  /// Lo que queda libre alrededor de un sector que no es el escenario ni la
+  /// pasarela (una pista, una barra, el Ingreso): la mesa no se pone si su
+  /// círculo, agrandado esto, lo pisa.
+  static const double despejeSectorM = 0.5;
+
   /// Alrededor del dibujo, para que entren los rótulos y las medidas.
   static const double _borde = 60;
   static const double _altoEscenario = 50;
@@ -203,7 +218,7 @@ class ArmarAMedida {
   /// Los bordes de un armado a medida, hoja por hoja. Null si no es un armado
   /// a medida o alguna hoja no trae su trapecio.
   static List<List<({double x, double y})>>? _bordes(ArmadoSalon armado) {
-    if (armado.clave != claveArmado || armado.hojas.isEmpty) return null;
+    if (!_esAMedida(armado) || armado.hojas.isEmpty) return null;
     final r = <List<({double x, double y})>>[];
     for (final h in armado.hojas) {
       final puntos = h.contorno?.puntos;
@@ -220,7 +235,7 @@ class ArmarAMedida {
   /// dónde cuentan como pegadas, que deja de servir en cuanto se separan o se
   /// juntan las mesas.
   static double? lugarDe(ArmadoSalon armado) {
-    if (armado.clave != claveArmado) return null;
+    if (!_esAMedida(armado)) return null;
     final guardado = armado.lugarOriginalM;
     if (guardado != null) return guardado;
     final pegadas = armado.distanciaPegadas;
@@ -264,9 +279,12 @@ class ArmarAMedida {
   /// (se midió con cinta y no era el de la foto).
   ///
   /// **Las mesas no se mueven** respecto del escenario ni cambian de número:
-  /// la que quede afuera del hormigón nuevo se avisa, no se corre sola. El
-  /// escenario toma el frente nuevo. Si el armado no es a medida, o el playón
-  /// es el mismo, devuelve el mismo armado.
+  /// la que quede afuera del hormigón nuevo se avisa, no se corre sola. Si el
+  /// armado no es a medida, o el playón es el mismo, devuelve el mismo armado.
+  ///
+  /// **El escenario es un sector como los demás** (6.1.0): queda como está, y
+  /// el jefe lo corre o lo agranda en Acomodar. Hasta la 6.0.0 tomaba el
+  /// frente nuevo del playón.
   static ArmadoSalon conPlayon(ArmadoSalon armado, PlayonReal p) {
     final bordes = _bordes(armado);
     final actual = playonDe(armado);
@@ -275,14 +293,13 @@ class ArmarAMedida {
     }
     final cxViejo = (bordes.first[0].x + bordes.first[1].x) / 2;
     // El dibujo sigue centrado y tiene que contener el hormigón nuevo, todas
-    // las mesas (aunque alguna haya quedado afuera) y los sectores que se
-    // pusieron a un costado.
+    // las mesas (aunque alguna haya quedado afuera) y los sectores, escenario
+    // incluido.
     var medio = _u(math.max(p.frenteM, p.fondoM) / 2);
     for (final m in armado.mesas) {
       medio = math.max(medio, (m.x - cxViejo).abs() + armado.radio);
     }
     for (final s in armado.sectores) {
-      if (s.tipo == TipoSector.escenario) continue;
       medio = math.max(medio, (s.caja.x - cxViejo).abs());
       medio = math.max(medio, (s.caja.derecha - cxViejo).abs());
     }
@@ -321,17 +338,7 @@ class ArmarAMedida {
       hojas: hojas,
       mesas: [for (final m in armado.mesas) m.copyWith(x: m.x + dx)],
       sectores: [
-        for (final s in armado.sectores)
-          s.tipo == TipoSector.escenario
-              ? s.copyWith(
-                  caja: RectPlano(
-                    cx - _u(p.frenteM / 2),
-                    s.caja.y,
-                    _u(p.frenteM),
-                    s.caja.alto,
-                  ),
-                )
-              : s.copyWith(caja: s.caja.mover(dx, 0)),
+        for (final s in armado.sectores) s.copyWith(caja: s.caja.mover(dx, 0)),
       ],
     );
   }
@@ -554,6 +561,297 @@ class ArmarAMedida {
       pedidas: o.cantidad,
       capacidad: capacidad,
       mesasPorFila: [for (final f in filas) f.total],
+    );
+  }
+
+  // ── El salón primero (6.1.0) ──────────────────────────────────────────────
+
+  /// El playón vacío: el borde del hormigón, el escenario centrado al frente y
+  /// el Ingreso al fondo, al medio (4 × 2 m, a medio metro del fondo), sin
+  /// mesas. Con el Ingreso, el tótem dibuja el camino a la mesa sin pasos
+  /// extra. Las mesas se ponen después con [acomodar].
+  static ArmadoSalon vacio(
+    PlayonReal p, {
+    double lugarM = MedidasPlano.lugarPorDefectoM,
+  }) {
+    final cx = _borde + _u(math.max(p.frenteM, p.fondoM) / 2);
+    const yA = _borde + _altoEscenario;
+    final ancho = 2 * _borde + _u(math.max(p.frenteM, p.fondoM));
+    final l = math.max(lugarM, MedidasPlano.lugarMinimoM);
+    return ArmadoSalon(
+      clave: claveVacio,
+      nombre: 'Salón vacío',
+      descripcion: 'El espacio, sin mesas',
+      radio: _radio,
+      metrosPorUnidad: _mu,
+      distanciaPegadas: pegadasHastaPasos * _u(l),
+      lugarOriginalM: l,
+      pasarelaOriginalM: 0,
+      hojas: [
+        HojaPlano(
+          id: 'A',
+          titulo: 'Playón',
+          caja: RectPlano(0, 0, ancho, yA + _u(p.profundidadM) + _borde),
+          contorno: _borde4(p, cx, yA, 0, p.profundidadM),
+        ),
+      ],
+      mesas: const [],
+      sectores: [
+        SectorPlano(
+          tipo: TipoSector.escenario,
+          texto: 'Escenario',
+          hoja: 'A',
+          caja: RectPlano(
+            cx - _u(p.frenteM / 2),
+            _borde,
+            _u(p.frenteM),
+            _altoEscenario,
+          ),
+        ),
+        SectorPlano(
+          tipo: TipoSector.ingreso,
+          texto: 'Ingreso',
+          hoja: 'A',
+          caja: RectPlano(
+            cx - _u(2),
+            yA + _u(math.max(0.0, p.profundidadM - 2.5)),
+            _u(4),
+            _u(2),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Un punto del plano dentro del borde, o justo sobre él.
+  static bool _dentro(ContornoPlano c, double x, double y) =>
+      c.contiene(x, y) || c.distanciaAlBorde(x, y) < 1e-6;
+
+  /// Cuánto hay del centro de un círculo a un rectángulo (0 si está adentro).
+  static double _distanciaARect(RectPlano r, double x, double y) {
+    final dx = math.max(math.max(r.x - x, 0.0), x - r.derecha);
+    final dy = math.max(math.max(r.y - y, 0.0), y - r.abajo);
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  /// Pone [cantidad] mesas en el salón que el jefe armó: dentro del borde real
+  /// del hormigón (que ya no es necesariamente un trapecio parejo) y sin pisar
+  /// ningún sector. Es el botón ACOMODAR LAS MESAS (6.1.0, "el salón
+  /// primero"). Las mesas que tenía [a] se reemplazan, numeradas de nuevo.
+  ///
+  /// Las mismas reglas que [armar], para que sobre el mismo playón dé lo mismo:
+  /// - filas desde el escenario, a [lugarM] de centro a centro (la distancia
+  ///   guardada del salón, si no se da), con medio metro libre delante del
+  ///   escenario y contra el borde;
+  /// - con pasarela, 2,5 m libres a cada lado mientras la fila la toca, y
+  ///   después el medio se llena;
+  /// - la serpentina del jefe (la izquierda desde el escenario y la derecha
+  ///   desde el fondo), en el sentido que menos la corta.
+  ///
+  /// Lo nuevo: cada hoja usa su borde (los costados se miden a la altura de
+  /// cada fila), y una mesa no se pone si su círculo, más [despejeSectorM],
+  /// pisa un sector que no es la pasarela (una pista, una barra, el Ingreso).
+  /// Si el escenario no está arriba, hay filas de los dos lados.
+  static ArmadoAMedida acomodar(
+    ArmadoSalon a, {
+    required int cantidad,
+    double? lugarM,
+    double despejePasarelaM = 2.5,
+    double margenM = 0.5,
+    double despejeEscenarioM = 0.5,
+  }) {
+    final lugar = math.max(
+      lugarM ?? a.lugarOriginalM ?? MedidasPlano.lugarPorDefectoM,
+      MedidasPlano.lugarMinimoM,
+    );
+    final l = a.aUnidades(lugar);
+    final mg = a.aUnidades(margenM);
+
+    // Las posiciones posibles, fila por fila, en el orden en que se llenan.
+    final filas = <({String hoja, double y, List<double> izq, List<double> der})>[];
+    for (final h in a.hojas) {
+      final c = h.contorno ??
+          ContornoPlano([
+            (x: h.caja.x, y: h.caja.y),
+            (x: h.caja.derecha, y: h.caja.y),
+            (x: h.caja.derecha, y: h.caja.abajo),
+            (x: h.caja.x, y: h.caja.abajo),
+          ]);
+      final ys = [for (final p in c.puntos) p.y];
+      final xs = [for (final p in c.puntos) p.x];
+      final arriba = ys.reduce(math.min), abajo = ys.reduce(math.max);
+      final izquierda = xs.reduce(math.min), derecha = xs.reduce(math.max);
+
+      final sectores = a.sectoresDeHoja(h.id);
+      SectorPlano? deTipo(TipoSector t) {
+        for (final s in sectores) {
+          if (s.tipo == t) return s;
+        }
+        return null;
+      }
+
+      final escenario = deTipo(TipoSector.escenario);
+      final pasarela = deTipo(TipoSector.pasarela);
+      final obstaculos = [
+        for (final s in sectores)
+          if (s.tipo != TipoSector.pasarela)
+            (
+              caja: s.caja,
+              despeje: a.aUnidades(s.tipo == TipoSector.escenario
+                  ? despejeEscenarioM
+                  : despejeSectorM),
+            ),
+      ];
+      final cx = pasarela?.caja.centroX ??
+          escenario?.caja.centroX ??
+          (izquierda + derecha) / 2;
+      final adentro = pasarela == null
+          ? 0.0
+          : pasarela.caja.ancho / 2 + a.aUnidades(despejePasarelaM);
+
+      bool entra(double x, double y) {
+        // La celda de la mesa, con el margen a los costados y al fondo: lo
+        // mismo que mide [armar] sobre el trapecio.
+        final mitad = l / 2;
+        for (final (px, py) in [
+          (x - mitad - mg, y - mitad),
+          (x + mitad + mg, y - mitad),
+          (x - mitad - mg, y + mitad),
+          (x + mitad + mg, y + mitad),
+          (x, y + mitad + mg),
+          (x, y - mitad),
+        ]) {
+          if (!_dentro(c, px, py)) return false;
+        }
+        for (final o in obstaculos) {
+          if (_distanciaARect(o.caja, x, y) < a.radio + o.despeje - 1e-9) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      ({String hoja, double y, List<double> izq, List<double> der}) fila(
+        double y,
+      ) {
+        final enPasarela = pasarela != null &&
+            y - l / 2 < pasarela.caja.abajo - 1e-9 &&
+            y + l / 2 > pasarela.caja.y + 1e-9;
+        final desde = enPasarela ? 0 : -(adentro / l + 1e-9).floor();
+        List<double> lado(int signo) {
+          final r = <double>[];
+          for (var col = desde;; col++) {
+            final x = cx + signo * (adentro + l / 2 + col * l);
+            if (x < izquierda - l || x > derecha + l) break;
+            if (entra(x, y)) r.add(x);
+          }
+          return r;
+        }
+
+        return (hoja: h.id, y: y, izq: lado(-1), der: lado(1));
+      }
+
+      // Desde el escenario hacia el fondo y, si queda lugar, hacia el frente.
+      // Sin escenario, desde arriba.
+      final haciaAbajo = <double>[];
+      final haciaArriba = <double>[];
+      if (escenario != null) {
+        for (var y = escenario.caja.abajo + a.aUnidades(despejeEscenarioM) + l / 2;
+            y - l / 2 < abajo;
+            y += l) {
+          haciaAbajo.add(y);
+        }
+        for (var y = escenario.caja.y - a.aUnidades(despejeEscenarioM) - l / 2;
+            y + l / 2 > arriba;
+            y -= l) {
+          haciaArriba.add(y);
+        }
+      } else {
+        for (var y = arriba + mg + l / 2; y - l / 2 < abajo; y += l) {
+          haciaAbajo.add(y);
+        }
+      }
+      final ordenadas = <double>[];
+      for (var i = 0; i < math.max(haciaAbajo.length, haciaArriba.length); i++) {
+        if (i < haciaAbajo.length) ordenadas.add(haciaAbajo[i]);
+        if (i < haciaArriba.length) ordenadas.add(haciaArriba[i]);
+      }
+      for (final y in ordenadas) {
+        final f = fila(y);
+        if (f.izq.isNotEmpty || f.der.isNotEmpty) filas.add(f);
+      }
+    }
+
+    final capacidad =
+        filas.fold(0, (s, f) => s + f.izq.length + f.der.length);
+
+    // Las filas que hacen falta. A la última se le sacan las de afuera, de a
+    // una por lado (primero la derecha), hasta quedar en la cantidad pedida.
+    final usadas = <({String hoja, double y, List<double> izq, List<double> der})>[];
+    var puestas = 0;
+    for (final f in filas) {
+      if (puestas >= cantidad) break;
+      usadas.add((hoja: f.hoja, y: f.y, izq: [...f.izq], der: [...f.der]));
+      puestas += f.izq.length + f.der.length;
+    }
+    if (usadas.isNotEmpty) {
+      final ultima = usadas.last;
+      var sobran = puestas - cantidad;
+      var derecha = true;
+      while (sobran > 0 && ultima.izq.length + ultima.der.length > 0) {
+        if (derecha && ultima.der.isNotEmpty) {
+          ultima.der.removeLast();
+          sobran--;
+        } else if (!derecha && ultima.izq.isNotEmpty) {
+          ultima.izq.removeLast();
+          sobran--;
+        }
+        derecha = !derecha;
+      }
+    }
+
+    // La serpentina del jefe, como en [armar].
+    final ultimaFila = usadas.length - 1;
+    List<MesaPlano> numerar(bool ultimaHaciaAdentro) {
+      final mesas = <MesaPlano>[];
+      void poner(String hoja, double x, double y) => mesas.add(MesaPlano(
+            numero: mesas.length + 1,
+            hoja: hoja,
+            x: x,
+            y: y,
+          ));
+      for (var f = 0; f <= ultimaFila; f++) {
+        final fila = usadas[f];
+        final haciaAdentro = (ultimaFila - f).isEven == ultimaHaciaAdentro;
+        for (final x in haciaAdentro ? fila.izq.reversed : fila.izq) {
+          poner(fila.hoja, x, fila.y);
+        }
+      }
+      for (var f = ultimaFila; f >= 0; f--) {
+        final fila = usadas[f];
+        final haciaAfuera = (ultimaFila - f).isEven == ultimaHaciaAdentro;
+        for (final x in haciaAfuera ? fila.der : fila.der.reversed) {
+          poner(fila.hoja, x, fila.y);
+        }
+      }
+      return mesas;
+    }
+
+    ArmadoSalon con(List<MesaPlano> mesas) => a.copyWith(
+          mesas: mesas,
+          distanciaPegadas: pegadasHastaPasos * l,
+        );
+    final adentroPrimero = con(numerar(true));
+    final afueraPrimero = con(numerar(false));
+    final armado = afueraPrimero.cortes.length < adentroPrimero.cortes.length
+        ? afueraPrimero
+        : adentroPrimero;
+
+    return ArmadoAMedida(
+      armado: armado,
+      pedidas: cantidad,
+      capacidad: capacidad,
+      mesasPorFila: [for (final f in usadas) f.izq.length + f.der.length],
     );
   }
 }

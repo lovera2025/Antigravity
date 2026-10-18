@@ -377,10 +377,15 @@ void main() {
       expect(p.profundidadM, closeTo(45, 1e-6));
       expect(b.problemas(), isEmpty);
       expect(MedirSalon.fueraDelHormigon(b, (_) => 2.0), isEmpty);
-      // El escenario toma el frente nuevo.
-      final escenario =
-          b.sectores.firstWhere((s) => s.tipo == TipoSector.escenario);
-      expect(b.aMetros(escenario.caja.ancho), closeTo(34, 1e-6));
+      // El escenario es un sector como los demás (6.1.0): no toma el frente
+      // nuevo, se corre con el resto y queda centrado igual que antes.
+      SectorPlano escenario(ArmadoSalon x) =>
+          x.sectores.firstWhere((s) => s.tipo == TipoSector.escenario);
+      expect(b.aMetros(escenario(b).caja.ancho),
+          closeTo(a.aMetros(escenario(a).caja.ancho), 1e-6));
+      final bordeB = b.hojas.first.contorno!.puntos;
+      expect(escenario(b).caja.centroX,
+          closeTo((bordeB[0].x + bordeB[1].x) / 2, 1e-6));
       // Y la distancia entre mesas es la de antes.
       expect(ArmarAMedida.lugarDe(b), closeTo(2.0, 1e-9));
     });
