@@ -15,8 +15,8 @@ y caja no cambian.
 > Plan aprobado: `C:\Users\lover\.claude\plans\en-que-nos-quedamos-radiant-gadget.md`.
 
 **Estado: PUBLICADA el 15-oct a las 22:28 (release `v6.0.0` en GitHub) e INSTALADA en su PC de la casa a las
-22:31.** Las PCs de la oficina siguen con la 5.0.0: las instala él el 16-oct (ver "Lo que falta para publicar",
-punto 3). **La web nueva se publicó el 15-oct a las 22:50 y los permisos de la puerta se cerraron a las 22:53**
+22:31, y el 16-oct en las PCs del operario y del jefe** (lo dijo él). **Lo que sigue es la 6.1.0:** ver
+[CONTEXTO_v6.1.0](CONTEXTO_v6.1.0_2026-10-18.md). **La web nueva se publicó el 15-oct a las 22:50 y los permisos de la puerta se cerraron a las 22:53**
 (puntos 6 y 7). Falta el ensayo. El 13-oct el usuario sumó a esta versión
 la puerta que sigue al sorteo, el Excel de acompañantes y música, y Recepción y el tótem nuevos: ver
 **"Qué pasó el 13-oct"** y **"Qué pasó el 14-oct"**, más abajo. **Hechas las partes 1 a 4 y, del orden del 14-oct,
@@ -1625,6 +1625,9 @@ ella el instalador no compila (y la central no tendría qué darle al celular). 
 - Cerca del sorteo: volver a sacar el control de mesas y sillas y verlo con él, nombre por nombre.
 
 ## Para seguir en otro chat, pegar
+
+**Ya no:** lo que sigue es la 6.1.0, y el texto para pegar está al final de
+[CONTEXTO_v6.1.0](CONTEXTO_v6.1.0_2026-10-18.md). Este queda como estaba el 15-oct.
 
 ```text
 Seguimos con la 6.0.0 de Junior Eventos. Leé primero

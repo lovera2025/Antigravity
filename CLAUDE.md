@@ -15,8 +15,12 @@ con check-in por QR y un tótem que se proyecta en el salón.
 ## Antes de tocar nada: la rama
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
-rama está ~170 commits adelante y va por la v6.0.0; `main` quedó en la 2.2.0.
+rama está ~170 commits adelante y va por la v6.1.0 (en curso; la 6.0.0 está
+instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
+
+**Lo que sigue es la 6.1.0:** las bajas temporales (hecha), la mora por cuota y el
+salón primero, en una sola versión. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
 
@@ -440,6 +444,24 @@ históricos y la pantalla se ve como siempre.
   número de mesa, los acompañantes y la música **solo si alguien los cambió a mano**. Editar alumno manda la ficha
   entera: una PC que todavía no bajó el sorteo o el Excel del delegado los mandaría vacíos al editar un teléfono, y
   los borraría en la nube y en las demás. Un dato nuevo que se cargue de a muchos tiene que entrar en esa regla.
+  **La mora, igual** (6.1.0, `camposMoraDelAlumno`): editar a TOÑANEZ desde la PC del jefe habría vuelto a subir
+  los $166.200 que en la nube ya estaban en 0.
+
+- **La baja temporal no toca la mora** (6.1.0; ver `docs/pendientes/mora-por-cuota.md`). Hasta la 6.0.0 la baja
+  guardaba el día en `mora_fecha_referencia` y la mora quedaba cortada ahí, también después de reincorporar.
+  - Ahora `fechaEfectivaMoraAr` usa siempre hoy, y la fecha se ignora: borrarla no cruza entre PCs, porque el pull
+    conserva la de la PC si la nube la trae vacía.
+  - Un reincorporado tiene la misma mora que uno que nunca estuvo de baja, y al reincorporar se revisa su ficha en
+    el momento (`revisarMora(soloContratos:)`).
+  - **Ojo: la revisión que corre al abrir el programa incluye a las bajas.** Solo
+    `soloEventosMasivosActivos: true` las deja afuera.
+- **Al bajar un contrato, el ajuste de la mora (`mora_tracked_ajuste`) lo manda la nube** (6.1.0, `contratoAlBajar`
+  en `core/services/contrato_al_bajar.dart`).
+  - Antes la PC se quedaba con el suyo si la nube traía 0: sacar un perdón o arreglar la nube a mano no le llegaba a
+    las otras.
+  - Las filas con cambios sin subir no llegan ahí (`pendingIds`).
+  - Si se pierde un ajuste, queda escrito en `revision_mora.txt`.
+  - La eximición, en cambio, sigue conservándose: hubo eximiciones que estaban solo en una PC.
 
 - **Las tablas que se sincronizan no llevan CHECK nuevos en la nube.** El motor toma cualquier "violates" como un
   padre que falta: reencola el evento y la fila queda trabada para siempre. Los valores válidos los controla la

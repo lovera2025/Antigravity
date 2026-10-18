@@ -1,0 +1,432 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano: salón primero, mesas después</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: una franja de pasos arriba (el flujo nuevo), y abajo la pantalla del plano tal como es hoy, con lo nuevo marcado. */
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#7b7f9e; --tinta:#1d1d2b; --tinta2:#5d6078;
+  --primario:#5a5e9c; --primario-suave:#dcdcf0; --ok:#2c7a3b; --ok-suave:#d9efdc;
+  --aviso:#b55a12; --aviso-suave:#fde6d2; --papel:#f6f4ee; --grilla:#dcdad2; --hormigon:#ebe7dd;
+  --nuevo:#b8860b; --nuevo-suave:#fff3cf; --manija:#2b5cc7;
+  --display:'Outfit',system-ui,sans-serif; --cuerpo:'Outfit',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1b26; --panel:#262636; --linea:#6b6e8a; --tinta:#eceaf6; --tinta2:#aeb0c4;
+  --primario:#9a9ee6; --primario-suave:#34365a; --ok:#7fd68e; --ok-suave:#1f3a26;
+  --aviso:#f0a060; --aviso-suave:#4a2e18; --papel:#1f1f29; --grilla:#30303d; --hormigon:#2a2a36;
+  --nuevo:#e3b94a; --nuevo-suave:#3d3418; --manija:#8fb0ff; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#1b1b26; --panel:#262636; --linea:#6b6e8a; --tinta:#eceaf6; --tinta2:#aeb0c4;
+  --primario:#9a9ee6; --primario-suave:#34365a; --ok:#7fd68e; --ok-suave:#1f3a26;
+  --aviso:#f0a060; --aviso-suave:#4a2e18; --papel:#1f1f29; --grilla:#30303d; --hormigon:#2a2a36;
+  --nuevo:#e3b94a; --nuevo-suave:#3d3418; --manija:#8fb0ff; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.4;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+h1{font-family:var(--display);font-weight:600;font-size:26px;margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:600;margin:0}
+p{margin:0}
+.sub{color:var(--tinta2);font-size:14px}
+.wrap{max-width:1240px;margin:0 auto;display:grid;gap:18px}
+
+.flujo{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.paso{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:12px 14px;cursor:pointer;display:grid;gap:4px;text-align:left;color:var(--tinta);font:inherit}
+.paso:focus-visible{outline:3px solid var(--primario);outline-offset:2px}
+.paso.activo{border-color:var(--primario);background:var(--primario-suave)}
+.paso .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--primario);color:#fff;font-size:12px;font-weight:700}
+.paso b{font-size:15px}
+.paso.nuevo b::after{content:'NUEVO';font-size:10px;letter-spacing:.08em;color:var(--nuevo);background:var(--nuevo-suave);border-radius:6px;padding:2px 6px;margin-left:8px;vertical-align:middle}
+
+.pantalla{background:var(--panel);border:1.5px solid var(--linea);border-radius:18px;padding:16px;display:grid;gap:12px}
+.cabecera{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.pill{border-radius:8px;padding:4px 10px;font-weight:600;font-size:13px}
+.pill.ok{background:var(--ok-suave);color:var(--ok)}
+.pill.aviso{background:var(--aviso-suave);color:var(--aviso)}
+.pill.borde{border:1.5px solid var(--linea);font-size:12px;letter-spacing:.04em}
+.franja{border:1.5px solid var(--linea);border-radius:14px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--bg)}
+.pestanas{display:flex;border:1.5px solid var(--linea);border-radius:999px;overflow:hidden}
+.pestanas span{padding:7px 16px;font-size:14px}
+.pestanas span.on{background:var(--primario-suave);font-weight:600}
+.franja .txt{flex:1 1 300px;min-width:0;font-weight:600;font-size:14px}
+.cuerpo{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px}
+@media (max-width:860px){.cuerpo{grid-template-columns:1fr}}
+.plano{background:var(--papel);border:1px solid var(--grilla);border-radius:10px;min-width:0;overflow:hidden}
+.plano svg{display:block;width:100%;height:auto;touch-action:none;user-select:none}
+.panel{display:grid;gap:10px;align-content:start;min-width:0}
+.tarjeta{border:1.5px solid var(--primario);border-radius:12px;padding:10px 12px}
+.tarjeta.nueva{border-color:var(--nuevo);background:var(--nuevo-suave)}
+.etq{font-size:12px;letter-spacing:.08em;font-weight:700;color:var(--tinta2);margin-top:4px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1.5px solid var(--linea);background:transparent;color:var(--primario);border-radius:999px;padding:8px 14px;font:inherit;font-weight:600;font-size:14px;cursor:pointer}
+.btn.chico{padding:5px 11px;font-size:13px}
+.btn.lleno{background:var(--primario);color:#fff;border-color:var(--primario)}
+.btn.nuevo{border-color:var(--nuevo);color:var(--nuevo);background:var(--nuevo-suave)}
+.btn.lleno.nuevo{background:var(--nuevo);color:#1d1d2b;border-color:var(--nuevo)}
+.btn:focus-visible{outline:3px solid var(--primario);outline-offset:2px}
+.sector-item{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--grilla);padding:6px 4px;font-size:14px;cursor:pointer;border-radius:4px}
+.sector-item.on{background:var(--primario-suave)}
+.pie{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+.medidas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.medidas.dos{grid-template-columns:1fr 1fr}
+.medidas label{display:grid;gap:3px;font-size:12px;color:var(--tinta2);min-width:0}
+.medidas input{font:inherit;font-size:15px;padding:6px 8px;border:1.5px solid var(--linea);border-radius:8px;background:var(--panel);color:var(--tinta);width:100%;font-variant-numeric:tabular-nums}
+
+.tarjetas{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.armado{border:1.5px solid var(--linea);border-radius:12px;padding:10px 12px;display:grid;gap:5px;font-size:13px;color:var(--tinta2)}
+.armado b{color:var(--tinta);font-size:14px}
+.armado.on{border-color:var(--primario);background:var(--primario-suave);border-width:2px}
+.armado.nuevo{border-color:var(--nuevo)}
+.armado .pill{justify-self:start}
+.nota{border-left:3px solid var(--nuevo);padding:6px 10px;background:var(--nuevo-suave);border-radius:0 8px 8px 0;font-size:14px}
+.lista{margin:0;padding-left:18px;display:grid;gap:4px;font-size:14px}
+.ocultar{display:none}
+</style></head><body>
+
+<div class="wrap">
+  <div>
+    <h1>El plano: primero el salón, después las mesas</h1>
+    <p class="sub">Maqueta del flujo nuevo que pidió el jefe (audio del 16-oct). Lo dorado es lo que se agrega; el resto es la pantalla de hoy. En los pasos 2 y 3 se puede arrastrar de verdad: el playón, los sectores y las mesas.</p>
+  </div>
+
+  <div class="flujo" role="tablist">
+    <button class="paso nuevo activo" data-p="1" role="tab"><span><span class="n">1</span></span><b>Salón vacío</b><span class="sub">En "Estilo y armado" se elige el salón sin mesas. No saltan las 132.</span></button>
+    <button class="paso nuevo" data-p="2" role="tab"><span><span class="n">2</span></span><b>Armar el espacio</b><span class="sub">El playón con sus esquinas, y adentro escenario, pasarela, pista, barras, ingreso. Todo con manijas.</span></button>
+    <button class="paso nuevo" data-p="3" role="tab"><span><span class="n">3</span></span><b>Acomodar las mesas</b><span class="sub">Un botón las pone alrededor de lo armado. Después, cada mesa se corre a mano.</span></button>
+    <button class="paso" data-p="4" role="tab"><span><span class="n">4</span></span><b>Sorteo</b><span class="sub">Como hoy. Recién ahí cada número tiene su familia.</span></button>
+  </div>
+
+  <!-- PASO 1 -->
+  <section class="pantalla" id="p1">
+    <div>
+      <h2>Estilo y armado</h2>
+      <p class="sub">La fiesta necesita 132 mesas. Elegí cómo arrancar y tocá LISTO.</p>
+    </div>
+    <div class="etq">1 · ARMADO DEL SALÓN</div>
+    <div class="tarjetas">
+      <div class="armado on nuevo"><b>Salón vacío</b><span>El playón y el escenario, para armar el espacio a mano. Las mesas se ponen después, desde Acomodar.</span><span class="pill borde" style="color:var(--nuevo);border-color:var(--nuevo)">NUEVO · viene elegido</span></div>
+      <div class="armado"><b>A medida del playón</b><span>132 mesas a 2 m</span><span class="pill ok">Entra</span></div>
+      <div class="armado"><b>Normal 2A · página 3</b><span>78 mesas · 28 × 15 m</span><span class="pill aviso">Faltan 54 mesas</span></div>
+      <div class="armado"><b>Normal 2A + 2B</b><span>142 mesas · 31 × 19 m y 31 × 6 m</span><span class="pill ok">Entra</span></div>
+      <div class="armado"><b>Técnica 1A + 1B</b><span>130 mesas y 20 de pasto</span><span class="pill aviso">Entra con el pasto</span></div>
+    </div>
+    <div class="nota">El salón vacío arranca con el playón de Costa Surubí (30 × 46 × 39 m, trapecio). Si la fiesta es en otro predio, el espacio se cambia en Acomodar: forma, medidas y esquinas.</div>
+    <div class="etq">2 · ESTILO &nbsp;&nbsp; 3 · SORTEO POR DIVISIÓN</div>
+    <p class="sub">Sin cambios: Gala, Arquitecto o Neón, y por división o toda la escuela junta.</p>
+    <div class="pie"><span class="sub">Salón vacío · Arquitecto · por división</span><span class="btns"><span class="btn">CANCELAR</span><span class="btn lleno">LISTO</span></span></div>
+  </section>
+
+  <!-- PASO 2 -->
+  <section class="pantalla ocultar" id="p2">
+    <div class="cabecera"><h2>Plano del salón</h2><span class="pill aviso">Sin mesas todavía</span><span class="sub" id="detalle2"></span></div>
+    <div class="franja">
+      <div class="pestanas"><span>Mesas</span><span class="on">Acomodar</span><span>Medidas</span><span>Colores y textos</span></div>
+      <div class="txt">Tocá el playón o un sector para elegirlo. Arrastrá para mover; tirá de una manija para cambiar lo que mide (de a medio metro). Cuando esté, tocá ACOMODAR LAS MESAS.</div>
+    </div>
+    <div class="cuerpo">
+      <div class="plano"><svg id="svg2" viewBox="0 0 610 520" aria-label="Salón vacío con sus sectores, el elegido con manijas"></svg></div>
+      <div class="panel">
+        <div class="tarjeta nueva" id="tarjeta2"></div>
+        <div id="campos2"></div>
+        <div class="btns"><span class="btn">+ Agregar sector</span><span class="btn">Sacar</span><span class="btn">Deshacer</span></div>
+        <div class="etq">EL ESPACIO</div>
+        <div id="lista2"></div>
+        <div class="tarjeta nueva"><b>Las mesas se ponen solas</b><p class="sub">Toma las 132 mesas de los alumnos cargados, las tiende en filas desde el escenario a 2 m y deja libre lo que armaste. Se ve antes de guardar.</p></div>
+        <div class="btns"><button class="btn lleno nuevo" id="irAcomodar">▦ ACOMODAR LAS MESAS (132)</button></div>
+      </div>
+    </div>
+    <div class="pie"><span class="btns"><span class="btn lleno">ESTILO Y ARMADO</span><span class="btn">SALIR DE PERSONALIZAR</span><span class="btn">HISTORIAL</span></span><span class="btns"><span class="btn lleno">✓ GUARDAR EL SALÓN</span><span class="btn">DESCARTAR</span></span></div>
+  </section>
+
+  <!-- PASO 3 -->
+  <section class="pantalla ocultar" id="p3">
+    <div class="cabecera"><h2>Plano del salón</h2><span class="pill ok" id="titular3">Entran las 132</span><span class="pill borde">ASÍ QUEDARÍA · SIN GUARDAR</span><span class="sub" id="detalle3"></span></div>
+    <div class="franja">
+      <div class="pestanas"><span>Mesas</span><span class="on">Acomodar</span><span>Medidas</span><span>Colores y textos</span></div>
+      <div class="txt">Las mesas quedaron alrededor de lo que armaste. Arrastrá una mesa para correrla a mano; o tocá el playón o un sector, movelo o agrandalo, y se vuelven a acomodar. Nada cambia hasta GUARDAR EL SALÓN.</div>
+    </div>
+    <div class="cuerpo">
+      <div class="plano"><svg id="svg3" viewBox="0 0 610 520" aria-label="Salón con las mesas acomodadas alrededor de la pista"></svg></div>
+      <div class="panel">
+        <div class="tarjeta" id="tarjeta3"><b>Nada elegido</b><p class="sub">Tocá una mesa, un sector o el playón.</p></div>
+        <div class="btns"><span class="btn">+ Agregar mesa</span><span class="btn">Sacar</span><span class="btn">Es de pasto</span><span class="btn">Deshacer</span></div>
+        <div class="etq">SEPARAR O JUNTAR</div>
+        <p class="sub">Todo el salón (132) · 2 m. Como hoy.</p>
+        <div class="etq">ANTES DE GUARDAR</div>
+        <p class="sub" id="avisos3">Nada para revisar.</p>
+        <div class="btns"><button class="btn nuevo" id="reacomodar">▦ ACOMODAR LAS MESAS OTRA VEZ</button></div>
+        <p class="sub">Vuelve a tender las 132 con el espacio como está ahora. Lo que corriste a mano se pierde (se puede Deshacer).</p>
+        <div class="btns"><button class="btn nuevo" id="vaciar">⟲ VACIAR EL SALÓN</button></div>
+        <p class="sub">Saca las mesas, los bloques y las fijadas; deja el espacio y las medidas. Solo sin sorteo vigente (primero "Deshacer sorteo").</p>
+      </div>
+    </div>
+    <div class="pie"><span class="btns"><span class="btn lleno">ESTILO Y ARMADO</span><span class="btn">SALIR DE PERSONALIZAR</span><span class="btn">HISTORIAL</span></span><span class="btns"><span class="btn lleno">✓ GUARDAR EL SALÓN</span><span class="btn">DESCARTAR</span></span></div>
+  </section>
+
+  <!-- PASO 4 -->
+  <section class="pantalla ocultar" id="p4">
+    <h2>Después, el sorteo de siempre</h2>
+    <ul class="lista">
+      <li>Con el salón guardado y las 132 mesas puestas, SORTEO ▾ sortea por división sobre ese plano. No cambia nada del motor.</li>
+      <li>Hasta el sorteo, el plano muestra solo números; quién está en cada mesa aparece recién con el sorteo (ya es así hoy).</li>
+      <li>Si entró alguien tarde: Acomodar → "Agregar mesa" y SORTEO vuelve a sortear solo a los que faltan (ya existe).</li>
+      <li>Para empezar de cero: "Deshacer sorteo" y después "Vaciar el salón". Queda el espacio armado; las mesas se vuelven a acomodar con un botón.</li>
+      <li>Un espacio armado para otro predio se puede guardar con nombre ("Buena Vista", "Puerto Viejo") y elegir desde Estilo y armado para la próxima fiesta ahí.</li>
+    </ul>
+    <div class="etq">LO QUE NO CAMBIA</div>
+    <p class="sub">La base y la nube no se tocan (es el mismo JSON de <code>armado_json</code> y <code>config</code>; el borde del hormigón ya se guarda por esquinas). Todo lo que guarda el salón sigue pidiendo modo jefe. Los armados del Canva siguen estando para quien los quiera.</p>
+  </section>
+</div>
+
+<script>
+(function(){
+  // ── Navegación ──
+  const pasos=[...document.querySelectorAll('.paso')];
+  function ir(n){
+    pasos.forEach(p=>p.classList.toggle('activo',p.dataset.p===String(n)));
+    for(let i=1;i<=4;i++) document.getElementById('p'+i).classList.toggle('ocultar',i!==n);
+    if(n===2) dibujar2(); if(n===3) dibujar3();
+  }
+  pasos.forEach(p=>p.addEventListener('click',()=>ir(+p.dataset.p)));
+  document.getElementById('irAcomodar').addEventListener('click',()=>{manual.clear();vacio=false;ir(3);});
+  document.getElementById('reacomodar').addEventListener('click',()=>{manual.clear();vacio=false;elegido3=null;dibujar3();});
+  document.getElementById('vaciar').addEventListener('click',()=>{manual.clear();vacio=true;elegido3=null;dibujar3();});
+
+  // ── Geometría (metros; x desde el centro del dibujo, y desde arriba) ──
+  const S=11, OX=40, OY=30, ANCHO=48, PROF=43;
+  const cx=OX+ANCHO/2*S;
+  const R=0.725, LUGAR=2.0, PASO=0.5;
+  const redondear=v=>Math.round(v/PASO)*PASO;
+  const fmt=v=>String(Math.round(v*10)/10).replace('.',',');
+  const lim=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+  // El playón: cuatro esquinas. Hoy la app lo guarda así (el borde del hormigón) pero solo deja escribir tres números.
+  const playon={tl:{x:-15,y:0},tr:{x:15,y:0},br:{x:23,y:39},bl:{x:-23,y:39}};
+  const sect={
+    escenario:{nombre:'Escenario',xM:-15,yM:0,wM:30,hM:1.5,tipo:'esc'},
+    pasarela:{nombre:'Pasarela',xM:-1.25,yM:1.5,wM:2.5,hM:10,tipo:'esc'},
+    pista:{nombre:'Pista',xM:-19,yM:20,wM:12,hM:10,tipo:'pista'},
+    barra:{nombre:'Barra',xM:12,yM:33,wM:6,hM:2,tipo:'sec2'},
+    ingreso:{nombre:'Ingreso',xM:-2,yM:36.5,wM:4,hM:2,tipo:'sec2'},
+  };
+  let elegido2='playon', elegido3=null, vacio=false;
+  const manual=new Map();
+  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const prof=()=>Math.max(playon.bl.y,playon.br.y)-Math.min(playon.tl.y,playon.tr.y);
+  const frente=()=>dist(playon.tl,playon.tr), fondo=()=>dist(playon.bl,playon.br);
+  // El borde izquierdo y el derecho a una profundidad dada (interpolando cada lado).
+  function bordeX(yM,lado){
+    const a=lado==='izq'?playon.tl:playon.tr, b=lado==='izq'?playon.bl:playon.br;
+    if(b.y===a.y) return a.x;
+    const t=lim((yM-a.y)/(b.y-a.y),0,1);
+    return a.x+(b.x-a.x)*t;
+  }
+  function formaRect(w,h){ playon.tl={x:-w/2,y:0};playon.tr={x:w/2,y:0};playon.br={x:w/2,y:h};playon.bl={x:-w/2,y:h}; }
+  function formaTrap(f,fo,h){ playon.tl={x:-f/2,y:0};playon.tr={x:f/2,y:0};playon.br={x:fo/2,y:h};playon.bl={x:-fo/2,y:h}; }
+
+  const estilo=`<style>
+    .grilla line{stroke:var(--grilla);stroke-width:.5}
+    .hormigon{fill:var(--hormigon);stroke:var(--linea);stroke-width:1;cursor:grab}
+    .hormigon.on{stroke:var(--manija);stroke-width:2;stroke-dasharray:none}
+    .cota{fill:var(--tinta2);font:500 9px var(--cuerpo)}
+    .esc rect{fill:#3a3a3a} .esc text{fill:#fff;font:600 8px var(--cuerpo);letter-spacing:.1em}
+    .pista rect{fill:var(--nuevo-suave);stroke:var(--nuevo);stroke-width:1.5;stroke-dasharray:4 3}
+    .pista text{fill:var(--nuevo);font:700 10px var(--cuerpo);letter-spacing:.12em}
+    .sec2 rect{fill:var(--primario-suave);stroke:var(--primario);stroke-width:1}
+    .sec2 text{fill:var(--primario);font:600 8px var(--cuerpo);letter-spacing:.1em}
+    .sector{cursor:grab} .sector.on rect{stroke:var(--manija);stroke-width:2;stroke-dasharray:none}
+    .manija{fill:var(--panel);stroke:var(--manija);stroke-width:1.5}
+    .manija.h{cursor:ew-resize} .manija.v{cursor:ns-resize} .manija.d{cursor:nwse-resize} .manija.d2{cursor:nesw-resize} .manija.e{cursor:move}
+    .medida{fill:var(--manija);font:600 8px var(--cuerpo)}
+    .mesa{cursor:grab} .mesa circle{fill:var(--papel);stroke:var(--linea);stroke-width:1}
+    .mesa.on circle{stroke:var(--manija);stroke-width:2}
+    .mesa.manual circle{stroke-dasharray:2 1.5}
+    .mesa text{fill:var(--tinta);font:600 6px var(--cuerpo)}
+  </style>`;
+
+  const px=p=>`${cx+p.x*S},${OY+p.y*S}`;
+  function base(on){
+    let g='';
+    for(let m=0;m<=ANCHO;m++) g+=`<line x1="${OX+m*S}" y1="${OY}" x2="${OX+m*S}" y2="${OY+PROF*S}"/>`;
+    for(let m=0;m<=PROF;m++) g+=`<line x1="${OX}" y1="${OY+m*S}" x2="${OX+ANCHO*S}" y2="${OY+m*S}"/>`;
+    const P=playon;
+    const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+    const cot=(a,b,txt,dx,dy)=>{const m=mid(a,b);return `<text class="${on?'medida':'cota'}" x="${cx+m.x*S+dx}" y="${OY+m.y*S+dy}" text-anchor="middle">${txt}</text>`;};
+    let s=`<g class="grilla">${g}</g>
+      <polygon class="hormigon ${on?'on':''}" data-playon="1" points="${px(P.tl)} ${px(P.tr)} ${px(P.br)} ${px(P.bl)}"/>`+
+      cot(P.tl,P.tr,fmt(frente())+' m',0,-8)+cot(P.bl,P.br,fmt(fondo())+' m',0,16)+
+      cot(P.tl,P.bl,fmt(dist(P.tl,P.bl))+' m',-22,3)+cot(P.tr,P.br,fmt(dist(P.tr,P.br))+' m',22,3);
+    if(on){
+      // Las mismas manijas que un sector: cuatro lados y cuatro esquinas.
+      for(const [k,a,b,c] of [['n','tl','tr','v'],['s','bl','br','v'],['w','tl','bl','h'],['e','tr','br','h']]){
+        const m=mid(P[a],P[b]);s+=`<rect class="manija ${c}" data-lado="${k}" x="${cx+m.x*S-3.5}" y="${OY+m.y*S-3.5}" width="7" height="7" rx="1.5"/>`;}
+      for(const k of ['tl','tr','br','bl']){const p=P[k];s+=`<rect class="manija e" data-esquina="${k}" x="${cx+p.x*S-4}" y="${OY+p.y*S-4}" width="8" height="8" rx="2"/>`;}
+      s+=`<text class="medida" x="${cx+P.br.x*S+8}" y="${OY+P.br.y*S-6}">${fmt(prof())} m de fondo</text>`;
+    }
+    return s;
+  }
+  function sectorSvg(k,b,on){
+    const x=cx+b.xM*S, y=OY+b.yM*S, w=b.wM*S, h=b.hM*S;
+    const vertical=b.hM>b.wM*1.5;
+    const label=vertical
+      ?`<text transform="translate(${x+w/2+3},${y+h/2}) rotate(-90)" text-anchor="middle">${b.nombre.toUpperCase()}</text>`
+      :`<text x="${x+w/2}" y="${y+h/2+3.5}" text-anchor="middle">${b.nombre.toUpperCase()}</text>`;
+    let s=`<g class="sector ${b.tipo} ${on?'on':''}" data-sector="${k}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>${label}</g>`;
+    if(on){
+      const m=[['n',x+w/2,y,'v'],['s',x+w/2,y+h,'v'],['w',x,y+h/2,'h'],['e',x+w,y+h/2,'h'],
+               ['nw',x,y,'d'],['se',x+w,y+h,'d'],['ne',x+w,y,'d2'],['sw',x,y+h,'d2']];
+      s+=m.map(([d,qx,qy,c])=>`<rect class="manija ${c}" data-manija="${d}" data-sector="${k}" x="${qx-3.5}" y="${qy-3.5}" width="7" height="7" rx="1.5"/>`).join('');
+      s+=`<text class="medida" x="${x+w/2}" y="${y-6}" text-anchor="middle">${fmt(b.wM)} m</text>`+
+         `<text class="medida" transform="translate(${x+w+9},${y+h/2}) rotate(90)" text-anchor="middle">${fmt(b.hM)} m</text>`;
+    }
+    return s;
+  }
+  function sectoresSvg(on){
+    const ks=Object.keys(sect).filter(k=>k!==on);
+    if(on&&sect[on]) ks.push(on);
+    return ks.map(k=>sectorSvg(k,sect[k],k===on)).join('');
+  }
+
+  // ── Acomodar: filas desde el escenario, a 2 m, dentro del playón y dejando libre lo armado ──
+  function choca(xM,yM,b,margen){
+    return xM+R+margen>b.xM && xM-R-margen<b.xM+b.wM && yM+R+margen>b.yM && yM-R-margen<b.yM+b.hM;
+  }
+  function acomodar(cantidad){
+    const esc=sect.escenario, pas=sect.pasarela;
+    const obst=[sect.pista,sect.barra,sect.ingreso];
+    const puestas=[];
+    const y0=esc.yM+esc.hM+2.5, yFin=prof()-1.2;
+    for(let yM=y0; yM<=yFin && puestas.length<cantidad; yM+=LUGAR){
+      const izq=bordeX(yM,'izq')+1.2, der=bordeX(yM,'der')-1.2;
+      const fila=[];
+      const conPasarela = yM < pas.yM+pas.hM+1;
+      const desde = conPasarela ? pas.wM/2+2.5+R : LUGAR/2;
+      for(const sx of [-1,1]){
+        for(let xM=desde; ; xM+=LUGAR){
+          const x=sx*xM;
+          if(x-R<izq || x+R>der) break;
+          if(choca(x,yM,esc,1.0)) continue;
+          if(obst.some(b=>choca(x,yM,b,0.5))) continue;
+          fila.push({x,y:yM});
+        }
+      }
+      fila.sort((a,b)=>a.x-b.x);
+      puestas.push(...fila);
+    }
+    const L=puestas.filter(m=>m.x<0), D=puestas.filter(m=>m.x>0);
+    let n=1;
+    for(const lado of [L,D]){
+      const filas=[...new Set(lado.map(m=>m.y))].sort((a,b)=>a-b);
+      filas.forEach((y,i)=>{
+        const f=lado.filter(m=>m.y===y).sort((a,b)=>a.x-b.x);
+        if(i%2===1) f.reverse();
+        f.forEach(m=>{ if(n<=cantidad) m.n=n++; });
+      });
+    }
+    return puestas.filter(m=>m.n).slice(0,cantidad);
+  }
+  let mesas=[];
+  function mesasSvg(ms,on){
+    return ms.map(m=>{const p=manual.get(m.n)||m;
+      return `<g class="mesa ${on===m.n?'on':''} ${manual.has(m.n)?'manual':''}" data-mesa="${m.n}"><circle cx="${cx+p.x*S}" cy="${OY+p.y*S}" r="${R*S}"/><text x="${cx+p.x*S}" y="${OY+p.y*S+2.2}" text-anchor="middle">${m.n}</text></g>`;}).join('');
+  }
+
+  // ── Paso 2 ──
+  function dibujar2(){
+    const onP=elegido2==='playon';
+    document.getElementById('svg2').innerHTML=estilo+base(onP)+sectoresSvg(onP?null:elegido2);
+    const cap=acomodar(999).length;
+    document.getElementById('detalle2').textContent=`0 mesas · playón de ${fmt(frente())} × ${fmt(fondo())} × ${fmt(prof())} m · entran hasta ${cap}`;
+    const tj=document.getElementById('tarjeta2'), ca=document.getElementById('campos2');
+    if(onP){
+      tj.innerHTML=`<b>Playón · ${fmt(frente())} m de frente, ${fmt(fondo())} m de fondo, ${fmt(prof())} m de profundidad</b><p class="sub">Como con la pista: arrastralo para moverlo entero; las manijas de los lados lo agrandan o achican de a un lado, y las de las esquinas le dan la forma del predio (rectángulo, trapecio o lo que haga falta). Las medidas se ven en cada lado; también podés escribirlas.</p>`;
+      ca.innerHTML=`<div class="btns" style="margin-bottom:8px"><button class="btn chico" data-forma="rect">▭ Rectángulo</button><button class="btn chico" data-forma="trap">⏢ Trapecio</button><button class="btn chico" data-forma="surubi">Costa Surubí</button></div>
+        <div class="medidas"><label>Frente (m)<input type="number" step="0.5" min="5" id="fr" value="${frente()}"></label><label>Fondo (m)<input type="number" step="0.5" min="5" id="fo" value="${fondo()}"></label><label>Profundidad (m)<input type="number" step="0.5" min="5" id="pr" value="${prof()}"></label></div>`;
+      ca.querySelector('[data-forma=rect]').addEventListener('click',()=>{formaRect(Math.max(frente(),fondo()),prof());dibujar2();});
+      ca.querySelector('[data-forma=trap]').addEventListener('click',()=>{formaTrap(frente(),Math.max(fondo(),frente()+8),prof());dibujar2();});
+      ca.querySelector('[data-forma=surubi]').addEventListener('click',()=>{formaTrap(30,46,39);dibujar2();});
+      const leer=()=>{const f=lim(+ca.querySelector('#fr').value||30,5,46), fo=lim(+ca.querySelector('#fo').value||46,5,46), p=lim(+ca.querySelector('#pr').value||39,5,42);formaTrap(redondear(f),redondear(fo),redondear(p));dibujar2();};
+      ['fr','fo','pr'].forEach(id=>ca.querySelector('#'+id).addEventListener('change',leer));
+    } else {
+      const b=sect[elegido2];
+      tj.innerHTML=`<b>${b.nombre} · ${fmt(b.wM)} × ${fmt(b.hM)} m</b><p class="sub">Arrastralo para moverlo. Las manijas de los lados cambian el ancho o el fondo; las de las esquinas, los dos. De a medio metro, y los números se ven mientras tirás.</p>`;
+      ca.innerHTML=`<div class="medidas dos"><label>Ancho (m)<input type="number" step="0.5" min="0.5" id="an" value="${b.wM}"></label><label>Fondo (m)<input type="number" step="0.5" min="0.5" id="al" value="${b.hM}"></label></div>`;
+      ca.querySelector('#an').addEventListener('change',e=>{b.wM=Math.max(0.5,redondear(+e.target.value||0.5));dibujar2();});
+      ca.querySelector('#al').addEventListener('change',e=>{b.hM=Math.max(0.5,redondear(+e.target.value||0.5));dibujar2();});
+    }
+    const items=[['playon','Playón',`${fmt(frente())} × ${fmt(fondo())} × ${fmt(prof())} m`],...Object.entries(sect).map(([k,s])=>[k,s.nombre,`${fmt(s.wM)} × ${fmt(s.hM)} m`])];
+    document.getElementById('lista2').innerHTML=items.map(([k,n,m])=>`<div class="sector-item ${k===elegido2?'on':''}" data-item="${k}"><span>${k==='playon'?'<b>':''}${n}${k==='playon'?'</b>':''}</span><span class="sub">${m}</span></div>`).join('');
+    document.querySelectorAll('#lista2 [data-item]').forEach(e=>e.addEventListener('click',()=>{elegido2=e.dataset.item;dibujar2();}));
+  }
+
+  // ── Paso 3 ──
+  function dibujar3(){
+    mesas=vacio?[]:acomodar(132);
+    const onMesa=typeof elegido3==='number'?elegido3:null;
+    const onP=elegido3==='playon';
+    const onSec=typeof elegido3==='string'&&!onP?elegido3:null;
+    document.getElementById('svg3').innerHTML=estilo+base(onP)+sectoresSvg(onSec)+mesasSvg(mesas,onMesa);
+    const t=document.getElementById('titular3'), av=document.getElementById('avisos3');
+    const capacidad=acomodar(999).length;
+    if(vacio){ t.textContent='Sin mesas todavía'; t.className='pill aviso'; av.textContent='El salón está vacío: tocá ACOMODAR LAS MESAS.'; document.getElementById('detalle3').textContent='0 mesas · el espacio y las medidas quedaron'; }
+    else if(mesas.length>=132){ t.textContent='Entran las 132'; t.className='pill ok'; av.textContent=manual.size?`${manual.size} mesa${manual.size>1?'s':''} corrida${manual.size>1?'s':''} a mano (se ven punteadas).`:'Nada para revisar.'; }
+    else { t.textContent='Faltan '+(132-mesas.length)+' mesas'; t.className='pill aviso'; av.textContent='Faltan '+(132-mesas.length)+' mesas: agrandá el playón, achicá un sector o juntá más.'; }
+    if(!vacio){ const ultimaY=Math.max(...mesas.map(m=>m.y)); document.getElementById('detalle3').textContent=`${mesas.length} mesas · hasta ${ultimaY.toFixed(0)} m del escenario · con este espacio entran hasta ${capacidad}`; }
+    const tj=document.getElementById('tarjeta3');
+    if(onP) tj.innerHTML=`<b>Playón · ${fmt(frente())} × ${fmt(fondo())} × ${fmt(prof())} m</b><p class="sub">Movelo entero o tirá de un lado o una esquina. Las mesas se vuelven a acomodar solas mientras no corras ninguna a mano.</p>`;
+    else if(onSec){ const b=sect[onSec]; tj.innerHTML=`<b>${b.nombre} · ${fmt(b.wM)} × ${fmt(b.hM)} m</b><p class="sub">Movelo o tirá de una manija. Las mesas se vuelven a acomodar solas mientras no corras ninguna a mano.</p>`; }
+    else if(onMesa){ tj.innerHTML=`<b>Mesa ${onMesa} · vacía</b><p class="sub">Arrastrala para correrla, como hoy. Queda punteada para que se note que es a mano.</p>`; }
+    else tj.innerHTML='<b>Nada elegido</b><p class="sub">Tocá una mesa, un sector o el playón.</p>';
+  }
+
+  // ── Arrastre (playón, sectores, manijas y mesas) ──
+  function instalar(svg,paso){
+    let arr=null;
+    const redib=paso===2?dibujar2:dibujar3;
+    const elegir=v=>{ if(paso===2) elegido2=v; else elegido3=v; };
+    const aMetros=e=>{const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const p=pt.matrixTransform(svg.getScreenCTM().inverse());return {x:(p.x-cx)/S,y:(p.y-OY)/S};};
+    svg.addEventListener('pointerdown',e=>{
+      const g=e.target.closest('[data-esquina],[data-lado],[data-manija],[data-sector],[data-mesa],[data-playon]'); if(!g) return;
+      const p=aMetros(e);
+      const copia=()=>({tl:{...playon.tl},tr:{...playon.tr},br:{...playon.br},bl:{...playon.bl}});
+      if(g.dataset.esquina){ arr={tipo:'esquina',k:g.dataset.esquina,p0:p,e0:{...playon[g.dataset.esquina]}}; }
+      else if(g.dataset.lado){ arr={tipo:'lado',k:g.dataset.lado,p0:p,P0:copia()}; }
+      else if(g.dataset.manija){ arr={tipo:'manija',d:g.dataset.manija,k:g.dataset.sector,p0:p,b0:{...sect[g.dataset.sector]}}; }
+      else if(g.dataset.sector){ const k=g.dataset.sector; elegir(k); arr={tipo:'sector',k,p0:p,b0:{...sect[k]}}; }
+      else if(g.dataset.mesa){ const n=+g.dataset.mesa; elegir(n); const m=manual.get(n)||mesas.find(x=>x.n===n); arr={tipo:'mesa',n,p0:p,m0:{...m}}; }
+      else { elegir('playon'); arr={tipo:'playon',p0:p,P0:copia()}; }
+      svg.setPointerCapture(e.pointerId); redib();
+    });
+    svg.addEventListener('pointermove',e=>{
+      if(!arr) return; const p=aMetros(e); const dx=p.x-arr.p0.x, dy=p.y-arr.p0.y;
+      const dentro=q=>({x:lim(redondear(q.x),-ANCHO/2+1,ANCHO/2-1),y:lim(redondear(q.y),0,PROF-1)});
+      if(arr.tipo==='esquina'){ playon[arr.k]=dentro({x:arr.e0.x+dx,y:arr.e0.y+dy}); }
+      else if(arr.tipo==='lado'){ // un lado entero: arriba y abajo corren en y, izquierda y derecha en x
+        const P0=arr.P0, ks={n:['tl','tr'],s:['bl','br'],w:['tl','bl'],e:['tr','br']}[arr.k];
+        for(const k of ks) playon[k]=dentro({x:P0[k].x+(arr.k==='w'||arr.k==='e'?dx:0),y:P0[k].y+(arr.k==='n'||arr.k==='s'?dy:0)});
+      }
+      else if(arr.tipo==='playon'){ // el cuerpo entero, con sus cuatro esquinas
+        const P0=arr.P0, ddx=redondear(dx), ddy=redondear(dy);
+        const cabe=['tl','tr','br','bl'].every(k=>P0[k].x+ddx>=-ANCHO/2+1&&P0[k].x+ddx<=ANCHO/2-1&&P0[k].y+ddy>=0&&P0[k].y+ddy<=PROF-1);
+        if(cabe) for(const k of ['tl','tr','br','bl']) playon[k]={x:P0[k].x+ddx,y:P0[k].y+ddy};
+      }
+      else if(arr.tipo==='sector'){ const b=sect[arr.k]; b.xM=redondear(arr.b0.xM+dx); b.yM=Math.max(0,redondear(arr.b0.yM+dy)); }
+      else if(arr.tipo==='manija'){
+        const b=sect[arr.k], o=arr.b0, d=arr.d;
+        if(d.includes('e')) b.wM=Math.max(0.5,redondear(o.wM+dx));
+        if(d.includes('w')){ const w=Math.max(0.5,redondear(o.wM-dx)); b.xM=o.xM+o.wM-w; b.wM=w; }
+        if(d.includes('s')) b.hM=Math.max(0.5,redondear(o.hM+dy));
+        if(d.includes('n')){ const h=Math.max(0.5,redondear(o.hM-dy)); b.yM=o.yM+o.hM-h; b.hM=h; }
+      } else { manual.set(arr.n,{x:arr.m0.x+dx,y:arr.m0.y+dy}); }
+      redib();
+    });
+    const soltar=()=>{arr=null;};
+    svg.addEventListener('pointerup',soltar); svg.addEventListener('pointercancel',soltar);
+  }
+  instalar(document.getElementById('svg2'),2);
+  instalar(document.getElementById('svg3'),3);
+  dibujar2(); dibujar3();
+})();
+</script>
+</body></html>

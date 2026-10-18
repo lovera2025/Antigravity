@@ -22,6 +22,20 @@ entrega encima—. Está acá para poder volver dentro de seis meses y preguntar
 
 ## Los pendientes
 
+### La 6.1.0 (decidida el 16 y el 18-oct-2026)
+
+Una sola versión con todo junto, en este orden. El estado de cada parte está en
+[CONTEXTO_v6.1.0](../CONTEXTO_v6.1.0_2026-10-18.md).
+
+- [La mora por cuota y las bajas temporales](mora-por-cuota.md) — un alumno que vuelve de una baja tiene la
+  misma mora que uno que nunca estuvo de baja. **Fase 1 hecha el 18-oct**; la fase 2 (la mora de cada cuota
+  guardada en una tabla) es la sección siguiente, con las correcciones que pide el proyecto.
+- [El salón primero, las mesas después](../PLAN_SALON_PRIMERO_2026-10-16.md) — pedido del jefe el 16-oct: armar el
+  espacio vacío, un botón que acomode las mesas, vaciar para probar, y manijas sobre el dibujo. Con su
+  [maqueta](../maqueta_salon_primero_2026-10-16.html) aprobada. Va después de la fase 2.
+
+### Otros
+
 - [La puerta con más de 1000 personas en web y tótem](invitados-mas-de-1000-en-web.md)
   — el QR y el tótem leen hasta 1000 invitados por evento. Hoy no llega ni cerca;
   importa si se cargan las familias enteras. Se resuelve subiendo "Max rows" en
