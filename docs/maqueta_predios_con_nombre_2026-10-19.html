@@ -1,0 +1,390 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predios con nombre</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#ecebf5; --panel:#fbfaff; --linea:#7b7f9e; --tinta:#1d1d2b; --tinta2:#5d6078;
+  --primario:#5a5e9c; --primario-suave:#dcdcf0; --ok:#2c7a3b; --ok-suave:#d9efdc;
+  --aviso:#b55a12; --aviso-suave:#fde6d2; --error:#b3261e; --papel:#f6f4ee; --grilla:#dcdad2; --hormigon:#ebe7dd;
+  --nuevo:#b8860b; --nuevo-suave:#fff3cf; --sector:#45443f; --pista:#e2ddcf; --mesa:#fffdf7;
+  --cuerpo:'Outfit',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#1b1b26; --panel:#262636; --linea:#6b6e8a; --tinta:#eceaf6; --tinta2:#aeb0c4;
+  --primario:#9a9ee6; --primario-suave:#34365a; --ok:#7fd68e; --ok-suave:#1f3a26;
+  --aviso:#f0a060; --aviso-suave:#4a2e18; --error:#ff8a80; --papel:#1f1f29; --grilla:#30303d; --hormigon:#2a2a36;
+  --nuevo:#e3b94a; --nuevo-suave:#3d3418; --sector:#c9c6bb; --pista:#3a3846; --mesa:#2b2b38; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#1b1b26; --panel:#262636; --linea:#6b6e8a; --tinta:#eceaf6; --tinta2:#aeb0c4;
+  --primario:#9a9ee6; --primario-suave:#34365a; --ok:#7fd68e; --ok-suave:#1f3a26;
+  --aviso:#f0a060; --aviso-suave:#4a2e18; --error:#ff8a80; --papel:#1f1f29; --grilla:#30303d; --hormigon:#2a2a36;
+  --nuevo:#e3b94a; --nuevo-suave:#3d3418; --sector:#c9c6bb; --pista:#3a3846; --mesa:#2b2b38; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--tinta);font-family:var(--cuerpo);font-size:15px;line-height:1.45;margin:0;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+h1{font-weight:600;font-size:26px;margin:0;text-wrap:balance}
+h2{font-size:17px;font-weight:600;margin:0}
+h3{font-size:15px;font-weight:600;margin:0}
+p{margin:0}
+.sub{color:var(--tinta2);font-size:14px}
+.wrap{max-width:1240px;margin:0 auto;display:grid;gap:18px}
+
+.flujo{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.paso{background:var(--panel);border:1.5px solid var(--linea);border-radius:14px;padding:12px 14px;cursor:pointer;display:grid;gap:4px;text-align:left;color:var(--tinta);font:inherit}
+.paso:focus-visible,.btn:focus-visible,.armado:focus-visible{outline:3px solid var(--primario);outline-offset:2px}
+.paso.activo{border-color:var(--primario);background:var(--primario-suave)}
+.paso .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--primario);color:#fff;font-size:12px;font-weight:700}
+.paso.aparte .n{background:var(--aviso)}
+.paso b{font-size:15px}
+
+.pantalla{background:var(--panel);border:1.5px solid var(--linea);border-radius:18px;padding:16px;display:grid;gap:14px}
+.acceso{font-size:13px;color:var(--tinta2);border:1px dashed var(--linea);border-radius:10px;padding:6px 10px;justify-self:start}
+.acceso b{color:var(--tinta)}
+.cuerpo{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+@media (max-width:860px){.cuerpo{grid-template-columns:1fr}}
+.plano{background:var(--papel);border:1px solid var(--grilla);border-radius:10px;min-width:0;overflow:hidden}
+.plano svg{display:block;width:100%;height:auto}
+.panel{display:grid;gap:10px;align-content:start;min-width:0}
+.tarjeta{border:1.5px solid var(--primario);border-radius:12px;padding:10px 12px;display:grid;gap:6px}
+.tarjeta.nueva{border-color:var(--nuevo);background:var(--nuevo-suave)}
+.etq{font-size:12px;letter-spacing:.08em;font-weight:700;color:var(--tinta2)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1.5px solid var(--linea);background:transparent;color:var(--primario);border-radius:999px;padding:8px 14px;font:inherit;font-weight:600;font-size:14px;cursor:pointer}
+.btn.chico{padding:5px 11px;font-size:13px}
+.btn.lleno{background:var(--primario);color:#fff;border-color:var(--primario)}
+.btn.nuevo{border-color:var(--nuevo);color:var(--nuevo);background:var(--nuevo-suave)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.campo{display:grid;gap:4px;font-size:13px;color:var(--tinta2)}
+.campo input{font:inherit;font-size:15px;padding:7px 9px;border:1.5px solid var(--linea);border-radius:8px;background:var(--panel);color:var(--tinta);width:100%}
+.error{color:var(--error);font-size:13px}
+.ok{color:var(--ok);font-size:14px;font-weight:600}
+.dialogo{border:2px solid var(--nuevo);border-radius:14px;padding:12px;display:grid;gap:10px;background:var(--panel)}
+.lista{margin:0;padding-left:18px;display:grid;gap:3px;font-size:14px}
+.chip{display:inline-block;border:1px solid var(--linea);border-radius:999px;padding:2px 9px;font-size:13px;margin:2px 4px 2px 0;cursor:pointer;background:transparent;color:var(--tinta);font-family:inherit}
+.chip.on{background:var(--primario-suave);border-color:var(--primario)}
+
+.opciones{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:900px){.opciones{grid-template-columns:1fr}}
+.opcion{border:1.5px solid var(--linea);border-radius:14px;padding:12px;display:grid;gap:10px;align-content:start}
+.opcion.reco{border-color:var(--ok)}
+.reco-pill{font-size:11px;letter-spacing:.06em;font-weight:700;color:var(--ok);background:var(--ok-suave);border-radius:6px;padding:2px 7px;margin-left:6px;vertical-align:middle}
+.tarjetas{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.armado{border:1.5px solid var(--linea);border-radius:12px;padding:8px;display:grid;gap:4px;font-size:12px;color:var(--tinta2);cursor:pointer;background:transparent;text-align:left;font-family:inherit}
+.armado b{color:var(--tinta);font-size:13px}
+.armado.on{border-color:var(--primario);background:var(--primario-suave);border-width:2px}
+.armado.predio{border-color:var(--nuevo)}
+.armado.predio.on{border-color:var(--primario)}
+.mini svg{display:block;width:100%;height:auto;border-radius:6px;background:var(--papel)}
+select{font:inherit;font-size:14px;padding:6px 8px;border:1.5px solid var(--linea);border-radius:8px;background:var(--panel);color:var(--tinta)}
+.vista{border:1px solid var(--grilla);border-radius:10px;overflow:hidden;background:var(--papel)}
+.pie{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:760px){.dos{grid-template-columns:1fr}}
+.caja{border:1.5px solid var(--linea);border-radius:14px;padding:12px;display:grid;gap:8px;align-content:start}
+.caja.cambio{border-color:var(--nuevo)}
+.linea-tiempo{display:grid;gap:6px;font-size:14px}
+.linea-tiempo div{border-left:3px solid var(--primario);padding:2px 10px}
+.menu{border:1.5px solid var(--linea);border-radius:10px;display:inline-grid;min-width:180px;background:var(--panel)}
+.menu button{border:0;background:transparent;text-align:left;padding:8px 12px;font:inherit;color:var(--tinta);cursor:pointer}
+.menu button:hover{background:var(--primario-suave)}
+.nota{border-left:3px solid var(--nuevo);padding:6px 10px;background:var(--nuevo-suave);border-radius:0 8px 8px 0;font-size:14px}
+.nota.aviso{border-left-color:var(--aviso);background:var(--aviso-suave)}
+.ocultar{display:none}
+</style></head><body>
+
+<div class="wrap">
+  <div>
+    <h1>Predios con nombre</h1>
+    <p class="sub">Maqueta para decidir antes de programar (19-oct). Un predio es un espacio armado una vez —el playón, el escenario, la pista, las barras, el Ingreso— que se guarda con nombre y se elige de punto de partida en otra fiesta. Lo dorado es lo nuevo. Los datos son inventados.</p>
+  </div>
+
+  <div class="flujo" role="tablist">
+    <button class="paso activo" data-p="1" role="tab"><span><span class="n">1</span></span><b>Guardar un predio</b><span class="sub">Se arma el espacio en Acomodar y se guarda con nombre.</span></button>
+    <button class="paso" data-p="2" role="tab"><span><span class="n">2</span></span><b>Elegirlo en otra fiesta</b><span class="sub">En Estilo y armado. Dos maneras de mostrarlo, lado a lado.</span></button>
+    <button class="paso" data-p="3" role="tab"><span><span class="n">3</span></span><b>Si el predio cambia</b><span class="sub">La fiesta tiene su copia: no cambia. Renombrar y borrar.</span></button>
+    <button class="paso aparte" data-p="4" role="tab"><span><span class="n">!</span></span><b>Aparte: "lejos" y "cerca"</b><span class="sub">Lo que encontré al revisar lo que pediste.</span></button>
+  </div>
+
+  <!-- PASO 1 -->
+  <section class="pantalla" id="p1">
+    <div class="acceso">Se llega: <b>PLANO → PERSONALIZAR → Acomodar → GUARDAR COMO PREDIO</b> · solo en modo jefe</div>
+    <div class="cuerpo">
+      <div class="plano" id="plano1"></div>
+      <div class="panel">
+        <div class="tarjeta"><b>Fiesta de la Normal · el espacio de Buena Vista</b><p class="sub">El jefe ya armó el playón y los sectores con las manijas. Todavía no puso las mesas.</p></div>
+        <div class="etq">EL ESPACIO</div>
+        <ul class="lista" id="espacio1"></ul>
+        <button class="btn nuevo" id="abrirGuardar">GUARDAR COMO PREDIO…</button>
+        <div class="dialogo ocultar" id="dlgGuardar" aria-live="polite">
+          <h3>Guardar este espacio como predio</h3>
+          <label class="campo">Nombre del predio
+            <input id="nombrePredio" value="Buena Vista" autocomplete="off">
+          </label>
+          <div class="sub">O reemplazá uno guardado: <span id="chipsPredios"></span></div>
+          <div class="error ocultar" id="errNombre"></div>
+          <div class="nota" id="notaReemplazo" hidden></div>
+          <div class="sub"><b>Se guarda:</b> el playón y lo que mide, el escenario, la pista, la barra y el Ingreso, con sus textos.<br><b>No se guarda:</b> las mesas, los colores, los títulos ni las mesas fijadas. Eso es de cada fiesta.</div>
+          <div class="btns"><button class="btn" id="cancelarGuardar">CANCELAR</button><button class="btn lleno" id="confirmarGuardar">GUARDAR</button></div>
+        </div>
+        <p class="ok ocultar" id="okGuardar"></p>
+        <div class="etq">PREDIOS GUARDADOS</div>
+        <ul class="lista" id="listaPredios"></ul>
+        <p class="sub">Suben a la nube y bajan a las otras PCs, como el plano.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PASO 2 -->
+  <section class="pantalla ocultar" id="p2">
+    <div class="acceso">Se llega: <b>PLANO → ESTILO Y ARMADO</b> (la primera vez se abre solo) · solo en modo jefe</div>
+    <div>
+      <h2>Estilo y armado · fiesta de Gregoria Morales</h2>
+      <p class="sub">La fiesta necesita 41 mesas. Elegí cómo arrancar y tocá LISTO. Las dos columnas son la misma pantalla mostrada de dos maneras: elegí cuál te gusta.</p>
+    </div>
+    <div class="opciones">
+      <div class="opcion reco">
+        <h3>A · Una tarjeta por predio <span class="reco-pill">RECOMENDADA</span></h3>
+        <p class="sub">Cada predio guardado es una tarjeta más, con su dibujo, al lado de "Salón vacío". Se ve de un vistazo cuál es cuál.</p>
+        <div class="tarjetas" id="tarjetasA"></div>
+        <div class="vista" id="vistaA"></div>
+        <p class="sub" id="pieA"></p>
+      </div>
+      <div class="opcion">
+        <h3>B · Un selector dentro de "Salón vacío"</h3>
+        <p class="sub">Una sola tarjeta; el predio se elige de una lista. Ocupa menos, pero no se ven los dibujos hasta elegir.</p>
+        <div class="tarjetas" id="tarjetasB"></div>
+        <label class="campo">Predio <select id="selectorB"></select></label>
+        <div class="vista" id="vistaB"></div>
+        <p class="sub" id="pieB"></p>
+      </div>
+    </div>
+    <div class="pie">
+      <p class="sub" id="resultado2">Al tocar LISTO queda el espacio elegido, sin mesas. Después: ACOMODAR LAS MESAS.</p>
+      <div class="btns"><button class="btn">CANCELAR</button><button class="btn lleno" id="listo2">LISTO</button></div>
+    </div>
+  </section>
+
+  <!-- PASO 3 -->
+  <section class="pantalla ocultar" id="p3">
+    <div>
+      <h2>Si el predio cambia, la fiesta no</h2>
+      <p class="sub">Al elegir un predio, la fiesta se lleva una <b>copia</b> del espacio. Cambiar el predio después no toca ninguna fiesta que ya lo usó.</p>
+    </div>
+    <div class="linea-tiempo">
+      <div><b>19-oct</b> · La Normal arrancó con Buena Vista.</div>
+      <div><b>25-oct</b> · El jefe agrandó la pista de Buena Vista y lo guardó de nuevo (GUARDAR COMO PREDIO → reemplazar).</div>
+    </div>
+    <div class="dos">
+      <div class="caja cambio"><h3>El predio Buena Vista, hoy</h3><div class="vista" id="vistaPredioHoy"></div><p class="sub">La pista de 12 × 12 m. Las fiestas que lo elijan desde ahora arrancan así.</p></div>
+      <div class="caja"><h3>La fiesta de la Normal</h3><div class="vista" id="vistaFiesta"></div><p class="sub">Sigue con su copia del 19-oct: la pista de 8 × 8 m y sus mesas, como el jefe las dejó.</p></div>
+    </div>
+    <div class="nota">Para tomar lo nuevo en la Normal: <b>Estilo y armado → Buena Vista</b> otra vez, solo si todavía nadie tiene mesa. <b>VOLVER AL ARMADO ORIGINAL</b>, en un salón que arrancó de un predio, vuelve a ese predio como está guardado hoy.</div>
+    <div class="dos">
+      <div class="caja">
+        <h3>Renombrar o borrar un predio</h3>
+        <p class="sub">Desde el menú <b>⋯</b> de su tarjeta en Estilo y armado (modo jefe).</p>
+        <div class="menu" role="menu"><button role="menuitem" data-accion="renombrar">Renombrar…</button><button role="menuitem" data-accion="borrar">Borrar</button></div>
+        <p class="sub" id="textoMenu">Tocá una opción para ver qué pasa.</p>
+      </div>
+      <div class="caja">
+        <h3>Lo que no cambia</h3>
+        <ul class="lista">
+          <li>Cada fiesta sigue con su propio salón y lo guarda en su fila, como hoy.</li>
+          <li>"Salón vacío" sigue siendo Costa Surubí de fábrica.</li>
+          <li>Con familias ya sentadas no se cambia el armado de una fiesta (tampoco con un predio).</li>
+          <li>La distancia entre mesas es de cada fiesta (pestaña Medidas): no va con el predio.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- PASO 4 -->
+  <section class="pantalla ocultar" id="p4">
+    <div>
+      <h2>Aparte: que "lejos" y "cerca" se cumplan en el salón de verdad</h2>
+      <p class="sub">En el sorteo, a una familia con mesa extra se le puede marcar "1 lejos" (que la extra no toque a la principal). "Juntas" es lo de siempre.</p>
+    </div>
+    <div class="dos">
+      <div class="caja">
+        <h3>Cómo está hoy (probado el 19-oct, 800 familias en 20 sorteos)</h3>
+        <ul class="lista">
+          <li><b>Juntas:</b> se mide mirando el salón dibujado. Se cumplió siempre: 0 de 800 sueltas.</li>
+          <li><b>Lejos:</b> se mide <b>por número</b> ("que no sean seguidas"). En los salones de hoy (A medida con pasarela, los del Canva) se cumplió: 0 de 800.</li>
+          <li>Pero en un salón acomodado <b>sin pasarela</b>, 2 de 800 quedaron tocándose. El número no alcanza: la 1 y la 132 quedan una al lado de la otra en el medio, y la 6 justo delante de la 9.</li>
+        </ul>
+      </div>
+      <div class="caja"><h3>El dibujo</h3><div class="vista" id="vistaLejos"></div><p class="sub">Primeras filas de un salón acomodado sin pasarela. En dorado, dos mesas "lejos" por número que en el salón se tocan.</p></div>
+    </div>
+    <div class="nota aviso">Lo que propongo, como una etapa propia y antes de los predios: <b>"lejos" se mide en el salón dibujado</b>, igual que "juntas". El sorteo no le da a la mesa "lejos" un lugar que toque a su familia; la revisión final lo comprueba mirando el plano; y si en ese salón no hay lugar para cumplirlo, no sortea y dice por qué. Se prueba con miles de sorteos sobre salones acomodados, A medida y del Canva: 0 fallas.</div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // Los predios, en metros: un borde de cuatro puntos y los sectores.
+  const predios = {
+    surubi: {nombre:'Costa Surubí', detalle:'de fábrica · 30 × 46 × 39 m', fabrica:true,
+      borde:[[8,4],[38,4],[46,43],[0,43]],
+      sectores:[{t:'esc',x:8,y:1,w:30,h:2,txt:'ESCENARIO'},{t:'ing',x:21,y:40,w:4,h:2,txt:'INGRESO'}]},
+    buenaVista: {nombre:'Buena Vista', detalle:'guardado el 19-oct · 32 × 32 × 30 m',
+      borde:[[7,6],[39,6],[39,36],[7,36]],
+      sectores:[{t:'esc',x:8,y:13,w:2,h:16,txt:'ESC.'},{t:'pista',x:20,y:17,w:8,h:8,txt:'PISTA'},{t:'barra',x:35,y:12,w:2,h:9,txt:'BARRA'},{t:'ing',x:29,y:33,w:5,h:2,txt:'INGRESO'}]},
+    puertoViejo: {nombre:'Puerto Viejo', detalle:'guardado el 12-oct · 24 × 30 × 26 m',
+      borde:[[11,6],[35,6],[41,32],[7,36]],
+      sectores:[{t:'esc',x:11,y:3,w:24,h:2,txt:'ESCENARIO'},{t:'barra',x:12,y:16,w:2,h:8,txt:'BARRA'},{t:'ing',x:24,y:32,w:4,h:2,txt:'INGRESO'}]},
+  };
+  const orden = ['surubi','puertoViejo'];
+  let guardados = ['puertoViejo'];
+
+  const NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, padre){ const e=document.createElementNS(NS,tag); for(const k in attrs) e.setAttribute(k,attrs[k]); if(padre) padre.appendChild(e); return e; }
+
+  // Dibuja un predio (y, si se pide, mesas en filas) en un SVG de 46 × 44 m.
+  function dibujar(p, {mesas=0, grande=false, resaltar=null, filas=null} = {}){
+    const svg = el('svg',{viewBox:'-2 -1 50 46', role:'img', 'aria-label':'Dibujo del predio '+p.nombre});
+    el('polygon',{points:p.borde.map(q=>q.join(',')).join(' '), fill:'var(--hormigon)', stroke:'var(--linea)', 'stroke-width':'.25'}, svg);
+    for(const s of p.sectores){
+      const relleno = s.t==='pista'||s.t==='ing' ? 'var(--pista)' : 'var(--sector)';
+      el('rect',{x:s.x,y:s.y,width:s.w,height:s.h,rx:.3,fill:relleno,stroke:'var(--linea)','stroke-width':'.15'}, svg);
+      if(grande){ const t=el('text',{x:s.x+s.w/2,y:s.y+s.h/2,'font-size':s.w<3?'.9':s.w<6?'.75':'1.1','text-anchor':'middle','dominant-baseline':'central',fill:s.t==='pista'||s.t==='ing'?'var(--tinta2)':'var(--papel)','font-family':'Outfit, sans-serif'},svg);
+        if(s.w<3){ t.setAttribute('transform',`rotate(-90 ${s.x+s.w/2} ${s.y+s.h/2})`); } t.textContent=s.txt; }
+    }
+    if(mesas){ for(const m of mesasPara(p, mesas)) el('circle',{cx:m[0],cy:m[1],r:.75,fill:'var(--mesa)',stroke:'var(--linea)','stroke-width':'.15'},svg); }
+    if(filas){ dibujarFilas(svg, filas, resaltar); }
+    return svg;
+  }
+
+  // Mesas a 2 m dentro del borde (rectángulo que lo contiene), sin pisar los sectores.
+  function mesasPara(p, n){
+    const xs=p.borde.map(q=>q[0]), ys=p.borde.map(q=>q[1]);
+    const out=[]; const minX=Math.min(...xs)+1.5, maxX=Math.max(...xs)-1.5, minY=Math.min(...ys)+1.8, maxY=Math.max(...ys)-1.5;
+    const dentro=(x,y)=>{ let a=false; const b=p.borde; for(let i=0,j=b.length-1;i<b.length;j=i++){ if((b[i][1]>y)!==(b[j][1]>y) && x < (b[j][0]-b[i][0])*(y-b[i][1])/(b[j][1]-b[i][1])+b[i][0]) a=!a; } return a; };
+    for(let y=minY;y<=maxY && out.length<n;y+=2){ for(let x=minX;x<=maxX && out.length<n;x+=2){
+      if(!dentro(x-1,y)||!dentro(x+1,y)) continue;
+      if(p.sectores.some(s=>x>s.x-1.3&&x<s.x+s.w+1.3&&y>s.y-1.3&&y<s.y+s.h+1.3)) continue;
+      out.push([x,y]); } }
+    return out;
+  }
+
+  function poner(id, svg){ const c=document.getElementById(id); c.replaceChildren(svg); }
+
+  // ── Paso 1: guardar ──
+  const bvGuardado = () => guardados.includes('buenaVista');
+  poner('plano1', dibujar(predios.buenaVista,{grande:true}));
+  document.getElementById('espacio1').innerHTML = [
+    '<li><b>Playón</b> · 32 × 32 × 30 m</li>','<li>Escenario · 2 × 16 m (al costado)</li>',
+    '<li>Pista · 8 × 8 m</li>','<li>Barra · 2 × 9 m</li>','<li>Ingreso · 4 × 2 m</li>'].join('');
+  function pintarLista(){
+    const items = [{n:'Costa Surubí',d:'de fábrica (la tarjeta "Salón vacío")'}].concat(
+      guardados.map(k=>({n:predios[k].nombre,d:predios[k].detalle})));
+    document.getElementById('listaPredios').innerHTML = items.map(i=>`<li><b>${i.n}</b> · <span class="sub">${i.d}</span></li>`).join('');
+    const chips = document.getElementById('chipsPredios'); chips.replaceChildren();
+    for(const k of guardados){ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=predios[k].nombre;
+      b.addEventListener('click',()=>{ nombre.value=predios[k].nombre; revisarNombre(); }); chips.appendChild(b); }
+  }
+  const nombre = document.getElementById('nombrePredio');
+  const err = document.getElementById('errNombre');
+  const notaReemplazo = document.getElementById('notaReemplazo');
+  function revisarNombre(){
+    err.classList.add('ocultar');
+    const v = nombre.value.trim().toLowerCase();
+    const repetido = guardados.find(k=>predios[k].nombre.toLowerCase()===v);
+    notaReemplazo.hidden = !repetido;
+    if(repetido) notaReemplazo.textContent = `Ya hay un predio "${predios[repetido].nombre}": GUARDAR lo reemplaza. Las fiestas que ya lo usaron no cambian.`;
+  }
+  nombre.addEventListener('input', revisarNombre);
+  document.getElementById('abrirGuardar').addEventListener('click',()=>{ document.getElementById('dlgGuardar').classList.remove('ocultar'); document.getElementById('okGuardar').classList.add('ocultar'); nombre.focus(); revisarNombre(); });
+  document.getElementById('cancelarGuardar').addEventListener('click',()=>document.getElementById('dlgGuardar').classList.add('ocultar'));
+  document.getElementById('confirmarGuardar').addEventListener('click',()=>{
+    const v = nombre.value.trim();
+    if(!v){ err.textContent='Escribí un nombre para el predio.'; err.classList.remove('ocultar'); nombre.focus(); return; }
+    if(v.toLowerCase()==='costa surubí' || v.toLowerCase()==='costa surubi'){ err.textContent='"Costa Surubí" es el de fábrica: elegí otro nombre (por ejemplo, "Costa Surubí medido").'; err.classList.remove('ocultar'); return; }
+    const repetido = guardados.find(k=>predios[k].nombre.toLowerCase()===v.toLowerCase());
+    if(repetido){ predios[repetido].detalle = 'reemplazado hoy'; }
+    else { predios.buenaVista.nombre = v; if(!guardados.includes('buenaVista')) guardados.push('buenaVista'); }
+    document.getElementById('dlgGuardar').classList.add('ocultar');
+    const ok = document.getElementById('okGuardar');
+    ok.textContent = repetido ? `Se reemplazó el predio ${predios[repetido].nombre}. Las fiestas que ya lo usaron no cambian.` : `Predio ${v} guardado: el espacio, sin mesas. Ya se puede elegir en Estilo y armado de cualquier fiesta, en las tres PCs.`;
+    ok.classList.remove('ocultar');
+    pintarLista(); armarPaso2();
+  });
+  pintarLista();
+
+  // ── Paso 2: elegir ──
+  let elegidoA = 'vacio', elegidoB = 'surubi', tarjetaB = 'vacio';
+  function tarjeta(clave, titulo, sub, esPredio, on, alTocar, dibujo){
+    const b=document.createElement('button'); b.type='button'; b.className='armado'+(esPredio?' predio':'')+(on?' on':'');
+    const mini=document.createElement('div'); mini.className='mini'; if(dibujo) mini.appendChild(dibujo);
+    b.appendChild(mini); const t=document.createElement('b'); t.textContent=titulo; b.appendChild(t);
+    const s=document.createElement('span'); s.textContent=sub; b.appendChild(s);
+    b.addEventListener('click',alTocar); return b;
+  }
+  function armarPaso2(){
+    const cont=document.getElementById('tarjetasA'); cont.replaceChildren();
+    cont.appendChild(tarjeta('vacio','Salón vacío','Costa Surubí, de fábrica',false,elegidoA==='vacio',()=>{elegidoA='vacio';armarPaso2();},dibujar(predios.surubi)));
+    for(const k of guardados){ cont.appendChild(tarjeta(k,predios[k].nombre,predios[k].detalle.split(' · ')[0],true,elegidoA===k,()=>{elegidoA=k;armarPaso2();},dibujar(predios[k]))); }
+    cont.appendChild(tarjeta('medida','A medida','41 mesas a 2 m',false,elegidoA==='medida',()=>{elegidoA='medida';armarPaso2();},dibujar(predios.surubi,{mesas:41})));
+    const pa = elegidoA==='vacio'?predios.surubi:elegidoA==='medida'?predios.surubi:predios[elegidoA];
+    poner('vistaA', dibujar(pa,{grande:true,mesas:elegidoA==='medida'?41:0}));
+    document.getElementById('pieA').textContent = elegidoA==='medida' ? 'A medida del playón de Costa Surubí, con las 41 mesas.' : `Arranca con el espacio de ${pa.nombre}, sin mesas.`;
+
+    const cb=document.getElementById('tarjetasB'); cb.replaceChildren();
+    cb.appendChild(tarjeta('vacio','Salón vacío','el predio, abajo',false,tarjetaB==='vacio',()=>{tarjetaB='vacio';armarPaso2();},null));
+    cb.appendChild(tarjeta('medida','A medida','41 mesas a 2 m',false,tarjetaB==='medida',()=>{tarjetaB='medida';armarPaso2();},null));
+    const sel=document.getElementById('selectorB'); const antes=elegidoB; sel.replaceChildren();
+    for(const k of ['surubi',...guardados]){ const o=document.createElement('option'); o.value=k; o.textContent=predios[k].nombre+(k==='surubi'?' (de fábrica)':''); sel.appendChild(o); }
+    sel.value = ['surubi',...guardados].includes(antes)?antes:'surubi'; sel.disabled = tarjetaB!=='vacio';
+    const pb = tarjetaB==='medida'?predios.surubi:predios[sel.value];
+    poner('vistaB', dibujar(pb,{grande:true,mesas:tarjetaB==='medida'?41:0}));
+    document.getElementById('pieB').textContent = tarjetaB==='medida' ? 'A medida del playón de Costa Surubí, con las 41 mesas.' : `Arranca con el espacio de ${pb.nombre}, sin mesas.`;
+  }
+  document.getElementById('selectorB').addEventListener('change',e=>{elegidoB=e.target.value;armarPaso2();});
+  document.getElementById('listo2').addEventListener('click',()=>{
+    const p = elegidoA==='medida'?null:(elegidoA==='vacio'?predios.surubi:predios[elegidoA]);
+    document.getElementById('resultado2').textContent = p ? `Listo (con la opción A): queda el espacio de ${p.nombre}, sin mesas, y sus medidas en la pestaña Medidas. Sigue ACOMODAR LAS MESAS (41).` : 'Listo (con la opción A): A medida, con las 41 mesas.';
+  });
+  armarPaso2();
+
+  // ── Paso 3: si cambia ──
+  const bvHoy = JSON.parse(JSON.stringify(predios.buenaVista));
+  bvHoy.sectores = bvHoy.sectores.map(s=>s.t==='pista'?{...s,x:17,y:15,w:12,h:12}:s);
+  poner('vistaPredioHoy', dibujar(bvHoy,{grande:true}));
+  poner('vistaFiesta', dibujar(predios.buenaVista,{grande:true,mesas:60}));
+  document.querySelectorAll('.menu button').forEach(b=>b.addEventListener('click',()=>{
+    document.getElementById('textoMenu').textContent = b.dataset.accion==='renombrar'
+      ? 'Renombrar: cambia el nombre en la lista. Las fiestas que lo usaron no cambian.'
+      : 'Borrar: se pide dos veces, y deja de aparecer en Estilo y armado. Las fiestas que lo usaron siguen con su copia.';
+  }));
+
+  // ── Paso 4: lejos ──
+  (function(){
+    const svg = el('svg',{viewBox:'0 0 50 15', role:'img','aria-label':'Dos filas de mesas numeradas en serpentina'});
+    el('rect',{x:5,y:.5,width:40,height:1.6,rx:.3,fill:'var(--sector)'},svg);
+    const t=el('text',{x:25,y:1.35,'font-size':'1','text-anchor':'middle','dominant-baseline':'central',fill:'var(--papel)','font-family':'Outfit, sans-serif'},svg); t.textContent='ESCENARIO';
+    const izq1=[7,6,5,4,3,2,1], der1=[132,131,130,129,128,127,126], izq2=[8,9,10,11,12,13,14], der2=[119,120,121,122,123,124,125];
+    const filas=[[izq1,der1,5],[izq2,der2,9.5]];
+    const dorado=new Set([1,132,6,9]);
+    for(const [iz,de,y] of filas){
+      [...iz,...de].forEach((n,i)=>{ const x=6.2+i*2.85; const on=dorado.has(n);
+        el('circle',{cx:x,cy:y,r:1.25,fill:on?'var(--nuevo-suave)':'var(--mesa)',stroke:on?'var(--nuevo)':'var(--linea)','stroke-width':on?'.3':'.12'},svg);
+        const tx=el('text',{x:x,y:y,'font-size':n>99?'.8':'.95','text-anchor':'middle','dominant-baseline':'central',fill:'var(--tinta)','font-family':'Outfit, sans-serif'},svg); tx.textContent=n; });
+    }
+    el('line',{x1:6.2+6*2.85+1.3,y1:5,x2:6.2+7*2.85-1.3,y2:5,stroke:'var(--nuevo)','stroke-width':'.35'},svg);
+    el('line',{x1:6.2+1*2.85,y1:6.3,x2:6.2+1*2.85,y2:8.2,stroke:'var(--nuevo)','stroke-width':'.35'},svg);
+    poner('vistaLejos', svg);
+  })();
+
+  // ── Pasos ──
+  function activar(p){
+    document.querySelectorAll('.paso').forEach(x=>x.classList.toggle('activo',x.dataset.p===p));
+    for(const n of [1,2,3,4]) document.getElementById('p'+n).classList.toggle('ocultar', String(n)!==p);
+  }
+  document.querySelectorAll('.paso').forEach(b=>b.addEventListener('click',()=>activar(b.dataset.p)));
+  // Se puede abrir directo en un paso: …html#p3.
+  const inicial = (location.hash.match(/^#p([1-4])$/) || [])[1];
+  if(inicial) activar(inicial);
+})();
+</script>
+</body></html>
