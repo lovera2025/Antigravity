@@ -324,6 +324,7 @@ class SyncEngine {
     'sorteos_mesas': 'updated_at',
     'planos_evento': 'updated_at',
     'mesas_movimientos': 'updated_at',
+    'predios': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -915,6 +916,9 @@ class SyncEngine {
     // segundo; esto es la red de seguridad si el aviso no llega.
     'planos_evento',
     'mesas_movimientos',
+    // Los predios con nombre (6.1.0): se guardan de vez en cuando, desde la
+    // oficina. Un minuto de demora no molesta.
+    'predios',
   ];
 
   /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
@@ -1253,6 +1257,8 @@ class SyncEngine {
       // Antes que los egresos (que caen en el 2 por defecto): el egreso lleva
       // `compromiso_id`, así que la cuenta tiene que existir arriba primero.
       if (table == 'compromisos_personal') return 1;
+      // Los predios no cuelgan de nada: son de todas las fiestas.
+      if (table == 'predios') return 1;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -1590,6 +1596,7 @@ class SyncEngine {
       _pullTable(db, 'sorteos_mesas', 'updated_at'),
       _pullTable(db, 'planos_evento', 'updated_at'),
       _pullTable(db, 'mesas_movimientos', 'updated_at'),
+      _pullTable(db, 'predios', 'updated_at'),
     ]);
 
     _moraRevisadaEnEstaSesion = true;
@@ -2535,6 +2542,17 @@ class SyncEngine {
         'motivo',
         'deshace_id',
         'avisos',
+        'hecho_por',
+        'created_at',
+        'updated_at',
+      ],
+      // v74. Todas las columnas, por la misma razón que las de la v72.
+      'predios': [
+        'id',
+        'nombre',
+        'armado_json',
+        'medidas',
+        'borrado_at',
         'hecho_por',
         'created_at',
         'updated_at',

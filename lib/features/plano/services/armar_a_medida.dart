@@ -115,9 +115,68 @@ class ArmarAMedida {
   /// "Volver al armado original" (ver `test/salon_convivencia_test.dart`).
   static const claveVacio = 'vacio@1';
 
+  /// Un salón que salió de un predio (6.1.0) lleva `predio@<id>` en su clave.
+  /// No es una clave nueva del JSON: es el valor de `clave`, que ya existe. La
+  /// 6.0.0 no lo conoce y lo abre igual que el salón vacío.
+  static const prefijoPredio = 'predio@';
+
+  static String claveDePredio(String id) => '$prefijoPredio$id';
+
+  /// El id del predio del que salió [a], o null si no salió de uno.
+  static String? idDePredio(ArmadoSalon a) =>
+      a.clave.startsWith(prefijoPredio) && a.clave.length > prefijoPredio.length
+          ? a.clave.substring(prefijoPredio.length)
+          : null;
+
   /// Las claves de los salones con el borde del playón dibujado a medida.
   static bool _esAMedida(ArmadoSalon a) =>
-      a.clave == claveArmado || a.clave == claveVacio;
+      a.clave == claveArmado || a.clave == claveVacio || idDePredio(a) != null;
+
+  /// El espacio de [a] para guardarlo como el predio [id]: el borde de cada
+  /// hoja y los sectores, sin mesas. Sin la distancia entre mesas ni el último
+  /// número dado: son de cada fiesta.
+  static ArmadoSalon espacioParaPredio(
+    ArmadoSalon a, {
+    required String id,
+    required String nombre,
+  }) =>
+      ArmadoSalon(
+        clave: claveDePredio(id),
+        nombre: nombre,
+        descripcion: 'El espacio, sin mesas',
+        radio: a.radio,
+        metrosPorUnidad: a.metrosPorUnidad,
+        pasarelaOriginalM: pasarelaDe(a),
+        hojas: a.hojas,
+        mesas: const [],
+        sectores: a.sectores,
+        ingreso: a.ingreso,
+      );
+
+  /// El salón de una fiesta que arranca del predio: su espacio, sin mesas, con
+  /// la distancia entre mesas de la fiesta ([lugarM]). Las mesas se ponen
+  /// después con [acomodar], como en el salón vacío.
+  static ArmadoSalon desdePredio(
+    ArmadoSalon espacio, {
+    required String nombre,
+    double lugarM = MedidasPlano.lugarPorDefectoM,
+  }) {
+    final l = math.max(lugarM, MedidasPlano.lugarMinimoM);
+    return ArmadoSalon(
+      clave: espacio.clave,
+      nombre: nombre,
+      descripcion: espacio.descripcion,
+      radio: espacio.radio,
+      metrosPorUnidad: espacio.metrosPorUnidad,
+      distanciaPegadas: pegadasHastaPasos * espacio.aUnidades(l),
+      lugarOriginalM: l,
+      pasarelaOriginalM: espacio.pasarelaOriginalM ?? pasarelaDe(espacio),
+      hojas: espacio.hojas,
+      mesas: const [],
+      sectores: espacio.sectores,
+      ingreso: espacio.ingreso,
+    );
+  }
 
   /// Lo que queda libre alrededor de un sector que no es el escenario ni la
   /// pasarela (una pista, una barra, el Ingreso): la mesa no se pone si su

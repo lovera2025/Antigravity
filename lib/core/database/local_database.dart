@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 73;
+  static const int _version = 74;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -89,9 +89,9 @@ class LocalDatabase {
       );
     }
 
-    // Red por si las migraciones v72 y v73 no pudieron crear sus tablas: son
-    // idempotentes, así que en una base sana no hacen nada. Cada una por su
-    // lado: si falla la de la v72, igual se intenta la de la v73.
+    // Red por si las migraciones v72, v73 y v74 no pudieron crear sus tablas:
+    // son idempotentes, así que en una base sana no hacen nada. Cada una por su
+    // lado: si falla la de la v72, igual se intentan las otras.
     try {
       await crearTablasV72(db);
     } catch (e) {
@@ -101,6 +101,11 @@ class LocalDatabase {
       await crearTablasV73(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v73 sin crear: $e');
+    }
+    try {
+      await crearTablasV74(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v74 sin crear: $e');
     }
     return db;
   }
@@ -683,6 +688,7 @@ class LocalDatabase {
 
     await crearTablasV72(db);
     await crearTablasV73(db);
+    await crearTablasV74(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -808,6 +814,28 @@ class LocalDatabase {
       'CREATE INDEX IF NOT EXISTS idx_mesas_movimientos_evento '
       'ON mesas_movimientos(evento_id, created_at)',
     );
+  }
+
+  /// La tabla de la v74 (6.1.0): los predios con nombre, el espacio de un
+  /// lugar armado una vez para arrancar otra fiesta desde ahí.
+  ///
+  /// Mismo criterio que la v72 y la v73: una tabla **nueva y aparte**, solo
+  /// `CREATE ... IF NOT EXISTS`, sin tocar ni una fila de lo que ya existe. Es
+  /// de todas las fiestas (no lleva `evento_id`), y borrar un predio le pone
+  /// `borrado_at`: la fila no se saca, así ninguna PC tiene que borrar nada.
+  static Future<void> crearTablasV74(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS predios (
+        id TEXT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        armado_json TEXT NOT NULL,
+        medidas TEXT NOT NULL DEFAULT '{}',
+        borrado_at TEXT,
+        hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _onUpgrade(
@@ -3015,6 +3043,20 @@ class LocalDatabase {
         debugPrint('✅ Migración v73 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v73: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 73, la tabla de la v74 no aparece.
+    if (oldVersion < 74 && newVersion >= 74) {
+      debugPrint('  🔧 v74: los predios con nombre');
+      // Igual que la v72 y la v73: solo una tabla nueva, sin tocar datos ni
+      // marcadores. Si fallara, la app abre igual y [_initDb] lo reintenta en
+      // cada arranque.
+      try {
+        await crearTablasV74(db);
+        debugPrint('✅ Migración v74 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v74: $e');
       }
     }
   }

@@ -512,13 +512,6 @@ void main() {
     });
   });
 
-  test('la copia usa la versión de la app: una base en 72 también se copia',
-      () async {
-    await crearBaseV71();
-    final db = await abrirEnVersion(72);
-    await db.close();
-    final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
-    expect(copia, isNotNull);
-    expect(copia!.path, endsWith('antes_de_v73.db'));
-  });
+  // "La copia usa la versión de la app" pasó a `migracion_v74_test.dart`: la
+  // app ya pide la 74.
 }
