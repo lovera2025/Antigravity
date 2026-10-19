@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
+import '../../../models/predio.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../common/utils/texto_busqueda.dart';
@@ -212,6 +213,10 @@ class PlanoEventoCuerpo extends StatefulWidget {
   /// Para que la pantalla sepa, al querer salir, si hay algo sin guardar.
   final PendienteDelPlano? pendiente;
 
+  /// Los predios con nombre (6.1.0): "Volver al armado original" de un salón
+  /// que salió de uno vuelve a él como está guardado hoy.
+  final List<Predio> predios;
+
   const PlanoEventoCuerpo({
     super.key,
     required this.plano,
@@ -229,6 +234,7 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.soloJefe = false,
     this.aviso,
     this.pendiente,
+    this.predios = const [],
   });
 
   @override
@@ -324,6 +330,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   @override
   void didUpdateWidget(PlanoEventoCuerpo old) {
     super.didUpdateWidget(old);
+    // Un predio guardado, renombrado o borrado (acá o en la otra PC): volver
+    // al original lo sigue.
+    _acomodo?.predios = widget.predios;
     if (!identical(old.pendiente, widget.pendiente)) {
       if (old.pendiente?._leer == _leerPendiente) {
         old.pendiente!._leer = null;
@@ -653,6 +662,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ocupantes: PlanoDeLaFiesta.ocupantes(widget.alumnos, widget.repartos),
         // También las bajas que conservan mesa: los números ya están dados.
         haySorteo: widget.alumnos.any(SalonMesas.tieneNumeros),
+        predios: widget.predios,
       );
 
   /// El último aviso de Acomodar que se tocó, y por cuál de sus mesas va: si

@@ -7,6 +7,7 @@ import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart'
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
+import 'package:arguello_events/features/plano/services/sesion_acomodo.dart';
 import 'package:arguello_events/models/predio.dart';
 
 /// Los predios con nombre (6.1.0): qué se guarda, con qué nombre, y con qué
@@ -225,6 +226,59 @@ void main() {
         expect(desdeElPredio.armado.clave, 'predio@$idA',
             reason: 'acomodar no le cambia la clave');
       }
+    });
+
+    group('Volver al armado original', () {
+      ArmadoSalon conMesas() => ArmarAMedida.acomodar(
+            PrediosDelSalon.salonDe(predio, lugarM: 2.2)!,
+            cantidad: 50,
+          ).armado;
+
+      test('vuelve al predio como está guardado hoy, sin mesas', () {
+        // Después de que la fiesta lo eligió, el jefe agrandó la pista y lo
+        // guardó de nuevo con el mismo nombre.
+        final hoy = PrediosDelSalon.guardarComo(
+          nombre: 'Buena Vista',
+          armado: ArmarAMedida.vacio(
+            const PlayonReal(frenteM: 32, fondoM: 46, profundidadM: 39),
+          ),
+          playon: const PlayonReal(frenteM: 32, fondoM: 46, profundidadM: 39),
+          guardados: [predio],
+          hechoPor: 'Jefe',
+          ahora: ahora,
+        ).predio!;
+        final s = SesionAcomodo(base: conMesas(), predios: [hoy]);
+        expect(s.motivoSinOriginal, isNull);
+        expect(s.volverAlOriginal(), isNull);
+        expect(s.actual.mesas, isEmpty);
+        expect(s.actual.clave, 'predio@$idA');
+        expect(ArmarAMedida.playonDe(s.actual)!.frenteM, closeTo(32, 0.01));
+        expect(s.actual.lugarOriginalM, 2.2,
+            reason: 'la distancia sigue siendo la de la fiesta');
+        expect(s.puedeDeshacer, isTrue);
+      });
+
+      test('si el predio se borró, apagado con el motivo', () {
+        final borrado =
+            PrediosDelSalon.borrar(predio, hechoPor: 'Jefe', ahora: ahora);
+        for (final predios in [<Predio>[], [borrado]]) {
+          final s = SesionAcomodo(base: conMesas(), predios: predios);
+          expect(
+            s.motivoSinOriginal,
+            'El predio "Buena Vista" se borró o todavía no llegó a esta PC: no '
+            'hay a qué volver.',
+          );
+          expect(s.volverAlOriginal(), isNotNull);
+          expect(s.actual.mesas, hasLength(50), reason: 'no cambió nada');
+        }
+      });
+
+      test('cuando el predio llega, ya se puede', () {
+        final s = SesionAcomodo(base: conMesas());
+        expect(s.motivoSinOriginal, isNotNull);
+        s.predios = [predio];
+        expect(s.motivoSinOriginal, isNull);
+      });
     });
 
     test('un armado que no salió de un predio no tiene id de predio', () {

@@ -443,6 +443,11 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               'el sorteo. El estilo se cambia siempre.'
           : null,
       rearmar: rearmar,
+      predios: _predios,
+      accionesPredios: AccionesPredios(
+        onRenombrar: _renombrarPredio,
+        onBorrar: _borrarPredio,
+      ),
     );
     if (eleccion == null || !mounted) return;
     await _guardar(eleccion);
@@ -469,6 +474,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         hayFamiliasConMesa: _hayFamiliasConMesa,
         hechoPor: quien,
         ahora: DateTime.now().toUtc(),
+        playon: eleccion.playon,
       );
       final nuevo = resultado.plano;
       // El diálogo ya no dejaba cambiar el armado si acá se veía el plano. Si
@@ -610,6 +616,90 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       _terminar();
     }
   }
+
+  /// Renombrar o borrar un predio, desde el menú ⋯ de su tarjeta en Estilo y
+  /// armado: relee los predios de la nube, hace la cuenta sobre el que hay de
+  /// verdad y guarda. Contesta la lista como quedó y qué pasó, que el diálogo
+  /// muestra debajo de las tarjetas.
+  Future<CambioDePredios> _cambiarPredio(
+    Predio visto, {
+    required ({Predio? predio, String? problema}) Function(
+      Predio fresco,
+      List<Predio> frescos,
+      String? quien,
+      DateTime ahora,
+    ) calcular,
+    required String Function(Predio predio) hecho,
+  }) async {
+    if (_frenaSinModoJefe()) {
+      return (predios: _predios, texto: '$kSoloEnModoJefe: los predios los '
+          'cambia el jefe.');
+    }
+    try {
+      final prediosRepo = ref.read(prediosRepositoryProvider);
+      final subida = ref.read(subidaInmediataProvider);
+      final quien = quienOpera(ref);
+      final desde = DateTime.now().toUtc();
+      final frescos = (await _leerPredios(nube: true)).predios;
+      final fresco = frescos.where((p) => p.id == visto.id).firstOrNull;
+      if (fresco == null) {
+        if (mounted) setState(() => _predios = frescos);
+        return (
+          predios: frescos,
+          texto: 'El predio "${visto.nombre}" ya no está: lo borraron desde '
+              'otra PC.',
+        );
+      }
+      final r = calcular(fresco, frescos, quien, DateTime.now().toUtc());
+      final predio = r.predio;
+      if (predio == null) {
+        return (predios: frescos, texto: r.problema ?? 'No se puede.');
+      }
+      await prediosRepo.guardar(predio);
+      final despues = (await _leerPredios(nube: false)).predios;
+      if (mounted) setState(() => _predios = despues);
+      final subio = await subida.subir(
+        tabla: 'predios',
+        registroId: predio.id,
+        desde: desde,
+      );
+      return (
+        predios: despues,
+        texto: '${hecho(predio)}'
+            '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
+      );
+    } catch (e) {
+      debugPrint('⚠️ Plano: no se pudo cambiar el predio ($e)');
+      return (
+        predios: _predios,
+        texto: 'No se pudo guardar el cambio del predio. Probá de nuevo.',
+      );
+    }
+  }
+
+  Future<CambioDePredios> _renombrarPredio(Predio predio, String nombre) =>
+      _cambiarPredio(
+        predio,
+        calcular: (fresco, frescos, quien, ahora) => PrediosDelSalon.renombrar(
+          fresco,
+          nombre,
+          guardados: frescos,
+          hechoPor: quien,
+          ahora: ahora,
+        ),
+        hecho: (p) => 'Predio renombrado: ahora es "${p.nombre}". Las fiestas '
+            'que lo usaron no cambian.',
+      );
+
+  Future<CambioDePredios> _borrarPredio(Predio predio) => _cambiarPredio(
+        predio,
+        calcular: (fresco, _, quien, ahora) => (
+          predio: PrediosDelSalon.borrar(fresco, hechoPor: quien, ahora: ahora),
+          problema: null,
+        ),
+        hecho: (p) => 'Predio "${p.nombre}" borrado: ya no aparece acá. Las '
+            'fiestas que lo usaron siguen con su copia.',
+      );
 
   // ── Personalizar: fijar y dejar libres ──────────────────────────────────
 
@@ -1249,6 +1339,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       soloJefe: !esJefe,
       aviso: _aviso,
       pendiente: _pendiente,
+      predios: _predios,
     );
   }
 }

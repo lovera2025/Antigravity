@@ -77,7 +77,10 @@ void main() {
   test('los predios (6.1.0): guardarlos, renombrarlos y borrarlos pregunta por '
       'el modo jefe', () {
     final fuente = leer(pantallaPlano);
-    final funciones = funcion.allMatches(fuente).toList();
+    // Renombrar y borrar contestan qué pasó: no son `Future<void>`.
+    final funciones = RegExp(r'^  Future<\w+> (\w+)\(', multiLine: true)
+        .allMatches(fuente)
+        .toList();
     final resultado = <String, bool>{};
     for (final g in RegExp(r'\bprediosRepo\.guardar\(').allMatches(fuente)) {
       final donde = funciones.lastWhere((f) => f.start < g.start);
@@ -90,7 +93,21 @@ void main() {
       isEmpty,
       reason: 'guardan un predio sin preguntar por el modo jefe',
     );
-    expect(resultado.keys.toSet(), {'_guardarComoPredio'});
+    // GUARDAR COMO PREDIO, y Renombrar y Borrar (los dos por `_cambiarPredio`).
+    expect(resultado.keys.toSet(), {'_guardarComoPredio', '_cambiarPredio'});
+    expect(fuente, contains('Future<CambioDePredios> _renombrarPredio('));
+    expect(fuente, contains('Future<CambioDePredios> _borrarPredio('));
+    expect(
+      RegExp(r'_renombrarPredio\(Predio predio, String nombre\) =>\s+'
+              r'_cambiarPredio\(')
+          .hasMatch(fuente),
+      isTrue,
+    );
+    expect(
+      RegExp(r'_borrarPredio\(Predio predio\) => _cambiarPredio\(')
+          .hasMatch(fuente),
+      isTrue,
+    );
   });
 
   test('nadie más guarda los predios', () {

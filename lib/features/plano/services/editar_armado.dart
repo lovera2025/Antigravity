@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
+import '../../../models/predio.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/armados_predefinidos.dart';
@@ -11,6 +12,7 @@ import '../modelo/medidas_salon.dart';
 import 'armar_a_medida.dart';
 import 'cambios_de_mesa.dart';
 import 'medir_salon.dart';
+import 'predios_del_salon.dart';
 
 /// Un grupo de mesas que se puede separar o juntar de una vez.
 class AlcanceSeparar {
@@ -965,7 +967,26 @@ class EditarArmado {
   /// Puede traer menos mesas que [a] si se agregaron más de las que entran:
   /// quien llama lo tiene que mirar (la sesión de Acomodar no deja volver al
   /// original en ese caso).
-  static ArmadoSalon? original(ArmadoSalon a) {
+  ///
+  /// Un salón que salió de un predio (6.1.0) vuelve a ese predio **como está
+  /// guardado hoy** en [predios], sin mesas y con la distancia de la fiesta.
+  /// Si se borró (o todavía no llegó a esta PC), null.
+  static ArmadoSalon? original(
+    ArmadoSalon a, {
+    Iterable<Predio> predios = const [],
+  }) {
+    final idPredio = ArmarAMedida.idDePredio(a);
+    if (idPredio != null) {
+      for (final p in predios) {
+        if (p.id == idPredio && !p.borrado) {
+          return PrediosDelSalon.salonDe(
+            p,
+            lugarM: a.lugarOriginalM ?? MedidasPlano.lugarPorDefectoM,
+          );
+        }
+      }
+      return null;
+    }
     // El salón vacío vuelve a como salió (6.1.0): el playón que tiene, el
     // escenario al frente y el Ingreso al fondo, sin mesas ni los sectores que
     // se agregaron. VACIAR EL SALÓN, en cambio, saca las mesas y deja el

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/plano_evento.dart';
+import '../../../models/predio.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/armados_predefinidos.dart';
@@ -10,6 +11,8 @@ import '../modelo/medidas_salon.dart';
 import '../services/armar_a_medida.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
+import '../services/predios_del_salon.dart';
+import 'nombre_predio_dialog.dart';
 import 'vista_plano.dart';
 
 /// Lo que se eligió para el plano de la fiesta.
@@ -18,11 +21,30 @@ class EleccionPlano {
   final EstiloPlano estilo;
   final ModoSorteo modo;
 
+  /// Se eligió un predio (6.1.0): sus medidas pasan a Medidas. Null: otro
+  /// armado.
+  final PlayonReal? playon;
+
   const EleccionPlano({
     required this.armado,
     required this.estilo,
     required this.modo,
+    this.playon,
   });
+}
+
+/// Lo que dice la pantalla después de renombrar o borrar un predio: la lista
+/// como quedó, y qué pasó en palabras.
+typedef CambioDePredios = ({List<Predio> predios, String texto});
+
+/// Renombrar y Borrar un predio desde el menú ⋯ de su tarjeta (6.1.0). Los
+/// guarda la pantalla; el diálogo pregunta y muestra cómo quedó.
+class AccionesPredios {
+  final Future<CambioDePredios> Function(Predio predio, String nombre)
+      onRenombrar;
+  final Future<CambioDePredios> Function(Predio predio) onBorrar;
+
+  const AccionesPredios({required this.onRenombrar, required this.onBorrar});
 }
 
 /// Abre "Estilo y armado": el armado del salón, el estilo y cómo se sortea,
@@ -35,6 +57,8 @@ Future<EleccionPlano?> mostrarElegirPlano({
   List<OcupantePlano> ocupantes = const [],
   String? armadoTrabado,
   bool rearmar = false,
+  List<Predio> predios = const [],
+  AccionesPredios? accionesPredios,
 }) =>
     showDialog<EleccionPlano>(
       context: context,
@@ -46,6 +70,8 @@ Future<EleccionPlano?> mostrarElegirPlano({
         ocupantes: ocupantes,
         armadoTrabado: armadoTrabado,
         rearmar: rearmar,
+        predios: predios,
+        accionesPredios: accionesPredios,
       ),
     );
 
@@ -74,6 +100,13 @@ class ElegirPlanoDialog extends StatefulWidget {
   /// ahora", y LISTO no rearmaba nada. Con el armado trabado no cambia nada.
   final bool rearmar;
 
+  /// Los predios con nombre (6.1.0), sin los borrados: una tarjeta por predio,
+  /// después de "Salón vacío".
+  final List<Predio> predios;
+
+  /// Renombrar y Borrar desde el menú ⋯ de cada predio. Null: sin menú.
+  final AccionesPredios? accionesPredios;
+
   const ElegirPlanoDialog({
     super.key,
     required this.mesasNecesarias,
@@ -82,6 +115,8 @@ class ElegirPlanoDialog extends StatefulWidget {
     this.ocupantes = const [],
     this.armadoTrabado,
     this.rearmar = false,
+    this.predios = const [],
+    this.accionesPredios,
   });
 
   @override
@@ -195,10 +230,107 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
       ? null
       : 'Ya hay familias con mesa: se quedarían sin la suya.';
 
+  // ── Los predios con nombre (6.1.0) ──
+
+  /// Los que se pueden elegir: renombrar o borrar uno la cambia.
+  late List<Predio> _predios = [
+    for (final p in widget.predios)
+      if (!p.borrado && p.espacioONull != null) p,
+  ];
+
+  /// El salón de cada predio, con la distancia de la fiesta: se arma una vez.
+  final _salones = <String, ArmadoSalon>{};
+
+  ArmadoSalon _salonDe(Predio p) => _salones.putIfAbsent(
+        p.id,
+        () => PrediosDelSalon.salonDe(p, lugarM: widget.medidas.lugarMesaM)!,
+      );
+
+  Predio? get _predioElegido {
+    for (final p in _predios) {
+      if (ArmarAMedida.claveDePredio(p.id) == _armado) return p;
+    }
+    return null;
+  }
+
+  /// Lo que pasó con el último Renombrar o Borrar, debajo de las tarjetas.
+  String? _avisoPredios;
+
+  void _ponerPredios(List<Predio> predios) {
+    _predios = [
+      for (final p in predios)
+        if (!p.borrado && p.espacioONull != null) p,
+    ];
+    _salones.clear();
+    // El que estaba elegido se borró: vuelve a lo de la primera vez.
+    if (_armado.startsWith(ArmarAMedida.prefijoPredio) &&
+        _predioElegido == null) {
+      _armado = _armadoActual != null
+          ? _claveActual
+          : _vacioApagado != null
+              ? ArmarAMedida.claveArmado
+              : ArmarAMedida.claveVacio;
+    }
+  }
+
+  Future<void> _renombrar(Predio p) async {
+    final acciones = widget.accionesPredios;
+    if (acciones == null) return;
+    final nombre = await pedirNombreDePredio(
+      context: context,
+      guardados: _predios,
+      renombrando: p,
+    );
+    if (nombre == null || nombre == p.nombre || !mounted) return;
+    final r = await acciones.onRenombrar(p, nombre);
+    if (!mounted) return;
+    setState(() {
+      _ponerPredios(r.predios);
+      _avisoPredios = r.texto;
+    });
+  }
+
+  /// Borrar se pide dos veces: el menú y esta pregunta.
+  Future<void> _borrar(Predio p) async {
+    final acciones = widget.accionesPredios;
+    if (acciones == null) return;
+    final seguro = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('¿Borrar el predio "${p.nombre}"?'),
+        content: const Text(
+          'Deja de aparecer en Estilo y armado. Las fiestas que lo usaron '
+          'siguen con su copia y no cambian.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            key: const Key('confirmar_borrar_predio'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('BORRAR'),
+          ),
+        ],
+      ),
+    );
+    if (seguro != true || !mounted) return;
+    final r = await acciones.onBorrar(p);
+    if (!mounted) return;
+    setState(() {
+      _ponerPredios(r.predios);
+      _avisoPredios = r.texto;
+    });
+  }
+
   ArmadoSalon get _elegido {
     if (_armado == _claveActual) return _armadoActual!;
     if (_armado == ArmarAMedida.claveVacio) return _vacio;
     if (_armado == ArmarAMedida.claveArmado) return _aMedida.armado;
+    final predio = _predioElegido;
+    if (predio != null) return _salonDe(predio);
     return ArmadosPredefinidos.porClave(_armado)!;
   }
 
@@ -215,7 +347,12 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
 
   void _listo() {
     Navigator.of(context).pop(
-      EleccionPlano(armado: _elegido, estilo: _estilo, modo: _modo),
+      EleccionPlano(
+        armado: _elegido,
+        estilo: _estilo,
+        modo: _modo,
+        playon: _predioElegido?.playon,
+      ),
     );
   }
 
@@ -289,9 +426,25 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
                         ),
                       ),
                     _armados(),
+                    if (_avisoPredios != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _avisoPredios!,
+                        key: const Key('aviso_predios'),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blueGrey.shade700,
+                        ),
+                      ),
+                    ],
                     if (_armado == ArmarAMedida.claveVacio) ...[
                       const SizedBox(height: 12),
                       _notaVacio(),
+                    ],
+                    if (_predioElegido != null) ...[
+                      const SizedBox(height: 12),
+                      _notaPredio(_predioElegido!),
                     ],
                     if (_armado == ArmarAMedida.claveArmado) ...[
                       const SizedBox(height: 12),
@@ -352,7 +505,10 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
     final actual = _armadoActual;
     final aMedida = _aMedida;
     final trabado = widget.armadoTrabado != null;
-    final cuantas = (actual != null ? 1 : 0) + 2 + ArmadosPredefinidos.todos.length;
+    final cuantas = (actual != null ? 1 : 0) +
+        2 +
+        _predios.length +
+        ArmadosPredefinidos.todos.length;
     return LayoutBuilder(
       builder: (context, lugar) {
         final ancho = anchoTarjetaArmado(lugar.maxWidth, cuantas);
@@ -370,6 +526,7 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
                 ancho: ancho,
               ),
             _tarjetaVacio(ancho),
+            for (final p in _predios) _tarjetaPredio(p, ancho),
             _tarjetaArmado(
               clave: ArmarAMedida.claveArmado,
               nombre: 'A medida del playón',
@@ -481,6 +638,117 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
     );
   }
 
+  /// Un predio con nombre (6.1.0): su dibujo, lo que mide su playón y el menú
+  /// ⋯ para renombrarlo o borrarlo. Se elige igual que el salón vacío: con
+  /// familias sentadas, apagado con el motivo.
+  Widget _tarjetaPredio(Predio p, double ancho) {
+    final clave = ArmarAMedida.claveDePredio(p.id);
+    final trabado = widget.armadoTrabado != null;
+    final apagado = trabado ? null : _vacioApagado;
+    final salon = _salonDe(p);
+    final pl = p.playon;
+    return _Tarjeta(
+      key: Key('armado_$clave'),
+      ancho: ancho,
+      elegida: _armado == clave,
+      onTap: trabado || apagado != null
+          ? null
+          : () => setState(() => _armado = clave),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  p.nombre,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (widget.accionesPredios != null)
+                SizedBox(
+                  width: 28,
+                  height: 22,
+                  child: PopupMenuButton<String>(
+                    key: Key('menu_predio_${p.id}'),
+                    tooltip: 'Renombrar o borrar',
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    icon: const Icon(Icons.more_horiz),
+                    onSelected: (accion) =>
+                        accion == 'borrar' ? _borrar(p) : _renombrar(p),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        key: Key('renombrar_predio'),
+                        value: 'renombrar',
+                        child: Text('Renombrar…'),
+                      ),
+                      PopupMenuItem(
+                        key: Key('borrar_predio'),
+                        value: 'borrar',
+                        child: Text('Borrar'),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 60,
+            width: double.infinity,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: IgnorePointer(
+                child: VistaPlano(
+                  key: Key('dibujo_predio_${p.id}'),
+                  armado: salon,
+                  hoja: salon.hojas.first.id,
+                  tema: TemaPlano.de(_estilo),
+                  estado: EstadoPlano.desde(armado: salon, ocupantes: const []),
+                  animar: false,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            apagado ??
+                '${MedirSalon.metros(pl.frenteM).replaceFirst(' m', '')} × '
+                    '${MedirSalon.metros(pl.fondoM).replaceFirst(' m', '')} × '
+                    '${MedirSalon.metros(pl.profundidadM)} · sin mesas',
+            style: TextStyle(
+              fontSize: 12,
+              color: apagado != null
+                  ? Colors.orange.shade800
+                  : Colors.grey.shade700,
+            ),
+          ),
+          if (apagado == null) ...[
+            const SizedBox(height: 6),
+            _Pastilla(texto: 'Mesas después', color: Colors.blueGrey.shade600),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Con qué arranca el salón que sale del predio.
+  Widget _notaPredio(Predio p) {
+    final pl = p.playon;
+    return Text(
+      'Arranca con el espacio de ${p.nombre} (${MedirSalon.metros(pl.frenteM)} '
+      'contra el escenario, ${MedirSalon.metros(pl.fondoM)} al fondo y '
+      '${MedirSalon.metros(pl.profundidadM)} de profundidad), sin mesas, y '
+      'sus medidas pasan a Medidas. Las mesas se ponen después con ACOMODAR '
+      'LAS MESAS, a la distancia de esta fiesta. Si el predio cambia, esta '
+      'fiesta no: se lleva una copia.',
+      key: const Key('nota_predio'),
+      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+    );
+  }
+
   /// Con qué playón arranca el salón vacío, y dónde se cambia.
   Widget _notaVacio() {
     final p = widget.medidas.playon;
@@ -492,7 +760,7 @@ class _ElegirPlanoDialogState extends State<ElegirPlanoDialog> {
       'escenario, ${MedirSalon.metros(p.fondoM)} al fondo y '
       '${MedirSalon.metros(p.profundidadM)} de profundidad), el escenario y el '
       'Ingreso. Si la fiesta es en otro predio, el espacio se cambia en '
-      'Personalizar → Acomodar.',
+      'Personalizar → Acomodar, y ahí se guarda como predio para la próxima.',
       key: const Key('nota_vacio'),
       style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
     );

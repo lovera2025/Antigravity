@@ -961,6 +961,183 @@ void main() {
     });
   });
 
+  group('Estilo y armado con predios', () {
+    const id = 'd0000000-0000-4000-8000-0000000000b2';
+    const playonBuenaVista =
+        PlayonReal(frenteM: 25, fondoM: 30, profundidadM: 30);
+
+    Predio buenaVista({PlayonReal playon = playonBuenaVista}) =>
+        PrediosDelSalon.guardarComo(
+          nombre: 'Buena Vista',
+          armado: ArmarAMedida.vacio(playon),
+          playon: playon,
+          guardados: const [],
+          hechoPor: 'Jefe',
+          ahora: _ahora,
+          idNuevo: id,
+        ).predio!;
+
+    Future<void> abrirElMenu(WidgetTester tester, String accion) async {
+      await _tocar(tester, 'estilo_y_armado');
+      await _asentar(tester);
+      await _tocar(tester, 'menu_predio_$id');
+      await _asentar(tester);
+      await _tocar(tester, accion);
+      await _asentar(tester);
+    }
+
+    testWidgets('una fiesta nueva arranca de un predio: su espacio y sus '
+        'medidas, y después se acomoda', (tester) async {
+      final mundo = await _abrir(
+        tester,
+        conPlano: false,
+        alumnos: _sinSortear(),
+        antes: (m) => m.predios.yaHay(buenaVista()),
+      );
+      await _tocar(tester, 'armado_predio@$id');
+      await _asentar(tester);
+      await _tocar(tester, 'listo');
+      await _asentar(tester);
+      final plano = mundo.guardado;
+      expect(plano.armado.clave, 'predio@$id');
+      expect(plano.armado.nombre, 'Buena Vista');
+      expect(plano.armado.mesas, isEmpty);
+      expect(plano.config.medidas.playon, playonBuenaVista);
+      // Sigue ACOMODAR LAS MESAS, sobre el espacio del predio.
+      await _personalizar(tester, 'acomodar');
+      expect(_prendido(tester, 'acomodar_mesas'), isTrue);
+      await _tocar(tester, 'acomodar_mesas');
+      expect(_vista(tester).armado.mesas, isNotEmpty);
+      expect(_vista(tester).armado.clave, 'predio@$id');
+    });
+
+    testWidgets('Renombrar desde el menú ⋯ lo guarda y lo dice; la fiesta no '
+        'cambia', (tester) async {
+      final mundo = await _abrir(
+        tester,
+        antes: (m) => m.predios.yaHay(buenaVista()),
+      );
+      await abrirElMenu(tester, 'renombrar_predio');
+      await tester.enterText(
+        find.byKey(const Key('nombre_predio')),
+        'Buena Vista II',
+      );
+      await tester.pump();
+      await _tocar(tester, 'listo_predio');
+      await _asentar(tester);
+      final p = mundo.predios.guardados.single;
+      expect(p.id, id);
+      expect(p.nombre, 'Buena Vista II');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('aviso_predios'))).data,
+        'Predio renombrado: ahora es "Buena Vista II". Las fiestas que lo '
+        'usaron no cambian.',
+      );
+      expect(mundo.subida.pedidas, ['predios']);
+      expect(mundo.planos.guardados, isEmpty);
+    });
+
+    testWidgets('Borrar desde el menú ⋯ lo marca, sin sacar la fila',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        antes: (m) => m.predios.yaHay(buenaVista()),
+      );
+      await abrirElMenu(tester, 'borrar_predio');
+      await _tocar(tester, 'confirmar_borrar_predio');
+      await _asentar(tester);
+      final p = mundo.predios.guardados.single;
+      expect(p.id, id);
+      expect(p.borrado, isTrue);
+      expect(mundo.predios.aca, hasLength(1), reason: 'la fila queda');
+      expect(find.byKey(const Key('armado_predio@$id')), findsNothing);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('aviso_predios'))).data,
+        'Predio "Buena Vista" borrado: ya no aparece acá. Las fiestas que lo '
+        'usaron siguen con su copia.',
+      );
+    });
+
+    testWidgets('si la otra PC lo borró mientras tanto, lo dice y no guarda',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        antes: (m) => m.predios.yaHay(buenaVista()),
+      );
+      await _tocar(tester, 'estilo_y_armado');
+      await _asentar(tester);
+      mundo.predios.nube = [];
+      await _tocar(tester, 'menu_predio_$id');
+      await _asentar(tester);
+      await _tocar(tester, 'borrar_predio');
+      await _asentar(tester);
+      await _tocar(tester, 'confirmar_borrar_predio');
+      await _asentar(tester);
+      expect(mundo.predios.guardados, isEmpty);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('aviso_predios'))).data,
+        'El predio "Buena Vista" ya no está: lo borraron desde otra PC.',
+      );
+      expect(find.byKey(const Key('armado_predio@$id')), findsNothing);
+    });
+
+    /// Una fiesta que arrancó de Buena Vista y ya tiene sus 40 mesas.
+    PlanoEvento desdeElPredio() => PlanoEvento.nuevo(
+          eventoId: _eventoId,
+          armado: ArmarAMedida.acomodar(
+            PrediosDelSalon.salonDe(buenaVista(), lugarM: 2)!,
+            cantidad: 40,
+          ).armado,
+          estilo: EstiloPlano.arquitecto,
+          modo: ModoSorteo.entera,
+          ahora: _ahora,
+        );
+
+    testWidgets('Volver al armado original va al predio como está hoy',
+        (tester) async {
+      await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        antes: (m) {
+          m.planos.aca = desdeElPredio();
+          m.planos.nube = m.planos.aca;
+          // Después, el jefe le agrandó el frente y lo guardó de nuevo.
+          m.predios.yaHay(buenaVista(
+            playon: const PlayonReal(frenteM: 28, fondoM: 30, profundidadM: 30),
+          ));
+        },
+      );
+      await _personalizar(tester, 'acomodar');
+      expect(_vista(tester).armado.mesas, hasLength(40));
+      await _bajarHasta(tester, 'acomodar_original', panel: 'panel_acomodar');
+      expect(_prendido(tester, 'acomodar_original'), isTrue);
+      await _tocar(tester, 'acomodar_original');
+      final a = _vista(tester).armado;
+      expect(a.mesas, isEmpty);
+      expect(ArmarAMedida.playonDe(a)!.frenteM, closeTo(28, 0.01));
+    });
+
+    testWidgets('si el predio se borró, Volver al armado original queda '
+        'apagado con el motivo', (tester) async {
+      await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        antes: (m) {
+          m.planos.aca = desdeElPredio();
+          m.planos.nube = m.planos.aca;
+        },
+      );
+      await _personalizar(tester, 'acomodar');
+      await _bajarHasta(tester, 'acomodar_original', panel: 'panel_acomodar');
+      expect(_prendido(tester, 'acomodar_original'), isFalse);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('motivo_sin_original'))).data,
+        'El predio "Buena Vista" se borró o todavía no llegó a esta PC: no hay '
+        'a qué volver.',
+      );
+    });
+  });
+
   group('antes de guardar', () {
     Future<_Mundo> conAlgoParaGuardar(WidgetTester tester) async {
       final mundo = await _abrir(tester);

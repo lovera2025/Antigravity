@@ -226,4 +226,78 @@ void main() {
       expect(m[c], isNotNull, reason: c);
     }
   });
+
+  group('un predio con nombre (6.1.0)', () {
+    const buenaVista = PlayonReal(frenteM: 20, fondoM: 24, profundidadM: 25);
+    final delPredio = ArmarAMedida.vacio(buenaVista);
+
+    test('sus medidas pasan a Medidas; la distancia es la de la fiesta', () {
+      final r = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: guardado(),
+        armado: delPredio,
+        estilo: EstiloPlano.gala,
+        modo: ModoSorteo.bloques,
+        hayFamiliasConMesa: false,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+        playon: buenaVista,
+      );
+      final m = r.plano.config.medidas;
+      expect(m.playon, buenaVista);
+      expect(m.lugarMesaM, 2.2);
+      // Lo demás de la fiesta queda.
+      expect(r.plano.config.titulo, 'Promoción 2026');
+      expect(r.plano.config.colores, {'5A': 3});
+    });
+
+    test('la primera vez también', () {
+      final r = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: null,
+        armado: delPredio,
+        estilo: EstiloPlano.gala,
+        modo: ModoSorteo.bloques,
+        hayFamiliasConMesa: false,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+        playon: buenaVista,
+      );
+      expect(r.plano.tieneIdFijo, isTrue);
+      expect(r.plano.config.medidas.playon, buenaVista);
+    });
+
+    test('con familias sentadas se conservan el armado y las medidas', () {
+      final antesDeElegir = guardado();
+      final r = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: antesDeElegir,
+        armado: delPredio,
+        estilo: EstiloPlano.neon,
+        modo: ModoSorteo.bloques,
+        hayFamiliasConMesa: true,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+        playon: buenaVista,
+      );
+      expect(r.conservoArmado, isTrue);
+      expect(r.plano.config.medidas, antesDeElegir.config.medidas);
+      expect(r.plano.estiloPlano, EstiloPlano.neon);
+    });
+
+    test('otro armado no cambia las medidas', () {
+      final antesDeElegir = guardado();
+      final r = aplicarEleccionAlPlano(
+        eventoId: evento,
+        fresco: antesDeElegir,
+        armado: aMedida,
+        estilo: EstiloPlano.gala,
+        modo: ModoSorteo.bloques,
+        hayFamiliasConMesa: false,
+        hechoPor: 'Jefe',
+        ahora: ahora,
+      );
+      expect(r.plano.config.medidas, antesDeElegir.config.medidas);
+    });
+  });
 }

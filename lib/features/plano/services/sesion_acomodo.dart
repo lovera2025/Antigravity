@@ -1,3 +1,4 @@
+import '../../../models/predio.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
@@ -30,12 +31,17 @@ class SesionAcomodo {
   /// se vuelve al armado original.
   bool haySorteo;
 
+  /// Los predios con nombre (6.1.0): un salón que salió de uno vuelve a él
+  /// como está guardado hoy. Se pone al día si la otra PC lo cambia.
+  List<Predio> predios;
+
   SesionAcomodo({
     required this.base,
     this.medidas = const MedidasPlano(),
     this.enUso = const {},
     this.ocupantes = const [],
     this.haySorteo = false,
+    this.predios = const [],
   })  : _actual = base,
         enUsoAlEmpezar = Map.unmodifiable(enUso);
 
@@ -415,9 +421,12 @@ class SesionAcomodo {
       return 'Ya hay familias con mesa: deshacé el sorteo para volver al '
           'armado original.';
     }
-    final original = EditarArmado.original(_actual);
+    final original = EditarArmado.original(_actual, predios: predios);
     if (original == null) {
-      return 'No se sabe de qué armado salió este salón.';
+      return ArmarAMedida.idDePredio(_actual) != null
+          ? 'El predio "${_actual.nombre}" se borró o todavía no llegó a esta '
+              'PC: no hay a qué volver.'
+          : 'No se sabe de qué armado salió este salón.';
     }
     // Sin sorteo, lo que está en uso son las fijadas. Si el salón se rehízo,
     // al guardar se quitan: no frenan volver al original.
@@ -443,7 +452,7 @@ class SesionAcomodo {
   String? volverAlOriginal() {
     final motivo = motivoSinOriginal;
     if (motivo != null) return motivo;
-    _poner(EditarArmado.original(_actual)!);
+    _poner(EditarArmado.original(_actual, predios: predios)!);
     return null;
   }
 

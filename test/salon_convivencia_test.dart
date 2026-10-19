@@ -118,6 +118,28 @@ void main() {
     expect(vuelta['ultimo_numero'], 12);
   });
 
+  // Los predios con nombre (6.1.0): el salón de una fiesta que arrancó de uno
+  // lleva su id en el valor de `clave` y su nombre en `nombre`, dos claves
+  // que ya existen. Nada más: la 6.0.0 lo abre como un salón cualquiera (sin
+  // "Volver al armado original", igual que el vacío) y lo guarda igual.
+  test('un salón que salió de un predio vuelve igual, con su clave', () {
+    const clave = 'predio@d0000000-0000-4000-8000-000000000001';
+    final json = salonVacio()
+      ..['clave'] = clave
+      ..['nombre'] = 'Buena Vista'
+      ..['mesas'] = [
+        for (var i = 1; i <= 6; i++)
+          {'n': i, 'h': 'A', 'x': 200.0 + 30 * i, 'y': 300.0},
+      ];
+    final vuelta = ida(json);
+    expect(vuelta['clave'], clave);
+    expect(vuelta['nombre'], 'Buena Vista');
+    expect(vuelta['mesas'], json['mesas']);
+    expect(vuelta['hojas'], json['hojas']);
+    expect(vuelta.keys.toSet(), json.keys.toSet(),
+        reason: 'ninguna clave nueva, ninguna perdida');
+  });
+
   test('una clave que el modelo no conoce se pierde: por eso no se agregan',
       () {
     final json = salonVacio()..['manijas'] = {'algo': 1};
