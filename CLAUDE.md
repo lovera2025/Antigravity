@@ -16,14 +16,14 @@ con check-in por QR y un tótem que se proyecta en el salón.
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
 rama está ~200 commits adelante y va por la v6.1.0 (publicada el 19-oct; instalada en
-la PC de la casa, faltan la del operario y la del jefe); `main` quedó en la 2.2.0.
+las PCs de la casa y del operario; falta la del jefe); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **La 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
 (hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón, los predios
 con nombre (la migración v74 ya probada sobre una copia de la base real) y las muestras de
 la etapa 5, en una sola versión. **Publicada el 19-oct** (el SQL de los predios corrido, la
-web también): sigue instalar las PCs del operario y del jefe, y lo de TOÑANEZ ("La publicación"
+web también, la del operario instalada): sigue instalar la PC del jefe y repetir lo de TOÑANEZ ("La publicación"
 en el CONTEXTO). La mora por cuota suelta (fase 2) quedó descartada. Entrada:
 `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 

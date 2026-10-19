@@ -266,14 +266,21 @@ Publicada `arguello-events-9hkokyqvi` (`dpl_6yh415WAb8W4hDhxxBsH7thTS4pf`); para
 `arguello-events-gfudt0il0`. Comprobado: `version.json` en `6.1.0`/`58`, `/lista` muestra el buscador y `?cotizar` el
 catálogo.
 
+**La PC del operario: instalada por él el 19-oct, a la tarde.**
+
+**TOÑANEZ, la primera vez (19-oct, 16:15, a pedido suyo con la del jefe todavía en la 6.0.0):** su fila en la nube
+(`475867b9-a41e-4685-8601-c80ecdafe801`) estaba con el ajuste, la ficha y el "ya usado" en $0, sin eximición, sin
+tocar desde el 16-oct 21:19 UTC. Se reescribió `mora_tracked_ajuste = 0` (el mismo valor, con `and mora_tracked_ajuste
+= 0` de guarda): `updated_at` pasó a 19-oct 19:15 UTC. Conteos iguales antes y después (643 contratos, $95.396.671,17,
+4.166 pagos) y un solo contrato tocado. Así la PC del operario y la de la casa la vuelven a bajar con la 6.1.0.
+
 **Falta, en la oficina y con él:**
-1. **La PC del operario**, antes de abrir la caja. Después, mirar la versión y su `revision_mora.txt` (tiene que decir
-   lo mismo: solo ESPINOZA, DENIS AIMARA, si no lo bajó ya corregido de la nube).
-2. **La PC del jefe.** Lo mismo.
-3. **TOÑANEZ (paso 4, con su OK):** leer su fila en la nube y reescribir `mora_tracked_ajuste = 0` (el mismo valor) para
-   que todas las PCs la vuelvan a bajar; después, en la PC del jefe, que su ventana de cobro se vea como una 0/9
-   ($171.600 hoy). Hasta entonces, en la oficina no se le cobra ni se la edita.
-4. Anotar acá cómo quedó cada PC.
+1. **La PC del jefe.** Después, mirar la versión y su `revision_mora.txt`.
+2. **TOÑANEZ otra vez, con la del jefe ya en la 6.1.0:** la misma sentencia. La PC del jefe bajó la de las 16:15 con la
+   6.0.0 y se quedó con sus $166.200, y después de instalar no la vuelve a bajar sola (la fila no cambió desde su
+   última bajada). Después, en la PC del jefe, que su ventana de cobro se vea como una 0/9 ($171.600 hoy). Hasta
+   entonces, **en la PC del jefe** no se le cobra ni se la edita.
+3. Anotar acá cómo quedó cada PC.
 
 ## Para el día de instalar la 6.1.0
 
