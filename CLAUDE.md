@@ -20,7 +20,7 @@ instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
-(hechos), y el salón primero (etapas 1 y 2 hechas), en una sola versión. La mora por
+(hechos), y el salón primero (etapas 1 a 3 hechas), en una sola versión. La mora por
 cuota suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
@@ -154,6 +154,14 @@ vacío y después pone las mesas con un botón.
   con la 6.1.0. Quien use el armado tiene que aguantar cero mesas.
 - **SORTEO no sortea un salón sin mesas** (`LecturaPlano.problemaParaSortear`, las dos veces que lee el plano;
   `test/plano_para_sortear_test.dart` lee la pantalla de la fiesta). Deshacer no lo mira.
+- **Las manijas** (etapa 3): dónde van y cuál hay bajo el dedo, en `ManijasPlano` (`services/manijas.dart`); lo que
+  hacen, en `EditarArmado` y `SesionAcomodo`.
+  - **Sobre el piso vacío se elige el playón sin agarrarlo**: arrastrar ahí mueve la vista con el plano acercado. Se
+    mueve entero con la manija del medio.
+  - **Mientras se arrastra, el dibujo se queda con la caja de la hoja del momento de apretar**
+    (`_conCajaQuieta`): si la hoja crecía en cada paso, lo agarrado corría más rápido que el mouse.
+  - Al guardar un playón cambiado a mano, las medidas guardadas lo siguen (`conMedidasDelPlayon`).
+  - Un salón sin mesas se guarda si ya estaba vacío (`sinMesasDeMas`).
 
 **En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin

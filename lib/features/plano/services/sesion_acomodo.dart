@@ -94,7 +94,8 @@ class SesionAcomodo {
   List<AvisoAcomodo> get bloqueosConMesas => [
         for (final (x, y) in EditarArmado.pisadas(_actual))
           AvisoAcomodo('Las mesas $x y $y se pisan.', [x, y]),
-        if (_actual.mesas.isEmpty) const AvisoAcomodo('El salón quedó sin mesas.'),
+        if (EditarArmado.sinMesasDeMas(_actual, base))
+          const AvisoAcomodo('El salón quedó sin mesas.'),
         if (hayCambios && cambioElUso)
           const AvisoAcomodo(
             'Mientras acomodabas cambiaron las mesas de las familias. Tocá '
@@ -153,6 +154,45 @@ class SesionAcomodo {
       y,
       desde: (x: caja.x, y: caja.y),
     );
+  }
+
+  // ── Las manijas (6.1.0, "el salón primero") ──────────────────────────────
+  // [dxM] y [dyM] son los metros que se corrió el puntero desde que se apretó:
+  // todo cuenta desde como estaba al empezar a arrastrar, de a medio metro.
+
+  /// Estira el sector desde una de sus manijas.
+  void estirarSector(int indice, Manija manija, double dxM, double dyM) {
+    final antes = _antesDeArrastrar;
+    if (antes == null || indice < 0 || indice >= antes.sectores.length) return;
+    _actual = EditarArmado.estirarSector(
+      _actual,
+      indice,
+      manija,
+      dxM,
+      dyM,
+      desde: antes.sectores[indice].caja,
+    );
+  }
+
+  /// Estira el playón de [hoja] desde una de sus manijas.
+  void estirarPlayon(String hoja, Manija manija, double dxM, double dyM) {
+    final antes = _antesDeArrastrar?.hoja(hoja)?.contorno;
+    if (antes == null) return;
+    _actual = EditarArmado.estirarPlayon(
+      _actual,
+      hoja,
+      manija,
+      dxM,
+      dyM,
+      desde: antes,
+    );
+  }
+
+  /// Corre el playón de [hoja] entero: la manija del medio.
+  void moverPlayon(String hoja, double dxM, double dyM) {
+    final antes = _antesDeArrastrar?.hoja(hoja)?.contorno;
+    if (antes == null) return;
+    _actual = EditarArmado.moverPlayon(_actual, hoja, dxM, dyM, desde: antes);
   }
 
   void terminarArrastre() {

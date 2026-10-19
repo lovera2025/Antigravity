@@ -18,6 +18,7 @@ import '../services/cambios_de_mesa.dart';
 import '../services/colores_y_textos.dart';
 import '../services/divisiones.dart';
 import '../services/editar_armado.dart';
+import '../services/manijas.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
 import '../services/sesion_acomodo.dart';
@@ -251,6 +252,19 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   SesionAcomodo? _acomodo;
   int? _mesaAcomodo;
   int? _sectorAcomodo;
+
+  /// El playón de la hoja a la vista está elegido (6.1.0): se le ven las
+  /// manijas.
+  bool _playonAcomodo = false;
+
+  /// Lo que se tiene agarrado, si no es una mesa ni un sector entero: una
+  /// manija de lo elegido, o la del medio del playón.
+  Manija? _manijaAgarrada;
+  bool _playonEntero = false;
+
+  /// La caja de la hoja al apretar, mientras se arrastra: el dibujo se queda
+  /// con ella hasta soltar (ver [_conCajaQuieta]).
+  RectPlano? _cajaAlApretar;
 
   /// Dónde se agarró lo que se arrastra, respecto de su lugar: así no pega un
   /// salto al empezar a moverlo.
@@ -652,6 +666,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       _hoja = s.actual.mesa(numero)!.hoja;
       _mesaAcomodo = numero;
       _sectorAcomodo = null;
+      _playonAcomodo = false;
       _confirmarDescartar = false;
     });
     _acercarA(s.actual, numero);
@@ -663,6 +678,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     _vueltaDelAviso = 0;
     _mesaAcomodo = null;
     _sectorAcomodo = null;
+    _playonAcomodo = false;
+    _manijaAgarrada = null;
+    _playonEntero = false;
+    _cajaAlApretar = null;
     _alcance = 'hoja';
     _pasoSeparar = null;
     _mensajeAcomodo = null;
@@ -749,30 +768,115 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     return mejor;
   }
 
-  /// Se apretó en el plano: si ahí hay una mesa o un sector, queda elegido y
-  /// agarrado para arrastrar. Con la vista previa de separar abierta no se
-  /// agarra nada.
+  /// Mientras se arrastra, la hoja se dibuja con la caja que tenía al apretar.
+  /// Si crecía con cada paso, el dibujo se achicaba y lo agarrado corría más
+  /// rápido que el puntero: el playón estirado 2 m quedaba en 3,5. Al soltar
+  /// toma el tamaño que hace falta.
+  ArmadoSalon _conCajaQuieta(ArmadoSalon a) {
+    final caja = _cajaAlApretar;
+    final h = a.hoja(_hoja);
+    if (caja == null || h == null || h.caja == caja) return a;
+    return a.copyWith(hojas: [
+      for (final x in a.hojas) x.id == _hoja ? x.copyWith(caja: caja) : x,
+    ]);
+  }
+
+  /// Cuántos píxeles de pantalla es una unidad del plano, con el zoom.
+  double _pxPorUnidad(ArmadoSalon armado) {
+    final hoja = armado.hoja(_hoja);
+    final base =
+        hoja == null ? 1.0 : EncuadrePlano.de(hoja.caja, _tamPlano).escala;
+    return base * _escalaZoom;
+  }
+
+  /// El borde del playón de la hoja a la vista, si tiene manijas (el salón
+  /// vacío y "A medida"; los del Canva no tienen borde).
+  ContornoPlano? _contornoConManijas(ArmadoSalon armado) {
+    final c = armado.hoja(_hoja)?.contorno;
+    return ManijasPlano.dePlayon(c) == null ? null : c;
+  }
+
+  /// Las manijas de lo elegido: el sector o el playón. Null si no hay.
+  Map<Manija, Offset>? _manijasDeLoElegido(ArmadoSalon armado) {
+    final i = _sectorAcomodo;
+    if (i != null && i < armado.sectores.length) {
+      final s = armado.sectores[i];
+      return s.hoja == _hoja ? ManijasPlano.deSector(s.caja) : null;
+    }
+    return _playonAcomodo
+        ? ManijasPlano.dePlayon(_contornoConManijas(armado))
+        : null;
+  }
+
+  /// "12 × 6 m": lo que mide el sector elegido, para escribirlo debajo.
+  String? _medidaDelSector(ArmadoSalon armado) {
+    final i = _sectorAcomodo;
+    if (i == null || i >= armado.sectores.length) return null;
+    final c = armado.sectores[i].caja;
+    return '${MedirSalon.metros(armado.aMetros(c.ancho)).replaceFirst(' m', '')}'
+        ' × ${MedirSalon.metros(armado.aMetros(c.alto))}';
+  }
+
+  /// La manija del medio del playón elegido, o null.
+  Offset? _centroDelPlayon(ArmadoSalon armado) => _playonAcomodo
+      ? ManijasPlano.centroPlayon(_contornoConManijas(armado))
+      : null;
+
+  /// Se apretó en el plano. Primero las manijas de lo elegido (pueden quedar
+  /// encima de una mesa), después una mesa y un sector, que quedan elegidos y
+  /// agarrados. Sobre el piso vacío se elige el playón, **sin agarrarlo**:
+  /// arrastrar ahí sigue moviendo la vista con el plano acercado; para
+  /// moverlo entero está la manija del medio. Con la vista previa de separar
+  /// abierta no se agarra nada.
   bool _apretar(Offset p) {
     final s = _acomodo;
     if (s == null || widget.ocupado || s.previa != null) return false;
     final armado = s.actual;
+    final radio = ManijasPlano.toleranciaPx / _pxPorUnidad(armado);
+    final manijas = _manijasDeLoElegido(armado);
+    final manija =
+        manijas == null ? null : ManijasPlano.en(manijas, p, radio);
+    final centro = _centroDelPlayon(armado);
+    final alCentro =
+        manija == null && centro != null && (centro - p).distance <= radio;
+    _apretadoEn = p;
+    _seMovio = false;
+    if (manija != null || alCentro) {
+      setState(() {
+        _manijaAgarrada = manija;
+        _playonEntero = alCentro;
+        _cajaAlApretar = armado.hoja(_hoja)?.caja;
+        _mensajeAcomodo = null;
+        _confirmarDescartar = false;
+        s.empezarArrastre();
+      });
+      return true;
+    }
     final mesa = _mesaEn(armado, p);
     final sector =
         mesa != null ? null : EditarArmado.sectorEn(armado, _hoja, p.dx, p.dy);
-    _apretadoEn = p;
-    _seMovio = false;
+    final contorno = _contornoConManijas(armado);
+    final playon = mesa == null &&
+        sector == null &&
+        contorno != null &&
+        contorno.contiene(p.dx, p.dy);
     setState(() {
       _mesaAcomodo = mesa;
       _sectorAcomodo = sector;
+      _playonAcomodo = playon;
+      _manijaAgarrada = null;
+      _playonEntero = false;
       _mensajeAcomodo = null;
       _confirmarDescartar = false;
       if (mesa != null) {
         final m = armado.mesa(mesa)!;
         _desfase = p - Offset(m.x, m.y);
+        _cajaAlApretar = armado.hoja(_hoja)?.caja;
         s.empezarArrastre();
       } else if (sector != null) {
         final c = armado.sectores[sector].caja;
         _desfase = p - Offset(c.x, c.y);
+        _cajaAlApretar = armado.hoja(_hoja)?.caja;
         s.empezarArrastre();
       }
     });
@@ -786,19 +890,27 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     // de donde se apretó, no se corre nada. (Un temblor de un par de píxeles
     // ya alcanzaba para correr la mesa un cuarto de metro sin querer.)
     if (!_seMovio) {
-      final hoja = s.actual.hoja(_hoja);
-      final pxPorUnidad = hoja == null
-          ? 1.0
-          : EncuadrePlano.de(hoja.caja, _tamPlano).escala;
-      final lejos = (p - _apretadoEn).distance * pxPorUnidad * _escalaZoom;
+      final lejos =
+          (p - _apretadoEn).distance * _pxPorUnidad(_conCajaQuieta(s.actual));
       if (lejos < _recorridoMinimoPx) return;
       _seMovio = true;
     }
     final destino = p - _desfase;
+    // Las manijas van por cuánto se corrió el puntero, en metros.
+    final corrido = p - _apretadoEn;
+    final dxM = s.actual.aMetros(corrido.dx);
+    final dyM = s.actual.aMetros(corrido.dy);
     setState(() {
+      final manija = _manijaAgarrada;
       final mesa = _mesaAcomodo;
       final sector = _sectorAcomodo;
-      if (mesa != null) {
+      if (manija != null && sector != null) {
+        s.estirarSector(sector, manija, dxM, dyM);
+      } else if (manija != null && _playonAcomodo) {
+        s.estirarPlayon(_hoja, manija, dxM, dyM);
+      } else if (_playonEntero) {
+        s.moverPlayon(_hoja, dxM, dyM);
+      } else if (mesa != null) {
         s.arrastrarMesa(mesa, destino.dx, destino.dy);
       } else if (sector != null) {
         s.arrastrarSector(sector, destino.dx, destino.dy);
@@ -808,7 +920,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
 
   void _soltarArrastre() {
     final s = _acomodo;
-    if (s != null) setState(s.terminarArrastre);
+    if (s == null) return;
+    setState(() {
+      _manijaAgarrada = null;
+      _playonEntero = false;
+      _cajaAlApretar = null;
+      s.terminarArrastre();
+    });
   }
 
   bool get _hayFamiliasConMesa => widget.alumnos
@@ -920,8 +1038,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     } else if (_modo == ModoPersonalizar.acomodar) {
       texto = _acomodo?.previa != null
           ? 'Así quedaría: APLICAR para dejarlo así, o CANCELAR.'
-          : 'Arrastrá una mesa para correrla: se ve la distancia a las tres '
-              'más cercanas. Nada cambia hasta tocar GUARDAR EL SALÓN.';
+          : 'Arrastrá una mesa o un sector para correrlo. Tocá un sector o '
+              'el piso del playón y tirá de sus manijas para cambiar lo que '
+              'mide. Nada cambia hasta tocar GUARDAR EL SALÓN.';
     } else if (espera == null || alumno == null) {
       texto = 'Personalizar las mesas: tocá una mesa o buscá una familia.';
     } else {
@@ -1236,7 +1355,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   /// El plano y, debajo, su barra: la regla, las hojas y el zoom. Van afuera
   /// del dibujo para no tapar ninguna mesa.
   Widget _areaPlano(BuildContext context) {
-    final armado = _armadoVisto;
+    final armado = _conCajaQuieta(_armadoVisto);
     final tema = _tema;
     final acomodando = _acomodo != null;
     const altoBarra = 48.0;
@@ -1299,6 +1418,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                                         _mesaAcomodo!,
                                       ),
                                 pideM: _plano.medidas.lugarMesaM,
+                                manijas: _manijasDeLoElegido(armado),
+                                centroPlayon: _centroDelPlayon(armado),
+                                playon: _playonAcomodo
+                                    ? _contornoConManijas(armado)
+                                    : null,
+                                medidaSector: _medidaDelSector(armado),
+                                zoom: _zoom,
                               )
                             : null,
                         onApretar: acomodando ? _apretar : null,
@@ -1349,6 +1475,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                           _alcance = 'hoja';
                           _mesaAcomodo = null;
                           _sectorAcomodo = null;
+                          _playonAcomodo = false;
                         }),
                       ),
                     const Spacer(),
@@ -1413,6 +1540,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           medidas: _plano.medidas,
           mesasNecesarias: _plano.mesasNecesarias,
           ocupado: widget.ocupado,
+          bordeAMano: !ArmarAMedida.esParejo(_plano.armado),
           onProbar: (m) => setState(() {
             _medidasEnPrueba = m;
             if (m == null) _pista = null;
@@ -1501,6 +1629,29 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         EditarArmado.pasoDe(armado, numeros) ??
         _plano.medidas.lugarMesaM;
 
+    String nombreDe(SectorPlano x) => x.texto.trim().isEmpty
+        ? PanelColoresTextos.rotuloDe(x.tipo)
+        : x.texto.trim();
+    String medida(List<double> lados) => [
+          for (final (i, m) in lados.indexed)
+            i == lados.length - 1
+                ? MedirSalon.metros(m)
+                : MedirSalon.metros(m).replaceFirst(' m', ''),
+        ].join(' × ');
+    // El playón de la hoja a la vista: frente, fondo y profundidad.
+    final contorno = _contornoConManijas(armado);
+    final medidaPlayon = contorno == null
+        ? null
+        : () {
+            final p = contorno.puntos;
+            return medida([
+              armado.aMetros(p[1].x - p[0].x),
+              armado.aMetros(p[2].x - p[3].x),
+              armado.aMetros(p[3].y - p[0].y),
+            ]);
+          }();
+    final playonElegido = _playonAcomodo && contorno != null;
+
     String? seleccion;
     String? detalle;
     if (mesa != null) {
@@ -1517,8 +1668,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ].join(', ')}.';
       }
     } else if (sector != null) {
-      seleccion = 'Sector: '
-          '${sector.texto.trim().isEmpty ? PanelColoresTextos.rotuloDe(sector.tipo) : sector.texto.trim()}';
+      seleccion = 'Sector: ${nombreDe(sector)}';
+      detalle = 'Las manijas lo estiran de a medio metro; agarrado del medio, '
+          'se mueve.';
+    } else if (playonElegido) {
+      seleccion = 'Playón · $medidaPlayon';
+      detalle = 'Una esquina o un lado lo estira de a medio metro; la manija '
+          'del medio lo mueve entero. Las medidas con cinta, en Medidas.';
     }
 
     void hecho(String? mensaje) {
@@ -1539,6 +1695,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
             n = s.agregar(_hoja, cerca: _mesaAcomodo);
             _mesaAcomodo = n;
             _sectorAcomodo = null;
+            _playonAcomodo = false;
             hecho('Mesa $n agregada: arrastrala a su lugar.');
           });
           // Con el plano acercado, la mesa nueva podía caer fuera de lo que
@@ -1579,6 +1736,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
             texto: PanelColoresTextos.rotuloDe(tipo),
           );
           _mesaAcomodo = null;
+          _playonAcomodo = false;
           hecho('Sector agregado arriba a la izquierda: arrastralo a su '
               'lugar. El texto se cambia en Colores y textos.');
         }),
@@ -1589,20 +1747,47 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                   _sectorAcomodo = null;
                   hecho(null);
                 }),
-        onTamanoSector: sector == null
+        espacio: [
+          if (medidaPlayon != null)
+            ItemEspacio(
+              clave: 'playon',
+              nombre: 'Playón',
+              medida: medidaPlayon,
+              elegido: playonElegido,
+            ),
+          for (final (i, x) in armado.sectores.indexed)
+            if (x.hoja == _hoja)
+              ItemEspacio(
+                clave: 'sector_$i',
+                nombre: nombreDe(x),
+                medida: medida([
+                  armado.aMetros(x.caja.ancho),
+                  armado.aMetros(x.caja.alto),
+                ]),
+                elegido: indice == i,
+              ),
+        ],
+        onElegirEspacio: (clave) => setState(() {
+          _mesaAcomodo = null;
+          _playonAcomodo = clave == 'playon';
+          _sectorAcomodo = clave.startsWith('sector_')
+              ? int.tryParse(clave.substring('sector_'.length))
+              : null;
+          hecho(null);
+        }),
+        indiceSector: indice,
+        medidaSector: sector == null
             ? null
-            : (dx, dy) => setState(() {
-                  s.tamanoSector(
-                    indice!,
-                    anchoM: armado.aMetros(sector.caja.ancho) + dx,
-                    altoM: armado.aMetros(sector.caja.alto) + dy,
-                  );
+            : (
+                ancho: armado.aMetros(sector.caja.ancho),
+                fondo: armado.aMetros(sector.caja.alto),
+              ),
+        onMedidaSector: sector == null
+            ? null
+            : (ancho, fondo) => setState(() {
+                  s.tamanoSector(indice!, anchoM: ancho, altoM: fondo);
                   hecho(null);
                 }),
-        tamanoSector: sector == null
-            ? null
-            : '${MedirSalon.metros(armado.aMetros(sector.caja.ancho)).replaceFirst(' m', '')}'
-                ' × ${MedirSalon.metros(armado.aMetros(sector.caja.alto))}',
         alcances: alcances,
         alcance: alcance,
         onAlcance: (v) => setState(() {

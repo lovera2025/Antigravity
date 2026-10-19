@@ -5,6 +5,7 @@ import '../../services/editar_armado.dart';
 import '../../services/medir_salon.dart';
 import '../../services/sesion_acomodo.dart';
 import 'panel_colores_textos.dart';
+import 'panel_medidas.dart';
 
 /// Personalizar → Acomodar: lo que se le puede hacer al salón, al lado del
 /// plano. La mesa o el sector se eligen y se arrastran en el plano; acá están
@@ -32,17 +33,25 @@ class PanelAcomodar extends StatefulWidget {
   final bool mesaEnPasto;
   final VoidCallback? onDeshacer;
 
-  // ── Sectores ──
+  // ── El espacio: el playón y los sectores (6.1.0) ──
+  /// El playón y cada sector de la hoja a la vista, para elegirlos sin
+  /// apuntar en el dibujo.
+  final List<ItemEspacio> espacio;
+  final ValueChanged<String> onElegirEspacio;
+
   final ValueChanged<TipoSector> onAgregarSector;
 
   /// Null: no hay un sector elegido.
   final VoidCallback? onSacarSector;
 
-  /// Agrandar o achicar el sector elegido, de a medio metro (ancho, alto).
-  final void Function(double anchoM, double altoM)? onTamanoSector;
+  /// El sector elegido (su lugar en la lista del armado) y lo que mide, en
+  /// metros. Null: no hay un sector elegido.
+  final int? indiceSector;
+  final ({double ancho, double fondo})? medidaSector;
 
-  /// "4 × 2 m", lo que mide el sector elegido.
-  final String? tamanoSector;
+  /// Se escribió lo que tiene que medir el sector elegido. Reemplaza a las
+  /// cuatro flechitas de la 6.0.0; para estirarlo a ojo están las manijas.
+  final void Function(double anchoM, double fondoM)? onMedidaSector;
 
   // ── Separar o juntar ──
   final List<AlcanceSeparar> alcances;
@@ -98,10 +107,13 @@ class PanelAcomodar extends StatefulWidget {
     required this.onPasto,
     required this.mesaEnPasto,
     required this.onDeshacer,
+    this.espacio = const [],
+    required this.onElegirEspacio,
     required this.onAgregarSector,
     required this.onSacarSector,
-    required this.onTamanoSector,
-    required this.tamanoSector,
+    this.indiceSector,
+    required this.medidaSector,
+    required this.onMedidaSector,
     required this.alcances,
     required this.alcance,
     required this.onAlcance,
@@ -151,9 +163,6 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
   VoidCallback? get onDeshacer => widget.onDeshacer;
   ValueChanged<TipoSector> get onAgregarSector => widget.onAgregarSector;
   VoidCallback? get onSacarSector => widget.onSacarSector;
-  void Function(double anchoM, double altoM)? get onTamanoSector =>
-      widget.onTamanoSector;
-  String? get tamanoSector => widget.tamanoSector;
   List<AlcanceSeparar> get alcances => widget.alcances;
   String get alcance => widget.alcance;
   ValueChanged<String> get onAlcance => widget.onAlcance;
@@ -258,7 +267,9 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      seleccion ?? 'Tocá una mesa o un sector, o arrastralo.',
+                      seleccion ??
+                          'Tocá una mesa, un sector o el piso del playón, o '
+                              'arrastralo.',
                       style: seleccion == null
                           ? gris
                           : const TextStyle(fontWeight: FontWeight.w800),
@@ -397,7 +408,16 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                     ),
                   ),
               ],
-              titulo('SECTORES'),
+              titulo('EL ESPACIO'),
+              for (final item in widget.espacio)
+                _RenglonEspacio(
+                  key: Key('espacio_${item.clave}'),
+                  item: item,
+                  onTap: ocupado || probando
+                      ? null
+                      : () => widget.onElegirEspacio(item.clave),
+                ),
+              const SizedBox(height: 4),
               Wrap(
                 spacing: 8,
                 runSpacing: 6,
@@ -429,35 +449,16 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                         Icons.delete_outline, probando ? null : onSacarSector),
                 ],
               ),
-              if (onTamanoSector != null) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Mide ${tamanoSector ?? ''}',
-                        key: const Key('tamano_sector'),
-                      ),
-                    ),
-                    for (final (clave, pista, icono, dx, dy) in const [
-                      ('sector_menos_ancho', 'Más angosto', Icons.west, -0.5, 0.0),
-                      ('sector_mas_ancho', 'Más ancho', Icons.east, 0.5, 0.0),
-                      ('sector_menos_alto', 'Más corto', Icons.north, 0.0, -0.5),
-                      ('sector_mas_alto', 'Más largo', Icons.south, 0.0, 0.5),
-                    ])
-                      IconButton(
-                        key: Key(clave),
-                        tooltip: pista,
-                        visualDensity: VisualDensity.compact,
-                        iconSize: 18,
-                        // Con la vista previa de separar abierta no se toca
-                        // nada más: se aplica o se cancela primero.
-                        onPressed: ocupado || probando
-                            ? null
-                            : () => onTamanoSector!(dx, dy),
-                        icon: Icon(icono),
-                      ),
-                  ],
+              if (widget.medidaSector != null &&
+                  widget.onMedidaSector != null) ...[
+                const SizedBox(height: 8),
+                _MedidaSector(
+                  // Otro sector, otros casilleros: no se arrastra lo escrito.
+                  key: ValueKey('medida_sector_${widget.indiceSector}'),
+                  medida: widget.medidaSector!,
+                  // Con la vista previa de separar abierta no se toca nada
+                  // más: se aplica o se cancela primero.
+                  onCambiar: ocupado || probando ? null : widget.onMedidaSector,
                 ),
               ],
               if (avisos.isNotEmpty) ...[
@@ -552,6 +553,174 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
 /// Cuántos bloqueos se muestran arriba de GUARDAR: con muchas mesas pisadas
 /// se comerían el panel.
 const _maximoBloqueos = 3;
+
+/// Un renglón de "El espacio": el playón o un sector, con lo que mide.
+class ItemEspacio {
+  /// `playon`, o `sector_<lugar en la lista del armado>`.
+  final String clave;
+  final String nombre;
+
+  /// "30 × 46 × 39 m", "12 × 6 m".
+  final String medida;
+  final bool elegido;
+
+  const ItemEspacio({
+    required this.clave,
+    required this.nombre,
+    required this.medida,
+    required this.elegido,
+  });
+}
+
+class _RenglonEspacio extends StatelessWidget {
+  final ItemEspacio item;
+  final VoidCallback? onTap;
+
+  const _RenglonEspacio({super.key, required this.item, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    return Material(
+      color: item.elegido
+          ? tema.colorScheme.primary.withValues(alpha: 0.08)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.nombre,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: item.clave == 'playon' || item.elegido
+                        ? FontWeight.w700
+                        : FontWeight.w400,
+                  ),
+                ),
+              ),
+              Text(
+                item.medida,
+                style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ancho y Fondo del sector elegido, para escribir la medida justa. Se
+/// aplica con Enter o al salir del casillero; lo que no es un número (o mide
+/// menos de medio metro) vuelve a lo que estaba.
+class _MedidaSector extends StatefulWidget {
+  final ({double ancho, double fondo}) medida;
+  final void Function(double anchoM, double fondoM)? onCambiar;
+
+  const _MedidaSector({super.key, required this.medida, this.onCambiar});
+
+  @override
+  State<_MedidaSector> createState() => _MedidaSectorState();
+}
+
+class _MedidaSectorState extends State<_MedidaSector> {
+  late final _ancho =
+      TextEditingController(text: PanelMedidas.numero(widget.medida.ancho));
+  late final _fondo =
+      TextEditingController(text: PanelMedidas.numero(widget.medida.fondo));
+  final _focoAncho = FocusNode();
+  final _focoFondo = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focoAncho.addListener(() {
+      if (!_focoAncho.hasFocus) _aplicar();
+    });
+    _focoFondo.addListener(() {
+      if (!_focoFondo.hasFocus) _aplicar();
+    });
+  }
+
+  @override
+  void didUpdateWidget(_MedidaSector old) {
+    super.didUpdateWidget(old);
+    // Se estiró con las manijas: los casilleros lo siguen, salvo el que se
+    // está escribiendo.
+    final ancho = PanelMedidas.numero(widget.medida.ancho);
+    final fondo = PanelMedidas.numero(widget.medida.fondo);
+    if (!_focoAncho.hasFocus && _ancho.text != ancho) _ancho.text = ancho;
+    if (!_focoFondo.hasFocus && _fondo.text != fondo) _fondo.text = fondo;
+  }
+
+  @override
+  void dispose() {
+    _ancho.dispose();
+    _fondo.dispose();
+    _focoAncho.dispose();
+    _focoFondo.dispose();
+    super.dispose();
+  }
+
+  void _aplicar() {
+    final ancho = PanelMedidas.leer(_ancho.text);
+    final fondo = PanelMedidas.leer(_fondo.text);
+    final m = widget.medida;
+    if (ancho == null ||
+        fondo == null ||
+        ancho < EditarArmado.pasoEspacioM ||
+        fondo < EditarArmado.pasoEspacioM) {
+      setState(() {
+        _ancho.text = PanelMedidas.numero(m.ancho);
+        _fondo.text = PanelMedidas.numero(m.fondo);
+      });
+      return;
+    }
+    if ((ancho - m.ancho).abs() < 0.005 && (fondo - m.fondo).abs() < 0.005) {
+      return;
+    }
+    widget.onCambiar?.call(ancho, fondo);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget casillero(
+      String clave,
+      String rotulo,
+      TextEditingController c,
+      FocusNode foco,
+    ) =>
+        Expanded(
+          child: TextField(
+            key: Key(clave),
+            controller: c,
+            focusNode: foco,
+            enabled: widget.onCambiar != null,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              isDense: true,
+              labelText: rotulo,
+              suffixText: 'm',
+              border: const OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => _aplicar(),
+          ),
+        );
+    return Row(
+      children: [
+        casillero('sector_ancho', 'Ancho', _ancho, _focoAncho),
+        const SizedBox(width: 8),
+        casillero('sector_fondo', 'Fondo', _fondo, _focoFondo),
+      ],
+    );
+  }
+}
 
 class _Renglon extends StatelessWidget {
   final String texto;

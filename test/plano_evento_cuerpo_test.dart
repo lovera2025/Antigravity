@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/plano/dibujo/pintor_acomodo.dart';
 import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
@@ -199,6 +200,83 @@ Future<void> _arrastrarMesa(
   await gesto.up();
   await tester.pump();
 }
+
+// ── Las manijas (6.1.0) ───────────────────────────────────────────────────
+
+/// Un punto del plano (hoja A), en la pantalla, sin zoom.
+Offset _puntoEnPantalla(WidgetTester tester, Offset enPlano) {
+  final vista = _vista(tester);
+  final caja = tester.getRect(find.byType(VistaPlano));
+  return caja.topLeft +
+      EncuadrePlano.de(vista.armado.hoja('A')!.caja, caja.size)
+          .aPantalla(enPlano);
+}
+
+/// Arrastra desde un punto del plano [metros] para un lado, como con el
+/// mouse.
+Future<void> _arrastrar(
+  WidgetTester tester,
+  Offset desde,
+  Offset metros,
+) async {
+  final vista = _vista(tester);
+  final caja = tester.getRect(find.byType(VistaPlano));
+  final escala =
+      EncuadrePlano.de(vista.armado.hoja('A')!.caja, caja.size).escala;
+  final gesto = await tester.startGesture(_puntoEnPantalla(tester, desde));
+  await tester.pump();
+  final total = metros * vista.armado.aUnidades(1) * escala;
+  for (var i = 0; i < 4; i++) {
+    await gesto.moveBy(total / 4);
+    await tester.pump();
+  }
+  await gesto.up();
+  await tester.pump();
+}
+
+int _escenario(WidgetTester tester) => _vista(tester)
+    .armado
+    .sectores
+    .indexWhere((s) => s.tipo == TipoSector.escenario);
+
+/// Toca el medio de un sector para elegirlo.
+Future<void> _tocarSector(WidgetTester tester, int i) async {
+  final c = _vista(tester).armado.sectores[i].caja;
+  await tester.tapAt(_puntoEnPantalla(tester, Offset(c.centroX, c.centroY)));
+  await tester.pump();
+}
+
+/// Ancho y fondo de un sector, en metros redondos a 1 cm.
+(double, double) _metrosSector(WidgetTester tester, int i) {
+  final a = _vista(tester).armado;
+  final c = a.sectores[i].caja;
+  double cm(double v) => (v * 100).round() / 100;
+  return (cm(a.aMetros(c.ancho)), cm(a.aMetros(c.alto)));
+}
+
+/// Frente, fondo y profundidad del playón a la vista, redondos a 1 cm.
+(double, double, double) _playon(WidgetTester tester) {
+  final p = ArmarAMedida.playonDe(_vista(tester).armado)!;
+  double cm(double v) => (v * 100).round() / 100;
+  return (cm(p.frenteM), cm(p.fondoM), cm(p.profundidadM));
+}
+
+/// Un punto del piso sin mesas ni sectores: cerca del fondo, del lado
+/// izquierdo.
+Offset _pisoVacio(WidgetTester tester) {
+  final a = _vista(tester).armado;
+  final p = a.hoja('A')!.contorno!.puntos;
+  return Offset(p[3].x * 0.7 + p[2].x * 0.3, p[3].y - a.aUnidades(3));
+}
+
+PintorAcomodo _pintor(WidgetTester tester) => tester
+    .widgetList<CustomPaint>(find.byType(CustomPaint))
+    .map((c) => c.painter)
+    .whereType<PintorAcomodo>()
+    .single;
+
+String _casillero(WidgetTester tester, String clave) =>
+    tester.widget<TextField>(find.byKey(Key(clave))).controller!.text;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -1645,7 +1723,8 @@ void main() {
           int.parse(m.group(1)!),
       ];
       expect(mesas, hasLength(2));
-      expect(elegido(tester), 'Tocá una mesa o un sector, o arrastralo.');
+      expect(elegido(tester),
+          'Tocá una mesa, un sector o el piso del playón, o arrastralo.');
 
       // Toca el aviso: va a la primera y la deja elegida, con el plano
       // acercado a ella.
@@ -2090,6 +2169,9 @@ void main() {
       expect(prendido(tester, 'guardar_acomodo'), isFalse);
       expect(find.textContaining('cambiaron las mesas de las familias'),
           findsOneWidget);
+      // Con "El espacio" (6.1.0) el panel es más largo: se baja hasta ahí.
+      await tester.ensureVisible(find.byKey(const Key('acomodar_original')));
+      await tester.pump();
       expect(prendido(tester, 'acomodar_original'), isFalse);
       expect(texto(tester, 'motivo_sin_original'), contains('deshacé el sorteo'));
       expect(salon, isEmpty);
@@ -2300,29 +2382,203 @@ void main() {
       expect(frente(), closeTo(antes, 1e-6));
     });
 
-    testWidgets('un sector se elige, se agranda y se saca', (tester) async {
+    testWidgets('un sector se elige, se le escribe la medida y se saca',
+        (tester) async {
       await _mostrar(tester, acciones: _acciones([], salon: []));
       await abrir(tester);
       final vista = _vista(tester);
       final i = vista.armado.sectores
           .indexWhere((s) => s.tipo == TipoSector.escenario);
       final c = vista.armado.sectores[i].caja;
-      final caja = tester.getRect(find.byType(VistaPlano));
-      final punto = caja.topLeft +
-          EncuadrePlano.de(vista.armado.hoja('A')!.caja, caja.size)
-              .aPantalla(Offset(c.centroX, c.centroY));
-      await tester.tapAt(punto);
+      await tester.tapAt(_puntoEnPantalla(tester, Offset(c.centroX, c.centroY)));
       await tester.pump();
       expect(elegido(tester), 'Sector: Escenario');
-      expect(texto(tester, 'tamano_sector'), startsWith('Mide 30 × '));
-      await tester.tap(find.byKey(const Key('sector_mas_ancho')));
+      // Las cuatro flechitas de la 6.0.0 ya no están: quedan Ancho y Fondo.
+      expect(find.byKey(const Key('sector_mas_ancho')), findsNothing);
+      expect(_casillero(tester, 'sector_ancho'), '30');
+      await tester.enterText(find.byKey(const Key('sector_ancho')), '30,5');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
-      expect(texto(tester, 'tamano_sector'), startsWith('Mide 30,5 × '));
+      expect(_metrosSector(tester, i).$1, closeTo(30.5, 1e-6));
       await tester.tap(find.byKey(const Key('acomodar_sacar_sector')));
       await tester.pump();
       expect(_vista(tester).armado.sectores.length,
           vista.armado.sectores.length - 1);
       expect(elegido(tester), startsWith('Tocá una mesa'));
+    });
+
+    testWidgets('lo que no es una medida vuelve a lo que estaba', (tester) async {
+      await _mostrar(tester, acciones: _acciones([], salon: []));
+      await abrir(tester);
+      final i = _escenario(tester);
+      await _tocarSector(tester, i);
+      final antes = _metrosSector(tester, i);
+      for (final mal in ['abc', '0,2', '']) {
+        await tester.enterText(find.byKey(const Key('sector_fondo')), mal);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+        expect(_metrosSector(tester, i), antes, reason: mal);
+      }
+      expect(prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    // 6.1.0, "el salón primero": las manijas sobre el dibujo.
+    group('las manijas', () {
+      testWidgets('un sector elegido muestra sus ocho, y una lo estira de a '
+          'medio metro', (tester) async {
+        await _mostrar(tester, acciones: _acciones([], salon: []));
+        await abrir(tester);
+        final i = _escenario(tester);
+        await _tocarSector(tester, i);
+        expect(_pintor(tester).manijas, hasLength(8));
+        expect(_pintor(tester).medidaSector, startsWith('30 × '));
+        final (ancho, fondo) = _metrosSector(tester, i);
+        final c = _vista(tester).armado.sectores[i].caja;
+        await _arrastrar(
+            tester, Offset(c.derecha, c.centroY), const Offset(1.1, 0.3));
+        // 1,1 m cae en 1 m, y la manija del costado no cambia el fondo.
+        expect(_metrosSector(tester, i), (ancho + 1, fondo));
+        expect(_casillero(tester, 'sector_ancho'), '31');
+        // Un arrastre es un paso de Deshacer.
+        await tester.tap(find.byKey(const Key('acomodar_deshacer')));
+        await tester.pump();
+        expect(_metrosSector(tester, i), (ancho, fondo));
+      });
+
+      testWidgets('apretar una manija sin arrastrar no cambia nada',
+          (tester) async {
+        await _mostrar(tester, acciones: _acciones([], salon: []));
+        await abrir(tester);
+        final i = _escenario(tester);
+        await _tocarSector(tester, i);
+        final c = _vista(tester).armado.sectores[i].caja;
+        await tester
+            .tapAt(_puntoEnPantalla(tester, Offset(c.derecha, c.centroY)));
+        await tester.pump();
+        expect(prendido(tester, 'acomodar_deshacer'), isFalse);
+        expect(prendido(tester, 'guardar_acomodo'), isFalse);
+      });
+
+      testWidgets('tocar el piso elige el playón; su manija del fondo lo '
+          'estira y la del medio lo mueve entero', (tester) async {
+        await _mostrar(tester, acciones: _acciones([], salon: []));
+        await abrir(tester);
+        await tester.tapAt(_puntoEnPantalla(tester, _pisoVacio(tester)));
+        await tester.pump();
+        expect(elegido(tester), 'Playón · 30 × 46 × 39 m');
+        expect(_pintor(tester).manijas, hasLength(8));
+        expect(_pintor(tester).centroPlayon, isNotNull);
+        // Apretar el piso no agarra nada: no hay nada para deshacer.
+        expect(prendido(tester, 'acomodar_deshacer'), isFalse);
+
+        final p = _vista(tester).armado.hoja('A')!.contorno!.puntos;
+        final fondo = Offset((p[2].x + p[3].x) / 2, p[2].y);
+        await _arrastrar(tester, fondo, const Offset(0, 2));
+        expect(_playon(tester), (30.0, 46.0, 41.0));
+        expect(elegido(tester), 'Playón · 30 × 46 × 41 m');
+
+        final antes = _vista(tester).armado.hoja('A')!.contorno!.puntos;
+        await _arrastrar(
+            tester, _pintor(tester).centroPlayon!, const Offset(2, 0));
+        final despues = _vista(tester).armado.hoja('A')!.contorno!.puntos;
+        final a = _vista(tester).armado;
+        for (var k = 0; k < 4; k++) {
+          expect(a.aMetros(despues[k].x - antes[k].x), closeTo(2, 0.01));
+          expect(despues[k].y, closeTo(antes[k].y, 1e-6));
+        }
+        expect(_playon(tester), (30.0, 46.0, 41.0));
+      });
+
+      testWidgets('con el plano acercado, arrastrar el piso mueve la vista y '
+          'no el playón', (tester) async {
+        await _mostrar(tester, acciones: _acciones([], salon: []));
+        await abrir(tester);
+        await tester.tap(find.byKey(const Key('acercar')));
+        await tester.pumpAndSettle();
+        final zoom = tester
+            .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+            .transformationController!;
+        final vistaAntes = zoom.value.getTranslation().x;
+        final borde = _vista(tester).armado.hoja('A')!.contorno!.puntos;
+        final caja = tester.getRect(find.byType(VistaPlano));
+        // El medio de la pantalla: el piso, lejos de las mesas.
+        final gesto = await tester.startGesture(caja.center);
+        await tester.pump();
+        for (var k = 0; k < 4; k++) {
+          await gesto.moveBy(const Offset(-30, 0));
+          await tester.pump();
+        }
+        await gesto.up();
+        await tester.pump();
+        expect(_vista(tester).armado.hoja('A')!.contorno!.puntos, borde);
+        expect(zoom.value.getTranslation().x, isNot(vistaAntes));
+        expect(prendido(tester, 'acomodar_deshacer'), isFalse);
+      });
+
+      testWidgets('"El espacio" lista el playón y los sectores, y elige desde '
+          'ahí', (tester) async {
+        await _mostrar(tester, acciones: _acciones([], salon: []));
+        await abrir(tester);
+        expect(find.byKey(const Key('espacio_playon')), findsOneWidget);
+        final i = _escenario(tester);
+        await tester.ensureVisible(find.byKey(Key('espacio_sector_$i')));
+        await tester.tap(find.byKey(Key('espacio_sector_$i')));
+        await tester.pump();
+        expect(elegido(tester), 'Sector: Escenario');
+        await tester.tap(find.byKey(const Key('espacio_playon')));
+        await tester.pump();
+        expect(elegido(tester), startsWith('Playón · '));
+      });
+
+      testWidgets('un armado del Canva no tiene playón para tocar',
+          (tester) async {
+        final canva = ArmadosPredefinidos.normal2a2b();
+        await _mostrar(tester,
+            plano: _plano(armado: canva), acciones: _acciones([], salon: []));
+        await abrir(tester);
+        expect(find.byKey(const Key('espacio_playon')), findsNothing);
+      });
+    });
+
+    testWidgets('el salón vacío: se arma el espacio y GUARDAR anda, sin mesas',
+        (tester) async {
+      final salon = <(ArmadoSalon, ArmadoSalon)>[];
+      final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+      await _mostrar(tester,
+          plano: _plano(armado: vacio), acciones: _acciones([], salon: salon));
+      await abrir(tester);
+      final i = _escenario(tester);
+      await _tocarSector(tester, i);
+      await tester.enterText(find.byKey(const Key('sector_ancho')), '20');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(find.textContaining('quedó sin mesas'), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(prendido(tester, 'guardar_acomodo'), isTrue);
+      await tester.tap(find.byKey(const Key('guardar_acomodo')));
+      await tester.pump();
+      expect(salon, hasLength(1));
+      expect(salon.single.$2.mesas, isEmpty);
+    });
+
+    testWidgets('Medidas avisa si el playón se dibujó a mano', (tester) async {
+      Future<void> medidas(ArmadoSalon armado) async {
+        // Una pantalla nueva: la anterior quedaba con Personalizar abierto.
+        await tester.pumpWidget(const SizedBox());
+        await _mostrar(tester,
+            plano: _plano(armado: armado),
+            acciones: _acciones([], medidas: [], salon: []));
+        await tester.tap(find.byKey(const Key('personalizar')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('pestana_medidas')));
+        await tester.pump();
+      }
+
+      final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+      await medidas(vacio);
+      expect(find.byKey(const Key('borde_a_mano')), findsNothing);
+      await medidas(EditarArmado.estirarPlayon(vacio, 'A', Manija.ne, 0, 2));
+      expect(find.byKey(const Key('borde_a_mano')), findsOneWidget);
     });
   });
 

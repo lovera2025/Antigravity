@@ -21,12 +21,12 @@ corto y su OK antes de programar.
    cuota suelta, y eligió la fila (la A de [PLAN_MORA_POR_CUOTA](PLAN_MORA_POR_CUOTA_2026-10-18.md)). A cambio,
    **el aviso "Revisar la ficha", HECHO (`964b141`)**.
 3. **El salón primero, las mesas después**, las etapas de su plan. **Las etapas 1 (las cuentas) y 2 (la tarjeta
-   "Salón vacío") HECHAS el 18-oct**; ver las secciones 8, 9 y 10 del plan.
-   - Las cuatro flechitas se sacan.
+   "Salón vacío") HECHAS el 18-oct, y la 3 (las manijas) el 19-oct**; ver las secciones 8 a 11 del plan.
+   - Las cuatro flechitas se sacaron (etapa 3).
    - Mover un sector después de acomodar no reacomoda: se toca el botón.
    - **Los predios con nombre van en la 6.1.0**, como etapa nueva con maqueta.
    - "Volver al armado original" también en el salón vacío.
-   - **Sigue la etapa 3:** las manijas sobre el dibujo.
+   - **Sigue la etapa 4:** ACOMODAR LAS MESAS y VACIAR EL SALÓN.
 4. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, y publicar con él presente.
 
 Sin la fase 2 la versión es más chica, pero el salón tiene sus etapas 2 a 6 más los predios: tampoco llega al lunes 20.
@@ -102,6 +102,24 @@ en la sección 10 de [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md).
   6.1.0.
 - **Comprobado:** 2.555 tests, 6 roturas a propósito vistas, y tres muestras (dos se le mandaron).
 
+## El salón primero, etapa 3: las manijas (19-oct)
+
+Preguntó qué era la etapa 3 y se le explicó con un dibujo; preguntó si ya estaba (no: estaba solo en el plan). Aprobó
+el plan corto con dos cambios a la maqueta:
+- el playón entero se mueve con una manija en el medio, porque arrastrar el piso mueve la vista con el plano
+  acercado;
+- las medidas con cinta siguen en la pestaña Medidas.
+
+Ahora, en Acomodar:
+- al tocar un sector o el piso del playón le aparecen sus manijas, y se estira de a medio metro;
+- en el panel van **Ancho** y **Fondo** en lugar de las flechitas, y la lista **"El espacio"**;
+- el salón vacío se puede guardar después de armarlo (antes "El salón quedó sin mesas" no dejaba);
+- las medidas guardadas siguen al playón cambiado a mano, y Medidas avisa si quedó torcido.
+
+**Encontrado en el camino:** mientras se arrastraba, la hoja crecía en cada paso y lo agarrado corría más rápido que el
+mouse (el playón estirado 2 m quedaba en 3,5). Ahora el dibujo se queda quieto hasta soltar. Detalle en la sección 11
+del plan.
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
@@ -130,10 +148,10 @@ docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/PLAN_SALON_PRIMERO_2026-10-16.md
 versión con todo junto: las bajas temporales y el aviso "Revisar la ficha",
 HECHOS el 18-oct y sin instalar (la fase 2 de la mora por cuota la descarté:
 me quedo con la mora en fila); el salón primero, con las etapas 1 (las
-cuentas) y 2 (la tarjeta "Salón vacío" en Estilo y armado) HECHAS el 18-oct;
-sigue la etapa 3 (las manijas sobre el dibujo), después los botones ACOMODAR y
-VACIAR, las muestras y los predios con nombre (etapa nueva, con maqueta); y al
-final la versión y publicar conmigo presente.
+cuentas) y 2 (la tarjeta "Salón vacío" en Estilo y armado) HECHAS el 18-oct y
+la 3 (las manijas) el 19-oct; sigue la etapa 4 (los botones ACOMODAR LAS MESAS
+y VACIAR EL SALÓN), después las muestras y los predios con nombre (etapa nueva,
+con maqueta); y al final la versión y publicar conmigo presente.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

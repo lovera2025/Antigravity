@@ -267,4 +267,45 @@ este salón. La fase 2 de la mora no va: eligió quedarse con la mora en fila (v
   muestras `Pasos_plano.png`, `Pasos_plano_trabado.png` y `Pantalla_plano_vacio.png`
   (`build/muestras_6.1.0/salon_vacio/`).
 
-**Sigue la etapa 3:** las manijas sobre el dibujo (sectores y playón) y el panel sin las cuatro flechitas.
+## 11. La etapa 3, hecha el 19-oct (las manijas)
+
+El plan corto lo aprobó el usuario el 19-oct, con dos cambios a la maqueta que se le explicaron antes:
+- **El playón entero se mueve con una manija en el medio**, no arrastrándolo desde adentro: con el plano acercado,
+  arrastrar el piso mueve la vista, y eso se perdía.
+- **Las medidas con cinta siguen en la pestaña Medidas** (frente, fondo, costado y "Volver a las de fábrica"): sin los
+  casilleros ni los atajos Rectángulo / Trapecio / Costa Surubí en Acomodar, que hubieran sido dos lugares para lo
+  mismo.
+
+Lo hecho:
+- **Las manijas sin pantalla** (`services/manijas.dart`, `ManijasPlano`): dónde va cada una de un sector o del playón,
+  la del medio, y cuál hay bajo el dedo, con 9 px de tolerancia en la pantalla.
+- **`SesionAcomodo`**: `estirarSector`, `estirarPlayon` y `moverPlayon`, contando desde como estaba al apretar. Un
+  arrastre es un paso de Deshacer.
+- **La pantalla** (`PlanoEventoCuerpo`):
+  - al apretar busca primero las manijas de lo elegido (pueden quedar sobre una mesa), después una mesa, un sector
+    y, sobre el piso vacío, **elige el playón sin agarrarlo**;
+  - **mientras se arrastra, el dibujo se queda con la caja de la hoja que tenía al apretar** (`_conCajaQuieta`).
+    Antes la hoja crecía en cada paso, el dibujo se achicaba y lo agarrado corría más rápido que el mouse: el playón
+    estirado 2 m quedaba en 3,5. Lo vio un test. Arregla también a las mesas y los sectores llevados al borde.
+- **El dibujo** (`PintorAcomodo`): las ocho manijas, la del medio del playón (un círculo con una cruz), el borde del
+  playón elegido y lo que mide el sector debajo de él, del mismo tamaño en pantalla con cualquier zoom.
+- **El panel**: sin las cuatro flechitas; **Ancho** y **Fondo** del sector (se aplican con Enter o al salir; lo que
+  no es una medida vuelve a lo que estaba), y la lista **"El espacio"**, con el playón y cada sector.
+- **Guardar el salón vacío:** "El salón quedó sin mesas" frena solo si el salón guardado tenía mesas
+  (`EditarArmado.sinMesasDeMas`). VACIAR, en la etapa 4, lo vuelve a mirar.
+- **Las medidas siguen al playón** (`EditarArmado.conMedidasDelPlayon`, en `paraGuardar`): al guardar un playón
+  cambiado con las manijas, `config.medidas.playon` toma lo dibujado (aproximado si lo era); un lado de menos de 5 m
+  no las cambia, porque al leerlas volverían a las de fábrica. Moverlo entero no las cambia.
+- **Medidas avisa el borde a mano** (`ArmarAMedida.esParejo`): si quedó torcido, lo que se escriba lo vuelve a dibujar
+  parejo. Correr un costado entero deja el trapecio parejo.
+- **Un arreglo de la etapa 1:** `estirarSector` recalculaba el ancho restando dos números aunque no se hubiera movido
+  y cambiaba el último decimal: apretar y soltar dejaba el salón "cambiado". Un lado quieto queda tal cual.
+- Sin tocar la base ni la nube: es el mismo borde y los mismos sectores, sin claves nuevas.
+- **Comprobado:**
+  - 2.582 tests (`test/salon_primero_manijas_test.dart` nuevo, y la pantalla entera en `plano_evento_cuerpo_test`);
+  - `flutter analyze` en 312, los de siempre;
+  - 8 roturas a propósito, todas vistas;
+  - las muestras `Acomodar_sector_manijas.png` y `Acomodar_playon_manijas.png` (`build/muestras_6.1.0/manijas/`),
+    mandadas al usuario.
+
+**Sigue la etapa 4:** ACOMODAR LAS MESAS y VACIAR EL SALÓN.

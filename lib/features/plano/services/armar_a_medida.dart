@@ -270,6 +270,26 @@ class ArmarAMedida {
     );
   }
 
+  /// El borde sigue siendo un trapecio parejo: el frente y el fondo derechos y
+  /// centrados uno con el otro, como lo dibuja [conPlayon]. Con las manijas
+  /// (6.1.0) puede quedar torcido, y ahí las medidas de la pestaña Medidas son
+  /// aproximadas: escribirlas lo vuelve a dibujar parejo. Un armado sin borde
+  /// (los del Canva) cuenta como parejo: no hay nada que avisar.
+  static bool esParejo(ArmadoSalon armado) {
+    final bordes = _bordes(armado);
+    if (bordes == null) return true;
+    const tolerancia = 0.5;
+    for (final b in bordes) {
+      final (ai, ad, bd, bi) = (b[0], b[1], b[2], b[3]);
+      if ((ai.y - ad.y).abs() > tolerancia || (bi.y - bd.y).abs() > tolerancia) {
+        return false;
+      }
+      final arriba = (ai.x + ad.x) / 2, abajo = (bi.x + bd.x) / 2;
+      if ((arriba - abajo).abs() > tolerancia) return false;
+    }
+    return true;
+  }
+
   static bool _mismoPlayon(PlayonReal a, PlayonReal b) =>
       (a.frenteM - b.frenteM).abs() < 0.001 &&
       (a.fondoM - b.fondoM).abs() < 0.001 &&

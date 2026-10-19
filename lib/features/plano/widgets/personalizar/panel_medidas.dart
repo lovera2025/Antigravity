@@ -32,6 +32,10 @@ class PanelMedidas extends StatefulWidget {
   final String? textoAccionAviso;
   final VoidCallback? onAccionAviso;
 
+  /// El playón se dibujó torcido con las manijas de Acomodar (6.1.0): lo que
+  /// se escriba acá lo vuelve a dibujar parejo, y conviene decirlo antes.
+  final bool bordeAMano;
+
   const PanelMedidas({
     super.key,
     required this.medidas,
@@ -43,6 +47,7 @@ class PanelMedidas extends StatefulWidget {
     this.aviso,
     this.textoAccionAviso,
     this.onAccionAviso,
+    this.bordeAMano = false,
   });
 
   /// Avisa si hay algo escrito que no sirve (un casillero vacío, una letra,
@@ -336,6 +341,16 @@ class _PanelMedidasState extends State<PanelMedidas> {
             padding: const EdgeInsets.only(right: 12),
             children: [
               titulo('EL PLAYÓN, CON CINTA'),
+              if (widget.bordeAMano)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'El playón se dibujó a mano en Acomodar: estas medidas son '
+                    'aproximadas, y lo que escribas lo vuelve a dibujar parejo.',
+                    key: const Key('borde_a_mano'),
+                    style: TextStyle(color: Colors.orange.shade900),
+                  ),
+                ),
               SizedBox(
                 height: 88,
                 child: CustomPaint(

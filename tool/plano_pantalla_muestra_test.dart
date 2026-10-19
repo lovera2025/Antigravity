@@ -17,6 +17,8 @@
 //     una distancia escrita sin guardar, en una notebook), la de Colores y
 //     textos (con un color y un título probándose) y la de Acomodar (una mesa
 //     agregada y corrida, con la regla; y la vista previa de separar);
+//   • Acomodar_sector_manijas.png y Acomodar_playon_manijas.png: las manijas
+//     del salón primero (6.1.0), sobre el salón vacío;
 //   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
@@ -439,6 +441,90 @@ void main() {
         );
         await tester.pump();
         await gesto.up();
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  // 6.1.0, "el salón primero": las manijas, sobre el salón vacío.
+  Future<void> abrirAcomodar(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('personalizar')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('pestana_acomodar')));
+    await tester.pump();
+  }
+
+  /// Dónde cae en la pantalla un punto del plano (hoja A, sin zoom).
+  Offset enPantalla(WidgetTester tester, Offset p) {
+    final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
+    final caja = tester.getRect(find.byType(VistaPlano));
+    return caja.topLeft +
+        EncuadrePlano.de(vista.armado.hoja('A')!.caja, caja.size).aPantalla(p);
+  }
+
+  /// Arrastra desde un punto del plano [metros] para un lado.
+  Future<void> arrastrar(WidgetTester tester, Offset desde, Offset metros) async {
+    final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
+    final caja = tester.getRect(find.byType(VistaPlano));
+    final escala =
+        EncuadrePlano.de(vista.armado.hoja('A')!.caja, caja.size).escala;
+    final gesto = await tester.startGesture(enPantalla(tester, desde));
+    await tester.pump();
+    final total = metros * vista.armado.aUnidades(1) * escala;
+    for (var i = 0; i < 4; i++) {
+      await gesto.moveBy(total / 4);
+      await tester.pump();
+    }
+    await gesto.up();
+    await tester.pump();
+  }
+
+  final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+  final sinSortear = _escuela(132, sorteada: false);
+
+  testWidgets('personalizar: Acomodar, un sector con sus manijas',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(vacio, sinSortear, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1440, 900),
+      'Acomodar_sector_manijas.png',
+      antes: () async {
+        await abrirAcomodar(tester);
+        final a = tester.widget<VistaPlano>(find.byType(VistaPlano)).armado;
+        final c = a.sectores
+            .firstWhere((s) => s.tipo == TipoSector.escenario)
+            .caja;
+        await tester.tapAt(enPantalla(tester, Offset(c.centroX, c.centroY)));
+        await tester.pump();
+        // Se lo achica de un lado, como con el mouse: el rótulo dice cuánto
+        // mide.
+        await arrastrar(
+            tester, Offset(c.derecha, c.centroY), const Offset(-6, 0));
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: Acomodar, el playón con sus manijas',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(vacio, sinSortear, EstiloPlano.arquitecto, acciones: _sinHacer),
+      const Size(1440, 900),
+      'Acomodar_playon_manijas.png',
+      antes: () async {
+        await abrirAcomodar(tester);
+        final a = tester.widget<VistaPlano>(find.byType(VistaPlano)).armado;
+        final p = a.hoja('A')!.contorno!.puntos;
+        // Se toca el piso, y la esquina de abajo a la derecha se corre: un
+        // predio que no es parejo.
+        await tester.tapAt(enPantalla(
+          tester,
+          Offset(p[3].x * 0.7 + p[2].x * 0.3, p[3].y - a.aUnidades(4)),
+        ));
+        await tester.pump();
+        await arrastrar(tester, Offset(p[2].x, p[2].y), const Offset(-4, -3));
       },
     );
     await tester.pumpWidget(const SizedBox());

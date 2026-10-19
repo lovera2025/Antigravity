@@ -520,15 +520,28 @@ class EditarArmado {
     final c = desde ?? a.sectores[indice].caja;
     final dx = _pasoEspacio(a, dxM), dy = _pasoEspacio(a, dyM);
     final min = a.aUnidades(pasoEspacioM);
-    var x0 = c.x, y0 = c.y, x1 = c.derecha, y1 = c.abajo;
-    if (manija.oeste) x0 = math.min(c.x + dx, x1 - min);
-    if (manija.este) x1 = math.max(c.derecha + dx, x0 + min);
-    if (manija.norte) y0 = math.min(c.y + dy, y1 - min);
-    if (manija.sur) y1 = math.max(c.abajo + dy, y0 + min);
+    // Un lado que no se corrió queda con sus números tal cual: restando la
+    // derecha menos la izquierda cambiaba el último decimal, y apretar y
+    // soltar dejaba el salón "cambiado" y un paso de Deshacer que no hacía
+    // nada.
+    var (x, ancho) = (c.x, c.ancho);
+    if (dx != 0 && (manija.este || manija.oeste)) {
+      var x0 = c.x, x1 = c.derecha;
+      if (manija.oeste) x0 = math.min(c.x + dx, x1 - min);
+      if (manija.este) x1 = math.max(c.derecha + dx, x0 + min);
+      (x, ancho) = (x0, x1 - x0);
+    }
+    var (y, alto) = (c.y, c.alto);
+    if (dy != 0 && (manija.norte || manija.sur)) {
+      var y0 = c.y, y1 = c.abajo;
+      if (manija.norte) y0 = math.min(c.y + dy, y1 - min);
+      if (manija.sur) y1 = math.max(c.abajo + dy, y0 + min);
+      (y, alto) = (y0, y1 - y0);
+    }
     return _conSector(
       a,
       indice,
-      (s) => s.copyWith(caja: RectPlano(x0, y0, x1 - x0, y1 - y0)),
+      (s) => s.copyWith(caja: RectPlano(x, y, ancho, alto)),
     );
   }
 
@@ -678,10 +691,17 @@ class EditarArmado {
   }
 
   /// Lo que no deja guardar el salón así, en palabras. Vacío si se puede.
-  static List<String> bloqueos(ArmadoSalon a) => [
+  ///
+  /// Quedarse sin mesas frena solo si el salón guardado ([base]) tenía: el
+  /// salón vacío (6.1.0) se arma y se guarda sin ninguna.
+  static List<String> bloqueos(ArmadoSalon a, {ArmadoSalon? base}) => [
         for (final (x, y) in pisadas(a)) 'Las mesas $x y $y se pisan.',
-        if (a.mesas.isEmpty) 'El salón quedó sin mesas.',
+        if (sinMesasDeMas(a, base)) 'El salón quedó sin mesas.',
       ];
+
+  /// [a] quedó sin mesas y el salón guardado ([base]) tenía.
+  static bool sinMesasDeMas(ArmadoSalon a, ArmadoSalon? base) =>
+      a.mesas.isEmpty && (base == null || base.mesas.isNotEmpty);
 
   /// La distancia típica entre las mesas de [numeros]: la mediana de lo que
   /// cada una tiene hasta su vecina más cercana del grupo. Null con menos de
@@ -1011,7 +1031,7 @@ class EditarArmado {
         'para no pisar ese cambio: mirá cómo quedó y acomodalo de nuevo.',
       );
     }
-    final trabas = bloqueos(nuevo);
+    final trabas = bloqueos(nuevo, base: base);
     if (trabas.isNotEmpty) return CambioDeConfig.noSePuede(trabas.join(' '));
     final usadas = enUso(alumnos, config);
     final sacadas = [
@@ -1034,16 +1054,52 @@ class EditarArmado {
         'quedó y acomodá de nuevo.',
       );
     }
+    final sinLasSacadas = sacadas.any(config.libres.containsKey)
+        ? config.copyWith(libres: {
+            for (final e in config.libres.entries)
+              if (!sacadas.contains(e.key)) e.key: e.value,
+          })
+        : config;
     return CambioDeConfig.ok(
-      sacadas.any(config.libres.containsKey)
-          ? config.copyWith(libres: {
-              for (final e in config.libres.entries)
-                if (!sacadas.contains(e.key)) e.key: e.value,
-            })
-          : config,
+      conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
       sacadas,
       armado: recordandoNumeros(nuevo, base),
     );
+  }
+
+  /// Si el playón se cambió con las manijas (6.1.0), las medidas guardadas lo
+  /// siguen: de ellas sale "en el playón entran hasta N", y la pestaña Medidas
+  /// las muestra. Quedan en centímetros, y aproximadas si lo eran. Un playón
+  /// con un lado fuera de lo que admiten las medidas (de 5 a 300 m) no las
+  /// cambia: al leerlas volverían a las de fábrica.
+  static ConfigPlano conMedidasDelPlayon(
+    ConfigPlano config, {
+    required ArmadoSalon base,
+    required ArmadoSalon nuevo,
+  }) {
+    final antes = ArmarAMedida.playonDe(base);
+    final ahora = ArmarAMedida.playonDe(nuevo);
+    if (antes == null || ahora == null) return config;
+    double cm(double m) => (m * 100).round() / 100;
+    final medido = PlayonReal(
+      frenteM: cm(ahora.frenteM),
+      fondoM: cm(ahora.fondoM),
+      profundidadM: cm(ahora.profundidadM),
+      aproximado: config.medidas.playon.aproximado,
+    );
+    bool mismo(PlayonReal a, PlayonReal b) =>
+        (a.frenteM - b.frenteM).abs() < 0.005 &&
+        (a.fondoM - b.fondoM).abs() < 0.005 &&
+        (a.profundidadM - b.profundidadM).abs() < 0.005;
+    if (mismo(antes, ahora) || mismo(config.medidas.playon, medido)) {
+      return config;
+    }
+    for (final lado in [medido.frenteM, medido.fondoM, medido.profundidadM]) {
+      if (lado < PlayonReal.ladoMinimoM || lado > PlayonReal.ladoMaximoM) {
+        return config;
+      }
+    }
+    return config.copyWith(medidas: config.medidas.copyWith(playon: medido));
   }
 
   /// [nuevo], con anotado el número más alto que tuvo alguna mesa del salón,
