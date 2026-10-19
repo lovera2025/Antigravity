@@ -343,5 +343,28 @@ Lo hecho:
   - las muestras `Acomodar_mesas_puestas.png`, `Acomodar_faltan.png` y `Salon_vaciado.png`
     (`build/muestras_6.1.0/acomodar/`), mandadas al usuario.
 
-**Sigue:** la etapa 5 (las muestras que faltan de su lista, con un PDF de playón rectangular) y los **predios con
-nombre** (etapa nueva, con maqueta antes de programar). Después, la versión.
+## 13. "Lejos" en el salón de verdad, hecho el 19-oct
+
+El usuario pidió, mientras se armaba la maqueta de los predios: "cuando marquen que una mesa quede lejos o cerca de
+una, que se cumpla". Se midió y aprobó arreglarlo antes de los predios.
+
+- **Cómo estaba:** "juntas" ya se medía en el salón dibujado (`tramosPegados`). "Lejos" (la extra que no toque a la
+  principal, en el diálogo del sorteo) se medía **por número**: el motor ve casilleros en fila y para él lejos es "no
+  seguidas". En el salón, dos mesas no seguidas pueden tocarse (una detrás de la otra; la 1 y la 132 a los dos lados
+  del medio sin pasarela).
+- **Medido sin el arreglo**, 20 familias con "1 lejos" en 100 sorteos por salón:
+  - sorteo entero: 0 de 2.000;
+  - **por división: 163 de 2.000 en el salón acomodado, 157 en A medida y 84 en el Canva Normal 2A + 2B** (entre 4 %
+    y 8 %). Esto está así en la 6.0.0 instalada.
+- **Ahora** (`sorteo_con_plano.dart`):
+  - `_sortearEn` vuelve a sortear el tramo si una mesa lejos toca a su familia (`lejosEnElSalon`, con
+    `ArmadoSalon.pegadas`, la misma medida que juntas: hasta 1,5 veces la distancia entre mesas), hasta 200 veces;
+  - `validar` lo revisa antes de guardar;
+  - si en ese salón no hay manera, `preparar` dice que no entra, con el motivo, y no se sortea.
+  - El motor no cambió. El sorteo sin plano tampoco: ahí no hay salón dibujado.
+- **Comprobado:** con el arreglo, 0 de 2.000 en los seis casos; `test/sorteo_lejos_en_el_salon_test.dart` (60 sorteos
+  por salón y modo, el caso en cadena, el salón donde no se puede y la revisión final); 2.617 tests; 4 roturas a
+  propósito vistas.
+
+**Sigue:** los **predios con nombre** (opción A y las tres decisiones recomendadas, aprobadas el 19-oct) y la etapa 5
+(las muestras que faltan, con un PDF de playón rectangular). Después, la versión.

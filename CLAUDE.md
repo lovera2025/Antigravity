@@ -137,6 +137,13 @@ entradas y traduce la salida.
   ese. Una familia se revierte solo si hoy tiene exactamente lo que ese sorteo le dejó.
 - **El número de una mesa que se sacó y se guardó no se vuelve a dar** (`ArmadoSalon.ultimoNumero`): ya pudo salir
   impreso.
+- **"Lejos" se mide en el salón dibujado, igual que "juntas"** (6.1.0). Para el motor, lejos es "no en casilleros
+  seguidos", y en el salón dos mesas no seguidas pueden tocarse: en el sorteo por división quedaban así entre el 4 % y
+  el 8 %.
+  - `_sortearEn` vuelve a sortear el tramo hasta que cada mesa lejos no toque a su familia (`lejosEnElSalon`, con
+    `pegadas`).
+  - `validar` lo revisa, y `preparar` dice que no entra si en ese salón no hay manera.
+  - `test/sorteo_lejos_en_el_salon_test.dart` lo prueba con 60 sorteos por salón y modo.
 
 **El salón primero** (6.1.0, en curso; `docs/PLAN_SALON_PRIMERO_2026-10-16.md`): el jefe arma primero el espacio
 vacío y después pone las mesas con un botón.

@@ -273,26 +273,50 @@ class SorteoConPlano {
 
   static PlanSorteo preparar(EntradaSorteoPlano e) {
     final base = _armar(e);
-    final plan = _planEstable(base, e).$1;
-    if (plan.entra || e.usarPasto || base.cas.pasto.isEmpty) {
-      return plan.$1;
+    try {
+      final (plan, semilla) = _planEstable(base, e);
+      if (plan.entra) {
+        // El sorteo entero no sortea en la vista previa: con mesas "lejos",
+        // se sortea una vez con la semilla que [sortear] usa como última red,
+        // para saber que en este salón se pueden cumplir.
+        if (_hayLejos(base)) _calcular(base, e, Random(semilla));
+        return plan.$1;
+      }
+      if (e.usarPasto || base.cas.pasto.isEmpty) return plan.$1;
+      // ¿Entraría con el pasto?
+      final conPasto =
+          _planEstable(_armar(e.conPasto(true)), e.conPasto(true)).$1;
+      return PlanSorteo(
+        modo: plan.$1.modo,
+        modoForzado: plan.$1.modoForzado,
+        bloques: plan.$1.bloques,
+        hastaMesa: plan.$1.hastaMesa,
+        hastaMesaMinima: plan.$1.hastaMesaMinima,
+        entra: false,
+        necesitaPasto: conPasto.entra,
+        familias: plan.$1.familias,
+        mesas: plan.$1.mesas,
+        avisos: plan.$1.avisos,
+      );
+    } on _LejosNoEntra {
+      return PlanSorteo(
+        modo: e.modo,
+        entra: false,
+        familias: base.pedidos.length,
+        mesas: base.pedidos.fold<int>(0, (s, p) => s + max(0, p.faltan)),
+        avisos: [
+          ...base.avisos,
+          'En este salón, las mesas marcadas "lejos" quedarían tocando a su '
+              'familia: no hay dónde separarlas. Agregá mesas o sacá la marca '
+              'de "lejos".',
+        ],
+      );
     }
-    // ¿Entraría con el pasto?
-    final conPasto =
-        _planEstable(_armar(e.conPasto(true)), e.conPasto(true)).$1;
-    return PlanSorteo(
-      modo: plan.$1.modo,
-      modoForzado: plan.$1.modoForzado,
-      bloques: plan.$1.bloques,
-      hastaMesa: plan.$1.hastaMesa,
-      hastaMesaMinima: plan.$1.hastaMesaMinima,
-      entra: false,
-      necesitaPasto: conPasto.entra,
-      familias: plan.$1.familias,
-      mesas: plan.$1.mesas,
-      avisos: plan.$1.avisos,
-    );
   }
+
+  /// Alguna familia nueva pidió mesas "lejos".
+  static bool _hayLejos(_Base b) =>
+      b.pedidos.any((p) => p.esNuevo && p.separadas > 0);
 
   /// Sortea. Tira [StateError] si no entra (el diálogo no lo deja llegar acá).
   ///
@@ -382,8 +406,15 @@ class SorteoConPlano {
       // como hace el sorteo sin plano.
       final nueva = suyas.isEmpty && !e.config.fijadasPorAlumno.containsKey(id);
       if (!nueva) continue;
-      if ((e.separaciones[id] ?? 0) == 0 && tramosPegados(a, nums).length > 1) {
+      final pedidas = e.separaciones[id] ?? 0;
+      if (pedidas == 0 && tramosPegados(a, nums).length > 1) {
         return 'Las mesas de una familia no quedaron juntas.';
+      }
+      // "Lejos" también se mira en el salón (6.1.0): sin tocar a la familia.
+      final lejos =
+          MesasExtraUtils.cantidadAlejadasEfectivas(nums.length, pedidas);
+      if (!lejosEnElSalon(a, nums, lejos)) {
+        return 'Las mesas "lejos" de una familia quedaron tocándose en el salón.';
       }
     }
     return null;
@@ -623,27 +654,89 @@ class SorteoConPlano {
           x.key: ([for (final c in x.value) cas.numero(c)!]..sort()),
       };
 
+  /// Cuántas veces se vuelve a sortear un tramo para que las mesas "lejos"
+  /// queden lejos en el salón. Casi siempre sale a la primera.
+  static const int _intentosLejos = 200;
+
+  /// Sortea un tramo con el motor, en casilleros.
+  ///
+  /// **"Lejos" se cumple en el salón dibujado** (6.1.0). Para el motor, lejos
+  /// es "no en casilleros seguidos"; en el salón, dos mesas que no son
+  /// seguidas pueden tocarse (una detrás de la otra, o a los dos lados del
+  /// medio sin pasarela: la 1 y la 132). Si pasa, se vuelve a sortear el
+  /// tramo; si después de [_intentosLejos] no se pudo, [_LejosNoEntra].
   static Map<String, List<int>> _sortearEn(
+    _Base b,
+    EntradaSorteoPlano e,
     List<PedidoSorteo> pedidos,
     Set<int> ocupadas,
     int capacidad,
     Random rng,
   ) {
     if (pedidos.isEmpty) return const {};
-    final r = SorteoMesasMotor.sortear(
-      pedidos: pedidos,
-      ocupadas: ocupadas,
-      capacidad: capacidad,
-      random: rng,
-    );
-    final error = SorteoMesasMotor.validar(
-      pedidos: pedidos,
-      ocupadas: ocupadas,
-      capacidad: capacidad,
-      asignaciones: r,
-    );
-    if (error != null) throw StateError(error);
-    return r;
+    final conLejos = [
+      for (final p in pedidos)
+        if (p.esNuevo && p.separadas > 0) p,
+    ];
+    for (var intento = 1;; intento++) {
+      final r = SorteoMesasMotor.sortear(
+        pedidos: pedidos,
+        ocupadas: ocupadas,
+        capacidad: capacidad,
+        random: rng,
+      );
+      final error = SorteoMesasMotor.validar(
+        pedidos: pedidos,
+        ocupadas: ocupadas,
+        capacidad: capacidad,
+        asignaciones: r,
+      );
+      if (error != null) throw StateError(error);
+      final enElSalon = _aNumeros(b.cas, r);
+      final todosLejos = conLejos.every(
+        (p) => lejosEnElSalon(e.armado, enElSalon[p.alumnoId]!, p.separadas),
+      );
+      if (todosLejos) return r;
+      if (intento >= _intentosLejos) throw _LejosNoEntra();
+    }
+  }
+
+  /// Las mesas de una familia, juntadas por las que se tocan en el salón
+  /// dibujado (`ArmadoSalon.pegadas`, la misma medida de "juntas").
+  static List<List<int>> gruposEnElSalon(ArmadoSalon a, Iterable<int> numeros) {
+    final quedan = numeros.toSet().toList()..sort();
+    final grupos = <List<int>>[];
+    while (quedan.isNotEmpty) {
+      final grupo = [quedan.removeAt(0)];
+      for (var i = 0; i < grupo.length; i++) {
+        final tocan = [
+          for (final n in quedan)
+            if (a.pegadas(grupo[i], n)) n,
+        ];
+        quedan.removeWhere(tocan.contains);
+        grupo.addAll(tocan);
+      }
+      grupos.add(grupo..sort());
+    }
+    return grupos;
+  }
+
+  /// [numeros] (las mesas de una familia) cumplen "[separadas] lejos" en el
+  /// salón: las demás juntas, y cada una de las lejos sin tocar a ninguna
+  /// otra de la familia.
+  static bool lejosEnElSalon(ArmadoSalon a, List<int> numeros, int separadas) {
+    if (separadas <= 0) return true;
+    final tamanos = [for (final g in gruposEnElSalon(a, numeros)) g.length]
+      ..sort();
+    final esperado = [
+      for (var i = 0; i < separadas; i++) 1,
+      numeros.length - separadas,
+    ]..sort();
+    if (tamanos.length != esperado.length) return false;
+    for (var i = 0; i < tamanos.length; i++) {
+      if (tamanos[i] != esperado[i]) return false;
+    }
+    return true;
   }
 
   static (PlanSorteo, ResultadoSorteoPlano?) _entera(
@@ -683,7 +776,7 @@ class SorteoConPlano {
       if (hayLugarParaFijos) {
         // Completar no usa el azar: da lo mismo en la vista previa y al
         // sortear.
-        deFijos = _sortearEn(fijos, ocupadas, cas.total, Random(0));
+        deFijos = _sortearEn(b, e, fijos, ocupadas, cas.total, Random(0));
         ocupadas = {...ocupadas, for (final l in deFijos.values) ...l};
       }
     }
@@ -733,7 +826,10 @@ class SorteoConPlano {
       avisos: avisos,
     );
     if (rng == null || !entra) return (plan, null);
-    final r = {...deFijos, ..._sortearEn(resto, ocupadas, capacidad, rng)};
+    final r = {
+      ...deFijos,
+      ..._sortearEn(b, e, resto, ocupadas, capacidad, rng),
+    };
     return (
       plan,
       ResultadoSorteoPlano(asignaciones: _aNumeros(cas, r), avisos: avisos),
@@ -780,7 +876,7 @@ class SorteoConPlano {
           null,
         );
       }
-      final r = _sortearEn(completar, ocupadas, cas.total, azar);
+      final r = _sortearEn(b, e, completar, ocupadas, cas.total, azar);
       asignaciones.addAll(r);
       for (final l in r.values) {
         ocupadas.addAll(l);
@@ -892,7 +988,7 @@ class SorteoConPlano {
             capacidad: fin,
           )) {
             filas.add(fila(k, ps, bloque: guardados[k]));
-            anotar(_sortearEn(ps, oc, fin, azar));
+            anotar(_sortearEn(b, e, ps, oc, fin, azar));
             continue;
           }
         }
@@ -922,7 +1018,7 @@ class SorteoConPlano {
         if (cap == null) {
           entraTodo = false;
         } else {
-          anotar(_sortearEn(todos, oc, cap, azar));
+          anotar(_sortearEn(b, e, todos, oc, cap, azar));
         }
       }
     } else {
@@ -956,7 +1052,7 @@ class SorteoConPlano {
             numeros.isEmpty ? null : BloqueDivision.deMesas(k, numeros);
         filas.add(fila(k, ps, bloque: bloque));
         if (bloque != null) bloquesNuevos.add(bloque);
-        anotar(_sortearEn(ps, oc, fin, azar));
+        anotar(_sortearEn(b, e, ps, oc, fin, azar));
         cursor = fin + 1;
       }
     }
@@ -983,6 +1079,14 @@ class SorteoConPlano {
 
 extension on (PlanSorteo, ResultadoSorteoPlano?) {
   bool get entra => $1.entra;
+}
+
+/// No hubo manera de que las mesas "lejos" quedaran lejos en el salón
+/// dibujado. Es un [StateError]: el sorteo lo trata como un reparto que no
+/// entró y prueba otro.
+class _LejosNoEntra extends StateError {
+  _LejosNoEntra()
+      : super('Las mesas "lejos" quedaban tocando a su familia en el salón.');
 }
 
 class _Base {

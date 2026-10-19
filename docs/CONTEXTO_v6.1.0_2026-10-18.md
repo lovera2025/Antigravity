@@ -133,6 +133,17 @@ Aprobó el plan corto con las tres decisiones recomendadas. En Acomodar:
 
 Detalle en la sección 12 del plan.
 
+## "Lejos" en el salón de verdad (19-oct)
+
+Pidió que "lejos" y "cerca" se cumplan. Juntas ya se cumplía. **Lejos no**: se medía por número, y en el sorteo por
+división entre el 4 % y el 8 % de las familias con "1 lejos" quedaban con la extra tocando a la principal, también en
+los salones de la 6.0.0 instalada. Ahora se mide en el salón dibujado: el sorteo vuelve a sortear si hace falta, la
+revisión final lo comprueba, y si no hay manera no sortea y dice por qué. Con el arreglo, 0 de 2.000 en cada caso.
+Detalle en la sección 13 del plan del salón.
+
+**Pendiente de preguntarle:** si ya hubo un sorteo de verdad por división con "lejos" marcado en la 6.0.0, revisar (solo
+leyendo) qué familias quedaron tocándose.
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
