@@ -21,7 +21,7 @@ Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
 (hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón y los predios
-con nombre (hechos; falta probar la migración v74 sobre una copia de la base real), en una
+con nombre (hechos; la migración v74 ya probada sobre una copia de la base real), en una
 sola versión. **Sigue la etapa 5 del salón** (las muestras que faltan). La mora por cuota
 suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 

@@ -31,8 +31,8 @@ corto y su OK antes de programar.
 4. **"Lejos" en el salón de verdad. HECHO el 19-oct (`2f968f2`)**: lo pidió él a mitad de la maqueta de los predios.
    Sección 13 del plan.
 5. **Los predios con nombre: PROGRAMADOS el 19-oct**, sin instalar (`91d2145`, `0053e57`, `c44c870`, muestras
-   `88389e4`). Ver "Los predios con nombre" abajo y la sección 14 del plan del salón. **Falta la prueba de la
-   migración v74 sobre una copia de su base**, con la app instalada cerrada.
+   `88389e4`), con la migración v74 probada sobre una copia de su base. Ver "Los predios con nombre" abajo y la
+   sección 14 del plan del salón.
 6. **La etapa 5 del salón:** las muestras que faltan de su lista, con un PDF de playón rectangular. **Es lo que
    sigue.**
 7. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, el SQL de los predios antes de instalar, y
@@ -176,8 +176,11 @@ y 6 del paso 3) y cuatro muestras (`build/muestras_6.1.0/predios/`, se le mandar
 **Encontrado en el camino:** la herramienta de muestras no fotografiaba lo que se abre encima (un menú) y `flutter
 test` dibuja las sombras como una raya negra; ahora puede, con la sombra de verdad (`conLoDeArriba`).
 
-**Falta:** la prueba de la migración sobre una copia de su base (`tool/verificar_migracion_v74_test.dart`): **la app
-instalada tiene que estar cerrada, y se le pide a él.**
+**La migración v74 sobre una copia de su base, perfecta** (19-oct, 12:54, con la app cerrada por él;
+`tool/verificar_migracion_v74_test.dart`): su base estaba en la v73 (la 6.0.0); las 33 tablas que ya había quedaron
+iguales fila por fila (643 contratos, 4.166 pagos, 3 planos), `predios` apareció vacía, el esquema de lo que ya existía
+quedó igual (63 tablas, índices y triggers), la vuelta a la 6.0.0 y otra vez a la nueva deja los mismos datos, y la
+base real quedó con el mismo SHA-256 (`64c6ae10…`).
 
 ## Qué más pasó el 19-oct
 
@@ -232,11 +235,10 @@ temporales y el aviso "Revisar la ficha" (la fase 2 de la mora por cuota la
 descarté); el salón primero con las etapas 1 a 4 (salón vacío, manijas,
 ACOMODAR LAS MESAS y VACIAR EL SALÓN); que "lejos" se cumpla en el salón de
 verdad; y los PREDIOS CON NOMBRE (sección 14 del plan), con su tabla nueva
-(migración v74). De los predios falta la prueba de la migración sobre una
-copia de mi base: avisame antes, porque la app instalada tiene que estar
-cerrada. Sigue la etapa 5 del salón (las muestras que faltan, con un PDF de
-playón rectangular), y al final la versión y publicar conmigo presente, con el
-SQL de los predios corrido antes.
+(migración v74, ya probada sobre una copia de mi base). Sigue la etapa 5 del
+salón (las muestras que faltan, con un PDF de playón rectangular), y al final
+la versión y publicar conmigo presente, con el SQL de los predios corrido
+antes.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

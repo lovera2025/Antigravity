@@ -391,8 +391,9 @@ Dónde quedó:
   (`AccionesPredios`); lo que guarda, en `plano_evento_screen.dart` (`_guardarComoPredio` y `_cambiarPredio`, con la
   llave del modo jefe).
 
-**Falta:** la prueba de la migración sobre una copia de la base real (`tool/verificar_migracion_v74_test.dart`), con la
-app instalada cerrada; y, antes de instalar, el SQL de la nube con el OK del usuario.
+**La migración, probada** sobre una copia de la base real el 19-oct (`tool/verificar_migracion_v74_test.dart`, con la
+app cerrada): lo de antes igual, `predios` vacía, la vuelta a la 6.0.0 bien y la base real intacta. **Falta**, antes de
+instalar, el SQL de la nube con el OK del usuario.
 
 Lo aprobado el 19-oct, como se escribió antes de programar:
 
