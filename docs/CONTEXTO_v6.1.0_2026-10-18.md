@@ -273,6 +273,7 @@ catálogo.
 tocar desde el 16-oct 21:19 UTC. Se reescribió `mora_tracked_ajuste = 0` (el mismo valor, con `and mora_tracked_ajuste
 = 0` de guarda): `updated_at` pasó a 19-oct 19:15 UTC. Conteos iguales antes y después (643 contratos, $95.396.671,17,
 4.166 pagos) y un solo contrato tocado. Así la PC del operario y la de la casa la vuelven a bajar con la 6.1.0.
+**Comprobado por él en la PC del operario: su ventana de cobro dice $171.600**, como las otras 0/9.
 
 **Falta, en la oficina y con él:**
 1. **La PC del jefe.** Después, mirar la versión y su `revision_mora.txt`.
