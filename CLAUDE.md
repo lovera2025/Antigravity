@@ -20,10 +20,11 @@ instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
-(hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón y los predios
-con nombre (hechos; la migración v74 ya probada sobre una copia de la base real), en una
-sola versión. **Sigue la etapa 5 del salón** (las muestras que faltan). La mora por cuota
-suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
+(hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón, los predios
+con nombre (la migración v74 ya probada sobre una copia de la base real) y las muestras de
+la etapa 5, en una sola versión. **Sigue la versión** (pubspec, `.iss`, instalador, el SQL
+de los predios antes). La mora por cuota suelta (fase 2) quedó descartada. Entrada:
+`docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
 
@@ -193,6 +194,13 @@ botones del pie: el SnackBar los tapaba varios segundos después de cada cambio.
 el texto de la excepción.
 
 **En papel:**
+- **se recorta hasta la última fila de mesas** (`PlanoPapel.marco`). En una hoja con el borde del playón, un sector
+  que queda entero más al fondo que las mesas (el Ingreso del salón vacío) no estira el recorte, y
+  `PlanoPapel.textoAlFondo` lo dice ("…sigue 14 m más hacia el fondo, con el Ingreso"); si no, el papel llegaba al
+  fondo y las mesas salían sin apellido. En el Canva entran todos los sectores;
+- el salón vacío guardado con mesas se llama "A medida del playón" (`ArmarAMedida.conNombreSegunMesas`, al guardar):
+  el nombre sale en el papel y en SORTEO. La pantalla compara lo guardado con `EditarArmado.comoSeGuarda`, no con lo
+  que se ve;
 - cada estilo lleva sus colores a la hoja (`TemaPlano.papel` y `papelNumero`): es una cuenta sobre el color de
   pantalla, no una lista a mano;
 - **los números de Gala van en Outfit**: las cifras de su serif son de estilo antiguo, un 1 se lee como una I, y el

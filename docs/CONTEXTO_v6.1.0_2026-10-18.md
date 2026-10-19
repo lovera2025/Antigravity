@@ -33,10 +33,9 @@ corto y su OK antes de programar.
 5. **Los predios con nombre: PROGRAMADOS el 19-oct**, sin instalar (`91d2145`, `0053e57`, `c44c870`, muestras
    `88389e4`), con la migración v74 probada sobre una copia de su base. Ver "Los predios con nombre" abajo y la
    sección 14 del plan del salón.
-6. **La etapa 5 del salón:** las muestras que faltan de su lista, con un PDF de playón rectangular. **Es lo que
-   sigue.**
+6. **La etapa 5 del salón: HECHA el 19-oct** (muestras `16a44f7`, arreglos `9478f3c`). Ver "La etapa 5" abajo.
 7. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, el SQL de los predios antes de instalar, y
-   publicar con él presente.
+   publicar con él presente. **Es lo que sigue.**
 
 Sin la fase 2 la versión es más chica, pero quedan los predios (con una migración) y la etapa 5: no llega al lunes 20.
 
@@ -201,6 +200,31 @@ base real quedó con el mismo SHA-256 (`64c6ae10…`).
 - Una vez la sesión se cortó justo al pasarle un plan: cuando dice "estoy en modo plan", quiere el botón para
   aprobarlo.
 
+## La etapa 5 del salón: las muestras (19-oct)
+
+Pidió hacerla en el mismo chat y aprobó el plan corto. De la lista del plan ya estaban las seis imágenes; faltaba el
+PDF de playón rectangular. Se hicieron:
+- **Dos planos impresos nuevos**, armados como trabaja el jefe ahora (salón vacío, el espacio con pista y barra,
+  ACOMODAR LAS MESAS y el sorteo por división): un playón rectangular de 30 × 40 m, en color y en blanco y negro, y
+  uno arrancado del predio Buena Vista con una esquina corrida con su manija.
+- **Las diez imágenes de la pantalla rehechas con el código de hoy** (seis del salón primero y cuatro de los predios),
+  todas en `build/muestras_6.1.0/etapa5/`, con una página `index.html` abierta en Edge.
+
+**Al mirar los PDF aparecieron dos cosas, y él eligió los arreglos recomendados (`9478f3c`):**
+1. **El papel de un salón que arrancó vacío no se recortaba**: el salón vacío trae el Ingreso contra el fondo, y el
+   papel no dejaba afuera ningún sector, así que dibujaba el playón entero con las mesas chicas y sin apellido. Ahora
+   se recorta como antes, hasta la última fila de mesas: lo que queda entero más al fondo (el Ingreso) sale de la hoja
+   y arriba se dice ("el hormigón sigue 14 m más hacia el fondo, con el Ingreso"). La pista y la barra que estén entre
+   las mesas entran enteras; en los armados del Canva no cambia nada.
+2. **Decía "SALÓN VACÍO" con 100 mesas**, en el papel y en la ventana de SORTEO. Ahora, al guardar el salón vacío con
+   mesas, se llama "A medida del playón", y vuelve a "Salón vacío" si se vacía. La clave sigue siendo `vacio@1`.
+   - **Encontrado en el camino:** después de guardar, la pantalla comparaba lo guardado con lo que se veía, y con el
+     nombre nuevo habría dicho "el salón guardado cambió mientras lo acomodabas". Ahora compara con lo que de verdad se
+     guarda (`EditarArmado.comoSeGuarda`).
+
+**Comprobado:** 2.702 tests, `flutter analyze` en 312 (los mismos), 4 roturas a propósito vistas, y los tres PDF
+mirados hoja por hoja (una A4 acostada cada uno, ninguna mesa afuera, los apellidos se leen).
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
@@ -235,10 +259,10 @@ temporales y el aviso "Revisar la ficha" (la fase 2 de la mora por cuota la
 descarté); el salón primero con las etapas 1 a 4 (salón vacío, manijas,
 ACOMODAR LAS MESAS y VACIAR EL SALÓN); que "lejos" se cumpla en el salón de
 verdad; y los PREDIOS CON NOMBRE (sección 14 del plan), con su tabla nueva
-(migración v74, ya probada sobre una copia de mi base). Sigue la etapa 5 del
-salón (las muestras que faltan, con un PDF de playón rectangular), y al final
-la versión y publicar conmigo presente, con el SQL de los predios corrido
-antes.
+(migración v74, ya probada sobre una copia de mi base), y la etapa 5 del salón
+(las muestras, con los dos arreglos del papel que elegí). Sigue la versión:
+pubspec y el .iss en 6.1.0, el instalador, y publicar conmigo presente, con el
+SQL de los predios corrido antes.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

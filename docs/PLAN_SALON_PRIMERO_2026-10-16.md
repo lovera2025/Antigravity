@@ -152,7 +152,9 @@ para elegirlo en Estilo y armado la próxima vez. No programar sin su OK.
    vaciar, acomodar otra vez" sobre un playón rectángulo con pista.
 5. **Muestras** con `tool/plano_pantalla_muestra_test.dart`: `Salon_vacio.png`, `Acomodar_playon_manijas.png`,
    `Acomodar_sector_manijas.png`, `Acomodar_mesas_puestas.png`, `Acomodar_faltan.png`, `Salon_vaciado.png`, y un
-   PDF con playón rectángulo. Mandárselas al usuario antes de la etapa 6.
+   PDF con playón rectángulo. Mandárselas al usuario antes de la etapa 6. **Hecha el 19-oct**: los PDF
+   (`Plano_rectangulo`, `Plano_playon_a_mano`) mostraron que el papel no se recortaba y decía "Salón vacío" con
+   mesas; los dos se arreglaron (`9478f3c`, ver el CONTEXTO de la 6.1.0).
 6. Versión 6.1.0 (`pubspec.yaml` + `installer/junior_eventos_setup.iss`), CONTEXTO nuevo
    (`docs/CONTEXTO_v6.1.0_<fecha>.md`), CLAUDE.md (dos párrafos: el salón vacío y las manijas; el escenario ya no se
    ata al frente), instalador.
