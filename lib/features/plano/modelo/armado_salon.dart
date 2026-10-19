@@ -478,6 +478,7 @@ class ArmadoSalon {
   }
 
   ArmadoSalon copyWith({
+    String? nombre,
     List<MesaPlano>? mesas,
     List<SectorPlano>? sectores,
     List<HojaPlano>? hojas,
@@ -486,7 +487,7 @@ class ArmadoSalon {
   }) =>
       ArmadoSalon(
         clave: clave,
-        nombre: nombre,
+        nombre: nombre ?? this.nombre,
         descripcion: descripcion,
         radio: radio,
         metrosPorUnidad: metrosPorUnidad,

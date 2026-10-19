@@ -109,6 +109,104 @@ void main() {
       }
     });
 
+    // 6.1.0: el salón vacío trae el Ingreso contra el fondo del playón. Si
+    // estirara el recorte, el papel llegaría siempre hasta el fondo y las
+    // mesas saldrían chicas y sin apellido (lo vio el usuario el 19-oct).
+    group('el salón que arrancó vacío', () {
+      final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+      SectorPlano sector(TipoSector t, String texto, double y) {
+        final b = vacio.hojas.single.contorno!.puntos;
+        final cx = (b[0].x + b[1].x) / 2;
+        return SectorPlano(
+          tipo: t,
+          texto: texto,
+          hoja: 'A',
+          caja: RectPlano(
+            cx - vacio.aUnidades(5),
+            b[0].y + vacio.aUnidades(y),
+            vacio.aUnidades(10),
+            vacio.aUnidades(4),
+          ),
+        );
+      }
+
+      ArmadoSalon acomodado(ArmadoSalon a, int mesas) =>
+          ArmarAMedida.acomodar(a, cantidad: mesas).armado;
+
+      bool adentro(RectPlano marco, RectPlano r) =>
+          marco.x <= r.x + 0.01 &&
+          marco.y <= r.y + 0.01 &&
+          marco.derecha >= r.derecha - 0.01 &&
+          marco.abajo >= r.abajo - 0.01;
+
+      test('con mesas, el Ingreso del fondo no estira el recorte, y se dice',
+          () {
+        final a = acomodado(vacio, 60);
+        final marco = PlanoPapel.marco(a, 'A');
+        expect(marco.alto, lessThan(a.hojas.single.caja.alto * 0.75));
+        for (final m in a.mesas) {
+          expect(marco.contieneCirculo(m.x, m.y, a.radio), isTrue,
+              reason: 'la mesa ${m.numero} quedó afuera');
+        }
+        final escenario =
+            a.sectores.firstWhere((s) => s.tipo == TipoSector.escenario);
+        final ingreso =
+            a.sectores.firstWhere((s) => s.tipo == TipoSector.ingreso);
+        expect(adentro(marco, escenario.caja), isTrue);
+        expect(adentro(marco, ingreso.caja), isFalse);
+        expect(
+          PlanoPapel.textoAlFondo(a, 'A', marco),
+          allOf(
+            startsWith('se ve hasta donde hay mesas: el hormigón sigue '),
+            endsWith(' m más hacia el fondo, con el Ingreso'),
+          ),
+        );
+      });
+
+      test('una pista entre las mesas entra entera', () {
+        final conPista = vacio.copyWith(sectores: [
+          ...vacio.sectores,
+          sector(TipoSector.pista, 'Pista', 10),
+        ]);
+        final a = acomodado(conPista, 80);
+        final marco = PlanoPapel.marco(a, 'A');
+        final pista = a.sectores.firstWhere((s) => s.tipo == TipoSector.pista);
+        expect(adentro(marco, pista.caja), isTrue);
+      });
+
+      test('lo que queda al fondo se nombra con su artículo', () {
+        final conBarra = vacio.copyWith(sectores: [
+          ...vacio.sectores,
+          sector(TipoSector.barra, '', 33),
+        ]);
+        final a = acomodado(conBarra, 40);
+        final marco = PlanoPapel.marco(a, 'A');
+        expect(PlanoPapel.textoAlFondo(a, 'A', marco),
+            endsWith('más hacia el fondo, con el Ingreso y la Barra'));
+      });
+
+      test('sin mesas va todo, y no dice nada', () {
+        final marco = PlanoPapel.marco(vacio, 'A');
+        for (final s in vacio.sectores) {
+          expect(adentro(marco, s.caja), isTrue, reason: s.texto);
+        }
+        expect(PlanoPapel.textoAlFondo(vacio, 'A', marco), isNull);
+      });
+
+      test('en un armado del Canva entran todos los sectores, como siempre',
+          () {
+        for (final armado in ArmadosPredefinidos.todos) {
+          for (final hoja in armado.hojas) {
+            final marco = PlanoPapel.marco(armado, hoja.id);
+            for (final s in armado.sectoresDeHoja(hoja.id)) {
+              expect(adentro(marco, s.caja), isTrue,
+                  reason: '${armado.clave} ${hoja.id}: ${s.texto}');
+            }
+          }
+        }
+      });
+    });
+
     test('una hoja que no existe o vacía no rompe', () {
       final armado = grilla(2, 2);
       expect(PlanoPapel.marco(armado, 'Z').ancho, greaterThan(0));

@@ -115,6 +115,21 @@ class ArmarAMedida {
   /// "Volver al armado original" (ver `test/salon_convivencia_test.dart`).
   static const claveVacio = 'vacio@1';
 
+  static const nombreAMedida = 'A medida del playón';
+  static const nombreVacio = 'Salón vacío';
+
+  /// El salón vacío con mesas ya no es un salón vacío: el papel y la ventana de
+  /// SORTEO decían "Salón vacío" con 100 mesas (lo vio el usuario el 19-oct).
+  /// Con mesas se llama como el armado a medida, y sin mesas vuelve a ser el
+  /// salón vacío. La clave no cambia: "Volver al armado original" la sigue
+  /// necesitando. Es el valor de `nombre`, que ya existe: la 6.0.0 lo muestra
+  /// igual. Los demás armados quedan como están (un predio, con su nombre).
+  static ArmadoSalon conNombreSegunMesas(ArmadoSalon a) {
+    if (a.clave != claveVacio) return a;
+    final nombre = a.mesas.isEmpty ? nombreVacio : nombreAMedida;
+    return a.nombre == nombre ? a : a.copyWith(nombre: nombre);
+  }
+
   /// Un salón que salió de un predio (6.1.0) lleva `predio@<id>` en su clave.
   /// No es una clave nueva del JSON: es el valor de `clave`, que ya existe. La
   /// 6.0.0 no lo conoce y lo abre igual que el salón vacío.
@@ -613,7 +628,7 @@ class ArmarAMedida {
 
     ArmadoSalon con(List<MesaPlano> mesas) => ArmadoSalon(
           clave: claveArmado,
-          nombre: 'A medida del playón',
+          nombre: nombreAMedida,
           descripcion: '${mesas.length} mesas a ${MedirSalon.metros(l)}',
           radio: _radio,
           metrosPorUnidad: _mu,
@@ -659,7 +674,7 @@ class ArmarAMedida {
     final l = math.max(lugarM, MedidasPlano.lugarMinimoM);
     return ArmadoSalon(
       clave: claveVacio,
-      nombre: 'Salón vacío',
+      nombre: nombreVacio,
       descripcion: 'El espacio, sin mesas',
       radio: _radio,
       metrosPorUnidad: _mu,

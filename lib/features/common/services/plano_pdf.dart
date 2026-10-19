@@ -215,8 +215,8 @@ class PlanoPdf {
     pw.Widget encabezado(HojaPlano hoja, RectPlano? marco) {
       final titulo = plano.config.titulo?.trim() ?? '';
       final subtitulo = plano.config.subtitulo?.trim() ?? '';
-      final fuera =
-          marco == null ? 0.0 : PlanoPapel.hormigonFueraM(armado, hoja.id, marco);
+      final alFondo =
+          marco == null ? null : PlanoPapel.textoAlFondo(armado, hoja.id, marco);
       return tema.encabezado(
         titulo: hojas.length > 1 && hoja.titulo.trim().isNotEmpty
             ? 'Plano del salón · ${hoja.titulo}'
@@ -230,9 +230,7 @@ class PlanoPdf {
           if (subtitulo.isNotEmpty) subtitulo,
           resumen.texto,
           ?_textoPlayon(armado, hoja, plano.medidas.playon.aproximado),
-          if (fuera >= 1)
-            'se ve hasta donde hay mesas: el hormigón sigue '
-                '${MedirSalon.metros(fuera, decimales: 0)} más hacia el fondo',
+          ?alFondo,
         ].join(' · '),
       );
     }

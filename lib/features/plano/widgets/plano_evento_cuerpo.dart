@@ -381,7 +381,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       final guardado = EditarArmado.firma(_plano.armado);
       if (guardado != EditarArmado.firma(sesion.base)) {
         if (!sesion.hayCambios ||
-            guardado == EditarArmado.firma(sesion.actual)) {
+            guardado ==
+                EditarArmado.firma(
+                  EditarArmado.comoSeGuarda(sesion.actual, sesion.base),
+                )) {
           // Se guardó lo acomodado (o no había nada pendiente): se sigue desde
           // lo que quedó.
           final mesa = _mesaAcomodo;

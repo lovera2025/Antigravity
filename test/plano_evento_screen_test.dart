@@ -760,6 +760,35 @@ void main() {
       );
     });
 
+    testWidgets('el salón vacío con sus mesas se guarda como "A medida del '
+        'playón", sin avisar de más', (tester) async {
+      final mundo = await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        antes: (m) {
+          m.planos.aca = PlanoEvento.nuevo(
+            eventoId: _eventoId,
+            armado: ArmarAMedida.vacio(PlayonReal.costaSurubi),
+            estilo: EstiloPlano.arquitecto,
+            modo: ModoSorteo.bloques,
+            ahora: _ahora,
+          );
+          m.planos.nube = m.planos.aca;
+        },
+      );
+      await _personalizar(tester, 'acomodar');
+      await _tocar(tester, 'acomodar_mesas');
+      await _guardar(tester, 'guardar_acomodo');
+      final guardado = mundo.guardado.armado;
+      expect(guardado.mesas, isNotEmpty);
+      expect(guardado.nombre, 'A medida del playón');
+      expect(guardado.clave, ArmarAMedida.claveVacio);
+      expect(_dicho(tester), 'El salón quedó guardado.');
+      // Después de guardar, la pantalla no cree que la otra PC lo cambió.
+      expect(find.textContaining('cambió mientras lo acomodabas'), findsNothing);
+      expect(find.text('SALÓN GUARDADO'), findsOneWidget);
+    });
+
     testWidgets('si la otra PC acomodó el salón mientras tanto, no se guarda',
         (tester) async {
       final mundo = await agregarUna(tester);

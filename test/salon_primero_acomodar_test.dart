@@ -259,6 +259,63 @@ void main() {
       expect(r.config!.libres, isEmpty);
     });
 
+    // El papel y la ventana de SORTEO decían "Salón vacío" con 100 mesas (lo vio
+    // el usuario el 19-oct, en la etapa 5).
+    test('el salón vacío con mesas se guarda con el nombre del armado a medida',
+        () {
+      expect(lleno.clave, ArmarAMedida.claveVacio);
+      final r = guardar(ArmarAMedida.acomodar(lleno, cantidad: 35).armado);
+      expect(r.armado!.nombre, 'A medida del playón');
+      expect(r.armado!.clave, ArmarAMedida.claveVacio,
+          reason: 'la clave no cambia: Volver al armado original la usa');
+      expect(EditarArmado.original(r.armado!)!.nombre, 'Salón vacío');
+    });
+
+    test('vaciado, vuelve a llamarse "Salón vacío"', () {
+      final conNombre = lleno.copyWith(nombre: 'A medida del playón');
+      final r = EditarArmado.paraGuardar(
+        base: conNombre,
+        nuevo: conNombre.copyWith(mesas: const []),
+        fresco: conNombre,
+        config: config,
+        alumnos: alumnos,
+        enUsoVisto: visto,
+        rehecho: true,
+      );
+      expect(r.armado!.nombre, 'Salón vacío');
+    });
+
+    test('lo que la pantalla compara después de guardar es lo guardado', () {
+      final nuevo = ArmarAMedida.acomodar(lleno, cantidad: 35).armado;
+      expect(
+        EditarArmado.firma(EditarArmado.comoSeGuarda(nuevo, lleno)),
+        EditarArmado.firma(guardar(nuevo).armado!),
+      );
+    });
+
+    test('los demás armados no cambian de nombre', () {
+      final aMedida = ArmarAMedida.armar(
+        const OpcionesAMedida(playon: PlayonReal.costaSurubi, cantidad: 30),
+      ).armado;
+      // Un salón que salió de un predio, con sus mesas: sigue con su nombre.
+      final dePredio = ArmarAMedida.acomodar(
+        ArmarAMedida.desdePredio(
+          ArmarAMedida.espacioParaPredio(conPista(), id: 'p1', nombre: 'Buena Vista'),
+          nombre: 'Buena Vista',
+        ),
+        cantidad: 30,
+      ).armado;
+      for (final a in [
+        aMedida,
+        aMedida.copyWith(mesas: const []),
+        ArmadosPredefinidos.normal2aPagina3(),
+        dePredio,
+      ]) {
+        expect(ArmarAMedida.conNombreSegunMesas(a).nombre, a.nombre);
+      }
+      expect(dePredio.nombre, 'Buena Vista');
+    });
+
     test('sin rehacer, una fijada sigue frenando que se saque su mesa', () {
       final r = guardar(EditarArmado.sacar(lleno, 3), rehecho: false);
       expect(r.sePuede, isFalse);

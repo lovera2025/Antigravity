@@ -266,12 +266,13 @@ void main() {
     const playon = PlayonReal(frenteM: 30, fondoM: 30, profundidadM: 40);
     final alumnos = _familias(['5° A', '5° B', '5° C'], 100);
     final mesas = alumnos.fold(0, (s, a) => s + SalonMesas.mesas(a));
-    final acomodado = ArmarAMedida.acomodar(
-      _conPistaYBarra(ArmarAMedida.vacio(playon)),
-      cantidad: mesas,
-    );
+    final vacio = _conPistaYBarra(ArmarAMedida.vacio(playon));
+    final acomodado = ArmarAMedida.acomodar(vacio, cantidad: mesas);
     expect(acomodado.faltan, 0, reason: 'entran todas');
-    final plano = _sorteada(acomodado.armado, alumnos);
+    // Como queda al tocar GUARDAR EL SALÓN (con el nombre que corresponde).
+    final guardado = EditarArmado.comoSeGuarda(acomodado.armado, vacio);
+    expect(guardado.nombre, 'A medida del playón');
+    final plano = _sorteada(guardado, alumnos);
     for (final bn in [false, true]) {
       await _guardar(
         'Plano_rectangulo${bn ? '_BN' : ''}.pdf',
@@ -306,8 +307,10 @@ void main() {
     final mesas = alumnos.fold(0, (s, a) => s + SalonMesas.mesas(a));
     final acomodado = ArmarAMedida.acomodar(movido, cantidad: mesas);
     expect(acomodado.faltan, 0, reason: 'entran todas');
-    expect(acomodado.armado.clave, startsWith('predio@'));
-    final plano = _sorteada(acomodado.armado, alumnos);
+    final guardado = EditarArmado.comoSeGuarda(acomodado.armado, movido);
+    expect(guardado.clave, startsWith('predio@'));
+    expect(guardado.nombre, 'Buena Vista');
+    final plano = _sorteada(guardado, alumnos);
     await _guardar('Plano_playon_a_mano.pdf', plano, estilo: EstiloPlano.gala);
   });
 

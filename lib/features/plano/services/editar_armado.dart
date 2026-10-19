@@ -1090,9 +1090,19 @@ class EditarArmado {
     return CambioDeConfig.ok(
       conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
       sacadas,
-      armado: recordandoNumeros(nuevo, base),
+      armado: comoSeGuarda(nuevo, base),
     );
   }
+
+  /// [nuevo] como queda guardado sobre [base]: con el número más alto anotado
+  /// ([recordandoNumeros]) y, si es el salón vacío, con el nombre según tenga
+  /// mesas o no (`ArmarAMedida.conNombreSegunMesas`), sea por ACOMODAR LAS
+  /// MESAS, por VACIAR o agregándolas a mano.
+  ///
+  /// La pantalla compara lo guardado con esto, no con lo que se ve: si no,
+  /// después de guardar creería que la otra PC cambió el salón.
+  static ArmadoSalon comoSeGuarda(ArmadoSalon nuevo, ArmadoSalon base) =>
+      ArmarAMedida.conNombreSegunMesas(recordandoNumeros(nuevo, base));
 
   /// Si el playón se cambió con las manijas (6.1.0), las medidas guardadas lo
   /// siguen: de ellas sale "en el playón entran hasta N", y la pestaña Medidas

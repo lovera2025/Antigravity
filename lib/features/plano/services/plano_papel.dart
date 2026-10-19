@@ -5,6 +5,7 @@ import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/sorteo_mesas_motor.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
+import 'medir_salon.dart';
 
 /// Una división en la leyenda del plano impreso.
 class DivisionEnPapel {
@@ -95,13 +96,20 @@ class PlanoPapel {
   static const int maxTramosEnLeyenda = 3;
 
   /// La parte de la hoja que va al papel: lo que tiene mesas y sectores, con
-  /// su aire. Nunca deja afuera una mesa ni un sector.
+  /// su aire. Nunca deja afuera una mesa.
   ///
   /// Un salón armado a medida deja medio playón vacío, y dibujarlo entero
   /// achica las mesas hasta que el número no se lee. Pero ver el hormigón
   /// entero también sirve: ahí se recorta solo si agranda el dibujo al menos
   /// [gananciaMinima] veces. Una hoja sin el borde del hormigón se recorta
   /// siempre: lo que queda afuera es papel en blanco.
+  ///
+  /// En una hoja con el borde del hormigón, **un sector que queda entero más
+  /// al fondo que la última fila de mesas no estira el recorte** (6.1.0): el
+  /// salón vacío trae el Ingreso contra el fondo, y si entrara, el papel
+  /// llegaría siempre hasta el fondo del playón y las mesas saldrían chicas y
+  /// sin apellido. Lo que queda afuera lo dice [textoAlFondo]. El escenario va
+  /// siempre. En un armado del Canva no cambia nada: entran todos.
   ///
   /// [proporcion] es el ancho sobre el alto del lugar donde se dibuja.
   static RectPlano marco(
@@ -130,7 +138,14 @@ class PlanoPapel {
     for (final m in mesas) {
       incluir(m.x - aire, m.y - aire, m.x + aire, m.y + aire);
     }
+    final fondoDeLasMesas = y1;
     for (final s in sectores) {
+      if (hoja.contorno != null &&
+          mesas.isNotEmpty &&
+          s.tipo != TipoSector.escenario &&
+          s.caja.y > fondoDeLasMesas) {
+        continue;
+      }
       incluir(s.caja.x - 12, s.caja.y - 12, s.caja.derecha + 12, s.caja.abajo + 12);
     }
     // Nunca más que la hoja.
@@ -157,6 +172,48 @@ class PlanoPapel {
     if (borde == null) return 0;
     final fondo = borde.puntos.map((p) => p.y).reduce(math.max);
     return math.max(0, armado.aMetros(fondo - marco.abajo));
+  }
+
+  /// Lo que dice el papel cuando el [marco] no llega al fondo del hormigón:
+  /// "se ve hasta donde hay mesas: el hormigón sigue 19 m más hacia el fondo,
+  /// con el Ingreso". Null si se ve entero (o falta menos de un metro).
+  static String? textoAlFondo(
+    ArmadoSalon armado,
+    String hojaId,
+    RectPlano marco,
+  ) {
+    final fuera = hormigonFueraM(armado, hojaId, marco);
+    if (fuera < 1) return null;
+    final quedan = [
+      for (final s in armado.sectoresDeHoja(hojaId))
+        if (s.caja.abajo > marco.abajo + 0.5) _conArticulo(s),
+    ];
+    final con = switch (quedan.length) {
+      0 => '',
+      1 => ', con ${quedan.single}',
+      _ => ', con ${quedan.sublist(0, quedan.length - 1).join(', ')} y '
+          '${quedan.last}',
+    };
+    return 'se ve hasta donde hay mesas: el hormigón sigue '
+        '${MedirSalon.metros(fuera, decimales: 0)} más hacia el fondo$con';
+  }
+
+  /// "el Ingreso", "la Barra", "los Baños": el nombre del sector como está
+  /// escrito, con su artículo. Uno de nombre libre ("Otro") va sin artículo.
+  static String _conArticulo(SectorPlano s) {
+    final (articulo, deFabrica) = switch (s.tipo) {
+      TipoSector.escenario => ('el', 'Escenario'),
+      TipoSector.pasarela => ('la', 'Pasarela'),
+      TipoSector.ingreso => ('el', 'Ingreso'),
+      TipoSector.brindis => ('el', 'Brindis'),
+      TipoSector.barra => ('la', 'Barra'),
+      TipoSector.cajas => ('las', 'Cajas'),
+      TipoSector.banos => ('los', 'Baños'),
+      TipoSector.pista => ('la', 'Pista'),
+      TipoSector.otro => ('', 'otro sector'),
+    };
+    final nombre = s.texto.trim().isEmpty ? deFabrica : s.texto.trim();
+    return articulo.isEmpty ? nombre : '$articulo $nombre';
   }
 
   /// Las divisiones con sus mesas, en el orden de la leyenda. "Sin curso
