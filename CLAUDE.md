@@ -27,7 +27,7 @@ web también, la del operario instalada): sigue instalar la PC del jefe y repeti
 en el CONTEXTO). La mora por cuota suelta (fase 2) quedó descartada. Entrada:
 `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
-**La 6.1.1** (programada el 19-oct, sin publicar): lo que se borra a mano en una PC desaparece también en la otra
+**La 6.1.1** (publicada el 19-oct, sin instalar en ninguna PC): lo que se borra a mano en una PC desaparece también en la otra
 (ver la trampa "Lo que se borra a mano…", abajo). La PC del jefe puede pasar de la 6.0.0 directo a la 6.1.1.
 Entrada: `docs/CONTEXTO_v6.1.1_2026-10-19.md`.
 

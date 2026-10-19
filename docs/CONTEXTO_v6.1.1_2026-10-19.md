@@ -2,8 +2,9 @@
 
 **Fecha:** 2026-10-19
 **Rama:** `feature/v4.6-cierre-por-sesiones`
-**Estado: PROGRAMADA el 19-oct, sin publicar ni instalar.** La versión en `pubspec.yaml` y en el instalador sigue en
-6.1.0: se sube al armar la versión, con su OK.
+**Estado: PUBLICADA el 19-oct** ([release v6.1.1](https://github.com/lovera2025/Antigravity/releases/tag/v6.1.1),
+tag sobre `019bca3`), **sin instalar en ninguna PC**. Lo pidió él desde la oficina: "publicalo, estoy en la oficina,
+pero con operario activo". La del operario se instala cuando no esté atendiendo. Ver "Publicar" abajo.
 
 > Anterior: [v6.1.0](CONTEXTO_v6.1.0_2026-10-18.md), publicada el 19-oct e instalada en la PC de la casa y en la del
 > operario; la del jefe sigue con la 6.0.0 y puede pasar directo a la 6.1.1.
@@ -126,11 +127,19 @@ Todo en `lib/core/services/sync_engine.dart`, el archivo nuevo `lib/core/service
 
 ## Publicar (con él presente; cada paso con su OK)
 
-0. Subir la versión a 6.1.1 en `pubspec.yaml` y en el instalador, `flutter test` entero, `flutter analyze`, armar el
-   instalador y el release.
-1. **La PC de la casa primero**: copia de la base con el programa cerrado, instalar, y mirar que saque
-   **exactamente** los 2 pagos y los 23 renglones, y nada más (comparado con la nube y con la copia, tabla por tabla).
-2. **La del operario.** Mirar qué escribió en `borrados_en_otra_pc.txt` y que ZAMPALLONI quede igual que la nube.
+0. **HECHO el 19-oct, con su "publicalo":**
+   - la versión 6.1.1+59 en `pubspec.yaml` y en el instalador (`019bca3`);
+   - el instalador: `installer/dist/Setup Junior Eventos v6.1.1.exe`, 38.072.106 bytes, SHA-256 `981B93A5…3D5ADF71`;
+   - el release con `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build\novedades_6.1.1.md`.
+     `/releases/latest` da `v6.1.1`, y el asset descargado de GitHub tiene el mismo tamaño y el mismo SHA-256;
+   - las novedades, las dos líneas de `build/novedades_6.1.1.md`.
+   - Desde ahí cada PC lo ve sola al abrir, o con "Buscar actualización".
+
+   Como él estaba en la oficina, el orden de abajo cambia: la del jefe o la del operario pueden ir antes que la de la
+   casa. Lo de la casa (los 2 pagos y los 23 renglones) se comprueba cuando vuelva.
+1. **La PC de la casa**: copia de la base con el programa cerrado, instalar, y mirar que saque **exactamente** los 2
+   pagos y los 23 renglones, y nada más (comparado con la nube y con la copia, tabla por tabla).
+2. **La del operario**, cuando no esté atendiendo. Mirar qué escribió en `borrados_en_otra_pc.txt` y que ZAMPALLONI quede igual que la nube.
    Prueba sin plata, con las dos PCs abiertas: anotar una nota en ARGUELLO, TOMAS en una y borrarla; en la otra tiene
    que desaparecer en segundos, y el archivo dice por qué camino.
 3. **La del jefe**, de la 6.0.0 directo a la 6.1.1. Después, **lo de TOÑANEZ** que quedó de la 6.1.0 (ver "La
@@ -148,9 +157,11 @@ la del jefe sigue con la 6.0.0. La 6.1.1 está programada en la rama y sin
 publicar: lo que se borra en una PC desaparece también en la otra (el aviso
 que no se tira, la cuenta de cada 10 segundos, al abrir un alumno y la
 revisión de cada 10 minutos de todas las tablas que se borran a mano).
-Sigue publicarla conmigo: la PC de la casa primero (tiene que sacar los 2
-pagos y los 23 renglones de presupuesto), después la del operario y la del
-jefe, y con la del jefe instalada, lo de TOÑANEZ.
+Está PUBLICADA (release v6.1.1, 19-oct) y sin instalar en ninguna PC. Sigue
+instalarla conmigo: la del operario cuando no esté atendiendo, la del jefe
+(de la 6.0.0 directo a la 6.1.1) y la de la casa (tiene que sacar los 2
+pagos y los 23 renglones de presupuesto); con la del jefe instalada, lo de
+TOÑANEZ.
 Contestame primero lo que te pregunto, en una línea, y siempre en español.
 Lo que toque la base real o la nube, con mi OK en el momento. No corras la app
 desde el working tree. Con "actualizá el contexto", frená y dejá todo anotado.
