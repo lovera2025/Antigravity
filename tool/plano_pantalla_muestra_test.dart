@@ -21,7 +21,11 @@
 //     del salón primero (6.1.0), sobre el salón vacío;
 //   • Acomodar_mesas_puestas.png, Acomodar_faltan.png y Salon_vaciado.png:
 //     ACOMODAR LAS MESAS y VACIAR EL SALÓN (6.1.0);
-//   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
+//   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio;
+//   • Acomodar_guardar_predio.png, Guardar_predio_nombre.png,
+//     Pasos_plano_predios.png y Pasos_plano_predio_menu.png: los predios con
+//     nombre (6.1.0): el botón en Acomodar, la ventana del nombre (reemplazando
+//     uno), las tarjetas en Estilo y armado y su menú ⋯.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
 
@@ -47,13 +51,16 @@ import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/historial_sorteo.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
+import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
 import 'package:arguello_events/features/plano/widgets/cambio_de_mesa_dialogs.dart';
 import 'package:arguello_events/features/plano/widgets/elegir_plano_dialog.dart';
+import 'package:arguello_events/features/plano/widgets/nombre_predio_dialog.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:arguello_events/models/predio.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
@@ -113,6 +120,7 @@ Future<void> _guardar(
   Size tam,
   String archivo, {
   Future<void> Function()? antes,
+  bool conLoDeArriba = false,
 }) async {
   final clave = GlobalKey();
   tester.view.physicalSize = tam * 2;
@@ -126,7 +134,14 @@ Future<void> _guardar(
         useMaterial3: true,
         colorSchemeSeed: Colors.indigo,
       ),
-      home: RepaintBoundary(key: clave, child: pantalla),
+      // Con [conLoDeArriba], la foto toma también lo que se abre encima de
+      // la pantalla (un menú, otra ventana): va por fuera de `home`.
+      builder: conLoDeArriba
+          ? (context, child) => RepaintBoundary(key: clave, child: child)
+          : null,
+      home: conLoDeArriba
+          ? pantalla
+          : RepaintBoundary(key: clave, child: pantalla),
     ),
   );
   await tester.pump();
@@ -208,6 +223,7 @@ final _sinHacer = AccionesPlano(
   onGuardarMedidas: (_, _) {},
   onGuardarColoresYTextos: (_, _) {},
   onGuardarArmado: (_, _, _, _) {},
+  onGuardarComoPredio: (_, _) {},
 );
 
 void main() {
@@ -809,5 +825,124 @@ void main() {
       const Size(1200, 1000),
       'Pasos_plano_trabado.png',
     );
+  });
+
+  // 6.1.0: los predios con nombre.
+  final ahora = DateTime.utc(2026, 10, 20, 12);
+  Predio predio(String id, String nombre, ArmadoSalon espacio, PlayonReal p) =>
+      PrediosDelSalon.guardarComo(
+        nombre: nombre,
+        armado: espacio,
+        playon: p,
+        guardados: const [],
+        hechoPor: 'Jefe',
+        ahora: ahora,
+        idNuevo: id,
+      ).predio!;
+  final buenaVista = predio(
+    'd0000000-0000-4000-8000-0000000000b1',
+    'Buena Vista',
+    conPista,
+    PlayonReal.costaSurubi,
+  );
+  const playonArenas = PlayonReal(frenteM: 24, fondoM: 30, profundidadM: 26);
+  final arenas = predio(
+    'd0000000-0000-4000-8000-0000000000a2',
+    'Arenas del Río',
+    ArmarAMedida.vacio(playonArenas),
+    playonArenas,
+  );
+  final acciones = AccionesPredios(
+    onRenombrar: (p, _) async => (predios: [buenaVista, arenas], texto: ''),
+    onBorrar: (p) async => (predios: [buenaVista, arenas], texto: ''),
+  );
+
+  testWidgets('personalizar: Acomodar, GUARDAR COMO PREDIO', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(conPista, sinSortear, EstiloPlano.arquitecto,
+          acciones: _sinHacer),
+      const Size(1440, 900),
+      'Acomodar_guardar_predio.png',
+      antes: () async {
+        await abrirAcomodar(tester);
+        await tester.ensureVisible(find.byKey(const Key('guardar_predio')));
+        await tester.pump();
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('el nombre del predio, reemplazando uno que ya está',
+      (tester) async {
+    await _guardar(
+      tester,
+      Scaffold(
+        backgroundColor: const Color(0xFF5F6368),
+        body: Center(
+          child: NombrePredioDialog(guardados: [buenaVista, arenas]),
+        ),
+      ),
+      const Size(900, 600),
+      'Guardar_predio_nombre.png',
+      antes: () async {
+        await tester.tap(
+          find.byKey(Key('chip_predio_${buenaVista.id}')),
+        );
+        await tester.pump();
+      },
+    );
+  });
+
+  testWidgets('los tres pasos, con dos predios y uno elegido', (tester) async {
+    await _guardar(
+      tester,
+      Scaffold(
+        backgroundColor: const Color(0xFF5F6368),
+        body: ElegirPlanoDialog(
+          mesasNecesarias: 132,
+          medidas: const MedidasPlano(),
+          predios: [buenaVista, arenas],
+          accionesPredios: acciones,
+        ),
+      ),
+      const Size(1200, 1100),
+      'Pasos_plano_predios.png',
+      antes: () async {
+        await tester.tap(
+          find.byKey(Key('armado_predio@${buenaVista.id}')),
+        );
+        await tester.pump();
+      },
+    );
+  });
+
+  testWidgets('los tres pasos, con el menú ⋯ de un predio abierto',
+      (tester) async {
+    await _guardar(
+      tester,
+      Scaffold(
+        backgroundColor: const Color(0xFF5F6368),
+        body: ElegirPlanoDialog(
+          mesasNecesarias: 132,
+          medidas: const MedidasPlano(),
+          predios: [buenaVista, arenas],
+          accionesPredios: acciones,
+        ),
+      ),
+      const Size(1200, 1100),
+      'Pasos_plano_predio_menu.png',
+      conLoDeArriba: true,
+      antes: () async {
+        // `flutter test` dibuja las sombras como una raya negra: el menú salía
+        // con un borde grueso que en la app no está.
+        debugDisableShadows = false;
+        await tester.tap(find.byKey(Key('menu_predio_${arenas.id}')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      },
+    );
+    // Antes de que termine el test, que la revisa.
+    debugDisableShadows = true;
   });
 }
