@@ -65,6 +65,24 @@ lo que se borró".
 - Los pagos tienen `updated_at` de ahora: las tres PCs los bajan solas.
 - No se sabe desde qué PC se borraron. Los conceptos dicen "(1/9)", "(2/9)", "(3/9)" porque son del plan de 9 cuotas.
 
+**Después, la mora de su ficha (19-oct, 20:56).** El usuario mandó capturas de su ventana de cobro en la PC de la
+casa: "Mora pendiente cuotas 2 y 3: $240.955" y un total de $292.755, mientras el detalle sumaba $103.500.
+- **Qué pasó:**
+  - a las 20:45 la PC de la casa abrió **todavía con la 6.1.0** y su revisión de la mora corrió con el plan que había
+    en la nube ($338.500 en 1 cuota): le puso de ficha $240.955 y la subió;
+  - enseguida se actualizó a la 6.1.1, que sacó lo borrado y volvió a revisar en el orden bueno (DE CARLO quedó en $0);
+  - a las 20:46:56 el usuario le volvió a poner $315.000 en 9 cuotas desde esa PC (lo confirmó él), pero la ficha
+    quedó con la cuenta del plan de 1 cuota.
+- **El cálculo, sobre una copia de la base de la casa** (`VACUUM INTO`, el programa abierto), con
+  `tool/simulacro_revision_mora_test.dart`: corrige a un solo alumno, ROTELA. La ficha pasa de $240.955 a **$51.700**
+  ($12.850 de la cuota 2 + $38.850 de la cuota 3, completada el 19-oct con 111 días de atraso), el "ya usado" queda en
+  $40.000 y la mora de $292.755 a **$103.500**. Es la cuenta que ya mostraba el detalle de la ventana.
+- **En la nube, con su OK:** `mora_pendiente_tracked = 51700`, solo si seguía en 240955. Para volver atrás:
+  `mora_pendiente_tracked = 240955`. Siguen 643 contratos, los saldos y los pagos iguales, un solo contrato tocado, y
+  la suma de las fichas bajó $189.255.
+- **Lo que falta:** que la ventana de cobro de la PC de la casa muestre $51.700 arriba y $103.500 de total. Esa PC baja
+  sola solo con la ventana del programa al frente.
+
 ## Por qué pasaba
 
 **Un cambio cruzaba; un borrado no.** El pull baja lo nuevo y lo cambiado (`updated_at`), nunca lo que dejó de
