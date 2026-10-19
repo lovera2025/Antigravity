@@ -38,6 +38,33 @@ como pasa cuando se perdona la mora.**
 - Los permisos de la nube dejan ver todas las filas de esas tablas a cualquier usuario con sesión: una foto de la nube
   es entera.
 
+## ROTELA, FABIO DANIEL: los pagos restaurados (19-oct, 20:39)
+
+Ya publicada la 6.1.1, el usuario avisó desde su casa: "ROTELA, FABIO DANIEL, de Técnica Pinaroli, hay que recuperar
+lo que se borró".
+
+- **Cómo estaba, en la base de la PC de la casa** (cerrada desde las 14:16, la única copia): pactado $315.000 en 9
+  cuotas, saldo $235.000 y 5 pagos: $35.000 y $5.000 del 22/07, $30.000 y $10.000 del 07/08 (caja de Juan) y $40.000
+  de "Mora pendiente cuotas 1 y 2" del 08/09.
+- **Cómo lo encontré en la nube:** pactado $338.500 en 1 cuota, saldo $298.500, la mora de la ficha y el "ya usado"
+  en 0, y un solo pago, una entrega de $40.000 del 19-oct a las 20:06, de la caja de Maxi. Los 5 pagos de antes ya
+  no estaban. La ficha se tocó por última vez a las 20:16.
+- Comparando cada evento con la PC de la casa, entre las 19 y las 20:30 desapareció eso y nada más: en Técnica, los
+  pagos anteriores a las 14:16 pasaron de 584 a 579 (−5, −$120.000); en los otros eventos, iguales.
+- **Lo que pidió:** "esos 5 que se borraron, restauralos, que aparezcan en su estado de cuenta; el jefe mañana decide".
+- **Lo que se hizo, en la nube y con su OK:**
+  - los 5 pagos, con sus mismos ids, montos, conceptos, fechas y cajas, sacados de la base de la PC de la casa. Para
+    volver atrás:
+    `delete from pagos_contrato_alumno where id in ('7dae6a62-…','d5191ba7-…','12ea701b-…','a63be0cc-…','65990b07-…')`;
+  - el saldo, a lo que da la cuenta del programa con el plan de hoy: $338.500 − $120.000 de cuotas = **$218.500** (la
+    mora no baja el saldo). Para volver atrás: `saldo_deudor = 298500`.
+  - **El plan no se tocó** ($338.500 en 1 cuota): lo decide el jefe. La mora de la ficha tampoco: se rehace sola
+    cuando el plan quede definido.
+- **Conteos:** siguen 643 contratos y se tocó uno solo; los pagos pasaron de 4.173 a 4.178 y su suma subió
+  $120.000; los saldos bajaron $80.000 ($95.241.771,17 → $95.161.771,17).
+- Los pagos tienen `updated_at` de ahora: las tres PCs los bajan solas.
+- No se sabe desde qué PC se borraron. Los conceptos dicen "(1/9)", "(2/9)", "(3/9)" porque son del plan de 9 cuotas.
+
 ## Por qué pasaba
 
 **Un cambio cruzaba; un borrado no.** El pull baja lo nuevo y lo cambiado (`updated_at`), nunca lo que dejó de
