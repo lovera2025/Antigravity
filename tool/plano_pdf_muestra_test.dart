@@ -12,7 +12,11 @@
 //   • Plano_normal_p3_antes_del_sorteo.pdf: la página 3 del Canva sin sortear,
 //     con mesas fijadas y libres;
 //   • Plano_normal_2a2b.pdf: dos hojas, sorteadas por división;
-//   • Plano_tecnica_con_pasto.pdf: toda la escuela junta, usando el pasto.
+//   • Plano_tecnica_con_pasto.pdf: toda la escuela junta, usando el pasto;
+//   • Plano_rectangulo[_BN].pdf (6.1.0): un playón rectangular de 30 × 40 m con
+//     pista y barra, acomodado con ACOMODAR LAS MESAS y sorteado por división;
+//   • Plano_playon_a_mano.pdf (6.1.0): arrancado de un predio, con una esquina
+//     del playón corrida con su manija, acomodado y sorteado.
 //
 // Lo que se mira: que cada hoja entre en una A4 acostada, que los números y
 // los apellidos se lean, que la leyenda diga qué mesas tiene cada división, y
@@ -34,7 +38,9 @@ import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart'
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/divisiones.dart';
+import 'package:arguello_events/features/plano/services/editar_armado.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
+import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -138,6 +144,30 @@ PlanoDeLaFiesta _sorteada(
   );
 }
 
+/// [vacio] con una pista de 10 × 10 m en el medio y una barra de 2 × 8 m contra
+/// el costado derecho, como las arma el jefe con las manijas.
+ArmadoSalon _conPistaYBarra(ArmadoSalon vacio) {
+  final b = vacio.hojas.first.contorno!.puntos;
+  final cx = (b[0].x + b[1].x) / 2;
+  double u(double m) => vacio.aUnidades(m);
+  return vacio.copyWith(sectores: [
+    ...vacio.sectores,
+    SectorPlano(
+      tipo: TipoSector.pista,
+      texto: 'Pista',
+      hoja: 'A',
+      caja: RectPlano(cx - u(5), b[0].y + u(16), u(10), u(10)),
+    ),
+    SectorPlano(
+      tipo: TipoSector.barra,
+      texto: 'Barra',
+      hoja: 'A',
+      caja: RectPlano(b[1].x - u(3), b[0].y + u(8), u(2), u(8)),
+      vertical: true,
+    ),
+  ]);
+}
+
 late String _carpeta;
 
 Future<void> _guardar(
@@ -228,6 +258,57 @@ void main() {
       _familias(['5° A', '5° B', '5° C', '5° D'], 126),
     );
     await _guardar('Plano_normal_2a2b.pdf', plano, estilo: EstiloPlano.gala);
+  });
+
+  // 6.1.0, "el salón primero": como arma el jefe ahora. El salón vacío, el
+  // espacio (una pista y una barra), ACOMODAR LAS MESAS y el sorteo.
+  test('playón rectangular, acomodado y sorteado por división', () async {
+    const playon = PlayonReal(frenteM: 30, fondoM: 30, profundidadM: 40);
+    final alumnos = _familias(['5° A', '5° B', '5° C'], 100);
+    final mesas = alumnos.fold(0, (s, a) => s + SalonMesas.mesas(a));
+    final acomodado = ArmarAMedida.acomodar(
+      _conPistaYBarra(ArmarAMedida.vacio(playon)),
+      cantidad: mesas,
+    );
+    expect(acomodado.faltan, 0, reason: 'entran todas');
+    final plano = _sorteada(acomodado.armado, alumnos);
+    for (final bn in [false, true]) {
+      await _guardar(
+        'Plano_rectangulo${bn ? '_BN' : ''}.pdf',
+        plano,
+        estilo: EstiloPlano.arquitecto,
+        blancoYNegro: bn,
+      );
+    }
+  });
+
+  test('playón movido a mano, desde un predio, acomodado y sorteado',
+      () async {
+    // El predio: Costa Surubí con la pista y la barra, guardado con nombre.
+    final predio = PrediosDelSalon.guardarComo(
+      nombre: 'Buena Vista',
+      armado: _conPistaYBarra(ArmarAMedida.vacio(PlayonReal.costaSurubi)),
+      playon: PlayonReal.costaSurubi,
+      guardados: const [],
+      hechoPor: 'Jefe',
+      ahora: DateTime.utc(2026, 10, 20),
+    ).predio!;
+    // La otra fiesta arranca de él, y el jefe corre la esquina del fondo a la
+    // derecha con su manija: 4 m para afuera y 3 m para abajo.
+    final movido = EditarArmado.estirarPlayon(
+      PrediosDelSalon.salonDe(predio, lugarM: 2)!,
+      'A',
+      Manija.se,
+      4,
+      3,
+    );
+    final alumnos = _familias(['6° A', '6° B', '6° C', '6° D'], 120);
+    final mesas = alumnos.fold(0, (s, a) => s + SalonMesas.mesas(a));
+    final acomodado = ArmarAMedida.acomodar(movido, cantidad: mesas);
+    expect(acomodado.faltan, 0, reason: 'entran todas');
+    expect(acomodado.armado.clave, startsWith('predio@'));
+    final plano = _sorteada(acomodado.armado, alumnos);
+    await _guardar('Plano_playon_a_mano.pdf', plano, estilo: EstiloPlano.gala);
   });
 
   test('Técnica con el pasto, toda la escuela junta', () async {
