@@ -33,6 +33,16 @@ class PanelAcomodar extends StatefulWidget {
   final bool mesaEnPasto;
   final VoidCallback? onDeshacer;
 
+  // ── Las mesas, solas (6.1.0) ──
+  /// "ACOMODAR LAS MESAS (132)", o "ACOMODAR OTRA VEZ (132)" si ya hay.
+  final String textoAcomodar;
+  final VoidCallback? onAcomodar;
+
+  /// Por qué no se puede, dicho debajo del botón apagado. Null: se puede.
+  final String? motivoSinAcomodar;
+  final VoidCallback? onVaciar;
+  final String? motivoSinVaciar;
+
   // ── El espacio: el playón y los sectores (6.1.0) ──
   /// El playón y cada sector de la hoja a la vista, para elegirlos sin
   /// apuntar en el dibujo.
@@ -107,6 +117,11 @@ class PanelAcomodar extends StatefulWidget {
     required this.onPasto,
     required this.mesaEnPasto,
     required this.onDeshacer,
+    this.textoAcomodar = 'ACOMODAR LAS MESAS',
+    this.onAcomodar,
+    this.motivoSinAcomodar,
+    this.onVaciar,
+    this.motivoSinVaciar,
     this.espacio = const [],
     required this.onElegirEspacio,
     required this.onAgregarSector,
@@ -245,10 +260,15 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
             key: const Key('barra_acomodar'),
             controller: _barra,
             thumbVisibility: true,
-            child: ListView(
+            // Todo armado de una vez, no solo lo que se ve: el panel es corto
+            // para eso, y así un aviso de abajo existe aunque haya que bajar
+            // para verlo.
+            child: SingleChildScrollView(
             controller: _barra,
             // Lugar para la barra: que no pise los botones.
             padding: const EdgeInsets.only(right: 12),
+            child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
                 key: const Key('elegido_acomodar'),
@@ -310,6 +330,51 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                     key: const Key('mensaje_acomodar'),
                     style: TextStyle(color: Colors.orange.shade900),
                   ),
+                ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  FilledButton.tonalIcon(
+                    key: const Key('acomodar_mesas'),
+                    style: compacto,
+                    // Con la vista previa de separar abierta no se toca nada
+                    // más: se aplica o se cancela primero.
+                    onPressed: ocupado ||
+                            probando ||
+                            widget.motivoSinAcomodar != null
+                        ? null
+                        : widget.onAcomodar,
+                    icon: const Icon(Icons.grid_view, size: 18),
+                    label: Text(widget.textoAcomodar),
+                  ),
+                  TextButton.icon(
+                    key: const Key('vaciar_salon'),
+                    style: compacto,
+                    onPressed:
+                        ocupado || probando || widget.motivoSinVaciar != null
+                            ? null
+                            : widget.onVaciar,
+                    icon: const Icon(Icons.layers_clear, size: 16),
+                    label: const Text('VACIAR EL SALÓN'),
+                  ),
+                ],
+              ),
+              if (widget.motivoSinAcomodar != null)
+                Text(
+                  widget.motivoSinAcomodar!,
+                  key: const Key('motivo_sin_acomodar'),
+                  style: gris,
+                ),
+              // El mismo motivo de ACOMODAR no se repite.
+              if (widget.motivoSinVaciar != null &&
+                  widget.motivoSinVaciar != widget.motivoSinAcomodar)
+                Text(
+                  widget.motivoSinVaciar!,
+                  key: const Key('motivo_sin_vaciar'),
+                  style: gris,
                 ),
               titulo('SEPARAR O JUNTAR'),
               if (alcances.isEmpty)
@@ -491,6 +556,7 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   style: gris,
                 ),
             ],
+          ),
           ),
           ),
         ),

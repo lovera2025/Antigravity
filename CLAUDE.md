@@ -20,7 +20,7 @@ instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
-(hechos), y el salón primero (etapas 1 a 3 hechas), en una sola versión. La mora por
+(hechos), y el salón primero (etapas 1 a 4 hechas), en una sola versión. La mora por
 cuota suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
@@ -161,7 +161,13 @@ vacío y después pone las mesas con un botón.
   - **Mientras se arrastra, el dibujo se queda con la caja de la hoja del momento de apretar**
     (`_conCajaQuieta`): si la hoja crecía en cada paso, lo agarrado corría más rápido que el mouse.
   - Al guardar un playón cambiado a mano, las medidas guardadas lo siguen (`conMedidasDelPlayon`).
-  - Un salón sin mesas se guarda si ya estaba vacío (`sinMesasDeMas`).
+- **ACOMODAR LAS MESAS y VACIAR EL SALÓN** (etapa 4, `SesionAcomodo.acomodar` y `vaciar`): solo sin familias con mesa
+  y con el borde del playón (no en un armado del Canva).
+  - **Un salón sin mesas se guarda siempre**: lo que no se hace sin mesas es sortear.
+  - **`SesionAcomodo.rehecho`** viaja con cada paso de Deshacer. Si está, al guardar (`paraGuardar(rehecho:)`) se
+    quitan las fijadas, las libres y los bloques, porque sus números quedaron en otro lugar; el panel lo avisa antes,
+    con los nombres.
+  - El panel de Acomodar es un `SingleChildScrollView`, no un `ListView`: lo de abajo existe aunque no se vea.
 
 **En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin

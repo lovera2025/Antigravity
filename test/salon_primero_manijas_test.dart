@@ -168,10 +168,12 @@ void main() {
       s.terminarArrastre();
       expect(s.bloqueos, isEmpty);
       expect(s.puedeGuardar, isTrue);
-      expect(EditarArmado.bloqueos(s.actual, base: vacio), isEmpty);
+      expect(EditarArmado.bloqueos(s.actual), isEmpty);
     });
 
-    test('un salón con mesas que se queda sin ninguna, no', () {
+    // Etapa 4: VACIAR EL SALÓN es justamente eso. Lo que no se hace sin mesas
+    // es sortear.
+    test('un salón con mesas que se queda sin ninguna, también', () {
       final conMesas = ArmarAMedida.armar(
         const OpcionesAMedida(playon: surubi, cantidad: 3),
       ).armado;
@@ -179,10 +181,8 @@ void main() {
       for (final n in conMesas.numeros) {
         s.sacar(n);
       }
-      expect(s.bloqueos, ['El salón quedó sin mesas.']);
-      expect(s.puedeGuardar, isFalse);
-      expect(EditarArmado.bloqueos(s.actual, base: conMesas),
-          ['El salón quedó sin mesas.']);
+      expect(s.bloqueos, isEmpty);
+      expect(s.puedeGuardar, isTrue);
     });
 
     test('paraGuardar lo deja pasar', () {

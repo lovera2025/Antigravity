@@ -308,4 +308,40 @@ Lo hecho:
   - las muestras `Acomodar_sector_manijas.png` y `Acomodar_playon_manijas.png` (`build/muestras_6.1.0/manijas/`),
     mandadas al usuario.
 
-**Sigue la etapa 4:** ACOMODAR LAS MESAS y VACIAR EL SALÓN.
+## 12. La etapa 4, hecha el 19-oct (ACOMODAR LAS MESAS y VACIAR EL SALÓN)
+
+El plan corto lo aprobó el usuario el 19-oct con las tres decisiones recomendadas:
+1. **Las mesas fijadas y las libres van por número**: después de ACOMODAR o VACIAR, al guardar se quitan (también los
+   bloques). Se avisa antes, en "Antes de guardar", con los nombres, y con Deshacer no se pierde nada. La otra opción
+   era que los botones no anduvieran hasta sacarlas a mano.
+2. **"El salón quedó sin mesas" ya no frena nada**: VACIAR es justamente eso. Lo que no se hace sin mesas es sortear.
+3. **La distancia entre mesas es la de Medidas.**
+
+Lo hecho:
+- **`SesionAcomodo`**: `acomodar(cantidad, lugarM:)` (con `ArmarAMedida.acomodar` de la etapa 1) y `vaciar()`, cada
+  uno un paso de Deshacer.
+  - `rehecho` dice si lo que se ve salió de uno de los dos, aunque después se corra algo a mano. Viaja con cada paso de
+    Deshacer (`_pilaRehecho`), y DESCARTAR lo vuelve a false.
+  - Apagados con el motivo (`motivoSinAcomodar`, `motivoSinVaciar`): con familias con mesa ("deshacé el sorteo
+    primero"), en un armado del Canva (sin el borde del playón), sin alumnos, o ya vacío.
+  - Rehecho, una fijada no frena "Volver al armado original": al guardar se quita.
+- **Guardar** (`paraGuardar(rehecho:)`): quita las fijadas, las libres y los bloques; una fijada no frena que se saque
+  su mesa, una familia sí. Una PC atrasada sigue sin poder pisar a la otra (la nube se relee antes). `onGuardarArmado`
+  lleva `rehecho`, y el aviso del pie dice si se fueron fijadas o libres.
+- **El panel**: "ACOMODAR LAS MESAS (132)" (u "OTRA VEZ" si ya hay mesas) y VACIAR EL SALÓN en un renglón, con el
+  motivo debajo si están apagados. Al acomodar dice cuántas entraron o cuántas faltan ("agrandá el playón, achicá un
+  sector o juntá más").
+- **El panel se arma entero** (`SingleChildScrollView`, no `ListView`): con la sección nueva, lo de más abajo no se
+  dibujaba hasta bajar, y los tests no lo encontraban.
+
+- **Comprobado:**
+  - 2.603 tests (`test/salon_primero_acomodar_test.dart` nuevo: la sesión, lo que se guarda, la PC atrasada, y el
+    recorrido "acomodar, sortear por división, deshacer, vaciar y acomodar otra vez" sobre un playón con pista;
+    y la pantalla entera en `plano_evento_cuerpo_test`);
+  - `flutter analyze` en 312, los de siempre;
+  - 11 roturas a propósito, todas vistas;
+  - las muestras `Acomodar_mesas_puestas.png`, `Acomodar_faltan.png` y `Salon_vaciado.png`
+    (`build/muestras_6.1.0/acomodar/`), mandadas al usuario.
+
+**Sigue:** la etapa 5 (las muestras que faltan de su lista, con un PDF de playón rectangular) y los **predios con
+nombre** (etapa nueva, con maqueta antes de programar). Después, la versión.

@@ -66,11 +66,14 @@ class AccionesPlano {
 
   /// Guardar el salón acomodado a mano: [base] es el que estaba guardado al
   /// empezar, [nuevo] el que quedó y [enUso] las mesas que tenían familia o
-  /// estaban fijadas al empezar. Null: no hay pestaña Acomodar.
+  /// estaban fijadas al empezar. [rehecho]: salió de ACOMODAR LAS MESAS o de
+  /// VACIAR EL SALÓN, y al guardar se quitan las fijadas y las libres. Null:
+  /// no hay pestaña Acomodar.
   final void Function(
     ArmadoSalon base,
     ArmadoSalon nuevo,
     Map<int, String> enUso,
+    bool rehecho,
   )? onGuardarArmado;
 
   const AccionesPlano({
@@ -1600,9 +1603,43 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ),
       );
 
+  /// Después de ACOMODAR o VACIAR, lo que se pierde al guardar: las mesas
+  /// fijadas y las libres van por número, y los números quedaron en otro
+  /// lugar. Se dice antes, con los nombres; con Deshacer no se pierde.
+  AvisoAcomodo? _quitaFijadasYLibres(SesionAcomodo s) {
+    final config = _plano.config;
+    if (!s.rehecho || (config.fijadas.isEmpty && config.libres.isEmpty)) {
+      return null;
+    }
+    final apellidos = <String>[
+      for (final f in config.fijadas.values) _apellidoDe(f.alumnoId),
+    ];
+    final libres = config.libres.keys.toList()..sort();
+    final partes = [
+      if (apellidos.isNotEmpty)
+        '${apellidos.length == 1 ? 'la mesa fijada para' : 'las mesas fijadas para'} '
+            '${apellidos.join(', ')}',
+      if (libres.isNotEmpty)
+        '${libres.length == 1 ? 'la mesa libre' : 'las mesas libres'} '
+            '(${libres.join(', ')})',
+    ];
+    return AvisoAcomodo(
+      'Al guardar se quitan ${partes.join(' y ')}: con las mesas acomodadas '
+      'de nuevo quedaron en otro lugar.',
+    );
+  }
+
+  String _apellidoDe(String alumnoId) {
+    for (final a in widget.alumnos) {
+      if (a.id == alumnoId) return CambiosDeMesa.apellido(a);
+    }
+    return 'una familia';
+  }
+
   Widget _panelAcomodar() {
     final s = _acomodo!;
     final armado = s.actual;
+    final cantidad = _plano.mesasNecesarias;
     final numeroElegido = _mesaAcomodo;
     final mesa = numeroElegido == null ? null : armado.mesa(numeroElegido);
     final indice = _sectorAcomodo;
@@ -1747,6 +1784,35 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                   _sectorAcomodo = null;
                   hecho(null);
                 }),
+        textoAcomodar: '${armado.mesas.isEmpty ? 'ACOMODAR LAS MESAS' : 'ACOMODAR OTRA VEZ'}'
+            ' ($cantidad)',
+        motivoSinAcomodar: s.motivoSinAcomodar(cantidad),
+        onAcomodar: () => setState(() {
+          final habia = armado.mesas.isNotEmpty;
+          final r = s.acomodar(cantidad, lugarM: _plano.medidas.lugarMesaM);
+          _mesaAcomodo = null;
+          _sectorAcomodo = null;
+          _playonAcomodo = false;
+          _pasoSeparar = null;
+          if (r == null) return;
+          hecho(r.faltan > 0
+              ? 'Entraron ${r.puestas} de ${r.pedidas}: '
+                  '${r.faltan == 1 ? 'falta 1' : 'faltan ${r.faltan}'}. '
+                  'Agrandá el playón, achicá un sector o juntá más.'
+              : '${r.puestas == 1 ? 'Se acomodó la mesa' : 'Se acomodaron las ${r.puestas} mesas'}'
+                  '${habia ? ' de nuevo: lo corrido a mano vuelve con Deshacer' : ''}. '
+                  'Todavía no se guardó.');
+        }),
+        motivoSinVaciar: s.motivoSinVaciar,
+        onVaciar: () => setState(() {
+          final problema = s.vaciar();
+          _mesaAcomodo = null;
+          _sectorAcomodo = null;
+          _pasoSeparar = null;
+          hecho(problema ??
+              'El salón quedó sin mesas y el espacio, como lo armaste. Todavía '
+                  'no se guardó: se puede deshacer.');
+        }),
         espacio: [
           if (medidaPlayon != null)
             ItemEspacio(
@@ -1818,7 +1884,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           _pasoSeparar = null;
         }),
         bloqueos: s.bloqueosConMesas,
-        avisos: s.avisosConMesas((n) => _plano.estado.info(n).sillasExtra),
+        avisos: [
+          ?_quitaFijadasYLibres(s),
+          ...s.avisosConMesas((n) => _plano.estado.info(n).sillasExtra),
+        ],
         onAviso: _irAlAviso,
         motivoSinOriginal: s.motivoSinOriginal,
         onOriginal: () => setState(() {
@@ -1837,7 +1906,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         onGuardar: () {
           setState(() => _pista = null);
           widget.acciones?.onGuardarArmado
-              ?.call(s.base, s.actual, s.enUsoAlEmpezar);
+              ?.call(s.base, s.actual, s.enUsoAlEmpezar, s.rehecho);
         },
         // Descartar se lleva todo lo acomodado: se pide dos veces, y aun así
         // se puede deshacer (un doble clic no pierde una hora de trabajo).

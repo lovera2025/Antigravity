@@ -21,12 +21,13 @@ corto y su OK antes de programar.
    cuota suelta, y eligió la fila (la A de [PLAN_MORA_POR_CUOTA](PLAN_MORA_POR_CUOTA_2026-10-18.md)). A cambio,
    **el aviso "Revisar la ficha", HECHO (`964b141`)**.
 3. **El salón primero, las mesas después**, las etapas de su plan. **Las etapas 1 (las cuentas) y 2 (la tarjeta
-   "Salón vacío") HECHAS el 18-oct, y la 3 (las manijas) el 19-oct**; ver las secciones 8 a 11 del plan.
+   "Salón vacío") HECHAS el 18-oct; la 3 (las manijas) y la 4 (ACOMODAR y VACIAR) el 19-oct**; ver las secciones 8 a
+   12 del plan.
    - Las cuatro flechitas se sacaron (etapa 3).
    - Mover un sector después de acomodar no reacomoda: se toca el botón.
    - **Los predios con nombre van en la 6.1.0**, como etapa nueva con maqueta.
    - "Volver al armado original" también en el salón vacío.
-   - **Sigue la etapa 4:** ACOMODAR LAS MESAS y VACIAR EL SALÓN.
+   - **Sigue:** la etapa 5 (muestras y un PDF de playón rectangular) y los predios con nombre.
 4. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, y publicar con él presente.
 
 Sin la fase 2 la versión es más chica, pero el salón tiene sus etapas 2 a 6 más los predios: tampoco llega al lunes 20.
@@ -120,6 +121,18 @@ Ahora, en Acomodar:
 mouse (el playón estirado 2 m quedaba en 3,5). Ahora el dibujo se queda quieto hasta soltar. Detalle en la sección 11
 del plan.
 
+## El salón primero, etapa 4: ACOMODAR y VACIAR (19-oct)
+
+Aprobó el plan corto con las tres decisiones recomendadas. En Acomodar:
+- **ACOMODAR LAS MESAS (132)** pone las mesas de la fiesta alrededor de lo armado, a la distancia de Medidas. Dice
+  cuántas faltan si no entran, y con mesas puestas pasa a "ACOMODAR OTRA VEZ".
+- **VACIAR EL SALÓN** saca las mesas y deja el espacio.
+- Los dos se apagan con el motivo si hay familias con mesa, en un armado del Canva o sin alumnos.
+- **Las mesas fijadas y las libres se quitan al guardar** lo acomodado o vaciado. Se avisa antes, con los nombres.
+- Un salón sin mesas ya se puede guardar.
+
+Detalle en la sección 12 del plan.
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
@@ -148,10 +161,10 @@ docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/PLAN_SALON_PRIMERO_2026-10-16.md
 versión con todo junto: las bajas temporales y el aviso "Revisar la ficha",
 HECHOS el 18-oct y sin instalar (la fase 2 de la mora por cuota la descarté:
 me quedo con la mora en fila); el salón primero, con las etapas 1 (las
-cuentas) y 2 (la tarjeta "Salón vacío" en Estilo y armado) HECHAS el 18-oct y
-la 3 (las manijas) el 19-oct; sigue la etapa 4 (los botones ACOMODAR LAS MESAS
-y VACIAR EL SALÓN), después las muestras y los predios con nombre (etapa nueva,
-con maqueta); y al final la versión y publicar conmigo presente.
+cuentas) y 2 (la tarjeta "Salón vacío" en Estilo y armado) HECHAS el 18-oct, y
+la 3 (las manijas) y la 4 (ACOMODAR LAS MESAS y VACIAR EL SALÓN) el 19-oct;
+siguen las muestras de la etapa 5 y los predios con nombre (etapa nueva, con
+maqueta); y al final la versión y publicar conmigo presente.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

@@ -19,6 +19,8 @@
 //     agregada y corrida, con la regla; y la vista previa de separar);
 //   • Acomodar_sector_manijas.png y Acomodar_playon_manijas.png: las manijas
 //     del salón primero (6.1.0), sobre el salón vacío;
+//   • Acomodar_mesas_puestas.png, Acomodar_faltan.png y Salon_vaciado.png:
+//     ACOMODAR LAS MESAS y VACIAR EL SALÓN (6.1.0);
 //   • Confirmar_cambio.png e Historial_mesas.png: los diálogos de un cambio.
 //
 // Los nombres son inventados: la muestra nunca usa datos reales.
@@ -205,7 +207,7 @@ final _sinHacer = AccionesPlano(
   onMover: (_, _) {},
   onGuardarMedidas: (_, _) {},
   onGuardarColoresYTextos: (_, _) {},
-  onGuardarArmado: (_, _, _) {},
+  onGuardarArmado: (_, _, _, _) {},
 );
 
 void main() {
@@ -525,6 +527,99 @@ void main() {
         ));
         await tester.pump();
         await arrastrar(tester, Offset(p[2].x, p[2].y), const Offset(-4, -3));
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  // 6.1.0, etapa 4: ACOMODAR LAS MESAS y VACIAR EL SALÓN.
+  Future<void> tocar(WidgetTester tester, String clave) async {
+    await tester.ensureVisible(find.byKey(Key(clave)));
+    await tester.pump();
+    await tester.tap(find.byKey(Key(clave)));
+    await tester.pump();
+  }
+
+  /// El salón vacío con una pista de 10 × 10 m en el medio.
+  final conPista = () {
+    final b = vacio.hojas.first.contorno!.puntos;
+    final cx = (b[0].x + b[1].x) / 2;
+    return vacio.copyWith(sectores: [
+      ...vacio.sectores,
+      SectorPlano(
+        tipo: TipoSector.pista,
+        texto: 'Pista',
+        hoja: 'A',
+        caja: RectPlano(
+          cx - vacio.aUnidades(5),
+          b[0].y + vacio.aUnidades(20),
+          vacio.aUnidades(10),
+          vacio.aUnidades(10),
+        ),
+      ),
+    ]);
+  }();
+
+  testWidgets('personalizar: Acomodar, las mesas puestas alrededor de la pista',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(conPista, sinSortear, EstiloPlano.arquitecto,
+          acciones: _sinHacer),
+      const Size(1440, 900),
+      'Acomodar_mesas_puestas.png',
+      antes: () async {
+        await abrirAcomodar(tester);
+        await tocar(tester, 'acomodar_mesas');
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: Acomodar, en un playón chico faltan mesas',
+      (tester) async {
+    const playonChico = PlayonReal(frenteM: 22, fondoM: 26, profundidadM: 24);
+    final chico = ArmarAMedida.vacio(playonChico);
+    await _guardar(
+      tester,
+      _pantalla(
+        chico,
+        sinSortear,
+        EstiloPlano.arquitecto,
+        acciones: _sinHacer,
+        config: const ConfigPlano(medidas: MedidasPlano(playon: playonChico)),
+      ),
+      const Size(1440, 900),
+      'Acomodar_faltan.png',
+      antes: () async {
+        await abrirAcomodar(tester);
+        await tocar(tester, 'acomodar_mesas');
+      },
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('personalizar: Acomodar, el salón vaciado, con lo que se quita '
+      'al guardar', (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(
+        aMedida,
+        sinSortear,
+        EstiloPlano.arquitecto,
+        acciones: _sinHacer,
+        config: ConfigPlano(
+          fijadas: {5: MesaFijada(alumnoId: sinSortear.first.id)},
+          libres: const {40: MesaLibre()},
+        ),
+      ),
+      const Size(1440, 900),
+      'Salon_vaciado.png',
+      antes: () async {
+        await abrirAcomodar(tester);
+        await tocar(tester, 'vaciar_salon');
+        // El panel baja hasta "Antes de guardar".
+        await tester.ensureVisible(find.textContaining('Al guardar se quitan'));
       },
     );
     await tester.pumpWidget(const SizedBox());

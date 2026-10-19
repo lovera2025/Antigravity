@@ -62,6 +62,15 @@ class SesionAcomodo {
   ArmadoSalon? _antesDeArrastrar;
   VistaPreviaSeparar? _previa;
 
+  /// Lo que se ve salió de ACOMODAR LAS MESAS o de VACIAR EL SALÓN (6.1.0),
+  /// aunque después se haya corrido algo a mano. Los números cambiaron de
+  /// lugar: al guardar se quitan las fijadas, las libres y los bloques. Va de
+  /// la mano con cada paso de Deshacer ([_pilaRehecho]).
+  bool _rehecho = false;
+  final List<bool> _pilaRehecho = [];
+
+  bool get rehecho => _rehecho;
+
   late final String _firmaBase = EditarArmado.firma(base);
   ArmadoSalon? _firmado;
   bool _igualALaBase = true;
@@ -94,8 +103,6 @@ class SesionAcomodo {
   List<AvisoAcomodo> get bloqueosConMesas => [
         for (final (x, y) in EditarArmado.pisadas(_actual))
           AvisoAcomodo('Las mesas $x y $y se pisan.', [x, y]),
-        if (EditarArmado.sinMesasDeMas(_actual, base))
-          const AvisoAcomodo('El salón quedó sin mesas.'),
         if (hayCambios && cambioElUso)
           const AvisoAcomodo(
             'Mientras acomodabas cambiaron las mesas de las familias. Tocá '
@@ -109,15 +116,26 @@ class SesionAcomodo {
   bool get puedeGuardar =>
       hayCambios && bloqueos.isEmpty && !arrastrando && _previa == null;
 
-  void _poner(ArmadoSalon armado) {
+  /// Un paso más, que se puede deshacer. [rehecho]: si el paso deja el salón
+  /// rehecho o no; null, como estaba.
+  void _poner(ArmadoSalon armado, {bool? rehecho}) {
     _previa = null;
     // La hoja vuelve al tamaño que le hace falta: no queda agrandada por algo
     // que ya se trajo de vuelta.
     final nuevo = EditarArmado.ajustarCajas(armado, base);
-    if (identical(nuevo, _actual)) return;
-    _pila.add(_actual);
-    if (_pila.length > _maximoDeshacer) _pila.removeAt(0);
+    if (identical(nuevo, _actual) && (rehecho ?? _rehecho) == _rehecho) return;
+    _apilar(_actual);
     _actual = nuevo;
+    _rehecho = rehecho ?? _rehecho;
+  }
+
+  void _apilar(ArmadoSalon armado) {
+    _pila.add(armado);
+    _pilaRehecho.add(_rehecho);
+    if (_pila.length > _maximoDeshacer) {
+      _pila.removeAt(0);
+      _pilaRehecho.removeAt(0);
+    }
   }
 
   // ── Arrastrar ───────────────────────────────────────────────────────────
@@ -208,8 +226,7 @@ class SesionAcomodo {
       _actual = antes;
       return;
     }
-    _pila.add(antes);
-    if (_pila.length > _maximoDeshacer) _pila.removeAt(0);
+    _apilar(antes);
   }
 
   // ── Mesas ───────────────────────────────────────────────────────────────
@@ -332,13 +349,64 @@ class SesionAcomodo {
     _previa = null;
     if (_pila.isEmpty) return;
     _actual = _pila.removeLast();
+    _rehecho = _pilaRehecho.removeLast();
   }
 
   /// Vuelve al salón guardado. Es un paso más: Deshacer trae de vuelta lo
   /// que se había acomodado.
   void descartar() {
     _antesDeArrastrar = null;
-    _poner(base);
+    _poner(base, rehecho: false);
+  }
+
+  // ── Acomodar y vaciar (6.1.0, "el salón primero") ───────────────────────
+
+  /// El salón tiene el borde del playón en cada hoja: el salón vacío y "A
+  /// medida". Los del Canva no: acomodarlos solos rompería un armado del jefe.
+  bool get _conBorde =>
+      _actual.hojas.isNotEmpty && _actual.hojas.every((h) => h.contorno != null);
+
+  static const _sinBorde = 'Este armado es del Canva: para acomodar las mesas '
+      'solas, elegí Salón vacío o A medida en Estilo y armado.';
+  static const _conFamilias =
+      'Ya hay familias con mesa: deshacé el sorteo primero.';
+
+  /// Por qué no se pueden acomodar las mesas solas, o null si se puede.
+  String? motivoSinAcomodar(int cantidad) {
+    if (haySorteo) return _conFamilias;
+    if (!_conBorde) return _sinBorde;
+    if (cantidad < 1) {
+      return 'La fiesta todavía no necesita mesas: no hay alumnos cargados.';
+    }
+    return null;
+  }
+
+  /// Por qué no se puede vaciar el salón, o null si se puede.
+  String? get motivoSinVaciar {
+    if (haySorteo) return _conFamilias;
+    if (!_conBorde) return _sinBorde;
+    if (_actual.mesas.isEmpty) return 'El salón ya está vacío.';
+    return null;
+  }
+
+  /// ACOMODAR LAS MESAS: pone [cantidad] mesas alrededor de lo que se armó,
+  /// numeradas de nuevo (`ArmarAMedida.acomodar`). Lo corrido a mano se
+  /// reemplaza; vuelve con Deshacer. Null si no se puede
+  /// ([motivoSinAcomodar]).
+  ArmadoAMedida? acomodar(int cantidad, {double? lugarM}) {
+    if (motivoSinAcomodar(cantidad) != null) return null;
+    final r = ArmarAMedida.acomodar(_actual, cantidad: cantidad, lugarM: lugarM);
+    _poner(r.armado, rehecho: true);
+    return r;
+  }
+
+  /// VACIAR EL SALÓN: saca todas las mesas y deja el espacio como se armó (el
+  /// borde, los sectores y las medidas). Devuelve por qué no se pudo, o null.
+  String? vaciar() {
+    final motivo = motivoSinVaciar;
+    if (motivo != null) return motivo;
+    _poner(_actual.copyWith(mesas: const []), rehecho: true);
+    return null;
   }
 
   /// Por qué no se puede volver al armado original, o null si se puede.
@@ -351,7 +419,9 @@ class SesionAcomodo {
     if (original == null) {
       return 'No se sabe de qué armado salió este salón.';
     }
-    for (final n in enUso.keys.toList()..sort()) {
+    // Sin sorteo, lo que está en uso son las fijadas. Si el salón se rehízo,
+    // al guardar se quitan: no frenan volver al original.
+    for (final n in _rehecho ? const <int>[] : (enUso.keys.toList()..sort())) {
       if (!original.existe(n)) {
         return 'La mesa $n ${enUso[n]} y el armado original no la tiene.';
       }

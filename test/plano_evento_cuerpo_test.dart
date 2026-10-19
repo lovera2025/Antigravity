@@ -123,12 +123,18 @@ AccionesPlano _acciones(
   List<MedidasPlano>? medidas,
   List<ColoresYTextos>? colores,
   List<(ArmadoSalon, ArmadoSalon)>? salon,
+  List<bool>? rehechos,
 }) =>
     AccionesPlano(
       onGuardarMedidas: medidas == null ? null : (m, _) => medidas.add(m),
       onGuardarColoresYTextos:
           colores == null ? null : (c, _) => colores.add(c),
-      onGuardarArmado: salon == null ? null : (b, n, _) => salon.add((b, n)),
+      onGuardarArmado: salon == null
+          ? null
+          : (b, n, _, rehecho) {
+              salon.add((b, n));
+              rehechos?.add(rehecho);
+            },
       onFijarEnMesa: (m) => tocados.add('fijar en $m'),
       onFijar: (a, m) => tocados.add('fijar $a desde $m'),
       onQuitarFijadas: (a) => tocados.add('quitar fijadas de $a'),
@@ -2400,6 +2406,8 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
       expect(_metrosSector(tester, i).$1, closeTo(30.5, 1e-6));
+      await tester.ensureVisible(find.byKey(const Key('acomodar_sacar_sector')));
+      await tester.pump();
       await tester.tap(find.byKey(const Key('acomodar_sacar_sector')));
       await tester.pump();
       expect(_vista(tester).armado.sectores.length,
@@ -2559,6 +2567,125 @@ void main() {
       await tester.pump();
       expect(salon, hasLength(1));
       expect(salon.single.$2.mesas, isEmpty);
+    });
+
+    // 6.1.0, etapa 4: ACOMODAR LAS MESAS y VACIAR EL SALÓN.
+    group('acomodar y vaciar', () {
+      final sinMesa = [
+        for (var i = 0; i < 10; i++)
+          _alumno('a$i', 'APELLIDO$i, NOMBRE', division: i < 5 ? '5° A' : '5° B'),
+      ];
+
+      String rotulo(WidgetTester tester, String clave) => tester
+          .widgetList<Text>(find.descendant(
+            of: find.byKey(Key(clave)),
+            matching: find.byType(Text),
+          ))
+          .first
+          .data!;
+
+      testWidgets('en el salón vacío pone las mesas de la fiesta, y GUARDAR '
+          'avisa que se rehízo', (tester) async {
+        final salon = <(ArmadoSalon, ArmadoSalon)>[];
+        final rehechos = <bool>[];
+        final vacio = ArmarAMedida.vacio(PlayonReal.costaSurubi);
+        await _mostrar(tester,
+            alumnos: sinMesa,
+            plano: _plano(armado: vacio, alumnos: sinMesa),
+            acciones: _acciones([], salon: salon, rehechos: rehechos));
+        await abrir(tester);
+        expect(rotulo(tester, 'acomodar_mesas'), 'ACOMODAR LAS MESAS (10)');
+        // Vacío no hay nada que vaciar: apagado, con el motivo.
+        expect(prendido(tester, 'vaciar_salon'), isFalse);
+        expect(texto(tester, 'motivo_sin_vaciar'), 'El salón ya está vacío.');
+
+        await tester.tap(find.byKey(const Key('acomodar_mesas')));
+        await tester.pump();
+        expect(_vista(tester).armado.mesas, hasLength(10));
+        expect(texto(tester, 'mensaje_acomodar'),
+            'Se acomodaron las 10 mesas. Todavía no se guardó.');
+        expect(rotulo(tester, 'acomodar_mesas'), 'ACOMODAR OTRA VEZ (10)');
+        expect(find.text('Entran las 10'), findsOneWidget);
+        expect(prendido(tester, 'vaciar_salon'), isTrue);
+
+        await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+        await tester.tap(find.byKey(const Key('guardar_acomodo')));
+        await tester.pump();
+        expect(salon.single.$2.mesas, hasLength(10));
+        expect(rehechos, [true]);
+      });
+
+      testWidgets('VACIAR saca las mesas, y antes de guardar dice qué fijadas '
+          'y libres se van', (tester) async {
+        final salon = <(ArmadoSalon, ArmadoSalon)>[];
+        final rehechos = <bool>[];
+        const config = ConfigPlano(
+          fijadas: {5: MesaFijada(alumnoId: 'a3')},
+          libres: {12: MesaLibre()},
+        );
+        await _mostrar(tester,
+            alumnos: sinMesa,
+            plano: _plano(alumnos: sinMesa, config: config),
+            acciones: _acciones([], salon: salon, rehechos: rehechos));
+        await abrir(tester);
+        final sectores = _vista(tester).armado.sectores;
+        await tester.tap(find.byKey(const Key('vaciar_salon')));
+        await tester.pump();
+        expect(_vista(tester).armado.mesas, isEmpty);
+        expect(_vista(tester).armado.sectores, sectores);
+        expect(find.text('Sin mesas todavía'), findsOneWidget);
+        expect(
+          find.textContaining('Al guardar se quitan la mesa fijada para '
+              'APELLIDO3 y la mesa libre (12)'),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+        await tester.tap(find.byKey(const Key('guardar_acomodo')));
+        await tester.pump();
+        expect(salon.single.$2.mesas, isEmpty);
+        expect(rehechos, [true]);
+      });
+
+      testWidgets('Deshacer trae de vuelta lo acomodado y deja de avisar',
+          (tester) async {
+        const config = ConfigPlano(libres: {12: MesaLibre()});
+        await _mostrar(tester,
+            alumnos: sinMesa,
+            plano: _plano(alumnos: sinMesa, config: config),
+            acciones: _acciones([], salon: []));
+        await abrir(tester);
+        final mesas = _vista(tester).armado.mesas.length;
+        await tester.tap(find.byKey(const Key('vaciar_salon')));
+        await tester.pump();
+        expect(find.textContaining('Al guardar se quitan'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('acomodar_deshacer')));
+        await tester.pump();
+        expect(_vista(tester).armado.mesas, hasLength(mesas));
+        expect(find.textContaining('Al guardar se quitan'), findsNothing);
+      });
+
+      testWidgets('con familias sentadas, los dos apagados con el motivo',
+          (tester) async {
+        await _mostrar(tester, acciones: _acciones([], salon: []));
+        await abrir(tester);
+        expect(prendido(tester, 'acomodar_mesas'), isFalse);
+        expect(prendido(tester, 'vaciar_salon'), isFalse);
+        expect(texto(tester, 'motivo_sin_acomodar'),
+            'Ya hay familias con mesa: deshacé el sorteo primero.');
+        // El mismo motivo no se repite.
+        expect(find.byKey(const Key('motivo_sin_vaciar')), findsNothing);
+      });
+
+      testWidgets('en un armado del Canva, apagados con el motivo',
+          (tester) async {
+        await _mostrar(tester,
+            alumnos: sinMesa,
+            plano: _plano(armado: ArmadosPredefinidos.normal2a2b(), alumnos: sinMesa),
+            acciones: _acciones([], salon: []));
+        await abrir(tester);
+        expect(prendido(tester, 'acomodar_mesas'), isFalse);
+        expect(texto(tester, 'motivo_sin_acomodar'), contains('del Canva'));
+      });
     });
 
     testWidgets('Medidas avisa si el playón se dibujó a mano', (tester) async {

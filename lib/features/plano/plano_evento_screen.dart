@@ -744,29 +744,38 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   /// familias: si la otra PC cambió el salón mientras tanto, o una mesa que se
   /// sacó ya tiene familia o quedó fijada, o las familias ya no tienen las
   /// mesas que se veían al acomodar ([enUso]), no se guarda nada y se dice.
+  /// [rehecho]: el salón salió de ACOMODAR LAS MESAS o VACIAR EL SALÓN (6.1.0):
+  /// se guarda sin las fijadas ni las libres, que cambiaron de lugar.
   Future<void> _guardarSalon(
     ArmadoSalon base,
     ArmadoSalon nuevo,
     Map<int, String> enUso,
-  ) =>
-      _cambiarConfig(
-        (p, alumnos) => EditarArmado.paraGuardar(
-          base: base,
-          nuevo: nuevo,
-          fresco: p.armado,
-          config: p.config,
-          alumnos: alumnos,
-          enUsoVisto: enUso,
-        ),
-        // Con la escuela ya sorteada, las mesas que se suman son para quien
-        // todavía no tiene: se dice cómo sigue.
-        hecho: (c) => _hayFamiliasConMesa &&
-                (c.armado?.mesas.length ?? 0) > base.mesas.length
-            ? 'El salón quedó guardado. Para darle mesa a quien todavía no '
-                'tiene, tocá SORTEO en la fiesta: los que ya tienen no se '
-                'mueven.'
-            : 'El salón quedó guardado.',
-      );
+    bool rehecho,
+  ) {
+    final fijadasOLibres = (_plano?.config.fijadas.length ?? 0) +
+        (_plano?.config.libres.length ?? 0);
+    return _cambiarConfig(
+      (p, alumnos) => EditarArmado.paraGuardar(
+        base: base,
+        nuevo: nuevo,
+        fresco: p.armado,
+        config: p.config,
+        alumnos: alumnos,
+        enUsoVisto: enUso,
+        rehecho: rehecho,
+      ),
+      // Con la escuela ya sorteada, las mesas que se suman son para quien
+      // todavía no tiene: se dice cómo sigue.
+      hecho: (c) => _hayFamiliasConMesa &&
+              (c.armado?.mesas.length ?? 0) > base.mesas.length
+          ? 'El salón quedó guardado. Para darle mesa a quien todavía no '
+              'tiene, tocá SORTEO en la fiesta: los que ya tienen no se '
+              'mueven.'
+          : rehecho && fijadasOLibres > 0
+              ? 'El salón quedó guardado, sin las mesas fijadas ni las libres.'
+              : 'El salón quedó guardado.',
+    );
+  }
 
   // ── Personalizar: colores y textos ──────────────────────────────────────
 

@@ -692,16 +692,12 @@ class EditarArmado {
 
   /// Lo que no deja guardar el salón así, en palabras. Vacío si se puede.
   ///
-  /// Quedarse sin mesas frena solo si el salón guardado ([base]) tenía: el
-  /// salón vacío (6.1.0) se arma y se guarda sin ninguna.
-  static List<String> bloqueos(ArmadoSalon a, {ArmadoSalon? base}) => [
+  /// Un salón sin mesas se guarda (6.1.0): es el salón vacío, o uno que se
+  /// vació para acomodarlo de nuevo. Lo que no se hace sin mesas es sortear
+  /// (`LecturaPlano.problemaParaSortear`).
+  static List<String> bloqueos(ArmadoSalon a) => [
         for (final (x, y) in pisadas(a)) 'Las mesas $x y $y se pisan.',
-        if (sinMesasDeMas(a, base)) 'El salón quedó sin mesas.',
       ];
-
-  /// [a] quedó sin mesas y el salón guardado ([base]) tenía.
-  static bool sinMesasDeMas(ArmadoSalon a, ArmadoSalon? base) =>
-      a.mesas.isEmpty && (base == null || base.mesas.isNotEmpty);
 
   /// La distancia típica entre las mesas de [numeros]: la mediana de lo que
   /// cada una tiene hasta su vecina más cercana del grupo. Null con menos de
@@ -1017,6 +1013,10 @@ class EditarArmado {
   ///   avisos de familias separadas y el permiso para volver al armado
   ///   original salieron de datos que ya no valen.
   /// - Las mesas que se sacaron dejan de figurar como libres.
+  /// - [rehecho]: el salón salió de ACOMODAR LAS MESAS o VACIAR EL SALÓN
+  ///   (6.1.0). Los números quedaron en otro lugar: se quitan las fijadas, las
+  ///   libres y los bloques (el jefe lo vio en "Antes de guardar"), y una
+  ///   fijada ya no frena que se saque su mesa. Una familia con mesa sí.
   static CambioDeConfig paraGuardar({
     required ArmadoSalon base,
     required ArmadoSalon nuevo,
@@ -1024,6 +1024,7 @@ class EditarArmado {
     required ConfigPlano config,
     required Iterable<ContratoAlumno> alumnos,
     required Map<int, String> enUsoVisto,
+    bool rehecho = false,
   }) {
     if (firma(fresco) != firma(base)) {
       return const CambioDeConfig.noSePuede(
@@ -1031,15 +1032,18 @@ class EditarArmado {
         'para no pisar ese cambio: mirá cómo quedó y acomodalo de nuevo.',
       );
     }
-    final trabas = bloqueos(nuevo, base: base);
+    final trabas = bloqueos(nuevo);
     if (trabas.isNotEmpty) return CambioDeConfig.noSePuede(trabas.join(' '));
     final usadas = enUso(alumnos, config);
+    final noSeSacan = rehecho
+        ? enUso(alumnos, config.copyWith(fijadas: const {}))
+        : usadas;
     final sacadas = [
       for (final n in base.numeros)
         if (!nuevo.existe(n)) n,
     ];
     for (final n in sacadas) {
-      final porque = usadas[n];
+      final porque = noSeSacan[n];
       if (porque != null) {
         return CambioDeConfig.noSePuede(
           'La mesa $n no se puede sacar: $porque. No se guardó nada.',
@@ -1054,12 +1058,14 @@ class EditarArmado {
         'quedó y acomodá de nuevo.',
       );
     }
-    final sinLasSacadas = sacadas.any(config.libres.containsKey)
-        ? config.copyWith(libres: {
-            for (final e in config.libres.entries)
-              if (!sacadas.contains(e.key)) e.key: e.value,
-          })
-        : config;
+    final sinLasSacadas = rehecho
+        ? config.copyWith(fijadas: const {}, libres: const {}, bloques: const [])
+        : sacadas.any(config.libres.containsKey)
+            ? config.copyWith(libres: {
+                for (final e in config.libres.entries)
+                  if (!sacadas.contains(e.key)) e.key: e.value,
+              })
+            : config;
     return CambioDeConfig.ok(
       conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
       sacadas,
