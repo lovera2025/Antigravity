@@ -20,10 +20,10 @@ instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
-(hechos), el salón primero (etapas 1 a 4 hechas) y "lejos" medido en el salón (hecho), en
-una sola versión. **Siguen los predios con nombre**, aprobados con maqueta y sin programar
-(sección 14 de `docs/PLAN_SALON_PRIMERO_2026-10-16.md`). La mora por cuota suelta (fase 2)
-quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
+(hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón y los predios
+con nombre (hechos; falta probar la migración v74 sobre una copia de la base real), en una
+sola versión. **Sigue la etapa 5 del salón** (las muestras que faltan). La mora por cuota
+suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
 
@@ -44,7 +44,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 73) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 74) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -177,6 +177,16 @@ vacío y después pone las mesas con un botón.
     quitan las fijadas, las libres y los bloques, porque sus números quedaron en otro lugar; el panel lo avisa antes,
     con los nombres.
   - El panel de Acomodar es un `SingleChildScrollView`, no un `ListView`: lo de abajo existe aunque no se vea.
+- **Los predios con nombre** (6.1.0, sección 14 del plan): el espacio de un lugar (playón, sectores, Ingreso, sin
+  mesas) guardado con nombre desde Acomodar (GUARDAR COMO PREDIO…) y elegido en Estilo y armado de otra fiesta.
+  - **Tabla aparte `predios` (v74)**, de todas las fiestas. **Borrar le pone `borrado_at`: la fila no se saca** (no
+    va en `_tablasAReconciliar`). Las reglas, en `PrediosDelSalon`; el repositorio que guarda lo usa solo la
+    pantalla del plano (`test/solo_modo_jefe_test.dart`), y quien lee entra por `leerPrediosProvider`.
+  - **La fiesta se lleva una copia** con `clave: 'predio@<id>'` (`ArmarAMedida.prefijoPredio`): sin claves nuevas en
+    el JSON. `_esAMedida` acepta el prefijo, y "Volver al armado original" vuelve al predio como está hoy
+    (`EditarArmado.original(a, predios:)`).
+  - Las medidas del predio pasan a Medidas al elegirlo (`aplicarEleccionAlPlano(playon:)`); la distancia entre mesas
+    es de cada fiesta.
 
 **En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin

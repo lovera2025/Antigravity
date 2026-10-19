@@ -30,9 +30,11 @@ corto y su OK antes de programar.
    - "Volver al armado original" también en el salón vacío.
 4. **"Lejos" en el salón de verdad. HECHO el 19-oct (`2f968f2`)**: lo pidió él a mitad de la maqueta de los predios.
    Sección 13 del plan.
-5. **Los predios con nombre: APROBADOS el 19-oct con su maqueta, SIN PROGRAMAR.** Opción A (una tarjeta por predio) y
-   las tres decisiones recomendadas. El plan aprobado está en la sección 14 del plan del salón. **Es lo que sigue.**
-6. **La etapa 5 del salón:** las muestras que faltan de su lista, con un PDF de playón rectangular.
+5. **Los predios con nombre: PROGRAMADOS el 19-oct**, sin instalar (`91d2145`, `0053e57`, `c44c870`, muestras
+   `88389e4`). Ver "Los predios con nombre" abajo y la sección 14 del plan del salón. **Falta la prueba de la
+   migración v74 sobre una copia de su base**, con la app instalada cerrada.
+6. **La etapa 5 del salón:** las muestras que faltan de su lista, con un PDF de playón rectangular. **Es lo que
+   sigue.**
 7. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, el SQL de los predios antes de instalar, y
    publicar con él presente.
 
@@ -147,9 +149,35 @@ los salones de la 6.0.0 instalada. Ahora se mide en el salón dibujado: el sorte
 revisión final lo comprueba, y si no hay manera no sortea y dice por qué. Con el arreglo, 0 de 2.000 en cada caso.
 Detalle en la sección 13 del plan del salón.
 
-**Pendiente de preguntarle:** si ya hubo un sorteo de verdad por división con "lejos" marcado en la 6.0.0. Si hubo,
-revisar (solo leyendo la nube, con su OK) qué familias quedaron tocándose. Se le ofreció el 19-oct y pidió frenar y
-anotar antes de contestar.
+**Contestado el 19-oct, en otro chat:** no hubo un sorteo de verdad por división con "lejos" en la 6.0.0. Los de
+prueba fueron de escuela completa, y el problema medido era del sorteo por división: no hay nada que revisar en la
+nube.
+
+## Los predios con nombre (19-oct)
+
+Lo aprobó con la maqueta (opción A y las tres decisiones), y se le pasó el plan corto con ExitPlanMode antes de
+programar. Ahora, para el jefe:
+- **Guardar:** PLANO → PERSONALIZAR → Acomodar → **GUARDAR COMO PREDIO…** (modo jefe). Pide el nombre; los chips de
+  los guardados ponen el suyo, y con un nombre que ya está avisa que lo reemplaza. "Costa Surubí" no se acepta. Se
+  guarda lo que se ve, aunque la fiesta no esté guardada (y lo dice).
+- **Elegir:** en Estilo y armado, una tarjeta por predio con su dibujo, después de "Salón vacío". Arranca la fiesta
+  con ese espacio, sin mesas, y sus medidas en Medidas; sigue ACOMODAR LAS MESAS, a la distancia de la fiesta.
+- **Renombrar y Borrar:** el menú ⋯ de la tarjeta. Borrar se pide dos veces. Las fiestas que lo usaron no cambian.
+- **Volver al armado original** en un salón que salió de un predio vuelve a ese predio como está hoy; si se borró,
+  apagado con el motivo.
+
+Tres cosas chicas que decidí al programar, recomendadas y sin preguntarle (poco riesgo, con vuelta atrás): borrar
+marca la fila en vez de sacarla; en un armado del Canva el botón se apaga con el motivo; solo las tarjetas de predio
+llevan dibujo.
+
+**Comprobado:** 2.692 tests, `flutter analyze` en 312 (los mismos de antes), 8 roturas a propósito vistas (2 del paso 2
+y 6 del paso 3) y cuatro muestras (`build/muestras_6.1.0/predios/`, se le mandaron).
+
+**Encontrado en el camino:** la herramienta de muestras no fotografiaba lo que se abre encima (un menú) y `flutter
+test` dibuja las sombras como una raya negra; ahora puede, con la sombra de verdad (`conLoDeArriba`).
+
+**Falta:** la prueba de la migración sobre una copia de su base (`tool/verificar_migracion_v74_test.dart`): **la app
+instalada tiene que estar cerrada, y se le pide a él.**
 
 ## Qué más pasó el 19-oct
 
@@ -180,7 +208,9 @@ anotar antes de contestar.
   en 0. Está de baja: no toca cobros ni totales.
 - **El plano se toca desde una PC con la 6.1.0:** en la 6.0.0 un salón sin mesas se ve como roto, y "lejos" sigue
   midiéndose por número. Conviene que el jefe no sortee por división con "lejos" hasta tener la 6.1.0.
-- **El SQL de los predios** (cuando estén programados) se corre antes de instalar, con su OK; operario primero.
+- **El SQL de los predios** (`supabase/migrations/20261020120000_predios.sql`, solo crea la tabla) se corre antes de
+  instalar, con su OK; operario primero. Sin él, las PCs con la 6.1.0 dicen "No bajaron: predios" y lo guardado queda
+  en la cola.
 
 ## Lo de la 6.0.0 que sigue esperando
 
@@ -200,16 +230,13 @@ docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/PLAN_SALON_PRIMERO_2026-10-16.md
 versión con todo junto, programada en la rama y sin instalar: las bajas
 temporales y el aviso "Revisar la ficha" (la fase 2 de la mora por cuota la
 descarté); el salón primero con las etapas 1 a 4 (salón vacío, manijas,
-ACOMODAR LAS MESAS y VACIAR EL SALÓN); y que "lejos" se cumpla en el salón de
-verdad. Sigue programar los PREDIOS CON NOMBRE, que ya aprobé con su maqueta
-(docs/maqueta_predios_con_nombre_2026-10-19.html): opción A, una tarjeta por
-predio, y las tres decisiones de la sección 14 del plan. Llevan una tabla
-nueva (migración v74): hacela como la v73, con copia y prueba sobre una copia
-de mi base, y avisame antes de la prueba porque la app instalada tiene que
-estar cerrada. Después, las muestras de la etapa 5, y al final la versión y
-publicar conmigo presente.
-Pendiente: preguntarme si ya hubo un sorteo de verdad por división con "lejos"
-marcado; si hubo, revisar solo leyendo, con mi OK.
+ACOMODAR LAS MESAS y VACIAR EL SALÓN); que "lejos" se cumpla en el salón de
+verdad; y los PREDIOS CON NOMBRE (sección 14 del plan), con su tabla nueva
+(migración v74). De los predios falta la prueba de la migración sobre una
+copia de mi base: avisame antes, porque la app instalada tiene que estar
+cerrada. Sigue la etapa 5 del salón (las muestras que faltan, con un PDF de
+playón rectangular), y al final la versión y publicar conmigo presente, con el
+SQL de los predios corrido antes.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

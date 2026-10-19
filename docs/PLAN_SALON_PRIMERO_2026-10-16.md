@@ -369,7 +369,32 @@ una, que se cumpla". Se midió y aprobó arreglarlo antes de los predios.
 **Sigue:** los **predios con nombre** (sección 14) y la etapa 5 (las muestras que faltan, con un PDF de playón
 rectangular). Después, la versión.
 
-## 14. Los predios con nombre: lo aprobado el 19-oct, SIN PROGRAMAR
+## 14. Los predios con nombre: aprobados el 19-oct, PROGRAMADOS el 19-oct (sin instalar)
+
+**Hecho en tres pasos** (`91d2145` la tabla, `0053e57` GUARDAR COMO PREDIO, `c44c870` Estilo y armado; muestras
+`88389e4`). Lo aprobado quedó como está abajo, con tres cosas chicas que se decidieron al programar (poco riesgo, con
+vuelta atrás):
+- **Borrar un predio no saca la fila: le pone `borrado_at`.** Así ninguna PC tiene que borrar filas (ni la que
+  estaba apagada) y no se suma un camino nuevo que borre. No va en `_tablasAReconciliar`.
+- **GUARDAR COMO PREDIO se apaga, con el motivo, en un armado del Canva**: no tiene el borde del playón, y ACOMODAR LAS
+  MESAS no andaría en la otra fiesta (`PrediosDelSalon.problemaDelSalon`).
+- **Solo las tarjetas de predio llevan dibujo chico.** Las demás siguen como estaban.
+
+Dónde quedó:
+- el modelo, `lib/models/predio.dart`; las reglas (nombre, reemplazar, renombrar, borrar, el salón de la fiesta),
+  `services/predios_del_salon.dart`; el repositorio, `repositories/predios_repository.dart`;
+- `ArmarAMedida.prefijoPredio`, `idDePredio`, `espacioParaPredio` y `desdePredio`; `_esAMedida` acepta `predio@`;
+- `EditarArmado.original(a, predios:)` y `SesionAcomodo.predios`;
+- la v74 en `local_database.dart` (`crearTablasV74`) y el SQL `supabase/migrations/20261020120000_predios.sql`,
+  **sin correr**;
+- el diálogo del nombre, `widgets/nombre_predio_dialog.dart`; las tarjetas y el menú ⋯, en `elegir_plano_dialog.dart`
+  (`AccionesPredios`); lo que guarda, en `plano_evento_screen.dart` (`_guardarComoPredio` y `_cambiarPredio`, con la
+  llave del modo jefe).
+
+**Falta:** la prueba de la migración sobre una copia de la base real (`tool/verificar_migracion_v74_test.dart`), con la
+app instalada cerrada; y, antes de instalar, el SQL de la nube con el OK del usuario.
+
+Lo aprobado el 19-oct, como se escribió antes de programar:
 
 La maqueta: `docs/maqueta_predios_con_nombre_2026-10-19.html` (cuatro pasos; se abre directo en uno con `#p2`, etc.).
 La aprobó con la **opción A** y las tres decisiones recomendadas.
