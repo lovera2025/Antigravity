@@ -21,6 +21,7 @@ import '../services/editar_armado.dart';
 import '../services/manijas.dart';
 import '../services/medir_salon.dart';
 import '../services/plano_de_la_fiesta.dart';
+import '../services/predios_del_salon.dart';
 import '../services/sesion_acomodo.dart';
 import 'personalizar/panel_acomodar.dart';
 import 'personalizar/panel_colores_textos.dart';
@@ -76,6 +77,13 @@ class AccionesPlano {
     bool rehecho,
   )? onGuardarArmado;
 
+  /// GUARDAR COMO PREDIO… (6.1.0): el espacio que se ve en Acomodar ([actual],
+  /// guardado o no) como un predio con nombre. [base] es el salón guardado,
+  /// para saber si el playón se cambió con las manijas. Null: el botón queda
+  /// apagado.
+  final void Function(ArmadoSalon base, ArmadoSalon actual)?
+      onGuardarComoPredio;
+
   const AccionesPlano({
     required this.onFijarEnMesa,
     required this.onFijar,
@@ -88,6 +96,7 @@ class AccionesPlano {
     this.onGuardarMedidas,
     this.onGuardarColoresYTextos,
     this.onGuardarArmado,
+    this.onGuardarComoPredio,
   });
 }
 
@@ -1854,6 +1863,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                   s.tamanoSector(indice!, anchoM: ancho, altoM: fondo);
                   hecho(null);
                 }),
+        motivoSinPredio: widget.acciones?.onGuardarComoPredio == null
+            ? kSoloEnModoJefe
+            : PrediosDelSalon.problemaDelSalon(armado),
+        onGuardarPredio: () {
+          setState(() => hecho(null));
+          widget.acciones?.onGuardarComoPredio?.call(s.base, s.actual);
+        },
         alcances: alcances,
         alcance: alcance,
         onAlcance: (v) => setState(() {

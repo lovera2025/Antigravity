@@ -63,6 +63,12 @@ class PanelAcomodar extends StatefulWidget {
   /// cuatro flechitas de la 6.0.0; para estirarlo a ojo están las manijas.
   final void Function(double anchoM, double fondoM)? onMedidaSector;
 
+  /// GUARDAR COMO PREDIO… (6.1.0): el espacio, con nombre, para otra fiesta.
+  final VoidCallback? onGuardarPredio;
+
+  /// Por qué no se puede guardar como predio. Null: se puede.
+  final String? motivoSinPredio;
+
   // ── Separar o juntar ──
   final List<AlcanceSeparar> alcances;
   final String alcance;
@@ -129,6 +135,8 @@ class PanelAcomodar extends StatefulWidget {
     this.indiceSector,
     required this.medidaSector,
     required this.onMedidaSector,
+    this.onGuardarPredio,
+    this.motivoSinPredio,
     required this.alcances,
     required this.alcance,
     required this.onAlcance,
@@ -526,6 +534,27 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   onCambiar: ocupado || probando ? null : widget.onMedidaSector,
                 ),
               ],
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const Key('guardar_predio'),
+                  style: compacto,
+                  onPressed:
+                      ocupado || probando || widget.motivoSinPredio != null
+                          ? null
+                          : widget.onGuardarPredio,
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                  label: const Text('GUARDAR COMO PREDIO…'),
+                ),
+              ),
+              Text(
+                widget.motivoSinPredio ??
+                    'Guarda este espacio con nombre, para arrancar otra fiesta '
+                        'desde acá. Las mesas no van.',
+                key: const Key('motivo_sin_predio'),
+                style: gris,
+              ),
               if (avisos.isNotEmpty) ...[
                 titulo('ANTES DE GUARDAR'),
                 for (final (i, a) in avisos.indexed)

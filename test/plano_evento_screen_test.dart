@@ -29,11 +29,14 @@ import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart
 import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/plano_evento_screen.dart';
 import 'package:arguello_events/features/plano/repositories/mesas_movimientos_repository.dart';
 import 'package:arguello_events/features/plano/repositories/planos_evento_repository.dart';
+import 'package:arguello_events/features/plano/repositories/predios_repository.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
+import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_al_dia.dart';
 import 'package:arguello_events/main.dart' show supabaseProvider;
@@ -42,6 +45,7 @@ import 'package:arguello_events/models/entradas_retiro.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/movimiento_mesas.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:arguello_events/models/predio.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
@@ -268,6 +272,52 @@ class _Subida implements SubidaInmediata {
   Future<bool> queda(Map<String, Iterable<String>> registros) async => !sube;
 }
 
+/// Los predios con nombre (6.1.0), en esta PC y en la nube.
+class _Predios extends PrediosRepository {
+  _Predios(super.supabase);
+
+  /// Los que tiene esta PC.
+  List<Predio> aca = [];
+
+  /// Los que tiene la nube. Cambiarlos es "la otra PC los tocó".
+  List<Predio> nube = [];
+
+  /// Sin red: la nube no contesta, y lo guardado no llega.
+  bool sinRed = false;
+
+  final guardados = <Predio>[];
+
+  @override
+  Future<List<Predio>> todos() async => [
+        for (final p in aca)
+          if (!p.borrado) p,
+      ]..sort((a, b) => a.nombre.compareTo(b.nombre));
+
+  @override
+  Future<void> guardar(Predio predio) async {
+    guardados.add(predio);
+    aca = [
+      for (final p in aca)
+        if (p.id != predio.id) p,
+      predio,
+    ];
+    if (!sinRed) nube = [...aca];
+  }
+
+  @override
+  Future<List<Predio>> traerDeLaNube() async {
+    if (sinRed) throw Exception('sin red');
+    aca = [...nube];
+    return todos();
+  }
+
+  /// Uno que ya está guardado en las dos.
+  void yaHay(Predio predio) {
+    aca = [...aca, predio];
+    nube = [...nube, predio];
+  }
+}
+
 /// La lista de la puerta: qué fiestas se pidió dejar al día, y si se pudo.
 class _Puerta implements PuertaAlDia {
   bool anda = true;
@@ -290,11 +340,13 @@ class _Puerta implements PuertaAlDia {
 class _Mundo {
   _Mundo(SupabaseClient supabase, {PlanoEvento? plano, required List<ContratoAlumno> alumnos})
       : planos = _Planos(supabase, aca: plano),
+        predios = _Predios(supabase),
         conexion = _Conexion() {
     contratos = _Contratos(supabase, conexion, alumnos, planos);
   }
 
   final _Planos planos;
+  final _Predios predios;
   final _Conexion conexion;
   late final _Contratos contratos;
   final motor = _Motor();
@@ -353,6 +405,7 @@ Future<_Mundo> _abrir(
         puertaAlDiaProvider.overrideWithValue(mundo.puerta),
         contratosRepositoryProvider.overrideWithValue(mundo.contratos),
         planosEventoRepositoryProvider.overrideWithValue(mundo.planos),
+        prediosRepositoryProvider.overrideWithValue(mundo.predios),
         mesasMovimientosRepositoryProvider
             .overrideWithValue(_Movimientos(mundo.contratos)),
         sillasRepartoRepositoryProvider.overrideWithValue(_Sillas()),
@@ -726,6 +779,185 @@ void main() {
       expect(mundo.planos.guardados, isEmpty);
       expect(_cartel(tester).$1, 'No se puede');
       await _contestar(tester, 'ENTENDIDO');
+    });
+  });
+
+  group('Personalizar: GUARDAR COMO PREDIO', () {
+    const idBuenaVista = 'd0000000-0000-4000-8000-0000000000b1';
+
+    Predio buenaVista() => PrediosDelSalon.guardarComo(
+          nombre: 'Buena Vista',
+          armado: ArmarAMedida.vacio(PlayonReal.costaSurubi),
+          playon: PlayonReal.costaSurubi,
+          guardados: const [],
+          hechoPor: 'Jefe',
+          ahora: _ahora,
+          idNuevo: idBuenaVista,
+        ).predio!;
+
+    /// Abre Acomodar y la ventana del nombre.
+    Future<_Mundo> abrirElNombre(
+      WidgetTester tester, {
+      void Function(_Mundo mundo)? antes,
+    }) async {
+      final mundo = await _abrir(tester, alumnos: _sinSortear(), antes: antes);
+      await _personalizar(tester, 'acomodar');
+      await _bajarHasta(tester, 'guardar_predio', panel: 'panel_acomodar');
+      expect(_prendido(tester, 'guardar_predio'), isTrue);
+      await _tocar(tester, 'guardar_predio');
+      await _asentar(tester);
+      expect(find.byKey(const Key('nombre_predio')), findsOneWidget);
+      return mundo;
+    }
+
+    testWidgets('guarda el espacio con nombre, sin mesas, y la fiesta no cambia',
+        (tester) async {
+      final mundo = await abrirElNombre(tester);
+      await tester.enterText(
+        find.byKey(const Key('nombre_predio')),
+        '  Buena   Vista ',
+      );
+      await tester.pump();
+      await _guardar(tester, 'listo_predio');
+
+      final p = mundo.predios.guardados.single;
+      expect(p.nombre, 'Buena Vista');
+      expect(p.hechoPor, isNotNull);
+      expect(p.playon, PlayonReal.costaSurubi);
+      final espacio = p.espacioONull!;
+      expect(espacio.clave, 'predio@${p.id}');
+      expect(espacio.mesas, isEmpty);
+      expect(espacio.sectores.map((s) => s.tipo),
+          containsAll([TipoSector.escenario]));
+      expect(mundo.planos.guardados, isEmpty, reason: 'la fiesta no se toca');
+      expect(mundo.subida.pedidas, ['predios']);
+      expect(
+        _dicho(tester),
+        'Predio "Buena Vista" guardado: ya se puede elegir en Estilo y armado '
+        'de otra fiesta.',
+      );
+    });
+
+    testWidgets('con el nombre de uno que ya está, avisa y lo reemplaza',
+        (tester) async {
+      final mundo = await abrirElNombre(
+        tester,
+        antes: (m) => m.predios.yaHay(buenaVista()),
+      );
+      await _tocar(tester, 'chip_predio_$idBuenaVista');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('aviso_nombre_predio'))).data,
+        'Ya hay un predio "Buena Vista": se reemplaza por este. Las fiestas '
+        'que lo usaron no cambian.',
+      );
+      expect(find.text('REEMPLAZAR'), findsOneWidget);
+      await _guardar(tester, 'listo_predio');
+      final p = mundo.predios.guardados.single;
+      expect(p.id, idBuenaVista, reason: 'queda el mismo predio');
+      expect(p.espacioONull!.clave, 'predio@$idBuenaVista');
+      expect(
+        _dicho(tester),
+        'Predio "Buena Vista" reemplazado: las fiestas que lo usaron no '
+        'cambian.',
+      );
+    });
+
+    testWidgets('"Costa Surubí" no se acepta: es el de fábrica',
+        (tester) async {
+      final mundo = await abrirElNombre(tester);
+      await tester.enterText(
+        find.byKey(const Key('nombre_predio')),
+        'costa surubi',
+      );
+      await tester.pump();
+      expect(_prendido(tester, 'listo_predio'), isFalse);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('aviso_nombre_predio'))).data,
+        '"Costa Surubí" es el de fábrica: elegí otro nombre.',
+      );
+      await _tocar(tester, 'cancelar_predio');
+      await _asentar(tester);
+      expect(mundo.predios.guardados, isEmpty);
+    });
+
+    testWidgets('si la otra PC guardó uno con ese nombre mientras se escribía, '
+        'no se guarda', (tester) async {
+      final mundo = await abrirElNombre(tester);
+      await tester.enterText(
+        find.byKey(const Key('nombre_predio')),
+        'Buena Vista',
+      );
+      await tester.pump();
+      mundo.predios.nube = [buenaVista()];
+      await _guardar(tester, 'listo_predio');
+      expect(mundo.predios.guardados, isEmpty);
+      expect(_cartel(tester).$1, 'Los predios cambiaron recién');
+      await _contestar(tester, 'ENTENDIDO');
+    });
+
+    testWidgets('sin red se guarda en esta PC y lo dice', (tester) async {
+      final mundo = await abrirElNombre(tester);
+      mundo.predios.sinRed = true;
+      mundo.subida.sube = false;
+      await tester.enterText(
+        find.byKey(const Key('nombre_predio')),
+        'Buena Vista',
+      );
+      await tester.pump();
+      await _guardar(tester, 'listo_predio');
+      expect(mundo.predios.guardados, hasLength(1));
+      expect(_dicho(tester), endsWith('Quedó en esta PC; sube cuando vuelva '
+          'la conexión.'));
+    });
+
+    testWidgets('con algo acomodado sin guardar, guarda lo que se ve y la '
+        'fiesta sigue sin guardar', (tester) async {
+      final mundo = await _abrir(tester, alumnos: _sinSortear());
+      await _personalizar(tester, 'acomodar');
+      await _tocar(tester, 'acomodar_agregar');
+      await _bajarHasta(tester, 'guardar_predio', panel: 'panel_acomodar');
+      await _tocar(tester, 'guardar_predio');
+      await _asentar(tester);
+      await tester.enterText(
+        find.byKey(const Key('nombre_predio')),
+        'Buena Vista',
+      );
+      await tester.pump();
+      await _guardar(tester, 'listo_predio');
+      expect(mundo.predios.guardados.single.espacioONull!.mesas, isEmpty);
+      expect(mundo.planos.guardados, isEmpty);
+      expect(_dicho(tester), contains('El salón de esta fiesta sigue sin '
+          'guardar.'));
+      // Lo acomodado sigue ahí, para guardarlo o descartarlo.
+      expect(_vista(tester).armado.existe(41), isTrue);
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(_prendido(tester, 'guardar_acomodo'), isTrue);
+    });
+
+    testWidgets('en un armado del Canva queda apagado, con el motivo',
+        (tester) async {
+      await _abrir(
+        tester,
+        alumnos: _sinSortear(),
+        antes: (m) {
+          final canva = PlanoEvento.nuevo(
+            eventoId: _eventoId,
+            armado: ArmadosPredefinidos.normal2aPagina3(),
+            estilo: EstiloPlano.arquitecto,
+            modo: ModoSorteo.entera,
+            ahora: _ahora,
+          );
+          m.planos.aca = canva;
+          m.planos.nube = canva;
+        },
+      );
+      await _personalizar(tester, 'acomodar');
+      await _bajarHasta(tester, 'guardar_predio', panel: 'panel_acomodar');
+      expect(_prendido(tester, 'guardar_predio'), isFalse);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('motivo_sin_predio'))).data,
+        contains('es del Canva'),
+      );
     });
   });
 

@@ -10,6 +10,7 @@ import '../../models/contrato_alumno.dart';
 import '../../models/evento.dart';
 import '../../models/movimiento_mesas.dart';
 import '../../models/plano_evento.dart';
+import '../../models/predio.dart';
 import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
@@ -29,6 +30,7 @@ import 'modelo/armado_salon.dart';
 import 'modelo/medidas_salon.dart';
 import 'repositories/mesas_movimientos_repository.dart';
 import 'repositories/planos_evento_repository.dart';
+import 'repositories/predios_repository.dart';
 import 'services/aplicar_eleccion.dart';
 import 'services/armar_a_medida.dart';
 import 'services/cambios_de_mesa.dart';
@@ -36,9 +38,11 @@ import 'services/colores_y_textos.dart';
 import 'services/editar_armado.dart';
 import 'services/historial_sorteo.dart';
 import 'services/plano_de_la_fiesta.dart';
+import 'services/predios_del_salon.dart';
 import 'widgets/cambio_de_mesa_dialogs.dart';
 import 'widgets/elegir_plano_dialog.dart';
 import 'widgets/imprimir_plano_dialog.dart';
+import 'widgets/nombre_predio_dialog.dart';
 import 'widgets/plano_evento_cuerpo.dart';
 
 /// El plano del salón de una fiesta: el armado con sus medidas, las familias
@@ -85,6 +89,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
   Map<String, SillasReparto> _repartos = {};
   PlanoEvento? _plano;
 
+  /// Los predios con nombre (6.1.0), sin los borrados: para Estilo y armado y
+  /// para volver al original de un salón que salió de uno.
+  List<Predio> _predios = const [];
+
   /// Los sorteos y los cambios de mesa registrados, para el Historial.
   List<SorteoMesasRegistro> _registros = [];
   List<MovimientoMesas> _movimientos = [];
@@ -116,6 +124,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     'mesas_movimientos',
     'sorteos_mesas',
     'entradas_retiro',
+    'predios',
   };
 
   @override
@@ -202,6 +211,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           .read(mesasMovimientosRepositoryProvider)
           .delEvento(widget.evento.id);
       final plano = (await _leerPlano(nube: nube)).plano;
+      final predios = (await _leerPredios(nube: nube)).predios;
       final armado = plano?.armadoONull;
       final vista = plano == null || armado == null
           ? null
@@ -222,6 +232,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
             if (e.value.entregado) e.key,
         };
         _plano = plano;
+        _predios = predios;
         _vista = vista;
         _cargando = false;
         _errorCarga = null;
@@ -482,6 +493,119 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         'probá de nuevo.',
         error: e,
       );
+    } finally {
+      _terminar();
+    }
+  }
+
+  // ── Los predios con nombre (6.1.0) ──────────────────────────────────────
+
+  /// Los predios: con [nube], primero los de la nube (por si la otra PC
+  /// guardó o renombró uno hace un momento) y, si no se pudo, los de esta PC.
+  /// Si no se pueden leer, ninguno: el plano de la fiesta anda igual.
+  Future<({List<Predio> predios, bool deLaNube})> _leerPredios({
+    required bool nube,
+  }) async {
+    final prediosRepo = ref.read(prediosRepositoryProvider);
+    if (nube && _hayConexion) {
+      try {
+        return (predios: await prediosRepo.traerDeLaNube(), deLaNube: true);
+      } catch (_) {
+        // Sin red, o la tabla todavía no existe en la nube: manda esta PC.
+      }
+    }
+    try {
+      return (predios: await prediosRepo.todos(), deLaNube: false);
+    } catch (e) {
+      debugPrint('⚠️ Plano: no se pudieron leer los predios ($e)');
+      return (predios: const <Predio>[], deLaNube: false);
+    }
+  }
+
+  /// GUARDAR COMO PREDIO…: el espacio que se ve en Acomodar, con nombre, para
+  /// arrancar otra fiesta desde ahí. Lo de esta fiesta no cambia: ni lo
+  /// guarda ni lo descarta.
+  ///
+  /// Sin la nube se guarda igual en esta PC: los predios los cambia solo el
+  /// jefe, y lo guardado sube cuando vuelve la conexión.
+  Future<void> _guardarComoPredio(ArmadoSalon base, ArmadoSalon actual) async {
+    final plano = _plano;
+    if (_ocupado || plano == null || _frenaSinModoJefe()) return;
+    final problemaDelSalon = PrediosDelSalon.problemaDelSalon(actual);
+    if (problemaDelSalon != null) {
+      await _avisar('No se puede', problemaDelSalon);
+      return;
+    }
+    // Si el salón salió de un predio, se sugiere el mismo: lo común es
+    // corregirlo y guardarlo de nuevo.
+    final origen = ArmarAMedida.idDePredio(actual);
+    final vistos = _predios;
+    final sugerido =
+        vistos.where((p) => p.id == origen).map((p) => p.nombre).firstOrNull;
+    final nombre = await pedirNombreDePredio(
+      context: context,
+      guardados: vistos,
+      sugerido: sugerido ?? '',
+    );
+    if (nombre == null || !mounted) return;
+
+    setState(() => _ocupado = true);
+    try {
+      final prediosRepo = ref.read(prediosRepositoryProvider);
+      final subida = ref.read(subidaInmediataProvider);
+      final quien = quienOpera(ref);
+      final desde = DateTime.now().toUtc();
+      final frescos = (await _leerPredios(nube: true)).predios;
+      // Lo que se avisó en la ventana (nuevo, o cuál se reemplaza) tiene que
+      // seguir siendo cierto con lo que dice la nube.
+      final seVio = PrediosDelSalon.conElNombre(nombre, vistos)?.id;
+      final hay = PrediosDelSalon.conElNombre(nombre, frescos)?.id;
+      if (seVio != hay) {
+        if (mounted) setState(() => _predios = frescos);
+        await _avisar(
+          'Los predios cambiaron recién',
+          'La otra PC guardó, renombró o borró un predio "$nombre" mientras '
+              'escribías. No se guardó nada: probá de nuevo.',
+        );
+        return;
+      }
+      final playon = EditarArmado.conMedidasDelPlayon(
+        plano.config,
+        base: base,
+        nuevo: actual,
+      ).medidas.playon;
+      final r = PrediosDelSalon.guardarComo(
+        nombre: nombre,
+        armado: actual,
+        playon: playon,
+        guardados: frescos,
+        hechoPor: quien,
+        ahora: DateTime.now().toUtc(),
+      );
+      final predio = r.predio;
+      if (predio == null) {
+        await _avisar('No se puede', r.problema ?? 'No se puede.');
+        return;
+      }
+      await prediosRepo.guardar(predio);
+      final despues = (await _leerPredios(nube: false)).predios;
+      if (mounted) setState(() => _predios = despues);
+      final subio = await subida.subir(
+        tabla: 'predios',
+        registroId: predio.id,
+        desde: desde,
+      );
+      final sinGuardar =
+          EditarArmado.firma(base) != EditarArmado.firma(actual);
+      _decir(
+        '${r.reemplaza != null ? 'Predio "${predio.nombre}" reemplazado: las '
+            'fiestas que lo usaron no cambian.' : 'Predio "${predio.nombre}" '
+            'guardado: ya se puede elegir en Estilo y armado de otra fiesta.'}'
+        '${sinGuardar ? ' El salón de esta fiesta sigue sin guardar.' : ''}'
+        '${subio ? '' : ' Quedó en esta PC; sube cuando vuelva la conexión.'}',
+      );
+    } catch (e) {
+      _decir('No se pudo guardar el predio. Probá de nuevo.', error: e);
     } finally {
       _terminar();
     }
@@ -1117,6 +1241,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               onGuardarMedidas: _guardarMedidas,
               onGuardarColoresYTextos: _guardarColoresYTextos,
               onGuardarArmado: _guardarSalon,
+              onGuardarComoPredio: _guardarComoPredio,
             )
           : null,
       onImprimir: _imprimir,

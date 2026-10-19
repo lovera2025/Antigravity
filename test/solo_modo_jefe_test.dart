@@ -74,6 +74,44 @@ void main() {
     expect(funciones.keys.toSet(), {'_guardar', '_cambiarConfig', '_cambiarMesas'});
   });
 
+  test('los predios (6.1.0): guardarlos, renombrarlos y borrarlos pregunta por '
+      'el modo jefe', () {
+    final fuente = leer(pantallaPlano);
+    final funciones = funcion.allMatches(fuente).toList();
+    final resultado = <String, bool>{};
+    for (final g in RegExp(r'\bprediosRepo\.guardar\(').allMatches(fuente)) {
+      final donde = funciones.lastWhere((f) => f.start < g.start);
+      resultado[donde.group(1)!] = fuente
+          .substring(donde.start, g.start)
+          .contains('_frenaSinModoJefe()');
+    }
+    expect(
+      resultado.entries.where((e) => !e.value).map((e) => e.key),
+      isEmpty,
+      reason: 'guardan un predio sin preguntar por el modo jefe',
+    );
+    expect(resultado.keys.toSet(), {'_guardarComoPredio'});
+  });
+
+  test('nadie más guarda los predios', () {
+    Set<String> archivosCon(String texto) => {
+          for (final f in Directory('lib').listSync(recursive: true))
+            if (f is File &&
+                f.path.endsWith('.dart') &&
+                f.readAsStringSync().contains(texto))
+              f.path.replaceAll('\\', '/'),
+        };
+    const repo = 'lib/features/plano/repositories/predios_repository.dart';
+    expect(archivosCon('prediosRepositoryProvider'), {pantallaPlano, repo});
+    // Solo el repositorio lo llama, por dentro.
+    expect(archivosCon('PrediosRepository.guardarEn('), isEmpty);
+    // Quien solo los lee entra por una puerta que no deja guardar.
+    expect(
+      leer(repo),
+      contains('(ref) => ref.watch(prediosRepositoryProvider).todos,'),
+    );
+  });
+
   test('la llave pregunta por el modo jefe de verdad', () {
     for (final ruta in [pantallaFiesta, pantallaPlano]) {
       final fuente = leer(ruta);
