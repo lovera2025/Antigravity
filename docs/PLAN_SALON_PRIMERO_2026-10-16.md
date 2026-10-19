@@ -366,5 +366,71 @@ una, que se cumpla". Se midió y aprobó arreglarlo antes de los predios.
   por salón y modo, el caso en cadena, el salón donde no se puede y la revisión final); 2.617 tests; 4 roturas a
   propósito vistas.
 
-**Sigue:** los **predios con nombre** (opción A y las tres decisiones recomendadas, aprobadas el 19-oct) y la etapa 5
-(las muestras que faltan, con un PDF de playón rectangular). Después, la versión.
+**Sigue:** los **predios con nombre** (sección 14) y la etapa 5 (las muestras que faltan, con un PDF de playón
+rectangular). Después, la versión.
+
+## 14. Los predios con nombre: lo aprobado el 19-oct, SIN PROGRAMAR
+
+La maqueta: `docs/maqueta_predios_con_nombre_2026-10-19.html` (cuatro pasos; se abre directo en uno con `#p2`, etc.).
+La aprobó con la **opción A** y las tres decisiones recomendadas.
+
+Un predio es el espacio armado una vez, con nombre ("Buena Vista"), para arrancar otra fiesta desde ahí.
+
+**Para el jefe:**
+1. **Guardar:** PLANO → PERSONALIZAR → Acomodar → **GUARDAR COMO PREDIO…**, solo en modo jefe.
+   - Pide el nombre; con chips, permite reemplazar uno guardado. Si el nombre ya existe, avisa que lo reemplaza y que
+     las fiestas que lo usaron no cambian.
+   - "Costa Surubí" está reservado: es el de fábrica.
+   - **Se guarda** el playón y lo que mide, el escenario, la pista, las barras, el Ingreso, con sus textos. **No se
+     guardan** las mesas, los colores, los títulos ni las fijadas: son de cada fiesta.
+   - Guarda lo que se ve en Acomodar, aunque la fiesta no se haya guardado.
+2. **Elegir (opción A):** en Estilo y armado, **una tarjeta por predio con su dibujo**, después de "Salón vacío"
+   (Costa Surubí de fábrica).
+   - Elegirlo es arrancar con ese espacio, sin mesas, y sus medidas en la pestaña Medidas.
+   - Sigue ACOMODAR LAS MESAS.
+   - Con familias sentadas, apagado como los demás armados.
+3. **Si el predio cambia, la fiesta no:** la fiesta se lleva una **copia**.
+   - Renombrar y Borrar, desde el menú ⋯ de la tarjeta (modo jefe). Borrar se pide dos veces.
+   - Las fiestas que lo usaron no cambian.
+4. **Las tres decisiones:**
+   - **"Volver al armado original"** en un salón que arrancó de un predio **vuelve a ese predio como está guardado
+     hoy**. Si se borró, queda apagado con el motivo.
+   - **La distancia entre mesas no va con el predio**: es de cada fiesta (Medidas).
+   - Opción A, no el selector (B).
+
+**Cómo, sin romper nada:**
+- **Tabla nueva `predios`**, en la PC y en la nube, sincronizada como `planos_evento` pero global (sin `evento_id`).
+  - Columnas: `id` (uuid), `nombre`, `armado_json` (un `ArmadoSalon` sin mesas), `medidas` (el playón, JSON),
+    `hecho_por`, `created_at`, `updated_at`.
+  - Borrar es un borrado con nombre y apellido: lo pide el jefe, por la cola. Pasa por la regla de `filasAPodar`
+    (CLAUDE.md, trampas).
+- **Migración local v74**, como la v73:
+  - solo `CREATE TABLE IF NOT EXISTS predios`;
+  - copia antes de migrar (`copiaAntesDeMigrar`);
+  - `tool/verificar_migracion_v74_test.dart` sobre una copia de su base: tabla por tabla, la vuelta a la 6.0.0 sobre
+    la misma base, y el mismo SHA-256 de la real. **La app instalada tiene que estar cerrada: se le pide al usuario.**
+- **SQL de la nube** `supabase/migrations/2026102x_predios.sql`:
+  - `CREATE TABLE IF NOT EXISTS`, el trigger de `updated_at` y los mismos permisos que `planos_evento`;
+  - sin CHECK; el ROLLBACK comentado arriba, y las consultas de verificación al final;
+  - **se corre antes de instalar, con su OK en el momento.**
+- **Ninguna clave nueva en el JSON del armado.** La fiesta guarda la copia con `clave: 'predio@<id>'` y `nombre:
+  'Buena Vista'`, que son claves que ya existen.
+  - Así "Volver al armado original" sabe a qué predio volver.
+  - `_esAMedida` y `EditarArmado.original` tienen que aceptar el prefijo.
+  - En la 6.0.0, una clave desconocida no ofrece "Volver al armado original" y Medidas no redibuja, igual que con
+    `vacio@1`. Sumarlo a `test/salon_convivencia_test.dart`.
+- **Al elegirlo**, `aplicarEleccionAlPlano` copia también `medidas.playon` del predio al `config` de la fiesta.
+- **Doble llave del modo jefe** en guardar, renombrar y borrar: el botón apagado con `kSoloEnModoJefe`, y
+  `_frenaSinModoJefe()` en la función. Ver si `test/solo_modo_jefe_test.dart` tiene que mirar el repositorio nuevo.
+
+**Pruebas:**
+- el repositorio y el sync;
+- guardar, reemplazar, renombrar y borrar;
+- elegir y copiar, también las medidas;
+- la fiesta no cambia si el predio cambia;
+- volver al original vuelve al predio, y apagado si se borró;
+- la convivencia con la 6.0.0;
+- la migración sobre la copia;
+- la pantalla entera (Acomodar y Estilo y armado);
+- las muestras;
+- roturas a propósito.

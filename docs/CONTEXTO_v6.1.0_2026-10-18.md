@@ -1,14 +1,16 @@
 # v6.1.0 — Las bajas temporales, la mora por cuota y el salón primero
 
-**Fecha:** 2026-10-18
+**Fecha:** 2026-10-18 · **actualizado el 19-oct**
 **Rama:** `feature/v4.6-cierre-por-sesiones`
 **Estado: EN CURSO. Nada instalado.** La 6.0.0 está publicada e instalada en las tres PCs (la de la casa el 15-oct;
 las del operario y del jefe el 16-oct). Lo de acá está programado en la rama, no en las PCs.
 
 > Anterior: [v6.0.0](CONTEXTO_v6.0.0_2026-10-11.md). Pendientes de esta versión:
-> [mora-por-cuota](pendientes/mora-por-cuota.md) y [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md), con su
-> [maqueta](maqueta_salon_primero_2026-10-16.html).
-> Plan de este chat: `C:\Users\lover\.claude\plans\donde-nos-quedamos-dreamy-blossom.md`.
+> [mora-por-cuota](pendientes/mora-por-cuota.md) y [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md), con sus
+> maquetas: la del [salón primero](maqueta_salon_primero_2026-10-16.html) y la de los
+> [predios con nombre](maqueta_predios_con_nombre_2026-10-19.html).
+> Planes de los chats: `C:\Users\lover\.claude\plans\donde-nos-quedamos-dreamy-blossom.md` (18-oct) y
+> `C:\Users\lover\.claude\plans\donde-nos-quedamos-prancy-bunny.md` (18 y 19-oct).
 
 ## Qué lleva y en qué orden (decidido por el usuario, 16 y 18-oct)
 
@@ -25,12 +27,16 @@ corto y su OK antes de programar.
    12 del plan.
    - Las cuatro flechitas se sacaron (etapa 3).
    - Mover un sector después de acomodar no reacomoda: se toca el botón.
-   - **Los predios con nombre van en la 6.1.0**, como etapa nueva con maqueta.
    - "Volver al armado original" también en el salón vacío.
-   - **Sigue:** la etapa 5 (muestras y un PDF de playón rectangular) y los predios con nombre.
-4. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, y publicar con él presente.
+4. **"Lejos" en el salón de verdad. HECHO el 19-oct (`2f968f2`)**: lo pidió él a mitad de la maqueta de los predios.
+   Sección 13 del plan.
+5. **Los predios con nombre: APROBADOS el 19-oct con su maqueta, SIN PROGRAMAR.** Opción A (una tarjeta por predio) y
+   las tres decisiones recomendadas. El plan aprobado está en la sección 14 del plan del salón. **Es lo que sigue.**
+6. **La etapa 5 del salón:** las muestras que faltan de su lista, con un PDF de playón rectangular.
+7. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, el SQL de los predios antes de instalar, y
+   publicar con él presente.
 
-Sin la fase 2 la versión es más chica, pero el salón tiene sus etapas 2 a 6 más los predios: tampoco llega al lunes 20.
+Sin la fase 2 la versión es más chica, pero quedan los predios (con una migración) y la etapa 5: no llega al lunes 20.
 
 ## Qué pasó el 16-oct
 
@@ -141,8 +147,28 @@ los salones de la 6.0.0 instalada. Ahora se mide en el salón dibujado: el sorte
 revisión final lo comprueba, y si no hay manera no sortea y dice por qué. Con el arreglo, 0 de 2.000 en cada caso.
 Detalle en la sección 13 del plan del salón.
 
-**Pendiente de preguntarle:** si ya hubo un sorteo de verdad por división con "lejos" marcado en la 6.0.0, revisar (solo
-leyendo) qué familias quedaron tocándose.
+**Pendiente de preguntarle:** si ya hubo un sorteo de verdad por división con "lejos" marcado en la 6.0.0. Si hubo,
+revisar (solo leyendo la nube, con su OK) qué familias quedaron tocándose. Se le ofreció el 19-oct y pidió frenar y
+anotar antes de contestar.
+
+## Qué más pasó el 19-oct
+
+- **Preguntó si después de acomodar y sortear se puede seguir cambiando y volver a guardar.** Sí:
+  - Medidas se guarda siempre, sin mover mesas ni familias;
+  - Acomodar a mano también (correr y agregar mesas, sectores, manijas);
+  - ACOMODAR, VACIAR y cambiar el armado se apagan con familias sentadas, con el motivo.
+  - En Medidas no se ponen sillas: las de cada familia salen de su alumno y se ven cuando tiene mesa.
+- **Preguntó qué aparece después del sorteo.** Más que el número y las sillas:
+  - cada mesa en el color de su división, con la leyenda;
+  - el apellido debajo de la principal y las sillas, al acercar la vista;
+  - al tocar una mesa, la familia con sus mesas y sillas;
+  - los avisos de mesas apretadas.
+
+  Se le mandó `Pantalla_plano_arquitecto.png`. Es de la 6.0.0 y no cambia.
+- **La maqueta de los predios** (`docs/maqueta_predios_con_nombre_2026-10-19.html`, `aacce78`): la aprobó con la
+  opción A y las tres decisiones.
+- Una vez la sesión se cortó justo al pasarle un plan: cuando dice "estoy en modo plan", quiere el botón para
+  aprobarlo.
 
 ## Para el día de instalar la 6.1.0
 
@@ -152,7 +178,9 @@ leyendo) qué familias quedaron tocándose.
   al día.
 - **DENIS:** mientras convivan versiones, una PC con la 6.0.0 le vuelve a calcular los $87.600 y la 6.1.0 los pone
   en 0. Está de baja: no toca cobros ni totales.
-- La regla de siempre: los SQL de la fase 2 se corren antes de instalar, con su OK; operario primero.
+- **El plano se toca desde una PC con la 6.1.0:** en la 6.0.0 un salón sin mesas se ve como roto, y "lejos" sigue
+  midiéndose por número. Conviene que el jefe no sortee por división con "lejos" hasta tener la 6.1.0.
+- **El SQL de los predios** (cuando estén programados) se corre antes de instalar, con su OK; operario primero.
 
 ## Lo de la 6.0.0 que sigue esperando
 
@@ -167,15 +195,21 @@ leyendo) qué familias quedaron tocándose.
 ```text
 Seguimos con la 6.1.0 de Junior Eventos. Leé primero
 docs/CONTEXTO_v6.1.0_2026-10-18.md entero, docs/PLAN_SALON_PRIMERO_2026-10-16.md
-(sobre todo las secciones 7, 8 y 9), CLAUDE.md y la memoria del proyecto. La
+(sobre todo las secciones 12, 13 y 14), CLAUDE.md y la memoria del proyecto. La
 6.0.0 está publicada e instalada en las tres PCs. La 6.1.0 va en una sola
-versión con todo junto: las bajas temporales y el aviso "Revisar la ficha",
-HECHOS el 18-oct y sin instalar (la fase 2 de la mora por cuota la descarté:
-me quedo con la mora en fila); el salón primero, con las etapas 1 (las
-cuentas) y 2 (la tarjeta "Salón vacío" en Estilo y armado) HECHAS el 18-oct, y
-la 3 (las manijas) y la 4 (ACOMODAR LAS MESAS y VACIAR EL SALÓN) el 19-oct;
-siguen las muestras de la etapa 5 y los predios con nombre (etapa nueva, con
-maqueta); y al final la versión y publicar conmigo presente.
+versión con todo junto, programada en la rama y sin instalar: las bajas
+temporales y el aviso "Revisar la ficha" (la fase 2 de la mora por cuota la
+descarté); el salón primero con las etapas 1 a 4 (salón vacío, manijas,
+ACOMODAR LAS MESAS y VACIAR EL SALÓN); y que "lejos" se cumpla en el salón de
+verdad. Sigue programar los PREDIOS CON NOMBRE, que ya aprobé con su maqueta
+(docs/maqueta_predios_con_nombre_2026-10-19.html): opción A, una tarjeta por
+predio, y las tres decisiones de la sección 14 del plan. Llevan una tabla
+nueva (migración v74): hacela como la v73, con copia y prueba sobre una copia
+de mi base, y avisame antes de la prueba porque la app instalada tiene que
+estar cerrada. Después, las muestras de la etapa 5, y al final la versión y
+publicar conmigo presente.
+Pendiente: preguntarme si ya hubo un sorteo de verdad por división con "lejos"
+marcado; si hubo, revisar solo leyendo, con mi OK.
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se

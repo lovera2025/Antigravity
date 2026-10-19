@@ -20,8 +20,10 @@ instalada); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **Lo que sigue es la 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
-(hechos), y el salón primero (etapas 1 a 4 hechas), en una sola versión. La mora por
-cuota suelta (fase 2) quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
+(hechos), el salón primero (etapas 1 a 4 hechas) y "lejos" medido en el salón (hecho), en
+una sola versión. **Siguen los predios con nombre**, aprobados con maqueta y sin programar
+(sección 14 de `docs/PLAN_SALON_PRIMERO_2026-10-16.md`). La mora por cuota suelta (fase 2)
+quedó descartada. Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
 ## Documentación del proyecto
 
