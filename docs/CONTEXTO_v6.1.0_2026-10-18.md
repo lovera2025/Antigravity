@@ -2,8 +2,9 @@
 
 **Fecha:** 2026-10-18 · **actualizado el 19-oct**
 **Rama:** `feature/v4.6-cierre-por-sesiones`
-**Estado: EN CURSO. Nada instalado.** La 6.0.0 está publicada e instalada en las tres PCs (la de la casa el 15-oct;
-las del operario y del jefe el 16-oct). Lo de acá está programado en la rama, no en las PCs.
+**Estado: PUBLICADA el 19-oct** ([release v6.1.0](https://github.com/lovera2025/Antigravity/releases/tag/v6.1.0),
+tag sobre `6620f65`) **e instalada en la PC de la casa**. Las del operario y del jefe siguen con la 6.0.0 hasta
+instalarlas en la oficina, con él. Ver "La publicación" abajo.
 
 > Anterior: [v6.0.0](CONTEXTO_v6.0.0_2026-10-11.md). Pendientes de esta versión:
 > [mora-por-cuota](pendientes/mora-por-cuota.md) y [PLAN_SALON_PRIMERO](PLAN_SALON_PRIMERO_2026-10-16.md), con sus
@@ -34,8 +35,8 @@ corto y su OK antes de programar.
    `88389e4`), con la migración v74 probada sobre una copia de su base. Ver "Los predios con nombre" abajo y la
    sección 14 del plan del salón.
 6. **La etapa 5 del salón: HECHA el 19-oct** (muestras `16a44f7`, arreglos `9478f3c`). Ver "La etapa 5" abajo.
-7. **La versión:** `pubspec.yaml` y el `.iss` en 6.1.0, el instalador, el SQL de los predios antes de instalar, y
-   publicar con él presente. **Es lo que sigue.**
+7. **La versión: PUBLICADA el 19-oct** e instalada en la PC de la casa. **Sigue instalar la del operario y la del
+   jefe, y después lo de TOÑANEZ** (ver "La publicación").
 
 Sin la fase 2 la versión es más chica, pero quedan los predios (con una migración) y la etapa 5: no llega al lunes 20.
 
@@ -225,6 +226,55 @@ PDF de playón rectangular. Se hicieron:
 **Comprobado:** 2.702 tests, `flutter analyze` en 312 (los mismos), 4 roturas a propósito vistas, y los tres PDF
 mirados hoja por hoja (una A4 acostada cada uno, ninguna mesa afuera, los apellidos se leen).
 
+## La publicación (19-oct)
+
+Pidió el plan ("arma el plan y lo veo") y lo aprobó: `C:\Users\lover\.claude\plans\donde-nos-quedamos-foamy-quilt.md`.
+Preguntó en el medio si los datos y los cobros seguían al día: sí, todo lo de la verificación fue sobre una copia, y
+las PCs siguieron cobrando y subiendo normal.
+
+**Paso 0, antes de armar (`6620f65`):**
+- `pubspec.yaml` en `6.1.0+58` y el `.iss` en `6.1.0`. 2.702 tests, `flutter analyze` en 312, los builds de Windows y
+  web bien.
+- **El cobro, 6.0.0 contra 6.1.0**, con `tool/cobro_igual_que_hoy_test.dart` sobre la misma copia de su base de las
+  12:53 (sacada con `VACUUM INTO` y la app cerrada; la 6.0.0 desde `4595dde` en una carpeta aparte, ya borrada):
+  - **629 de 643 alumnos idénticos** (ficha, ventana, papel, mora y recibo) y **las operaciones del día idénticas**;
+  - **cambian 14: las 13 bajas y TOÑANEZ, AGUSTINA** ($9.300 en la 6.0.0, $171.600 en la 6.1.0, como las otras 0/9).
+    En la planilla de la Normal es el único renglón distinto: el total pasa de $3.944.300 a $4.106.600;
+  - los papeles de los cinco del 15-oct (ARANDA, SILVA, MACHUCA, GOMEZ GIMENA, PEREZ MAIA) más ESPINOZA, DENIS AIMARA,
+    lado a lado en `build/muestras_6.1.0/cobro/Comparar.html` (se le abrió en Edge).
+- **El simulacro de la revisión de la mora** (`tool/simulacro_revision_mora_test.dart`, la misma copia): la primera vez
+  que abra la 6.1.0 corrige **a un solo alumno, ESPINOZA, DENIS AIMARA** (baja: la ficha de $87.600 a $0, la mora de
+  hoy $132.000 → $44.400). Ningún perdón.
+- Las novedades (`build/novedades_6.1.0.md`), aprobadas tal cual: el salón primero, los predios, "lejos" en el salón,
+  y las bajas con el aviso de la ficha.
+- El instalador: `installer/dist/Setup Junior Eventos v6.1.0.exe`, 38.063.091 bytes, SHA-256 `B3F83B1E…F4276E69`.
+
+**Paso 1, la nube (con su OK, justo antes del release):** `apply_migration` `predios`. Conteos iguales antes y después: 643 contratos
+($95.396.671,17 de saldos), 4.166 pagos, 27 notas, 3 planos, 11 invitados, 30 eventos. `predios` vacía, con RLS, su
+policy, un disparador de cada uno y fuera de Realtime.
+
+**Paso 2, el release (14:12, con su "publicamos ahora"):** `tool/publish_windows_release.ps1 -SoloNotas -NotesFile
+build\novedades_6.1.0.md`. `/releases/latest` da `v6.1.0`; el asset descargado de GitHub tiene el mismo tamaño y el
+mismo SHA-256 que el armado. Sabe que desde ahí cada PC con la 6.0.0 lo ve sola al abrir.
+
+**Paso 3, esta PC (la de la casa, 14:13):** la instaló él. Comprobado: `Junior Eventos 6.1.0` en `C:\Junior Eventos\`,
+la base en la v74 con `predios`, la copia `backups\antes_de_v74.db` (14:13:59), la cola vacía, y `revision_mora.txt`
+(14:14) con el mismo único alumno del simulacro, ya subido. 643 contratos y 4.166 pagos, iguales a la nube.
+
+**Paso 5, la web (14:20, con su OK):** `build/web` a `.vercel/output/static` y `npx vercel deploy --prebuilt --prod`.
+Publicada `arguello-events-9hkokyqvi` (`dpl_6yh415WAb8W4hDhxxBsH7thTS4pf`); para volver atrás, la de antes es
+`arguello-events-gfudt0il0`. Comprobado: `version.json` en `6.1.0`/`58`, `/lista` muestra el buscador y `?cotizar` el
+catálogo.
+
+**Falta, en la oficina y con él:**
+1. **La PC del operario**, antes de abrir la caja. Después, mirar la versión y su `revision_mora.txt` (tiene que decir
+   lo mismo: solo ESPINOZA, DENIS AIMARA, si no lo bajó ya corregido de la nube).
+2. **La PC del jefe.** Lo mismo.
+3. **TOÑANEZ (paso 4, con su OK):** leer su fila en la nube y reescribir `mora_tracked_ajuste = 0` (el mismo valor) para
+   que todas las PCs la vuelvan a bajar; después, en la PC del jefe, que su ventana de cobro se vea como una 0/9
+   ($171.600 hoy). Hasta entonces, en la oficina no se le cobra ni se la edita.
+4. Anotar acá cómo quedó cada PC.
+
 ## Para el día de instalar la 6.1.0
 
 - **TOÑANEZ:** con su OK en el momento, reescribir en la nube su `mora_tracked_ajuste = 0`, sin cambiar plata,
@@ -259,10 +309,10 @@ temporales y el aviso "Revisar la ficha" (la fase 2 de la mora por cuota la
 descarté); el salón primero con las etapas 1 a 4 (salón vacío, manijas,
 ACOMODAR LAS MESAS y VACIAR EL SALÓN); que "lejos" se cumpla en el salón de
 verdad; y los PREDIOS CON NOMBRE (sección 14 del plan), con su tabla nueva
-(migración v74, ya probada sobre una copia de mi base), y la etapa 5 del salón
-(las muestras, con los dos arreglos del papel que elegí). Sigue la versión:
-pubspec y el .iss en 6.1.0, el instalador, y publicar conmigo presente, con el
-SQL de los predios corrido antes.
+(migración v74), y la etapa 5 del salón. La 6.1.0 está PUBLICADA (19-oct) e
+instalada en mi PC de la casa, con el SQL de los predios corrido y la web
+publicada. Falta instalar la PC del operario (antes de abrir la caja) y la del
+jefe, conmigo, y después lo de TOÑANEZ (paso 4 de "La publicación").
 Hasta instalar la 6.1.0, en la oficina nadie le cobra ni le edita nada a
 TOÑANEZ, AGUSTINA.
 La regla de la mora, mía: la mora de un mes que ya se pagó no se cobra más; se
