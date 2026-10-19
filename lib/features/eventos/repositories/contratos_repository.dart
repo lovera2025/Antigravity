@@ -13,6 +13,7 @@ import '../../../models/sorteo_mesas_registro.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../../core/utils/pago_interes_mora.dart';
 import '../../../core/utils/uuid_utils.dart';
@@ -57,11 +58,43 @@ class PagoLoteLinea {
   });
 }
 
+/// Saca de la PC los pagos de un alumno que en la nube ya no están, y dice
+/// cuántos sacó. En la app es `SyncEngine.revisarPagosDelAlumno`.
+typedef RevisarPagosEnLaNube = Future<int> Function(
+  String contratoId,
+  bool rehacerCuenta,
+);
+
 class ContratosRepository {
   final SupabaseClient _supabase;
   final ConnectivityService _connectivity;
 
-  ContratosRepository(this._supabase, this._connectivity);
+  /// Sin esto (el motor de sincronización lo arma sin él), no se consulta la
+  /// nube antes de leer o rehacer la cuenta de un alumno.
+  final RevisarPagosEnLaNube? _revisarPagosEnLaNube;
+
+  ContratosRepository(
+    this._supabase,
+    this._connectivity, {
+    RevisarPagosEnLaNube? revisarPagosEnLaNube,
+  }) : _revisarPagosEnLaNube = revisarPagosEnLaNube;
+
+  /// Saca de esta PC los pagos del alumno que se borraron en otra PC, y rehace
+  /// su cuenta si sacó alguno. Devuelve cuántos sacó.
+  ///
+  /// Lo llaman las pantallas que muestran los pagos de un alumno **antes** de
+  /// leer su ficha, así el saldo que muestran ya es el bueno. Sin internet no
+  /// hace nada y no demora nada. Nunca tira.
+  Future<int> revisarPagosEnLaNube(String contratoId) async {
+    final revisar = _revisarPagosEnLaNube;
+    if (revisar == null) return 0;
+    try {
+      return await revisar(contratoId, true);
+    } catch (e) {
+      debugPrint('⚠️ Revisando los pagos de $contratoId en la nube: $e');
+      return 0;
+    }
+  }
 
   /// Suma mora cobrada (no anulada) dentro de una transacci├│n, **antes** de insertar un nuevo pago.
   Future<double> _sumMoraCobradaHistorialTxn(
@@ -634,7 +667,26 @@ class ContratosRepository {
   }
 
   /// Recalcula los contadores de cuotas de un contrato basándose en el historial de pagos.
-  Future<void> recalcularProgresoContrato(String contratoId) async {
+  ///
+  /// Con [revisarNube] (lo normal), antes de la cuenta saca los pagos del
+  /// alumno que se borraron en otra PC: la cuenta sube a la nube, y con un pago
+  /// borrado adentro le pisaba el saldo (DE CARLO, MICAELA ESTEFANIA, 19-oct-2026:
+  /// $176.100 en vez de $236.100). Sin internet se hace igual, con lo de la PC.
+  /// En false lo usan quien recorre muchos alumnos, para no consultar la nube
+  /// por cada uno, y el motor, que ya la consultó.
+  Future<void> recalcularProgresoContrato(
+    String contratoId, {
+    bool revisarNube = true,
+  }) async {
+    final revisar = _revisarPagosEnLaNube;
+    if (revisarNube && revisar != null) {
+      try {
+        await revisar(contratoId, false);
+      } catch (e) {
+        debugPrint('⚠️ Revisando los pagos de $contratoId en la nube: $e');
+      }
+    }
+
     final db = await LocalDatabase.instance;
 
     final cRows = await db.query('contratos_alumnos', where: 'id = ?', whereArgs: [contratoId]);
@@ -920,7 +972,13 @@ class ContratosRepository {
   }
 
   /// Obtiene historial de pagos.
+  ///
+  /// Antes de leerlo saca los pagos que se borraron en otra PC (ver
+  /// [revisarPagosEnLaNube]): lo usan la ventana de cobro, el historial, el
+  /// estado de cuenta, el recibo y perdonar la mora, y ahí lo que se ve tiene
+  /// que ser lo de la nube.
   Future<List<Map<String, dynamic>>> getHistorialPagosAlumno(String contratoId) async {
+    await revisarPagosEnLaNube(contratoId);
     final db = await LocalDatabase.instance;
     return await db.query('pagos_contrato_alumno',
         where: 'contrato_alumno_id = ?',
@@ -1196,7 +1254,7 @@ class ContratosRepository {
     
     for (final aRow in alumnos) {
       final id = aRow['id'] as String;
-      await recalcularProgresoContrato(id);
+      await recalcularProgresoContrato(id, revisarNube: false);
     }
   }
 
@@ -1626,5 +1684,11 @@ class ContratosRepository {
 final contratosRepositoryProvider = Provider<ContratosRepository>((ref) {
   final supabase = ref.watch(supabaseProvider);
   final connectivity = ref.watch(connectivityServiceProvider);
-  return ContratosRepository(supabase, connectivity);
+  return ContratosRepository(
+    supabase,
+    connectivity,
+    revisarPagosEnLaNube: (contratoId, rehacerCuenta) => ref
+        .read(syncEngineProvider)
+        .revisarPagosDelAlumno(contratoId, rehacerCuenta: rehacerCuenta),
+  );
 });

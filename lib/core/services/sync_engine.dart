@@ -8,10 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/local_database.dart';
 import '../database/sync_queue.dart';
 import '../utils/uuid_utils.dart';
+import 'borrados_de_otra_pc.dart';
 import 'connectivity_service.dart';
 import 'contrato_al_bajar.dart';
 import 'instalacion_id.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
+import '../../features/eventos/repositories/contratos_repository.dart';
 import '../../features/mi_empresa/repositories/finanzas_repository.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
 import '../../features/eventos/services/revision_mora_constancia.dart';
@@ -286,6 +288,40 @@ Set<String> filasAPodar({
   return idsLocales.difference(idsEnLaNube).difference(idsPendientes);
 }
 
+/// Los pagos de un alumno en esta PC, comparados con los de la nube.
+class PagosDelAlumnoEnLaNube {
+  const PagosDelAlumnoEnLaNube({required this.deMas, required this.faltan});
+
+  /// Están acá y en la nube ya no, y no esperan subir: los borró alguien en la
+  /// otra PC. Se sacan.
+  final Set<String> deMas;
+
+  /// Están en la nube y acá todavía no bajaron. Mientras falte alguno no se
+  /// rehace la cuenta del alumno: daría que debe más, y esa cuenta sube.
+  final Set<String> faltan;
+}
+
+/// Compara los pagos de un alumno con la foto de la nube **de ese alumno**.
+///
+/// Es una foto completa y contada del mismo alcance que se recorre (los pagos
+/// de un contrato), así que cumple la regla de [filasAPodar], que es quien
+/// decide qué sobra. Sin foto completa no sobra ni falta nada.
+PagosDelAlumnoEnLaNube compararPagosDelAlumno({
+  required Set<String> locales,
+  required Set<String> pendientes,
+  required Set<String> enLaNube,
+  required bool fotoCompleta,
+}) =>
+    PagosDelAlumnoEnLaNube(
+      deMas: filasAPodar(
+        fotoCompleta: fotoCompleta,
+        idsLocales: locales,
+        idsEnLaNube: enLaNube,
+        idsPendientes: pendientes,
+      ),
+      faltan: fotoCompleta ? enLaNube.difference(locales) : const <String>{},
+    );
+
 /// Motor de sincronización — local-first, nube manual.
 class SyncEngine {
   final ConnectivityService _connectivity;
@@ -463,9 +499,11 @@ class SyncEngine {
 
   /// Cada cuánto se revisa si en la nube desapareció algo.
   ///
-  /// Diez minutos y no diez segundos: el pulso ya cubre los borrados en vivo, y
-  /// esto es solo para la PC que estaba apagada cuando pasaron. Son 6 requests
-  /// de ids más 6 `count`, y no tiene sentido pagarlos seguido.
+  /// Diez minutos y no diez segundos: en vivo los borrados llegan por el pulso
+  /// y, si se pierde, por la cuenta de cada ciclo (`_contarParaVerBorrados`).
+  /// Esto es para lo demás y para la PC que estaba apagada cuando pasaron. Son
+  /// unas 25 consultas de ids y otros tantos `count` (los pagos, en 5 tandas),
+  /// y no tiene sentido pagarlos seguido.
   static const _cadaCuantoSeReconcilia = Duration(minutes: 10);
   Timer? _timerReconciliacion;
 
@@ -592,6 +630,9 @@ class SyncEngine {
   }
 
   /// Baja cambios remotos a SQLite (no sube pendientes locales).
+  ///
+  /// Desde la 6.1.1 revisa siempre lo borrado en otra PC, antes de la mora (ver
+  /// `_pullFromCloud`): [reconcileDeletes] queda por compatibilidad.
   Future<void> pullRemote({bool reconcileDeletes = false}) async {
     if (_isBusy) return;
     if (_connectivity.currentStatus == AppConnectivity.offline) {
@@ -612,10 +653,6 @@ class SyncEngine {
       _updateStatus(SyncStatus.syncing);
       _lastError = null;
       await _pullFromCloud();
-
-      if (reconcileDeletes) {
-        await _reconcileDeletes();
-      }
 
       FinanzasRepository.invalidateProyeccionCache();
       _lastPullTime = DateTime.now();
@@ -645,10 +682,19 @@ class SyncEngine {
   // ninguna tabla a la publicación de Realtime** — sigue solo `invitados`, que
   // es el tótem. Ver docs/CONTEXTO_v4.9.4_2026-09-02.md.
   //
-  // El pulso es un **acelerador, no un transporte**: lo único que hace es
-  // adelantar un pull que igual iba a pasar. Si el socket está caído, o el
-  // mensaje se pierde, o la PC estaba apagada, el ciclo de siempre lo cubre. Por
-  // eso no hay reintentos ni acuses: un aviso perdido cuesta segundos, no datos.
+  // Para las tablas, el pulso es un **acelerador, no un transporte**: lo único
+  // que hace es adelantar un pull que igual iba a pasar. Si el socket está
+  // caído, o el mensaje se pierde, o la PC estaba apagada, el ciclo de siempre
+  // lo cubre. Por eso no hay acuses: un aviso perdido cuesta segundos, no datos.
+  //
+  // **Para los borrados no es así**: el pull trae lo nuevo y lo cambiado, nunca
+  // lo que dejó de existir. Un borrado que se pierde lo repone recién la
+  // revisión (`_reconcileDeletes`) o la consulta de un alumno al abrirlo
+  // (`revisarPagosDelAlumno`). Por eso los borrados del pulso no se tiran
+  // cuando la PC está ocupada: se guardan y se aplican a los pocos segundos. El
+  // 19-oct-2026 el jefe borró un pago de DE CARLO y la PC del operario, prendida
+  // y cobrando, se lo quedó: al cobrarle contó los dos y le pisó el saldo a la
+  // nube.
 
   static const String _nombreCanalPulso = 'sync_pulse';
   static const String _eventoPulso = 'cambios';
@@ -761,12 +807,26 @@ class SyncEngine {
     _debouncePulso = Timer(_esperaTrasPulso, () => unawaited(_atenderElPulso()));
   }
 
+  /// Cuánto se espera para volver a intentar los borrados de un pulso que llegó
+  /// con la PC ocupada.
+  static const _esperaBorradosDelPulso = Duration(seconds: 3);
+  Timer? _reintentoBorradosDelPulso;
+
   Future<void> _atenderElPulso() async {
     if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
-      // Se pierde el aviso a propósito: el ciclo de siempre lo cubre, y
-      // reencolarlo acá es cómo se arma una tormenta de reintentos.
+      // Las tablas se sueltan a propósito: el ciclo de 10 s las baja igual, y
+      // reencolarlas es cómo se arma una tormenta de reintentos.
       _tablasDelPulso.clear();
-      _borradosDelPulso.clear();
+      // Los borrados no: no tienen otro camino al instante (ver arriba). Son una
+      // lista con nombre y apellido y aplicarlos dos veces no hace nada, así que
+      // esperar a que la PC se desocupe no cuesta nada.
+      if (_borradosDelPulso.isNotEmpty) {
+        _reintentoBorradosDelPulso?.cancel();
+        _reintentoBorradosDelPulso = Timer(
+          _esperaBorradosDelPulso,
+          () => unawaited(_atenderElPulso()),
+        );
+      }
       return;
     }
 
@@ -781,7 +841,12 @@ class SyncEngine {
       // Los borrados primero: si además bajan filas de esas tablas, que no
       // vuelvan a entrar las que alguien acaba de eliminar.
       for (final e in borrados.entries) {
-        await _aplicarBorrados(db, e.key, e.value);
+        await _aplicarBorrados(
+          db,
+          e.key,
+          e.value,
+          camino: CaminoDelBorrado.aviso,
+        );
       }
 
       if (tablas.isNotEmpty) {
@@ -807,10 +872,46 @@ class SyncEngine {
   ///
   /// No se encola nada: en la nube ya está borrado, y encolarlo sería mandarle
   /// de vuelta un DELETE por algo que no pasó acá.
-  Future<void> _aplicarBorrados(
+  ///
+  /// Lo que se saca queda escrito en `borrados_en_otra_pc.txt`, con el
+  /// [camino] por el que esta PC se enteró. Y si entre lo sacado hay pagos, la
+  /// cuenta de esos alumnos se rehace ([rehacerCuentas]): con el pago adentro,
+  /// esta PC pudo haber subido un saldo armado con él. Devuelve cuántas filas
+  /// sacó.
+  Future<int> _aplicarBorrados(
     Database db,
     String tabla,
     Set<String> ids, {
+    required CaminoDelBorrado camino,
+    bool rehacerCuentas = true,
+  }) async {
+    final sacado = _LoSacado();
+    await _borrarConSusHijas(db, tabla, ids, sacado);
+    if (sacado.estaVacio) return 0;
+
+    for (final t in sacado.tablas) {
+      _anotarCambioBajado(t);
+    }
+    debugPrint(
+      '  🗑️ ${sacado.total} fila(s) que en la nube ya no estaban '
+      '(${camino.texto}): ${sacado.tablas.join(", ")}',
+    );
+    try {
+      await BorradosConstancia.anotar(sacado.renglones, camino);
+    } catch (e) {
+      debugPrint('  ⚠️ No pude anotar lo borrado: $e');
+    }
+    if (rehacerCuentas) {
+      await _rehacerCuentas(db, sacado.contratosARehacer);
+    }
+    return sacado.total;
+  }
+
+  Future<void> _borrarConSusHijas(
+    Database db,
+    String tabla,
+    Set<String> ids,
+    _LoSacado sacado, {
     int profundidad = 0,
   }) async {
     if (ids.isEmpty || profundidad > 4) return;
@@ -841,19 +942,209 @@ class SyncEngine {
         huerfanas.addAll(filas.map((r) => (r['id'] as String?) ?? ''));
       }
       huerfanas.remove('');
-      await _aplicarBorrados(
+      await _borrarConSusHijas(
         db,
         hija,
         huerfanas,
+        sacado,
         profundidad: profundidad + 1,
       );
     }
 
     for (final id in aBorrar) {
+      // Se lee antes de borrar: para la constancia y, si es un pago, para saber
+      // de qué alumno era y rehacerle la cuenta.
+      final filas = await db.query(
+        tabla,
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (filas.isEmpty) continue;
+      final fila = filas.first;
+      String? alumno;
+      if (tabla == 'pagos_contrato_alumno') {
+        final contrato = await db.query(
+          'contratos_alumnos',
+          columns: ['nombre_alumno'],
+          where: 'id = ?',
+          whereArgs: [fila['contrato_alumno_id']],
+          limit: 1,
+        );
+        if (contrato.isNotEmpty) {
+          alumno = contrato.first['nombre_alumno'] as String?;
+        }
+      }
       await db.delete(tabla, where: 'id = ?', whereArgs: [id]);
+      sacado.anotar(tabla, fila, alumno: alumno);
     }
-    _anotarCambioBajado(tabla);
-    debugPrint('  🗑️ $tabla: ${aBorrar.length} borrado(s) por pulso');
+  }
+
+  /// Rehace la cuenta de los alumnos a los que se les sacó un pago.
+  ///
+  /// Solo si sus pagos en esta PC quedaron iguales a los de la nube: si falta
+  /// alguno que todavía no bajó, la cuenta daría que debe más, y esa cuenta
+  /// sube (es lo que se llevó puesta la auditoría de septiembre, ver el final
+  /// de `contratos_repository.dart`). Si la nube ya tenía el saldo bien, el
+  /// recálculo da lo mismo y no sube nada; si esta PC lo había pisado, sube el
+  /// bueno.
+  Future<void> _rehacerCuentas(Database db, Set<String> contratos) async {
+    for (final id in contratos) {
+      try {
+        final comparados = await _compararPagosConLaNube(db, id);
+        if (comparados == null) {
+          debugPrint(
+            '  ⏸️ $id: no pude leer sus pagos en la nube; la cuenta se rehace '
+            'la próxima vez que se lo toque',
+          );
+          continue;
+        }
+        if (comparados.faltan.isNotEmpty) {
+          debugPrint(
+            '  ⏸️ $id: le faltan bajar ${comparados.faltan.length} pago(s); '
+            'la cuenta se rehace cuando bajen',
+          );
+          continue;
+        }
+        await ContratosRepository(_supabase, _connectivity)
+            .recalcularProgresoContrato(id, revisarNube: false);
+      } catch (e) {
+        debugPrint('  ⚠️ No pude rehacer la cuenta de $id: $e');
+      }
+    }
+  }
+
+  /// Cuánto se espera a la nube al consultar los pagos de un alumno. Corto: lo
+  /// espera una pantalla que se está abriendo, o un cobro.
+  static const _esperaNubeDelAlumno = Duration(seconds: 3);
+
+  /// Los pagos de un alumno, comparados con la nube, o `null` si no se pudo
+  /// leer la nube o lo que vino no es una foto creíble.
+  Future<PagosDelAlumnoEnLaNube?> _compararPagosConLaNube(
+    Database db,
+    String contratoId,
+  ) async {
+    // Primero lo de esta PC y lo que espera subir; recién después la nube. Un
+    // pago que sube mientras se consulta ya estaba en la cola al mirarla, así
+    // que no se puede tomar por borrado.
+    final locales = (await db.query(
+      'pagos_contrato_alumno',
+      columns: ['id'],
+      where: 'contrato_alumno_id = ?',
+      whereArgs: [contratoId],
+    )).map((r) => (r['id'] as String?) ?? '').where((id) => id.isNotEmpty)
+        .toSet();
+    final pendientes = (await db.query(
+      '_sync_queue',
+      columns: ['registro_id'],
+      where: 'tabla = ?',
+      whereArgs: ['pagos_contrato_alumno'],
+    )).map((r) => r['registro_id'] as String).toSet();
+
+    try {
+      final respuesta = await _supabase
+          .from('pagos_contrato_alumno')
+          .select('id')
+          .eq('contrato_alumno_id', contratoId)
+          .count(CountOption.exact)
+          .timeout(_esperaNubeDelAlumno);
+      final enLaNube = <String>{
+        for (final f in respuesta.data)
+          if (((f['id'] as String?) ?? '').isNotEmpty) f['id'] as String,
+      };
+      if (enLaNube.length != respuesta.count) {
+        debugPrint(
+          '  ⏸️ pagos de $contratoId: traje ${enLaNube.length} y la nube dice '
+          '${respuesta.count} — no se toca nada',
+        );
+        return null;
+      }
+
+      // Cero pagos en la nube contra alguno acá puede ser de verdad (el jefe le
+      // borró el único) o una sesión vencida, que también lee cero. Si el alumno
+      // se ve, la sesión anda y el cero es de verdad.
+      if (enLaNube.isEmpty && locales.isNotEmpty) {
+        final alumno = await _supabase
+            .from('contratos_alumnos')
+            .select('id')
+            .eq('id', contratoId)
+            .limit(1)
+            .timeout(_esperaNubeDelAlumno);
+        if (alumno.isEmpty) {
+          debugPrint(
+            '  ⏸️ pagos de $contratoId: la nube no devuelve ni el alumno — '
+            'eso es sesión o permisos, no un borrado',
+          );
+          return null;
+        }
+      }
+
+      return compararPagosDelAlumno(
+        locales: locales,
+        pendientes: pendientes,
+        enLaNube: enLaNube,
+        fotoCompleta: true,
+      );
+    } catch (e) {
+      debugPrint('  ⏸️ pagos de $contratoId: no pude leer la nube ($e)');
+      return null;
+    }
+  }
+
+  /// Cuándo se le preguntó a la nube por cada alumno. Una pantalla que se
+  /// redibuja vuelve a pedir el historial: no tiene sentido salir a la nube
+  /// cada vez.
+  final Map<String, DateTime> _revisionDelAlumno = {};
+  static const _cadaCuantoSeRevisaUnAlumno = Duration(seconds: 15);
+
+  /// Saca de esta PC los pagos de un alumno que en la nube ya no están.
+  ///
+  /// Es lo que hace que lo borrado en otra PC desaparezca **al instante** donde
+  /// importa: lo llaman el historial de pagos del alumno (la ventana de cobro,
+  /// el estado de cuenta, el recibo, perdonar la mora) y el recálculo de su
+  /// cuenta, antes de hacerla. No depende del aviso: le pregunta a la nube en
+  /// ese momento.
+  ///
+  /// Sin internet no hace nada y no demora nada: se cobra igual, con lo de la
+  /// PC. Con internet espera a la nube como mucho [_esperaNubeDelAlumno].
+  ///
+  /// Con [rehacerCuenta], si sacó algo y no le falta bajar ningún pago, rehace
+  /// la cuenta del alumno. Devuelve cuántos pagos sacó.
+  Future<int> revisarPagosDelAlumno(
+    String contratoId, {
+    CaminoDelBorrado camino = CaminoDelBorrado.alumno,
+    bool rehacerCuenta = true,
+  }) async {
+    if (kIsWeb || contratoId.length != 36) return 0;
+    if (_connectivity.currentStatus == AppConnectivity.offline) return 0;
+    final ahora = DateTime.now();
+    final antes = _revisionDelAlumno[contratoId];
+    if (antes != null && ahora.difference(antes) < _cadaCuantoSeRevisaUnAlumno) {
+      return 0;
+    }
+    _revisionDelAlumno[contratoId] = ahora;
+
+    try {
+      final db = await LocalDatabase.instance;
+      final comparados = await _compararPagosConLaNube(db, contratoId);
+      if (comparados == null || comparados.deMas.isEmpty) return 0;
+
+      final sacados = await _aplicarBorrados(
+        db,
+        'pagos_contrato_alumno',
+        comparados.deMas,
+        camino: camino,
+        rehacerCuentas: false,
+      );
+      if (sacados > 0 && rehacerCuenta && comparados.faltan.isEmpty) {
+        await ContratosRepository(_supabase, _connectivity)
+            .recalcularProgresoContrato(contratoId, revisarNube: false);
+      }
+      return sacados;
+    } catch (e) {
+      debugPrint('  ⚠️ Revisando los pagos de $contratoId: $e');
+      return 0;
+    }
   }
 
   /// Lo que se mueve durante un cobro. Baja en cada ciclo.
@@ -1025,7 +1316,15 @@ class SyncEngine {
       // el programa (también la primera vez, al instalar una versión nueva).
       if (!_moraRevisadaEnEstaSesion && _tablasConFalloPull.isEmpty) {
         _moraRevisadaEnEstaSesion = true;
+        // Antes, lo que se borró en otra PC mientras esta estaba cerrada: la
+        // mora se rehace desde los pagos, y con un pago borrado adentro saldría
+        // mal y subiría.
+        await _reconcileDeletes();
         await revisarMora();
+      } else {
+        // En cada ciclo: si en la nube hay menos que acá, algo se borró en otra
+        // PC y el aviso no llegó.
+        await _contarParaVerBorrados(db);
       }
       // Lo que sí bajó tiene que refrescar igual la pantalla, así que esto
       // devuelve true de todos modos: lo único que cambia es dejar de informar
@@ -1599,6 +1898,9 @@ class SyncEngine {
       _pullTable(db, 'predios', 'updated_at'),
     ]);
 
+    // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
+    // pagos, y con un pago borrado adentro saldría mal y subiría.
+    await _reconcileDeletes();
     _moraRevisadaEnEstaSesion = true;
     await revisarMora();
 
@@ -2584,7 +2886,20 @@ class SyncEngine {
     return clean;
   }
 
-  /// Tablas padre que se reconcilian. Las hijas caen por cascada.
+  /// Las tablas en las que se revisa qué se borró en otra PC: **todas las que
+  /// se pueden borrar a mano**.
+  ///
+  /// Hasta la 6.1.0 eran solo las seis primeras, con la idea de que "las hijas
+  /// caen por cascada". Eso vale cuando se borra el padre, no cuando se borra
+  /// una hija suelta con el padre vivo. Un pago se borra solo, con su alumno
+  /// vivo, y entonces no lo alcanzaba nada: el 19-oct-2026 el jefe borró un
+  /// pago de $60.000 de DE CARLO, MICAELA ESTEFANIA, la PC del operario se lo
+  /// quedó y, al cobrarle, contó los dos pagos y le pisó el saldo a la nube
+  /// ($176.100 en vez de $236.100). Lo mismo dejaba renglones de presupuesto
+  /// borrados en la otra PC, que se veía más caro.
+  ///
+  /// Van primero los padres: si se fue uno, sus hijas se van con él y quedan
+  /// anotadas con su nombre.
   static const List<String> _tablasAReconciliar = [
     'clientes',
     'eventos',
@@ -2592,7 +2907,66 @@ class SyncEngine {
     'contratos_alumnos',
     'prestamos_alquiler',
     'servicios',
+    'pagos_contrato_alumno',
+    'presupuesto_servicios',
+    'eventos_servicios',
+    'egresos',
+    'transacciones',
+    'notas_operativas_contrato',
+    'obligaciones_pago',
+    'compromisos_personal',
+    'cierre_caja_anotaciones',
+    'solicitudes_cotizacion',
+    'prestamo_alquiler_lineas',
+    'pagos_prestamo_alquiler',
+    'operadores_caja',
+    'sesiones_caja',
   ];
+
+  /// Las tablas que se bajan y **no** se revisan, con el motivo. Una tabla
+  /// nueva que se baje tiene que entrar en una lista o en la otra:
+  /// `test/borrados_de_otra_pc_test.dart` falla si no.
+  static const Map<String, String> _tablasSinRevisarBorrados = {
+    'invitados':
+        'la lista de la puerta tiene su propio camino: el tótem por Realtime, '
+            'el salón la arma o la vacía (PuertaAlDia)',
+    'calculos_rentabilidad': 'no se borra a mano',
+    'caja_fuerte_movimientos': 'no se borra a mano',
+    'rentabilidad_config': 'no se borra a mano',
+    'cierre_caja_guia_movimientos': 'no se borra a mano',
+    'sillas_reparto': 'una fila por alumno, con id fijo: no se borra a mano',
+    'entradas_retiro': 'una fila por alumno, con id fijo: no se borra a mano',
+    'sorteos_mesas': 'solo se agregan renglones: deshacer es otro renglón',
+    'mesas_movimientos': 'solo se agregan renglones',
+    'planos_evento': 'una fila por fiesta, con id fijo: no se borra a mano',
+    'predios': 'borrar le pone borrado_at: la fila no se saca',
+  };
+
+  /// Para los tests: las tablas que se revisan.
+  @visibleForTesting
+  static List<String> get tablasQueSeRevisan => _tablasAReconciliar;
+
+  /// Para los tests: las que no, con su motivo.
+  @visibleForTesting
+  static Map<String, String> get tablasSinRevisarBorrados =>
+      _tablasSinRevisarBorrados;
+
+  /// Para los tests: todas las que se bajan.
+  @visibleForTesting
+  static Set<String> get tablasQueSeBajan => _incrementalColumns.keys.toSet();
+
+  /// Para los tests: la revisión de cada 10 minutos.
+  @visibleForTesting
+  Future<void> revisarLoBorradoEnOtraPc() => _reconcileDeletes();
+
+  /// Para los tests: la cuenta de cada ciclo de 10 s.
+  @visibleForTesting
+  Future<void> contarParaVerBorrados() async =>
+      _contarParaVerBorrados(await LocalDatabase.instance);
+
+  /// Para los tests: un pulso que llega de otra PC.
+  @visibleForTesting
+  void recibirPulso(Map<String, dynamic> mensaje) => _alRecibirPulso(mensaje);
 
   /// Trae **todos** los ids de una tabla de la nube, o `null` si no pudo.
   ///
@@ -2656,62 +3030,122 @@ class SyncEngine {
   /// Cumple la segunda mitad de la regla —comparar contra una foto completa **y
   /// contada**—, y por eso todo el cuidado está en [_idsCompletosDeLaNube]: sin
   /// esa certeza, `filasAPodar` recibe `fotoCompleta: false` y no borra nada.
-  Future<void> _reconcileDeletes() async {
+  Future<void> _reconcileDeletes({
+    CaminoDelBorrado camino = CaminoDelBorrado.revision,
+  }) async {
     final db = await LocalDatabase.instance;
 
     debugPrint('🔄 Reconciliación de borrados remotos...');
 
     for (final table in _tablasAReconciliar) {
-      try {
-        final cloudIds = await _idsCompletosDeLaNube(table);
+      await _revisarBorradosDe(db, table, camino: camino);
+    }
+  }
 
-        final localRows = await db.query(table, columns: ['id']);
-        final localIds = localRows
-            .map((r) => (r['id'] as String?) ?? '')
-            .where((id) => id.isNotEmpty)
-            .toSet();
+  /// La revisión de una tabla: saca de esta PC lo que en la nube ya no está.
+  Future<void> _revisarBorradosDe(
+    Database db,
+    String table, {
+    required CaminoDelBorrado camino,
+  }) async {
+    try {
+      // **Primero lo de esta PC y lo que espera subir; recién después la
+      // nube.** Al revés —como fue hasta la 6.1.0— un cobro que se carga y
+      // sube mientras se leen las páginas de la nube no está en la foto (se
+      // leyó antes) ni en la cola (ya salió), y se tomaba por borrado. Así, lo
+      // que estaba en la cola al empezar queda protegido aunque suba en el
+      // medio, y lo que entra después no está en la lista de esta PC.
+      final localRows = await db.query(table, columns: ['id']);
+      final localIds = localRows
+          .map((r) => (r['id'] as String?) ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
 
-        // Lo que todavía no subió no está de más: la nube no lo vio nunca.
-        final pendingRows = await db.query(
-          '_sync_queue',
-          columns: ['registro_id'],
-          where: "tabla = ?",
-          whereArgs: [table],
-        );
-        final pendingIds = pendingRows
-            .map((r) => r['registro_id'] as String)
-            .toSet();
+      // Lo que todavía no subió no está de más: la nube no lo vio nunca.
+      final pendingRows = await db.query(
+        '_sync_queue',
+        columns: ['registro_id'],
+        where: "tabla = ?",
+        whereArgs: [table],
+      );
+      final pendingIds = pendingRows
+          .map((r) => r['registro_id'] as String)
+          .toSet();
 
-        // Una nube vacía contra una base local con filas no es un borrado
-        // masivo: es una lectura que no funcionó. Ver `fotoDeLaNubeEsCreible`.
-        final creible =
-            cloudIds != null &&
-            fotoDeLaNubeEsCreible(
-              enLaNube: cloudIds.length,
-              local: localIds.length,
-            );
-        if (cloudIds != null && !creible) {
-          debugPrint(
-            '  ⏸️ $table: la nube dice 0 filas y acá hay ${localIds.length} — '
-            'eso es sesión o permisos, no un borrado. No se toca nada.',
+      final cloudIds = await _idsCompletosDeLaNube(table);
+
+      // Una nube vacía contra una base local con filas no es un borrado
+      // masivo: es una lectura que no funcionó. Ver `fotoDeLaNubeEsCreible`.
+      final creible =
+          cloudIds != null &&
+          fotoDeLaNubeEsCreible(
+            enLaNube: cloudIds.length,
+            local: localIds.length,
           );
-        }
-
-        // La misma función que usa el podado del pull. Un solo lugar decide qué
-        // se borra, y un solo test lo cubre.
-        final aBorrar = filasAPodar(
-          fotoCompleta: creible,
-          idsLocales: localIds,
-          idsEnLaNube: cloudIds ?? const {},
-          idsPendientes: pendingIds,
+      if (cloudIds != null && !creible) {
+        debugPrint(
+          '  ⏸️ $table: la nube dice 0 filas y acá hay ${localIds.length} — '
+          'eso es sesión o permisos, no un borrado. No se toca nada.',
         );
-        if (aBorrar.isEmpty) continue;
+      }
 
-        // Por el mismo camino que los borrados del pulso, así se llevan sus
-        // hijas: en SQLite local el CASCADE del esquema no borra nada.
-        await _aplicarBorrados(db, table, aBorrar);
+      // La misma función que usa el podado del pull. Un solo lugar decide qué
+      // se borra, y un solo test lo cubre.
+      final aBorrar = filasAPodar(
+        fotoCompleta: creible,
+        idsLocales: localIds,
+        idsEnLaNube: cloudIds ?? const {},
+        idsPendientes: pendingIds,
+      );
+      if (aBorrar.isEmpty) return;
+
+      // Por el mismo camino que los borrados del pulso, así se llevan sus
+      // hijas: en SQLite local el CASCADE del esquema no borra nada.
+      await _aplicarBorrados(db, table, aBorrar, camino: camino);
+    } catch (e) {
+      debugPrint('  ⚠️ Error reconciliando $table: $e');
+    }
+  }
+
+  /// Las tablas que se cuentan en cada ciclo de 10 s, para enterarse de un
+  /// borrado aunque el aviso no llegue: lo que se mueve en el mostrador.
+  static const List<String> _tablasQueSeCuentan = [
+    'pagos_contrato_alumno',
+    'contratos_alumnos',
+    'egresos',
+  ];
+
+  /// Cuenta en la nube las tablas del mostrador y, si en alguna hay menos que
+  /// en esta PC, la revisa en ese momento.
+  ///
+  /// Es lo que hace que un borrado llegue en 10 segundos como mucho aunque el
+  /// aviso se pierda: un `count` por tabla, sin bajar nada. Corre después de
+  /// la bajada, cuando esta PC ya tiene todo lo nuevo de la nube: si acá hay
+  /// más filas que allá (sin contar lo que espera subir), alguna se borró en
+  /// otra PC. Si a la vez entró una fila nueva que todavía no bajó, las cuentas
+  /// pueden empatar por un ciclo; el siguiente lo ve.
+  Future<void> _contarParaVerBorrados(Database db) async {
+    for (final tabla in _tablasQueSeCuentan) {
+      try {
+        final enLaNube = await _supabase
+            .from(tabla)
+            .count(CountOption.exact)
+            .timeout(_esperaNubeDelAlumno);
+        final fila = await db.rawQuery(
+          'SELECT COUNT(*) AS n FROM $tabla WHERE id NOT IN '
+          '(SELECT registro_id FROM _sync_queue WHERE tabla = ?)',
+          [tabla],
+        );
+        final aca = (fila.first['n'] as num?)?.toInt() ?? 0;
+        if (aca > enLaNube) {
+          debugPrint(
+            '  🔎 $tabla: acá $aca y en la nube $enLaNube — se revisa qué se '
+            'borró',
+          );
+          await _revisarBorradosDe(db, tabla, camino: CaminoDelBorrado.cuenta);
+        }
       } catch (e) {
-        debugPrint('  ⚠️ Error reconciliando $table: $e');
+        debugPrint('  ⏸️ $tabla: no pude contar en la nube ($e)');
       }
     }
   }
@@ -2743,6 +3177,7 @@ class SyncEngine {
     _timerReconciliacion?.cancel();
     _reintentoReconciliacion?.cancel();
     _debouncePulso?.cancel();
+    _reintentoBorradosDelPulso?.cancel();
     _timerAvisoCambios?.cancel();
     unawaited(_canalPulso?.unsubscribe() ?? Future.value());
     _connectivitySub?.cancel();
@@ -2750,6 +3185,38 @@ class SyncEngine {
     _pendingController.close();
     _remoteProbeController.close();
     _cambiosBajadosController.close();
+  }
+}
+
+/// Lo que sacó una pasada de `_aplicarBorrados`, con su cascada.
+class _LoSacado {
+  final Map<String, List<Map<String, Object?>>> _filas = {};
+  final List<String> renglones = [];
+  final Set<String> _contratosConPagosSacados = {};
+
+  void anotar(String tabla, Map<String, Object?> fila, {String? alumno}) {
+    (_filas[tabla] ??= []).add(fila);
+    renglones.add(renglonDeLoBorrado(tabla, fila, alumno: alumno));
+    if (tabla == 'pagos_contrato_alumno') {
+      final c = fila['contrato_alumno_id'];
+      if (c is String && c.isNotEmpty) _contratosConPagosSacados.add(c);
+    }
+  }
+
+  bool get estaVacio => _filas.isEmpty;
+
+  int get total => _filas.values.fold(0, (s, l) => s + l.length);
+
+  Iterable<String> get tablas => _filas.keys;
+
+  /// Los alumnos a los que se les sacó un pago y siguen existiendo. Si se fue
+  /// el alumno entero, sus pagos se fueron con él y no hay cuenta que rehacer.
+  Set<String> get contratosARehacer {
+    final sinAlumno = {
+      for (final f in _filas['contratos_alumnos'] ?? const [])
+        if (f['id'] is String) f['id'] as String,
+    };
+    return _contratosConPagosSacados.difference(sinAlumno);
   }
 }
 

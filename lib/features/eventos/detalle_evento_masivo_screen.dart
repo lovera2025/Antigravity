@@ -4858,6 +4858,9 @@ class _DetalleEventoMasivoScreenState
       return;
     }
     final cRepo = ref.read(contratosRepositoryProvider);
+    // Antes de leer la ficha: si en otra PC le borraron un pago, que no se
+    // cuente acá. Con el pago adentro, el cobro le pisaba el saldo a la nube.
+    _avisarPagosSacados(await cRepo.revisarPagosEnLaNube(alumno.id));
     var alumnoFresco = await cRepo.getContratoById(alumno.id) ?? alumno;
     // Reconciliar mesas antes de abrir el modal para que el JSON por mesa
     // esté al día (corrige contratos con pagos legacy sin número de mesa).
@@ -8109,8 +8112,29 @@ class _DetalleEventoMasivoScreenState
     ]);
   }
 
+  /// Avisa que se sacaron pagos que se borraron en otra PC
+  /// (`ContratosRepository.revisarPagosEnLaNube`).
+  void _avisarPagosSacados(int sacados) {
+    if (sacados <= 0 || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          sacados == 1
+              ? 'Se sacó un pago que se borró en otra PC. Lo que ves ahora es '
+                  'lo de la nube.'
+              : 'Se sacaron $sacados pagos que se borraron en otra PC. Lo que '
+                  'ves ahora es lo de la nube.',
+        ),
+        backgroundColor: Colors.orangeAccent,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
   Future<void> _mostrarHistorialPagosAlumno(ContratoAlumno alumno) async {
     final repo = ref.read(contratosRepositoryProvider);
+    // Antes de leer la ficha, así el saldo de arriba ya es el bueno.
+    _avisarPagosSacados(await repo.revisarPagosEnLaNube(alumno.id));
     final alumnoUi = await repo.getContratoById(alumno.id) ?? alumno;
     final mesasResumen = MesasExtraUtils.estadoDesdeContrato(alumnoUi);
     final isDark = Theme.of(context).brightness == Brightness.dark;

@@ -27,6 +27,10 @@ web también, la del operario instalada): sigue instalar la PC del jefe y repeti
 en el CONTEXTO). La mora por cuota suelta (fase 2) quedó descartada. Entrada:
 `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
+**La 6.1.1** (programada el 19-oct, sin publicar): lo que se borra a mano en una PC desaparece también en la otra
+(ver la trampa "Lo que se borra a mano…", abajo). La PC del jefe puede pasar de la 6.0.0 directo a la 6.1.1.
+Entrada: `docs/CONTEXTO_v6.1.1_2026-10-19.md`.
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:
@@ -558,6 +562,28 @@ históricos y la pantalla se ve como siempre.
   Hoy la decisión vive en `filasAPodar` (`sync_engine.dart`), con su test en
   `test/filas_a_podar_test.dart`. **Cualquier camino nuevo que borre tiene que
   pasar por ahí**, no reimplementar la comparación al lado.
+
+- **Lo que se borra a mano en una PC tiene que llegar a la otra, y el pull no lo trae** (6.1.1). El pull baja lo
+  nuevo y lo cambiado, nunca lo que dejó de existir. El 19-oct-2026 el jefe borró un pago de $60.000 de DE CARLO,
+  MICAELA ESTEFANIA. La PC del operario, prendida y cobrando, se lo quedó: el aviso al instante (el pulso) se tiraba
+  si la PC estaba ocupada, y la revisión de cada 10 minutos miraba solo seis tablas padre ("las hijas caen por
+  cascada", que vale si se borra el padre, no una hija suelta). Al cobrarle, contó los dos pagos y le pisó el saldo
+  a la nube ($176.100 en vez de $236.100). En la PC de la casa había además 23 renglones de presupuesto borrados.
+  Ahora un borrado llega por cuatro caminos (`borrados_de_otra_pc.dart` dice cuál en `borrados_en_otra_pc.txt`):
+  - **el aviso**, que ya no se tira con la PC ocupada: se reintenta a los 3 s;
+  - **la cuenta de cada ciclo de 10 s** (`_contarParaVerBorrados`): un `count` de pagos, alumnos y egresos; si en la
+    nube hay menos que acá, se revisa esa tabla en el momento;
+  - **al abrir un alumno** (`revisarPagosDelAlumno`, desde `getHistorialPagosAlumno` y antes de
+    `recalcularProgresoContrato`): sus pagos contra la nube, una consulta con 3 s de tope y una vez cada 15 s por
+    alumno; sin internet no hace nada;
+  - **la revisión de cada 10 minutos y la del arranque**, que mira **todas las tablas que se borran a mano** y corre
+    antes de la revisión de la mora. Lee lo de la PC y la cola **antes** que la nube: al revés, un cobro que subía en
+    el medio se tomaba por borrado.
+
+  Al sacar un pago se rehace la cuenta del alumno, solo si sus pagos quedaron iguales a los de la nube.
+  **Una tabla nueva que se baje tiene que estar en `_tablasAReconciliar` o en `_tablasSinRevisarBorrados`, con el
+  motivo**: `test/borrados_de_otra_pc_test.dart` falla si no, y también si aparece un borrado a mano de una tabla que
+  no se revisa.
 
 - **El `updated_at` de Supabase lo mantiene un trigger, no los repos.** Hay un
   `before insert or update` sobre cada tabla sincronizada que corre
