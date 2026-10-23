@@ -629,6 +629,7 @@ void main() {
         (t) => t.$1 == 'oro',
         orElse: () => todas.first,
       );
+      // ignore: invalid_use_of_visible_for_testing_member
       PersonalizarTotem.elegirFondo = elegirFondoDePrueba(bytes);
       await _sacarPersonalizar(
         tester,
