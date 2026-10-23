@@ -63,6 +63,15 @@ class TotemConfigRepository {
     return guardada;
   }
 
+  /// Los nombres de las imágenes de un evento en el bucket: la foto del
+  /// círculo y el fondo de "Tu fondo".
+  static const portada = 'portada';
+  static const fondo = 'fondo';
+
+  /// Dónde va una imagen en el bucket.
+  static String rutaDe(String eventoId, String nombre, String extension) =>
+      '$eventoId/$nombre.${normalizarExtension(extension)}';
+
   /// Sube la portada del evento y devuelve su URL pública.
   ///
   /// Recibe **bytes** y no un path porque en web `PlatformFile.path` es siempre
@@ -71,6 +80,23 @@ class TotemConfigRepository {
     required String eventoId,
     required Uint8List bytes,
     required String extension,
+  }) =>
+      _subir(eventoId: eventoId, bytes: bytes, extension: extension, nombre: portada);
+
+  /// Sube el fondo de "Tu fondo" y devuelve su URL pública. Mismas reglas que
+  /// la portada, en `<evento>/fondo.<ext>`.
+  Future<String> subirFondo({
+    required String eventoId,
+    required Uint8List bytes,
+    required String extension,
+  }) =>
+      _subir(eventoId: eventoId, bytes: bytes, extension: extension, nombre: fondo);
+
+  Future<String> _subir({
+    required String eventoId,
+    required Uint8List bytes,
+    required String extension,
+    required String nombre,
   }) async {
     final ext = normalizarExtension(extension);
     final mime = mimeDe(ext);
@@ -84,8 +110,8 @@ class TotemConfigRepository {
       throw ArgumentError('La imagen pesa más de 5 MB. Elegí una más liviana.');
     }
 
-    // Path convenido en la migración: una portada por evento.
-    final path = '$eventoId/portada.$ext';
+    // Path convenido en la migración: una portada (y un fondo) por evento.
+    final path = rutaDe(eventoId, nombre, ext);
 
     await _client.storage.from(bucket).uploadBinary(
           path,
@@ -101,13 +127,16 @@ class TotemConfigRepository {
   }
 
   /// Quita la portada del evento.
-  ///
+  Future<void> borrarImagen(String eventoId) => _borrar(eventoId, portada);
+
+  /// Quita el fondo de "Tu fondo".
+  Future<void> borrarFondo(String eventoId) => _borrar(eventoId, fondo);
+
   /// Se intentan todas las extensiones porque no sabemos con cuál se subió;
   /// `remove` no falla por un path que no existe.
-  Future<void> borrarImagen(String eventoId) async {
-    final paths = tiposPermitidos.keys
-        .map((ext) => '$eventoId/portada.$ext')
-        .toList();
+  Future<void> _borrar(String eventoId, String nombre) async {
+    final paths =
+        tiposPermitidos.keys.map((ext) => rutaDe(eventoId, nombre, ext)).toList();
     await _client.storage.from(bucket).remove(paths);
   }
 }

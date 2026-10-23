@@ -69,6 +69,31 @@ void main() {
       expect(_detalle(e, 'Foto del tótem'), 'no bajó · se reintenta');
     });
 
+    test('con "Tu fondo": lista solo con la foto y el fondo en la PC', () {
+      final sinFondo = _estado(DatosSinInternet(
+          hayInternet: true,
+          alDia: _alDia,
+          fotoGuardada: true,
+          fondoGuardado: false));
+      expect(sinFondo.tipo, TipoSinInternet.falta);
+      expect(sinFondo.texto, contains('falta guardar el fondo del tótem'));
+      expect(_detalle(sinFondo, 'Fondo del tótem'), 'no bajó · se reintenta');
+
+      final conLosDos = _estado(DatosSinInternet(
+          hayInternet: true,
+          alDia: _alDia,
+          fotoGuardada: true,
+          fondoGuardado: true));
+      expect(conLosDos.tipo, TipoSinInternet.lista);
+      expect(_detalle(conLosDos, 'Fondo del tótem'), 'guardado');
+    });
+
+    test('sin "Tu fondo", ni se habla del fondo', () {
+      final e = _estado(DatosSinInternet(
+          hayInternet: true, alDia: _alDia, fotoGuardada: true));
+      expect(e.detalle.map((r) => r.$1), isNot(contains('Fondo del tótem')));
+    });
+
     test('la primera vez, mientras baja', () {
       final e = _estado(const DatosSinInternet(hayInternet: true, bajando: true));
       expect(e.tipo, TipoSinInternet.falta);
@@ -140,7 +165,12 @@ void main() {
     late SinInternetEnMemoria mem;
     setUp(() => mem = SinInternetEnMemoria());
 
-    PuestaAlDiaPuerta puesta({bool hay = true, bool masivo = true, String? foto}) {
+    PuestaAlDiaPuerta puesta({
+      bool hay = true,
+      bool masivo = true,
+      String? foto,
+      String? fondo,
+    }) {
       final p = PuestaAlDiaPuerta(
         eventoId: _ev,
         accesos: mem.accesos,
@@ -149,7 +179,8 @@ void main() {
         cadaCuenta: const Duration(hours: 1),
       )
         ..masivo = masivo
-        ..fotoUrl = foto;
+        ..fotoUrl = foto
+        ..fondoUrl = fondo;
       addTearDown(p.dispose);
       return p;
     }
@@ -199,6 +230,37 @@ void main() {
       await p.arrancar();
       expect(p.datos.alDia, _ahora);
       expect(p.datos.fotoGuardada, isFalse);
+    });
+
+    test('con "Tu fondo", guarda también el fondo; si no baja, se dice aparte',
+        () async {
+      final p = puesta(
+        foto: 'https://nube.test/foto.png',
+        fondo: 'https://nube.test/fondo.jpg',
+      );
+      await p.arrancar();
+      expect(mem.fondosGuardados, {'https://nube.test/fondo.jpg'});
+      expect(p.datos.fondoGuardado, isTrue);
+      expect(p.datos.fotoGuardada, isTrue);
+
+      mem.bajaFondo = false;
+      final otra = puesta(fondo: 'https://nube.test/otro_fondo.jpg');
+      await otra.arrancar();
+      expect(otra.datos.alDia, _ahora, reason: 'el fondo no frena el "al día"');
+      expect(otra.datos.fondoGuardado, isFalse);
+    });
+
+    test('sin internet mira si el fondo está, sin bajarlo', () async {
+      mem.fondosGuardados.add('https://nube.test/fondo.jpg');
+      final p = puesta(hay: false, fondo: 'https://nube.test/fondo.jpg');
+      await p.arrancar();
+      expect(p.datos.fondoGuardado, isTrue);
+      p.fondoUrl = 'https://nube.test/fondo_nuevo.jpg';
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(p.datos.fondoGuardado, isFalse);
+      p.fondoUrl = null;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(p.datos.fondoGuardado, isNull, reason: 'ya no usa "Tu fondo"');
     });
 
     test('sin internet: no intenta bajar nada, y dice la hora guardada',
@@ -259,6 +321,8 @@ void main() {
           bajarAlumnos: () async => true,
           guardarFoto: (_, _) async => true,
           fotoGuardada: (_, _) async => true,
+          guardarFondo: (_, _) async => true,
+          fondoGuardado: (_, _) async => true,
           contarSinSubir: (_) async => 0,
           leerAlDia: (_) async => null,
           anotarAlDia: (_, _) async {},
@@ -375,6 +439,41 @@ void main() {
       );
       expect(find.textContaining('falta guardar la foto del tótem'),
           findsOneWidget);
+    });
+
+    testWidgets('con "Tu fondo" y el fondo que no baja: falta', (tester) async {
+      final mundo = await abrir(
+        tester,
+        config: {
+          _ev: const TotemConfig(
+            eventoId: _ev,
+            estilo: 'tu_fondo',
+            fondoUrl: 'https://nube.test/fondo.jpg',
+          ),
+        },
+        antes: (m) => m.sinInternet.bajaFondo = false,
+      );
+      expect(find.textContaining('falta guardar el fondo del tótem'),
+          findsOneWidget);
+      expect(mundo.sinInternet.fondosGuardados, isEmpty);
+    });
+
+    testWidgets('con un fondo cargado pero otra apariencia, no lo pide',
+        (tester) async {
+      final mundo = await abrir(
+        tester,
+        config: {
+          _ev: const TotemConfig(
+            eventoId: _ev,
+            estilo: 'gala',
+            fondoUrl: 'https://nube.test/fondo.jpg',
+          ),
+        },
+        antes: (m) => m.sinInternet.bajaFondo = false,
+      );
+      expect(find.text('Lista para trabajar sin internet · al día 21:40'),
+          findsOneWidget);
+      expect(mundo.sinInternet.fondosGuardados, isEmpty);
     });
 
     testWidgets('vuelve internet: se pone al día de nuevo', (tester) async {

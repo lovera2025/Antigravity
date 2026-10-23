@@ -110,6 +110,8 @@ class SinInternetEnMemoria {
   var bajanAlumnos = true;
   var bajaFoto = true;
   final fotosGuardadas = <String>{};
+  var bajaFondo = true;
+  final fondosGuardados = <String>{};
   var sinSubir = 0;
   final alDia = <String, DateTime>{};
   var listasBajadas = 0;
@@ -130,6 +132,11 @@ class SinInternetEnMemoria {
           return fotosGuardadas.contains(url);
         },
         fotoGuardada: (url, _) async => fotosGuardadas.contains(url),
+        guardarFondo: (url, _) async {
+          if (bajaFondo) fondosGuardados.add(url);
+          return fondosGuardados.contains(url);
+        },
+        fondoGuardado: (url, _) async => fondosGuardados.contains(url),
         contarSinSubir: (_) async => sinSubir,
         leerAlDia: (id) async => alDia[id],
         anotarAlDia: (id, cuando) async => alDia[id] = cuando,

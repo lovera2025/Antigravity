@@ -30,6 +30,10 @@ class DatosSinInternet {
   /// foto.
   final bool? fotoGuardada;
 
+  /// Si el fondo de "Tu fondo" está guardado en la PC. Null: el tótem no usa
+  /// un fondo propio.
+  final bool? fondoGuardado;
+
   /// Ingresos marcados en esta PC que todavía no subieron.
   final int sinSubir;
 
@@ -39,6 +43,7 @@ class DatosSinInternet {
     this.bajando = false,
     this.fallo = false,
     this.fotoGuardada,
+    this.fondoGuardado,
     this.sinSubir = 0,
   });
 
@@ -49,6 +54,8 @@ class DatosSinInternet {
     bool? fallo,
     bool? fotoGuardada,
     bool sinFoto = false,
+    bool? fondoGuardado,
+    bool sinFondo = false,
     int? sinSubir,
   }) =>
       DatosSinInternet(
@@ -57,6 +64,8 @@ class DatosSinInternet {
         bajando: bajando ?? this.bajando,
         fallo: fallo ?? this.fallo,
         fotoGuardada: sinFoto ? null : (fotoGuardada ?? this.fotoGuardada),
+        fondoGuardado:
+            sinFondo ? null : (fondoGuardado ?? this.fondoGuardado),
         sinSubir: sinSubir ?? this.sinSubir,
       );
 }
@@ -81,7 +90,8 @@ class EstadoSinInternet {
   final TipoSinInternet tipo;
   final String texto;
 
-  /// Personas, al día, foto y sin subir.
+  /// Personas, al día, foto, el fondo (si el tótem va con "Tu fondo") y sin
+  /// subir.
   final List<(String, String)> detalle;
 
   const EstadoSinInternet(this.tipo, this.texto, this.detalle);
@@ -111,6 +121,14 @@ class EstadoSinInternet {
           false => d.hayInternet ? 'no bajó · se reintenta' : 'no está guardada',
         },
       ),
+      // Solo si el tótem va con "Tu fondo": a los demás no les cambia nada.
+      if (d.fondoGuardado != null)
+        (
+          'Fondo del tótem',
+          d.fondoGuardado!
+              ? 'guardado'
+              : (d.hayInternet ? 'no bajó · se reintenta' : 'no está guardado'),
+        ),
       (
         'Ingresos sin subir',
         d.sinSubir == 0
@@ -164,6 +182,9 @@ class EstadoSinInternet {
     if (d.fotoGuardada == false) {
       return es(TipoSinInternet.falta, '$falta: falta guardar la foto del tótem.');
     }
+    if (d.fondoGuardado == false) {
+      return es(TipoSinInternet.falta, '$falta: falta guardar el fondo del tótem.');
+    }
     return es(
       TipoSinInternet.lista,
       'Lista para trabajar sin internet · al día ${_cuando(alDia, ahora)}',
@@ -215,6 +236,10 @@ class AccesosPuerta {
   /// Si la foto ya está en la PC, sin bajar nada.
   final Future<bool> Function(String url, String eventoId) fotoGuardada;
 
+  /// Lo mismo con el fondo de "Tu fondo", que va en su propia carpeta.
+  final Future<bool> Function(String url, String eventoId) guardarFondo;
+  final Future<bool> Function(String url, String eventoId) fondoGuardado;
+
   final Future<int> Function(String eventoId) contarSinSubir;
   final Future<DateTime?> Function(String eventoId) leerAlDia;
   final Future<void> Function(String eventoId, DateTime cuando) anotarAlDia;
@@ -225,6 +250,8 @@ class AccesosPuerta {
     required this.bajarAlumnos,
     required this.guardarFoto,
     required this.fotoGuardada,
+    required this.guardarFondo,
+    required this.fondoGuardado,
     required this.contarSinSubir,
     this.leerAlDia = AlDiaDeLaPuerta.leer,
     this.anotarAlDia = AlDiaDeLaPuerta.anotar,
@@ -287,6 +314,7 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
 
   bool _masivo = false;
   String? _fotoUrl;
+  String? _fondoUrl;
   bool _arrancada = false;
   bool _cerrada = false;
   Future<void>? _enCurso;
@@ -311,7 +339,7 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
     _timerCuenta = Timer.periodic(cadaCuenta, (_) => unawaited(recontar()));
     await Future.wait([
       recontar(),
-      _datos.hayInternet ? ponerAlDia() : _mirarFoto(),
+      if (_datos.hayInternet) ponerAlDia() else ...[_mirarFoto(), _mirarFondo()],
     ]);
   }
 
@@ -340,6 +368,15 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
     unawaited(_datos.hayInternet ? _guardarFoto() : _mirarFoto());
   }
 
+  /// El fondo de "Tu fondo", si el tótem lo usa (null: no). Si cambia, se
+  /// guarda el nuevo.
+  set fondoUrl(String? url) {
+    if (url == _fondoUrl) return;
+    _fondoUrl = url;
+    if (!_arrancada) return;
+    unawaited(_datos.hayInternet ? _guardarFondo() : _mirarFondo());
+  }
+
   /// Baja todo lo del evento. Si ya está bajando, espera a esa.
   Future<void> ponerAlDia() => _enCurso ??= _ponerAlDia().whenComplete(() {
         _enCurso = null;
@@ -354,6 +391,7 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
         accesos.bajarLista(eventoId),
         if (_masivo) accesos.bajarAlumnos(),
         _guardarFoto(),
+        _guardarFondo(),
       ]);
       bien = resultados.every((r) => r != false);
     } catch (e) {
@@ -394,6 +432,32 @@ class PuestaAlDiaPuerta extends ChangeNotifier {
     final ok = await accesos.fotoGuardada(url, eventoId);
     if (!_cerrada && url == _fotoUrl) {
       _poner(_datos.copyWith(fotoGuardada: ok));
+    }
+  }
+
+  /// Como [_guardarFoto]: el fondo tampoco cuenta para "todo bajó".
+  Future<bool?> _guardarFondo() async {
+    final url = _fondoUrl;
+    if (url == null) {
+      _poner(_datos.copyWith(sinFondo: true));
+      return null;
+    }
+    final ok = await accesos.guardarFondo(url, eventoId);
+    if (!_cerrada && url == _fondoUrl) {
+      _poner(_datos.copyWith(fondoGuardado: ok));
+    }
+    return null;
+  }
+
+  Future<void> _mirarFondo() async {
+    final url = _fondoUrl;
+    if (url == null) {
+      _poner(_datos.copyWith(sinFondo: true));
+      return;
+    }
+    final ok = await accesos.fondoGuardado(url, eventoId);
+    if (!_cerrada && url == _fondoUrl) {
+      _poner(_datos.copyWith(fondoGuardado: ok));
     }
   }
 

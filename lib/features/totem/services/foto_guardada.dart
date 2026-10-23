@@ -19,6 +19,20 @@ ImageProvider? fotoDelEvento(TotemConfig cfg) {
   return FotoGuardada(url, eventoId: cfg.eventoId);
 }
 
+/// El fondo de "Tu fondo", como la foto: en la web, de internet; en la PC, el
+/// guardado, **en su propia carpeta** ([FotosDelTotem.fondosEnLaPc]). Null si
+/// el evento no tiene fondo.
+ImageProvider? fondoDelEvento(TotemConfig cfg) {
+  final url = cfg.fondoUrl;
+  if (url == null) return null;
+  if (kIsWeb) return NetworkImage(url);
+  return FotoGuardada(
+    url,
+    eventoId: cfg.eventoId,
+    fotos: FotosDelTotem.fondosEnLaPc,
+  );
+}
+
 /// La foto del evento guardada en la PC (sección 5 de la 6.0.0).
 ///
 /// Antes era `NetworkImage`: sin internet el tótem caía al logo. Ahora la foto
@@ -55,17 +69,20 @@ class FotoGuardada extends ImageProvider<FotoGuardada> {
     final fotos = key.fotos ?? FotosDelTotem.enLaPc;
     final bytes = await fotos.bytes(key.url, eventoId: key.eventoId);
     if (bytes == null) {
-      throw StateError('La foto del evento no está en la PC y no se pudo bajar');
+      throw StateError('${fotos.que} no está en la PC y no se pudo bajar');
     }
     return decode(await ui.ImmutableBuffer.fromUint8List(bytes));
   }
 
   @override
   bool operator ==(Object other) =>
-      other is FotoGuardada && other.url == url && other.eventoId == eventoId;
+      other is FotoGuardada &&
+      other.url == url &&
+      other.eventoId == eventoId &&
+      identical(other.fotos, fotos);
 
   @override
-  int get hashCode => Object.hash(url, eventoId);
+  int get hashCode => Object.hash(url, eventoId, fotos);
 
   @override
   String toString() => 'FotoGuardada($url)';
@@ -78,17 +95,31 @@ class FotoGuardada extends ImageProvider<FotoGuardada> {
 /// y se borra la vieja **recién cuando la nueva quedó guardada**. Sin
 /// internet y sin la nueva, se usa la vieja: mejor la foto anterior que el
 /// logo.
+///
+/// **Cada carpeta guarda una sola imagen por evento**: al guardar la nueva se
+/// borran las otras, y sin internet se usa la última. Por eso el fondo de "Tu
+/// fondo" va en otra carpeta ([fondosEnLaPc]): en la misma, guardar uno
+/// borraba el otro, y sin internet el círculo podía mostrar el fondo.
 class FotosDelTotem {
   FotosDelTotem({
     Future<Directory> Function()? carpeta,
     http.Client Function()? cliente,
     this.espera = const Duration(seconds: 20),
-  })  : _carpeta = carpeta ?? _carpetaDeLaPc,
+    this.que = 'La foto del evento',
+  })  : _carpeta = carpeta ?? carpetaEnDocumentos(carpetaFotos),
         _cliente = cliente ?? http.Client.new;
 
-  /// La de la app: anda en la ventana principal y en la del tótem, que
-  /// leen y escriben la misma carpeta.
+  /// Las carpetas, dentro de `Documentos\Junior Eventos`.
+  static const carpetaFotos = 'fotos_totem';
+  static const carpetaFondos = 'fondos_totem';
+
+  /// Las de la app: andan en la ventana principal y en la del tótem, que
+  /// leen y escriben las mismas carpetas.
   static final enLaPc = FotosDelTotem();
+  static final fondosEnLaPc = FotosDelTotem(
+    carpeta: carpetaEnDocumentos(carpetaFondos),
+    que: 'El fondo del tótem',
+  );
 
   final Future<Directory> Function() _carpeta;
   final http.Client Function() _cliente;
@@ -96,17 +127,27 @@ class FotosDelTotem {
   /// Cuánto se espera a que baje la foto.
   final Duration espera;
 
+  /// Qué se guarda, para los avisos: "La foto del evento", "El fondo del
+  /// tótem".
+  final String que;
+
   /// Lo que se está bajando: dos pantallas que piden la misma foto a la vez
   /// la bajan una sola vez.
   final _enCurso = <String, Future<Uint8List?>>{};
 
-  static Future<Directory> _carpetaDeLaPc() async {
-    final docs = await getApplicationDocumentsDirectory();
-    return Directory(
-      '${docs.path}${Platform.pathSeparator}Junior Eventos'
-      '${Platform.pathSeparator}fotos_totem',
-    );
-  }
+  /// `Documentos\Junior Eventos\<nombre>`. Los tests le pasan otra carpeta de
+  /// documentos.
+  static Future<Directory> Function() carpetaEnDocumentos(
+    String nombre, {
+    Future<Directory> Function() documentos = getApplicationDocumentsDirectory,
+  }) =>
+      () async {
+        final docs = await documentos();
+        return Directory(
+          '${docs.path}${Platform.pathSeparator}Junior Eventos'
+          '${Platform.pathSeparator}$nombre',
+        );
+      };
 
   Future<Directory> _delEvento(String eventoId) async {
     final base = await _carpeta();
@@ -147,7 +188,7 @@ class FotosDelTotem {
       final archivo = await _archivo(url, eventoId);
       if (await archivo.exists()) return await archivo.readAsBytes();
     } catch (e) {
-      debugPrint('No se pudo leer la foto guardada: $e');
+      debugPrint('No se pudo leer lo guardado ($que): $e');
     }
     return await _bajar(url, eventoId) ?? await _laUltima(eventoId);
   }
@@ -169,13 +210,13 @@ class FotosDelTotem {
       if (r.statusCode != 200 ||
           r.bodyBytes.isEmpty ||
           (tipo != null && !tipo.startsWith('image/'))) {
-        debugPrint('La foto del evento no bajó (${r.statusCode}, $tipo)');
+        debugPrint('$que no bajó (${r.statusCode}, $tipo)');
         return null;
       }
       await _escribir(url, eventoId, r.bodyBytes);
       return r.bodyBytes;
     } catch (e) {
-      debugPrint('La foto del evento no bajó: $e');
+      debugPrint('$que no bajó: $e');
       return null;
     } finally {
       cliente.close();
@@ -200,7 +241,7 @@ class FotosDelTotem {
         }
       }
     } catch (e) {
-      debugPrint('No se pudo guardar la foto del evento: $e');
+      debugPrint('No se pudo guardar en la PC ($que): $e');
     }
   }
 
@@ -221,7 +262,7 @@ class FotosDelTotem {
       }
       return await ultima?.readAsBytes();
     } catch (e) {
-      debugPrint('No se pudo leer la última foto guardada: $e');
+      debugPrint('No se pudo leer la última guardada ($que): $e');
       return null;
     }
   }

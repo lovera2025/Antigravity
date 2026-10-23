@@ -152,6 +152,70 @@ void main() {
     expect(await rota.estaGuardada(_v1, eventoId: _ev), isFalse);
   });
 
+  // "Tu fondo": el fondo va en su propia carpeta. En la misma, guardar uno
+  // borraba el otro (cada carpeta deja una sola imagen por evento), y sin
+  // internet el círculo podía mostrar el fondo.
+  group('la foto y el fondo conviven', () {
+    const fondo1 = 'https://nube.test/totem/$_ev/fondo.jpg?v=1';
+    const fondo2 = 'https://nube.test/totem/$_ev/fondo.jpg?v=2';
+    final fondoBytes = Uint8List.fromList([...fotoDePrueba, 0]);
+    late FotosDelTotem deFotos;
+    late FotosDelTotem deFondos;
+
+    setUp(() {
+      // Las mismas dos carpetas que usa la app, dentro de una de documentos
+      // de mentira.
+      deFotos = FotosDelTotem(
+        carpeta: FotosDelTotem.carpetaEnDocumentos(
+          FotosDelTotem.carpetaFotos,
+          documentos: () async => carpeta,
+        ),
+        cliente: red.cliente,
+      );
+      deFondos = FotosDelTotem(
+        carpeta: FotosDelTotem.carpetaEnDocumentos(
+          FotosDelTotem.carpetaFondos,
+          documentos: () async => carpeta,
+        ),
+        cliente: red.cliente,
+        que: 'El fondo del tótem',
+      );
+    });
+
+    test('guardar uno no borra el otro, en ningún orden', () async {
+      expect(await deFotos.guardar(_v1, eventoId: _ev), isTrue);
+      red.cuerpo = fondoBytes;
+      expect(await deFondos.guardar(fondo1, eventoId: _ev), isTrue);
+      expect(await deFotos.estaGuardada(_v1, eventoId: _ev), isTrue);
+
+      // Se cambian los dos: cada uno borra solo su versión vieja.
+      red.cuerpo = fotoDePrueba;
+      expect(await deFotos.guardar(_v2, eventoId: _ev), isTrue);
+      red.cuerpo = fondoBytes;
+      expect(await deFondos.guardar(fondo2, eventoId: _ev), isTrue);
+      expect(await deFotos.estaGuardada(_v2, eventoId: _ev), isTrue);
+      expect(await deFondos.estaGuardada(fondo2, eventoId: _ev), isTrue);
+      expect(await deFotos.estaGuardada(_v1, eventoId: _ev), isFalse);
+      expect(await deFondos.estaGuardada(fondo1, eventoId: _ev), isFalse);
+    });
+
+    test('sin internet, cada uno devuelve el suyo', () async {
+      await deFotos.guardar(_v1, eventoId: _ev);
+      red.cuerpo = fondoBytes;
+      await deFondos.guardar(fondo1, eventoId: _ev);
+      red.hayInternet = false;
+      // Las direcciones nuevas no bajan: va la última guardada de cada uno.
+      expect(await deFotos.bytes(_v2, eventoId: _ev), fotoDePrueba);
+      expect(await deFondos.bytes(fondo2, eventoId: _ev), fondoBytes);
+    });
+
+    test('las carpetas de la app son distintas', () {
+      expect(FotosDelTotem.carpetaFotos, isNot(FotosDelTotem.carpetaFondos));
+      expect(identical(FotosDelTotem.enLaPc, FotosDelTotem.fondosEnLaPc),
+          isFalse);
+    });
+  });
+
   group('lo que dibuja el tótem', () {
     test('sin foto en Personalizar, nada', () {
       expect(fotoDelEvento(TotemConfig.defaults(_ev)), isNull);
@@ -160,6 +224,17 @@ void main() {
     test('con foto, la guardada en la PC', () {
       final cfg = TotemConfig.defaults(_ev).copyWith(imagenUrl: _v1);
       expect(fotoDelEvento(cfg), FotoGuardada(_v1, eventoId: _ev));
+    });
+
+    test('el fondo, el guardado en la PC, en su carpeta', () {
+      expect(fondoDelEvento(TotemConfig.defaults(_ev)), isNull);
+      const url = 'https://nube.test/totem/$_ev/fondo.jpg?v=1';
+      final cfg = TotemConfig.defaults(_ev).copyWith(fondoUrl: url);
+      expect(
+        fondoDelEvento(cfg),
+        FotoGuardada(url, eventoId: _ev, fotos: FotosDelTotem.fondosEnLaPc),
+      );
+      expect(fondoDelEvento(cfg), isNot(FotoGuardada(url, eventoId: _ev)));
     });
 
     // Con `test` y no `testWidgets`: dibujar una imagen de verdad necesita el
