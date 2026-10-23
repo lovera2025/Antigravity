@@ -34,7 +34,7 @@ final eventoMasivoProvider =
 final estiloDelEventoProvider =
     Provider.autoDispose.family<EstiloTotem?, String>((ref, eventoId) {
   final cfg = ref.watch(totemConfigValueProvider(eventoId));
-  final elegida = EstiloTotem.desdeClave(cfg.estilo);
+  final elegida = EstiloTotem.elegida(cfg.estilo, fondoUrl: cfg.fondoUrl);
   if (elegida != null) return elegida;
   final masivo = ref.watch(eventoMasivoProvider(eventoId));
   return masivo == null ? null : EstiloTotem.porDefecto(masivo: masivo);
@@ -213,6 +213,7 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
               final actual = _reproductor.actual;
               return EscenaTotem(
                 estilo: estilo,
+                respaldo: EstiloTotem.porDefecto(masivo: masivo),
                 cfg: cfg,
                 // El QR, solo en un particular, como en el salón.
                 qrUrl: masivo

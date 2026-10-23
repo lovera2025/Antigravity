@@ -30,6 +30,10 @@ class EscenaTotem extends StatefulWidget {
   final EstiloTotem estilo;
   final TotemConfig cfg;
 
+  /// La apariencia si [estilo] es "Tu fondo" y la imagen no está en la PC ni
+  /// baja: la del tipo de evento. Nunca una pantalla rota.
+  final EstiloTotem respaldo;
+
   /// La foto del evento, si manda sobre la de [cfg]: en Personalizar, la
   /// recién elegida, que todavía no se subió. Null: la de `cfg.imagenUrl`.
   final ImageProvider? foto;
@@ -69,6 +73,7 @@ class EscenaTotem extends StatefulWidget {
     super.key,
     required this.estilo,
     required this.cfg,
+    this.respaldo = EstiloTotem.cristal,
     this.foto,
     this.qrUrl,
     this.llegada,
@@ -177,11 +182,19 @@ class _EscenaTotemState extends State<EscenaTotem>
     return _guia;
   }
 
-  EscenaEstilo get _escena => switch (widget.estilo) {
+  /// La que se dibuja: "Tu fondo" necesita su imagen; sin ella, [respaldo].
+  EstiloTotem get _estilo => widget.estilo == EstiloTotem.tuFondo
+      ? (widget.respaldo == EstiloTotem.tuFondo
+          ? EstiloTotem.cristal
+          : widget.respaldo)
+      : widget.estilo;
+
+  EscenaEstilo _escenaDe(EstiloTotem estilo) => switch (estilo) {
         EstiloTotem.neon => const EscenaNeon(),
         EstiloTotem.cristal => const EscenaCristal(),
         EstiloTotem.poster => const EscenaPoster(),
         EstiloTotem.gala => const EscenaGala(),
+        EstiloTotem.tuFondo => const EscenaCristal(),
       };
 
   double get _progreso {
@@ -195,12 +208,13 @@ class _EscenaTotemState extends State<EscenaTotem>
 
   @override
   Widget build(BuildContext context) {
+    final estilo = _estilo;
     final color = widget.cfg.colorAcento;
-    final escena = _escena;
+    final escena = _escenaDe(estilo);
     // La guardada en la PC: sin internet se sigue viendo (sección 5).
     final foto = widget.foto ?? fotoDelEvento(widget.cfg);
     final guia = _guiaPara(widget.llegada);
-    final tema = guia == null ? null : temaPlanoDelTotem(widget.estilo, color);
+    final tema = guia == null ? null : temaPlanoDelTotem(estilo, color);
     return LayoutBuilder(
       builder: (context, c) {
         final ancho = c.maxWidth.isFinite ? c.maxWidth : 1080.0;
@@ -218,7 +232,7 @@ class _EscenaTotemState extends State<EscenaTotem>
                       : _reloj.value * 60;
               final datos = DatosEscena(
                 cfg: widget.cfg,
-                estilo: widget.estilo,
+                estilo: estilo,
                 foto: foto,
                 color: color,
                 segundo: segundoNeon(color),
@@ -236,11 +250,9 @@ class _EscenaTotemState extends State<EscenaTotem>
                 fit: StackFit.expand,
                 children: [
                   FondoTotem(
-                    estilo: widget.estilo,
+                    estilo: estilo,
                     color: color,
-                    atenuado: widget.estilo == EstiloTotem.cristal
-                        ? 1
-                        : 1 - 0.45 * e,
+                    atenuado: estilo == EstiloTotem.cristal ? 1 : 1 - 0.45 * e,
                     fogonazo: _fogonazo(e),
                     tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
                   ),

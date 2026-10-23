@@ -21,9 +21,60 @@ class TotemConfig {
   /// nube (una fila de antes de la 6.0.0) también cuenta como prendida.
   final bool mostrarMusica;
 
-  /// La apariencia elegida en Personalizar (`neon`, `cristal`, `poster` o
-  /// `gala`, ver `EstiloTotem`). Null: la del tipo de evento.
+  /// La apariencia elegida en Personalizar (`neon`, `cristal`, `poster`,
+  /// `gala` o `tu_fondo`, ver `EstiloTotem`). Null: la del tipo de evento.
   final String? estilo;
+
+  // ── "Tu fondo" ────────────────────────────────────────────────────────────
+  //
+  // La quinta apariencia: una imagen propia de fondo, con su animación, sus
+  // efectos y sus colores. La receta la arma la imagen al guardar
+  // (`LecturaDelFondo`) y se guarda entera, así la PC y el tótem por el
+  // navegador muestran lo mismo sin volver a leerla. Lo que esta versión no
+  // conoce (una animación o un efecto nuevos) se guarda como vino, como
+  // `estilo`: si no, guardar Personalizar pisaría lo que eligió una más nueva.
+
+  /// La imagen del fondo, con `?v=`. Null: sin fondo.
+  final String? fondoUrl;
+
+  /// Si la receta sale de la imagen ("Automático · según la imagen"). Vacía
+  /// en la nube = automático.
+  final bool fondoAutomatico;
+
+  /// La animación de la imagen (`acercarse`, `ondular`, …; ver
+  /// `AnimacionFondo`), tal como vino. Null: la de siempre.
+  final String? fondoAnimacion;
+
+  /// Los efectos que van encima (`destellos`, `bruma`, …; ver `EfectoFondo`),
+  /// tal como vinieron. Vacía: sin efectos; null: los de siempre.
+  final List<String>? fondoEfectos;
+
+  /// Cuánto se mueve la imagen, de 0 a 100.
+  final int fondoIntensidad;
+
+  /// Cuánto se notan los efectos, de 0 a 100.
+  final int fondoIntensidadEfectos;
+
+  /// Cuánto se oscurece la imagen para que se lea, de 0 a 80.
+  final int fondoOscurecer;
+
+  /// Los tres colores sacados de la imagen: el brillo (marco, título, borde
+  /// del círculo), el saludo y la tarjeta de la llegada. Null: salen del color
+  /// del evento.
+  final List<Color>? fondoPaleta;
+
+  /// Hacia dónde va la animación: lo importante de la imagen, de 0 a 1 en
+  /// cada eje. Null: el centro.
+  final Offset? fondoFoco;
+
+  /// Las letras de "Tu fondo" (`clasica`, `suave`, `fiesta`, `moderna`; ver
+  /// `LetrasFondo`), tal como vinieron. Null: las de siempre.
+  final String? fondoLetras;
+
+  /// Qué tan clara es la imagen, de 0 (negra) a 100 (blanca). Con una imagen
+  /// clara y poco oscurecida el texto va oscuro. Null: oscura.
+  final int? fondoLuz;
+
   final DateTime? updatedAt;
 
   /// El saludo de siempre. Si nadie lo cambió y entra una familia, se dice
@@ -40,8 +91,26 @@ class TotemConfig {
     this.colorAcento = acentoPorDefecto,
     this.mostrarMusica = true,
     this.estilo,
+    this.fondoUrl,
+    this.fondoAutomatico = true,
+    this.fondoAnimacion,
+    this.fondoEfectos,
+    this.fondoIntensidad = intensidadPorDefecto,
+    this.fondoIntensidadEfectos = intensidadEfectosPorDefecto,
+    this.fondoOscurecer = oscurecerPorDefecto,
+    this.fondoPaleta,
+    this.fondoFoco,
+    this.fondoLetras,
+    this.fondoLuz,
     this.updatedAt,
   });
+
+  static const intensidadPorDefecto = 40;
+  static const intensidadEfectosPorDefecto = 50;
+  static const oscurecerPorDefecto = 30;
+
+  /// El oscurecido más fuerte: más, y la imagen ya no se ve.
+  static const oscurecerMaximo = 80;
 
   /// Valores idénticos a los que hoy están escritos en el código.
   factory TotemConfig.defaults(String eventoId) =>
@@ -57,6 +126,22 @@ class TotemConfig {
     final imagen = json['imagen_url'] as String?;
     final estilo = json['estilo'];
 
+    /// Un texto con algo, o null.
+    String? crudo(String clave) {
+      final v = json[clave];
+      return v is String && v.trim().isNotEmpty ? v.trim() : null;
+    }
+
+    /// Un número entero acotado; vacío o basura, [siVacio].
+    int entero(String clave, int siVacio, int maximo) {
+      final v = json[clave];
+      final n = v is num ? v.round() : int.tryParse('${v ?? ''}'.trim());
+      return n == null ? siVacio : n.clamp(0, maximo);
+    }
+
+    final efectos = json['fondo_efectos'];
+    final luz = json['fondo_luz'];
+
     return TotemConfig(
       eventoId: json['evento_id'] as String,
       titulo: texto('titulo', 'JUNIOR EVENTOS'),
@@ -67,6 +152,27 @@ class TotemConfig {
       colorAcento: parseHex(json['color_acento'] as String?),
       mostrarMusica: json['mostrar_musica'] != false,
       estilo: estilo is String && estilo.trim().isNotEmpty ? estilo.trim() : null,
+      fondoUrl: crudo('fondo_url'),
+      fondoAutomatico: json['fondo_automatico'] != false,
+      fondoAnimacion: crudo('fondo_animacion'),
+      fondoEfectos: efectos is String
+          ? [
+              for (final e in efectos.split(','))
+                if (e.trim().isNotEmpty) e.trim(),
+            ]
+          : null,
+      fondoIntensidad: entero('fondo_intensidad', intensidadPorDefecto, 100),
+      fondoIntensidadEfectos: entero(
+        'fondo_intensidad_efectos',
+        intensidadEfectosPorDefecto,
+        100,
+      ),
+      fondoOscurecer:
+          entero('fondo_oscurecer', oscurecerPorDefecto, oscurecerMaximo),
+      fondoPaleta: leerPaleta(json['fondo_paleta'] as String?),
+      fondoFoco: leerFoco(json['fondo_foco'] as String?),
+      fondoLetras: crudo('fondo_letras'),
+      fondoLuz: luz == null ? null : entero('fondo_luz', 0, 100),
       updatedAt: json['updated_at'] != null
           ? DateTime.tryParse(json['updated_at'].toString())
           : null,
@@ -86,6 +192,20 @@ class TotemConfig {
         // guardar Personalizar falla. Se corre antes de instalar.
         'mostrar_musica': mostrarMusica,
         'estilo': estilo,
+        // Las de "Tu fondo" necesitan sus columnas en la nube (SQL
+        // `20261023120000_totem_config_tu_fondo.sql`): sin ellas, guardar
+        // Personalizar falla. Se corre antes de instalar y de publicar la web.
+        'fondo_url': fondoUrl,
+        'fondo_automatico': fondoAutomatico,
+        'fondo_animacion': fondoAnimacion,
+        'fondo_efectos': fondoEfectos?.join(','),
+        'fondo_intensidad': fondoIntensidad.clamp(0, 100),
+        'fondo_intensidad_efectos': fondoIntensidadEfectos.clamp(0, 100),
+        'fondo_oscurecer': fondoOscurecer.clamp(0, oscurecerMaximo),
+        'fondo_paleta': paletaATexto(fondoPaleta),
+        'fondo_foco': focoATexto(fondoFoco),
+        'fondo_letras': fondoLetras,
+        'fondo_luz': fondoLuz?.clamp(0, 100),
         'updated_at': updatedAt?.toIso8601String(),
       };
 
@@ -100,6 +220,18 @@ class TotemConfig {
     bool? mostrarMusica,
     String? estilo,
     bool limpiarEstilo = false,
+    String? fondoUrl,
+    bool limpiarFondo = false,
+    bool? fondoAutomatico,
+    String? fondoAnimacion,
+    List<String>? fondoEfectos,
+    int? fondoIntensidad,
+    int? fondoIntensidadEfectos,
+    int? fondoOscurecer,
+    List<Color>? fondoPaleta,
+    Offset? fondoFoco,
+    String? fondoLetras,
+    int? fondoLuz,
   }) {
     return TotemConfig(
       eventoId: eventoId,
@@ -111,9 +243,89 @@ class TotemConfig {
       colorAcento: colorAcento ?? this.colorAcento,
       mostrarMusica: mostrarMusica ?? this.mostrarMusica,
       estilo: limpiarEstilo ? null : (estilo ?? this.estilo),
+      // Sin la imagen, la receta no se borra: no molesta, y si se vuelve a
+      // cargar un fondo se arma otra.
+      fondoUrl: limpiarFondo ? null : (fondoUrl ?? this.fondoUrl),
+      fondoAutomatico: fondoAutomatico ?? this.fondoAutomatico,
+      fondoAnimacion: fondoAnimacion ?? this.fondoAnimacion,
+      fondoEfectos: fondoEfectos ?? this.fondoEfectos,
+      fondoIntensidad: (fondoIntensidad ?? this.fondoIntensidad).clamp(0, 100),
+      fondoIntensidadEfectos:
+          (fondoIntensidadEfectos ?? this.fondoIntensidadEfectos).clamp(0, 100),
+      fondoOscurecer:
+          (fondoOscurecer ?? this.fondoOscurecer).clamp(0, oscurecerMaximo),
+      fondoPaleta: fondoPaleta ?? this.fondoPaleta,
+      fondoFoco: fondoFoco ?? this.fondoFoco,
+      fondoLetras: fondoLetras ?? this.fondoLetras,
+      fondoLuz: (fondoLuz ?? this.fondoLuz)?.clamp(0, 100),
       updatedAt: updatedAt,
     );
   }
+
+  /// Esta config con todo lo de "Tu fondo" de [otra]. Personalizar arma la
+  /// config campo por campo, y un campo que falte se borra en la nube: lo del
+  /// fondo que no se tocó viaja así.
+  TotemConfig conFondoDe(TotemConfig otra) => TotemConfig(
+        eventoId: eventoId,
+        titulo: titulo,
+        subtitulo: subtitulo,
+        mensajeBienvenida: mensajeBienvenida,
+        mensajeQr: mensajeQr,
+        imagenUrl: imagenUrl,
+        colorAcento: colorAcento,
+        mostrarMusica: mostrarMusica,
+        estilo: estilo,
+        fondoUrl: otra.fondoUrl,
+        fondoAutomatico: otra.fondoAutomatico,
+        fondoAnimacion: otra.fondoAnimacion,
+        fondoEfectos: otra.fondoEfectos,
+        fondoIntensidad: otra.fondoIntensidad,
+        fondoIntensidadEfectos: otra.fondoIntensidadEfectos,
+        fondoOscurecer: otra.fondoOscurecer,
+        fondoPaleta: otra.fondoPaleta,
+        fondoFoco: otra.fondoFoco,
+        fondoLetras: otra.fondoLetras,
+        fondoLuz: otra.fondoLuz,
+        updatedAt: updatedAt,
+      );
+
+  // ── La paleta y el foco, como texto ─────────────────────────────────────────
+
+  /// `#RRGGBB,#RRGGBB,#RRGGBB`: los tres colores, o null si falta alguno o
+  /// alguno no es un color.
+  static List<Color>? leerPaleta(String? texto) {
+    if (texto == null) return null;
+    final partes = texto.split(',').map((p) => p.trim()).toList();
+    if (partes.length != 3) return null;
+    final colores = <Color>[];
+    for (final p in partes) {
+      final limpio = p.replaceFirst('#', '');
+      if (!RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(limpio)) return null;
+      colores.add(Color(0xFF000000 | int.parse(limpio, radix: 16)));
+    }
+    return colores;
+  }
+
+  static String? paletaATexto(List<Color>? paleta) {
+    if (paleta == null || paleta.length != 3) return null;
+    return paleta.map(hexDe).join(',');
+  }
+
+  /// `x,y`, cada uno de 0 a 1. Null si no se entiende.
+  static Offset? leerFoco(String? texto) {
+    if (texto == null) return null;
+    final partes = texto.split(',');
+    if (partes.length != 2) return null;
+    final x = double.tryParse(partes[0].trim());
+    final y = double.tryParse(partes[1].trim());
+    if (x == null || y == null || !x.isFinite || !y.isFinite) return null;
+    return Offset(x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
+  }
+
+  static String? focoATexto(Offset? foco) => foco == null
+      ? null
+      : '${foco.dx.clamp(0.0, 1.0).toStringAsFixed(3)},'
+          '${foco.dy.clamp(0.0, 1.0).toStringAsFixed(3)}';
 
   // ── Color ─────────────────────────────────────────────────────────────────
 
@@ -128,8 +340,11 @@ class TotemConfig {
     return valor == null ? acentoPorDefecto : Color(valor);
   }
 
-  String get colorAcentoHex {
-    final rgb = colorAcento.toARGB32() & 0xFFFFFF;
+  String get colorAcentoHex => hexDe(colorAcento);
+
+  /// `#RRGGBB`, sin la transparencia.
+  static String hexDe(Color c) {
+    final rgb = c.toARGB32() & 0xFFFFFF;
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 }

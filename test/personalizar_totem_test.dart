@@ -92,7 +92,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byType(Dialog), findsOneWidget);
       expect(find.byType(BottomSheet), findsNothing);
-      for (final e in EstiloTotem.values) {
+      for (final e in EstiloTotem.deLaCasa) {
         expect(_tarjeta(e), findsOneWidget);
         expect(
           tester.getCenter(_vista).dx,
@@ -158,7 +158,7 @@ void main() {
         (tester) async {
       await _abrir(tester);
       expect(_escenaDeLaVista(tester).estilo, EstiloTotem.neon);
-      for (final e in EstiloTotem.values) {
+      for (final e in EstiloTotem.deLaCasa) {
         final t = _laTarjeta(tester, e);
         expect(t.elegida, e == EstiloTotem.neon, reason: e.nombre);
         expect(t.vaSiNoElegis, e == EstiloTotem.neon, reason: e.nombre);
@@ -232,7 +232,7 @@ void main() {
     testWidgets('las tarjetas están quietas y la vista se mueve',
         (tester) async {
       await _abrir(tester);
-      for (final e in EstiloTotem.values) {
+      for (final e in EstiloTotem.deLaCasa) {
         final escena = tester.widget<EscenaTotem>(
           find.descendant(of: _tarjeta(e), matching: find.byType(EscenaTotem)),
         );
@@ -252,7 +252,7 @@ void main() {
       );
       await tester.pump();
       expect(_escenaDeLaVista(tester).cfg.titulo, 'EGRESADOS 2026');
-      for (final e in EstiloTotem.values) {
+      for (final e in EstiloTotem.deLaCasa) {
         expect(_laTarjeta(tester, e).cfg.titulo, 'EGRESADOS 2026');
       }
       await tester.ensureVisible(find.byTooltip('Rosa'));
@@ -275,7 +275,7 @@ void main() {
       final foto = _escenaDeLaVista(tester).foto;
       expect(foto, isA<MemoryImage>());
       expect((foto! as MemoryImage).bytes, fotoDePrueba);
-      for (final e in EstiloTotem.values) {
+      for (final e in EstiloTotem.deLaCasa) {
         expect(_laTarjeta(tester, e).foto, foto, reason: e.nombre);
       }
       expect(find.text('Quitar foto'), findsOneWidget);

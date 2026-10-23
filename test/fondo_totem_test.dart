@@ -1,5 +1,8 @@
-// Los fondos animados de las cuatro apariencias del tótem (`fondo_totem.dart`):
-// que cada shader compile y dibuje, y que si no carga quede el degradé.
+// Los fondos animados de las cuatro apariencias de la casa (`fondo_totem.dart`):
+// que cada shader compile y dibuje, y que si no carga quede el degradé. El de
+// "Tu fondo" lee una imagen: `fondo_propio_test.dart`.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,7 +50,7 @@ Future<GlobalKey> _montar(WidgetTester tester, EstiloTotem estilo) async {
 void main() {
   tearDown(FondoTotem.olvidar);
 
-  for (final estilo in EstiloTotem.values) {
+  for (final estilo in EstiloTotem.deLaCasa) {
     testWidgets('${estilo.nombre}: el shader compila y dibuja', (tester) async {
       await tester.runAsync(FondoTotem.precargar);
       expect(FondoTotem.tieneShader(estilo), isTrue,
@@ -68,7 +71,7 @@ void main() {
 
   test('cada apariencia tiene su archivo de shader', () {
     expect(
-      EstiloTotem.values.map((e) => e.shader),
+      EstiloTotem.deLaCasa.map((e) => e.shader),
       [
         'shaders/totem_neon.frag',
         'shaders/totem_cristal.frag',
@@ -76,5 +79,21 @@ void main() {
         'shaders/totem_gala.frag',
       ],
     );
+    // Y están declarados en `pubspec.yaml`, y existen.
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    for (final e in EstiloTotem.deLaCasa) {
+      expect(pubspec, contains('- ${e.shader}'), reason: e.nombre);
+      expect(File(e.shader).existsSync(), isTrue, reason: e.shader);
+    }
+  });
+
+  test('las de la casa son las cuatro sin imagen', () {
+    expect(EstiloTotem.deLaCasa, [
+      EstiloTotem.neon,
+      EstiloTotem.cristal,
+      EstiloTotem.poster,
+      EstiloTotem.gala,
+    ]);
+    expect(EstiloTotem.deLaCasa, isNot(contains(EstiloTotem.tuFondo)));
   });
 }

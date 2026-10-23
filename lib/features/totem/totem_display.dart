@@ -734,13 +734,18 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
 
   /// La escena, con lo que dice el reproductor.
   Widget _escena() {
-    final estilo = estiloDelTotem(elegido: _cfg.estilo, ficha: _ficha);
+    final estilo = estiloDelTotem(
+      elegido: _cfg.estilo,
+      fondoUrl: _cfg.fondoUrl,
+      ficha: _ficha,
+    );
     return AnimatedBuilder(
       animation: _reproductor,
       builder: (context, _) {
         final actual = _reproductor.actual;
         return EscenaTotem(
           estilo: estilo,
+          respaldo: EstiloTotem.porDefecto(masivo: _ficha?.masivo),
           cfg: _cfg,
           qrUrl: _mostrarQr ? '$kWebBaseUrl/lista?evento=$_eventoId' : null,
           llegada: actual == null

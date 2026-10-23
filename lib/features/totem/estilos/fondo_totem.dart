@@ -7,8 +7,9 @@ import 'package:flutter/scheduler.dart';
 
 import 'totem_estilo.dart';
 
-/// El fondo animado de una apariencia del tótem: su shader (`shaders/`), con el
-/// color del evento.
+/// El fondo animado de una apariencia de la casa ([EstiloTotem.deLaCasa]): su
+/// shader (`shaders/`), con el color del evento. El de "Tu fondo" lee una
+/// imagen y lo pinta `FondoPropio`.
 ///
 /// El shader se carga **una vez** por apariencia y queda guardado. Si una PC
 /// no lo puede usar, o mientras carga, se pinta un degradé del mismo color:
@@ -36,7 +37,7 @@ class FondoTotem extends StatefulWidget {
     this.atenuado = 1,
     this.fogonazo = 0,
     this.tiempoFijo,
-  });
+  }) : assert(estilo != EstiloTotem.tuFondo, 'Tu fondo lo pinta FondoPropio');
 
   static final _programas = <EstiloTotem, Future<ui.FragmentProgram?>>{};
   static final _listos = <EstiloTotem, ui.FragmentProgram?>{};
@@ -63,7 +64,7 @@ class FondoTotem extends StatefulWidget {
 
   /// Carga las cuatro de antemano (al abrir el tótem, en los tests).
   static Future<void> precargar() =>
-      Future.wait([for (final e in EstiloTotem.values) programa(e)]);
+      Future.wait([for (final e in EstiloTotem.deLaCasa) programa(e)]);
 
   /// Olvida lo cargado. Solo los tests.
   @visibleForTesting

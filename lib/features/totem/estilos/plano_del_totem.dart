@@ -7,10 +7,10 @@ import 'totem_estilo.dart';
 
 /// El tema del plano en la llegada del tótem: **se viste como la apariencia**,
 /// no con el estilo que la fiesta eligió para el plano impreso. Neón y Gala
-/// salen de sus planos; Cristal va con mesas blancas sobre vidrio y Póster
-/// con mesas blancas. En todas, la mesa de la familia va en el color del
-/// evento, y los colores de las divisiones no van: en la puerta importa una
-/// sola mesa.
+/// salen de sus planos; Cristal va con mesas blancas sobre vidrio, y Póster y
+/// "Tu fondo" con mesas blancas. En todas, la mesa de la familia va en
+/// [acento] (el color del evento, o el brillo de la imagen en "Tu fondo"), y
+/// los colores de las divisiones no van: en la puerta importa una sola mesa.
 ///
 /// El fondo es apenas transparente: se ve el fondo animado detrás.
 ///
@@ -50,6 +50,15 @@ TemaPlano temaPlanoDelTotem(EstiloTotem estilo, Color acento) =>
             acento: acento,
             numeroEnFoco: numero,
             ruta: acento,
+          ),
+        // Sobre una imagen cualquiera: mesas blancas, como en Póster, sobre un
+        // vidrio oscuro, y la mesa en el brillo de la imagen.
+        EstiloTotem.tuFondo => _con(
+            _poster,
+            fondo: const Color(0xD10A0A0D),
+            acento: acento,
+            numeroEnFoco: numero,
+            ruta: Color.lerp(acento, const Color(0xFFFFFFFF), 0.35)!,
           ),
       };
     });

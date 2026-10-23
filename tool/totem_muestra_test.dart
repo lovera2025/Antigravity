@@ -25,6 +25,7 @@
 // ignore_for_file: avoid_print
 
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -153,8 +154,9 @@ Widget _cuatro(
   int porFila = 4,
 }) {
   final filas = <List<EstiloTotem>>[];
-  for (var i = 0; i < EstiloTotem.values.length; i += porFila) {
-    filas.add(EstiloTotem.values.sublist(i, i + porFila));
+  const estilos = EstiloTotem.deLaCasa;
+  for (var i = 0; i < estilos.length; i += porFila) {
+    filas.add(estilos.sublist(i, math.min(i + porFila, estilos.length)));
   }
   return Padding(
     padding: const EdgeInsets.all(_hueco),

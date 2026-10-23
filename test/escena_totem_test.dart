@@ -106,6 +106,40 @@ void main() {
       }
     });
 
+    test('"Tu fondo" sin imagen no cuenta: va la del tipo', () {
+      for (final url in [null, '']) {
+        expect(
+          estiloDelTotem(elegido: 'tu_fondo', fondoUrl: url, ficha: fichaDePrueba()),
+          EstiloTotem.neon,
+          reason: '$url',
+        );
+        expect(EstiloTotem.elegida('tu_fondo', fondoUrl: url), isNull);
+      }
+      expect(
+        estiloDelTotem(
+          elegido: 'TU_FONDO',
+          fondoUrl: 'https://x.test/fondo.jpg?v=1',
+          ficha: fichaDePrueba(),
+        ),
+        EstiloTotem.tuFondo,
+      );
+      // Las demás no necesitan imagen.
+      expect(EstiloTotem.elegida('gala', fondoUrl: null), EstiloTotem.gala);
+    });
+
+    // La 6.1.1 (019bca3) busca la clave entre sus cuatro con este mismo
+    // `desdeClave`: "tu_fondo" no está y va la del tipo.
+    test('una versión que no conoce "tu_fondo" va a la del tipo', () {
+      EstiloTotem? comoLaVieja(String clave) {
+        for (final e in EstiloTotem.deLaCasa) {
+          if (e.clave == clave) return e;
+        }
+        return null;
+      }
+
+      expect(comoLaVieja(EstiloTotem.tuFondo.clave), isNull);
+    });
+
     test('ida y vuelta de la clave', () {
       for (final e in EstiloTotem.values) {
         expect(EstiloTotem.desdeClave(e.clave), e);

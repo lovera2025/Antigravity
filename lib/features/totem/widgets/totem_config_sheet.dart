@@ -197,6 +197,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   String? _estilo;
   String? _imagenUrl;
 
+  /// La config como llegó: lo del fondo que no se toca acá se guarda igual.
+  late final TotemConfig _guardada;
+
   /// Foto elegida y todavía no subida. Se sube recién al guardar para no dejar
   /// archivos huérfanos en el bucket si el usuario cancela. Mientras tanto se
   /// ve en la vista y en las tarjetas.
@@ -226,6 +229,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     // `totemConfigValueProvider` nunca falla: si el evento no tiene fila,
     // devuelve los valores de siempre.
     final cfg = ref.read(totemConfigValueProvider(widget.eventoId));
+    _guardada = cfg;
     _titulo = TextEditingController(text: cfg.titulo);
     _subtitulo = TextEditingController(text: cfg.subtitulo);
     _bienvenida = TextEditingController(text: cfg.mensajeBienvenida);
@@ -269,7 +273,10 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
         estilo: _estilo,
-      );
+      ).conFondoDe(_guardada);
+
+  /// Si hay un fondo para "Tu fondo".
+  bool get _hayFondo => _guardada.fondoUrl != null;
 
   /// La foto recién elegida, que manda sobre la guardada.
   ImageProvider? get _foto =>
@@ -281,7 +288,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
 
   /// La que se ve: la elegida, o la del tipo de evento si nadie eligió.
   EstiloTotem _estiloQueSeVe(bool masivo) =>
-      EstiloTotem.desdeClave(_estilo) ??
+      EstiloTotem.elegida(_estilo, fondoUrl: _hayFondo ? 'hay' : null) ??
       EstiloTotem.porDefecto(masivo: masivo);
 
   // ── Ver una llegada ───────────────────────────────────────────────────────
@@ -387,7 +394,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
         estilo: _estilo,
-      );
+      ).conFondoDe(_guardada);
 
       final guardada = await repo.guardar(cfg);
 
@@ -758,18 +765,25 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   }
 
   Widget _tarjetas(TotemConfig cfg, EstiloTotem visto, bool masivo) {
-    final nadieEligio = EstiloTotem.desdeClave(_estilo) == null;
+    final nadieEligio =
+        EstiloTotem.elegida(_estilo, fondoUrl: _hayFondo ? 'hay' : null) == null;
     final porDefecto = EstiloTotem.porDefecto(masivo: masivo);
+    // "Tu fondo" se puede elegir solo con un fondo cargado.
+    final estilos = [
+      ...EstiloTotem.deLaCasa,
+      if (_hayFondo) EstiloTotem.tuFondo,
+    ];
     return LayoutBuilder(
       builder: (context, c) {
         const espacio = 10.0;
-        final ancho = math.min(128.0, (c.maxWidth - espacio * 3) / 4);
+        final n = estilos.length;
+        final ancho = math.min(128.0, (c.maxWidth - espacio * (n - 1)) / n);
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final e in EstiloTotem.values) ...[
-              if (e != EstiloTotem.values.first) const SizedBox(width: espacio),
+            for (final e in estilos) ...[
+              if (e != estilos.first) const SizedBox(width: espacio),
               TarjetaApariencia(
                 key: ValueKey('apariencia_${e.clave}'),
                 estilo: e,
