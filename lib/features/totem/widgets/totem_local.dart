@@ -10,6 +10,7 @@ import '../../plano/repositories/planos_evento_repository.dart';
 import '../../recepcion/providers/recepcion_provider.dart';
 import '../../recepcion/services/puerta_del_evento.dart';
 import '../estilos/escena_totem.dart';
+import '../estilos/fondo_propio.dart';
 import '../estilos/fondo_totem.dart';
 import '../estilos/totem_estilo.dart';
 import '../providers/totem_config_provider.dart';
@@ -134,6 +135,7 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
   void initState() {
     super.initState();
     unawaited(FondoTotem.precargar());
+    unawaited(FondoPropio.precargar());
 
     // La ficha antes que la lista: la familia de cada uno tiene que estar
     // cuando llega su ingreso.

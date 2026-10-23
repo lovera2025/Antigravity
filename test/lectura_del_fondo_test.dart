@@ -111,7 +111,7 @@ double _tono(Color c) => mcu.Hct.fromInt(c.toARGB32()).tone;
 
 /// El contraste del saludo contra la luz del fondo detrás, con el oscurecido.
 double _contrasteDelSaludo(LecturaDelFondo l, Color saludo, int oscurecer) {
-  final y = mcu.ColorUtils.yFromLstar(l.luz * 100) * (1 - 0.5 * oscurecer / 100);
+  final y = mcu.ColorUtils.yFromLstar(l.luzCentro * 100) * (1 - 0.5 * oscurecer / 100);
   return mcu.Contrast.ratioOfTones(_tono(saludo), mcu.ColorUtils.lstarFromY(y));
 }
 

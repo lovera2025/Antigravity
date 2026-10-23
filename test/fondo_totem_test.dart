@@ -71,17 +71,18 @@ void main() {
 
   test('cada apariencia tiene su archivo de shader', () {
     expect(
-      EstiloTotem.deLaCasa.map((e) => e.shader),
+      EstiloTotem.values.map((e) => e.shader),
       [
         'shaders/totem_neon.frag',
         'shaders/totem_cristal.frag',
         'shaders/totem_poster.frag',
         'shaders/totem_gala.frag',
+        'shaders/totem_tu_fondo.frag',
       ],
     );
-    // Y están declarados en `pubspec.yaml`, y existen.
+    // Y los cinco están declarados en `pubspec.yaml`, y existen.
     final pubspec = File('pubspec.yaml').readAsStringSync();
-    for (final e in EstiloTotem.deLaCasa) {
+    for (final e in EstiloTotem.values) {
       expect(pubspec, contains('- ${e.shader}'), reason: e.nombre);
       expect(File(e.shader).existsSync(), isTrue, reason: e.shader);
     }

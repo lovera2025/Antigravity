@@ -149,6 +149,8 @@ flutter:
     - shaders/totem_cristal.frag
     - shaders/totem_poster.frag
     - shaders/totem_gala.frag
+    # "Tu fondo": lee la imagen del evento (`fondo_propio.dart`).
+    - shaders/totem_tu_fondo.frag
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

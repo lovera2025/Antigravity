@@ -14,6 +14,7 @@ import '../../models/invitado.dart';
 import '../../models/totem_config.dart';
 import '../../../main.dart' show kWebBaseUrl;
 import 'estilos/escena_totem.dart';
+import 'estilos/fondo_propio.dart';
 import 'estilos/fondo_totem.dart';
 import 'estilos/fuentes_totem.dart';
 import 'estilos/totem_estilo.dart';
@@ -198,9 +199,11 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..forward();
-    // Los cuatro fondos, de antemano: el de este evento está listo al
-    // primer cuadro, y cambiar de apariencia no tiene que esperar.
+    // Los fondos, de antemano (también el de "Tu fondo"): el de este evento
+    // está listo al primer cuadro, y cambiar de apariencia no tiene que
+    // esperar.
     unawaited(FondoTotem.precargar());
+    unawaited(FondoPropio.precargar());
     _reproductor.prepararCola = _prepararCola;
     _connect();
     // Solo en su propia ventana. Montado en la ventana principal (la ruta

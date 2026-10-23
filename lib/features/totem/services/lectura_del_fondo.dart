@@ -25,6 +25,11 @@ class LecturaDelFondo {
   /// Qué tan clara es, de 0 a 1 (la luminosidad L* de su luz media).
   final double luz;
 
+  /// Qué tan clara es donde va el texto (el centro: de 15 % a 85 % a lo
+  /// ancho, de 30 % a 75 % a lo alto). Con esta se mide si el saludo se lee:
+  /// una imagen oscura con un brillo al medio (un dorado) es clara justo ahí.
+  final double luzCentro;
+
   /// Qué tan colorida es, de 0 a 1 (Hasler y Süsstrunk).
   final double color;
 
@@ -44,12 +49,13 @@ class LecturaDelFondo {
   const LecturaDelFondo({
     required this.colores,
     required this.luz,
+    double? luzCentro,
     required this.color,
     required this.variedad,
     required this.calidez,
     required this.detalle,
     required this.foco,
-  });
+  }) : luzCentro = luzCentro ?? luz;
 
   /// El ancho de la copia que se lee. Los umbrales de abajo están medidos a
   /// este tamaño.
@@ -155,9 +161,10 @@ class LecturaDelFondo {
     final a = mcu.Hct.fromInt(elegidos[0].toARGB32());
     final b = mcu.Hct.fromInt(elegidos[1].toARGB32());
     final c = mcu.Hct.fromInt(elegidos[2].toARGB32());
-    // La luz del fondo detrás del saludo: la imagen, con el oscurecido que
-    // hay a esa altura (la mitad del de arriba y el de abajo).
-    final yFondo = mcu.ColorUtils.yFromLstar(luz * 100) * (1 - 0.5 * oscurecer / 100);
+    // La luz del fondo detrás del saludo: el centro de la imagen, con el
+    // oscurecido que hay a esa altura (la mitad del de arriba y el de abajo).
+    final yFondo =
+        mcu.ColorUtils.yFromLstar(luzCentro * 100) * (1 - 0.5 * oscurecer / 100);
     final tonoFondo = mcu.ColorUtils.lstarFromY(yFondo);
 
     Color hct(double tono, mcu.Hct de, {double? croma}) => Color(
@@ -189,8 +196,9 @@ class LecturaDelFondo {
     return ColoresDelFondo(brillo, saludo, tarjeta);
   }
 
-  /// La luz, de 0 a 100, como se guarda (`fondo_luz`).
-  int get luzEntera => (luz * 100).round().clamp(0, 100);
+  /// La luz detrás del texto, de 0 a 100, como se guarda (`fondo_luz`): con
+  /// ella decide el tótem si el texto va oscuro y cuánto se oscurece detrás.
+  int get luzEntera => (luzCentro * 100).round().clamp(0, 100);
 
   /// Tres colores distintos entre sí (en tono o en matiz). Si la imagen no
   /// tiene tres, se arman a partir del primero.
@@ -275,6 +283,8 @@ class LecturaDelFondo {
     final argb = List<int>.filled(n, 0);
     final gris = Float64List(n);
     var sumaY = 0.0;
+    var sumaYCentro = 0.0;
+    var nCentro = 0;
     var sumaCalidez = 0.0;
     var sumaRg = 0.0, sumaYb = 0.0, sumaRg2 = 0.0, sumaYb2 = 0.0;
     // La variedad: el matiz de cada píxel con color, como una flecha; si
@@ -288,6 +298,14 @@ class LecturaDelFondo {
           0.7152 * mcu.ColorUtils.linearized(g) +
           0.0722 * mcu.ColorUtils.linearized(b);
       sumaY += y;
+      final px = i % ancho, py = i ~/ ancho;
+      if (px >= ancho * 0.15 &&
+          px < ancho * 0.85 &&
+          py >= alto * 0.3 &&
+          py < alto * 0.75) {
+        sumaYCentro += y;
+        nCentro++;
+      }
       gris[i] = mcu.ColorUtils.lstarFromY(y) / 100;
       final maximo = math.max(r, math.max(g, b));
       final minimo = math.min(r, math.min(g, b));
@@ -361,6 +379,9 @@ class LecturaDelFondo {
     return LecturaDelFondo(
       colores: await _colores(argb),
       luz: mcu.ColorUtils.lstarFromY(sumaY / n) / 100,
+      luzCentro: nCentro == 0
+          ? null
+          : mcu.ColorUtils.lstarFromY(sumaYCentro / nCentro) / 100,
       color: (colorido / 110).clamp(0.0, 1.0),
       variedad: variedad.clamp(0.0, 1.0),
       calidez: sumaCalidez / n,

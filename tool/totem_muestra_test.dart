@@ -18,6 +18,9 @@
 // - Personalizar_llegada.png: con Gala elegida y "Ver una llegada".
 // - Personalizar_celular.png y Personalizar_celular_tarjetas.png: en el
 //   celular (un particular), recién abierta y deslizada hasta las tarjetas.
+// - TuFondo_espera.png, TuFondo_llegada.png y TuFondo_horizontal.png: "Tu
+//   fondo" con las imágenes de --dart-define=fondos=<carpeta> (JPG o PNG; sin
+//   carpeta, una de mentira), cada una con la receta que le arma la lectura.
 //
 // Las escenas, los fondos (los shaders de verdad) y las letras son los de la
 // app. La pantalla entera del tótem lee la nube y no se monta en una prueba.
@@ -37,9 +40,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
+import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
+import 'package:arguello_events/features/totem/estilos/tu_fondo.dart';
+import 'package:arguello_events/features/totem/services/lectura_del_fondo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
@@ -49,10 +55,12 @@ import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import '../test/helpers/ficha_de_prueba.dart';
+import '../test/helpers/fondo_de_prueba.dart';
 import '../test/helpers/personalizar_en_memoria.dart';
 import '../test/helpers/puerta_en_memoria.dart';
 
 const _salida = String.fromEnvironment('salida', defaultValue: '');
+const _fondos = String.fromEnvironment('fondos', defaultValue: '');
 
 /// Una pantalla vertical de tótem, achicada: 1080×1920 a la mitad.
 const _vertical = Size(540, 960);
@@ -430,6 +438,205 @@ void main() {
           porFila: 2,
         ),
         'Totem_llegada_plano_horizontal.png',
+      );
+    });
+  });
+
+  group('Tu fondo', () {
+    // Las imágenes, leídas como en Personalizar: cada una con su receta.
+    Future<List<(String, Uint8List, TotemConfig)>> imagenes(
+      WidgetTester tester,
+      TotemConfig base,
+    ) async {
+      final lista = <(String, Uint8List, TotemConfig)>[];
+      await tester.runAsync(() async {
+        final archivos = _fondos.isEmpty
+            ? <File>[]
+            : (Directory(_fondos)
+                .listSync()
+                .whereType<File>()
+                .where((f) => RegExp(r'\.(jpe?g|png|webp)$', caseSensitive: false)
+                    .hasMatch(f.path))
+                .toList()
+              ..sort((a, b) => a.path.compareTo(b.path)));
+        final todos = archivos.isEmpty
+            ? [('De prueba', await pngDePrueba(ancho: 540, alto: 960))]
+            : [
+                for (final f in archivos)
+                  (
+                    f.uri.pathSegments.last.split('.').first,
+                    f.readAsBytesSync(),
+                  ),
+              ];
+        for (final (nombre, bytes) in todos) {
+          final lectura = await LecturaDelFondo.deBytes(bytes);
+          final cfg = conLaLectura(
+            base.copyWith(
+              estilo: 'tu_fondo',
+              fondoUrl: 'https://nube.test/$nombre.jpg',
+            ),
+            lectura,
+            automatico: true,
+          );
+          print('── $nombre: ${lectura.palabras.join(', ')} → '
+              '${lectura.receta().resumen}');
+          lista.add((nombre, bytes, cfg));
+        }
+      });
+      return lista;
+    }
+
+    /// Lado a lado, cada una con su nombre y su receta arriba.
+    Widget fila(
+      Size pantalla,
+      List<(String, Uint8List, TotemConfig)> todas,
+      Widget Function(Uint8List, TotemConfig) escena,
+    ) =>
+        Padding(
+          padding: const EdgeInsets.all(_hueco),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (nombre, bytes, cfg) in todas)
+                Padding(
+                  padding: const EdgeInsets.only(right: _hueco),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: pantalla.width,
+                        height: 38,
+                        child: Text(
+                          '$nombre · ${AnimacionFondo.de(cfg.fondoAnimacion).nombre}'
+                          ' · ${EfectoFondo.de(cfg.fondoEfectos).map((e) => e.nombre).join(', ')}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: FuentesTotem.linea,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: pantalla.width,
+                        height: pantalla.height,
+                        child: escena(bytes, cfg),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+
+    Future<void> sacarConFondos(
+      WidgetTester tester,
+      Size pantalla,
+      List<(String, Uint8List, TotemConfig)> todas,
+      Widget Function(Uint8List, TotemConfig) escena,
+      String archivo,
+    ) async {
+      final clave = GlobalKey();
+      final tam = Size(
+        2 * _hueco + todas.length * (pantalla.width + _hueco),
+        2 * _hueco + 48 + pantalla.height,
+      );
+      tester.view.physicalSize = tam;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: clave,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(fontFamily: FuentesPlano.linea, useMaterial3: true),
+            home: Scaffold(
+              backgroundColor: const Color(0xFF0E0E10),
+              body: fila(pantalla, todas, escena),
+            ),
+          ),
+        ),
+      );
+      // Que se lean las imágenes de fondo y el logo.
+      for (var i = 0; i < 80; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+        final listos = find
+            .byType(FondoPropio)
+            .evaluate()
+            .every((e) => (e.widget as FondoPropio).imagen != null);
+        if (listos && find.byType(FondoPropio).evaluate().length == todas.length) {
+          break;
+        }
+      }
+      await tester.runAsync(() async {
+        for (final e in find.byType(Image).evaluate()) {
+          await precacheImage((e.widget as Image).image, e);
+        }
+      });
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      await _guardar(tester, clave, archivo);
+    }
+
+    setUpAll(FondoPropio.precargar);
+
+    testWidgets('la espera, cada una con su receta', (tester) async {
+      final todas = await imagenes(tester, _masivo);
+      await sacarConFondos(
+        tester,
+        _vertical,
+        todas,
+        (bytes, cfg) => EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          cfg: cfg,
+          fondo: MemoryImage(bytes),
+          quieta: true,
+          tiempoFijo: 6,
+        ),
+        'TuFondo_espera.png',
+      );
+    });
+
+    testWidgets('la familia que llega, con el plano', (tester) async {
+      final todas = await imagenes(tester, _masivo);
+      await sacarConFondos(
+        tester,
+        _vertical,
+        todas,
+        (bytes, cfg) => EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          cfg: cfg,
+          fondo: MemoryImage(bytes),
+          quieta: true,
+          tiempoFijo: 6,
+          llegada: familia,
+          enCamino: 2,
+          plano: ArmadosPredefinidos.normal2aPagina3(),
+        ),
+        'TuFondo_llegada.png',
+      );
+    });
+
+    testWidgets('en una tele horizontal', (tester) async {
+      final todas = await imagenes(tester, _masivo);
+      await sacarConFondos(
+        tester,
+        _apaisada,
+        todas.take(2).toList(),
+        (bytes, cfg) => EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          cfg: cfg,
+          fondo: MemoryImage(bytes),
+          quieta: true,
+          tiempoFijo: 6,
+        ),
+        'TuFondo_horizontal.png',
       );
     });
   });

@@ -1,6 +1,8 @@
 // Las cuatro apariencias del tótem (`estilos/`): la espera y la llegada de
 // cada una, en una pantalla vertical, una apaisada y una chica, sin desbordes,
 // con lo que tiene que decir y sin lo que no.
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -9,10 +11,12 @@ import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
+import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/plano_del_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
+import 'package:arguello_events/features/totem/estilos/tu_fondo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
@@ -21,6 +25,7 @@ import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import 'helpers/ficha_de_prueba.dart';
+import 'helpers/fondo_de_prueba.dart';
 import 'helpers/personalizar_en_memoria.dart' show fotoDePrueba;
 import 'helpers/puerta_en_memoria.dart';
 
@@ -524,6 +529,226 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(FondoTotem.tieneShader(EstiloTotem.neon), isFalse);
     expect(find.text('GARCÍA, BRUNO'), findsOneWidget);
+  });
+
+  group('"Tu fondo"', () {
+    late Uint8List png;
+    final fiesta = ArmadosPredefinidos.normal2aPagina3();
+    final familia = [filaDe('perez'), filaDe('perez', 1), filaDe('perez', 2)];
+
+    setUpAll(() async => png = await pngDePrueba());
+    setUp(FondoPropio.olvidar);
+    tearDown(FondoPropio.olvidar);
+
+    /// Deja que la imagen se lea (es de verdad, no de mentira).
+    Future<void> esperarFondo(WidgetTester tester) async {
+      await tester.runAsync(FondoPropio.precargar);
+      for (var i = 0; i < 60; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+        final f = find.byType(FondoPropio);
+        if (f.evaluate().isNotEmpty && tester.widget<FondoPropio>(f).imagen != null) {
+          return;
+        }
+      }
+    }
+
+    EscenaTotem escena(
+      TotemConfig cfg, {
+      ContenidoBienvenida? llegada,
+      String? qr,
+      bool quieta = true,
+      int enCamino = 0,
+      ImageProvider? fondo,
+    }) =>
+        EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          respaldo: EstiloTotem.neon,
+          cfg: cfg,
+          fondo: fondo ?? MemoryImage(png),
+          llegada: llegada,
+          qrUrl: qr,
+          quieta: quieta,
+          enCamino: enCamino,
+        );
+
+    for (final MapEntry(key: nombre, value: tamano) in _tamanos.entries) {
+      testWidgets('la espera y la familia que llega, en pantalla $nombre',
+          (tester) async {
+        await _montar(tester, escena(conTuFondo(_masivo)), tamano: tamano);
+        await esperarFondo(tester);
+        expect(tester.takeException(), isNull);
+        expect(tester.widget<FondoPropio>(find.byType(FondoPropio)).imagen,
+            isNotNull);
+        expect(find.byType(FondoTotem), findsNothing);
+        expect(find.text('2026'), findsOneWidget);
+        expect(find.text('PROMOCIÓN'), findsOneWidget);
+        expect(find.byType(QrImageView), findsNothing);
+
+        await _montar(
+          tester,
+          escena(
+            conTuFondo(_masivo),
+            enCamino: 2,
+            llegada: _llegada(familia),
+          ),
+          tamano: tamano,
+        );
+        await esperarFondo(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.text('¡Bienvenidos!'), findsOneWidget);
+        expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
+        expect(find.text('con GÓMEZ, ANA y PÉREZ, LUIS'), findsOneWidget);
+        expect(find.text('12'), findsOneWidget);
+        expect(find.text('10 sillas (8 + 2 extra)'), findsOneWidget);
+        expect(find.text('Tusa · Karol G'), findsOneWidget);
+        expect(find.text('2 más en camino'), findsOneWidget);
+      });
+    }
+
+    testWidgets('un particular, con su QR', (tester) async {
+      await _montar(tester, escena(conTuFondo(_particular), qr: _qr));
+      await esperarFondo(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(QrImageView), findsOneWidget);
+      expect(find.text('ESCANEÁ PARA INGRESAR'), findsOneWidget);
+    });
+
+    testWidgets('cada animación y cada efecto se mueven sin romper nada',
+        (tester) async {
+      for (final a in AnimacionFondo.values) {
+        await _montar(
+          tester,
+          escena(
+            conTuFondo(
+              _masivo,
+              animacion: a.clave,
+              efectos: [for (final e in EfectoFondo.values) e.clave],
+            ),
+            quieta: false,
+          ),
+        );
+        await esperarFondo(tester);
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 250));
+        }
+        expect(tester.takeException(), isNull, reason: a.nombre);
+      }
+    });
+
+    testWidgets('con una imagen clara y sin oscurecer, el texto va oscuro',
+        (tester) async {
+      await _montar(
+        tester,
+        escena(conTuFondo(_masivo, oscurecer: 0, luz: 92, efectos: ['bokeh'])),
+      );
+      await esperarFondo(tester);
+      final titulo = tester.widget<Text>(find.text('2026'));
+      expect(titulo.style!.color!.computeLuminance(), lessThan(0.2));
+
+      await _montar(tester, escena(conTuFondo(_masivo)));
+      await esperarFondo(tester);
+      final claro = tester.widget<Text>(find.text('2026'));
+      expect(claro.style!.color!.computeLuminance(), greaterThan(0.5));
+    });
+
+    testWidgets('si la imagen no está ni baja, la apariencia del tipo',
+        (tester) async {
+      await _montar(
+        tester,
+        escena(
+          conTuFondo(_masivo),
+          fondo: MemoryImage(Uint8List.fromList(const [1, 2, 3])),
+        ),
+      );
+      for (var i = 0; i < 20; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(tester.takeException(), isNull);
+      expect(find.byType(FondoPropio), findsNothing);
+      expect(tester.widget<FondoTotem>(find.byType(FondoTotem)).estilo,
+          EstiloTotem.neon);
+      expect(find.text('2026'), findsOneWidget);
+    });
+
+    testWidgets('sin fondo cargado, directamente la del tipo', (tester) async {
+      await _montar(
+        tester,
+        EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          respaldo: EstiloTotem.gala,
+          cfg: _masivo.copyWith(estilo: 'tu_fondo'),
+          quieta: true,
+        ),
+      );
+      expect(find.byType(FondoPropio), findsNothing);
+      expect(tester.widget<FondoTotem>(find.byType(FondoTotem)).estilo,
+          EstiloTotem.gala);
+    });
+
+    testWidgets('la mesa en el plano va en el brillo de la imagen',
+        (tester) async {
+      final cfg = conTuFondo(_masivo);
+      await _montar(
+        tester,
+        EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          cfg: cfg,
+          fondo: MemoryImage(png),
+          quieta: true,
+          llegada: _llegada(familia),
+          plano: fiesta,
+        ),
+      );
+      await esperarFondo(tester);
+      expect(tester.takeException(), isNull);
+      final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
+      expect(vista.resaltadas, {12});
+      expect(vista.tema.resaltado, cfg.fondoPaleta![0]);
+      expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
+    });
+
+    testWidgets('muchos acompañantes de nombre largo: se achica, no desborda',
+        (tester) async {
+      final ficha = FichaTotem(
+        eventoId: eventoMasivo,
+        masivo: true,
+        personas: {
+          for (var i = 1; i <= 5; i++)
+            'a$i': PersonaFicha(
+              id: 'a$i',
+              nombre: 'FERNÁNDEZ DE LA SANTÍSIMA TRINIDAD, MARÍA JOSEFINA $i',
+              familia: 'alumno',
+              esAlumno: false,
+              mesa: '128-129',
+              sillas: '128: 10 sillas · 129: 10 sillas',
+              titular: 'GONZÁLEZ DEL CORAZÓN DE JESÚS, JUAN BAUTISTA',
+            ),
+        },
+      );
+      final personas = [
+        for (var i = 1; i <= 5; i++) filaSuelta('a$i', ficha.de('a$i')!.nombre),
+      ];
+      for (final tamano in [const Size(360, 640), const Size(1920, 1080)]) {
+        await _montar(
+          tester,
+          escena(
+            conTuFondo(_masivo),
+            enCamino: 3,
+            llegada: _llegada(personas, ficha: ficha),
+          ),
+          tamano: tamano,
+        );
+        await esperarFondo(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.text('128: 10 sillas · 129: 10 sillas'), findsOneWidget);
+      }
+    });
   });
 
   testWidgets('animada: entra, se va y vuelve a la espera', (tester) async {

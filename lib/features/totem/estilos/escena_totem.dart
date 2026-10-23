@@ -14,10 +14,13 @@ import 'escena_cristal.dart';
 import 'escena_gala.dart';
 import 'escena_neon.dart';
 import 'escena_poster.dart';
+import 'escena_tu_fondo.dart';
+import 'fondo_propio.dart';
 import 'fondo_totem.dart';
 import 'fuentes_totem.dart';
 import 'plano_del_totem.dart';
 import 'totem_estilo.dart';
+import 'tu_fondo.dart';
 
 /// Lo que se ve en el tótem: la espera o una llegada, en la apariencia del
 /// evento, sobre su fondo animado.
@@ -37,6 +40,10 @@ class EscenaTotem extends StatefulWidget {
   /// La foto del evento, si manda sobre la de [cfg]: en Personalizar, la
   /// recién elegida, que todavía no se subió. Null: la de `cfg.imagenUrl`.
   final ImageProvider? foto;
+
+  /// El fondo de "Tu fondo", si manda sobre el de [cfg] (en Personalizar, el
+  /// recién elegido). Null: el de `cfg.fondoUrl`, guardado en la PC.
+  final ImageProvider? fondo;
 
   /// El QR de la espera. Null: sin QR (un evento masivo).
   final String? qrUrl;
@@ -75,6 +82,7 @@ class EscenaTotem extends StatefulWidget {
     required this.cfg,
     this.respaldo = EstiloTotem.cristal,
     this.foto,
+    this.fondo,
     this.qrUrl,
     this.llegada,
     this.plano,
@@ -123,9 +131,15 @@ class _EscenaTotemState extends State<EscenaTotem>
     duration: const Duration(seconds: 60),
   );
 
+  /// La imagen de "Tu fondo", si es la apariencia: se carga una vez y se
+  /// suelta al cambiar.
+  final _fondo = CargaDelFondo();
+
   @override
   void initState() {
     super.initState();
+    _fondo.addListener(_cambioElFondo);
+    _cargarFondo();
     if (widget.quieta) {
       _entrada.value = widget.llegada == null ? 0 : 1;
     } else {
@@ -134,9 +148,22 @@ class _EscenaTotemState extends State<EscenaTotem>
     }
   }
 
+  void _cambioElFondo() {
+    if (mounted) setState(() {});
+  }
+
+  /// La recién elegida en Personalizar, o la del evento (en la PC, la
+  /// guardada: anda sin internet).
+  void _cargarFondo() => _fondo.cargar(
+        widget.estilo == EstiloTotem.tuFondo
+            ? widget.fondo ?? fondoDelEvento(widget.cfg)
+            : null,
+      );
+
   @override
   void didUpdateWidget(covariant EscenaTotem old) {
     super.didUpdateWidget(old);
+    _cargarFondo();
     if (widget.quieta) {
       _entrada.value = widget.llegada == null ? 0 : 1;
       return;
@@ -155,6 +182,9 @@ class _EscenaTotemState extends State<EscenaTotem>
 
   @override
   void dispose() {
+    _fondo
+      ..removeListener(_cambioElFondo)
+      ..dispose();
     _entrada.dispose();
     _reloj.dispose();
     super.dispose();
@@ -182,19 +212,23 @@ class _EscenaTotemState extends State<EscenaTotem>
     return _guia;
   }
 
-  /// La que se dibuja: "Tu fondo" necesita su imagen; sin ella, [respaldo].
-  EstiloTotem get _estilo => widget.estilo == EstiloTotem.tuFondo
-      ? (widget.respaldo == EstiloTotem.tuFondo
-          ? EstiloTotem.cristal
-          : widget.respaldo)
-      : widget.estilo;
+  /// La que se dibuja: "Tu fondo" necesita su imagen; si no está en la PC ni
+  /// baja (o el evento no tiene), [EscenaTotem.respaldo]. Mientras carga
+  /// sigue siendo "Tu fondo", sobre negro: es un instante.
+  EstiloTotem get _estilo {
+    if (widget.estilo != EstiloTotem.tuFondo) return widget.estilo;
+    if (_fondo.de != null && !_fondo.fallo) return EstiloTotem.tuFondo;
+    return widget.respaldo == EstiloTotem.tuFondo
+        ? EstiloTotem.cristal
+        : widget.respaldo;
+  }
 
   EscenaEstilo _escenaDe(EstiloTotem estilo) => switch (estilo) {
         EstiloTotem.neon => const EscenaNeon(),
         EstiloTotem.cristal => const EscenaCristal(),
         EstiloTotem.poster => const EscenaPoster(),
         EstiloTotem.gala => const EscenaGala(),
-        EstiloTotem.tuFondo => const EscenaCristal(),
+        EstiloTotem.tuFondo => const EscenaTuFondo(),
       };
 
   double get _progreso {
@@ -209,7 +243,11 @@ class _EscenaTotemState extends State<EscenaTotem>
   @override
   Widget build(BuildContext context) {
     final estilo = _estilo;
-    final color = widget.cfg.colorAcento;
+    // En "Tu fondo", los colores salen de la imagen: el brillo hace de color
+    // del evento (la línea del tiempo, el borde y la mesa del plano).
+    final receta =
+        estilo == EstiloTotem.tuFondo ? RecetaDibujada.de(widget.cfg) : null;
+    final color = receta?.colores.brillo ?? widget.cfg.colorAcento;
     final escena = _escenaDe(estilo);
     // La guardada en la PC: sin internet se sigue viendo (sección 5).
     final foto = widget.foto ?? fotoDelEvento(widget.cfg);
@@ -235,7 +273,7 @@ class _EscenaTotemState extends State<EscenaTotem>
                 estilo: estilo,
                 foto: foto,
                 color: color,
-                segundo: segundoNeon(color),
+                segundo: receta?.colores.saludo ?? segundoNeon(color),
                 u: u,
                 ancho: ancho,
                 alto: alto,
@@ -249,13 +287,25 @@ class _EscenaTotemState extends State<EscenaTotem>
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  FondoTotem(
-                    estilo: estilo,
-                    color: color,
-                    atenuado: estilo == EstiloTotem.cristal ? 1 : 1 - 0.45 * e,
-                    fogonazo: _fogonazo(e),
-                    tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
-                  ),
+                  if (receta != null)
+                    FondoPropio(
+                      imagen: _fondo.imagen,
+                      chica: _fondo.chica,
+                      receta: receta,
+                      // Con el texto oscuro, oscurecer en la llegada lo
+                      // ensucia: va como Cristal, sin atenuar.
+                      atenuado: receta.textoOscuro ? 1 : 1 - 0.45 * e,
+                      fogonazo: _fogonazo(e),
+                      tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
+                    )
+                  else
+                    FondoTotem(
+                      estilo: estilo,
+                      color: color,
+                      atenuado: estilo == EstiloTotem.cristal ? 1 : 1 - 0.45 * e,
+                      fogonazo: _fogonazo(e),
+                      tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
+                    ),
                   ...escena.capasDeFondo(datos),
                   if (e < 1)
                     Opacity(
@@ -284,7 +334,14 @@ class _EscenaTotemState extends State<EscenaTotem>
                             fontWeight: FontWeight.w700,
                             fontSize: u * 0.75,
                             letterSpacing: u * 0.15,
-                            color: Colors.white.withValues(alpha: 0.85),
+                            // Sobre un fondo propio claro, oscuro.
+                            color: receta != null && receta.textoOscuro
+                                ? Color.lerp(
+                                    receta.colores.saludo,
+                                    Colors.black,
+                                    0.35,
+                                  )
+                                : Colors.white.withValues(alpha: 0.85),
                           ),
                         ),
                       ),
@@ -625,12 +682,16 @@ class QrDelTotem extends StatelessWidget {
   final double u;
   final Color marco;
 
+  /// El color del texto de abajo. Null: blanco, sobre los fondos oscuros.
+  final Color? colorTexto;
+
   const QrDelTotem({
     super.key,
     required this.url,
     required this.texto,
     required this.u,
     required this.marco,
+    this.colorTexto,
   });
 
   @override
@@ -668,7 +729,7 @@ class QrDelTotem extends StatelessWidget {
             fontFamily: FuentesTotem.linea,
             fontSize: u * 0.55,
             letterSpacing: u * 0.12,
-            color: Colors.white.withValues(alpha: 0.75),
+            color: colorTexto ?? Colors.white.withValues(alpha: 0.75),
           ),
         ),
       ],
