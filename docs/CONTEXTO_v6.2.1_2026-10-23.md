@@ -1,4 +1,4 @@
-# La 6.2.1 (23-oct-2026): la foto y las frases del tótem, y el celular sin internet
+# La 6.2.1 (23-oct-2026): la foto y las frases del tótem, el camino en escuadra y el celular sin internet
 
 **Programada y probada el 23-oct, sin publicar.** La idea del usuario es publicarla el 24-oct a la mañana, con su OK en
 el momento: primero el SQL, después el release, la web y las PCs (las instala él y avisa).
@@ -70,6 +70,27 @@ página quedó en blanco.** Los datos y las PCs, bien: no se marcó nada.
 - En Windows no cambia nada (la letra de base ahí es Segoe UI); en la web (Vercel) Roboto sale de la app en vez de
   Google: la misma letra.
 
+### 3. El camino a la mesa, en escuadra
+
+El usuario preguntó el 23-oct por la línea del camino en la llegada: "queda como rayas nomás, que apuntan al lugar,
+muy desprolijo". No había cambiado desde la 6.0.0: iba por el atajo más corto, rozando las mesas y doblando en
+cualquier ángulo. Pidió "línea recta y que doble, entonces queda más simétrico", y aprobó cómo quedó ("ahí me gusta
+más").
+
+- **`CaminoALaMesa`** busca solo a lo largo y a lo ancho, por el medio de los pasillos (cada celda cuesta más cuanto
+  más pegada a algo tapado: `holgura`, medida en dos pasadas) y con pocas vueltas (doblar cuesta 4 pasos, volverse 30;
+  la búsqueda va por celda y dirección de llegada).
+- **Sale del cartel del Ingreso enseguida**: sus celdas se pueden pisar pero cuestan (`enIngreso`); antes lo recorría
+  por adentro.
+- **`sinEscalones`** saca las Z chicas (va, se corre un poco y sigue para el mismo lado) cuando se puede ir derecho sin
+  pisar nada; **`_enEscuadra`** alinea el primer tramo con el ingreso y el último con el centro de la mesa.
+- **El dibujo** (`PintorResaltado`, `caminoRedondeado`): la esquina apenas suavizada y una flecha en la punta, que
+  acompaña a la línea mientras se dibuja.
+- Sigue igual: nunca pisa otra mesa, termina en el borde de la mesa, sin paso va recto, y en el playón de 284 mesas
+  tarda menos de medio segundo (`test/camino_a_la_mesa_test.dart`).
+- Muestra nueva: `tool/totem_muestra_test.dart`, "el camino a varias mesas, en grande" (seis mesas del salón de la
+  Normal).
+
 ## Pruebas
 
 - `flutter test`: **2.826 bien**, también el de Recepción que a veces falla con la PC cargada.
@@ -84,6 +105,3 @@ página quedó en blanco.** Los datos y las PCs, bien: no se marcó nada.
 1. **Publicar, con su OK en el momento**: el SQL (antes que nada), la versión 6.2.1 en `pubspec.yaml` y en el
    instalador, el release, la web y las PCs.
 2. El ensayo con el router de verdad: el celular sin internet, entero.
-3. **Pregunta abierta del usuario (23-oct):** la línea del camino a la mesa en la llegada se ve "como rayas,
-   desprolija". No cambió: es la de la 6.0.0 (`CaminoALaMesa`, tramos rectos que doblan en ángulo al esquivar mesas).
-   Se le ofreció emprolijarla (menos quiebres y curvas suaves); no está decidido.

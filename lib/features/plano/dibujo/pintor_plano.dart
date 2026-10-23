@@ -906,6 +906,29 @@ class PintorPlano extends CustomPainter {
       !setEquals(old.resaltadas, resaltadas);
 }
 
+/// El camino por [puntos], con cada esquina redondeada: una curva de hasta
+/// [radio] que nunca pasa de la mitad de los tramos que une, así dos esquinas
+/// seguidas no se pisan. La curva corta la esquina por adentro: en una vuelta
+/// de 90° pasa a 0,35 [radio] de ella (con el del tótem, un quinto del radio de
+/// una mesa), y el camino va por el medio del pasillo.
+Path caminoRedondeado(List<Offset> puntos, double radio) {
+  final camino = Path()..moveTo(puntos.first.dx, puntos.first.dy);
+  for (var i = 1; i < puntos.length - 1; i++) {
+    final antes = puntos[i - 1], esquina = puntos[i], despues = puntos[i + 1];
+    final a = antes - esquina, b = despues - esquina;
+    final la = a.distance, lb = b.distance;
+    if (la == 0 || lb == 0) continue;
+    final r = math.min(radio, math.min(la, lb) / 2);
+    final entra = esquina + a / la * r;
+    final sale = esquina + b / lb * r;
+    camino
+      ..lineTo(entra.dx, entra.dy)
+      ..quadraticBezierTo(esquina.dx, esquina.dy, sale.dx, sale.dy);
+  }
+  camino.lineTo(puntos.last.dx, puntos.last.dy);
+  return camino;
+}
+
 /// Lo que se mueve encima del plano: el pulso de las mesas resaltadas y, en
 /// el tótem, el camino desde el ingreso.
 class PintorResaltado extends CustomPainter {
@@ -943,17 +966,19 @@ class PintorResaltado extends CustomPainter {
 
     final puntos = ruta;
     if (puntos != null && puntos.length > 1 && progresoRuta > 0) {
-      final camino = Path()..moveTo(puntos.first.dx, puntos.first.dy);
-      for (final p in puntos.skip(1)) {
-        camino.lineTo(p.dx, p.dy);
-      }
+      // El camino va en escuadra; la esquina, apenas suavizada, se lee como
+      // un ángulo recto prolijo (6.2.1).
+      final camino = caminoRedondeado(puntos, armado.radio * 0.6);
       final medida = camino.computeMetrics().toList();
       final total = medida.fold<double>(0, (s, m) => s + m.length);
       var resta = total * progresoRuta.clamp(0, 1);
       final visible = Path();
+      ui.Tangent? punta;
       for (final m in medida) {
         if (resta <= 0) break;
-        visible.addPath(m.extractPath(0, math.min(resta, m.length)), Offset.zero);
+        final hasta = math.min(resta, m.length);
+        visible.addPath(m.extractPath(0, hasta), Offset.zero);
+        punta = m.getTangentForOffset(hasta);
         resta -= m.length;
       }
       canvas.drawPath(
@@ -975,6 +1000,23 @@ class PintorResaltado extends CustomPainter {
           ..strokeJoin = StrokeJoin.round
           ..color = tema.ruta,
       );
+      // La flecha en la punta: dice para dónde va, también mientras se dibuja.
+      if (punta != null && total * progresoRuta > 40) {
+        final hacia = punta.vector / punta.vector.distance;
+        final costado = Offset(-hacia.dy, hacia.dx);
+        final atras = punta.position - hacia * 22;
+        canvas.drawPath(
+          Path()
+            ..moveTo(punta.position.dx + hacia.dx * 6, punta.position.dy + hacia.dy * 6)
+            ..lineTo(atras.dx + costado.dx * 13, atras.dy + costado.dy * 13)
+            ..lineTo(atras.dx - costado.dx * 13, atras.dy - costado.dy * 13)
+            ..close(),
+          Paint()
+            ..style = PaintingStyle.fill
+            ..strokeJoin = StrokeJoin.round
+            ..color = tema.ruta,
+        );
+      }
     }
 
     final p = pulso.value;

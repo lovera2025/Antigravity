@@ -49,12 +49,14 @@ import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/forma_foto.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/features/totem/estilos/plano_del_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/estilos/tu_fondo.dart';
 import 'package:arguello_events/features/totem/services/lectura_del_fondo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
+import 'package:arguello_events/features/totem/services/plano_de_la_llegada.dart';
 import 'package:arguello_events/features/totem/widgets/aviso_sin_internet.dart';
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
 import 'package:arguello_events/models/invitado.dart';
@@ -890,6 +892,33 @@ void main() {
         'Foto_TuFondo.png',
       );
     });
+  });
+
+  // 6.2.1: el camino del ingreso a la mesa, prolijo: por el medio de los
+  // pasillos, con pocas vueltas y redondeadas, y una flecha.
+  testWidgets('el camino a varias mesas, en grande', (tester) async {
+    final armado = ArmadosPredefinidos.normal2aPagina3();
+    const panel = Size(560, 470);
+    final mesas = ['12', '5', '31', '47', '64', '78'];
+    final color = _masivo.colorAcento;
+    await _sacar(
+      tester,
+      Size(2 * _hueco + 3 * (panel.width + _hueco), 2 * (_hueco + 48 + panel.height) + _hueco),
+      _grilla(panel, [
+        for (final m in mesas)
+          (
+            'Mesa $m',
+            PanelPlano(
+              guia: PlanoDeLaLlegada.para(armado, mesa: m, nombre: 'X')!,
+              tema: temaPlanoDelTotem(EstiloTotem.neon, color),
+              borde: color,
+              u: 20,
+              animar: false,
+            ),
+          ),
+      ]),
+      'Camino_a_varias_mesas.png',
+    );
   });
 
   group('La foto (6.2.1)', () {

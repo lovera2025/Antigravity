@@ -39,7 +39,8 @@ dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-
 
 **La 6.2.1** (programada y probada el 23-oct, **sin publicar**; la idea es publicarla el 24-oct a la mañana con el OK
 del usuario, SQL primero): la foto del tótem se saca, cambia de forma y se agranda; las frases se agrandan; las dos se
-mueven juntas, con manijas en Personalizar. Y la página del celular de la puerta abre sin internet. Entrada:
+mueven juntas, con manijas en Personalizar. El camino a la mesa va en escuadra. Y la página del celular de la puerta
+abre sin internet. Entrada:
 `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 ## Documentación del proyecto
@@ -485,6 +486,9 @@ tapa las frases.
     "conflicto";
   - `CaminoALaMesa` busca el paso (A* en una grilla de medio radio, sin pisar mesas con sus sillas, escenario,
     pasarela, barras, cajas ni baños), sale del sector "Ingreso" o de `armado.ingreso` y, sin paso, va recto.
+    **Desde la 6.2.1 va en escuadra** (pedido del usuario: "línea recta y que doble"): solo a lo largo y a lo ancho,
+    por el medio de los pasillos, con pocas vueltas, sin escalones y saliendo enseguida del cartel del Ingreso; el
+    dibujo suaviza apenas la esquina y pone una flecha. No volver a las diagonales: se veía "como rayas".
 - **Cómo se dibuja:**
   - la escena arma la guía **una vez por llegada** (`EscenaTotem.planosArmados`);
   - los temas salen de `temaPlanoDelTotem`, **guardados por apariencia y color**: `TemaPlano` no tiene `==` y uno
