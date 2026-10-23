@@ -35,7 +35,31 @@ class RepoTotemEnMemoria extends Fake implements TotemConfigRepository {
     guardadas.add(cfg);
     return cfg;
   }
+
+  /// Los fondos que se subieron, y cuántas veces se borró.
+  final fondosSubidos = <Uint8List>[];
+  var fondosBorrados = 0;
+
+  @override
+  Future<String> subirFondo({
+    required String eventoId,
+    required Uint8List bytes,
+    required String extension,
+  }) async {
+    fondosSubidos.add(bytes);
+    return 'https://nube.test/totem/$eventoId/fondo.$extension'
+        '?v=${fondosSubidos.length}';
+  }
+
+  @override
+  Future<void> borrarFondo(String eventoId) async => fondosBorrados++;
 }
+
+/// El selector de archivos, que devuelve [bytes] como `story.png`.
+Future<FilePickerResult?> Function() elegirFondoDePrueba(Uint8List bytes) =>
+    () async => FilePickerResult([
+          PlatformFile(name: 'story.png', size: bytes.length, bytes: bytes),
+        ]);
 
 /// Una foto de 1 × 1, transparente: la que "elige" el selector en los tests.
 final fotoDePrueba = Uint8List.fromList(const [

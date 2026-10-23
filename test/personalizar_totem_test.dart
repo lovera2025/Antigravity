@@ -2,6 +2,8 @@
 // la vista del tótem de verdad con "Ver una llegada", ventana al centro en la PC
 // y hoja a pantalla completa en tablet y celular. Se monta entero, con la nube
 // reemplazada por los mismos providers que usa la app.
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +11,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
+import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
@@ -17,6 +20,7 @@ import 'package:arguello_events/features/totem/widgets/link_totem_navegador.dart
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
+import 'helpers/fondo_de_prueba.dart';
 import 'helpers/personalizar_en_memoria.dart';
 import 'helpers/puerta_en_memoria.dart';
 
@@ -422,6 +426,195 @@ void main() {
     await tester.pump();
     final tam = tester.getSize(_vista);
     expect(tam.width, greaterThan(tam.height));
+  });
+
+  group('"Tu fondo"', () {
+    late Uint8List png;
+    setUpAll(() async => png = await pngDePrueba());
+    setUp(() {
+      FondoPropio.olvidar();
+      PersonalizarTotem.elegirFondo = elegirFondoDePrueba(png);
+    });
+    tearDown(FondoPropio.olvidar);
+
+    /// Elige el fondo y deja que se lea la imagen.
+    Future<void> elegirFondo(WidgetTester tester) async {
+      await tester.ensureVisible(find.byKey(const ValueKey('elegir_fondo')));
+      await tester.tap(find.byKey(const ValueKey('elegir_fondo')));
+      for (var i = 0; i < 40; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+        if (find.text('Leyendo la imagen…').evaluate().isEmpty &&
+            find.text('Se lee:').evaluate().isNotEmpty) {
+          break;
+        }
+      }
+    }
+
+    testWidgets('sin fondo, no se puede elegir: no hay tarjeta', (tester) async {
+      await _abrir(tester);
+      expect(_tarjeta(EstiloTotem.tuFondo), findsNothing);
+      expect(find.text('Elegir fondo'), findsOneWidget);
+      expect(find.text('Automático · según la imagen'), findsNothing);
+    });
+
+    testWidgets('al elegirlo queda elegida "Tu fondo" y la receta sale de la '
+        'imagen', (tester) async {
+      await _abrir(tester);
+      await elegirFondo(tester);
+      expect(tester.takeException(), isNull);
+      expect(_tarjeta(EstiloTotem.tuFondo), findsOneWidget);
+      expect(_laTarjeta(tester, EstiloTotem.tuFondo).elegida, isTrue);
+      expect(_escenaDeLaVista(tester).estilo, EstiloTotem.tuFondo);
+      expect(_escenaDeLaVista(tester).fondo, isA<MemoryImage>());
+      expect(find.text('VISTA DEL TÓTEM · TU FONDO'), findsOneWidget);
+      // Lo que se leyó y lo que eligió.
+      expect(find.text('Se lee:'), findsOneWidget);
+      expect(find.textContaining('Eligió: '), findsOneWidget);
+      final cfg = _escenaDeLaVista(tester).cfg;
+      expect(cfg.fondoAutomatico, isTrue);
+      expect(cfg.fondoPaleta, hasLength(3));
+      expect(cfg.fondoAnimacion, isNotNull);
+    });
+
+    testWidgets('guardar sube el fondo y manda toda la receta', (tester) async {
+      final repo = await _abrir(tester);
+      await elegirFondo(tester);
+      final antes = _escenaDeLaVista(tester).cfg;
+      await _guardar(tester);
+      expect(repo.fondosSubidos.single, png);
+      final g = repo.guardadas.single;
+      expect(g.estilo, 'tu_fondo');
+      expect(g.fondoUrl, 'https://nube.test/totem/$eventoMasivo/fondo.png?v=1');
+      expect(g.fondoAutomatico, isTrue);
+      expect(g.fondoAnimacion, antes.fondoAnimacion);
+      expect(g.fondoEfectos, antes.fondoEfectos);
+      expect(g.fondoPaleta, antes.fondoPaleta);
+      expect(g.fondoFoco, antes.fondoFoco);
+      expect(g.fondoLetras, antes.fondoLetras);
+      expect(g.fondoLuz, antes.fondoLuz);
+    });
+
+    testWidgets('tocar una animación o un efecto apaga "Automático"',
+        (tester) async {
+      final repo = await _abrir(tester);
+      await elegirFondo(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('animacion_ondular')));
+      await tester.tap(find.byKey(const ValueKey('animacion_ondular')));
+      await tester.pump();
+      expect(_escenaDeLaVista(tester).cfg.fondoAutomatico, isFalse);
+      expect(find.textContaining('Lo elegiste vos'), findsOneWidget);
+      final antes = _escenaDeLaVista(tester).cfg.fondoEfectos ?? const [];
+      final yaEstaba = antes.contains('glitch');
+      await tester.ensureVisible(find.byKey(const ValueKey('efecto_glitch')));
+      await tester.tap(find.byKey(const ValueKey('efecto_glitch')));
+      await tester.pump();
+      await _guardar(tester);
+      final g = repo.guardadas.single;
+      expect(g.fondoAutomatico, isFalse);
+      expect(g.fondoAnimacion, 'ondular');
+      expect(g.fondoEfectos!.contains('glitch'), !yaEstaba);
+    });
+
+    testWidgets('volver a "Automático" vuelve a la receta de la imagen',
+        (tester) async {
+      await _abrir(tester);
+      await elegirFondo(tester);
+      final receta = _escenaDeLaVista(tester).cfg.fondoAnimacion;
+      await tester.ensureVisible(find.byKey(const ValueKey('animacion_quieta')));
+      await tester.tap(find.byKey(const ValueKey('animacion_quieta')));
+      await tester.pump();
+      expect(_escenaDeLaVista(tester).cfg.fondoAnimacion, 'quieta');
+      await tester.ensureVisible(find.byKey(const ValueKey('fondo_automatico')));
+      await tester.tap(find.byKey(const ValueKey('fondo_automatico')));
+      await tester.pump();
+      expect(_escenaDeLaVista(tester).cfg.fondoAutomatico, isTrue);
+      expect(_escenaDeLaVista(tester).cfg.fondoAnimacion, receta);
+    });
+
+    testWidgets('otra apariencia conserva el fondo para volver', (tester) async {
+      final repo = await _abrir(tester);
+      await elegirFondo(tester);
+      // Elegir el fondo bajó la columna: las tarjetas quedaron arriba.
+      await tester.ensureVisible(_tarjeta(EstiloTotem.gala));
+      await tester.pump();
+      await tester.tap(_tarjeta(EstiloTotem.gala));
+      await tester.pump();
+      expect(_escenaDeLaVista(tester).estilo, EstiloTotem.gala);
+      expect(_tarjeta(EstiloTotem.tuFondo), findsOneWidget);
+      await _guardar(tester);
+      final g = repo.guardadas.single;
+      expect(g.estilo, 'gala');
+      expect(g.fondoUrl, isNotNull, reason: 'queda guardado para volver');
+    });
+
+    group('con un fondo guardado', () {
+      final guardada = conTuFondo(
+        const TotemConfig(eventoId: eventoMasivo, titulo: 'PROMOCIÓN 2026'),
+        animacion: 'respirar',
+        efectos: ['bokeh', 'marco'],
+      ).copyWith(fondoAutomatico: false);
+
+      testWidgets('guardar sin tocar nada lo conserva entero', (tester) async {
+        final repo = await _abrir(tester, guardada: guardada);
+        expect(_tarjeta(EstiloTotem.tuFondo), findsOneWidget);
+        expect(_escenaDeLaVista(tester).estilo, EstiloTotem.tuFondo);
+        await _guardar(tester);
+        final a = repo.guardadas.single.toJson();
+        final b = guardada.toJson();
+        for (final k in b.keys.where((k) => k.startsWith('fondo_'))) {
+          expect(a[k], b[k], reason: k);
+        }
+        expect(repo.fondosSubidos, isEmpty);
+        expect(repo.fondosBorrados, 0);
+      });
+
+      testWidgets('quitarlo lo borra y vuelve a la apariencia del tipo',
+          (tester) async {
+        final repo = await _abrir(tester, guardada: guardada);
+        await tester.ensureVisible(find.text('Quitar fondo'));
+        await tester.tap(find.text('Quitar fondo'));
+        await tester.pump();
+        expect(_tarjeta(EstiloTotem.tuFondo), findsNothing);
+        expect(_escenaDeLaVista(tester).estilo, EstiloTotem.neon);
+        await _guardar(tester);
+        expect(repo.fondosBorrados, 1);
+        final g = repo.guardadas.single;
+        expect(g.fondoUrl, isNull);
+        expect(g.estilo, isNull);
+      });
+
+      testWidgets('el oscurecido se cambia a mano', (tester) async {
+        final repo = await _abrir(tester, guardada: guardada);
+        final barra = find.byKey(const ValueKey('oscurecer'));
+        await tester.ensureVisible(barra);
+        // Hasta la punta derecha: el máximo.
+        await tester.drag(barra, const Offset(600, 0));
+        await tester.pump();
+        await _guardar(tester);
+        expect(repo.guardadas.single.fondoOscurecer, TotemConfig.oscurecerMaximo);
+        expect(repo.guardadas.single.fondoAutomatico, isFalse);
+      });
+    });
+
+    for (final tamano in [const Size(360, 640), _tablet, _pc]) {
+      testWidgets(
+          '${tamano.width.toInt()}×${tamano.height.toInt()}: con fondo, vertical '
+          'y horizontal y una llegada, sin desbordes', (tester) async {
+        await _abrir(tester, tamano: tamano);
+        await elegirFondo(tester);
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('Horizontal'));
+        await tester.tap(find.text('Horizontal'));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('ver_una_llegada')));
+        await tester.pump();
+        await tester.pump(EscenaTotem.entrada);
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 
   testWidgets('un error al guardar se dice en palabras y no cierra',

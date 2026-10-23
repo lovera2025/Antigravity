@@ -16,17 +16,20 @@ import '../../recepcion/providers/recepcion_provider.dart'
 import '../estilos/escena_totem.dart';
 import '../estilos/fuentes_totem.dart';
 import '../estilos/totem_estilo.dart';
+import '../estilos/tu_fondo.dart';
 import '../providers/clave_totem_provider.dart';
 import '../providers/totem_config_provider.dart';
 import '../repositories/totem_config_repository.dart';
 import '../services/bienvenidas_totem.dart';
 import '../services/contenido_bienvenida.dart';
 import '../services/ficha_totem.dart';
+import '../services/foto_guardada.dart';
+import '../services/lectura_del_fondo.dart';
 import '../totem_orientation.dart';
 import 'link_totem_navegador.dart';
 
 const _gold = TotemConfig.acentoPorDefecto;
-const _fondo = Color(0xFF141414);
+const _colorDelPanel = Color(0xFF141414);
 
 /// Paleta curada.
 ///
@@ -167,14 +170,24 @@ class PersonalizarTotem extends ConsumerStatefulWidget {
   @visibleForTesting
   static Future<FilePickerResult?> Function() elegirFoto = _conElSelector;
 
+  /// Cómo se elige el fondo de "Tu fondo". Solo los tests lo cambian.
+  @visibleForTesting
+  static Future<FilePickerResult?> Function() elegirFondo = _fondoConElSelector;
+
   static Future<FilePickerResult?> _conElSelector() =>
+      _selector('Elegí la foto del evento');
+
+  static Future<FilePickerResult?> _fondoConElSelector() =>
+      _selector('Elegí el fondo del tótem');
+
+  static Future<FilePickerResult?> _selector(String titulo) =>
       // `withData: true` es obligatorio: en web `PlatformFile.path` siempre es
       // null. El resto del repo usa `.path` y por eso no anda del lado web.
       FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: TotemConfigRepository.tiposPermitidos.keys.toList(),
         withData: true,
-        dialogTitle: 'Elegí la foto del evento',
+        dialogTitle: titulo,
       );
 
   @override
@@ -197,7 +210,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   String? _estilo;
   String? _imagenUrl;
 
-  /// La config como llegó: lo del fondo que no se toca acá se guarda igual.
+  /// La config como llegó.
   late final TotemConfig _guardada;
 
   /// Foto elegida y todavía no subida. Se sube recién al guardar para no dejar
@@ -206,6 +219,24 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   Uint8List? _imagenNueva;
   String? _extensionNueva;
   bool _quitarImagen = false;
+
+  // ── "Tu fondo" ──
+  //
+  // Lo del fondo (la receta, los colores, el foco) viaja en [_fondo], una
+  // config de la que solo importa lo del fondo: Personalizar arma la config
+  // campo por campo, y un campo que falte se borra en la nube.
+
+  late TotemConfig _fondo;
+
+  /// El fondo elegido y todavía no subido, como la foto.
+  Uint8List? _fondoNuevo;
+  String? _extensionFondo;
+  bool _quitarFondo = false;
+
+  /// Lo que se leyó de la imagen (la nueva, o la guardada cuando se termina de
+  /// leer). Con ella se rehacen los colores al cambiar el oscurecido.
+  LecturaDelFondo? _lectura;
+  bool _leyendo = false;
 
   bool _guardando = false;
   String? _error;
@@ -239,6 +270,8 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     _mostrarMusica = cfg.mostrarMusica;
     _estilo = cfg.estilo;
     _imagenUrl = cfg.imagenUrl;
+    _fondo = cfg;
+    if (cfg.fondoUrl != null) _leerGuardado();
 
     TotemOrientationStore.load(widget.eventoId).then((o) {
       if (mounted && !_seGiro && o == TotemOrientation.horizontal) {
@@ -273,14 +306,27 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
         estilo: _estilo,
-      ).conFondoDe(_guardada);
+      ).conFondoDe(
+        _quitarFondo ? _fondo.copyWith(limpiarFondo: true) : _fondo,
+      );
 
-  /// Si hay un fondo para "Tu fondo".
-  bool get _hayFondo => _guardada.fondoUrl != null;
+  /// Si hay un fondo para "Tu fondo": el guardado o uno recién elegido.
+  bool get _hayFondo =>
+      !_quitarFondo && (_fondoNuevo != null || _guardada.fondoUrl != null);
 
   /// La foto recién elegida, que manda sobre la guardada.
   ImageProvider? get _foto =>
       _imagenNueva == null ? null : MemoryImage(_imagenNueva!);
+
+  /// El fondo recién elegido, que manda sobre el guardado. Se guarda el
+  /// proveedor: uno nuevo en cada cuadro haría leer la imagen de nuevo.
+  MemoryImage? _fondoImagen;
+  MemoryImage? get _fondoParaVer {
+    final bytes = _fondoNuevo;
+    if (bytes == null) return null;
+    if (!identical(_fondoImagen?.bytes, bytes)) _fondoImagen = MemoryImage(bytes);
+    return _fondoImagen;
+  }
 
   /// El QR de la espera: solo en un particular, como en el salón.
   String? _qrUrl(bool masivo) =>
@@ -318,32 +364,146 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
 
   // ── Imagen ────────────────────────────────────────────────────────────────
 
-  Future<void> _elegirImagen() async {
-    final resultado = await PersonalizarTotem.elegirFoto();
-    if (!mounted || resultado == null || resultado.files.isEmpty) return;
+  /// Los bytes y la extensión del archivo elegido, o null (y el error dicho)
+  /// si no sirve. Las mismas reglas para la foto y el fondo: las del bucket.
+  (Uint8List, String)? _archivoValido(FilePickerResult? resultado) {
+    if (!mounted || resultado == null || resultado.files.isEmpty) return null;
     final archivo = resultado.files.single;
     final bytes = archivo.bytes;
 
     if (bytes == null) {
       setState(() => _error = 'No se pudo leer el archivo.');
-      return;
+      return null;
     }
 
     final ext = archivo.extension ?? '';
     if (TotemConfigRepository.mimeDe(ext) == null) {
       setState(() => _error = 'Solo se aceptan JPG, PNG o WEBP.');
-      return;
+      return null;
     }
     if (bytes.length > TotemConfigRepository.maxBytes) {
       setState(() => _error = 'La imagen pesa más de 5 MB. Elegí una más liviana.');
-      return;
+      return null;
     }
+    return (bytes, ext);
+  }
 
+  Future<void> _elegirImagen() async {
+    final valido = _archivoValido(await PersonalizarTotem.elegirFoto());
+    if (valido == null) return;
     setState(() {
-      _imagenNueva = bytes;
-      _extensionNueva = ext;
+      _imagenNueva = valido.$1;
+      _extensionNueva = valido.$2;
       _quitarImagen = false;
       _error = null;
+    });
+  }
+
+  // ── "Tu fondo" ────────────────────────────────────────────────────────────
+
+  /// Elige el fondo: queda elegida "Tu fondo" y se lee la imagen. Con
+  /// "Automático" prendido, la receta sale de ella.
+  Future<void> _elegirFondo() async {
+    final valido = _archivoValido(await PersonalizarTotem.elegirFondo());
+    if (valido == null) return;
+    final (bytes, ext) = valido;
+    setState(() {
+      _fondoNuevo = bytes;
+      _extensionFondo = ext;
+      _quitarFondo = false;
+      _estilo = EstiloTotem.tuFondo.clave;
+      _lectura = null;
+      _leyendo = true;
+      _error = null;
+    });
+    try {
+      final lectura = await LecturaDelFondo.deBytes(bytes);
+      if (!mounted || !identical(_fondoNuevo, bytes)) return;
+      setState(() {
+        _lectura = lectura;
+        _fondo = conLaLectura(
+          _fondo,
+          lectura,
+          automatico: _fondo.fondoAutomatico,
+        );
+      });
+    } catch (e) {
+      debugPrint('Personalizar: no se pudo leer el fondo: $e');
+      if (mounted && identical(_fondoNuevo, bytes)) {
+        setState(() => _error = 'No se pudo leer la imagen. Probá con otra.');
+      }
+    } finally {
+      if (mounted && identical(_fondoNuevo, bytes)) {
+        setState(() => _leyendo = false);
+      }
+    }
+  }
+
+  /// Lee el fondo guardado, en chico: hace falta para rehacer los colores si
+  /// se cambia el oscurecido. Si no se puede (sin internet y sin el fondo en
+  /// la PC), quedan los colores guardados.
+  void _leerGuardado() {
+    final proveedor = fondoDelEvento(_guardada);
+    if (proveedor == null) return;
+    final stream = ResizeImage(
+      proveedor,
+      width: LecturaDelFondo.anchoDeLectura,
+    ).resolve(ImageConfiguration.empty);
+    late final ImageStreamListener oyente;
+    oyente = ImageStreamListener(
+      (info, _) async {
+        stream.removeListener(oyente);
+        try {
+          final lectura = await LecturaDelFondo.deImagen(info.image);
+          if (mounted && _fondoNuevo == null && !_quitarFondo) {
+            setState(() => _lectura = lectura);
+          }
+        } catch (e) {
+          debugPrint('Personalizar: no se pudo leer el fondo guardado: $e');
+        } finally {
+          info.dispose();
+        }
+      },
+      onError: (e, _) {
+        stream.removeListener(oyente);
+        debugPrint('Personalizar: el fondo guardado no se pudo leer; quedan '
+            'sus colores: $e');
+      },
+    );
+    stream.addListener(oyente);
+  }
+
+  void _quitarElFondo() {
+    setState(() {
+      _fondoNuevo = null;
+      _extensionFondo = null;
+      _quitarFondo = true;
+      _lectura = null;
+      _leyendo = false;
+      // Sin fondo, "Tu fondo" no se puede elegir: vuelve a la del tipo.
+      if (_estilo == EstiloTotem.tuFondo.clave) _estilo = null;
+      _error = null;
+    });
+  }
+
+  void _alternarAutomatico(bool automatico) {
+    setState(() {
+      final lectura = _lectura;
+      _fondo = automatico && lectura != null
+          ? conLaLectura(_fondo, lectura, automatico: true)
+          : _fondo.copyWith(fondoAutomatico: automatico);
+    });
+  }
+
+  /// Un cambio a mano: apaga "Automático" y queda lo elegido. Los colores se
+  /// rehacen (dependen del oscurecido).
+  void _aMano(TotemConfig Function(TotemConfig) cambio) {
+    setState(() {
+      final nuevo = cambio(_fondo).copyWith(fondoAutomatico: false);
+      final lectura = _lectura;
+      _fondo = lectura == null
+          ? nuevo
+          : conLaLectura(nuevo, lectura, automatico: false);
     });
   }
 
@@ -384,6 +544,19 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         );
       }
 
+      // El fondo, igual: se sube o se borra recién ahora.
+      var fondoUrl = _guardada.fondoUrl;
+      if (_quitarFondo) {
+        if (fondoUrl != null) await repo.borrarFondo(widget.eventoId);
+        fondoUrl = null;
+      } else if (_fondoNuevo != null) {
+        fondoUrl = await repo.subirFondo(
+          eventoId: widget.eventoId,
+          bytes: _fondoNuevo!,
+          extension: _extensionFondo!,
+        );
+      }
+
       final cfg = TotemConfig(
         eventoId: widget.eventoId,
         titulo: _preview.titulo,
@@ -394,7 +567,11 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
         estilo: _estilo,
-      ).conFondoDe(_guardada);
+      ).conFondoDe(
+        fondoUrl == null
+            ? _fondo.copyWith(limpiarFondo: true)
+            : _fondo.copyWith(fondoUrl: fondoUrl),
+      );
 
       final guardada = await repo.guardar(cfg);
 
@@ -551,7 +728,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   Widget _marco({required BorderRadius redondeo, required Widget child}) {
     return Container(
       decoration: BoxDecoration(
-        color: _fondo,
+        color: _colorDelPanel,
         borderRadius: redondeo,
         border: Border.all(color: _gold.withValues(alpha: 0.28)),
         boxShadow: [
@@ -639,8 +816,10 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
       child: EscenaTotem(
         key: const ValueKey('vista_totem'),
         estilo: estilo,
+        respaldo: EstiloTotem.porDefecto(masivo: masivo),
         cfg: cfg,
         foto: _foto,
+        fondo: _fondoParaVer,
         qrUrl: _qrUrl(masivo),
         llegada: _conLlegada
             ? LlegadaDeEjemplo.para(masivo: masivo, cfg: cfg)
@@ -736,6 +915,8 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         _tarjetas(cfg, estilo, masivo),
         const SizedBox(height: 24),
         _seccionFoto(cfg),
+        const SizedBox(height: 24),
+        _seccionFondo(),
         const SizedBox(height: 20),
         _campo(_titulo, 'Título', 'PROMOCIÓN 2026'),
         const SizedBox(height: 12),
@@ -787,8 +968,10 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
               TarjetaApariencia(
                 key: ValueKey('apariencia_${e.clave}'),
                 estilo: e,
+                respaldo: porDefecto,
                 cfg: cfg,
                 foto: _foto,
+                fondo: _fondoParaVer,
                 qrUrl: _qrUrl(masivo),
                 ancho: ancho,
                 elegida: e == visto,
@@ -899,6 +1082,311 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  /// "Tu fondo": la imagen para toda la pantalla, lo que se leyó de ella y su
+  /// receta, automática o a mano. Es lo del diseño del 23-oct (Claude Design).
+  Widget _seccionFondo() {
+    final cfg = _fondo;
+    final receta = RecetaDibujada.de(cfg);
+    final hay = _hayFondo;
+    final libre = !_guardando;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('FONDO', style: _estiloRotulo),
+        const SizedBox(height: 4),
+        const Text(
+          'Una imagen para toda la pantalla, por ejemplo una story. La foto '
+          'del círculo es aparte. De la imagen salen la animación, los efectos '
+          'y los colores de "Tu fondo".',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              key: const ValueKey('elegir_fondo'),
+              onPressed: libre ? _elegirFondo : null,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _gold,
+                minimumSize: const Size(0, 44),
+                side: BorderSide(color: _gold.withValues(alpha: 0.5)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.wallpaper_rounded, size: 18),
+              label: Text(hay ? 'Cambiar fondo' : 'Elegir fondo'),
+            ),
+            if (hay)
+              TextButton.icon(
+                onPressed: libre ? _quitarElFondo : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white54,
+                  minimumSize: const Size(0, 44),
+                ),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Quitar fondo'),
+              ),
+            Text(
+              'JPG, PNG o WEBP · hasta 5 MB',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.3),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+        if (_leyendo) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Leyendo la imagen…',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ],
+        if (hay) ...[
+          const SizedBox(height: 14),
+          _automatico(cfg, receta),
+          const SizedBox(height: 18),
+          Text('ANIMACIÓN DE LA IMAGEN', style: _estiloRotulo),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final a in AnimacionFondo.values)
+                _Pastilla(
+                  key: ValueKey('animacion_${a.clave}'),
+                  texto: a.nombre,
+                  ayuda: a.explicacion,
+                  elegida: receta.animacion == a,
+                  onTap: libre
+                      ? () => _aMano((c) => c.copyWith(fondoAnimacion: a.clave))
+                      : null,
+                ),
+            ],
+          ),
+          _barra(
+            'Intensidad',
+            cfg.fondoIntensidad,
+            100,
+            key: const ValueKey('intensidad_animacion'),
+            receta.animacion == AnimacionFondo.quieta || !libre
+                ? null
+                : (v) => _aMano((c) => c.copyWith(fondoIntensidad: v)),
+          ),
+          const SizedBox(height: 14),
+          Text('EFECTOS · VAN ENCIMA, SE COMBINAN', style: _estiloRotulo),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final e in EfectoFondo.values)
+                _Pastilla(
+                  key: ValueKey('efecto_${e.clave}'),
+                  texto: e.nombre,
+                  ayuda: e.explicacion,
+                  elegida: receta.tiene(e),
+                  onTap: libre ? () => _aMano((c) => _conEfecto(c, e)) : null,
+                ),
+            ],
+          ),
+          _barra(
+            'Intensidad',
+            cfg.fondoIntensidadEfectos,
+            100,
+            key: const ValueKey('intensidad_efectos'),
+            receta.efectos.isEmpty || !libre
+                ? null
+                : (v) => _aMano((c) => c.copyWith(fondoIntensidadEfectos: v)),
+          ),
+          const SizedBox(height: 14),
+          Text('OSCURECER', style: _estiloRotulo),
+          _barra(
+            'Para que se lea',
+            cfg.fondoOscurecer,
+            TotemConfig.oscurecerMaximo,
+            key: const ValueKey('oscurecer'),
+            libre
+                ? (v) => _aMano((c) => c.copyWith(fondoOscurecer: v))
+                : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Prende o apaga un efecto. Los que esta versión no conoce quedan.
+  static TotemConfig _conEfecto(TotemConfig c, EfectoFondo e) {
+    final claves = [
+      ...(c.fondoEfectos ?? [for (final p in EfectoFondo.porDefecto) p.clave]),
+    ];
+    if (!claves.remove(e.clave)) claves.add(e.clave);
+    return c.copyWith(fondoEfectos: claves);
+  }
+
+  /// "Automático · según la imagen", lo que se leyó y lo que quedó.
+  Widget _automatico(TotemConfig cfg, RecetaDibujada receta) {
+    final lectura = _lectura;
+    final efectos = receta.efectos.map((e) => e.nombre).toList();
+    final resumen = '${cfg.fondoAutomatico ? 'Eligió' : 'Queda'}: '
+        '${receta.animacion.nombre} · '
+        '${efectos.isEmpty ? 'sin efectos' : efectos.join(', ')} · '
+        'oscurecer ${cfg.fondoOscurecer} %'
+        '${receta.textoOscuro ? ' · el texto va oscuro' : ''}';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: _gold.withValues(alpha: 0.9)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Automático · según la imagen',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      cfg.fondoAutomatico
+                          ? 'La animación, los efectos y el oscurecido salen de '
+                              'la imagen.'
+                          : 'Lo elegiste vos. Prendelo para volver a lo de la '
+                              'imagen.',
+                      style: const TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                key: const ValueKey('fondo_automatico'),
+                value: cfg.fondoAutomatico,
+                onChanged: _guardando ? null : _alternarAutomatico,
+                activeThumbColor: Colors.black,
+                activeTrackColor: _gold,
+              ),
+            ],
+          ),
+          if (lectura != null) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text(
+                  'Se lee:',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                for (final p in lectura.palabras)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                    ),
+                    child: Text(
+                      p,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Text(
+                'Colores:',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(width: 8),
+              for (final (nombre, color) in [
+                ('Brillo', receta.colores.brillo),
+                ('Saludo', receta.colores.saludo),
+                ('Tarjeta', receta.colores.tarjeta),
+              ]) ...[
+                Tooltip(
+                  message: '$nombre ${TotemConfig.hexDe(color)}',
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            resumen,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Una barra de 0 a [maximo], de a 10. Sin [alCambiar], apagada.
+  Widget _barra(
+    String rotulo,
+    int valor,
+    int maximo,
+    ValueChanged<int>? alCambiar, {
+    Key? key,
+  }) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 112,
+          child: Text(
+            rotulo,
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            key: key,
+            value: valor.clamp(0, maximo).toDouble(),
+            max: maximo.toDouble(),
+            divisions: maximo ~/ 10,
+            label: '$valor %',
+            activeColor: _gold,
+            inactiveColor: Colors.white24,
+            onChanged: alCambiar == null ? null : (v) => alCambiar(v.round()),
+          ),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(
+            alCambiar == null ? '—' : '$valor %',
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
         ),
       ],
     );
@@ -1027,8 +1515,14 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
 /// ya muestra el movimiento.
 class TarjetaApariencia extends StatelessWidget {
   final EstiloTotem estilo;
+
+  /// La del tipo de evento, si es "Tu fondo" y la imagen no se puede leer.
+  final EstiloTotem respaldo;
   final TotemConfig cfg;
   final ImageProvider? foto;
+
+  /// El fondo de "Tu fondo" recién elegido, como [foto].
+  final ImageProvider? fondo;
   final String? qrUrl;
   final double ancho;
   final bool elegida;
@@ -1042,8 +1536,10 @@ class TarjetaApariencia extends StatelessWidget {
   const TarjetaApariencia({
     super.key,
     required this.estilo,
+    this.respaldo = EstiloTotem.cristal,
     required this.cfg,
     required this.foto,
+    this.fondo,
     required this.qrUrl,
     required this.ancho,
     required this.elegida,
@@ -1087,8 +1583,10 @@ class TarjetaApariencia extends StatelessWidget {
                   child: IgnorePointer(
                     child: EscenaTotem(
                       estilo: estilo,
+                      respaldo: respaldo,
                       cfg: cfg,
                       foto: foto,
+                      fondo: fondo,
                       qrUrl: qrUrl,
                       quieta: true,
                     ),
@@ -1128,6 +1626,67 @@ class TarjetaApariencia extends StatelessWidget {
                       style: TextStyle(color: Colors.white38, fontSize: 10.5),
                     ),
                   ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Una opción de "Tu fondo" (una animación, un efecto), que se prende y se
+/// apaga.
+class _Pastilla extends StatelessWidget {
+  final String texto;
+  final String ayuda;
+  final bool elegida;
+  final VoidCallback? onTap;
+
+  const _Pastilla({
+    super.key,
+    required this.texto,
+    required this.ayuda,
+    required this.elegida,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: ayuda,
+      child: Semantics(
+        button: true,
+        selected: elegida,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(99),
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 38),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: elegida
+                  ? _gold.withValues(alpha: 0.16)
+                  : Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(
+                color: elegida ? _gold : Colors.white.withValues(alpha: 0.16),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (elegida) ...[
+                  const Icon(Icons.check_rounded, size: 15, color: _gold),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  texto,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: elegida ? const Color(0xFFF3D77A) : Colors.white70,
+                  ),
+                ),
               ],
             ),
           ),

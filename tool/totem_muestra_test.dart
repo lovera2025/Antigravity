@@ -623,6 +623,41 @@ void main() {
       );
     });
 
+    testWidgets('Personalizar en la PC, con un fondo elegido', (tester) async {
+      final todas = await imagenes(tester, _masivo);
+      final (_, bytes, _) = todas.firstWhere(
+        (t) => t.$1 == 'oro',
+        orElse: () => todas.first,
+      );
+      PersonalizarTotem.elegirFondo = elegirFondoDePrueba(bytes);
+      await _sacarPersonalizar(
+        tester,
+        const Size(1366, 900),
+        guardada: _masivo,
+        archivo: 'TuFondo_Personalizar.png',
+        antes: (tester) async {
+          final boton = find.byKey(const ValueKey('elegir_fondo'));
+          await tester.ensureVisible(boton);
+          await tester.tap(boton);
+          for (var i = 0; i < 80; i++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            await tester.pump();
+            final leida = find.text('Se lee:').evaluate().isNotEmpty;
+            final fondos = find.byType(FondoPropio).evaluate();
+            if (leida &&
+                fondos.isNotEmpty &&
+                fondos.every((e) => (e.widget as FondoPropio).imagen != null)) {
+              break;
+            }
+          }
+          await tester.ensureVisible(find.text('Automático · según la imagen'));
+          await tester.pump();
+        },
+      );
+    });
+
     testWidgets('en una tele horizontal', (tester) async {
       final todas = await imagenes(tester, _masivo);
       await sacarConFondos(
