@@ -37,6 +37,11 @@ las tres PCs** el 23-oct). La quinta apariencia del tótem: una imagen propia es
 dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-10-23.md`; el detalle,
 `docs/PLAN_TU_FONDO_2026-10-23.md`.
 
+**La 6.2.1** (programada y probada el 23-oct, **sin publicar**; la idea es publicarla el 24-oct a la mañana con el OK
+del usuario, SQL primero): la foto del tótem se saca, cambia de forma y se agranda; las frases se agrandan; las dos se
+mueven juntas, con manijas en Personalizar. Y la página del celular de la puerta abre sin internet. Entrada:
+`docs/CONTEXTO_v6.2.1_2026-10-23.md`.
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:
@@ -367,6 +372,10 @@ que le piden por el wifi, con o sin internet. Recepción → CELULARES ("Sumar u
   lib/puesto_main.dart --no-web-resources-cdn` (sin CDN: en el salón no hay internet). La arma
   `installer\build_installer.ps1` y el instalador la deja en `{app}\puesto`, con la regla del cortafuegos
   (`test/instalador_puesto_test.dart` lee los dos archivos).
+- **Sin CDN no alcanza: la app tiene que traer su Roboto** (v6.2.1). Si no hay una familia `Roboto` en `pubspec.yaml`,
+  Flutter web la baja de `fonts.gstatic.com` al arrancar y no dibuja nada hasta tenerla: sin internet, el celular veía
+  la página en blanco (ensayo del 23-oct). `test/puesto_sin_internet_test.dart`. Para probar una página web sin
+  internet: Edge sin ventana con `--host-resolver-rules` (ver el CONTEXTO de la 6.2.1).
 - **En la web de un celular, `TextField` suelta el teclado al apoyar el dedo afuera y eso se come el toque.** El
   buscador de `PanelPuerta` lo suelta al levantarlo (`onTapUpOutside`, solo en la web).
 - **Las pruebas escuchan solo en esta PC** (`escuchaCentralProvider` en `loopbackIPv4`): en todas las conexiones,
@@ -456,6 +465,16 @@ colores y las letras.
 - **Personalizar guarda lo del fondo entero** (`TotemConfig.conFondoDe`): la config se arma campo por campo.
 - Arnés sin base ni nube: `tool/tu_fondo_prueba.dart` (Windows o web). Muestras: `tool/totem_muestra_test.dart`,
   grupo "Tu fondo".
+
+**La foto y las frases de la espera** (v6.2.1; `docs/CONTEXTO_v6.2.1_2026-10-23.md`). En Personalizar la foto se saca
+(`mostrarFoto`), cambia de forma (`FormaFoto`, nueve, con "tal cual" para un logo sin fondo) y de tamaño (50 a 300 %);
+las frases, de tamaño (50 a 200 %); y las dos se mueven **juntas** (`ubicacionX`/`ubicacionY`), así la foto nunca
+tapa las frases.
+- **Las apariencias arman la foto con `fotoDeLaEspera` y las frases con `d.frases`**, y lo de la espera va en
+  `Centrado(ubicacion: d.ubicacionDeLaEspera, child: d.bloque(...))`. Una apariencia nueva tiene que pasar por los
+  tres: ahí se cuelgan las manijas de Personalizar (`alrededorDeLaFoto`, `alrededorDelTexto`, `alrededorDelBloque`).
+- **`Escalado` agranda ocupando lo que mide** (`Transform.scale` no: lo de abajo se pisaría).
+- Póster no usa forma, tamaños ni lugar: la foto es su fondo.
 
 **El plano en la llegada** (v6.0.0, sección 4). Cuando llega una familia de un masivo sorteado, la llegada va arriba
 (a la izquierda en una tele horizontal) y abajo el salón con su mesa encendida y el camino desde el Ingreso.
