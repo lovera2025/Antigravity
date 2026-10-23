@@ -16,7 +16,7 @@ con check-in por QR y un tótem que se proyecta en el salón.
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
 rama está ~200 commits adelante y va por la v6.2.0 (publicada el 23-oct; al 23-oct, instalada
-solo en la PC de la casa: la del operario y la del jefe siguen con la 6.1.1); `main` quedó en la 2.2.0.
+en las tres PCs: la casa, el operario y el jefe); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **La 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
@@ -33,7 +33,7 @@ también en la otra (ver la trampa "Lo que se borra a mano…", abajo). Entrada:
 vale es lo que diga él.
 
 **La 6.2.0: "Tu fondo"** (publicada el 23-oct: el SQL de sus columnas corrido, el release y la web; **instalada en
-la PC de la casa** el 23-oct; la del operario y la del jefe las actualiza el usuario cuando vaya y avisa). La quinta apariencia del tótem: una imagen propia es el fondo. Las novedades
+las tres PCs** el 23-oct). La quinta apariencia del tótem: una imagen propia es el fondo. Las novedades
 dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-10-23.md`; el detalle,
 `docs/PLAN_TU_FONDO_2026-10-23.md`.
 

@@ -1,7 +1,7 @@
 # La 6.2.0 (23-oct-2026): "Tu fondo"
 
 **Publicada el 23-oct** (el SQL, el release y la web), con el OK del usuario: "corre el sql y publica". **Instalada
-en la PC de la casa el 23-oct**; las del operario y el jefe, todavía no: las actualiza él cuando vaya y avisa.
+en las tres PCs el 23-oct**: primero la de la casa y después la del operario y la del jefe (lo dijo él).
 
 ## Qué lleva
 
@@ -44,12 +44,11 @@ https://claude.ai/artifact/7QwqMNZtr44HMbBrkqJPor.
 - Las PCs con la 6.1.1 (o la 6.0.0) siguen igual. No conocen las columnas nuevas, no las leen y, al guardar
   Personalizar, no las pisan.
 - Si un evento tiene "Tu fondo", en esas PCs el tótem muestra la apariencia del tipo.
-- **No elegir "Tu fondo" en un evento cuyo tótem se proyecte desde una PC sin la 6.2.0:** se vería la del tipo.
+- Al 23-oct las tres PCs tienen la 6.2.0, así que esto ya no pasa con ellas: queda por si se suma una PC vieja.
 
 ## Falta
 
-1. **Instalar la del operario y la del jefe** (lo hace el usuario y avisa). La de la casa ya la tiene (23-oct).
-2. **La prueba con un evento de verdad, desde una PC con la 6.2.0:**
+1. **La prueba con un evento de verdad:**
    - elegir un fondo en Personalizar, guardar, y ver el tótem de la ventana y el de `?totem`;
    - "Lista para trabajar sin internet" y cortar la red.
 
