@@ -141,6 +141,14 @@ flutter:
         - asset: assets/google_fonts/Oswald-Regular.ttf
         - asset: assets/google_fonts/Oswald-Bold.ttf
           weight: 700
+    # Roboto, la letra de base de Flutter en la web. Si la app no la trae, la
+    # web la baja de fonts.gstatic.com al arrancar y no dibuja nada hasta
+    # tenerla: sin internet, la página del celular de la puerta (la de la
+    # notebook central) quedaba en blanco (23-oct-2026). Licencia Apache en
+    # assets/fonts/LICENSE-Roboto.txt. `test/puesto_sin_internet_test.dart`.
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
 
   # Los fondos animados de las cuatro apariencias del tótem
   # (`lib/features/totem/estilos/fondo_totem.dart`).

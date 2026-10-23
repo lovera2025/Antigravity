@@ -1,5 +1,9 @@
 # Recepción y el tótem sin internet (modo local)
 
+**El 23-oct, el primer ensayo sin internet encontró la página del celular en blanco**: Flutter web bajaba la letra
+Roboto de Google antes de dibujar. Arreglado en la 6.2.1 (la app trae su Roboto; ver
+`docs/CONTEXTO_v6.2.1_2026-10-23.md`), sin publicar. Falta repetir el ensayo con la 6.2.1 instalada.
+
 **Estado:** hecho y probado con su celular (15-oct); falta solo el ensayo con el router de verdad. **Va en la 6.0.0**
 (decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra
 forma** (15-oct, sección 7): los puestos van a ser celulares (o tablets), así que **una notebook del salón hace de
