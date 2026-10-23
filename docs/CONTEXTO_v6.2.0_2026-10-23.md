@@ -1,8 +1,7 @@
 # La 6.2.0 (23-oct-2026): "Tu fondo"
 
-**Publicada el 23-oct** (el SQL, el release y la web), con el OK del usuario: "corre el sql y publica". **Sin
-instalar todavía**: las PCs las actualiza él y avisa ("mediante voy y confirmo que todas están actualizadas te lo voy a
-decir").
+**Publicada el 23-oct** (el SQL, el release y la web), con el OK del usuario: "corre el sql y publica". **Instalada
+en la PC de la casa el 23-oct**; las del operario y el jefe, todavía no: las actualiza él cuando vaya y avisa.
 
 ## Qué lleva
 
@@ -49,7 +48,7 @@ https://claude.ai/artifact/7QwqMNZtr44HMbBrkqJPor.
 
 ## Falta
 
-1. **Instalar las PCs** (lo hace el usuario y avisa).
+1. **Instalar la del operario y la del jefe** (lo hace el usuario y avisa). La de la casa ya la tiene (23-oct).
 2. **La prueba con un evento de verdad, desde una PC con la 6.2.0:**
    - elegir un fondo en Personalizar, guardar, y ver el tótem de la ventana y el de `?totem`;
    - "Lista para trabajar sin internet" y cortar la red.
