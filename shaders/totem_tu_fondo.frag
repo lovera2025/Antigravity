@@ -135,7 +135,7 @@ void main() {
   if (uCont > 0.5) {
     vec2 tam = aspI < aspP ? vec2(aspI / aspP, 1.0) : vec2(1.0, aspP / aspI);
     q = (pant - (vec2(1.0) - tam) * 0.5) / tam;
-    vec2 borde = min(q, vec2(1.0) - q) / 0.07;
+    vec2 borde = min(q, vec2(1.0) - q) / 0.12;
     dentro = clamp(aspI < aspP ? borde.x : borde.y, 0.0, 1.0);
   } else {
     q = (pant - (vec2(1.0) - cubre) * 0.5) / cubre;

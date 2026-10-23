@@ -433,7 +433,7 @@ class PintorFondoQuieto extends CustomPainter {
         entera,
         Paint()..filterQuality = FilterQuality.medium,
       );
-      // Los bordes, fundidos en la copia chica (el 7 % de la imagen).
+      // Los bordes, fundidos en la copia chica (el 12 % de la imagen).
       final horizontal = entera.width < size.width;
       canvas.drawRect(
         entera,
@@ -448,7 +448,7 @@ class PintorFondoQuieto extends CustomPainter {
               Color(0xFF000000),
               Color(0x00000000),
             ],
-            stops: const [0, 0.07, 0.93, 1],
+            stops: const [0, 0.12, 0.88, 1],
           ).createShader(entera),
       );
       canvas.restore();

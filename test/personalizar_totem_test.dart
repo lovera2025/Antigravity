@@ -148,10 +148,17 @@ void main() {
           await tester.tap(find.text('Horizontal'));
           await tester.pump();
           expect(tester.takeException(), isNull);
-          await tester.tap(find.byKey(const ValueKey('ver_una_llegada')));
+          // En el celular y la tablet el botón puede quedar fuera: se toca
+          // donde se ve.
+          final verLlegada = find.byKey(const ValueKey('ver_una_llegada'));
+          await tester.ensureVisible(verLlegada);
+          await tester.pump();
+          await tester.tap(verLlegada);
           await tester.pump();
           await tester.pump(EscenaTotem.entrada);
           expect(tester.takeException(), isNull);
+          expect(_escenaDeLaVista(tester).llegada, isNotNull,
+              reason: 'el toque llegó al botón');
         });
       }
     }
@@ -609,10 +616,14 @@ void main() {
         await tester.ensureVisible(find.text('Horizontal'));
         await tester.tap(find.text('Horizontal'));
         await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('ver_una_llegada')));
+        final verLlegada = find.byKey(const ValueKey('ver_una_llegada'));
+        await tester.ensureVisible(verLlegada);
+        await tester.pump();
+        await tester.tap(verLlegada);
         await tester.pump();
         await tester.pump(EscenaTotem.entrada);
         expect(tester.takeException(), isNull);
+        expect(_enLaVista(find.text('PÉREZ, JUAN MARTÍN')), findsOneWidget);
       });
     }
   });

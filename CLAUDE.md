@@ -32,6 +32,11 @@ también en la otra (ver la trampa "Lo que se borra a mano…", abajo). Entrada:
 **Las instalaciones las hace el usuario por su cuenta y avisa.** Si un "falta instalar" de acá quedó viejo, lo que
 vale es lo que diga él.
 
+**"Tu fondo"** (23-oct): programado y probado en la rama `feature/totem-tu-fondo`, **sin unir a la principal a
+propósito**. Su SQL (`20261023120000_totem_config_tu_fondo.sql`) va antes que nada: con el código sin el SQL, guardar
+Personalizar falla. Se publica con el OK del usuario, y las novedades dicen "Nuevas características y detalles".
+Entrada: `docs/PLAN_TU_FONDO_2026-10-23.md`.
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:
@@ -335,6 +340,8 @@ la notebook central (sección 7, abajo). Lo que cuida cada parte: `docs/pendient
   avisado por el puente.
 - **La foto del tótem se guarda en la PC** (`FotoGuardada`, en `Documentos\Junior Eventos\fotos_totem`). En el
   escritorio, la foto del evento sale de `fotoDelEvento(cfg)`, nunca de `NetworkImage`.
+  - **El fondo de "Tu fondo" va en otra carpeta** (`fondos_totem`, `FotosDelTotem.fondosEnLaPc`). Cada carpeta deja
+    una imagen por evento: en la misma, guardar el fondo borraba la foto del círculo.
 - **Sin internet y con la sesión vencida, entra** (`sesionParaEntrar`, `test/sesion_sin_internet_test.dart`, con la
   librería de Supabase de verdad). Si la PC recuerda el rol, la nube se espera 3 s (`kEsperaDelRolRecordado`).
 - **"Lista para trabajar sin internet"**, la línea de Recepción: lo que dice es `EstadoSinInternet` y cuándo se pone
@@ -431,6 +438,25 @@ PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve
   - **si no se toca una tarjeta, `estilo` se guarda como estaba**, porque la config se arma campo por campo;
   - se prueba entera con `test/helpers/personalizar_en_memoria.dart`, y `PersonalizarTotem.elegirFoto` reemplaza al
     selector de archivos.
+
+**"Tu fondo", la quinta apariencia** (rama `feature/totem-tu-fondo`, sin publicar; todo en
+`docs/PLAN_TU_FONDO_2026-10-23.md`). Una imagen propia es el fondo, y de ella salen la animación, los efectos, los
+colores y las letras.
+- **La animación de la imagen** (`AnimacionFondo`: quieta, acercarse, recorrer, flotar, respirar, ondular) **y los
+  efectos** (`EfectoFondo`: van encima y se combinan) **son dos cosas distintas**: así lo pidió el usuario. Todo en
+  `estilos/tu_fondo.dart`.
+- **Cada imagen trae su receta** (`LecturaDelFondo.receta`, `services/lectura_del_fondo.dart`): se lee una vez en
+  Personalizar y **se guarda entera con la config** (11 columnas `fondo_*`), así la PC y la web muestran lo mismo.
+  "Automático · según la imagen" viene prendido; tocar algo lo apaga.
+- **`EstiloTotem.deLaCasa` son las cuatro de antes**: `FondoTotem` solo pinta esas. "Tu fondo" lo pinta `FondoPropio`
+  con `shaders/totem_tu_fondo.frag`, que lee la imagen (`setImageSampler`).
+- **"Tu fondo" sin imagen no cuenta** (`EstiloTotem.elegida`); si la imagen no está ni baja, va
+  `EscenaTotem.respaldo` (la del tipo). Sin shader, la imagen quieta (`PintorFondoQuieto`, igual al shader sin
+  animación).
+- **`AnimacionFondo.index` es el número que recibe el shader:** una animación nueva va al final.
+- **Personalizar guarda lo del fondo entero** (`TotemConfig.conFondoDe`): la config se arma campo por campo.
+- Arnés sin base ni nube: `tool/tu_fondo_prueba.dart` (Windows o web). Muestras: `tool/totem_muestra_test.dart`,
+  grupo "Tu fondo".
 
 **El plano en la llegada** (v6.0.0, sección 4). Cuando llega una familia de un masivo sorteado, la llegada va arriba
 (a la izquierda en una tele horizontal) y abajo el salón con su mesa encendida y el camino desde el Ingreso.
