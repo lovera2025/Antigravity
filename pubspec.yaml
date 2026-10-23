@@ -72,6 +72,9 @@ dependencies:
   web_socket_channel: ^3.0.3
   # SQLite nativo en Android/iOS (la PC usa sqflite_common_ffi en local_database.dart).
   sqflite: ^2.4.2
+  # Los colores de "Tu fondo" salen de la imagen (`lectura_del_fondo.dart`). Ya
+  # venía con Flutter: la misma versión que fija el SDK.
+  material_color_utilities: ^0.13.0
 
 
 dev_dependencies:
