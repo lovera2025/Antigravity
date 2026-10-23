@@ -26,11 +26,16 @@ class EscenaTuFondo extends EscenaEstilo {
     // al medio se tapaba con el saludo dorado.
     final luz = (d.cfg.fondoLuz ?? 30) / 100;
     final sombra = (0.12 + (luz - 0.2) * 0.8).clamp(0.12, 0.45);
+    // Sigue a las frases, si se movieron.
+    final donde = d.ubicacionDeLaEspera;
     return [
       DecoratedBox(
         decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: const Alignment(0, -0.15),
+            center: Alignment(
+              donde.x * 0.6,
+              (-0.15 + donde.y * 0.7).clamp(-0.9, 0.9),
+            ),
             radius: 0.8,
             colors: r.textoOscuro
                 ? const [Color(0x6BFFFFFF), Color(0x00FFFFFF)]
@@ -58,91 +63,95 @@ class EscenaTuFondo extends EscenaEstilo {
     final t = _Textos.de(r);
     final titulo = partirTitulo(d.cfg.titulo);
     final qr = d.qrUrl;
+    // Sin la foto queda solo la imagen: es para cuando ya trae el logo.
+    final foto = fotoDeLaEspera(
+      d,
+      lado: u * 5.2,
+      borde: r.colores.brillo,
+      grosor: u * 0.12,
+      brillo: r.textoOscuro ? null : r.colores.brillo,
+    );
     return Centrado(
-      margen: EdgeInsets.fromLTRB(u * 2, u * 2.2, u * 2, u * (qr == null ? 3.4 : 1.4)),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: r.textoOscuro
-                  ? const []
-                  : [
-                      BoxShadow(
-                        color: r.colores.brillo.withValues(alpha: 0.45),
-                        blurRadius: u * 1.2,
-                      ),
-                    ],
-            ),
-            child: FotoEvento(
-              imagen: d.foto,
-              lado: u * 5.2,
-              borde: r.colores.brillo,
-              grosor: u * 0.12,
-            ),
-          ),
-          SizedBox(height: u * 1.3),
-          if (titulo.chico != null)
-            Text(
-              titulo.chico!,
-              textAlign: TextAlign.center,
-              style: t.estilo(
-                r.letras.chico,
-                tamano: u * 1.15,
-                color: t.chico,
-                sombras: t.suaves(u),
-              ).copyWith(letterSpacing: u * 0.45),
-            ),
-          Text(
-            titulo.grande,
-            textAlign: TextAlign.center,
-            style: t.estilo(
-              r.letras.titulo,
-              tamano: u * (titulo.chico == null ? 2.8 : 5.0),
-              color: t.grande,
-              alto: 1.0,
-              sombras: t.brillo(u),
-            ).copyWith(
-              letterSpacing:
-                  r.letras == LetrasFondo.moderna ? u * 0.25 : null,
-            ),
-          ),
-          if (d.cfg.subtitulo.isNotEmpty) ...[
-            SizedBox(height: u * 0.4),
-            Text(
-              d.cfg.subtitulo,
-              textAlign: TextAlign.center,
-              style: t.estilo(
-                r.letras.saludo,
-                tamano: u * 1.5,
-                color: t.saludo,
-                sombras: t.suaves(u),
+      margen: EdgeInsets.fromLTRB(
+        u * 2,
+        u * 2.2,
+        u * 2,
+        u * (qr == null ? 3.4 : 1.4),
+      ),
+      ubicacion: d.ubicacionDeLaEspera,
+      child: d.bloque(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (foto != null) ...[foto, SizedBox(height: u * 1.3)],
+            d.frases([
+              if (titulo.chico != null)
+                Text(
+                  titulo.chico!,
+                  textAlign: TextAlign.center,
+                  style: t
+                      .estilo(
+                        r.letras.chico,
+                        tamano: u * 1.15,
+                        color: t.chico,
+                        sombras: t.suaves(u),
+                      )
+                      .copyWith(letterSpacing: u * 0.45),
+                ),
+              Text(
+                titulo.grande,
+                textAlign: TextAlign.center,
+                style: t
+                    .estilo(
+                      r.letras.titulo,
+                      tamano: u * (titulo.chico == null ? 2.8 : 5.0),
+                      color: t.grande,
+                      alto: 1.0,
+                      sombras: t.brillo(u),
+                    )
+                    .copyWith(
+                      letterSpacing: r.letras == LetrasFondo.moderna
+                          ? u * 0.25
+                          : null,
+                    ),
               ),
-            ),
+              if (d.cfg.subtitulo.isNotEmpty) ...[
+                SizedBox(height: u * 0.4),
+                Text(
+                  d.cfg.subtitulo,
+                  textAlign: TextAlign.center,
+                  style: t.estilo(
+                    r.letras.saludo,
+                    tamano: u * 1.5,
+                    color: t.saludo,
+                    sombras: t.suaves(u),
+                  ),
+                ),
+              ],
+              SizedBox(height: u * 0.9),
+              Text(
+                d.cfg.mensajeBienvenida,
+                textAlign: TextAlign.center,
+                style: t.estilo(
+                  r.letras.saludo,
+                  tamano: u * 2.6,
+                  color: t.saludo,
+                  sombras: t.brilloSaludo(u),
+                ),
+              ),
+              if (qr != null) ...[
+                SizedBox(height: u * 1.2),
+                QrDelTotem(
+                  url: qr,
+                  texto: d.cfg.mensajeQr,
+                  u: u,
+                  marco: r.colores.brillo,
+                  colorTexto: t.suave,
+                ),
+              ],
+            ]),
           ],
-          SizedBox(height: u * 0.9),
-          Text(
-            d.cfg.mensajeBienvenida,
-            textAlign: TextAlign.center,
-            style: t.estilo(
-              r.letras.saludo,
-              tamano: u * 2.6,
-              color: t.saludo,
-              sombras: t.brilloSaludo(u),
-            ),
-          ),
-          if (qr != null) ...[
-            SizedBox(height: u * 1.2),
-            QrDelTotem(
-              url: qr,
-              texto: d.cfg.mensajeQr,
-              u: u,
-              marco: r.colores.brillo,
-              colorTexto: t.suave,
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -159,7 +168,10 @@ class EscenaTuFondo extends EscenaEstilo {
       final p = d.tramo(desde, hasta);
       return Opacity(
         opacity: p,
-        child: Transform.translate(offset: Offset(0, (1 - p) * u * 1.2), child: hijo),
+        child: Transform.translate(
+          offset: Offset(0, (1 - p) * u * 1.2),
+          child: hijo,
+        ),
       );
     }
 
@@ -254,7 +266,12 @@ class EscenaTuFondo extends EscenaEstilo {
 
   /// La tarjeta de la mesa: el número grande y, al lado, las sillas y la
   /// música. En el color de la tarjeta de la imagen, con el borde del brillo.
-  Widget _tarjeta(DatosEscena d, ContenidoBienvenida c, RecetaDibujada r, _Textos t) {
+  Widget _tarjeta(
+    DatosEscena d,
+    ContenidoBienvenida c,
+    RecetaDibujada r,
+    _Textos t,
+  ) {
     final u = d.u;
     final mesa = c.mesa!;
     final derecha = <Widget>[
@@ -295,7 +312,10 @@ class EscenaTuFondo extends EscenaEstilo {
             ? Colors.white.withValues(alpha: 0.62)
             : r.colores.tarjeta.withValues(alpha: 0.62),
         borderRadius: BorderRadius.circular(u * 1.1),
-        border: Border.all(color: r.colores.brillo, width: math.max(1, u * 0.07)),
+        border: Border.all(
+          color: r.colores.brillo,
+          width: math.max(1, u * 0.07),
+        ),
         boxShadow: [
           BoxShadow(
             color: r.colores.brillo.withValues(alpha: 0.25),
@@ -363,7 +383,14 @@ class _Textos {
   final Color suave;
   final Color musica;
 
-  _Textos._(this.r, this.grande, this.chico, this.saludo, this.suave, this.musica);
+  _Textos._(
+    this.r,
+    this.grande,
+    this.chico,
+    this.saludo,
+    this.suave,
+    this.musica,
+  );
 
   factory _Textos.de(RecetaDibujada r) {
     final s = r.colores.saludo;
@@ -394,20 +421,19 @@ class _Textos {
     required Color color,
     double? alto,
     List<Shadow>? sombras,
-  }) =>
-      TextStyle(
-        fontFamily: letra.familia,
-        fontWeight: letra.peso,
-        fontStyle: letra.estilo,
-        // Las cifras alineadas en la serif de Gala: "12" se leía "I2".
-        fontFeatures: letra.familia == FuentesTotem.gala
-            ? const [FontFeature.liningFigures()]
-            : null,
-        fontSize: tamano,
-        height: alto,
-        color: color,
-        shadows: sombras,
-      );
+  }) => TextStyle(
+    fontFamily: letra.familia,
+    fontWeight: letra.peso,
+    fontStyle: letra.estilo,
+    // Las cifras alineadas en la serif de Gala: "12" se leía "I2".
+    fontFeatures: letra.familia == FuentesTotem.gala
+        ? const [FontFeature.liningFigures()]
+        : null,
+    fontSize: tamano,
+    height: alto,
+    color: color,
+    shadows: sombras,
+  );
 
   /// Una sombra oscura y suave que despega el texto claro de la imagen.
   Shadow _despega(double u) =>
@@ -416,11 +442,21 @@ class _Textos {
   /// El resplandor del título: el de neón, en el brillo de la imagen, sobre
   /// la sombra que lo despega. Con el texto oscuro, una sombra clara.
   List<Shadow> brillo(double u, {double fuerza = 0.75}) => r.textoOscuro
-      ? [Shadow(color: Colors.white.withValues(alpha: 0.85), blurRadius: u * 1.3)]
+      ? [
+          Shadow(
+            color: Colors.white.withValues(alpha: 0.85),
+            blurRadius: u * 1.3,
+          ),
+        ]
       : [_despega(u), ...brilloNeon(r.colores.brillo, u, fuerza: fuerza)];
 
   List<Shadow> brilloSaludo(double u) => r.textoOscuro
-      ? [Shadow(color: Colors.white.withValues(alpha: 0.7), blurRadius: u * 0.8)]
+      ? [
+          Shadow(
+            color: Colors.white.withValues(alpha: 0.7),
+            blurRadius: u * 0.8,
+          ),
+        ]
       : [
           _despega(u),
           Shadow(
@@ -457,9 +493,29 @@ class PintorEfectos extends CustomPainter {
       final azar = _Azar(receta.semilla ^ (efecto.index * 0x9E3779B1));
       switch (efecto) {
         case EfectoFondo.destellos:
-          _suben(canvas, size, azar, (10 + 30 * e).round(), 0.13, 0.3, _rapidos, 0.7, 3.5);
+          _suben(
+            canvas,
+            size,
+            azar,
+            (10 + 30 * e).round(),
+            0.13,
+            0.3,
+            _rapidos,
+            0.7,
+            3.5,
+          );
         case EfectoFondo.polvo:
-          _suben(canvas, size, azar, (16 + 40 * e).round(), 0.05, 0.12, _lentos, 0.5, 3);
+          _suben(
+            canvas,
+            size,
+            azar,
+            (16 + 40 * e).round(),
+            0.05,
+            0.12,
+            _lentos,
+            0.5,
+            3,
+          );
         case EfectoFondo.bokeh:
           _bokeh(canvas, size, azar, (4 + 10 * e).round());
         case EfectoFondo.titileo:
@@ -485,7 +541,13 @@ class PintorEfectos extends CustomPainter {
   static double _vaiven(double t, double periodo) =>
       0.5 - 0.5 * math.cos(2 * math.pi * t / periodo);
 
-  void _punto(Canvas canvas, Offset c, double radio, Color color, double brillo) {
+  void _punto(
+    Canvas canvas,
+    Offset c,
+    double radio,
+    Color color,
+    double brillo,
+  ) {
     canvas.drawCircle(
       c,
       radio * brillo * 0.6,
@@ -535,11 +597,17 @@ class PintorEfectos extends CustomPainter {
   /// Luces grandes y desenfocadas que flotan en el lugar.
   void _bokeh(Canvas canvas, Size size, _Azar azar, int n) {
     for (var k = 0; k < n; k++) {
-      final base = Offset(azar.real() * 0.92 * size.width, (0.04 + azar.real() * 0.7) * size.height);
+      final base = Offset(
+        azar.real() * 0.92 * size.width,
+        (0.04 + azar.real() * 0.7) * size.height,
+      );
       final radio = u * (0.6 + azar.real() * 1.6);
       final periodo = _rapidos[azar.entero(_rapidos.length)];
       final fase = azar.real() * periodo;
-      final ida = Offset((azar.real() * 2 - 1) * u * 1.6, (azar.real() * 2 - 1) * u * 1.6);
+      final ida = Offset(
+        (azar.real() * 2 - 1) * u * 1.6,
+        (azar.real() * 2 - 1) * u * 1.6,
+      );
       final c = receta.colores;
       final color = [Colors.white, c.brillo, c.tarjeta][azar.entero(3)];
       final alfa = 0.22 + azar.real() * 0.3;
@@ -558,14 +626,23 @@ class PintorEfectos extends CustomPainter {
   /// arriba.
   void _titileo(Canvas canvas, Size size, _Azar azar, int n) {
     for (var k = 0; k < n; k++) {
-      final c = Offset(azar.real() * size.width, azar.real() * 0.7 * size.height);
+      final c = Offset(
+        azar.real() * size.width,
+        azar.real() * 0.7 * size.height,
+      );
       final radio = u * (0.025 + azar.real() * 0.04);
       final periodo = _titileos[azar.entero(_titileos.length)];
       final fase = azar.real() * periodo;
       final alfa = 0.6 + azar.real() * 0.4;
       final color = _color(azar, alfa);
       final v = _vaiven(reloj + fase, periodo);
-      _punto(canvas, c, radio * (0.5 + 0.5 * v), color.withValues(alpha: color.a * (0.05 + 0.95 * v)), 3);
+      _punto(
+        canvas,
+        c,
+        radio * (0.5 + 0.5 * v),
+        color.withValues(alpha: color.a * (0.05 + 0.95 * v)),
+        3,
+      );
     }
   }
 
@@ -685,7 +762,11 @@ class _Chispas extends CustomPainter {
           ..color = tono.withValues(alpha: 0.35 * alfa)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, radio),
       );
-      canvas.drawCircle(c, radio, Paint()..color = tono.withValues(alpha: alfa));
+      canvas.drawCircle(
+        c,
+        radio,
+        Paint()..color = tono.withValues(alpha: alfa),
+      );
     }
   }
 
@@ -699,7 +780,8 @@ class _Chispas extends CustomPainter {
 class _Azar {
   int _s;
 
-  _Azar(int semilla) : _s = (semilla & 0xFFFFFFFF) == 0 ? 0x9E3779B9 : semilla & 0xFFFFFFFF;
+  _Azar(int semilla)
+    : _s = (semilla & 0xFFFFFFFF) == 0 ? 0x9E3779B9 : semilla & 0xFFFFFFFF;
 
   int _siguiente() {
     var x = _s;

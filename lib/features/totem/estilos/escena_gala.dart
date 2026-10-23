@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/contenido_bienvenida.dart';
 import 'escena_totem.dart';
+import 'forma_foto.dart';
 import 'fuentes_totem.dart';
 import 'totem_estilo.dart';
 
@@ -34,95 +35,105 @@ class EscenaGala extends EscenaEstilo {
         color: Colors.white,
       ),
     );
+    final foto = fotoDeLaEspera(
+      d,
+      lado: u * 5.4,
+      borde: d.color.withValues(alpha: 0.7),
+      grosor: u * 0.04,
+      // El anillo que gira va con el círculo, y crece con la foto. Con otra
+      // forma queda su borde dorado.
+      alrededor: (foto, forma, medida) {
+        if (forma != FormaFoto.circulo) return foto;
+        final escala = medida.width / 5.4;
+        return SizedBox(
+          width: escala * 7,
+          height: escala * 7,
+          child: CustomPaint(
+            painter: _Anillo(giro: d.reloj * 0.15, color: d.color, u: escala),
+            child: Center(child: foto),
+          ),
+        );
+      },
+    );
     return Centrado(
       margen: EdgeInsets.symmetric(horizontal: u * 2, vertical: u * 2.4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: u * 7,
-            height: u * 7,
-            child: CustomPaint(
-              painter: _Anillo(giro: d.reloj * 0.15, color: d.color, u: u),
-              child: Center(
-                child: FotoEvento(
-                  imagen: d.foto,
-                  lado: u * 5.4,
-                  borde: d.color.withValues(alpha: 0.7),
-                  grosor: u * 0.04,
+      ubicacion: d.ubicacionDeLaEspera,
+      child: d.bloque(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (foto != null) ...[foto, SizedBox(height: u * 1.1)],
+            d.frases([
+              if (titulo.chico != null)
+                Text(
+                  titulo.chico!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FuentesTotem.gala,
+                    fontFeatures: _cifras,
+                    fontWeight: FontWeight.w600,
+                    fontSize: u * 1.2,
+                    letterSpacing: u * 0.35,
+                    color: d.color,
+                  ),
+                ),
+              // Un brillo cruza el título cada seis segundos.
+              ShaderMask(
+                blendMode: BlendMode.srcATop,
+                shaderCallback: (r) {
+                  final x = ((d.reloj % 6) / 6) * 3 - 1;
+                  return LinearGradient(
+                    begin: Alignment(x - 0.4, -0.3),
+                    end: Alignment(x + 0.4, 0.3),
+                    colors: [
+                      Colors.white,
+                      Color.lerp(d.color, Colors.white, 0.6)!,
+                      Colors.white,
+                    ],
+                  ).createShader(r);
+                },
+                child: grande,
+              ),
+              if (d.cfg.subtitulo.isNotEmpty) ...[
+                SizedBox(height: u * 0.4),
+                Text(
+                  d.cfg.subtitulo,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FuentesTotem.gala,
+                    fontFeatures: _cifras,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                    fontSize: u * 1.3,
+                    color: d.color,
+                  ),
+                ),
+              ],
+              SizedBox(height: u * 0.8),
+              Text(
+                d.cfg.mensajeBienvenida,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FuentesTotem.gala,
+                  fontFeatures: _cifras,
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w500,
+                  fontSize: u * 1.6,
+                  color: Colors.white.withValues(alpha: 0.9),
                 ),
               ),
-            ),
-          ),
-          SizedBox(height: u * 1.1),
-          if (titulo.chico != null)
-            Text(
-              titulo.chico!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FuentesTotem.gala,
-                fontFeatures: _cifras,
-                fontWeight: FontWeight.w600,
-                fontSize: u * 1.2,
-                letterSpacing: u * 0.35,
-                color: d.color,
-              ),
-            ),
-          // Un brillo cruza el título cada seis segundos.
-          ShaderMask(
-            blendMode: BlendMode.srcATop,
-            shaderCallback: (r) {
-              final x = ((d.reloj % 6) / 6) * 3 - 1;
-              return LinearGradient(
-                begin: Alignment(x - 0.4, -0.3),
-                end: Alignment(x + 0.4, 0.3),
-                colors: [
-                  Colors.white,
-                  Color.lerp(d.color, Colors.white, 0.6)!,
-                  Colors.white,
-                ],
-              ).createShader(r);
-            },
-            child: grande,
-          ),
-          if (d.cfg.subtitulo.isNotEmpty) ...[
-            SizedBox(height: u * 0.4),
-            Text(
-              d.cfg.subtitulo,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FuentesTotem.gala,
-                fontFeatures: _cifras,
-                fontStyle: FontStyle.italic,
-                fontWeight: FontWeight.w500,
-                fontSize: u * 1.3,
-                color: d.color,
-              ),
-            ),
+              if (d.qrUrl != null) ...[
+                SizedBox(height: u * 1.1),
+                QrDelTotem(
+                  url: d.qrUrl!,
+                  texto: d.cfg.mensajeQr,
+                  u: u,
+                  marco: d.color,
+                ),
+              ],
+            ]),
           ],
-          SizedBox(height: u * 0.8),
-          Text(
-            d.cfg.mensajeBienvenida,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: FuentesTotem.gala,
-              fontFeatures: _cifras,
-              fontStyle: FontStyle.italic,
-              fontWeight: FontWeight.w500,
-              fontSize: u * 1.6,
-              color: Colors.white.withValues(alpha: 0.9),
-            ),
-          ),
-          if (d.qrUrl != null) ...[
-            SizedBox(height: u * 1.1),
-            QrDelTotem(
-              url: d.qrUrl!,
-              texto: d.cfg.mensajeQr,
-              u: u,
-              marco: d.color,
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }

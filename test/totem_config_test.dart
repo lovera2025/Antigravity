@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:arguello_events/features/totem/estilos/forma_foto.dart';
 import 'package:arguello_events/features/totem/widgets/totem_config_sheet.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -36,6 +37,133 @@ void main() {
     test('copyWith no la toca si no se la nombra', () {
       final apagada = const TotemConfig(eventoId: _ev, mostrarMusica: false);
       expect(apagada.copyWith(titulo: 'OTRO').mostrarMusica, isFalse);
+    });
+  });
+
+  group('la foto del evento (6.2.1)', () {
+    test('una fila de antes: la foto, en círculo y al 100 %', () {
+      for (final cfg in [
+        const TotemConfig(eventoId: _ev),
+        TotemConfig.fromJson({'evento_id': _ev}),
+        TotemConfig.fromJson({
+          'evento_id': _ev,
+          'mostrar_foto': null,
+          'foto_forma': null,
+          'foto_tamano': null,
+        }),
+      ]) {
+        expect(cfg.mostrarFoto, isTrue);
+        expect(cfg.fotoForma, isNull);
+        expect(FormaFoto.de(cfg.fotoForma), FormaFoto.circulo);
+        expect(cfg.fotoTamano, 100);
+      }
+    });
+
+    test('se guarda y se lee como se eligió', () {
+      final cfg = const TotemConfig(eventoId: _ev).copyWith(
+        mostrarFoto: false,
+        fotoForma: 'corazon',
+        fotoTamano: 220,
+      );
+      final json = cfg.toJson();
+      expect(json['mostrar_foto'], isFalse);
+      expect(json['foto_forma'], 'corazon');
+      expect(json['foto_tamano'], 220);
+      final leida = TotemConfig.fromJson(json);
+      expect(leida.mostrarFoto, isFalse);
+      expect(FormaFoto.de(leida.fotoForma), FormaFoto.corazon);
+      expect(leida.fotoTamano, 220);
+    });
+
+    test('el tamaño no pasa de los topes, venga de donde venga', () {
+      expect(
+        TotemConfig.fromJson({'evento_id': _ev, 'foto_tamano': 900}).fotoTamano,
+        TotemConfig.fotoTamanoMaximo,
+      );
+      expect(
+        TotemConfig.fromJson({'evento_id': _ev, 'foto_tamano': 10}).fotoTamano,
+        TotemConfig.fotoTamanoMinimo,
+      );
+      expect(
+        TotemConfig.fromJson({'evento_id': _ev, 'foto_tamano': 'basura'})
+            .fotoTamano,
+        100,
+      );
+      expect(
+        const TotemConfig(eventoId: _ev).copyWith(fotoTamano: 5000).fotoTamano,
+        TotemConfig.fotoTamanoMaximo,
+      );
+    });
+
+    test('una forma que esta versión no conoce se dibuja como círculo y se '
+        'guarda como vino', () {
+      final cfg = TotemConfig.fromJson({'evento_id': _ev, 'foto_forma': 'estrella'});
+      expect(FormaFoto.de(cfg.fotoForma), FormaFoto.circulo);
+      expect(cfg.toJson()['foto_forma'], 'estrella');
+    });
+
+    test('copyWith y conFondoDe no la tocan si no se la nombra', () {
+      const elegida = TotemConfig(
+        eventoId: _ev,
+        mostrarFoto: false,
+        fotoForma: 'ovalo',
+        fotoTamano: 150,
+        textoTamano: 130,
+        ubicacionX: -40,
+        ubicacionY: 80,
+      );
+      for (final cfg in [
+        elegida.copyWith(titulo: 'OTRO'),
+        elegida.conFondoDe(const TotemConfig(eventoId: _ev)),
+      ]) {
+        expect(cfg.mostrarFoto, isFalse);
+        expect(cfg.fotoForma, 'ovalo');
+        expect(cfg.fotoTamano, 150);
+        expect(cfg.textoTamano, 130);
+        expect(cfg.ubicacionX, -40);
+        expect(cfg.ubicacionY, 80);
+      }
+    });
+
+    test('las frases y dónde van: vacías, como siempre; y con sus topes', () {
+      final vieja = TotemConfig.fromJson({'evento_id': _ev});
+      expect(vieja.textoTamano, 100);
+      expect(vieja.ubicacionX, 0);
+      expect(vieja.ubicacionY, 0);
+      final cfg = const TotemConfig(eventoId: _ev)
+          .copyWith(textoTamano: 160, ubicacionX: 100, ubicacionY: -60);
+      final leida = TotemConfig.fromJson(cfg.toJson());
+      expect(leida.textoTamano, 160);
+      expect(leida.ubicacionX, 100);
+      expect(leida.ubicacionY, -60);
+      final pasada = TotemConfig.fromJson({
+        'evento_id': _ev,
+        'texto_tamano': 999,
+        'ubicacion_x': -500,
+        'ubicacion_y': 'basura',
+      });
+      expect(pasada.textoTamano, TotemConfig.textoTamanoMaximo);
+      expect(pasada.ubicacionX, -100);
+      expect(pasada.ubicacionY, 0);
+    });
+
+    test('cada forma tiene su clave, su nombre y su medida', () {
+      expect(FormaFoto.values.map((f) => f.clave).toSet(), hasLength(FormaFoto.values.length));
+      for (final f in FormaFoto.values) {
+        expect(FormaFoto.de(f.clave), f);
+        expect(f.nombre, isNotEmpty);
+        final m = f.medida(100);
+        expect(m.width, greaterThan(0));
+        expect(m.height, greaterThan(0));
+        // El contorno queda dentro de su lugar.
+        final caja = f.camino(Offset.zero & m).getBounds();
+        expect(caja.left, greaterThanOrEqualTo(-0.01), reason: f.clave);
+        expect(caja.top, greaterThanOrEqualTo(-0.01), reason: f.clave);
+        expect(caja.right, lessThanOrEqualTo(m.width + 0.01), reason: f.clave);
+        expect(caja.bottom, lessThanOrEqualTo(m.height + 0.01), reason: f.clave);
+      }
+      expect(FormaFoto.de(null), FormaFoto.circulo);
+      expect(FormaFoto.de(''), FormaFoto.circulo);
     });
   });
 
@@ -182,6 +310,8 @@ void main() {
           .readAsStringSync(),
       File('supabase/migrations/20261023120000_totem_config_tu_fondo.sql')
           .readAsStringSync(),
+      File('supabase/migrations/20261023200000_totem_config_foto.sql')
+          .readAsStringSync(),
     ].join('\n').toLowerCase();
     // `updated_by` y `updated_at` los pone el repositorio y el disparador.
     for (final clave in const TotemConfig(eventoId: _ev).toJson().keys) {
@@ -189,6 +319,19 @@ void main() {
     }
     expect(sql, contains('add column if not exists mostrar_musica boolean'));
     expect(sql, contains('add column if not exists estilo text'));
+    // Las de la foto (6.2.1), con su tipo y su vuelta atrás escrita arriba.
+    const deLaFoto = {
+      'mostrar_foto': 'boolean',
+      'foto_forma': 'text',
+      'foto_tamano': 'smallint',
+      'texto_tamano': 'smallint',
+      'ubicacion_x': 'smallint',
+      'ubicacion_y': 'smallint',
+    };
+    for (final MapEntry(key: col, value: tipo) in deLaFoto.entries) {
+      expect(sql, contains('add column if not exists $col $tipo;'), reason: col);
+      expect(sql, contains('drop column if exists $col;'), reason: col);
+    }
     // Las de "Tu fondo", con su tipo y su vuelta atrás escrita arriba.
     const tipos = {
       'fondo_url': 'text',
@@ -216,16 +359,20 @@ void main() {
       expect(sql, contains('drop column if exists $col;'), reason: col);
     }
     // Sin NOT NULL ni CHECK: una fila vieja nunca hace fallar un guardado.
-    final fondo = File(
+    for (final archivo in const [
       'supabase/migrations/20261023120000_totem_config_tu_fondo.sql',
-    ).readAsStringSync().toLowerCase();
-    final sentencias = fondo
-        .split('\n')
-        .where((l) => !l.trimLeft().startsWith('--'))
-        .join('\n');
-    expect(sentencias, isNot(contains('not null')));
-    expect(sentencias, isNot(contains('check')));
-    expect(sentencias, isNot(contains('default')));
+      'supabase/migrations/20261023200000_totem_config_foto.sql',
+    ]) {
+      final sentencias = File(archivo)
+          .readAsStringSync()
+          .toLowerCase()
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('--'))
+          .join('\n');
+      expect(sentencias, isNot(contains('not null')), reason: archivo);
+      expect(sentencias, isNot(contains('check')), reason: archivo);
+      expect(sentencias, isNot(contains('default')), reason: archivo);
+    }
   });
 
   group('la casilla en Personalizar', () {
@@ -245,6 +392,28 @@ void main() {
       );
       expect(find.text(CasillaMusicaTotem.titulo), findsOneWidget);
       expect(find.text(CasillaMusicaTotem.explicacion), findsOneWidget);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(valor, isFalse);
+    });
+
+    testWidgets('la de la foto dice qué hace y cambia al tocarla',
+        (tester) async {
+      var valor = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => CasillaFotoTotem(
+                valor: valor,
+                onChanged: (v) => setState(() => valor = v),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text(CasillaFotoTotem.titulo), findsOneWidget);
+      expect(find.text(CasillaFotoTotem.explicacion), findsOneWidget);
       await tester.tap(find.byType(Switch));
       await tester.pump();
       expect(valor, isFalse);

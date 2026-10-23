@@ -14,6 +14,7 @@ import '../../common/utils/cortes_pantalla.dart';
 import '../../recepcion/providers/recepcion_provider.dart'
     show eventosActivosProvider;
 import '../estilos/escena_totem.dart';
+import '../estilos/forma_foto.dart';
 import '../estilos/fuentes_totem.dart';
 import '../estilos/totem_estilo.dart';
 import '../estilos/tu_fondo.dart';
@@ -26,6 +27,7 @@ import '../services/ficha_totem.dart';
 import '../services/foto_guardada.dart';
 import '../services/lectura_del_fondo.dart';
 import '../totem_orientation.dart';
+import 'foto_en_personalizar.dart';
 import 'link_totem_navegador.dart';
 
 const _gold = TotemConfig.acentoPorDefecto;
@@ -204,6 +206,17 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   late Color _acento;
   late bool _mostrarMusica;
 
+  /// La foto de la espera: si se muestra, su forma (tal como vino, como
+  /// [_estilo]) y su tamaño.
+  late bool _mostrarFoto;
+  String? _fotoForma;
+  late int _fotoTamano;
+
+  /// Las frases: su tamaño, y dónde van junto con la foto.
+  late int _textoTamano;
+  late int _ubicacionX;
+  late int _ubicacionY;
+
   /// La apariencia: la guardada, o la que se tocó. Si no se toca ninguna se
   /// conserva tal cual, también vacía: la config se arma campo por campo, y un
   /// campo que falte acá se borra en la nube.
@@ -268,6 +281,12 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     _hex = TextEditingController(text: cfg.colorAcentoHex);
     _acento = cfg.colorAcento;
     _mostrarMusica = cfg.mostrarMusica;
+    _mostrarFoto = cfg.mostrarFoto;
+    _fotoForma = cfg.fotoForma;
+    _fotoTamano = cfg.fotoTamano;
+    _textoTamano = cfg.textoTamano;
+    _ubicacionX = cfg.ubicacionX;
+    _ubicacionY = cfg.ubicacionY;
     _estilo = cfg.estilo;
     _imagenUrl = cfg.imagenUrl;
     _fondo = cfg;
@@ -305,6 +324,12 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         imagenUrl: _quitarImagen ? null : _imagenUrl,
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
+        mostrarFoto: _mostrarFoto,
+        fotoForma: _fotoForma,
+        fotoTamano: _fotoTamano,
+        textoTamano: _textoTamano,
+        ubicacionX: _ubicacionX,
+        ubicacionY: _ubicacionY,
         estilo: _estilo,
       ).conFondoDe(
         _quitarFondo ? _fondo.copyWith(limpiarFondo: true) : _fondo,
@@ -566,6 +591,12 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         imagenUrl: url,
         colorAcento: _acento,
         mostrarMusica: _mostrarMusica,
+        mostrarFoto: _mostrarFoto,
+        fotoForma: _fotoForma,
+        fotoTamano: _fotoTamano,
+        textoTamano: _textoTamano,
+        ubicacionX: _ubicacionX,
+        ubicacionY: _ubicacionY,
         estilo: _estilo,
       ).conFondoDe(
         fondoUrl == null
@@ -821,6 +852,42 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         foto: _foto,
         fondo: _fondoParaVer,
         qrUrl: _qrUrl(masivo),
+        // Sobre la vista: las manijas para agrandar la foto y las frases, y
+        // el arrastre para moverlas juntas.
+        alrededorDeLaFoto: _guardando
+            ? null
+            : (foto) => ManijasParaAgrandar(
+                  key: const ValueKey('manijas_foto'),
+                  clave: 'foto',
+                  tamano: _fotoTamano,
+                  minimo: TotemConfig.fotoTamanoMinimo,
+                  maximo: TotemConfig.fotoTamanoMaximo,
+                  onTamano: (v) => setState(() => _fotoTamano = v),
+                  child: foto,
+                ),
+        alrededorDelTexto: _guardando
+            ? null
+            : (frases) => ManijasParaAgrandar(
+                  key: const ValueKey('manijas_texto'),
+                  clave: 'texto',
+                  tamano: _textoTamano,
+                  minimo: TotemConfig.textoTamanoMinimo,
+                  maximo: TotemConfig.textoTamanoMaximo,
+                  onTamano: (v) => setState(() => _textoTamano = v),
+                  child: frases,
+                ),
+        alrededorDelBloque: _guardando
+            ? null
+            : (bloque, pantalla) => ArrastrarParaUbicar(
+                  pantalla: pantalla,
+                  x: _ubicacionX,
+                  y: _ubicacionY,
+                  onUbicacion: (x, y) => setState(() {
+                    _ubicacionX = x;
+                    _ubicacionY = y;
+                  }),
+                  child: bloque,
+                ),
         llegada: _conLlegada
             ? LlegadaDeEjemplo.para(masivo: masivo, cfg: cfg)
             : null,
@@ -914,7 +981,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         const SizedBox(height: 12),
         _tarjetas(cfg, estilo, masivo),
         const SizedBox(height: 24),
-        _seccionFoto(cfg),
+        _seccionFoto(cfg, estilo),
+        const SizedBox(height: 24),
+        _seccionFrases(estilo),
         const SizedBox(height: 24),
         _seccionFondo(),
         const SizedBox(height: 20),
@@ -1034,7 +1103,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     letterSpacing: 1.6,
   );
 
-  Widget _seccionFoto(TotemConfig cfg) {
+  Widget _seccionFoto(TotemConfig cfg, EstiloTotem estilo) {
+    final libre = !_guardando;
+    final poster = estilo == EstiloTotem.poster;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1083,6 +1154,104 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        CasillaFotoTotem(
+          key: const ValueKey('casilla_foto'),
+          valor: _mostrarFoto,
+          onChanged: libre ? (v) => setState(() => _mostrarFoto = v) : null,
+        ),
+        if (_mostrarFoto && poster)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              'En Póster la foto ocupa toda la pantalla: la forma y el tamaño '
+              'no se usan.',
+              style: TextStyle(color: Color(0xFFF3DC8A), fontSize: 11),
+            ),
+          ),
+        if (_mostrarFoto && !poster) ...[
+          const SizedBox(height: 16),
+          Text('FORMA', style: _estiloRotulo),
+          const SizedBox(height: 4),
+          const Text(
+            '"Tal cual" la muestra entera, sin recortar ni marco: para un logo '
+            'sin fondo.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          FormasDeLaFoto(
+            elegida: FormaFoto.de(_fotoForma),
+            onChanged: libre
+                ? (f) => setState(() => _fotoForma = f.clave)
+                : null,
+          ),
+          const SizedBox(height: 16),
+          Text('TAMAÑO', style: _estiloRotulo),
+          const SizedBox(height: 4),
+          const Text(
+            'El 100 % es el de siempre. También se agranda arrastrando las '
+            'esquinas de la foto en la vista.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          BarraDeTamano(
+            clave: 'foto',
+            valor: _fotoTamano,
+            minimo: TotemConfig.fotoTamanoMinimo,
+            maximo: TotemConfig.fotoTamanoMaximo,
+            onChanged: libre ? (v) => setState(() => _fotoTamano = v) : null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Las frases de la espera: su tamaño y dónde van junto con la foto.
+  Widget _seccionFrases(EstiloTotem estilo) {
+    final libre = !_guardando;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('LAS FRASES', style: _estiloRotulo),
+        const SizedBox(height: 4),
+        if (estilo == EstiloTotem.poster)
+          const Text(
+            'En Póster las frases van abajo, sobre la foto: el tamaño y el '
+            'lugar no se usan.',
+            style: TextStyle(color: Color(0xFFF3DC8A), fontSize: 11),
+          )
+        else ...[
+          const Text(
+            'El título, el subtítulo y el saludo. Se agrandan con las esquinas '
+            'de las frases en la vista.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          BarraDeTamano(
+            clave: 'texto',
+            valor: _textoTamano,
+            minimo: TotemConfig.textoTamanoMinimo,
+            maximo: TotemConfig.textoTamanoMaximo,
+            onChanged: libre ? (v) => setState(() => _textoTamano = v) : null,
+          ),
+          const SizedBox(height: 12),
+          Text('DÓNDE VAN', style: _estiloRotulo),
+          const SizedBox(height: 4),
+          const Text(
+            'La foto y las frases van juntas, así la foto nunca las tapa. '
+            'Arrastralas en la vista o tocá un lugar.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          UbicacionDeLaEspera(
+            x: _ubicacionX,
+            y: _ubicacionY,
+            onChanged: libre
+                ? (x, y) => setState(() {
+                      _ubicacionX = x;
+                      _ubicacionY = y;
+                    })
+                : null,
+          ),
+        ],
       ],
     );
   }
@@ -1101,7 +1270,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         const SizedBox(height: 4),
         const Text(
           'Una imagen para toda la pantalla, por ejemplo una story. La foto '
-          'del círculo es aparte. De la imagen salen la animación, los efectos '
+          'del evento es aparte. De la imagen salen la animación, los efectos '
           'y los colores de "Tu fondo".',
           style: TextStyle(color: Colors.white38, fontSize: 11),
         ),
@@ -1779,6 +1948,60 @@ class CasillaMusicaTotem extends StatelessWidget {
       'Al saludar, el tótem muestra la canción que eligió, si está cargada.';
 
   @override
+  Widget build(BuildContext context) => _Casilla(
+        icono: Icons.music_note_rounded,
+        titulo: titulo,
+        explicacion: explicacion,
+        valor: valor,
+        onChanged: onChanged,
+      );
+}
+
+/// Si la espera muestra la foto (o el logo de la empresa, sin foto). Se apaga
+/// cuando el fondo ya trae el logo, para que quede solo la imagen.
+class CasillaFotoTotem extends StatelessWidget {
+  final bool valor;
+
+  /// Null mientras se guarda.
+  final ValueChanged<bool>? onChanged;
+
+  const CasillaFotoTotem({
+    super.key,
+    required this.valor,
+    required this.onChanged,
+  });
+
+  static const titulo = 'Mostrar la foto';
+  static const explicacion =
+      'Apagala si tu fondo ya trae el logo: queda solo el fondo, limpio.';
+
+  @override
+  Widget build(BuildContext context) => _Casilla(
+        icono: Icons.account_circle_outlined,
+        titulo: titulo,
+        explicacion: explicacion,
+        valor: valor,
+        onChanged: onChanged,
+      );
+}
+
+/// Un renglón con su ícono, su título, la explicación y el interruptor.
+class _Casilla extends StatelessWidget {
+  final IconData icono;
+  final String titulo;
+  final String explicacion;
+  final bool valor;
+  final ValueChanged<bool>? onChanged;
+
+  const _Casilla({
+    required this.icono,
+    required this.titulo,
+    required this.explicacion,
+    required this.valor,
+    required this.onChanged,
+  });
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
@@ -1789,20 +2012,20 @@ class CasillaMusicaTotem extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.music_note_rounded, color: _gold.withValues(alpha: 0.9)),
+          Icon(icono, color: _gold.withValues(alpha: 0.9)),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   titulo,
-                  style: TextStyle(color: Colors.white, fontSize: 14),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
                   explicacion,
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
             ),

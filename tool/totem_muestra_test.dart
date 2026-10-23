@@ -21,6 +21,11 @@
 // - TuFondo_espera.png, TuFondo_llegada.png y TuFondo_horizontal.png: "Tu
 //   fondo" con las imágenes de --dart-define=fondos=<carpeta> (JPG o PNG; sin
 //   carpeta, una de mentira), cada una con la receta que le arma la lectura.
+// - La foto del evento (6.2.1), en unos quince con una foto y un logo de
+//   mentira: Foto_formas.png (las nueve formas), Foto_tamanos.png (del 50 al
+//   300 %), Foto_en_cada_apariencia.png (el corazón), Foto_TuFondo.png (con
+//   foto, el logo tal cual y sin foto) y Foto_Personalizar.png y
+//   Foto_Personalizar_celular.png (la forma, el tamaño y las manijas).
 //
 // Las escenas, los fondos (los shaders de verdad) y las letras son los de la
 // app. La pantalla entera del tótem lee la nube y no se monta en una prueba.
@@ -42,6 +47,7 @@ import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart'
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
+import 'package:arguello_events/features/totem/estilos/forma_foto.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/estilos/tu_fondo.dart';
@@ -82,6 +88,173 @@ const _particular = TotemConfig(
   subtitulo: 'Nos casamos',
   colorAcento: Color(0xFFFF8FB1),
 );
+
+/// Unos quince, para las muestras de la foto (6.2.1).
+const _quince = TotemConfig(
+  eventoId: eventoParticular,
+  titulo: 'MIS XV',
+  subtitulo: 'Sofía',
+  mensajeBienvenida: '¡Bienvenidos!',
+  colorAcento: Color(0xFFFF8FB1),
+);
+
+/// Una foto de mentira: una silueta sobre un degradé rosa.
+Future<Uint8List> _retrato(WidgetTester tester) async {
+  late Uint8List bytes;
+  await tester.runAsync(() async {
+    final grabador = ui.PictureRecorder();
+    final c = Canvas(grabador);
+    const r = Rect.fromLTWH(0, 0, 400, 400);
+    c.drawRect(
+      r,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          r.topCenter,
+          r.bottomCenter,
+          const [Color(0xFFF7C6D5), Color(0xFFB9659B)],
+        ),
+    );
+    final silueta = Paint()..color = const Color(0xFF5B2747);
+    c.drawCircle(const Offset(200, 160), 80, silueta);
+    c.drawPath(
+      Path()
+        ..moveTo(40, 400)
+        ..cubicTo(56, 285, 128, 243, 200, 243)
+        ..cubicTo(272, 243, 344, 285, 360, 400)
+        ..close(),
+      silueta,
+    );
+    final imagen = await grabador.endRecording().toImage(400, 400);
+    bytes = (await imagen.toByteData(format: ui.ImageByteFormat.png))!
+        .buffer
+        .asUint8List();
+  });
+  return bytes;
+}
+
+/// Un logo de mentira sin fondo, apaisado: una corona dorada.
+Future<Uint8List> _logoSinFondo(WidgetTester tester) async {
+  late Uint8List bytes;
+  await tester.runAsync(() async {
+    final grabador = ui.PictureRecorder();
+    final c = Canvas(grabador);
+    final oro = Paint()..color = const Color(0xFFEBC86A);
+    c.drawPath(
+      Path()
+        ..moveTo(70, 90)
+        ..lineTo(130, 140)
+        ..lineTo(200, 60)
+        ..lineTo(270, 140)
+        ..lineTo(330, 90)
+        ..lineTo(310, 200)
+        ..lineTo(90, 200)
+        ..close(),
+      oro,
+    );
+    for (final p in const [Offset(70, 84), Offset(200, 52), Offset(330, 84)]) {
+      c.drawCircle(p, 12, oro);
+    }
+    c.drawRRect(
+      RRect.fromLTRBR(90, 212, 310, 232, const Radius.circular(6)),
+      oro,
+    );
+    final imagen = await grabador.endRecording().toImage(400, 250);
+    bytes = (await imagen.toByteData(format: ui.ImageByteFormat.png))!
+        .buffer
+        .asUint8List();
+  });
+  return bytes;
+}
+
+/// Una story de mentira que ya trae el logo: violeta, con luces, y la corona
+/// dorada arriba.
+Future<Uint8List> _fondoConLogo(WidgetTester tester) async {
+  late Uint8List bytes;
+  await tester.runAsync(() async {
+    final grabador = ui.PictureRecorder();
+    final c = Canvas(grabador);
+    const r = Rect.fromLTWH(0, 0, 540, 960);
+    c.drawRect(
+      r,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          r.topCenter,
+          r.bottomCenter,
+          const [Color(0xFF2A1240), Color(0xFF8E3B6E), Color(0xFFE9A06A)],
+          const [0, 0.6, 1],
+        ),
+    );
+    final azar = math.Random(7);
+    for (var i = 0; i < 40; i++) {
+      c.drawCircle(
+        Offset(azar.nextDouble() * 540, azar.nextDouble() * 960),
+        4 + azar.nextDouble() * 18,
+        Paint()
+          ..color = const Color(0xFFFFE3B0).withValues(alpha: 0.12 + azar.nextDouble() * 0.2)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+    }
+    final oro = Paint()..color = const Color(0xFFEBC86A);
+    c.save();
+    c.translate(170, 70);
+    c.scale(0.5);
+    c.drawPath(
+      Path()
+        ..moveTo(70, 90)
+        ..lineTo(130, 140)
+        ..lineTo(200, 60)
+        ..lineTo(270, 140)
+        ..lineTo(330, 90)
+        ..lineTo(310, 200)
+        ..lineTo(90, 200)
+        ..close(),
+      oro,
+    );
+    for (final p in const [Offset(70, 84), Offset(200, 52), Offset(330, 84)]) {
+      c.drawCircle(p, 12, oro);
+    }
+    c.restore();
+    final imagen = await grabador.endRecording().toImage(540, 960);
+    bytes = (await imagen.toByteData(format: ui.ImageByteFormat.png))!
+        .buffer
+        .asUint8List();
+  });
+  return bytes;
+}
+
+/// Varias pantallas en filas de a [porFila], cada una con su nombre arriba.
+Widget _grilla(Size pantalla, List<(String, Widget)> todas, {int porFila = 4}) {
+  return Padding(
+    padding: const EdgeInsets.all(_hueco),
+    child: Wrap(
+      spacing: _hueco,
+      runSpacing: _hueco,
+      children: [
+        for (final (nombre, escena) in todas)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 38,
+                child: Text(
+                  nombre,
+                  style: const TextStyle(
+                    fontFamily: FuentesTotem.linea,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 22,
+                    color: Colors.white70,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(width: pantalla.width, height: pantalla.height, child: escena),
+            ],
+          ),
+      ],
+    ),
+  );
+}
 
 Future<void> _cargarLetras() async {
   await cargarFuentesTotem();
@@ -673,6 +846,198 @@ void main() {
           tiempoFijo: 6,
         ),
         'TuFondo_horizontal.png',
+      );
+    });
+
+    // 6.2.1: con un fondo que ya trae el logo, la foto se saca; o va el logo
+    // sin fondo, "tal cual" y grande.
+    testWidgets('la foto: con foto, el logo tal cual y sin foto',
+        (tester) async {
+      // Una story que ya trae su logo arriba, leída como en Personalizar.
+      final bytes = await _fondoConLogo(tester);
+      late TotemConfig cfg;
+      await tester.runAsync(() async {
+        cfg = conLaLectura(
+          _quince.copyWith(estilo: 'tu_fondo', fondoUrl: 'https://nube.test/story.png'),
+          await LecturaDelFondo.deBytes(bytes),
+          automatico: true,
+        );
+      });
+      final retrato = await _retrato(tester);
+      final logo = await _logoSinFondo(tester);
+      final casos = [
+        ('Con foto', bytes, cfg),
+        ('Logo tal cual 220 %', bytes, cfg.copyWith(fotoForma: 'tal_cual', fotoTamano: 220)),
+        ('Sin foto', bytes, cfg.copyWith(mostrarFoto: false)),
+        (
+          'Sin foto, frases abajo al 140 %',
+          bytes,
+          cfg.copyWith(mostrarFoto: false, textoTamano: 140, ubicacionY: 100),
+        ),
+      ];
+      await sacarConFondos(
+        tester,
+        _vertical,
+        casos,
+        (bytes, cfg) => EscenaTotem(
+          estilo: EstiloTotem.tuFondo,
+          cfg: cfg,
+          fondo: MemoryImage(bytes),
+          foto: MemoryImage(cfg.fotoForma == 'tal_cual' ? logo : retrato),
+          quieta: true,
+          tiempoFijo: 6,
+        ),
+        'Foto_TuFondo.png',
+      );
+    });
+  });
+
+  group('La foto (6.2.1)', () {
+    testWidgets('las nueve formas', (tester) async {
+      final retrato = await _retrato(tester);
+      final logo = await _logoSinFondo(tester);
+      const chica = Size(320, 569);
+      await _sacar(
+        tester,
+        Size(2 * _hueco + 5 * (chica.width + _hueco), 2 * (2 * _hueco + 48 + chica.height)),
+        _grilla(chica, [
+          for (final f in FormaFoto.values)
+            (
+              f.nombre,
+              EscenaTotem(
+                estilo: EstiloTotem.neon,
+                cfg: _quince.copyWith(fotoForma: f.clave, fotoTamano: 160),
+                foto: MemoryImage(f == FormaFoto.talCual ? logo : retrato),
+                quieta: true,
+                tiempoFijo: 6,
+              ),
+            ),
+        ], porFila: 5),
+        'Foto_formas.png',
+      );
+    });
+
+    testWidgets('del más chico al más grande', (tester) async {
+      final retrato = await _retrato(tester);
+      final tamanos = [
+        TotemConfig.fotoTamanoMinimo,
+        100,
+        200,
+        TotemConfig.fotoTamanoMaximo,
+      ];
+      await _sacar(
+        tester,
+        _lienzo(_vertical),
+        _grilla(_vertical, [
+          for (final t in tamanos)
+            (
+              '$t %',
+              EscenaTotem(
+                estilo: EstiloTotem.gala,
+                cfg: _quince.copyWith(fotoTamano: t),
+                foto: MemoryImage(retrato),
+                quieta: true,
+                tiempoFijo: 6,
+              ),
+            ),
+        ]),
+        'Foto_tamanos.png',
+      );
+    });
+
+    testWidgets('el corazón en cada apariencia', (tester) async {
+      final retrato = await _retrato(tester);
+      await _sacar(
+        tester,
+        _lienzo(_vertical),
+        _cuatro(
+          _vertical,
+          (e) => EscenaTotem(
+            estilo: e,
+            cfg: _quince.copyWith(fotoForma: 'corazon', fotoTamano: 180),
+            foto: MemoryImage(retrato),
+            quieta: true,
+            tiempoFijo: 6,
+          ),
+        ),
+        'Foto_en_cada_apariencia.png',
+      );
+    });
+
+    testWidgets('las frases: más grandes, más chicas y en otro lugar',
+        (tester) async {
+      final retrato = await _retrato(tester);
+      await _sacar(
+        tester,
+        _lienzo(_vertical),
+        _grilla(_vertical, [
+          for (final (nombre, cfg) in [
+            ('Como siempre', _quince),
+            ('Foto 220 %, frases 80 %, arriba', _quince.copyWith(fotoTamano: 220, textoTamano: 80, ubicacionY: -100)),
+            ('Frases 160 %, abajo', _quince.copyWith(textoTamano: 160, ubicacionY: 100)),
+            ('Óvalo, abajo a la izquierda', _quince.copyWith(fotoForma: 'ovalo', ubicacionX: -100, ubicacionY: 100)),
+          ])
+            (
+              nombre,
+              EscenaTotem(
+                estilo: EstiloTotem.gala,
+                cfg: cfg,
+                foto: MemoryImage(retrato),
+                quieta: true,
+                tiempoFijo: 6,
+              ),
+            ),
+        ]),
+        'Foto_frases.png',
+      );
+    });
+
+    testWidgets('Personalizar en la PC: la forma, el tamaño y las manijas',
+        (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(1366, 900),
+        guardada: _quince,
+        archivo: 'Foto_Personalizar.png',
+        antes: (tester) async {
+          await tester.ensureVisible(find.byKey(const ValueKey('forma_corazon')));
+          await tester.tap(find.byKey(const ValueKey('forma_corazon')));
+          await tester.pump();
+          for (var i = 0; i < 6; i++) {
+            await tester.tap(find.byKey(const ValueKey('agrandar_foto')));
+            await tester.pump();
+          }
+          await tester.ensureVisible(find.text('FOTO DEL EVENTO'));
+          // Que termine el cambio de borde de las formas (0,2 s).
+          await tester.pump(const Duration(milliseconds: 400));
+        },
+      );
+    });
+
+    testWidgets('Personalizar en la PC: las frases y dónde van', (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(1366, 900),
+        guardada: _quince.copyWith(fotoTamano: 140, textoTamano: 120, ubicacionY: 60),
+        archivo: 'Foto_Personalizar_frases.png',
+        antes: (tester) async {
+          await tester.ensureVisible(find.byKey(const ValueKey('ubicacion_al_medio')));
+          await tester.pump();
+        },
+      );
+    });
+
+    testWidgets('Personalizar en el celular, en la parte de la foto',
+        (tester) async {
+      await _sacarPersonalizar(
+        tester,
+        const Size(390, 844),
+        guardada: _quince,
+        archivo: 'Foto_Personalizar_celular.png',
+        antes: (tester) async {
+          await tester.ensureVisible(find.byKey(const ValueKey('tamano_foto')));
+          await tester.pump();
+        },
       );
     });
   });

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../models/totem_config.dart';
@@ -16,6 +17,7 @@ import 'escena_neon.dart';
 import 'escena_poster.dart';
 import 'escena_tu_fondo.dart';
 import 'fondo_propio.dart';
+import 'forma_foto.dart';
 import 'fondo_totem.dart';
 import 'fuentes_totem.dart';
 import 'plano_del_totem.dart';
@@ -47,6 +49,19 @@ class EscenaTotem extends StatefulWidget {
 
   /// El QR de la espera. Null: sin QR (un evento masivo).
   final String? qrUrl;
+
+  /// Lo que va pegado a la foto de la espera: en Personalizar, las manijas
+  /// para agrandarla. Null: nada (el tótem).
+  final Widget Function(Widget foto)? alrededorDeLaFoto;
+
+  /// Lo que va alrededor de la foto y las frases de la espera, juntas, con lo
+  /// que mide la pantalla: en Personalizar, para moverlas arrastrando. Null:
+  /// nada (el tótem).
+  final Widget Function(Widget bloque, Size pantalla)? alrededorDelBloque;
+
+  /// Lo que va pegado a las frases de la espera: en Personalizar, las manijas
+  /// para agrandarlas. Null: nada (el tótem).
+  final Widget Function(Widget frases)? alrededorDelTexto;
 
   /// La llegada que se muestra; null en la espera.
   final ContenidoBienvenida? llegada;
@@ -84,6 +99,9 @@ class EscenaTotem extends StatefulWidget {
     this.foto,
     this.fondo,
     this.qrUrl,
+    this.alrededorDeLaFoto,
+    this.alrededorDelBloque,
+    this.alrededorDelTexto,
     this.llegada,
     this.plano,
     this.claveLlegada,
@@ -282,6 +300,9 @@ class _EscenaTotemState extends State<EscenaTotem>
                 enCamino: widget.enCamino,
                 entrada: e,
                 reloj: reloj,
+                alrededorDeLaFoto: widget.alrededorDeLaFoto,
+                alrededorDelBloque: widget.alrededorDelBloque,
+                alrededorDelTexto: widget.alrededorDelTexto,
               );
               final llegada = widget.llegada;
               return Stack(
@@ -476,6 +497,15 @@ class DatosEscena {
   /// pantalla, como el horizonte de Neón, sigue a la vista.
   final bool planoAlCostado;
 
+  /// Ver [EscenaTotem.alrededorDeLaFoto].
+  final Widget Function(Widget foto)? alrededorDeLaFoto;
+
+  /// Ver [EscenaTotem.alrededorDelBloque].
+  final Widget Function(Widget bloque, Size pantalla)? alrededorDelBloque;
+
+  /// Ver [EscenaTotem.alrededorDelTexto].
+  final Widget Function(Widget frases)? alrededorDelTexto;
+
   const DatosEscena({
     required this.cfg,
     required this.estilo,
@@ -492,6 +522,9 @@ class DatosEscena {
     required this.reloj,
     this.conPlano = false,
     this.planoAlCostado = false,
+    this.alrededorDeLaFoto,
+    this.alrededorDelBloque,
+    this.alrededorDelTexto,
   });
 
   /// Lo mismo, para la parte de la pantalla que deja el plano.
@@ -516,6 +549,9 @@ class DatosEscena {
         reloj: reloj,
         conPlano: true,
         planoAlCostado: alCostado,
+        alrededorDeLaFoto: alrededorDeLaFoto,
+        alrededorDelBloque: alrededorDelBloque,
+        alrededorDelTexto: alrededorDelTexto,
       );
 
   /// La parte de [entrada] que va de [desde] a [hasta], de 0 a 1.
@@ -523,6 +559,134 @@ class DatosEscena {
       curva.transform(((entrada - desde) / (hasta - desde)).clamp(0.0, 1.0));
 
   TotemConfig get c => cfg;
+
+  /// Dónde va lo de la espera (la foto y las frases, juntas), dentro del lugar
+  /// que deja cada apariencia. Al medio, como siempre, si nadie lo movió.
+  Alignment get ubicacionDeLaEspera =>
+      Alignment(cfg.ubicacionX / 100, cfg.ubicacionY / 100);
+
+  /// Lo de la espera, con lo que le ponga Personalizar para moverlo.
+  Widget bloque(Widget lo) =>
+      alrededorDelBloque?.call(lo, Size(ancho, alto)) ?? lo;
+
+  /// Las frases de la espera (todo lo que va debajo de la foto), en su tamaño
+  /// ([TotemConfig.textoTamano]) y con lo que les ponga Personalizar para
+  /// agrandarlas.
+  Widget frases(List<Widget> todas) {
+    final Widget columna = Escalado(
+      factor: cfg.textoTamano / 100,
+      child: Column(mainAxisSize: MainAxisSize.min, children: todas),
+    );
+    return alrededorDelTexto?.call(columna) ?? columna;
+  }
+}
+
+/// Su hijo, más grande o más chico: a diferencia de `Transform.scale`, ocupa
+/// lo que mide agrandado, así lo de abajo se corre y nada se pisa.
+class Escalado extends SingleChildRenderObjectWidget {
+  final double factor;
+
+  const Escalado({super.key, required this.factor, super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      RenderEscalado(factor);
+
+  @override
+  void updateRenderObject(BuildContext context, RenderEscalado renderObject) {
+    renderObject.factor = factor;
+  }
+}
+
+/// Lo que dibuja [Escalado].
+class RenderEscalado extends RenderProxyBox {
+  RenderEscalado(this._factor);
+
+  double _factor;
+  double get factor => _factor;
+  set factor(double v) {
+    if (v == _factor) return;
+    _factor = v;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    final hijo = child;
+    if (hijo == null) {
+      size = constraints.smallest;
+      return;
+    }
+    // Se le da al hijo el lugar que tiene, achicado, y se agranda lo que mide.
+    final c = constraints;
+    hijo.layout(
+      BoxConstraints(
+        minWidth: c.minWidth / _factor,
+        maxWidth: c.maxWidth / _factor,
+        minHeight: c.minHeight / _factor,
+        maxHeight: c.maxHeight / _factor,
+      ),
+      parentUsesSize: true,
+    );
+    size = c.constrain(hijo.size * _factor);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final hijo = child;
+    if (hijo == null) return;
+    context.pushTransform(
+      needsCompositing,
+      offset,
+      Matrix4.diagonal3Values(_factor, _factor, 1),
+      (context, offset) => context.paintChild(hijo, offset),
+    );
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final hijo = child;
+    if (hijo == null) return false;
+    return result.addWithPaintTransform(
+      transform: Matrix4.diagonal3Values(_factor, _factor, 1),
+      position: position,
+      hitTest: (result, p) => hijo.hitTest(result, position: p),
+    );
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) {
+    transform.multiply(Matrix4.diagonal3Values(_factor, _factor, 1));
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      (child?.getMinIntrinsicWidth(height / _factor) ?? 0) * _factor;
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      (child?.getMaxIntrinsicWidth(height / _factor) ?? 0) * _factor;
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      (child?.getMinIntrinsicHeight(width / _factor) ?? 0) * _factor;
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      (child?.getMaxIntrinsicHeight(width / _factor) ?? 0) * _factor;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final hijo = child;
+    if (hijo == null) return constraints.smallest;
+    final c = constraints;
+    return c.constrain(
+      hijo.getDryLayout(BoxConstraints(
+            minWidth: c.minWidth / _factor,
+            maxWidth: c.maxWidth / _factor,
+            minHeight: c.minHeight / _factor,
+            maxHeight: c.maxHeight / _factor,
+          )) *
+          _factor,
+    );
+  }
 }
 
 /// Una apariencia: cómo se dibuja la espera y cómo una llegada.
@@ -602,14 +766,26 @@ class Centrado extends StatelessWidget {
   final Widget child;
   final EdgeInsets margen;
 
-  const Centrado({super.key, required this.child, required this.margen});
+  /// Dónde va dentro del margen. Al medio, si no se dice.
+  final Alignment ubicacion;
+
+  const Centrado({
+    super.key,
+    required this.child,
+    required this.margen,
+    this.ubicacion = Alignment.center,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: margen,
       child: LayoutBuilder(
-        builder: (context, c) => Center(
+        builder: (context, c) => Align(
+          alignment: Alignment(
+            ubicacion.x.clamp(-1.0, 1.0),
+            ubicacion.y.clamp(-1.0, 1.0),
+          ),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: ConstrainedBox(
@@ -623,13 +799,49 @@ class Centrado extends StatelessWidget {
   }
 }
 
-/// La foto del evento en un círculo; sin foto, o si no baja, el logo de la
-/// empresa.
+/// La foto de la espera como se eligió en Personalizar: su forma y su tamaño.
+/// Null si se apagó ([TotemConfig.mostrarFoto]).
+///
+/// [lado] es el ancho al 100 %, el de siempre en cada apariencia. [alrededor]
+/// le pone algo a la foto ya armada (el anillo de Gala), con su medida.
+Widget? fotoDeLaEspera(
+  DatosEscena d, {
+  required double lado,
+  required Color borde,
+  required double grosor,
+  Color? brillo,
+  Widget Function(Widget foto, FormaFoto forma, Size medida)? alrededor,
+}) {
+  if (!d.cfg.mostrarFoto) return null;
+  final forma = FormaFoto.de(d.cfg.fotoForma);
+  final ancho = lado * d.cfg.fotoTamano / 100;
+  Widget foto = FotoEvento(
+    imagen: d.foto,
+    lado: ancho,
+    borde: borde,
+    grosor: grosor,
+    forma: forma,
+    brillo: brillo,
+  );
+  // Las manijas de Personalizar van pegadas a la foto.
+  foto = d.alrededorDeLaFoto?.call(foto) ?? foto;
+  return alrededor == null ? foto : alrededor(foto, forma, forma.medida(ancho));
+}
+
+/// La foto del evento en su forma (el círculo, si nadie eligió otra); sin
+/// foto, o si no baja, el logo de la empresa. "Tal cual" la muestra entera,
+/// sin recortar ni marco.
 class FotoEvento extends StatelessWidget {
   final ImageProvider? imagen;
+
+  /// El ancho.
   final double lado;
   final Color borde;
   final double grosor;
+  final FormaFoto forma;
+
+  /// Un resplandor de este color alrededor ("Tu fondo"). Null: sin.
+  final Color? brillo;
 
   const FotoEvento({
     super.key,
@@ -637,42 +849,128 @@ class FotoEvento extends StatelessWidget {
     required this.lado,
     required this.borde,
     this.grosor = 2,
+    this.forma = FormaFoto.circulo,
+    this.brillo,
   });
 
   @override
   Widget build(BuildContext context) {
+    final medida = forma.medida(lado);
+    final talCual = forma == FormaFoto.talCual;
     final logo = Padding(
-      padding: EdgeInsets.all(lado * 0.18),
+      padding: EdgeInsets.all(talCual ? 0 : medida.shortestSide * 0.18),
       child: Image.asset(
         'assets/icons/logo-transparent-final.png',
         fit: BoxFit.contain,
         color: const Color(0xFFF2F0EB),
         errorBuilder: (_, _, _) => Icon(
           Icons.celebration_rounded,
-          size: lado * 0.5,
+          size: medida.shortestSide * 0.5,
           color: const Color(0xFFF2F0EB),
         ),
       ),
     );
-    return Container(
-      width: lado,
-      height: lado,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.black.withValues(alpha: 0.35),
-        border: Border.all(color: borde, width: grosor),
-      ),
-      child: ClipOval(
+    final imagen = this.imagen;
+    if (talCual) {
+      return SizedBox.fromSize(
+        size: medida,
         child: imagen == null
             ? logo
             : Image(
-                image: imagen!,
-                fit: BoxFit.cover,
+                image: imagen,
+                fit: BoxFit.contain,
                 errorBuilder: (_, _, _) => logo,
               ),
+      );
+    }
+    return SizedBox.fromSize(
+      size: medida,
+      child: CustomPaint(
+        painter: _FondoDeLaForma(forma: forma, grosor: grosor, brillo: brillo),
+        foregroundPainter: _BordeDeLaForma(forma: forma, color: borde, grosor: grosor),
+        child: ClipPath(
+          clipper: _RecorteDeLaForma(forma, grosor),
+          child: SizedBox.expand(
+            child: imagen == null
+                ? logo
+                : Image(
+                    image: imagen,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => logo,
+                  ),
+          ),
+        ),
       ),
     );
   }
+}
+
+/// La foto va dentro del borde: el contorno de la forma, achicado el grosor.
+class _RecorteDeLaForma extends CustomClipper<Path> {
+  final FormaFoto forma;
+  final double grosor;
+
+  _RecorteDeLaForma(this.forma, this.grosor);
+
+  @override
+  Path getClip(Size size) => forma.camino((Offset.zero & size).deflate(grosor));
+
+  @override
+  bool shouldReclip(_RecorteDeLaForma old) =>
+      old.forma != forma || old.grosor != grosor;
+}
+
+/// Detrás de la foto: el resplandor, si hay, y un fondo oscuro para el logo.
+class _FondoDeLaForma extends CustomPainter {
+  final FormaFoto forma;
+  final double grosor;
+  final Color? brillo;
+
+  _FondoDeLaForma({required this.forma, required this.grosor, this.brillo});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final camino = forma.camino(Offset.zero & size);
+    final b = brillo;
+    if (b != null) {
+      canvas.drawPath(
+        camino,
+        Paint()
+          ..color = b.withValues(alpha: b.a * 0.45)
+          ..maskFilter = MaskFilter.blur(BlurStyle.outer, size.shortestSide * 0.12),
+      );
+    }
+    canvas.drawPath(camino, Paint()..color = Colors.black.withValues(alpha: 0.35));
+  }
+
+  @override
+  bool shouldRepaint(_FondoDeLaForma old) =>
+      old.forma != forma || old.grosor != grosor || old.brillo != brillo;
+}
+
+/// El borde, sobre la foto: el contorno de la forma, por dentro.
+class _BordeDeLaForma extends CustomPainter {
+  final FormaFoto forma;
+  final Color color;
+  final double grosor;
+
+  _BordeDeLaForma({required this.forma, required this.color, required this.grosor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawPath(
+      forma.camino((Offset.zero & size).deflate(grosor / 2)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = grosor
+        ..strokeJoin = StrokeJoin.round
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BordeDeLaForma old) =>
+      old.forma != forma || old.color != color || old.grosor != grosor;
 }
 
 /// El QR de un evento particular, con el texto de Personalizar debajo.

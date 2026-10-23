@@ -21,6 +21,39 @@ class TotemConfig {
   /// nube (una fila de antes de la 6.0.0) también cuenta como prendida.
   final bool mostrarMusica;
 
+  // ── La foto del evento (6.2.1) ───────────────────────────────────────────
+  //
+  // En la espera, la foto (o el logo de la empresa, sin foto) va arriba del
+  // título. Desde la 6.2.1 se puede sacar, cambiar de forma y agrandar. Las tres
+  // vacías en la nube (una fila de antes) son lo de siempre: la foto, en
+  // círculo y al 100 %.
+
+  /// Si se muestra. Se apaga cuando el fondo ya trae el logo y la pantalla
+  /// tiene que quedar limpia. Vale también en Póster, donde la foto es el
+  /// fondo: sin ella van las luces.
+  final bool mostrarFoto;
+
+  /// La forma (`circulo`, `corazon`, `tal_cual`, …; ver `FormaFoto`), tal como
+  /// vino. Null: el círculo.
+  final String? fotoForma;
+
+  /// El tamaño, en % del de siempre, de [fotoTamanoMinimo] a
+  /// [fotoTamanoMaximo]. En Póster no se usa.
+  final int fotoTamano;
+
+  /// El tamaño de las frases de la espera (el título, el subtítulo, el saludo
+  /// y el QR), en % del de siempre, de [textoTamanoMinimo] a
+  /// [textoTamanoMaximo]. En Póster no se usa.
+  final int textoTamano;
+
+  /// Dónde van juntas la foto y las frases de la espera, para que no pisen el
+  /// logo o lo importante del fondo: de -100 (a la izquierda, arriba) a 100 (a
+  /// la derecha, abajo), dentro del lugar que deja cada apariencia. 0 (o vacía
+  /// en la nube): al medio, como siempre. Van juntas, así la foto nunca tapa
+  /// las frases. En Póster no se usa: ahí las frases van abajo, sobre la foto.
+  final int ubicacionX;
+  final int ubicacionY;
+
   /// La apariencia elegida en Personalizar (`neon`, `cristal`, `poster`,
   /// `gala` o `tu_fondo`, ver `EstiloTotem`). Null: la del tipo de evento.
   final String? estilo;
@@ -90,6 +123,12 @@ class TotemConfig {
     this.imagenUrl,
     this.colorAcento = acentoPorDefecto,
     this.mostrarMusica = true,
+    this.mostrarFoto = true,
+    this.fotoForma,
+    this.fotoTamano = fotoTamanoPorDefecto,
+    this.textoTamano = textoTamanoPorDefecto,
+    this.ubicacionX = 0,
+    this.ubicacionY = 0,
     this.estilo,
     this.fondoUrl,
     this.fondoAutomatico = true,
@@ -104,6 +143,18 @@ class TotemConfig {
     this.fondoLuz,
     this.updatedAt,
   });
+
+  /// El tope de la foto es el que deja el ancho de la pantalla con su margen:
+  /// al 300 % mide más de la mitad del ancho de una tele vertical. Si con los
+  /// textos no entra, la espera se achica entera (`Centrado`): nunca se corta.
+  static const fotoTamanoMinimo = 50;
+  static const fotoTamanoMaximo = 300;
+  static const fotoTamanoPorDefecto = 100;
+
+  /// Las frases, del 50 % al doble.
+  static const textoTamanoMinimo = 50;
+  static const textoTamanoMaximo = 200;
+  static const textoTamanoPorDefecto = 100;
 
   static const intensidadPorDefecto = 40;
   static const intensidadEfectosPorDefecto = 50;
@@ -151,6 +202,20 @@ class TotemConfig {
       imagenUrl: (imagen == null || imagen.trim().isEmpty) ? null : imagen,
       colorAcento: parseHex(json['color_acento'] as String?),
       mostrarMusica: json['mostrar_musica'] != false,
+      mostrarFoto: json['mostrar_foto'] != false,
+      fotoForma: crudo('foto_forma'),
+      fotoTamano: entero(
+        'foto_tamano',
+        fotoTamanoPorDefecto,
+        fotoTamanoMaximo,
+      ).clamp(fotoTamanoMinimo, fotoTamanoMaximo),
+      textoTamano: entero(
+        'texto_tamano',
+        textoTamanoPorDefecto,
+        textoTamanoMaximo,
+      ).clamp(textoTamanoMinimo, textoTamanoMaximo),
+      ubicacionX: _ubicacionDe(json['ubicacion_x']),
+      ubicacionY: _ubicacionDe(json['ubicacion_y']),
       estilo: estilo is String && estilo.trim().isNotEmpty ? estilo.trim() : null,
       fondoUrl: crudo('fondo_url'),
       fondoAutomatico: json['fondo_automatico'] != false,
@@ -179,6 +244,12 @@ class TotemConfig {
     );
   }
 
+  /// Dónde va lo de la espera, acotado; vacío o basura, al medio.
+  static int _ubicacionDe(Object? v) {
+    final n = v is num ? v.round() : int.tryParse('${v ?? ''}'.trim());
+    return (n ?? 0).clamp(-100, 100);
+  }
+
   Map<String, dynamic> toJson() => {
         'evento_id': eventoId,
         'titulo': titulo,
@@ -191,6 +262,15 @@ class TotemConfig {
         // `20261014120000_totem_config_estilo_y_musica.sql`): sin ella,
         // guardar Personalizar falla. Se corre antes de instalar.
         'mostrar_musica': mostrarMusica,
+        // Las de la foto necesitan sus columnas en la nube (SQL de la 6.2.1,
+        // `20261023200000_totem_config_foto.sql`): sin ellas, guardar
+        // Personalizar falla. Se corre antes de instalar y de publicar la web.
+        'mostrar_foto': mostrarFoto,
+        'foto_forma': fotoForma,
+        'foto_tamano': fotoTamano.clamp(fotoTamanoMinimo, fotoTamanoMaximo),
+        'texto_tamano': textoTamano.clamp(textoTamanoMinimo, textoTamanoMaximo),
+        'ubicacion_x': ubicacionX.clamp(-100, 100),
+        'ubicacion_y': ubicacionY.clamp(-100, 100),
         'estilo': estilo,
         // Las de "Tu fondo" necesitan sus columnas en la nube (SQL
         // `20261023120000_totem_config_tu_fondo.sql`): sin ellas, guardar
@@ -218,6 +298,12 @@ class TotemConfig {
     bool limpiarImagen = false,
     Color? colorAcento,
     bool? mostrarMusica,
+    bool? mostrarFoto,
+    String? fotoForma,
+    int? fotoTamano,
+    int? textoTamano,
+    int? ubicacionX,
+    int? ubicacionY,
     String? estilo,
     bool limpiarEstilo = false,
     String? fondoUrl,
@@ -242,6 +328,14 @@ class TotemConfig {
       imagenUrl: limpiarImagen ? null : (imagenUrl ?? this.imagenUrl),
       colorAcento: colorAcento ?? this.colorAcento,
       mostrarMusica: mostrarMusica ?? this.mostrarMusica,
+      mostrarFoto: mostrarFoto ?? this.mostrarFoto,
+      fotoForma: fotoForma ?? this.fotoForma,
+      fotoTamano: (fotoTamano ?? this.fotoTamano)
+          .clamp(fotoTamanoMinimo, fotoTamanoMaximo),
+      textoTamano: (textoTamano ?? this.textoTamano)
+          .clamp(textoTamanoMinimo, textoTamanoMaximo),
+      ubicacionX: (ubicacionX ?? this.ubicacionX).clamp(-100, 100),
+      ubicacionY: (ubicacionY ?? this.ubicacionY).clamp(-100, 100),
       estilo: limpiarEstilo ? null : (estilo ?? this.estilo),
       // Sin la imagen, la receta no se borra: no molesta, y si se vuelve a
       // cargar un fondo se arma otra.
@@ -274,6 +368,12 @@ class TotemConfig {
         imagenUrl: imagenUrl,
         colorAcento: colorAcento,
         mostrarMusica: mostrarMusica,
+        mostrarFoto: mostrarFoto,
+        fotoForma: fotoForma,
+        fotoTamano: fotoTamano,
+        textoTamano: textoTamano,
+        ubicacionX: ubicacionX,
+        ubicacionY: ubicacionY,
         estilo: estilo,
         fondoUrl: otra.fondoUrl,
         fondoAutomatico: otra.fondoAutomatico,

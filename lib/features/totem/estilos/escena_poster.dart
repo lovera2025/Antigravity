@@ -16,7 +16,9 @@ class EscenaPoster extends EscenaEstilo {
 
   @override
   List<Widget> capasDeFondo(DatosEscena d) {
-    final foto = d.foto;
+    // Con la foto apagada en Personalizar, las luces, como sin foto. La forma
+    // y el tamaño acá no se usan: la foto es el fondo.
+    final foto = d.cfg.mostrarFoto ? d.foto : null;
     return [
       if (foto != null)
         Opacity(

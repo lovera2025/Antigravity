@@ -15,97 +15,102 @@ class EscenaCristal extends EscenaEstilo {
   const EscenaCristal();
 
   static Widget _vidrio(double u, {required Widget child}) => ClipRRect(
-        borderRadius: BorderRadius.circular(u * 1.2),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: u * 0.6, sigmaY: u * 0.6),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: u * 1.4, vertical: u * 1.6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(u * 1.2),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.30),
-                width: u * 0.05,
-              ),
-            ),
-            child: child,
+    borderRadius: BorderRadius.circular(u * 1.2),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: u * 0.6, sigmaY: u * 0.6),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: u * 1.4, vertical: u * 1.6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(u * 1.2),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.30),
+            width: u * 0.05,
           ),
         ),
-      );
+        child: child,
+      ),
+    ),
+  );
 
   @override
   Widget espera(DatosEscena d) {
     final u = d.u;
     final titulo = partirTitulo(d.cfg.titulo);
+    final foto = fotoDeLaEspera(
+      d,
+      lado: u * 4.6,
+      borde: d.color,
+      grosor: u * 0.1,
+    );
     return Centrado(
       margen: EdgeInsets.symmetric(horizontal: u * 2.2, vertical: u * 2.4),
-      child: _vidrio(
-        u,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FotoEvento(
-              imagen: d.foto,
-              lado: u * 4.6,
-              borde: d.color,
-              grosor: u * 0.1,
-            ),
-            SizedBox(height: u * 0.9),
-            if (titulo.chico != null)
-              Text(
-                titulo.chico!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: FuentesTotem.cartelera,
-                  fontSize: u * 1.1,
-                  letterSpacing: u * 0.28,
-                  color: Colors.white.withValues(alpha: 0.85),
+      ubicacion: d.ubicacionDeLaEspera,
+      child: d.bloque(
+        _vidrio(
+          u,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (foto != null) ...[foto, SizedBox(height: u * 0.9)],
+              d.frases([
+                if (titulo.chico != null)
+                  Text(
+                    titulo.chico!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: FuentesTotem.cartelera,
+                      fontSize: u * 1.1,
+                      letterSpacing: u * 0.28,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                Text(
+                  titulo.grande,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FuentesTotem.cartelera,
+                    fontWeight: FontWeight.w700,
+                    fontSize: u * (titulo.chico == null ? 2.4 : 4),
+                    height: 1.05,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            Text(
-              titulo.grande,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FuentesTotem.cartelera,
-                fontWeight: FontWeight.w700,
-                fontSize: u * (titulo.chico == null ? 2.4 : 4),
-                height: 1.05,
-                color: Colors.white,
-              ),
-            ),
-            if (d.cfg.subtitulo.isNotEmpty) ...[
-              SizedBox(height: u * 0.4),
-              Text(
-                d.cfg.subtitulo.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: FuentesTotem.linea,
-                  fontSize: u * 0.75,
-                  letterSpacing: u * 0.35,
-                  color: d.color,
+                if (d.cfg.subtitulo.isNotEmpty) ...[
+                  SizedBox(height: u * 0.4),
+                  Text(
+                    d.cfg.subtitulo.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: FuentesTotem.linea,
+                      fontSize: u * 0.75,
+                      letterSpacing: u * 0.35,
+                      color: d.color,
+                    ),
+                  ),
+                ],
+                SizedBox(height: u * 0.9),
+                Text(
+                  d.cfg.mensajeBienvenida,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FuentesTotem.linea,
+                    fontSize: u * 1.2,
+                    color: Colors.white.withValues(alpha: 0.92),
+                  ),
                 ),
-              ),
+                if (d.qrUrl != null) ...[
+                  SizedBox(height: u * 1.1),
+                  QrDelTotem(
+                    url: d.qrUrl!,
+                    texto: d.cfg.mensajeQr,
+                    u: u,
+                    marco: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ],
+              ]),
             ],
-            SizedBox(height: u * 0.9),
-            Text(
-              d.cfg.mensajeBienvenida,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FuentesTotem.linea,
-                fontSize: u * 1.2,
-                color: Colors.white.withValues(alpha: 0.92),
-              ),
-            ),
-            if (d.qrUrl != null) ...[
-              SizedBox(height: u * 1.1),
-              QrDelTotem(
-                url: d.qrUrl!,
-                texto: d.cfg.mensajeQr,
-                u: u,
-                marco: Colors.white.withValues(alpha: 0.6),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

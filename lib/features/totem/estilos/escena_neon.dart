@@ -21,9 +21,7 @@ class EscenaNeon extends EscenaEstilo {
   /// El margen de abajo que deja el contenido arriba del horizonte. Con el
   /// plano abajo, el horizonte queda detrás del plano: alcanza un margen chico.
   static double _sobreElHorizonte(DatosEscena d) =>
-      d.conPlano && !d.planoAlCostado
-          ? d.u
-          : d.alto * (1 - horizonte) + d.u;
+      d.conPlano && !d.planoAlCostado ? d.u : d.alto * (1 - horizonte) + d.u;
 
   /// Si la letra que titila está apagada en este instante: dos parpadeos
   /// cortos cada cuatro segundos.
@@ -45,73 +43,78 @@ class EscenaNeon extends EscenaEstilo {
       color: Colors.white,
       shadows: brilloNeon(d.color, u),
     );
+    final foto = fotoDeLaEspera(
+      d,
+      lado: u * 5.2,
+      borde: d.color,
+      grosor: u * 0.12,
+    );
     final arriba = Centrado(
       margen: EdgeInsets.fromLTRB(u * 2, u * 2.2, u * 2, _sobreElHorizonte(d)),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FotoEvento(
-            imagen: d.foto,
-            lado: u * 5.2,
-            borde: d.color,
-            grosor: u * 0.12,
-          ),
-          SizedBox(height: u * 1.2),
-          if (titulo.chico != null)
-            Text(
-              titulo.chico!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FuentesTotem.tubo,
-                fontSize: u * 1.15,
-                letterSpacing: u * 0.3,
-                color: Colors.white.withValues(alpha: 0.85),
-                shadows: brilloNeon(d.segundo, u, fuerza: 0.6),
-              ),
-            ),
-          Text.rich(
-            TextSpan(
-              children: [
-                for (var i = 0; i < grande.length; i++)
-                  TextSpan(
-                    text: grande[i],
-                    // Una letra titila cada tanto, como un tubo flojo.
-                    style: i == math.min(1, grande.length - 1) && apagar
-                        ? tubo.copyWith(
-                            color: Colors.white.withValues(alpha: 0.25),
-                            shadows: const [],
-                          )
-                        : tubo,
+      ubicacion: d.ubicacionDeLaEspera,
+      child: d.bloque(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (foto != null) ...[foto, SizedBox(height: u * 1.2)],
+            d.frases([
+              if (titulo.chico != null)
+                Text(
+                  titulo.chico!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FuentesTotem.tubo,
+                    fontSize: u * 1.15,
+                    letterSpacing: u * 0.3,
+                    color: Colors.white.withValues(alpha: 0.85),
+                    shadows: brilloNeon(d.segundo, u, fuerza: 0.6),
                   ),
-              ],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          if (d.cfg.subtitulo.isNotEmpty) ...[
-            SizedBox(height: u * 0.5),
-            Text(
-              d.cfg.subtitulo.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: FuentesTotem.linea,
-                fontSize: u * 0.8,
-                letterSpacing: u * 0.4,
-                color: d.color,
+                ),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    for (var i = 0; i < grande.length; i++)
+                      TextSpan(
+                        text: grande[i],
+                        // Una letra titila cada tanto, como un tubo flojo.
+                        style: i == math.min(1, grande.length - 1) && apagar
+                            ? tubo.copyWith(
+                                color: Colors.white.withValues(alpha: 0.25),
+                                shadows: const [],
+                              )
+                            : tubo,
+                      ),
+                  ],
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
+              if (d.cfg.subtitulo.isNotEmpty) ...[
+                SizedBox(height: u * 0.5),
+                Text(
+                  d.cfg.subtitulo.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FuentesTotem.linea,
+                    fontSize: u * 0.8,
+                    letterSpacing: u * 0.4,
+                    color: d.color,
+                  ),
+                ),
+              ],
+              SizedBox(height: u * 0.9),
+              Text(
+                d.cfg.mensajeBienvenida,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FuentesTotem.cartel,
+                  fontSize: u * 2.6,
+                  color: Colors.white,
+                  shadows: brilloNeon(d.segundo, u),
+                ),
+              ),
+            ]),
           ],
-          SizedBox(height: u * 0.9),
-          Text(
-            d.cfg.mensajeBienvenida,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: FuentesTotem.cartel,
-              fontSize: u * 2.6,
-              color: Colors.white,
-              shadows: brilloNeon(d.segundo, u),
-            ),
-          ),
-        ],
+        ),
       ),
     );
     final qr = d.qrUrl;
@@ -152,7 +155,12 @@ class EscenaNeon extends EscenaEstilo {
     final circulo = d.tramo(0.55, 0.95);
     final con = conQuienDe(c);
     return Centrado(
-      margen: EdgeInsets.fromLTRB(u * 1.6, u * 2.4, u * 1.6, _sobreElHorizonte(d)),
+      margen: EdgeInsets.fromLTRB(
+        u * 1.6,
+        u * 2.4,
+        u * 1.6,
+        _sobreElHorizonte(d),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -205,11 +213,7 @@ class EscenaNeon extends EscenaEstilo {
               width: u * 7.5,
               height: u * 7.5,
               child: CustomPaint(
-                painter: _CirculoNeon(
-                  progreso: circulo,
-                  color: d.color,
-                  u: u,
-                ),
+                painter: _CirculoNeon(progreso: circulo, color: d.color, u: u),
                 child: Center(
                   child: Opacity(
                     opacity: circulo,

@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
+import 'package:arguello_events/features/totem/estilos/forma_foto.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/estilos/totem_estilo.dart';
 import 'package:arguello_events/features/totem/totem_orientation.dart';
@@ -390,6 +391,268 @@ void main() {
       expect(particular.sillas, isNull);
       expect(particular.musica, isNull);
       expect(particular.conQuien, isNull);
+    });
+  });
+
+  // 6.2.1: la foto del evento se puede sacar (el fondo ya trae el logo),
+  // cambiar de forma y agrandar, con las manijas o con − y +.
+  group('la foto del evento', () {
+    final casilla = find.descendant(
+      of: find.byKey(const ValueKey('casilla_foto')),
+      matching: find.byType(Switch),
+    );
+    FotoEvento fotoDeLaVista(WidgetTester tester) =>
+        tester.widget<FotoEvento>(_enLaVista(find.byType(FotoEvento)));
+
+    Future<void> tocar(WidgetTester tester, Finder f) async {
+      await tester.ensureVisible(f);
+      await tester.tap(f);
+      await tester.pump();
+    }
+
+    testWidgets('apagarla la saca de la vista y se guarda apagada',
+        (tester) async {
+      final repo = await _abrir(tester);
+      expect(_enLaVista(find.byType(FotoEvento)), findsOneWidget);
+      await tocar(tester, casilla);
+      expect(tester.takeException(), isNull);
+      expect(_enLaVista(find.byType(FotoEvento)), findsNothing);
+      expect(_enLaVista(find.byKey(const ValueKey('manijas_foto'))), findsNothing);
+      expect(_enLaVista(find.text('2026')), findsOneWidget);
+      // Sin la foto no hay forma ni tamaño para elegir.
+      expect(find.byKey(const ValueKey('tamano_foto')), findsNothing);
+      for (final e in [EstiloTotem.cristal, EstiloTotem.gala]) {
+        await tocar(tester, _tarjeta(e));
+        expect(_enLaVista(find.byType(FotoEvento)), findsNothing, reason: e.nombre);
+      }
+      await _guardar(tester);
+      expect(repo.guardadas.single.mostrarFoto, isFalse);
+    });
+
+    testWidgets('la forma elegida se ve en la vista y se guarda',
+        (tester) async {
+      final repo = await _abrir(tester);
+      expect(fotoDeLaVista(tester).forma, FormaFoto.circulo);
+      await tocar(tester, find.byKey(const ValueKey('forma_corazon')));
+      expect(fotoDeLaVista(tester).forma, FormaFoto.corazon);
+      await tocar(tester, find.byKey(const ValueKey('forma_tal_cual')));
+      expect(fotoDeLaVista(tester).forma, FormaFoto.talCual);
+      expect(tester.takeException(), isNull);
+      await _guardar(tester);
+      expect(repo.guardadas.single.fotoForma, 'tal_cual');
+    });
+
+    testWidgets('− y + la achican y la agrandan, sin pasar de los topes',
+        (tester) async {
+      final repo = await _abrir(tester);
+      final antes = fotoDeLaVista(tester).lado;
+      await tocar(tester, find.byKey(const ValueKey('agrandar_foto')));
+      expect(find.text('110 %'), findsOneWidget);
+      expect(fotoDeLaVista(tester).lado, closeTo(antes * 1.1, 0.01));
+      for (var i = 0; i < 40; i++) {
+        await tocar(tester, find.byKey(const ValueKey('agrandar_foto')));
+      }
+      expect(find.text('${TotemConfig.fotoTamanoMaximo} %'), findsOneWidget);
+      for (var i = 0; i < 40; i++) {
+        await tocar(tester, find.byKey(const ValueKey('achicar_foto')));
+      }
+      expect(find.text('${TotemConfig.fotoTamanoMinimo} %'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await _guardar(tester);
+      expect(repo.guardadas.single.fotoTamano, TotemConfig.fotoTamanoMinimo);
+    });
+
+    testWidgets('arrastrar una manija hacia afuera la agranda, hasta el tope',
+        (tester) async {
+      final repo = await _abrir(tester);
+      final manija = _enLaVista(
+        find.byKey(const ValueKey('manija_foto_1.0_1.0')),
+      );
+      expect(manija, findsOneWidget);
+      final antes = fotoDeLaVista(tester).lado;
+      final gesto = await tester.startGesture(tester.getCenter(manija));
+      // El primer tramo solo decide que es la manija y no el arrastre de
+      // todo; agranda lo que sigue.
+      await gesto.moveBy(const Offset(30, 30));
+      await tester.pump();
+      await gesto.moveBy(const Offset(30, 30));
+      await tester.pump();
+      expect(fotoDeLaVista(tester).lado, greaterThan(antes));
+      // Muy lejos: queda en el tope.
+      await gesto.moveBy(const Offset(2000, 2000));
+      await tester.pump();
+      await gesto.up();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('${TotemConfig.fotoTamanoMaximo} %'), findsOneWidget);
+      await _guardar(tester);
+      expect(repo.guardadas.single.fotoTamano, TotemConfig.fotoTamanoMaximo);
+    });
+
+    testWidgets('en todas las apariencias, en el tope, entra sin cortarse',
+        (tester) async {
+      await _abrir(
+        tester,
+        guardada: const TotemConfig(
+          eventoId: eventoMasivo,
+          titulo: 'PROMOCIÓN 2026',
+          fotoForma: 'ovalo',
+          fotoTamano: TotemConfig.fotoTamanoMaximo,
+        ),
+      );
+      for (final e in EstiloTotem.deLaCasa) {
+        await tocar(tester, _tarjeta(e));
+        expect(tester.takeException(), isNull, reason: e.nombre);
+        if (e == EstiloTotem.poster) continue;
+        final vista = tester.getRect(_vista);
+        final foto = tester.getRect(_enLaVista(find.byType(FotoEvento)));
+        expect(vista.contains(foto.topLeft), isTrue, reason: e.nombre);
+        expect(vista.contains(foto.bottomRight), isTrue, reason: e.nombre);
+      }
+    });
+
+    testWidgets('en Póster la forma y el tamaño no se usan, y lo dice',
+        (tester) async {
+      await _abrir(tester);
+      await tocar(tester, _tarjeta(EstiloTotem.poster));
+      expect(find.byKey(const ValueKey('forma_circulo')), findsNothing);
+      expect(find.byKey(const ValueKey('tamano_foto')), findsNothing);
+      expect(
+        find.textContaining('En Póster la foto ocupa toda la pantalla'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('si no se la toca, se guarda como estaba', (tester) async {
+      final repo = await _abrir(
+        tester,
+        guardada: const TotemConfig(
+          eventoId: eventoMasivo,
+          titulo: 'PROMOCIÓN 2026',
+          mostrarFoto: false,
+          fotoForma: 'arco',
+          fotoTamano: 180,
+        ),
+      );
+      expect(_enLaVista(find.byType(FotoEvento)), findsNothing);
+      await _guardar(tester);
+      final g = repo.guardadas.single;
+      expect(g.mostrarFoto, isFalse);
+      expect(g.fotoForma, 'arco');
+      expect(g.fotoTamano, 180);
+    });
+  });
+
+  // 6.2.1: las frases se agrandan con sus manijas, y la foto y las frases se
+  // mueven juntas arrastrándolas o tocando un lugar.
+  group('las frases y dónde van', () {
+    Future<void> tocar(WidgetTester tester, Finder f) async {
+      await tester.ensureVisible(f);
+      await tester.tap(f);
+      await tester.pump();
+    }
+
+    Rect frases(WidgetTester tester) =>
+        tester.getRect(_enLaVista(find.byKey(const ValueKey('manijas_texto'))));
+
+    testWidgets('arrastrar una esquina de las frases las agranda',
+        (tester) async {
+      final repo = await _abrir(tester);
+      final antes = frases(tester);
+      final manija = _enLaVista(
+        find.byKey(const ValueKey('manija_texto_1.0_1.0')),
+      );
+      final gesto = await tester.startGesture(tester.getCenter(manija));
+      // El primer tramo solo decide que es la manija y no el arrastre de
+      // todo; agranda lo que sigue.
+      await gesto.moveBy(const Offset(30, 30));
+      await tester.pump();
+      await gesto.moveBy(const Offset(40, 40));
+      await tester.pump();
+      await gesto.up();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(frases(tester).width, greaterThan(antes.width));
+      await _guardar(tester);
+      expect(repo.guardadas.single.textoTamano, greaterThan(100));
+      expect(
+        repo.guardadas.single.textoTamano,
+        lessThanOrEqualTo(TotemConfig.textoTamanoMaximo),
+      );
+    });
+
+    testWidgets('arrastrarlas las mueve juntas, sin salir de la pantalla',
+        (tester) async {
+      final repo = await _abrir(tester);
+      final foto = _enLaVista(find.byType(FotoEvento));
+      final antesFoto = tester.getRect(foto);
+      final antesFrases = frases(tester);
+      // Se agarra por el título, lejos de las esquinas.
+      final gesto = await tester.startGesture(
+        tester.getCenter(_enLaVista(find.text('2026'))),
+      );
+      await gesto.moveBy(const Offset(0, 20));
+      await tester.pump();
+      await gesto.moveBy(const Offset(0, 3000));
+      await tester.pump();
+      await gesto.up();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      final corrida = tester.getRect(foto).top - antesFoto.top;
+      expect(corrida, greaterThan(0));
+      // Juntas: las frases se corrieron lo mismo, y siguen debajo de la foto.
+      expect(frases(tester).top - antesFrases.top, closeTo(corrida, 1));
+      expect(frases(tester).top, greaterThanOrEqualTo(tester.getRect(foto).bottom));
+      expect(tester.getRect(_vista).contains(frases(tester).bottomCenter - const Offset(0, 1)),
+          isTrue);
+      await _guardar(tester);
+      expect(repo.guardadas.single.ubicacionY, 100);
+      expect(repo.guardadas.single.ubicacionX, 0);
+    });
+
+    testWidgets('tocar un lugar las lleva ahí, y "Volver al medio" las vuelve',
+        (tester) async {
+      final repo = await _abrir(tester);
+      final medio = tester.getCenter(_enLaVista(find.byType(FotoEvento)));
+      await tocar(tester, find.byKey(const ValueKey('ubicacion_-100_-100')));
+      final arribaIzq = tester.getCenter(_enLaVista(find.byType(FotoEvento)));
+      expect(arribaIzq.dy, lessThan(medio.dy));
+      expect(arribaIzq.dx, lessThan(medio.dx));
+      await tocar(tester, find.byKey(const ValueKey('ubicacion_al_medio')));
+      expect(
+        tester.getCenter(_enLaVista(find.byType(FotoEvento))).dy,
+        closeTo(medio.dy, 1),
+      );
+      await tocar(tester, find.byKey(const ValueKey('ubicacion_100_100')));
+      await _guardar(tester);
+      expect(repo.guardadas.single.ubicacionX, 100);
+      expect(repo.guardadas.single.ubicacionY, 100);
+    });
+
+    testWidgets('en Póster no se usan, y lo dice', (tester) async {
+      await _abrir(tester);
+      await tocar(tester, _tarjeta(EstiloTotem.poster));
+      expect(find.byKey(const ValueKey('tamano_texto')), findsNothing);
+      expect(find.byKey(const ValueKey('ubicacion_al_medio')), findsNothing);
+      expect(find.textContaining('En Póster las frases van abajo'), findsOneWidget);
+    });
+
+    testWidgets('si no se las toca, se guardan como estaban', (tester) async {
+      final repo = await _abrir(
+        tester,
+        guardada: const TotemConfig(
+          eventoId: eventoMasivo,
+          titulo: 'PROMOCIÓN 2026',
+          textoTamano: 140,
+          ubicacionX: 30,
+          ubicacionY: -70,
+        ),
+      );
+      await _guardar(tester);
+      final g = repo.guardadas.single;
+      expect(g.textoTamano, 140);
+      expect(g.ubicacionX, 30);
+      expect(g.ubicacionY, -70);
     });
   });
 
