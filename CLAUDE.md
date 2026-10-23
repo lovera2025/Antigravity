@@ -15,8 +15,8 @@ con check-in por QR y un tótem que se proyecta en el salón.
 ## Antes de tocar nada: la rama
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
-rama está ~200 commits adelante y va por la v6.1.1 (publicada el 19-oct e instalada en
-las tres PCs: la casa, el operario y el jefe); `main` quedó en la 2.2.0.
+rama está ~200 commits adelante y va por la v6.2.0 (publicada el 23-oct, sin instalar; las
+tres PCs, la casa, el operario y el jefe, tienen la 6.1.1); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **La 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
@@ -32,10 +32,10 @@ también en la otra (ver la trampa "Lo que se borra a mano…", abajo). Entrada:
 **Las instalaciones las hace el usuario por su cuenta y avisa.** Si un "falta instalar" de acá quedó viejo, lo que
 vale es lo que diga él.
 
-**"Tu fondo"** (23-oct): programado y probado en la rama `feature/totem-tu-fondo`, **sin unir a la principal a
-propósito**. Su SQL (`20261023120000_totem_config_tu_fondo.sql`) va antes que nada: con el código sin el SQL, guardar
-Personalizar falla. Se publica con el OK del usuario, y las novedades dicen "Nuevas características y detalles".
-Entrada: `docs/PLAN_TU_FONDO_2026-10-23.md`.
+**La 6.2.0: "Tu fondo"** (publicada el 23-oct: el SQL de sus columnas corrido, el release y la web; **sin instalar**,
+las PCs las actualiza el usuario y avisa). La quinta apariencia del tótem: una imagen propia es el fondo. Las novedades
+dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-10-23.md`; el detalle,
+`docs/PLAN_TU_FONDO_2026-10-23.md`.
 
 ## Documentación del proyecto
 
@@ -439,8 +439,7 @@ PC. `FichaTotem` (`totem/services/ficha_totem.dart`) se arma con lo mismo que ve
   - se prueba entera con `test/helpers/personalizar_en_memoria.dart`, y `PersonalizarTotem.elegirFoto` reemplaza al
     selector de archivos.
 
-**"Tu fondo", la quinta apariencia** (rama `feature/totem-tu-fondo`, sin publicar; todo en
-`docs/PLAN_TU_FONDO_2026-10-23.md`). Una imagen propia es el fondo, y de ella salen la animación, los efectos, los
+**"Tu fondo", la quinta apariencia** (v6.2.0; todo en `docs/PLAN_TU_FONDO_2026-10-23.md`). Una imagen propia es el fondo, y de ella salen la animación, los efectos, los
 colores y las letras.
 - **La animación de la imagen** (`AnimacionFondo`: quieta, acercarse, recorrer, flotar, respirar, ondular) **y los
   efectos** (`EfectoFondo`: van encima y se combinan) **son dos cosas distintas**: así lo pidió el usuario. Todo en

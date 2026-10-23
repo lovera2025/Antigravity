@@ -1,7 +1,7 @@
 # "Tu fondo": la quinta apariencia del tótem (23-oct-2026)
 
-**Estado:** programado en la rama `feature/totem-tu-fondo` (sacada de `feature/v4.6-cierre-por-sesiones`), con tests.
-**No está publicado ni instalado, y el SQL no se corrió.** Se publica con el OK del usuario (ver "La publicación").
+**Estado:** **publicado en la 6.2.0 el 23-oct**: el SQL, el release y la web. Sin instalar todavía. Lo que se hizo en
+cada paso está en `docs/CONTEXTO_v6.2.0_2026-10-23.md`.
 
 - Spec del usuario: `Desktop\SPEC_totem_tu_fondo.md`.
 - Diseño en Claude Design: https://claude.ai/artifact/7QwqMNZtr44HMbBrkqJPor ("Tótem · Tu fondo"), privado en su cuenta.
