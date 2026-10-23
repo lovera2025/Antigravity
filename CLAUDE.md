@@ -15,21 +15,22 @@ con check-in por QR y un tótem que se proyecta en el salón.
 ## Antes de tocar nada: la rama
 
 **El desarrollo va en `feature/v4.6-cierre-por-sesiones`, no en `main`.** Esa
-rama está ~200 commits adelante y va por la v6.1.0 (publicada el 19-oct; instalada en
-las PCs de la casa y del operario; falta la del jefe); `main` quedó en la 2.2.0.
+rama está ~200 commits adelante y va por la v6.1.1 (publicada el 19-oct e instalada en
+las tres PCs: la casa, el operario y el jefe); `main` quedó en la 2.2.0.
 Ramificar de `main` significa trabajar sobre código de hace meses.
 
 **La 6.1.0:** las bajas temporales y el aviso "Revisar la ficha"
 (hechos), el salón primero (etapas 1 a 4 hechas), "lejos" medido en el salón, los predios
 con nombre (la migración v74 ya probada sobre una copia de la base real) y las muestras de
-la etapa 5, en una sola versión. **Publicada el 19-oct** (el SQL de los predios corrido, la
-web también, la del operario instalada): sigue instalar la PC del jefe y repetir lo de TOÑANEZ ("La publicación"
-en el CONTEXTO). La mora por cuota suelta (fase 2) quedó descartada. Entrada:
-`docs/CONTEXTO_v6.1.0_2026-10-18.md`.
+la etapa 5, en una sola versión. **Publicada el 19-oct** (el SQL de los predios corrido y la
+web también). Lo de TOÑANEZ en la PC del jefe quedó resuelto. La mora por cuota suelta (fase 2) quedó descartada.
+Entrada: `docs/CONTEXTO_v6.1.0_2026-10-18.md`.
 
-**La 6.1.1** (publicada el 19-oct, sin instalar en ninguna PC): lo que se borra a mano en una PC desaparece también en la otra
-(ver la trampa "Lo que se borra a mano…", abajo). La PC del jefe puede pasar de la 6.0.0 directo a la 6.1.1.
-Entrada: `docs/CONTEXTO_v6.1.1_2026-10-19.md`.
+**La 6.1.1** (publicada el 19-oct; al 23-oct, instalada en las tres PCs): lo que se borra a mano en una PC desaparece
+también en la otra (ver la trampa "Lo que se borra a mano…", abajo). Entrada: `docs/CONTEXTO_v6.1.1_2026-10-19.md`.
+
+**Las instalaciones las hace el usuario por su cuenta y avisa.** Si un "falta instalar" de acá quedó viejo, lo que
+vale es lo que diga él.
 
 ## Documentación del proyecto
 
