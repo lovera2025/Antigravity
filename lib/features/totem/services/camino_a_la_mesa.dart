@@ -78,7 +78,10 @@ abstract final class CaminoALaMesa {
           );
     return _desdeElBorde(
       _hastaElBorde(puntos, destino, armado.radio * alBorde),
-      _sectorIngreso(armado, m.hoja, desde),
+      [
+        for (final s in armado.sectoresDeHoja(m.hoja))
+          if (s.tipo == TipoSector.ingreso) s.caja,
+      ],
     );
   }
 
@@ -107,40 +110,64 @@ abstract final class CaminoALaMesa {
     return r;
   }
 
-  /// El sector "Ingreso" de la hoja que tiene adentro el punto de salida.
-  static RectPlano? _sectorIngreso(ArmadoSalon armado, String hoja, Offset p) {
-    for (final s in armado.sectoresDeHoja(hoja)) {
-      final c = s.caja;
-      if (s.tipo == TipoSector.ingreso &&
-          p.dx >= c.x &&
-          p.dx <= c.derecha &&
-          p.dy >= c.y &&
-          p.dy <= c.abajo) {
-        return c;
+  /// Si al salir pasa por un cartel de ingreso (sale de adentro, o el punto
+  /// de salida está justo afuera y lo cruza), arranca donde lo deja: así no
+  /// tacha lo que dice.
+  static List<Offset> _desdeElBorde(
+    List<Offset> puntos,
+    List<RectPlano> carteles,
+  ) {
+    if (carteles.isEmpty) return puntos;
+    var p = [...puntos];
+    for (var vuelta = 0; vuelta < 4 && p.length >= 2; vuelta++) {
+      final a = p[0], b = p[1];
+      final largo = (b - a).distance;
+      double? corte;
+      for (final c in carteles) {
+        final t = _adentro(a, b, c);
+        if (t == null) continue;
+        final (entra, sale) = t;
+        // El cartel tiene que estar al salir, no más adelante en el tramo.
+        if (entra * largo > math.min(c.ancho, c.alto)) continue;
+        corte = math.max(corte ?? 0, sale);
       }
+      if (corte == null || corte <= 0) break;
+      if (corte >= 1) {
+        if (p.length <= 2) break;
+        p = p.sublist(1);
+        continue;
+      }
+      p[0] = Offset.lerp(a, b, corte)!;
+      break;
     }
-    return null;
+    return p;
   }
 
-  /// Si sale de adentro del cartel del ingreso, arranca en su borde: así no
-  /// tacha lo que dice.
-  static List<Offset> _desdeElBorde(List<Offset> puntos, RectPlano? sector) {
-    if (sector == null || puntos.length < 2) return puntos;
-    final a = puntos[0];
-    final b = puntos[1];
+  /// La parte del tramo de [a] a [b] que cae dentro de [r], de 0 a 1 (recorte
+  /// de Liang-Barsky). Null si no lo toca.
+  static (double, double)? _adentro(Offset a, Offset b, RectPlano r) {
+    var t0 = 0.0, t1 = 1.0;
     final d = b - a;
-    double salida(double desde, double paso, double menor, double mayor) =>
-        paso > 0
-            ? (mayor - desde) / paso
-            : paso < 0
-                ? (menor - desde) / paso
-                : double.infinity;
-    final t = math.min(
-      salida(a.dx, d.dx, sector.x, sector.derecha),
-      salida(a.dy, d.dy, sector.y, sector.abajo),
-    );
-    if (t >= 1) return puntos.length > 2 ? puntos.sublist(1) : puntos;
-    return [Offset.lerp(a, b, t)!, ...puntos.skip(1)];
+    bool recortar(double p, double q) {
+      if (p == 0) return q >= 0;
+      final t = q / p;
+      if (p < 0) {
+        if (t > t1) return false;
+        if (t > t0) t0 = t;
+      } else {
+        if (t < t0) return false;
+        if (t < t1) t1 = t;
+      }
+      return true;
+    }
+
+    if (!recortar(-d.dx, a.dx - r.x) ||
+        !recortar(d.dx, r.derecha - a.dx) ||
+        !recortar(-d.dy, a.dy - r.y) ||
+        !recortar(d.dy, r.abajo - a.dy)) {
+      return null;
+    }
+    return (t0, t1);
   }
 
   /// Corta el camino donde entra en la mesa: termina en su borde.
@@ -180,20 +207,43 @@ class _Grilla {
   /// camino sale del cartel enseguida y no lo recorre por adentro.
   final Uint8List enIngreso;
 
+  /// Las celdas de las sillas de otras mesas: alrededor de la mesa, hasta
+  /// [CaminoALaMesa.conSillas]. Se pasa entre ellas (en el salón de la Normal,
+  /// entre fila y fila quedan 22 a 33 cm de silla a silla y por ahí camina la
+  /// gente, de costado), pero cuesta más que un pasillo libre. Lo que no se
+  /// pisa nunca es la mesa ([_cuerpo]).
+  final Uint8List silla;
+
+  /// Las celdas fuera del borde del hormigón (solo en un armado a medida del
+  /// playón): se pueden pisar, pero cuestan, así el camino va por adentro.
+  final Uint8List fuera;
+
   _Grilla._(this.x0, this.y0, this.paso, this.columnas, this.filas)
       : tapada = List.filled(columnas * filas, false),
-        enIngreso = Uint8List(columnas * filas);
+        enIngreso = Uint8List(columnas * filas),
+        silla = Uint8List(columnas * filas),
+        fuera = Uint8List(columnas * filas);
+
+  /// Lo que cuesta cada paso fuera del hormigón.
+  static const _fueraDelPiso = 3.0;
+
+  /// La mesa misma, en radios: lo que se tapa del todo. Un poco más que el
+  /// radio, así un tramo entre dos celdas libres nunca la roza.
+  static const _cuerpo = 1.15;
+
+  /// Lo que cuesta cada paso entre sillas, además del paso.
+  static const _entreSillas = 0.4;
 
   /// Lo que cuesta cada paso adentro del cartel del ingreso.
   static const _porElCartel = 3.0;
 
-  /// La holgura que se busca: con tanto lugar a los dos lados, el camino va
-  /// por el medio del pasillo. En celdas de medio radio: un radio y medio.
-  static const _holguraBuscada = 3.0;
+  /// La holgura que se busca, en celdas, contando las sillas como borde: con
+  /// tanto lugar a los dos lados, el camino va por el medio del pasillo.
+  static const _holguraBuscada = 2.0;
 
-  /// Lo que cuesta pasar pegado a algo tapado, además del paso: con holgura
-  /// cero, el paso cuesta el triple.
-  static const _pesoHolgura = 2.0;
+  /// Lo que cuesta pasar pegado a las sillas o a algo tapado, además del paso:
+  /// poco, para que centre el camino en el pasillo sin hacerlo rodear.
+  static const _pesoHolgura = 0.6;
 
   /// Lo que cuesta doblar en ángulo recto, en pasos: el camino dobla poco.
   static const _doblar = 4.0;
@@ -218,10 +268,11 @@ class _Grilla {
       math.max(1, (h.caja.ancho / paso).ceil()),
       math.max(1, (h.caja.alto / paso).ceil()),
     );
-    final r = armado.radio * CaminoALaMesa.conSillas;
+    final cuerpo = armado.radio * _cuerpo;
+    final conSillas = armado.radio * CaminoALaMesa.conSillas;
     for (final m in armado.mesasDeHoja(h.id)) {
       if (m.numero == destino) continue;
-      g._taparCirculo(Offset(m.x, m.y), r);
+      g._taparCirculo(Offset(m.x, m.y), cuerpo, conSillas);
     }
     for (final s in armado.sectoresDeHoja(h.id)) {
       if (CaminoALaMesa._sectoresQueTapan.contains(s.tipo)) {
@@ -232,6 +283,13 @@ class _Grilla {
             g.enIngreso[f * g.columnas + k] = 1;
           }
         }
+      }
+    }
+    final borde = h.contorno;
+    if (borde != null && borde.puntos.length >= 3) {
+      for (var c = 0; c < g.fuera.length; c++) {
+        final p = g.centro(c);
+        if (!borde.contiene(p.dx, p.dy)) g.fuera[c] = 1;
       }
     }
     g._medirHolgura();
@@ -245,7 +303,9 @@ class _Grilla {
     const lejos = 1 << 20;
     final d = Int32List(columnas * filas);
     for (var i = 0; i < d.length; i++) {
-      d[i] = tapada[i] ? 0 : lejos;
+      // Las sillas cuentan como borde del pasillo: el camino se centra entre
+      // ellas, y entre fila y fila va por el medio.
+      d[i] = tapada[i] || silla[i] == 1 ? 0 : lejos;
     }
     void mirar(int i, int x, int y, int peso) {
       if (x < 0 || y < 0 || x >= columnas || y >= filas) return;
@@ -292,11 +352,15 @@ class _Grilla {
         y0 + (c ~/ columnas + 0.5) * paso,
       );
 
-  void _taparCirculo(Offset c, double r) {
-    for (var f = _fila(c.dy - r); f <= _fila(c.dy + r); f++) {
-      for (var k = _col(c.dx - r); k <= _col(c.dx + r); k++) {
-        if ((centro(f * columnas + k) - c).distance < r) {
+  /// Tapa la mesa hasta [r] y marca sus sillas hasta [sillas].
+  void _taparCirculo(Offset c, double r, double sillas) {
+    for (var f = _fila(c.dy - sillas); f <= _fila(c.dy + sillas); f++) {
+      for (var k = _col(c.dx - sillas); k <= _col(c.dx + sillas); k++) {
+        final d = (centro(f * columnas + k) - c).distance;
+        if (d < r) {
           tapada[f * columnas + k] = true;
+        } else if (d < sillas) {
+          silla[f * columnas + k] = 1;
         }
       }
     }
@@ -365,7 +429,10 @@ class _Grilla {
         final giro = (nd - dir).abs();
         final vuelta = giro == 0 ? 0.0 : (giro == 2 ? _volverse : _doblar);
         final cartel = enIngreso[v] == 1 ? _porElCartel : 0.0;
-        final nuevo = g[s] + 1 + _apretado(v) + vuelta + cartel;
+        final sillas = silla[v] == 1 ? _entreSillas : 0.0;
+        final afuera = fuera[v] == 1 ? _fueraDelPiso : 0.0;
+        final nuevo =
+            g[s] + 1 + _apretado(v) + vuelta + cartel + sillas + afuera;
         if (nuevo < g[t]) {
           g[t] = nuevo;
           de[t] = s;
@@ -390,7 +457,7 @@ class _Grilla {
   }
 
   /// Si se puede ir derecho de [a] a [b] (a lo largo o a lo ancho) sin pisar
-  /// nada ni pasar pegado: con una celda libre alrededor, salvo en las de
+  /// ninguna mesa ni lo que tapa (entre sillas sí), salvo en las celdas de
   /// [salida] y [llegada].
   bool _libreEntre(Offset a, Offset b, int salida, int llegada) {
     final largo = (b - a).distance;
@@ -398,7 +465,7 @@ class _Grilla {
     for (var i = 0; i <= pasos; i++) {
       final c = celda(Offset.lerp(a, b, i / pasos)!);
       if (c == salida || c == llegada) continue;
-      if (tapada[c] || holgura[c] < 1) return false;
+      if (tapada[c]) return false;
     }
     return true;
   }

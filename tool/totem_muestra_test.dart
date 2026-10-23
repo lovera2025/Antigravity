@@ -43,7 +43,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
+import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
@@ -918,6 +921,57 @@ void main() {
           ),
       ]),
       'Camino_a_varias_mesas.png',
+    );
+  });
+
+  // El camino sale de cómo está armado el plano: en un playón a medida con
+  // las mesas a 2 m y a 2,5 m, a las mismas mesas.
+  testWidgets('el camino en un playón a medida, a 2 y a 2,5 m', (tester) async {
+    // El Ingreso donde lo pone el salón vacío: abajo al medio, adentro.
+    ArmadoSalon conIngreso(double lugarM) {
+      final a = ArmarAMedida.armar(
+        OpcionesAMedida(playon: PlayonReal.costaSurubi, cantidad: 150, lugarM: lugarM),
+      ).armado;
+      final h = a.hojas.first;
+      final pts = h.contorno!.puntos;
+      final abajo = pts.map((p) => p.y).reduce(math.max);
+      final medio = (pts.map((p) => p.x).reduce(math.min) + pts.map((p) => p.x).reduce(math.max)) / 2;
+      return a.copyWith(sectores: [
+        ...a.sectores,
+        SectorPlano(
+          tipo: TipoSector.ingreso,
+          texto: 'Ingreso',
+          hoja: h.id,
+          caja: RectPlano(
+            medio - a.aUnidades(2),
+            abajo - a.aUnidades(2.5),
+            a.aUnidades(4),
+            a.aUnidades(2),
+          ),
+        ),
+      ]);
+    }
+
+    const panel = Size(560, 520);
+    final color = _masivo.colorAcento;
+    await _sacar(
+      tester,
+      Size(2 * _hueco + 3 * (panel.width + _hueco), 2 * (_hueco + 48 + panel.height) + _hueco),
+      _grilla(panel, [
+        for (final metros in [2.0, 2.5])
+          for (final m in ['40', '95', '140'])
+            (
+              'A $metros m · mesa $m',
+              PanelPlano(
+                guia: PlanoDeLaLlegada.para(conIngreso(metros), mesa: m, nombre: 'X')!,
+                tema: temaPlanoDelTotem(EstiloTotem.neon, color),
+                borde: color,
+                u: 20,
+                animar: false,
+              ),
+            ),
+      ], porFila: 3),
+      'Camino_a_medida.png',
     );
   });
 

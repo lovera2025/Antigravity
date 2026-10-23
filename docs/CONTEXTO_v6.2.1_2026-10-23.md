@@ -77,19 +77,29 @@ muy desprolijo". No había cambiado desde la 6.0.0: iba por el atajo más corto,
 cualquier ángulo. Pidió "línea recta y que doble, entonces queda más simétrico", y aprobó cómo quedó ("ahí me gusta
 más").
 
-- **`CaminoALaMesa`** busca solo a lo largo y a lo ancho, por el medio de los pasillos (cada celda cuesta más cuanto
-  más pegada a algo tapado: `holgura`, medida en dos pasadas) y con pocas vueltas (doblar cuesta 4 pasos, volverse 30;
-  la búsqueda va por celda y dirección de llegada).
-- **Sale del cartel del Ingreso enseguida**: sus celdas se pueden pisar pero cuestan (`enIngreso`); antes lo recorría
-  por adentro.
+- **`CaminoALaMesa`** busca solo a lo largo y a lo ancho, por el medio de los pasillos (cada celda cuesta un poco más
+  cuanto más pegada a las sillas o a algo tapado: `holgura`, medida en dos pasadas) y con pocas vueltas (doblar cuesta
+  4 pasos, volverse 30; la búsqueda va por celda y dirección de llegada).
+- **Entre las sillas se pasa** (pregunta del usuario: "uno pasa como por afuera y entra otra vez; la idea es el camino
+  que deberían seguir los familiares"). Medido en el salón de la Normal: contando las sillas, entre columnas de mesas
+  no queda paso y entre filas quedan 22 a 33 cm; por ahí camina la gente, de costado. Lo que no se pisa es la mesa
+  (`_cuerpo`, 1,15 radios); la zona de las sillas (hasta 1,35) cuesta un poco más que un pasillo libre
+  (`_entreSillas`). Antes las sillas eran pared: 7 de las 78 mesas daban un rodeo de más del 25 % (la 76, 25,6 m
+  contra 11,4 m). Ahora ninguna; la peor, la 67, camina 1,2 m de más.
+- **Se adapta a cómo está armado el plano** (lo pidió el usuario: "puede ser 2 metros, puede ser que yo amplíe"): todo
+  sale de dónde está cada mesa y de su radio. En un playón a medida con las mesas a 2 m y a 2,5 m, ningún camino pasa
+  del 2 % sobre lo más corto. `tool/caminos_rodeo_test.dart` lo mide en los tres salones.
+- **Sale del cartel del Ingreso enseguida**: sus celdas se pueden pisar pero cuestan (`enIngreso`), y el camino
+  arranca donde lo deja, también si el punto de salida está justo afuera (`_desdeElBorde`, recorte de Liang-Barsky).
+- **Fuera del hormigón** (un armado a medida) se puede pasar, pero cuesta (`fuera`): el camino va por adentro.
 - **`sinEscalones`** saca las Z chicas (va, se corre un poco y sigue para el mismo lado) cuando se puede ir derecho sin
   pisar nada; **`_enEscuadra`** alinea el primer tramo con el ingreso y el último con el centro de la mesa.
 - **El dibujo** (`PintorResaltado`, `caminoRedondeado`): la esquina apenas suavizada y una flecha en la punta, que
   acompaña a la línea mientras se dibuja.
 - Sigue igual: nunca pisa otra mesa, termina en el borde de la mesa, sin paso va recto, y en el playón de 284 mesas
   tarda menos de medio segundo (`test/camino_a_la_mesa_test.dart`).
-- Muestra nueva: `tool/totem_muestra_test.dart`, "el camino a varias mesas, en grande" (seis mesas del salón de la
-  Normal).
+- Muestras nuevas: `tool/totem_muestra_test.dart`, "el camino a varias mesas, en grande" (seis mesas del salón de la
+  Normal) y "el camino en un playón a medida, a 2 y a 2,5 m" (con el Ingreso donde lo pone el salón vacío).
 
 ## Pruebas
 

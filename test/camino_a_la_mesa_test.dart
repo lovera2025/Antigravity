@@ -219,6 +219,42 @@ void main() {
     }
   });
 
+  // 6.2.1: entre las sillas se pasa (entre fila y fila quedan 22 a 33 cm y por
+  // ahí camina la gente). Cuando eran pared, a la 76 se llegaba rodeando todo
+  // el bloque: 25,6 m contra 11,4 m. tool/caminos_rodeo_test.dart mide todas.
+  test('en la Normal, a las mesas del fondo sin rodear el bloque', () {
+    final a = ArmadosPredefinidos.normal2aPagina3();
+    double largo(List<Offset> p) {
+      var s = 0.0;
+      for (var i = 1; i < p.length; i++) {
+        s += (p[i] - p[i - 1]).distance;
+      }
+      return s;
+    }
+
+    for (final mesa in const [76, 64]) {
+      final ruta = CaminoALaMesa.trazar(a, mesa)!;
+      expect(a.aMetros(largo(ruta)), lessThan(15), reason: 'mesa $mesa');
+      _noPisaMesas(ruta, a, mesa);
+    }
+  });
+
+  test('va en escuadra: cada tramo, a lo largo o a lo ancho', () {
+    final a = ArmadosPredefinidos.normal2aPagina3();
+    for (final m in a.mesas) {
+      final ruta = CaminoALaMesa.trazar(a, m.numero)!;
+      // Menos el primero y el último, que se alinean con el ingreso y la mesa.
+      for (var i = 2; i < ruta.length - 1; i++) {
+        final d = ruta[i] - ruta[i - 1];
+        expect(
+          d.dx.abs() < 0.01 || d.dy.abs() < 0.01,
+          isTrue,
+          reason: 'mesa ${m.numero}, tramo $i: $d',
+        );
+      }
+    }
+  });
+
   test('en un playón de 284 mesas, rápido', () {
     final armado = ArmarAMedida.armar(
       const OpcionesAMedida(

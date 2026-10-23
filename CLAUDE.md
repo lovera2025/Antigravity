@@ -489,6 +489,9 @@ tapa las frases.
     **Desde la 6.2.1 va en escuadra** (pedido del usuario: "línea recta y que doble"): solo a lo largo y a lo ancho,
     por el medio de los pasillos, con pocas vueltas, sin escalones y saliendo enseguida del cartel del Ingreso; el
     dibujo suaviza apenas la esquina y pone una flecha. No volver a las diagonales: se veía "como rayas".
+    **Entre las sillas se pasa, la mesa no** (con las sillas, entre filas quedan 22 a 33 cm y por ahí camina la
+    gente): si las sillas vuelven a ser pared, el camino rodea por afuera. Todo sale del plano (posiciones y radio):
+    `tool/caminos_rodeo_test.dart` mide el rodeo de cada mesa en la Normal y en playones a 2 y 2,5 m.
 - **Cómo se dibuja:**
   - la escena arma la guía **una vez por llegada** (`EscenaTotem.planosArmados`);
   - los temas salen de `temaPlanoDelTotem`, **guardados por apariencia y color**: `TemaPlano` no tiene `==` y uno
