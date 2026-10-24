@@ -123,6 +123,58 @@ void main() {
       expect(_renglones(_perez(pagadas: 4), _nov2).first, 'cuota 5 · 63 d · \$18900');
     });
 
+    // El caso por el que se pidió (23-oct): un alumno que no pagó nada viene a
+    // hacer un compromiso y se le congela el precio, con la mora que tenga.
+    test('un alumno sin ningún pago que viene a comprometerse: "Todas" deja la mora quieta', () {
+      final sinPagos = _perez(pagadas: 0);
+      final alComprometerse = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: sinPagos,
+        moraCobradaHistorial: 0,
+        ahoraAr: _oct23,
+      );
+      // Cuotas 1 a 6 vencidas al 23/10: 176 + 145 + 115 + 84 + 53 + 23 días.
+      expect(alComprometerse, closeTo(300.0 * (176 + 145 + 115 + 84 + 53 + 23), 0.01));
+
+      MoraCongelada.poner(_id, MoraCongelada.nada.congelar(todas: true, dia: _oct23));
+      final unMesDespues = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: sinPagos,
+        moraCobradaHistorial: 0,
+        ahoraAr: DateTime(2026, 11, 23),
+      );
+      // Igual: ni las vencidas suben ni la del 31/10 empieza a sumar.
+      expect(unMesDespues, closeTo(alComprometerse, 0.01));
+    });
+
+    // Pedido del usuario (24-oct): "fijate las moras perdonadas, que no
+    // resuciten". El perdón es la eximición (`moraExentaHasta`): la cuenta
+    // arranca desde ahí, y congelar o recalcular no la toca.
+    test('una mora perdonada no resucita al congelar ni al recalcular', () {
+      // Perdonó todo hasta el 31/10: las cuotas vencidas cuentan desde ahí.
+      final perdonado = ContratoAlumno(
+        id: _id,
+        eventoId: 'e0000000-0000-4000-8000-000000000001',
+        nombreAlumno: 'PÉREZ, JUAN',
+        cantidadAcompanantes: 0,
+        montoTotalPactado: 270000,
+        saldoDeudor: 180000,
+        cuotasPagadas: 3,
+        totalCuotas: 9,
+        createdAt: DateTime.utc(2026, 3, 30, 3),
+        moraExentaHasta: DateTime(2026, 10, 31),
+      );
+      final sinCongelar = _renglones(perdonado, _nov2);
+      expect(sinCongelar.first, 'cuota 4 · 2 d · \$600');
+
+      final congelada = MoraCongelada.nada.congelar(todas: true, dia: _oct23);
+      MoraCongelada.poner(_id, congelada);
+      // Congelada desde antes del perdón: no corre nada.
+      expect(_renglones(perdonado, _nov2), isEmpty);
+
+      // Recalcular vuelve a la cuenta con el perdón, no a los 94 días de antes.
+      MoraCongelada.poner(_id, congelada.recalcular(cuotasPagadas: 3, dia: _nov2));
+      expect(_renglones(perdonado, _nov2), sinCongelar);
+    });
+
     test('la mora a cobrar sale de la misma cuenta', () {
       MoraCongelada.poner(_id, MoraCongelada.nada.congelar(cuotas: {4, 5}, dia: _oct23));
       final total = MoraCuotaCalculator.moraPendienteOperativa(

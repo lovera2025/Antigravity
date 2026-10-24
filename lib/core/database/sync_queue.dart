@@ -345,6 +345,7 @@ class SyncQueue {
         'notas_operativas_contrato': 'contrato_alumno_id',
         'sillas_reparto': 'contrato_alumno_id',
         'entradas_retiro': 'contrato_alumno_id',
+        'mora_congelada': 'contrato_alumno_id',
       },
       'prestamos_alquiler': {
         'prestamo_alquiler_lineas': 'prestamo_id',

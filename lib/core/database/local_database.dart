@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 74;
+  static const int _version = 75;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -89,7 +89,7 @@ class LocalDatabase {
       );
     }
 
-    // Red por si las migraciones v72, v73 y v74 no pudieron crear sus tablas:
+    // Red por si las migraciones v72 a v75 no pudieron crear sus tablas:
     // son idempotentes, así que en una base sana no hacen nada. Cada una por su
     // lado: si falla la de la v72, igual se intentan las otras.
     try {
@@ -106,6 +106,11 @@ class LocalDatabase {
       await crearTablasV74(db);
     } catch (e) {
       debugPrint('⚠️ Tabla v74 sin crear: $e');
+    }
+    try {
+      await crearTablasV75(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v75 sin crear: $e');
     }
     return db;
   }
@@ -689,6 +694,7 @@ class LocalDatabase {
     await crearTablasV72(db);
     await crearTablasV73(db);
     await crearTablasV74(db);
+    await crearTablasV75(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -832,6 +838,26 @@ class LocalDatabase {
         medidas TEXT NOT NULL DEFAULT '{}',
         borrado_at TEXT,
         hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// La tabla de la v75 (6.2.1): la mora congelada, una fila por alumno.
+  ///
+  /// Mismo criterio que las de antes: **nueva y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`. No va en `contratos_alumnos` porque esa fila se reescribe
+  /// entera en tres lugares (CLAUDE.md, "Trampas conocidas") y una columna nueva
+  /// se perdería en silencio. La fila no se borra nunca: descongelar la
+  /// actualiza. `pausas` es la lista de pausas en JSON (`MoraCongelada.toJson`).
+  static Future<void> crearTablasV75(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mora_congelada (
+        id TEXT PRIMARY KEY,
+        contrato_alumno_id TEXT NOT NULL UNIQUE,
+        evento_id TEXT,
+        pausas TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -3057,6 +3083,20 @@ class LocalDatabase {
         debugPrint('✅ Migración v74 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v74: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 74, la tabla de la v75 no aparece.
+    if (oldVersion < 75 && newVersion >= 75) {
+      debugPrint('  🔧 v75: la mora congelada');
+      // Igual que las de antes: solo una tabla nueva, sin tocar datos ni
+      // marcadores. Si fallara, la app abre igual y [_initDb] lo reintenta en
+      // cada arranque.
+      try {
+        await crearTablasV75(db);
+        debugPrint('✅ Migración v75 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v75: $e');
       }
     }
   }

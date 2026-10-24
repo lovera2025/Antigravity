@@ -81,6 +81,11 @@ class UuidUtils {
   static String planoEventoId(String eventoId) =>
       _uuidDe('planos_evento_v1|$eventoId');
 
+  /// PK estable para `mora_congelada` (6.2.1): una fila por alumno. Si las dos
+  /// PCs congelan al mismo alumno, escriben la misma fila (gana la última).
+  static String moraCongeladaId(String contratoAlumnoId) =>
+      _uuidDe('mora_congelada_v1|$contratoAlumnoId');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

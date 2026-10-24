@@ -343,21 +343,29 @@ void main() {
       await abierta.close();
     });
 
-    test('la copia usa la versión de la app: una base en 73 se copia',
-        () async {
+    // Con la versión fija: desde la 6.2.1 la app va por la 75 (lo de la versión
+    // de la app lo prueba `migracion_v75_test.dart`).
+    test('una base en 73, yendo a la 74, se copia', () async {
       await crearBaseV73();
-      final copia =
-          await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(
+        path,
+        factory: factory,
+        versionNueva: 74,
+      );
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v74.db'));
     });
 
-    test('una base ya migrada no se copia', () async {
+    test('una base ya en la 74 no se copia para ir a la 74', () async {
       await crearBaseV73();
       final db = await abrirEnVersion(74);
       await db.close();
       expect(
-        await LocalDatabase.copiaAntesDeMigrar(path, factory: factory),
+        await LocalDatabase.copiaAntesDeMigrar(
+          path,
+          factory: factory,
+          versionNueva: 74,
+        ),
         isNull,
       );
     });

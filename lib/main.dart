@@ -27,6 +27,7 @@ import 'features/totem/services/lista_de_la_pc.dart';
 import 'features/totem/services/puente_ficha.dart';
 import 'features/eventos/repositories/contratos_repository.dart';
 import 'features/eventos/repositories/eventos_repository.dart';
+import 'features/eventos/repositories/mora_congelada_repository.dart';
 import 'features/eventos/repositories/sillas_reparto_repository.dart';
 import 'features/plano/repositories/planos_evento_repository.dart';
 import 'features/recepcion/providers/recepcion_provider.dart'
@@ -149,8 +150,11 @@ void main(List<String> args) async {
     if (!kIsWeb) {
       try {
         // Inicializar DB
-        await LocalDatabase.instance;
+        final db = await LocalDatabase.instance;
         debugPrint('✅ SQLite local inicializado correctamente');
+        // La mora congelada, antes de que se dibuje la primera pantalla: la
+        // cuenta de la mora la lee de memoria (6.2.1).
+        await MoraCongeladaRepository.cargarRegistroEn(db);
         // Copia semanal. No se espera (que no demore el arranque) y arranca
         // con retraso: al abrir, el sync está escribiendo y VACUUM no corre
         // dentro de una transacción ajena.

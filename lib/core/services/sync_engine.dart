@@ -14,6 +14,7 @@ import 'contrato_al_bajar.dart';
 import 'instalacion_id.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
 import '../../features/eventos/repositories/contratos_repository.dart';
+import '../../features/eventos/repositories/mora_congelada_repository.dart';
 import '../../features/mi_empresa/repositories/finanzas_repository.dart';
 import '../../features/eventos/services/mora_tracked_recovery.dart';
 import '../../features/eventos/services/revision_mora_constancia.dart';
@@ -361,6 +362,7 @@ class SyncEngine {
     'planos_evento': 'updated_at',
     'mesas_movimientos': 'updated_at',
     'predios': 'updated_at',
+    'mora_congelada': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1166,6 +1168,9 @@ class SyncEngine {
     // de seguridad si el aviso no llega.
     'entradas_retiro',
     'sillas_reparto',
+    // La mora congelada cambia lo que se cobra: la otra PC tiene que verla en
+    // segundos, como un cobro (6.2.1).
+    'mora_congelada',
   ];
 
   /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
@@ -1231,6 +1236,10 @@ class SyncEngine {
   Future<void> revisarMora({Set<String>? soloContratos}) async {
     try {
       final db = await LocalDatabase.instance;
+      // La mora congelada, al día con lo que se acaba de bajar (6.2.1): si no,
+      // la revisión rehace las fichas sin las pausas. Esperar el aviso de cambios
+      // bajados no alcanza: llega 300 ms después y esto corre enseguida.
+      await MoraCongeladaRepository.cargarRegistroEn(db);
       final recalibrados = await MoraTrackedRecovery.reconciliarTodos(
         db: db,
         encolarSync: true,
@@ -1525,6 +1534,7 @@ class SyncEngine {
       // Cuelgan del alumno, igual que las notas: el contrato tiene que estar
       // arriba antes, o la FK de la nube rechaza la fila.
       if (table == 'sillas_reparto' || table == 'entradas_retiro') return 4;
+    if (table == 'mora_congelada') return 4;
       if (table == 'sorteos_mesas') return 2;
       // Cuelgan del evento, como el registro del sorteo.
       if (table == 'planos_evento' || table == 'mesas_movimientos') return 2;
@@ -1885,6 +1895,7 @@ class SyncEngine {
       _pullTable(db, 'planos_evento', 'updated_at'),
       _pullTable(db, 'mesas_movimientos', 'updated_at'),
       _pullTable(db, 'predios', 'updated_at'),
+      _pullTable(db, 'mora_congelada', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2247,6 +2258,11 @@ class SyncEngine {
       }
       await batch.commit(noResult: true);
       if (novedades > 0) _anotarCambioBajado(table);
+      // La otra PC congeló o descongeló: la cuenta de la mora lo tiene que ver
+      // ya, antes de que la grilla se refresque al final del ciclo (6.2.1).
+      if (novedades > 0 && table == 'mora_congelada') {
+        await MoraCongeladaRepository.cargarRegistroEn(db);
+      }
       if (ajustesQueSeFueron.isNotEmpty) {
         try {
           await RevisionMoraConstancia.anotar(
@@ -2780,6 +2796,14 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      'mora_congelada': [
+        'id',
+        'contrato_alumno_id',
+        'evento_id',
+        'pausas',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -2929,6 +2953,8 @@ class SyncEngine {
     'mesas_movimientos': 'solo se agregan renglones',
     'planos_evento': 'una fila por fiesta, con id fijo: no se borra a mano',
     'predios': 'borrar le pone borrado_at: la fila no se saca',
+    'mora_congelada':
+        'una fila por alumno, con id fijo: descongelar la actualiza, no se borra',
   };
 
   /// Para los tests: las tablas que se revisan.
