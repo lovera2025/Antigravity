@@ -37,7 +37,8 @@ las tres PCs** el 23-oct). La quinta apariencia del tótem: una imagen propia es
 dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-10-23.md`; el detalle,
 `docs/PLAN_TU_FONDO_2026-10-23.md`.
 
-**La 6.2.1** (terminada el 24-oct; el usuario pidió publicarla ese día, SQL primero): la foto del tótem se saca,
+**La 6.2.1** (**publicada el 24-oct**: los dos SQL, el release y la web; **sin instalar**: las PCs las instala el
+usuario y avisa; no congelar a nadie hasta que estén las tres): la foto del tótem se saca,
 cambia de forma y se agranda; las frases se agrandan; las dos se mueven juntas, con manijas en Personalizar. El
 camino a la mesa va en escuadra. La página del celular de la puerta abre sin internet. Y se sumaron tres cosas:
 **"Congelar la mora"** (ver "La mora congelada", abajo), **la limpieza** (sin OPERADORES, sin "Restaurar mora", sin

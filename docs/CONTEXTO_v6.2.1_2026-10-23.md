@@ -179,11 +179,31 @@ DETALLES DEL EVENTO desaparecía.
 
 **Las novedades del release dicen "Nuevas capacidades en el modo jefe, limpieza"** (lo pidió el usuario).
 
+## La publicación (24-oct, pasada la medianoche)
+
+Con el OK del usuario ("hacelo ya la publicación"; eligió terminar Congelar la mora y publicar todo junto).
+
+1. **Los dos SQL** (`apply_migration` `totem_config_foto` y `mora_congelada`, con los archivos del repo).
+   - Conteos iguales antes y después: 643 contratos, 4.291 pagos, 28 notas, 0 entradas, 11 invitados, 30 eventos y 3
+     filas de `totem_config`, con la misma huella (md5 de las columnas de antes): no se tocó ninguna.
+   - Las seis columnas de la foto, vacías. `mora_congelada` vacía, con RLS, su policy y sus dos disparadores. Ninguna
+     de las dos en Realtime.
+2. **El instalador:** `installer/dist/Setup Junior Eventos v6.2.1.exe`, 38.208.035 bytes, SHA-256
+   `A8FE284F…1C8FBE20` (armado con `powershell -File installer\build_installer.ps1`, como proceso aparte).
+3. **El release:** `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build/novedades_6.2.1.md`.
+   - Las novedades dicen **"Nuevas capacidades en el modo jefe, limpieza"**.
+   - `/releases/latest` da `v6.2.1` (etiqueta en `a7af53b`). El instalador bajado de GitHub, idéntico al armado.
+4. **La web:** `flutter build web --release`, a `.vercel/output/static`, y `npx vercel deploy --prebuilt --prod`.
+   - Publicada `arguello-events-3wzvwmlhr`. Para volver atrás, la de antes es `arguello-events-forbuzmsh` (6.2.0).
+   - Comprobado: `version.json` da `6.2.1`/`61`; `/`, `?cotizar` y `/lista` responden; `/op` cae en el login; Roboto se
+     sirve desde la web.
+
+**Las PCs las instala el usuario y avisa.** Instala primero la del operario, como siempre.
+
 ## Falta
 
-1. **Publicar**: los dos SQL antes que nada (`20261023200000_totem_config_foto.sql` y
-   `20261023210000_mora_congelada.sql`), la versión 6.2.1 en `pubspec.yaml` y en el instalador, el release y la web. Las
-   PCs las instala él. **No congelar nada hasta que las tres PCs tengan la 6.2.1.**
-2. Que el usuario confirme cómo quedó el camino a la mesa.
+1. Que el usuario instale la 6.2.1 en las tres PCs. **No congelar a nadie hasta que estén las tres.**
+2. Que confirme cómo quedó el camino a la mesa.
 3. El ensayo con el router de verdad: el celular sin internet, entero.
+4. Probar con un evento de verdad la foto nueva y "Tu fondo".
 
