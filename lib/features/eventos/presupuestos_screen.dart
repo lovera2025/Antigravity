@@ -4,13 +4,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/presupuesto.dart';
+import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/widgets/animated_background.dart';
 import '../common/services/pdf_service.dart';
+import 'detalle_evento_particular_screen.dart';
+import 'repositories/eventos_repository.dart';
 import 'repositories/presupuestos_repository.dart';
 import 'selector_servicios_screen.dart';
 import 'utils/evento_presentacion.dart';
 import '../rentabilidad/calculador_rentabilidad_screen.dart';
+
+/// Qué ofrece la tarjeta de un presupuesto aprobado.
+enum AccionPresupuesto { crearEvento, verEvento }
+
+/// Confirmado = ya tiene su evento: se ofrece VER EVENTO, nunca crear otro.
+AccionPresupuesto accionDelPresupuesto(Presupuesto p) =>
+    p.confirmado ? AccionPresupuesto.verEvento : AccionPresupuesto.crearEvento;
 
 class PresupuestosScreen extends ConsumerStatefulWidget {
   /// Si es true, se muestra solo el cuerpo (sin [Scaffold] propio) para incrustar en un [TabBarView].
@@ -25,6 +35,10 @@ class PresupuestosScreen extends ConsumerStatefulWidget {
 class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
   late Timer _timer;
   bool _showSuccessAnimation = false;
+
+  /// Presupuestos que se están convirtiendo en evento: su botón se apaga, así
+  /// un doble toque no crea dos.
+  final Set<String> _creando = {};
   final Set<EstadoPresupuesto> _filtrosEstado = {EstadoPresupuesto.borrador, EstadoPresupuesto.enviado};
   String _filtroFecha = 'Todos';
 
@@ -400,12 +414,25 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                         style: TextStyle(fontSize: 10, color: isDark ? Colors.white24 : Colors.black26),
                       ),
                       const SizedBox(width: 8),
+                      // Con evento no se borra: se ve apagado y dice por qué.
                       IconButton(
-                        onPressed: () => _eliminarPresupuesto(p),
-                        icon: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
+                        onPressed: () => p.confirmado
+                            ? _avisar(
+                                'No se borra',
+                                PresupuestoConEventoException.mensaje,
+                                Icons.lock_outline_rounded,
+                              )
+                            : _eliminarPresupuesto(p),
+                        icon: Icon(
+                          p.confirmado ? Icons.lock_outline_rounded : Icons.delete_outline,
+                          size: 14,
+                          color: p.confirmado ? Colors.grey : Colors.redAccent,
+                        ),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        tooltip: 'Eliminar presupuesto',
+                        tooltip: p.confirmado
+                            ? 'Tiene su evento: no se borra'
+                            : 'Eliminar presupuesto',
                       ),
                     ],
                   ),
@@ -547,12 +574,21 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
                         )),
                       ],
 
+                      // Confirmado = ya tiene su evento: se abre, no se crea
+                      // otro (6.2.1). Mientras se crea, el botón se apaga.
                       if (realState == EstadoPresupuesto.aprobado)
                          Expanded(
                            child: ElevatedButton.icon(
-                             onPressed: () => _confirmarPresupuesto(p),
-                             icon: const Icon(Icons.celebration),
-                             label: const Text('CREAR EVENTO', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                             onPressed: _creando.contains(p.id)
+                                 ? null
+                                 : (p.confirmado
+                                     ? () => _verEvento(p)
+                                     : () => _confirmarPresupuesto(p)),
+                             icon: Icon(p.confirmado ? Icons.open_in_new_rounded : Icons.celebration),
+                             label: Text(
+                               accionDelPresupuesto(p) == AccionPresupuesto.verEvento ? 'VER EVENTO' : 'CREAR EVENTO',
+                               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
+                             ),
                              style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent, foregroundColor: Colors.black),
                            ),
                          ),
@@ -630,6 +666,9 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🗑️ Presupuesto eliminado.'), backgroundColor: Colors.orange));
           await _refrescarLista(pullRemote: false);
         }
+      } on PresupuestoConEventoException {
+        await _avisar('No se borra', PresupuestoConEventoException.mensaje, Icons.lock_outline_rounded);
+        await _refrescarLista(pullRemote: false);
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
       }
@@ -661,11 +700,13 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
               },
             ),
             const Divider(color: Colors.white12),
-            if (widget.embedded) ...[
+            // Antes solo dentro de MI EMPRESA; PRESUPUESTOS salió de ahí (6.2.1) y
+            // ahora es del modo jefe, igual que la barra lateral que lo abre.
+            if (ref.read(esRolJefeProvider)) ...[
               ListTile(
                 leading: const Icon(Icons.analytics_outlined, color: Colors.greenAccent),
                 title: const Text('Analizar Rentabilidad', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('Solo en MI EMPRESA: simulador con este presupuesto.', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                subtitle: const Text('Solo en modo jefe: simulador con este presupuesto.', style: TextStyle(color: Colors.white54, fontSize: 10)),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(context, MaterialPageRoute(builder: (_) => CalculadorRentabilidadScreen(presupuestoPreCargado: p)));
@@ -703,7 +744,66 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
     );
   }
 
+  /// Un aviso que no se va solo, con el motivo en palabras.
+  Future<void> _avisar(String titulo, String mensaje, IconData icono) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(icono, color: const Color(0xFFD4AF37), size: 32),
+        title: Text(titulo),
+        content: Text(mensaje),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Abre el evento particular que salió del presupuesto.
+  Future<void> _abrirEvento(String eventoId) async {
+    final evento = await ref.read(eventosRepositoryProvider).getById(eventoId);
+    if (!mounted) return;
+    if (evento == null) {
+      await _avisar(
+        'No encuentro el evento',
+        'El evento todavía no está en esta PC. Esperá a que baje de la nube y '
+            'volvé a intentar.',
+        Icons.cloud_off_rounded,
+      );
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DetalleEventoParticularScreen(evento: evento)),
+    );
+    if (mounted) unawaited(_refrescarLista(pullRemote: false));
+  }
+
+  /// VER EVENTO: el presupuesto ya está confirmado. Si su evento está, se abre;
+  /// si no (uno viejo que se confirmó sin crearlo), se ofrece crearlo.
+  Future<void> _verEvento(Presupuesto p) async {
+    final eventoId =
+        await ref.read(presupuestosRepositoryProvider).eventoDelPresupuesto(p.id);
+    if (!mounted) return;
+    if (eventoId != null) {
+      await _abrirEvento(eventoId);
+    } else {
+      await _confirmarPresupuesto(p);
+    }
+  }
+
   Future<void> _confirmarPresupuesto(Presupuesto p) async {
+    if (_creando.contains(p.id)) return;
+
+    if (p.cliente?.nombreCompleto == 'CLIENTE DESCONOCIDO') {
+      await _avisar('Falta el cliente', PresupuestoSinClienteException.mensaje, Icons.person_off_outlined);
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -719,46 +819,61 @@ class _PresupuestosScreenState extends ConsumerState<PresupuestosScreen> {
         ],
       ),
     );
+    if (confirm != true || !mounted) return;
 
-    if (confirm == true) {
-      try {
-        await ref.read(presupuestosRepositoryProvider).confirmarPresupuesto(p.id);
-        if (mounted) {
-          await _refrescarLista(pullRemote: false);
-          setState(() {
-            _showSuccessAnimation = true;
-          });
-          
-          // Ocultar animación tras unos segundos
-          Future.delayed(const Duration(milliseconds: 3000), () {
-            if (mounted) {
-              setState(() {
-                _showSuccessAnimation = false;
-              });
-            }
-          });
-        }
-      } on PresupuestoSinItemsException {
-        // Un snackbar que se va solo no alcanza: si esto pasa desapercibido, el
-        // evento queda sin monto y nadie se entera hasta que alguien lo abre.
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            icon: const Icon(Icons.cloud_off_rounded, color: Color(0xFFE74C3C), size: 32),
-            title: const Text('Faltan datos para confirmar'),
-            content: const Text(PresupuestoSinItemsException.mensaje),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('ENTENDIDO'),
-              ),
-            ],
-          ),
-        );
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
+    // Sin fecha del evento, se pide: antes se inventaba "hoy + 30 días".
+    DateTime? fecha = p.fechaEvento;
+    if (fecha == null) {
+      final hoy = DateTime.now();
+      fecha = await showDatePicker(
+        context: context,
+        helpText: '¿QUÉ DÍA ES EL EVENTO?',
+        initialDate: hoy,
+        firstDate: DateTime(hoy.year - 1),
+        lastDate: DateTime(hoy.year + 3),
+      );
+      if (fecha == null || !mounted) return;
+    }
+
+    setState(() => _creando.add(p.id));
+    try {
+      final r = await ref
+          .read(presupuestosRepositoryProvider)
+          .confirmarPresupuesto(p.id, fechaEvento: fecha);
+      if (!mounted) return;
+      await _refrescarLista(pullRemote: false);
+      if (!mounted) return;
+      if (r.yaExistia) {
+        // Ya tenía su evento: se abre ese, no se crea otro.
+        await _abrirEvento(r.eventoId);
+        return;
       }
+      setState(() => _showSuccessAnimation = true);
+      // La animación y, al terminar, el evento recién creado.
+      await Future<void>.delayed(const Duration(milliseconds: 3000));
+      if (!mounted) return;
+      setState(() => _showSuccessAnimation = false);
+      await _abrirEvento(r.eventoId);
+    } on PresupuestoNoEncontradoException {
+      await _avisar('No está el presupuesto', PresupuestoNoEncontradoException.mensaje, Icons.search_off_rounded);
+      await _refrescarLista(pullRemote: false);
+    } on PresupuestoSinFechaException {
+      await _avisar('Falta la fecha', PresupuestoSinFechaException.mensaje, Icons.event_busy_outlined);
+    } on PresupuestoSinClienteException {
+      await _avisar('Falta el cliente', PresupuestoSinClienteException.mensaje, Icons.person_off_outlined);
+    } on PresupuestoSinItemsException {
+      // Un snackbar que se va solo no alcanza: si esto pasa desapercibido, el
+      // evento queda sin monto y nadie se entera hasta que alguien lo abre.
+      await _avisar('Faltan datos para confirmar', PresupuestoSinItemsException.mensaje, Icons.cloud_off_rounded);
+    } catch (e) {
+      await _avisar(
+        'No se pudo crear el evento',
+        'No se creó nada: el presupuesto quedó como estaba. Volvé a intentar.',
+        Icons.error_outline_rounded,
+      );
+      debugPrint('confirmarPresupuesto: $e');
+    } finally {
+      if (mounted) setState(() => _creando.remove(p.id));
     }
   }
 

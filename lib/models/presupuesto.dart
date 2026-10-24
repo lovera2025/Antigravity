@@ -12,6 +12,12 @@ class Presupuesto {
   final DateTime fechaVencimiento;
   final DateTime? fechaEvento;
   final EstadoPresupuesto estado;
+
+  /// Ya se convirtió en evento. En la base es el estado `confirmado`, que
+  /// [estado] muestra como aprobado; hasta la 6.2.1 nada más lo distinguía y la
+  /// tarjeta seguía ofreciendo CREAR EVENTO: crearlo dos veces mudaba los
+  /// renglones del primer evento al segundo.
+  final bool confirmado;
   final String? instagram;
   final String? telefono;
   final String? vendedorNombre;
@@ -32,6 +38,7 @@ class Presupuesto {
     required this.fechaVencimiento,
     this.fechaEvento,
     this.estado = EstadoPresupuesto.enviado,
+    this.confirmado = false,
     this.instagram,
     this.telefono,
     this.vendedorNombre,
@@ -78,6 +85,8 @@ class Presupuesto {
           : DateTime.now().add(const Duration(days: 7)),
       fechaEvento: json['fecha_evento'] != null ? DateTime.tryParse(json['fecha_evento'].toString()) : null,
       estado: _mapEstado(json['estado']),
+      confirmado:
+          (json['estado'] ?? '').toString().toLowerCase() == 'confirmado',
       instagram: json['instagram'],
       telefono: json['telefono'],
       vendedorNombre: json['vendedor_nombre'],
@@ -106,7 +115,8 @@ class Presupuesto {
       'detalle_anclaje': detalleAnclaje,
       'fecha_vencimiento': fechaVencimiento.toIso8601String(),
       if (fechaEvento != null) 'fecha_evento': fechaEvento!.toIso8601String(),
-      'estado': estado.name,
+      // Un confirmado vuelve como confirmado, no como "aprobado".
+      'estado': confirmado ? 'confirmado' : estado.name,
       'instagram': instagram,
       'telefono': telefono,
       'vendedor_nombre': vendedorNombre,

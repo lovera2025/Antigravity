@@ -484,11 +484,13 @@ class PdfService {
   static Future<void> generarPresupuestoPreviewDesdeEvento({
     required Evento evento,
     required List<EventosServicios> servicios,
+    Presupuesto? origen,
     BuildContext? context,
   }) async {
     final p = presupuestoVirtualDesdeEvento(
       evento: evento,
       servicios: servicios,
+      origen: origen,
     );
     await generarPresupuestoElite(
       p,

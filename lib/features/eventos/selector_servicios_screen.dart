@@ -17,6 +17,11 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
   final DateTime? fechaEvento;
   final int cantidadCuotas;
   final String? eventoId;
+
+  /// Al editar un evento: el presupuesto del que salió. Sus servicios
+  /// inventados quedaron atados al presupuesto, no al evento; sin esto se
+  /// veían como "Servicio Ad-hoc" (6.2.1).
+  final String? presupuestoOrigenId;
   final Map<String, double>? serviciosIniciales;
   /// Si las claves de [serviciosIniciales] son **id de línea** (36 chars), mapea línea → servicio del catálogo. Si es null, las claves se asumen `servicio_id` (comportamiento previo, una fila por servicio).
   final Map<String, String>? servicioIdPorLineaInicial;
@@ -51,6 +56,7 @@ class SelectorServiciosScreen extends ConsumerStatefulWidget {
     this.fechaEvento,
     this.cantidadCuotas = 1,
     this.eventoId,
+    this.presupuestoOrigenId,
     this.serviciosIniciales,
     this.servicioIdPorLineaInicial,
     this.modalidad = 'particular',
@@ -407,7 +413,10 @@ class _SelectorServiciosScreenState extends ConsumerState<SelectorServiciosScree
     setState(() => _isLoading = true);
     try {
       final repo = ref.read(eventosRepositoryProvider);
-      final catalogo = await repo.getCatalogo(eventoId: widget.eventoId ?? _tempEventoId);
+      final catalogo = await repo.getCatalogo(
+        eventoId: widget.eventoId ?? _tempEventoId,
+        presupuestoOrigenId: widget.presupuestoOrigenId,
+      );
       if (!mounted) return;
       
       setState(() {

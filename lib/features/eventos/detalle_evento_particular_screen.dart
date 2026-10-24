@@ -5,15 +5,18 @@ import '../common/widgets/operational_sync_coordinator.dart';
 
 
 import '../../models/evento.dart';
+import '../../models/presupuesto.dart';
 import '../../models/transaccion.dart';
 import 'widgets/registrar_pago_dialog.dart';
 import 'selector_servicios_screen.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import 'repositories/eventos_repository.dart';
+import 'repositories/presupuestos_repository.dart';
 import 'repositories/transacciones_repository.dart';
 import 'utils/evento_presentacion.dart';
 import 'widgets/panel_maestro_evento_sheet.dart';
+import 'widgets/servicios_del_evento.dart';
 
 class DetalleEventoParticularScreen extends ConsumerStatefulWidget {
   final Evento evento;
@@ -31,6 +34,9 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
   List<EventosServicios> _servicios = [];
   List<Transaccion> _transacciones = [];
   bool _maestroPromptMostrado = false;
+
+  /// El presupuesto del que salió el evento (null si se creó a mano).
+  Presupuesto? _presupuestoOrigen;
 
   List<Transaccion> get _transaccionesActivas =>
       _transacciones.where((t) => !t.esAnulada).toList();
@@ -62,6 +68,13 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       // 3. Evento fresco (bonificación global %, etc.)
       final evFresh = await eventosRepo.getById(widget.evento.id);
 
+      // El presupuesto del que salió: de ahí sale el lugar, que el evento no
+      // guarda (6.2.1). Sin migración: se lee del presupuesto vinculado.
+      final origenId = evFresh?.presupuestoId ?? widget.evento.presupuestoId;
+      final origen = (origenId != null && origenId.isNotEmpty)
+          ? await ref.read(presupuestosRepositoryProvider).getById(origenId)
+          : null;
+
       // 4. Si el evento quedó sin un solo ítem pero su presupuesto los tiene, se
       // traen. Es el rescate de los eventos que se confirmaron contra una base
       // incompleta: se creaban vacíos y sin monto, sin avisar. Solo con cero
@@ -83,6 +96,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
           _servicios = presData;
           _transacciones = transData;
           if (evFresh != null) _eventoActual = evFresh;
+          _presupuestoOrigen = origen;
           _isLoading = false;
         });
         if (reparados > 0) {
@@ -193,6 +207,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       await PdfService.generarPresupuestoPreviewDesdeEvento(
         evento: _eventoActual,
         servicios: _servicios,
+        origen: _presupuestoOrigen,
         context: context,
       );
       messenger.hideCurrentSnackBar();
@@ -488,6 +503,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       MaterialPageRoute(
         builder: (_) => SelectorServiciosScreen(
           eventoId: widget.evento.id,
+          presupuestoOrigenId: _eventoActual.presupuestoId,
           clienteId: widget.evento.clienteId,
           servicioIdPorLineaInicial: servicioIdPorLinea,
           serviciosIniciales: serviciosIniciales,
@@ -993,8 +1009,6 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const gold = Color(0xFFD4AF37);
     final frase = EventoPresentacion.fraseIntroEvento(_eventoActual);
-    final tieneHomenajeado =
-        EventoPresentacion.nombreFestejadoEfectivoEvento(_eventoActual) != null;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1036,17 +1050,37 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
               letterSpacing: 0.8,
             ),
           ),
-          if (tieneHomenajeado) ...[
+          // El lugar sale del presupuesto vinculado: el evento no lo guarda.
+          if ((_presupuestoOrigen?.lugar ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              'Solicitante: ${EventoPresentacion.solicitanteNombre(_eventoActual)}',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white60 : Colors.black54,
-              ),
+            Row(
+              children: [
+                const Icon(Icons.location_on_outlined, size: 14, color: gold),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Lugar: ${_presupuestoOrigen!.lugar!.trim()}',
+                    key: const Key('evento_lugar'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
+          const SizedBox(height: 6),
+          Text(
+            EventoPresentacion.lineaSolicitante(_eventoActual),
+            key: const Key('evento_solicitante'),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white60 : Colors.black54,
+            ),
+          ),
           if (frase.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
@@ -1193,7 +1227,7 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
               TextButton.icon(
                 onPressed: _editarServicios,
                 icon: const Icon(Icons.add),
-                label: const Text('Asignar Proveedores'),
+                label: const Text('Asignar servicios'),
               )
             ],
           ),
@@ -1201,56 +1235,16 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'PROVEEDORES ASIGNADOS',
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.2, color: Colors.grey),
-            ),
-            TextButton.icon(
-              onPressed: _editarServicios,
-              icon: const Icon(Icons.edit, size: 14),
-              label: const Text('EDITAR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFFD4AF37)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ..._servicios.map((srv) => Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: const CircleAvatar(
-              backgroundColor: Colors.transparent,
-              child: Icon(Icons.storefront_rounded, color: Color(0xFFD4AF37)),
-            ),
-            title: Text(srv.servicio?.nombre ?? 'Desconocido', style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: srv.cantidad > 1 
-                ? Text('CANTIDAD: ${srv.cantidad.toStringAsFixed(0)}', style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))
-                : null,
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(srv.precioFinalAcordado.toCurrency(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFFD4AF37))),
-                if (srv.cantidad > 1) 
-                  Text('TOTAL: ${(srv.cantidad * srv.precioFinalAcordado).toCurrency()}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-        ))
-      ],
-    );
+    // El detalle de cada servicio, los combos juntos y los extras marcados
+    // (6.2.1): antes se veían solo el nombre y el precio.
+    return ServiciosDelEvento(servicios: _servicios, onEditar: _editarServicios);
   }
 
   Widget _buildSeccionInformacionEvento() {
-    final observaciones = _eventoActual.observaciones;
-    if (observaciones == null || observaciones.trim().isEmpty) return const SizedBox.shrink();
+    // Siempre a la vista (6.2.1): vacía desaparecía entera, con su EDITAR INFO
+    // adentro, y no había dónde cargar los detalles.
+    final observaciones = _eventoActual.observaciones?.trim() ?? '';
+    final sinDetalles = observaciones.isEmpty;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryGold = const Color(0xFFD4AF37);
@@ -1305,12 +1299,16 @@ class _DetalleEventoParticularScreenState extends ConsumerState<DetalleEventoPar
               ),
               const Divider(height: 24, thickness: 0.5),
               Text(
-                observaciones,
+                sinDetalles ? 'Sin detalles cargados.' : observaciones,
+                key: const Key('evento_detalles'),
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: sinDetalles ? 13 : 14,
                   height: 1.6,
                   fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87,
+                  fontStyle: sinDetalles ? FontStyle.italic : FontStyle.normal,
+                  color: sinDetalles
+                      ? (isDark ? Colors.white38 : Colors.black38)
+                      : (isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87),
                 ),
               ),
             ],

@@ -88,6 +88,17 @@ class EventoPresentacion {
           ? evento.cliente!.nombreCompleto.trim()
           : 'Cliente';
 
+  /// "Solicitante: nombre · teléfono · email", con lo que haya. Antes el
+  /// teléfono y el email solo se veían abriendo el Panel Maestro (6.2.1).
+  static String lineaSolicitante(Evento evento) {
+    final partes = <String>[solicitanteNombre(evento)];
+    final tel = evento.cliente?.telefono?.trim() ?? '';
+    final mail = evento.cliente?.email?.trim() ?? '';
+    if (tel.isNotEmpty) partes.add(tel);
+    if (mail.isNotEmpty) partes.add(mail);
+    return 'Solicitante: ${partes.join(' · ')}';
+  }
+
   /// Colegio / institución para PDFs de masivos (nunca solo el tipo genérico).
   ///
   /// Orden: institución del alumno → encabezado del evento → cliente → tipo.

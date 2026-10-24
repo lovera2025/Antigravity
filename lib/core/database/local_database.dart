@@ -3068,6 +3068,11 @@ class LocalDatabase {
   static Future<void> Function(Database, int, int) get onUpgradeParaTest =>
       _onUpgrade;
 
+  /// El mismo `onCreate` que usa la app: una base en memoria con el esquema
+  /// entero, para probar lo que lee y escribe varias tablas a la vez
+  /// (`test/confirmar_presupuesto_test.dart`).
+  static Future<void> Function(Database, int) get onCreateParaTest => _onCreate;
+
   /// Copia completa de la base **antes** de migrarla, cada vez que va a migrar.
   ///
   /// Abre la base sin pedir versión —así sqflite no corre ninguna migración—,

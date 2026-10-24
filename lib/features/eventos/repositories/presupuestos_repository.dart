@@ -32,13 +32,62 @@ class PresupuestoSinItemsException implements Exception {
   String toString() => mensaje;
 }
 
+/// El presupuesto ya no está en esta PC (lo borraron en la otra y se bajó).
+/// Antes se salía sin hacer nada y la pantalla igual decía "creado con éxito".
+class PresupuestoNoEncontradoException implements Exception {
+  const PresupuestoNoEncontradoException();
+
+  static const String mensaje =
+      'Este presupuesto ya no está en esta PC: puede que lo hayan borrado en la '
+      'otra. Actualizá la lista y fijate si sigue.';
+
+  @override
+  String toString() => mensaje;
+}
+
+/// El presupuesto no trae fecha del evento: la confirmación la pide antes.
+class PresupuestoSinFechaException implements Exception {
+  const PresupuestoSinFechaException();
+
+  static const String mensaje =
+      'Este presupuesto no tiene la fecha del evento. Elegila para crearlo.';
+
+  @override
+  String toString() => mensaje;
+}
+
+/// El cliente del presupuesto no está en esta PC (la tarjeta dice "registro
+/// corrupto / huérfano"): un evento así no aparece en el Panel.
+class PresupuestoSinClienteException implements Exception {
+  const PresupuestoSinClienteException();
+
+  static const String mensaje =
+      'El cliente de este presupuesto no está en esta PC. Primero hay que '
+      'arreglar el cliente; después se crea el evento.';
+
+  @override
+  String toString() => mensaje;
+}
+
+/// Un presupuesto que ya tiene su evento no se borra.
+class PresupuestoConEventoException implements Exception {
+  const PresupuestoConEventoException();
+
+  static const String mensaje =
+      'Este presupuesto ya tiene su evento y no se borra: de él salen el lugar '
+      'y los detalles que muestra el evento.';
+
+  @override
+  String toString() => mensaje;
+}
+
 class PresupuestosRepository {
   final SupabaseClient _supabase;
   final ConnectivityService _connectivity;
   final SyncEngine _syncEngine;
-  final Ref _ref;
-
-  PresupuestosRepository(this._supabase, this._connectivity, this._ref, this._syncEngine);
+  // El `Ref` ya no se usa: crear el evento es una cuenta estática sobre la
+  // base (`EventosRepository.crearEventoEn`), dentro de la transacción.
+  PresupuestosRepository(this._supabase, this._connectivity, Ref _, this._syncEngine);
 
   void _scheduleSync() {
     // Local-first: encolar ya ocurrió; subida manual vía nubecita.
@@ -62,17 +111,19 @@ class PresupuestosRepository {
     return _mapRowsToPresupuestos(db, rows);
   }
 
-  Future<Presupuesto?> getById(String id) async {
-    final db = await LocalDatabase.instance;
+  Future<Presupuesto?> getById(String id) async =>
+      _leerEn(await LocalDatabase.instance, id);
+
+  static Future<Presupuesto?> _leerEn(DatabaseExecutor db, String id) async {
     final rows = await db.rawQuery('''
       SELECT p.*, c.nombre_completo as cliente_nombre, c.telefono as cliente_telefono, c.email as cliente_email
       FROM presupuestos p
       LEFT JOIN clientes c ON p.cliente_id = c.id
       WHERE p.id = ?
     ''', [id]);
-    
+
     if (rows.isEmpty) return null;
-    
+
     final budgets = await _mapRowsToPresupuestos(db, rows);
     return budgets.first;
   }
@@ -178,16 +229,74 @@ class PresupuestosRepository {
   }
 
 
-  Future<void> confirmarPresupuesto(String id, {bool crearContratoSena = false}) async {
-    final db = await LocalDatabase.instance;
-    final p = await getById(id);
-    if (p == null) return;
+  /// Convierte el presupuesto en su evento particular y devuelve el id del
+  /// evento. Si ya tenía uno, devuelve ese y no crea nada ([yaExistia]).
+  ///
+  /// [fechaEvento] es la que eligió el usuario cuando el presupuesto no la
+  /// trae: ya no se inventa "hoy + 30 días".
+  Future<({String eventoId, bool yaExistia})> confirmarPresupuesto(
+    String id, {
+    DateTime? fechaEvento,
+  }) async {
+    final r = await confirmarEn(
+      await LocalDatabase.instance,
+      id,
+      fechaEvento: fechaEvento,
+    );
+    _scheduleSync();
+    return r;
+  }
 
-    // Sin ítems no se confirma. `getById` lee la base LOCAL, así que un
-    // presupuesto cuyos ítems todavía no bajaron de la nube llega acá con la
-    // lista vacía, y el evento se creaba sin un solo servicio, en silencio. Como
-    // el monto de un evento particular sale de sumar sus servicios, quedaba en
-    // $0 para siempre y el presupuesto igual pasaba a "confirmado".
+  /// El evento que salió de este presupuesto, o null si todavía no tiene.
+  Future<String?> eventoDelPresupuesto(String presupuestoId) async =>
+      eventoDelPresupuestoEn(await LocalDatabase.instance, presupuestoId);
+
+  static Future<String?> eventoDelPresupuestoEn(
+    DatabaseExecutor db,
+    String presupuestoId,
+  ) async {
+    final rows = await db.query(
+      'eventos',
+      columns: ['id'],
+      where: 'presupuesto_id = ?',
+      whereArgs: [presupuestoId],
+      orderBy: 'created_at ASC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['id'] as String?;
+  }
+
+  /// Lo que hace [confirmarPresupuesto], sobre [db] (los tests usan una base
+  /// en memoria).
+  ///
+  /// - **Nunca dos eventos del mismo presupuesto.** Si ya hay un evento con su
+  ///   `presupuesto_id`, se devuelve ese (y se deja el presupuesto confirmado si
+  ///   no lo estaba). Antes el botón CREAR EVENTO no se iba nunca: crearlo otra
+  ///   vez mudaba los renglones del primer evento al segundo, porque llevan el
+  ///   mismo id, y el primero quedaba en $0.
+  /// - **Todo junto:** evento, renglones y estado van en una transacción.
+  /// - Sin ítems, sin fecha o sin cliente en esta PC, no crea y dice por qué.
+  static Future<({String eventoId, bool yaExistia})> confirmarEn(
+    Database db,
+    String id, {
+    DateTime? fechaEvento,
+  }) async {
+    final p = await _leerEn(db, id);
+    if (p == null) throw const PresupuestoNoEncontradoException();
+
+    final existente = await eventoDelPresupuestoEn(db, id);
+    if (existente != null) {
+      if (!p.confirmado) {
+        await db.transaction((txn) => _marcarConfirmadoEn(txn, id));
+      }
+      return (eventoId: existente, yaExistia: true);
+    }
+
+    // Sin ítems no se confirma. Se lee la base LOCAL, así que un presupuesto
+    // cuyos ítems todavía no bajaron de la nube llega acá con la lista vacía, y
+    // el evento se creaba sin un solo servicio, en silencio. Como el monto de
+    // un evento particular sale de sumar sus servicios, quedaba en $0 para
+    // siempre y el presupuesto igual pasaba a "confirmado".
     //
     // Le pasó al de braian colman el 2026-09-04: 6 ítems por $1.750.000 en la
     // nube, cero en la PC que lo confirmó. Mejor no confirmar y decir por qué.
@@ -195,8 +304,18 @@ class PresupuestosRepository {
       throw const PresupuestoSinItemsException();
     }
 
-    // 1. Crear Evento Real
-    final repoEventos = _ref.read(eventosRepositoryProvider);
+    final fecha = p.fechaEvento ?? fechaEvento;
+    if (fecha == null) throw const PresupuestoSinFechaException();
+
+    final cliente = await db.query(
+      'clientes',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [p.clienteId],
+      limit: 1,
+    );
+    if (cliente.isEmpty) throw const PresupuestoSinClienteException();
+
     // Convertir servicios de presupuesto a formato compatible con el nuevo selector {'precio': x, 'cantidad': y}
     final Map<String, Map<String, dynamic>> serviciosMap = {
       for (var s in p.servicios) s.id: {
@@ -209,32 +328,36 @@ class PresupuestosRepository {
         'es_extra': s.esExtra,
       }
     };
-    
-    await repoEventos.crearEventoCompleto(
-      clienteId: p.clienteId,
-      tipoEvento: p.tipoEvento,
-      // Si el presupuesto trae fecha_evento se usa esa; caso contrario,
-      // se mantiene el placeholder histórico (+30 días) para no bloquear el alta.
-      fechaEvento: p.fechaEvento ?? DateTime.now().add(const Duration(days: 30)),
-      modalidad: 'particular',
-      observaciones: p.detalleAnclaje,
-      nombreFestejado: p.nombreFestejado,
-      encabezadoEvento: p.encabezadoEvento,
-      tituloFestejado: p.encabezadoEvento ?? p.tituloFestejado ?? p.nombreFestejado,
-      presupuestoId: p.id,
-      serviciosSeleccionados: serviciosMap,
-    );
 
-    // 2. Marcar como confirmado
-    await db.update('presupuestos', {'estado': 'confirmado'}, where: 'id = ?', whereArgs: [id]);
+    final eventoId = await db.transaction((txn) async {
+      final nuevo = await EventosRepository.crearEventoEn(
+        txn,
+        clienteId: p.clienteId,
+        tipoEvento: p.tipoEvento,
+        fechaEvento: fecha,
+        modalidad: 'particular',
+        observaciones: p.detalleAnclaje,
+        nombreFestejado: p.nombreFestejado,
+        encabezadoEvento: p.encabezadoEvento,
+        tituloFestejado: p.encabezadoEvento ?? p.tituloFestejado ?? p.nombreFestejado,
+        presupuestoId: p.id,
+        serviciosSeleccionados: serviciosMap,
+      );
+      await _marcarConfirmadoEn(txn, id);
+      return nuevo;
+    });
+    return (eventoId: eventoId, yaExistia: false);
+  }
+
+  static Future<void> _marcarConfirmadoEn(DatabaseExecutor txn, String id) async {
+    await txn.update('presupuestos', {'estado': 'confirmado'}, where: 'id = ?', whereArgs: [id]);
     await SyncQueue.enqueue(
-      tabla: 'presupuestos', 
-      operacion: SyncOperation.update, 
-      registroId: id, 
-      payload: {'id': id, 'estado': 'confirmado'}
+      executor: txn,
+      tabla: 'presupuestos',
+      operacion: SyncOperation.update,
+      registroId: id,
+      payload: {'id': id, 'estado': 'confirmado'},
     );
-
-    _scheduleSync();
   }
 
   Future<void> cambiarEstado(String id, EstadoPresupuesto nuevoEstado) async {
@@ -252,6 +375,11 @@ class PresupuestosRepository {
 
   Future<void> eliminar(String id) async {
     final db = await LocalDatabase.instance;
+    // Un presupuesto con su evento no se borra: de él salen el lugar que muestra
+    // el evento y la reparación de sus renglones (6.2.1).
+    if (await eventoDelPresupuestoEn(db, id) != null) {
+      throw const PresupuestoConEventoException();
+    }
     await db.delete('presupuesto_servicios', where: 'presupuesto_id = ?', whereArgs: [id]);
     await db.delete('presupuestos', where: 'id = ?', whereArgs: [id]);
     await SyncQueue.enqueue(tabla: 'presupuestos', operacion: SyncOperation.delete, registroId: id, payload: {});
@@ -393,7 +521,7 @@ class PresupuestosRepository {
 
   // ── HELPERS ───────────────────────────────────────────────────────────────
 
-  Future<List<Presupuesto>> _mapRowsToPresupuestos(Database db, List<Map<String, dynamic>> rows) async {
+  static Future<List<Presupuesto>> _mapRowsToPresupuestos(DatabaseExecutor db, List<Map<String, dynamic>> rows) async {
     final List<Presupuesto> results = [];
     for (final row in rows) {
       final pid = row['id'] as String;

@@ -62,9 +62,16 @@ class EventosRepository {
 
   /// Catálogo de servicios.
   /// Incluye los servicios globales (evento_id IS NULL) y los exclusivos de este evento.
-  Future<List<Servicio>> getCatalogo({String? eventoId, bool includeArchived = false}) async {
+  /// [presupuestoOrigenId]: el presupuesto del que salió el evento. Los
+  /// servicios inventados al armar el presupuesto quedan atados a él, no al
+  /// evento; sin esto, al editar el evento se veían como "Servicio Ad-hoc".
+  Future<List<Servicio>> getCatalogo({
+    String? eventoId,
+    String? presupuestoOrigenId,
+    bool includeArchived = false,
+  }) async {
     final db = await LocalDatabase.instance;
-    
+
     String query = 'SELECT * FROM servicios WHERE ';
     if (!includeArchived) {
       query += '(is_archived = 0 OR is_archived IS NULL) AND ';
@@ -73,10 +80,16 @@ class EventosRepository {
     }
     query += '(evento_id IS NULL';
     List<dynamic> args = [];
-    
+
     if (eventoId != null) {
       query += ' OR evento_id = ?';
       args.add(eventoId);
+    }
+    if (presupuestoOrigenId != null &&
+        presupuestoOrigenId.isNotEmpty &&
+        presupuestoOrigenId != eventoId) {
+      query += ' OR evento_id = ?';
+      args.add(presupuestoOrigenId);
     }
     
     query += ') ORDER BY nombre ASC';
@@ -150,8 +163,49 @@ class EventosRepository {
     String? presupuestoId,
     /// [lineaId] -> { 'servicio_id', 'precio', 'cantidad', 'grupo', 'combo_orden', 'detalle_servicio' } (mismo servicio varias filas)
     required Map<String, Map<String, dynamic>> serviciosSeleccionados,
+  }) async =>
+      crearEventoEn(
+        await LocalDatabase.instance,
+        id: id,
+        clienteId: clienteId,
+        nombreCliente: nombreCliente,
+        telefonoCliente: telefonoCliente,
+        emailCliente: emailCliente,
+        tipoEvento: tipoEvento,
+        fechaEvento: fechaEvento,
+        cantidadCuotas: cantidadCuotas,
+        modalidad: modalidad,
+        observaciones: observaciones,
+        tituloFestejado: tituloFestejado,
+        nombreFestejado: nombreFestejado,
+        encabezadoEvento: encabezadoEvento,
+        presupuestoId: presupuestoId,
+        serviciosSeleccionados: serviciosSeleccionados,
+      );
+
+  /// Lo mismo que [crearEventoCompleto] sobre [db], que puede ser una
+  /// transacción: confirmar un presupuesto crea el evento, sus renglones y el
+  /// estado "confirmado" todo junto (6.2.1). Antes eran pasos sueltos y una
+  /// falla a la mitad dejaba un evento a medias con el presupuesto sin
+  /// confirmar; reintentar creaba un segundo evento.
+  static Future<String> crearEventoEn(
+    DatabaseExecutor db, {
+    String? id,
+    String? clienteId,
+    String? nombreCliente,
+    String? telefonoCliente,
+    String? emailCliente,
+    required String tipoEvento,
+    required DateTime fechaEvento,
+    int cantidadCuotas = 1,
+    String modalidad = 'particular',
+    String? observaciones,
+    String? tituloFestejado,
+    String? nombreFestejado,
+    String? encabezadoEvento,
+    String? presupuestoId,
+    required Map<String, Map<String, dynamic>> serviciosSeleccionados,
   }) async {
-    final db = await LocalDatabase.instance;
     final now = DateTime.now().toUtc().toIso8601String();
 
     // 1. Crear cliente si no existe
@@ -168,7 +222,7 @@ class EventosRepository {
         'created_at': now,
       };
       await db.insert('clientes', clienteData, conflictAlgorithm: ConflictAlgorithm.replace);
-      await SyncQueue.enqueue(tabla: 'clientes', operacion: SyncOperation.insert, registroId: finalClienteId, payload: clienteData);
+      await SyncQueue.enqueue(executor: db, tabla: 'clientes', operacion: SyncOperation.insert, registroId: finalClienteId, payload: clienteData);
     }
 
     // 2. Crear evento
@@ -194,7 +248,7 @@ class EventosRepository {
       'created_at': now,
     };
     await db.insert('eventos', eventoData, conflictAlgorithm: ConflictAlgorithm.replace);
-    await SyncQueue.enqueue(tabla: 'eventos', operacion: SyncOperation.insert, registroId: eventoId, payload: eventoData);
+    await SyncQueue.enqueue(executor: db, tabla: 'eventos', operacion: SyncOperation.insert, registroId: eventoId, payload: eventoData);
 
     // 3. Crear presupuesto (servicios)
     for (final entry in serviciosSeleccionados.entries) {
@@ -214,6 +268,7 @@ class EventosRepository {
       };
       await db.insert('eventos_servicios', esData, conflictAlgorithm: ConflictAlgorithm.replace);
       await SyncQueue.enqueue(
+        executor: db,
         tabla: 'eventos_servicios',
         operacion: SyncOperation.insert,
         registroId: lineaId,
