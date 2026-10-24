@@ -40,7 +40,10 @@ dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-
 **La 6.2.1** (programada y probada el 23-oct, **sin publicar**; la idea es publicarla el 24-oct a la mañana con el OK
 del usuario, SQL primero): la foto del tótem se saca, cambia de forma y se agranda; las frases se agrandan; las dos se
 mueven juntas, con manijas en Personalizar. El camino a la mesa va en escuadra. Y la página del celular de la puerta
-abre sin internet. Entrada:
+abre sin internet. **El 23-oct a la noche se sumaron tres cosas, en curso:** la limpieza (OPERADORES, "Restaurar
+mora", PRESUPUESTOS de Mi Empresa y código muerto), el evento particular que muestra todo lo del presupuesto, y
+"Congelar la mora" (tabla `mora_congelada`, SQLite v75). Las novedades dicen "Nuevas capacidades en el modo jefe,
+limpieza". Entrada:
 `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 ## Documentación del proyecto

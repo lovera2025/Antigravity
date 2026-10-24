@@ -110,8 +110,37 @@ más").
   tamaños, el corazón en cada apariencia, "Tu fondo" con y sin foto y con las frases abajo, y Personalizar con las
   manijas. Se le mandaron al usuario.
 
+## En curso (23-oct, a la noche): tres cosas más para esta misma versión
+
+El usuario pidió sumar tres cosas a la 6.2.1. El plan está en
+`C:\Users\lover\.claude\plans\seguimos-con-el-plan-eager-crayon.md` y él lo aprobó.
+
+1. **La limpieza.** Se sacan:
+   - la pestaña OPERADORES;
+   - de "Restaurar / perdonar mora", todo menos "Perdonar mora (por curso)";
+   - la pestaña PRESUPUESTOS de Mi Empresa (queda en la barra lateral, en modo jefe);
+   - las rutas internas sin uso;
+   - del menú de la nube, las opciones de más;
+   - el código muerto.
+
+   También el QR de cotizar pasa a la web de hoy, y Saneamiento pide el PIN otra vez. Ningún dato ni tabla se toca.
+2. **Presupuesto → evento particular.** Un cliente preguntó "dónde están los detalles que puse". Lo que faltaba en el
+   evento:
+   - el detalle de cada servicio: 51 de 61 renglones lo tienen;
+   - el lugar del presupuesto;
+   - DETALLES DEL EVENTO, que desaparecía vacía.
+
+   Además, un presupuesto confirmado se podía convertir en evento dos veces.
+3. **Congelar la mora** (botón con copo de nieve, solo modo jefe; aviso celeste para todos):
+   - una tabla nueva `mora_congelada` (SQLite v75 y la nube);
+   - la cuenta resta los días congelados y nunca cambia una fecha.
+
+**Las novedades del release dicen "Nuevas capacidades en el modo jefe, limpieza"** (lo pidió el usuario).
+
 ## Falta
 
-1. **Publicar, con su OK en el momento**: el SQL (antes que nada), la versión 6.2.1 en `pubspec.yaml` y en el
-   instalador, el release, la web y las PCs.
-2. El ensayo con el router de verdad: el celular sin internet, entero.
+1. **Publicar, con su OK en el momento**: los dos SQL antes que nada (`20261023200000_totem_config_foto.sql` y, cuando
+   exista, `20261023210000_mora_congelada.sql`), la versión 6.2.1 en `pubspec.yaml` y en el instalador, el release, la
+   web y las PCs. **No congelar nada hasta que las tres PCs tengan la 6.2.1.**
+2. Que el usuario confirme cómo quedó el camino a la mesa.
+3. El ensayo con el router de verdad: el celular sin internet, entero.
