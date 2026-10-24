@@ -2,6 +2,26 @@ import 'dart:math' as math;
 
 import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
+import 'mora_congelada.dart';
+
+/// Días de mora de la cuota [n] al día [hoySolo]: desde su vencimiento efectivo,
+/// menos los que estuvo congelada (6.2.1). **Nunca cambia una fecha: resta
+/// días.** Sin nada congelado (el registro vacío) es la cuenta de siempre.
+int _diasQueCuentan(
+  ContratoAlumno a,
+  int n,
+  DateTime vEfectivo,
+  DateTime hoySolo,
+) {
+  final dias = hoySolo.difference(vEfectivo).inDays;
+  if (dias <= 0) return dias;
+  final quietos = MoraCongelada.de(a.id).diasQuietos(
+    cuota: n,
+    vencimientoEfectivo: vEfectivo,
+    al: hoySolo,
+  );
+  return dias - quietos;
+}
 
 /// Resultado de la lectura "inteligente" de mora sobre el **plan de cuota base** (excl. mesa/sillas).
 class MoraCuotaResumen {
@@ -232,7 +252,7 @@ class MoraCuotaCalculator {
 
     int dias = 0;
     if (hoySolo.isAfter(vEfectivo)) {
-      dias = hoySolo.difference(vEfectivo).inDays;
+      dias = _diasQueCuentan(a, proxN, vEfectivo, hoySolo);
     }
 
     final bool mora = a.saldoDeudor > 0.01 && dias > 0;
@@ -586,10 +606,14 @@ class MoraCuotaCalculator {
 
       final vEfectivo = _vencimientoEfectivoConExencion(vSolo, a.moraExentaHasta);
 
+      // Los vencimientos crecen con cada cuota: si esta no venció, las que
+      // siguen tampoco.
       if (!hoySolo.isAfter(vEfectivo)) break;
 
-      final dias = hoySolo.difference(vEfectivo).inDays;
-      if (dias <= 0) break;
+      // Con la mora congelada (6.2.1) una cuota puede quedar en 0 días y la
+      // siguiente no (congelada una sola, o vencida durante "Todas"): se sigue.
+      final dias = _diasQueCuentan(a, n, vEfectivo, hoySolo);
+      if (dias <= 0) continue;
 
       final interes = interesSugeridoSimpleSobreMonto(
         cuotaPura,
