@@ -1,7 +1,7 @@
-# La 6.2.1 (23-oct-2026): la foto y las frases del tótem, el camino en escuadra y el celular sin internet
+# La 6.2.1 (23 y 24-oct-2026): la foto del tótem, el camino en escuadra, el celular sin internet, congelar la mora, la limpieza y el evento particular
 
-**Programada y probada el 23-oct, sin publicar.** La idea del usuario es publicarla el 24-oct a la mañana, con su OK en
-el momento: primero el SQL, después el release, la web y las PCs (las instala él y avisa).
+**Terminada el 24-oct.** El usuario pidió publicarla ese día ("hacelo ya la publicación"): primero los dos SQL, después
+el release, la web y las PCs (las instala él y avisa).
 
 ## Qué lleva
 
@@ -101,46 +101,89 @@ más").
 - Muestras nuevas: `tool/totem_muestra_test.dart`, "el camino a varias mesas, en grande" (seis mesas del salón de la
   Normal) y "el camino en un playón a medida, a 2 y a 2,5 m" (con el Ingreso donde lo pone el salón vacío).
 
+### 4. Congelar la mora (24-oct)
+
+Lo pidió el usuario el 23-oct a la noche: el que no pagó nada y viene a hacer un compromiso, "se le congela el precio, y
+normalmente tienen mora". El plan, aprobado, en `C:\Users\lover\.claude\plans\seguimos-con-el-plan-eager-crayon.md`.
+
+- **El copo de nieve** en la fila de cada alumno, solo en modo jefe (celeste si tiene algo congelado). Abre
+  **Congelar** (las cuotas vencidas con su mora de hoy, "Todas, también las que se venzan", "Queda congelada en $X") o,
+  con algo congelado, **Mora congelada**: Mantener ese precio o Recalcular, con los dos montos a la vista antes de
+  tocar, y "Congelar otra cuota". `widgets/congelar_mora_dialog.dart`.
+- **La cuenta resta días, nunca cambia una fecha** (`services/mora_congelada.dart`; `_diasQueCuentan` en
+  `MoraCuotaCalculator`). Lo que se descongela con Recalcular vuelve a la cuenta de siempre solo en las cuotas que se
+  deben: una pagada mientras estaba congelada queda como se cobró.
+- **El ejemplo que confirmó el usuario** (PÉREZ, JUAN, cuota de $30.000) está tal cual en `test/mora_congelada_test.dart`:
+  congela la 4 y la 5 el 23/10; al 2/11 siguen en $25.200 y $15.900 y la 6 está en $9.900; Mantener $41.100,
+  Recalcular $47.100. También el alumno sin ningún pago que se compromete, y que **una mora perdonada no resucita**
+  (lo preguntó él).
+- **El aviso celeste**, para todos: "Mora congelada desde 23/10/2026 · C4, C5" en ESTADO DE DEUDA, la ventana de cobro y
+  Mi Empresa → Cobro. La línea de la eximición pasa a decir "Sin mora hasta".
+- **Tabla nueva `mora_congelada`** (SQLite v75 y `supabase/migrations/20261023210000_mora_congelada.sql`): una fila por
+  alumno con id fijo, que nunca se borra. Sube y baja con lo del cobro. Lo congelado se carga en memoria al abrir,
+  antes de la revisión de la mora y cuando llega de otra PC.
+- **No congelar a nadie hasta que las tres PCs tengan la 6.2.1.**
+- Muestras: `tool/congelar_mora_muestra_test.dart` (se le mandaron).
+
+### 5. La limpieza (24-oct)
+
+El usuario pidió dejar la versión "bien prolija" y eligió qué sacar:
+
+- **Mi Empresa queda con FINANZAS y COBRO.** Sale OPERADORES (una sola cuenta Asesor, sin entrar desde abril) y
+  PRESUPUESTOS (sigue en la barra lateral, en modo jefe).
+- **"Restaurar / perdonar mora" queda solo como "Perdonar mora (por curso)".** "Restaurar (vencidos)" contaba dos veces la
+  mora de todos los masivos (Buena Vista quedaba afuera porque estaba fijo en el código) y borraba perdones;
+  "Individual" movía el Reg y ponía mora a mano, lo de TOÑANEZ.
+- **El QR de cotizar** llevaba a la web vieja de Firebase (de marzo): ahora a la de Vercel.
+- **Saneamiento** pide el PIN otra vez y arranca sin nada tildado.
+- **El menú de la nube:** sin "Verificar nube" ni "Subir y bajar"; "Pull completo forzado" solo en modo jefe.
+- El Centro de Comando dice EVENTOS (decía NUEVO EVENTO y abría la lista).
+- **Sin `/op` ni las rutas `/operador` y `/recepcion_unified`** (esta abría Recepción en la web sin usuario).
+  `/totem_display` queda: el tótem dentro de la ventana principal la usa.
+- Código muerto afuera (la restauración de mora, la validación de DNI vieja del tótem, la caja fuerte retirada, egresos
+  viejos, el buscador viejo del QR), la carpeta `scratch` y ~70 archivos sueltos de la raíz (dos binarios de 45 MB). Los
+  documentos y SQL viejos, a `docs/archivo` y `supabase/archivo`.
+- Se dejó `kListaPuertaHabilitada`: no molesta y tiene sus tests.
+- `test/limpieza_621_test.dart` vigila que nada de eso vuelva.
+
+### 6. El evento particular muestra todo lo de su presupuesto (24-oct)
+
+Un cliente del usuario preguntó "dónde están los detalles que puse". En la nube (23-oct): 12 eventos salieron de un
+presupuesto; 51 de sus 61 servicios tienen detalle y la pantalla no lo mostraba; 11 tienen lugar y no se veía; en 5
+DETALLES DEL EVENTO desaparecía.
+
+- La lista dice **SERVICIOS** (decía PROVEEDORES ASIGNADOS) y muestra el detalle de cada uno, los combos juntos, los
+  extras con "EXTRA · no suma al total" y la cantidad tal cual (1,5). `widgets/servicios_del_evento.dart`.
+- **El lugar** sale del presupuesto vinculado (sin migración); el solicitante va con teléfono y email; DETALLES DEL
+  EVENTO siempre está, con EDITAR INFO.
+- El PDF que se regenera desde el evento lleva el lugar, el WhatsApp y el Instagram del presupuesto.
+- **Nunca dos eventos del mismo presupuesto**: confirmado dice VER EVENTO; confirmar otra vez devuelve el mismo; evento,
+  renglones y estado en una transacción; el botón se apaga mientras crea; sin fecha la pide; sin cliente o sin
+  presupuesto en la PC lo dice; al terminar abre el evento; un presupuesto con evento no se borra.
+- Queda anotado, sin tocar: el total con extras en el Panel y los recibos (`docs/pendientes/total-con-extras.md`).
+
 ## Pruebas
 
-- `flutter test`: **2.826 bien**, también el de Recepción que a veces falla con la PC cargada.
-- `flutter analyze`: 312, los mismos de la 6.2.0; ninguno en lo nuevo.
-- Muestras (`tool/totem_muestra_test.dart`, grupo "La foto (6.2.1)" y "la foto: con foto, el logo tal cual y sin
-  foto"), con una foto, un logo (una corona) y una story inventados, en `build/muestras_foto/`: las nueve formas, los
-  tamaños, el corazón en cada apariencia, "Tu fondo" con y sin foto y con las frases abajo, y Personalizar con las
-  manijas. Se le mandaron al usuario.
-
-## En curso (23-oct, a la noche): tres cosas más para esta misma versión
-
-El usuario pidió sumar tres cosas a la 6.2.1. El plan está en
-`C:\Users\lover\.claude\plans\seguimos-con-el-plan-eager-crayon.md` y él lo aprobó.
-
-1. **La limpieza.** Se sacan:
-   - la pestaña OPERADORES;
-   - de "Restaurar / perdonar mora", todo menos "Perdonar mora (por curso)";
-   - la pestaña PRESUPUESTOS de Mi Empresa (queda en la barra lateral, en modo jefe);
-   - las rutas internas sin uso;
-   - del menú de la nube, las opciones de más;
-   - el código muerto.
-
-   También el QR de cotizar pasa a la web de hoy, y Saneamiento pide el PIN otra vez. Ningún dato ni tabla se toca.
-2. **Presupuesto → evento particular.** Un cliente preguntó "dónde están los detalles que puse". Lo que faltaba en el
-   evento:
-   - el detalle de cada servicio: 51 de 61 renglones lo tienen;
-   - el lugar del presupuesto;
-   - DETALLES DEL EVENTO, que desaparecía vacía.
-
-   Además, un presupuesto confirmado se podía convertir en evento dos veces.
-3. **Congelar la mora** (botón con copo de nieve, solo modo jefe; aviso celeste para todos):
-   - una tabla nueva `mora_congelada` (SQLite v75 y la nube);
-   - la cuenta resta los días congelados y nunca cambia una fecha.
+- `flutter test`: **2.913 bien**.
+- `flutter analyze`: 309 (eran 312: la limpieza sacó tres).
+- **La migración sobre una copia de la base real** (`tool/verificar_migracion_v75_test.dart`, 24-oct, con la app
+  cerrada): las 34 tablas idénticas (643 alumnos, 4.291 pagos), solo aparece `mora_congelada` vacía, el esquema de lo de
+  antes igual, la vuelta a la 6.2.0 abre con los mismos datos, y la base real quedó con el mismo SHA-256.
+- **El día a día, la versión de hoy contra la nueva**, sobre otra copia (`tool/cobro_igual_que_hoy_test.dart` en la
+  6.2.0 y en la 6.2.1): cada alumno (ficha, mora por cuota, simulación del cobro, recibo) y las operaciones del día
+  (cobrar cuota, mesa, sillas y mora, un abono y anular) dan **exactamente lo mismo**; las 16 diferencias son la carpeta
+  de cada PDF, el número de versión y el de la base.
+- **La revisión de la mora** (`tool/simulacro_revision_mora_test.dart`, las dos versiones): 643 alumnos, ninguno cambia,
+  ninguna ficha sube, **ningún perdón cambia su eximición**.
+- Las copias se borraron al terminar.
 
 **Las novedades del release dicen "Nuevas capacidades en el modo jefe, limpieza"** (lo pidió el usuario).
 
 ## Falta
 
-1. **Publicar, con su OK en el momento**: los dos SQL antes que nada (`20261023200000_totem_config_foto.sql` y, cuando
-   exista, `20261023210000_mora_congelada.sql`), la versión 6.2.1 en `pubspec.yaml` y en el instalador, el release, la
-   web y las PCs. **No congelar nada hasta que las tres PCs tengan la 6.2.1.**
+1. **Publicar**: los dos SQL antes que nada (`20261023200000_totem_config_foto.sql` y
+   `20261023210000_mora_congelada.sql`), la versión 6.2.1 en `pubspec.yaml` y en el instalador, el release y la web. Las
+   PCs las instala él. **No congelar nada hasta que las tres PCs tengan la 6.2.1.**
 2. Que el usuario confirme cómo quedó el camino a la mesa.
 3. El ensayo con el router de verdad: el celular sin internet, entero.
+

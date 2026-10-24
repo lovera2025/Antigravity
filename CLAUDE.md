@@ -37,14 +37,13 @@ las tres PCs** el 23-oct). La quinta apariencia del tótem: una imagen propia es
 dicen "Nuevas características y detalles". Entrada: `docs/CONTEXTO_v6.2.0_2026-10-23.md`; el detalle,
 `docs/PLAN_TU_FONDO_2026-10-23.md`.
 
-**La 6.2.1** (programada y probada el 23-oct, **sin publicar**; la idea es publicarla el 24-oct a la mañana con el OK
-del usuario, SQL primero): la foto del tótem se saca, cambia de forma y se agranda; las frases se agrandan; las dos se
-mueven juntas, con manijas en Personalizar. El camino a la mesa va en escuadra. Y la página del celular de la puerta
-abre sin internet. **El 23-oct a la noche se sumaron tres cosas, en curso:** la limpieza (OPERADORES, "Restaurar
-mora", PRESUPUESTOS de Mi Empresa y código muerto), el evento particular que muestra todo lo del presupuesto, y
-"Congelar la mora" (tabla `mora_congelada`, SQLite v75). Las novedades dicen "Nuevas capacidades en el modo jefe,
-limpieza". Entrada:
-`docs/CONTEXTO_v6.2.1_2026-10-23.md`.
+**La 6.2.1** (terminada el 24-oct; el usuario pidió publicarla ese día, SQL primero): la foto del tótem se saca,
+cambia de forma y se agranda; las frases se agrandan; las dos se mueven juntas, con manijas en Personalizar. El
+camino a la mesa va en escuadra. La página del celular de la puerta abre sin internet. Y se sumaron tres cosas:
+**"Congelar la mora"** (ver "La mora congelada", abajo), **la limpieza** (sin OPERADORES, sin "Restaurar mora", sin
+PRESUPUESTOS en Mi Empresa, sin `/op` ni rutas viejas, y código muerto afuera) y **el evento particular que muestra
+todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos eventos del mismo presupuesto). Las
+novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 ## Documentación del proyecto
 
@@ -65,7 +64,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 74) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 75) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -82,7 +81,9 @@ sobre `Uri.base`, no con path parsing.
 | `?totem&evento=<id>&clave=<k>` | Tótem (el link, con la clave, sale de Personalizar tótem) | **No** (deliberado: se proyecta desde una smart TV) |
 | `/lista?evento=<id>` | Lo que ve el invitado al escanear el QR: busca su nombre y entra con su DNI | No |
 | `?buscar&evento=<id>` | La misma página que `/lista` | No |
-| `/op?evento=<id>` | Ya no se usa: dice dónde se suman los celulares | No |
+
+`/op` y las rutas internas `/operador` y `/recepcion_unified` se sacaron en la 6.2.1 (la segunda abría Recepción en la
+web sin pedir usuario): `/op` cae en el login. `test/puerta_cerrada_test.dart` vigila que no vuelvan.
 
 **Ventana secundaria de escritorio.** El tótem nativo corre en otra ventana vía
 `desktop_multi_window` (`KioskLauncher`). Esa ventana **no** inicializa el
@@ -104,8 +105,9 @@ de toda la app está en `user_role_provider.dart:66`.
   (`puede_eventos`, `puede_totem`, `puede_recepcion`, …). Cada flag prende o
   apaga una tarjeta del menú.
 
-Se asignan desde Mi Empresa → pestaña OPERADORES (`finanzas_view.dart`, ~6500
-líneas; el diálogo está en `_showPermissionsDialog`).
+**Desde la 6.2.1 no se asignan desde la app:** la pestaña OPERADORES de Mi Empresa se sacó (no había asesores en
+uso: una sola cuenta, sin entrar desde abril). Los permisos siguen en la nube (`permisos_usuario`) y
+`AsesorHomeScreen` los lee; para darlos, SQL o volver a poner la pestaña (está en la historia de git).
 
 **Ojo:** hay un segundo concepto de "admin" totalmente independiente, por PIN
 local (`admin_provider.dart`, PIN maestro `2026`, TTL 3 min), que gatea Mi
@@ -566,6 +568,24 @@ históricos y la pantalla se ve como siempre.
   **La mora, igual** (6.1.0, `camposMoraDelAlumno`): editar a TOÑANEZ desde la PC del jefe habría vuelto a subir
   los $166.200 que en la nube ya estaban en 0.
 
+- **La mora congelada (6.2.1): resta días, nunca cambia una fecha.** El jefe congela la mora de un alumno (el copo de
+  nieve de la fila, solo modo jefe), por cuota o "Todas" (también las que se venzan). Se pidió para el que no pagó
+  nada y viene a hacer un compromiso.
+  - Las pausas (`PausaMora`: cuota o todas, `desde`, `hasta`) están en `features/eventos/services/mora_congelada.dart`.
+    `MoraCuotaCalculator` resta los días quietos en `calcular` y `calcularDesglose` (`_diasQueCuentan`); un repaso a un
+    cobro viejo no ve una pausa posterior. El tramo se cuenta desde el vencimiento efectivo, así que **un perdón (la
+    eximición) no resucita** al congelar ni al recalcular (`test/mora_congelada_test.dart`).
+  - **Mantener** cierra la pausa (lo congelado queda quieto para siempre); **Recalcular** la saca, pero solo en las
+    cuotas que se deben: una cuota pagada mientras estaba congelada se cobró así y su pausa queda.
+  - La cuenta lee un **registro en memoria** (`MoraCongelada.de(id)`), vacío por defecto: sin nada congelado todo da
+    igual que antes. Se carga al abrir (`main.dart`), **antes de la revisión de la mora** (`revisarMora`) y cuando el
+    sync baja filas. **No va en `ContratoAlumno`** (la trampa de las columnas de `contratos_alumnos`).
+  - Tabla aparte **`mora_congelada` (v75)**, una fila por alumno con id fijo, que nunca se borra
+    (`_tablasSinRevisarBorrados`). En la nube, sin CHECK, sin clave foránea y sin índice único.
+  - **No congelar a nadie hasta que todas las PCs tengan la 6.2.1:** una PC más vieja cuenta la mora entera y, si
+    cobra, deja la ficha sin congelar.
+  - El aviso celeste ("Mora congelada desde dd/mm · C4, C5") es `AvisoMoraCongelada` y va en la grilla, el cobro y Mi
+    Empresa → Cobro. La línea de la eximición dice "Sin mora hasta" (decía "Mora congelada hasta").
 - **La baja temporal no toca la mora** (6.1.0; ver `docs/pendientes/mora-por-cuota.md`). Hasta la 6.0.0 la baja
   guardaba el día en `mora_fecha_referencia` y la mora quedaba cortada ahí, también después de reincorporar.
   - Ahora `fechaEfectivaMoraAr` usa siempre hoy, y la fecha se ignora: borrarla no cruza entre PCs, porque el pull
