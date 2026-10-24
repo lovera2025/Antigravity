@@ -79,12 +79,6 @@ class ConnectivityService {
     return _pingSupabase();
   }
 
-  /// Fuerza una re-verificación del estado de conectividad.
-  Future<AppConnectivity> recheckNow() async {
-    await _checkNow();
-    return _currentStatus;
-  }
-
   void _updateStatus(AppConnectivity newStatus) {
     if (_currentStatus != newStatus) {
       _currentStatus = newStatus;

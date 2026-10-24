@@ -9,11 +9,8 @@
 // test lee los archivos y falla si pasa.
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-import 'package:arguello_events/features/recepcion/op_ya_no_se_usa.dart';
 import 'package:arguello_events/features/totem/services/lista_del_totem.dart';
 import 'package:arguello_events/models/invitado.dart';
 
@@ -212,15 +209,20 @@ void main() {
           contains('claveMala: (eventoId) => ref.read(claveTotemProvider).olvidar(eventoId)'));
     });
 
-    test('?buscar es la página del QR, y /op ya no marca a nadie', () {
+    test('?buscar es la página del QR, y /op y las rutas viejas ya no existen', () {
       final main = _leer('lib/main.dart');
       expect(main, isNot(contains('OpCheckinScreen')));
       expect(main, isNot(contains('TotemCheckinScreen')));
       final buscar = main.substring(main.indexOf('class BuscarApp'));
       expect(buscar.substring(0, buscar.indexOf('\n}\n')),
           contains('ListaInvitadosScreen(eventoId: eventoId)'));
-      final op = main.substring(main.indexOf('class OpApp'));
-      expect(op.substring(0, op.indexOf('\n}\n')), contains('OpYaNoSeUsa()'));
+      // 6.2.1: `/op` (que solo decía "ya no se usa") y las rutas internas
+      // `/operador` y `/recepcion_unified` se sacaron. La segunda abría
+      // Recepción en la web sin pedir usuario.
+      expect(main, isNot(contains('class OpApp')));
+      expect(main, isNot(contains("contains('/op')")));
+      expect(main, isNot(contains("'/operador'")));
+      expect(main, isNot(contains("'/recepcion_unified'")));
     });
   });
 
@@ -271,13 +273,5 @@ void main() {
         reason: 'todo aviso de Recepción pasa por _emitir',
       );
     });
-  });
-
-  testWidgets('/op dice dónde se suman ahora los celulares', (tester) async {
-    GoogleFonts.config.allowRuntimeFetching = false;
-    await tester.pumpWidget(const MaterialApp(home: OpYaNoSeUsa()));
-    expect(find.text(OpYaNoSeUsa.titulo), findsOneWidget);
-    expect(find.text(OpYaNoSeUsa.explicacion), findsOneWidget);
-    expect(kCelularesDesdeRecepcion, contains('CELULARES'));
   });
 }

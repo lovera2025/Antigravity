@@ -95,28 +95,6 @@ class InvitadosRepository {
     return rows.map((r) => Invitado.fromJson(r)).toList();
   }
 
-  /// Busca invitado por DNI en un evento específico.
-  Future<Invitado?> buscarPorDni(String eventoId, String dni) async {
-    final db = await LocalDatabase.instance;
-    final rows = await db.query('invitados',
-      where: 'evento_id = ? AND dni = ?',
-      whereArgs: [eventoId, dni],
-    );
-    if (rows.isEmpty) return null;
-    return Invitado.fromJson(rows.first);
-  }
-
-  /// Busca invitados por nombre (parcial) en un evento.
-  Future<List<Invitado>> buscarPorNombre(String eventoId, String nombre) async {
-    final db = await LocalDatabase.instance;
-    final rows = await db.query('invitados',
-      where: 'evento_id = ? AND nombre_completo LIKE ?',
-      whereArgs: [eventoId, '%$nombre%'],
-      orderBy: 'nombre_completo COLLATE NOCASE ASC',
-    );
-    return rows.map((r) => Invitado.fromJson(r)).toList();
-  }
-
   /// Estadísticas rápidas de un evento.
   Future<Map<String, int>> getEstadisticas(String eventoId) async {
     final db = await LocalDatabase.instance;
@@ -570,67 +548,6 @@ class InvitadosRepository {
     unawaited(_subirYa(invitadoId));
   }
 
-  /// Deshace TODOS los ingresos de un evento (vuelven a pendiente). Ideal para limpiar pruebas.
-  Future<void> resetearIngresosGlobal(String eventoId) async {
-    final db = await LocalDatabase.instance;
-    final now = DateTime.now().toUtc().toIso8601String();
-
-    final rows = await db.query(
-      'invitados',
-      columns: ['id'],
-      where: 'evento_id = ? AND estado_ingreso = ?',
-      whereArgs: [eventoId, 'ingresado'],
-    );
-
-    if (rows.isEmpty) return; // Nada que resetear
-
-    await db.transaction((txn) async {
-      await txn.update(
-        'invitados',
-        {'estado_ingreso': 'pendiente', 'updated_at': now},
-        where: 'evento_id = ? AND estado_ingreso = ?',
-        whereArgs: [eventoId, 'ingresado'],
-      );
-
-      for (final row in rows) {
-        final id = row['id'] as String;
-        await SyncQueue.enqueue(
-          tabla: 'invitados',
-          operacion: SyncOperation.update,
-          registroId: id,
-          payload: {'id': id, 'estado_ingreso': 'pendiente', 'updated_at': now},
-          executor: txn,
-        );
-      }
-    });
-
-    // Volvieron todos a pendiente: para el tótem equivale a vaciar la lista.
-    if (KioskLauncher.isTotemActive) KioskLauncher.notifyListReset();
-    unawaited(_emitir(eventoId, 'list_reset', {'evento_id': eventoId}));
-
-    _notifyChanges(eventoId);
-
-    if (_connectivity.currentStatus == AppConnectivity.online) {
-      Future.microtask(() async {
-        try {
-          await _supabase.from('invitados')
-              .update({'estado_ingreso': 'pendiente', 'updated_at': now})
-              .eq('evento_id', eventoId)
-              .eq('estado_ingreso', 'ingresado');
-          
-          final dbInner = await LocalDatabase.instance;
-          await dbInner.transaction((txn) async {
-            for (final row in rows) {
-              await txn.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: ['invitados', row['id']]);
-            }
-          });
-        } catch (e) {
-          debugPrint('⚠️ Sync reset global fallido: $e');
-        }
-      });
-    }
-  }
-
   /// Vacía completamente la lista de invitados de un evento (Elimina todos).
   Future<void> vaciarEvento(String eventoId) async {
     final db = await LocalDatabase.instance;
@@ -733,51 +650,6 @@ class InvitadosRepository {
         }
       });
     }
-  }
-
-  /// Valida el DNI de un invitado y marca el ingreso si es correcto (Lógica del Tótem).
-  Future<Map<String, dynamic>> validarDniYMarcarIngreso({
-    required String invitadoId,
-    required String dniIngresado,
-  }) async {
-    final db = await LocalDatabase.instance;
-    final row = await db.query('invitados',
-      where: 'id = ?',
-      whereArgs: [invitadoId],
-    );
-    
-    if (row.isEmpty) {
-      return {'success': false, 'error': 'not_found', 'message': 'Invitado no encontrado'};
-    }
-    
-    final invitado = Invitado.fromJson(row.first);
-    
-    if (invitado.estadoIngreso == EstadoIngreso.ingresado) {
-      return {'success': false, 'error': 'ya_ingresado', 'message': 'Este invitado ya ingresó'};
-    }
-    
-    if (invitado.intentosFallidos >= 3) {
-      return {'success': false, 'error': 'bloqueado', 'message': 'Acceso bloqueado por seguridad'};
-    }
-    
-    if (invitado.dni.isEmpty) {
-       return {'success': false, 'error': 'no_dni', 'message': 'No tienes DNI registrado. Consulta en recepción.'};
-    }
-
-    if (invitado.dni != dniIngresado) {
-      await registrarIntentoFallido(invitadoId);
-      final nuevosIntentos = invitado.intentosFallidos + 1;
-      if (nuevosIntentos >= 3) {
-        return {'success': false, 'error': 'bloqueado', 'message': 'DNI incorrecto. Acceso bloqueado.'};
-      }
-      return {'success': false, 'error': 'dni_incorrecto', 'message': 'DNI incorrecto. Quedan ${3 - nuevosIntentos} intentos.'};
-    }
-    
-    // Todo bien
-    await marcarIngreso(invitadoId);
-    await resetearIntentos(invitadoId);
-    
-    return {'success': true};
   }
 
   // ── SYNC ──────────────────────────────────────────────────────────────────

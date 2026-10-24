@@ -410,9 +410,6 @@ class SyncEngine {
   DateTime? _lastPullTime;
   DateTime? get lastPullTime => _lastPullTime;
 
-  /// @deprecated Use [lastUploadTime] / [lastPullTime].
-  DateTime? get lastSyncTime => _lastPullTime ?? _lastUploadTime;
-
   // Stream de estado
   final _statusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get statusStream => _statusController.stream;
@@ -464,9 +461,11 @@ class SyncEngine {
   }) : _connectivity = connectivity,
        _supabase = supabase ?? Supabase.instance.client;
 
-  /// Inicia el motor — solo contadores locales, sin sync automático.
+  /// Inicia el motor: el pulso entre PCs y la revisión de borrados. La subida
+  /// (a los 2 s de guardar) y el ciclo de bajada de 10 s viven en
+  /// `OperationalSyncCoordinator`.
   void start() {
-    debugPrint('⚡ SyncEngine iniciado (modo local-first, sync manual)');
+    debugPrint('⚡ SyncEngine iniciado (local primero, sync automático)');
 
     SyncQueue.onChanged = () {
       unawaited(refreshPendingCount());
@@ -1399,16 +1398,6 @@ class SyncEngine {
       return _remoteProbe;
     }
   }
-
-  /// Subir + bajar (solo cuando el usuario lo pide explícitamente).
-  Future<void> syncBidirectional({bool reconcileDeletes = false}) async {
-    await flushPending();
-    if (_lastError != null && _status == SyncStatus.error) return;
-    await pullRemote(reconcileDeletes: reconcileDeletes);
-  }
-
-  /// Alias de compatibilidad → bidireccional manual.
-  Future<void> syncNow() => syncBidirectional();
 
   /// Borra todos los timestamps de último pull para forzar pull completo
   /// en la próxima sincronización. Útil para recuperar datos faltantes

@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../main.dart' show kWebBaseUrl;
 import '../public_selection_screen.dart';
+
+/// El catálogo público, en la web de hoy. Hasta la 6.2.1 el QR apuntaba a la
+/// web vieja de Firebase (`arguello-eventos.web.app`), que quedó en marzo.
+const kLinkCotizar = '$kWebBaseUrl/?cotizar';
 
 class GenerarQRDialog extends StatefulWidget {
   const GenerarQRDialog({super.key});
@@ -13,29 +18,12 @@ class GenerarQRDialog extends StatefulWidget {
 
 class _GenerarQRDialogState extends State<GenerarQRDialog> {
   bool _isImageLoaded = false;
-  final TextEditingController _hostController = TextEditingController(text: "arguello-eventos.web.app");
-  String _currentUrl = "https://arguello-eventos.web.app/cotizar";
+  static const _currentUrl = kLinkCotizar;
 
   @override
   void initState() {
     super.initState();
     _loadLogo();
-    _updateUrl();
-  }
-
-  void _updateUrl() {
-    setState(() {
-      var host = _hostController.text.trim();
-      
-      // Si es una IP local y NO tiene puerto, le clavamos el :8080 de prepo
-      final isIp = host.contains(RegExp(r'^[0-1]?[0-9]?[0-9]\.'));
-      if (isIp && !host.contains(':')) {
-        host = "$host:8080";
-      }
-
-      final protocol = (isIp || host.contains('localhost')) ? "http" : "https";
-      _currentUrl = "$protocol://$host/cotizar";
-    });
   }
 
   Future<void> _loadLogo() async {
@@ -119,19 +107,6 @@ class _GenerarQRDialogState extends State<GenerarQRDialog> {
                         dataModuleShape: QrDataModuleShape.square,
                         color: Colors.black,
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Input para IP Local
-                  TextField(
-                    controller: _hostController,
-                    onChanged: (_) => _updateUrl(),
-                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87),
-                    decoration: InputDecoration(
-                      labelText: 'HOST / IP PARA PRUEBA LOCAL',
-                      labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1),
-                      prefixIcon: const Icon(Icons.lan_outlined, size: 16),
-                      isDense: true,
                     ),
                   ),
                 ],

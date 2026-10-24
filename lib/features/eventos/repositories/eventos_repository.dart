@@ -398,30 +398,6 @@ class EventosRepository {
 
   }
 
-  /// Elimina servicios creados para un evento que no se confirmó.
-  Future<void> borrarServiciosTemporales(String eventoId) async {
-    final db = await LocalDatabase.instance;
-    // 1. Obtener los IDs de los servicios vinculados a este evento provisional
-    final rows = await db.query('servicios', where: 'evento_id = ?', whereArgs: [eventoId]);
-    if (rows.isEmpty) return;
-    
-    final ids = rows.map((r) => r['id'] as String).toList();
-    
-    // 2. Borrado local
-    await db.delete('servicios', where: 'evento_id = ?', whereArgs: [eventoId]);
-    
-    // 3. Limpieza de cola de sincronización
-    for (final id in ids) {
-      await _removeFromQueue('servicios', id);
-      await SyncQueue.enqueue(
-        tabla: 'servicios',
-        operacion: SyncOperation.delete,
-        registroId: id,
-        payload: {},
-      );
-    }
-  }
-
   /// Purgue de servicios huérfanos: Elimina servicios que tengan un eventoId 
   /// pero que NO estén en la lista de servicios del presupuesto oficial.
   Future<void> purgarServiciosHuerfanos(String eventoId, List<String> idsEnPresupuesto) async {
@@ -884,11 +860,6 @@ class EventosRepository {
   }
 
   // _syncCrearEventoInmediato deprecado a favor de SyncEngine jerárquico.
-
-  Future<void> _removeFromQueue(String tabla, String registroId) async {
-    final db = await LocalDatabase.instance;
-    await db.delete('_sync_queue', where: 'tabla = ? AND registro_id = ?', whereArgs: [tabla, registroId]);
-  }
 
 }
 

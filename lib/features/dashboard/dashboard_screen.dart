@@ -904,9 +904,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   // ── Centro de Comando ──────────────────────────────────────────────────────
   Widget _buildCommandCenter(bool isDark, Color gold) {
     final actions = [
+      // Abre la lista de eventos (el alta está ahí, en NUEVO EVENTO): decía
+      // "NUEVO EVENTO" y no creaba ninguno (6.2.1).
       _CommandAction(
-        label: 'NUEVO EVENTO',
-        icon: Icons.add_circle_outline_rounded,
+        label: 'EVENTOS',
+        icon: Icons.celebration_outlined,
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const EventosScreen()),

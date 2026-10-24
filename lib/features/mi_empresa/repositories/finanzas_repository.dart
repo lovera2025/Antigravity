@@ -711,14 +711,6 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     return merged;
   }
 
-  /// Actualiza solo [medio_pago] en SQLite y encola sync (sin tocar montos ni fechas).
-  Future<void> actualizarMedioPagoRegistro({
-    required String tabla,
-    required String id,
-    required String medioPago,
-  }) =>
-      corregirMedioPagoVarios([(tabla: tabla, id: id)], medioPago);
-
   /// Cambia el medio de pago de varios cobros: todos o ninguno.
   ///
   /// Cada fila hace lo mismo que la corrección de a uno —solo `medio_pago`, sin

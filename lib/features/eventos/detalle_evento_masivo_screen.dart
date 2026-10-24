@@ -9,7 +9,6 @@ import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
 import '../caja_sesiones/services/caja_auto_sync_service.dart';
-import '../../core/config/app_config.dart';
 
 import '../../models/evento.dart';
 import '../../models/contrato_alumno.dart';
@@ -569,62 +568,6 @@ class _DetalleEventoMasivoScreenState
         SnackBar(content: Text('No se guardó el reparto de sillas: $e')),
       );
     }
-  }
-
-  void _mostrarNotificacionDeuda(ContratoAlumno alumno) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Theme.of(context).cardColor,
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        duration: const Duration(seconds: 5),
-        content: Row(
-          children: [
-            const Icon(
-              Icons.warning_amber_rounded,
-              color: Colors.redAccent,
-              size: 28,
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppConfig.tituloGestionCobro,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
-                      letterSpacing: 0.5,
-                      color: Colors.redAccent.withValues(alpha: 0.8),
-                    ),
-                  ),
-                  Text(
-                    'El alumno ${alumno.nombreAlumno} presenta un saldo pendiente de ${alumno.saldoDeudor.toCurrency()}.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        action: SnackBarAction(
-          label: 'VER PERFIL',
-          textColor: const Color(0xFFD4AF37),
-          onPressed: () => _mostrarModalEditarAlumno(alumno),
-        ),
-      ),
-    );
   }
 
   Future<void> _eliminarEvento() async {

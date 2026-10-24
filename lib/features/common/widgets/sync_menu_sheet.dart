@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
+import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../dashboard/providers/dashboard_provider.dart';
 
 /// Indicador de sync local-first con menú: subir / verificar / bajar.
@@ -105,7 +106,7 @@ class SyncCloudIndicator extends ConsumerWidget {
     final parts = <String>[];
     switch (connectivity) {
       case AppConnectivity.online:
-        parts.add('Modo local — nube manual');
+        parts.add('Sincroniza sola con la nube');
         break;
       case AppConnectivity.cloudUnavailable:
         parts.add('Nube no disponible');
@@ -172,6 +173,7 @@ class SyncCloudIndicator extends ConsumerWidget {
   ) async {
     final engine = ref.read(syncEngineProvider);
     final isOffline = connectivity == AppConnectivity.offline;
+    final esJefe = ref.read(esRolJefeProvider);
 
     await showModalBottomSheet<void>(
       context: context,
@@ -233,7 +235,7 @@ class SyncCloudIndicator extends ConsumerWidget {
                         ? (probe.remoteChangeCount > 0
                             ? '${probe.remoteChangeCount} cambios remotos'
                             : 'Al día (verificado)')
-                        : (probe.probeError ?? 'Sin verificar — tocá Verificar'),
+                        : (probe.probeError ?? 'Se baja solo, cada pocos segundos'),
                     Colors.lightBlueAccent,
                   ),
                   if (probe.lastProbeAt != null) ...[
@@ -249,7 +251,7 @@ class SyncCloudIndicator extends ConsumerWidget {
                   const SizedBox(height: 16),
                   if (isOffline)
                     Text(
-                      'Sin conexión: podés seguir operando en local. Subir/bajar cuando vuelva internet.',
+                      'Sin conexión: podés seguir operando en local. Sube y baja solo cuando vuelva internet.',
                       style: TextStyle(
                         color: Colors.redAccent.withValues(alpha: 0.9),
                         fontSize: 12,
@@ -268,38 +270,25 @@ class SyncCloudIndicator extends ConsumerWidget {
                     ),
                     _actionTile(
                       ctx,
-                      icon: Icons.search_rounded,
-                      label: 'Verificar nube',
-                      subtitle: 'Consulta cuánto hay para bajar (no descarga)',
-                      enabled: true,
-                      onTap: () => _run(ctx, ref, () => engine.probeRemoteChanges()),
-                    ),
-                    _actionTile(
-                      ctx,
                       icon: Icons.arrow_downward_rounded,
                       label: 'Bajar cambios',
                       subtitle: probe.remoteChangeCount > 0
                           ? 'Traer ${probe.remoteChangeCount} cambios a este dispositivo'
-                          : 'Verificá primero o bajá igual por si acaso',
+                          : 'Trae ya lo último de la nube (igual se baja solo)',
                       enabled: true,
                       onTap: () => _run(ctx, ref, () => engine.pullRemote()),
                     ),
-                    _actionTile(
-                      ctx,
-                      icon: Icons.sync_rounded,
-                      label: 'Subir y bajar',
-                      subtitle: 'Sube pendientes y luego baja cambios remotos',
-                      enabled: uploadCount > 0 || probe.remoteChangeCount > 0,
-                      onTap: () => _run(ctx, ref, () => engine.syncBidirectional()),
-                    ),
-                    _actionTile(
-                      ctx,
-                      icon: Icons.restore_rounded,
-                      label: 'Pull completo forzado',
-                      subtitle: 'Resetea timestamps y baja TODOS los datos desde cero',
-                      enabled: true,
-                      onTap: () => _run(ctx, ref, () => engine.forceFullPull()),
-                    ),
+                    // Baja todo de cero: es para arreglar una PC, no para el
+                    // día a día. Solo en modo jefe (6.2.1).
+                    if (esJefe)
+                      _actionTile(
+                        ctx,
+                        icon: Icons.restore_rounded,
+                        label: 'Pull completo forzado',
+                        subtitle: 'Resetea timestamps y baja TODOS los datos desde cero',
+                        enabled: true,
+                        onTap: () => _run(ctx, ref, () => engine.forceFullPull()),
+                      ),
                   ],
                 ],
               ),

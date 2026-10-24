@@ -60,22 +60,12 @@ class _SmartPurgeDialogState extends ConsumerState<SmartPurgeDialog> {
       final res = await repo.buscarVinculadosPorNombre(query);
       setState(() {
         _resultados = res;
-        _montoTotalImpacto = 0;
-        // Seleccionar todo por defecto para facilitar limpiezas de prueba
+        // Arranca sin nada tildado (6.2.1): borra para siempre, en la PC y en
+        // la nube, y venir todo marcado era cómodo solo para limpiar pruebas.
         for (var entry in res.entries) {
-          _selectedIds[entry.key] = entry.value.map((e) => e['id'].toString()).toSet();
-          
-          // Calcular impacto financiero (Solo de items seleccionados, inicialmente todos)
-          if (entry.key == 'transacciones' || entry.key == 'pagos' || entry.key == 'pagos_alquiler') {
-            for (var item in entry.value) {
-              _montoTotalImpacto += double.tryParse(item['monto'].toString()) ?? 0;
-            }
-          } else if (entry.key == 'egresos') {
-            for (var item in entry.value) {
-              _montoTotalImpacto -= double.tryParse(item['monto'].toString()) ?? 0;
-            }
-          }
+          _selectedIds[entry.key] = <String>{};
         }
+        _montoTotalImpacto = 0;
       });
     } catch (e) {
       if (mounted) {

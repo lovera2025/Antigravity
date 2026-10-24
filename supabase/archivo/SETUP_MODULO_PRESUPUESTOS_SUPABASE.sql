@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS public.presupuestos (
     lugar TEXT,
     detalle_anclaje TEXT,
     fecha_vencimiento TIMESTAMPTZ NOT NULL,
-    estado TEXT DEFAULT 'activo' CHECK (estado IN ('activo', 'vencido', 'confirmado')),
+    -- La nube real acepta siete estados (verificado el 23-oct-2026). Este
+    -- archivo decía solo tres: recrear la base desde acá dejaba "aprobado" y
+    -- "rechazado" trabados en la cola de subida.
+    estado TEXT DEFAULT 'activo' CHECK (estado IN ('activo', 'borrador', 'enviado', 'aprobado', 'rechazado', 'vencido', 'confirmado')),
     instagram TEXT,
     telefono TEXT,
     notificado_vencimiento BOOLEAN DEFAULT FALSE,

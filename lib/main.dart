@@ -19,10 +19,7 @@ import 'features/caja_sesiones/widgets/role_gate_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/cotizacion/public_selection_screen.dart';
-import 'features/recepcion/operador_view.dart';
 import 'features/recepcion/lista_invitados_screen.dart';
-import 'features/recepcion/op_ya_no_se_usa.dart';
-import 'features/recepcion/recepcion_unified_screen.dart';
 import 'features/recepcion/repositories/invitados_repository.dart';
 import 'features/totem/totem_display.dart';
 import 'features/totem/providers/clave_totem_provider.dart';
@@ -97,7 +94,6 @@ void main(List<String> args) async {
   final bool isBuscar = kIsWeb && currentUrl.contains('buscar');
   final bool isLista = kIsWeb && currentUrl.contains('lista');
   final bool isTotem = kIsWeb && currentUrl.contains('totem');
-  final bool isOp = kIsWeb && currentUrl.contains('/op');
 
   // Initialize Supabase para AMBAS ramas (evita crashes)
   try {
@@ -136,10 +132,6 @@ void main(List<String> args) async {
   if (isCatalog) {
     debugPrint('V4 >>> LANZANDO SECTOR PÚBLICO: URL=$currentUrl');
     runApp(const ProviderScope(child: CatalogApp()));
-  } else if (isOp) {
-    final eventoId = Uri.base.queryParameters['evento'] ?? '';
-    debugPrint('V4 >>> LANZANDO OPERADOR: eventoId=$eventoId');
-    runApp(ProviderScope(child: OpApp(eventoId: eventoId)));
   } else if (isTotem) {
     final eventoId = Uri.base.queryParameters['evento'] ?? '';
     debugPrint('V4 >>> LANZANDO TÓTEM WEB: eventoId=$eventoId');
@@ -202,34 +194,6 @@ class CatalogApp extends ConsumerWidget {
       supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       home: const PublicSelectionScreen(),
-    );
-  }
-}
-
-/// `/op`: hasta la 6.0.0, recepción con un PIN. Ya no se usa (sección 8): dice
-/// dónde se suman ahora los celulares de la puerta.
-class OpApp extends ConsumerWidget {
-  final String eventoId;
-  const OpApp({required this.eventoId, super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp(
-      title: 'Recepción — Argüello Events',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        useMaterial3: true,
-      ),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('es', 'AR')],
-      locale: const Locale('es', 'AR'),
-      home: const OpYaNoSeUsa(),
     );
   }
 }
@@ -404,7 +368,10 @@ class JuniorEventsApp extends ConsumerWidget {
       supportedLocales: const [Locale('es', 'AR')],
       locale: const Locale('es', 'AR'),
       onGenerateRoute: (settings) {
-        // Rutas adicionales: operador (admin), tótem (pantalla vertical fullscreen), recepción unificada
+        // La única ruta por nombre es el tótem dentro de la ventana principal.
+        // `/operador` y `/recepcion_unified` se sacaron en la 6.2.1: nadie las
+        // usaba y, en la web, escribir la segunda en la dirección abría
+        // Recepción sin pedir usuario.
         if (settings.name == '/totem_display') {
           final args = settings.arguments as Map<String, dynamic>?;
           final eventoId = args?['eventoId'] as String? ?? '';
@@ -414,19 +381,6 @@ class JuniorEventsApp extends ConsumerWidget {
                 TotemDisplay(eventoId: eventoId, svc: SupabaseService()),
           );
         }
-        if (settings.name == '/operador') {
-          return MaterialPageRoute(
-            settings: settings,
-            builder: (_) => const OperadorView(),
-          );
-        }
-        if (settings.name == '/recepcion_unified') {
-          return MaterialPageRoute(
-            settings: settings,
-            builder: (_) => const RecepcionUnifiedScreen(),
-          );
-        }
-
         // Por defecto usamos SplashScreen para resolver auth/flow normal
         return MaterialPageRoute(
           settings: settings,

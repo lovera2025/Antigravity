@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../main.dart';
 import '../../core/utils/ar_time.dart';
 import '../../models/egreso.dart';
 import '../../models/evento.dart';
@@ -22,7 +21,7 @@ import '../dashboard/providers/dashboard_provider.dart';
 import 'widgets/corregir_medio_pago_dialog.dart';
 import 'widgets/anular_cobro_cuota_dialog.dart';
 import 'widgets/smart_purge_dialog.dart';
-import 'widgets/restaurar_mora_dialog.dart';
+import 'widgets/perdonar_mora_por_curso_dialog.dart';
 import '../eventos/detalle_evento_particular_screen.dart';
 import '../eventos/detalle_evento_masivo_screen.dart';
 import '../eventos/repositories/eventos_repository.dart';
@@ -31,8 +30,6 @@ import '../egresos/repositories/egresos_repository.dart';
 import '../egresos/widgets/registrar_egreso_global_dialog.dart';
 import '../egresos/services/egreso_concepto_sugerencias.dart';
 import '../eventos/eventos_screen.dart';
-import '../eventos/presupuestos_screen.dart';
-import '../recepcion/op_ya_no_se_usa.dart' show kCelularesDesdeRecepcion;
 import 'repositories/finanzas_repository.dart';
 import 'models/compromiso_personal.dart';
 import 'providers/compromisos_personal_provider.dart';
@@ -173,11 +170,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   /// Capturado en [initState]: en [dispose] no se puede usar [ref] (Riverpod).
   late final AdminAuthNotifier _adminAuthNotifier;
 
-  // Gestión de Asesores
-  List<Map<String, dynamic>> _asesores = [];
-  Set<String> _onlineUserIds = {};
-  RealtimeChannel? _presenceChannel;
-
   // Buscador Maestro
   final _masterSearchCtrl = TextEditingController();
   // Búsqueda dentro del panel desplegable de ingresos / egresos (refina sin depender solo del scroll)
@@ -257,16 +249,11 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
   void initState() {
     super.initState();
     _adminAuthNotifier = ref.read(adminAuthProvider.notifier);
-    // 4 pestañas: se retiró PERSONAL. Su contenido único —la liquidación por
-    // operador— vive ahora en el panel SALDO DEL NEGOCIO, leyendo el
-    // histórico en vez del mes filtrado, que era lo que la dejaba en blanco.
-    _tabController = TabController(length: 4, vsync: this);
+    // FINANZAS y COBRO. Se retiraron PERSONAL (su liquidación por operador
+    // vive en SALDO DEL NEGOCIO), PRESUPUESTOS (está en la barra lateral, en
+    // modo jefe) y OPERADORES (6.2.1).
+    _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabControllerTick);
-    final isAdmin = ref.read(adminAuthProvider).isAdmin;
-    if (isAdmin) {
-      _fetchAsesores();
-      _setupPresenceListener();
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _resolveMiEmpresaAccess());
   }
 
@@ -290,9 +277,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     _ingresosHScrollCtrl.dispose();
     _pulsoBarrasScrollController.dispose();
     _deudasSearchCtrl.dispose();
-    if (_presenceChannel != null) {
-      Supabase.instance.client.removeChannel(_presenceChannel!);
-    }
     _alertasGestionExpansionController.dispose();
     super.dispose();
   }
@@ -328,80 +312,6 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
         });
         break;
     }
-  }
-
-  /// Cargar lista de Asesores desde perfiles + permisos.
-  Future<void> _fetchAsesores() async {
-    final supabase = ref.read(supabaseProvider);
-    try {
-      final res = await supabase
-          .from('perfiles')
-          .select('id, nombre, rol')
-          .eq('rol', 'Asesor')
-          .order('nombre');
-      if (!mounted) return;
-      setState(() {
-        _asesores = (res as List).cast<Map<String, dynamic>>();
-      });
-    } catch (e) {
-      debugPrint('Error cargando asesores: $e');
-    }
-  }
-
-  /// Escuchar presencia de usuarios en tiempo real.
-  void _setupPresenceListener() {
-    _presenceChannel = Supabase.instance.client.channel('online_users');
-
-    // Sync completo (se dispara al inicio y en cada cambio)
-    _presenceChannel!.onPresenceSync((payload) {
-      _updateOnlineUsers();
-    });
-
-    // Detección rápida de join/leave individuales
-    _presenceChannel!.onPresenceJoin((payload) {
-      _updateOnlineUsers();
-    });
-
-    _presenceChannel!.onPresenceLeave((payload) {
-      _updateOnlineUsers();
-    });
-
-    // Suscribir al canal
-    _presenceChannel!.subscribe((status, error) {
-      if (status == RealtimeSubscribeStatus.subscribed) {
-        debugPrint('✅ Admin suscrito a presencia');
-        // Admin también trackea para que el canal esté activo
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
-          _presenceChannel!.track({
-            'user_id': user.id,
-            'email': user.email ?? '',
-            'role': 'Admin',
-            'online_at': DateTime.now().toIso8601String(),
-          });
-        }
-        // Chequear estado actual después de suscribirse
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) _updateOnlineUsers();
-        });
-      }
-    });
-  }
-
-  void _updateOnlineUsers() {
-    if (_presenceChannel == null) return;
-    final presences = _presenceChannel!.presenceState();
-    final ids = <String>{};
-    for (final state in presences) {
-      for (final presence in state.presences) {
-        final uid = presence.payload['user_id']?.toString();
-        if (uid != null) ids.add(uid);
-      }
-    }
-    if (mounted) {
-      setState(() => _onlineUserIds = ids);
-    }
-    debugPrint('🟢 Usuarios online: ${ids.length} → $ids');
   }
 
   Future<void> _navegarAEvento(IngresoDetallado ing) async {
@@ -453,9 +363,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
       controller: _tabController,
       children: [
         _buildContent(isDark, gold, state),
-        const PresupuestosScreen(embedded: true),
         CobroMasivosTab(isDark: isDark, gold: gold),
-        _buildOperadoresTab(isDark, gold),
       ],
     );
   }
@@ -558,21 +466,27 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                 IconButton(
                   style: _finanzasIconButtonStyle(),
                   icon: Icon(Icons.cleaning_services_rounded, size: _kFinanzasAppBarIconSize, color: gold.withValues(alpha: 0.85)),
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (context) => const SmartPurgeDialog(),
-                  ),
+                  // Borra para siempre, en la PC y en la nube: pide el PIN
+                  // otra vez, como las correcciones de cobro.
+                  onPressed: () async {
+                    final ok = await AdminGate.check(context, ref, forceVerification: true);
+                    if (!ok || !context.mounted) return;
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => const SmartPurgeDialog(),
+                    );
+                  },
                   tooltip: 'Saneamiento',
                 ),
               if (showMiEmpresaContent)
                 IconButton(
                   style: _finanzasIconButtonStyle(),
-                  icon: Icon(Icons.restore_rounded, size: _kFinanzasAppBarIconSize, color: gold),
+                  icon: Icon(Icons.volunteer_activism_outlined, size: _kFinanzasAppBarIconSize, color: gold),
                   onPressed: () => showDialog(
                     context: context,
-                    builder: (context) => const RestaurarMoraDialog(),
+                    builder: (context) => const PerdonarMoraPorCursoDialog(),
                   ),
-                  tooltip: 'Restaurar mora persistida',
+                  tooltip: 'Perdonar mora (por curso)',
                 ),
               const SizedBox(width: 4),
             ],
@@ -588,9 +502,7 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
                         fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
                     tabs: const [
                       Tab(icon: Icon(Icons.bar_chart_rounded, size: 18), text: 'FINANZAS'),
-                      Tab(icon: Icon(Icons.request_quote_outlined, size: 18), text: 'PRESUPUESTOS'),
                       Tab(icon: Icon(Icons.payments_outlined, size: 18), text: 'COBRO'),
-                      Tab(icon: Icon(Icons.login_rounded, size: 18), text: 'OPERADORES'),
                     ],
                   )
                 : null,
@@ -6747,370 +6659,9 @@ class _FinanzasViewState extends ConsumerState<FinanzasView>
     );
   }
 
-  // ── FAB Personal ──────────────────────────────────────────────────────────
-
-  /// Mostrar diálogo de permisos para un Asesor específico.
-  Future<void> _showPermissionsDialog(String userId, String nombre) async {
-    final supabase = ref.read(supabaseProvider);
-    const gold = Color(0xFFD4AF37);
-
-    // Cargar permisos actuales
-    Map<String, bool> permisos = {
-      'puede_recepcion': true,
-      'puede_eventos': false,
-      'puede_clientes': false,
-      'puede_catalogo': false,
-      'puede_totem': false,
-      'puede_qr': false,
-      'puede_finanzas': false,
-    };
-
-    try {
-      final res = await supabase
-          .from('permisos_usuario')
-          .select()
-          .eq('user_id', userId)
-          .maybeSingle();
-      if (res != null) {
-        for (final key in permisos.keys) {
-          permisos[key] = res[key] ?? permisos[key];
-        }
-      }
-    } catch (e) {
-      debugPrint('Error cargando permisos: $e');
-    }
-
-    final labels = {
-      'puede_recepcion': ('Recepción / Check-in', Icons.door_front_door_rounded),
-      'puede_eventos': ('Eventos', Icons.celebration_outlined),
-      'puede_clientes': ('Clientes', Icons.people_alt_outlined),
-      'puede_catalogo': ('Catálogo', Icons.settings_suggest_outlined),
-      'puede_totem': ('Tótem', Icons.monitor_rounded),
-      'puede_qr': ('QR', Icons.qr_code_2_rounded),
-      'puede_finanzas': ('Finanzas', Icons.business_center_outlined),
-    };
-
-    if (!mounted) return;
-
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: gold.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Center(
-                      child: Text(
-                        nombre.isNotEmpty ? nombre[0].toUpperCase() : '?',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: gold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(nombre, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                        const Text('PERMISOS DE ACCESO', style: TextStyle(fontSize: 9, color: Colors.grey, letterSpacing: 1.5)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 350,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Divider(),
-                    ...permisos.entries.map((entry) {
-                      final info = labels[entry.key]!;
-                      return SwitchListTile(
-                        value: entry.value,
-                        onChanged: (val) {
-                          setDialogState(() => permisos[entry.key] = val);
-                        },
-                        title: Text(info.$1, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                        secondary: Icon(info.$2, color: entry.value ? gold : Colors.grey, size: 20),
-                        activeThumbColor: gold,
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                      );
-                    }),
-                    const Divider(),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('CANCELAR', style: TextStyle(color: Colors.grey)),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await supabase.from('permisos_usuario').upsert({
-                        'user_id': userId,
-                        ...permisos,
-                        'asignado_por': supabase.auth.currentUser?.id,
-                        'updated_at': DateTime.now().toIso8601String(),
-                      });
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Permisos de $nombre actualizados'),
-                            backgroundColor: const Color(0xFF00B894),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (ctx.mounted) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
-                        );
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: gold,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: const Text('GUARDAR', style: TextStyle(fontWeight: FontWeight.w900)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildOperadoresTab(bool isDark, Color gold) {
-    const purple = Colors.purpleAccent;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── GESTIÓN DE ASESORES ─────────────────────────────────
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                    ),
-                    child: const Icon(Icons.group_rounded, color: Colors.cyanAccent, size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ASESORES REGISTRADOS',
-                          style: GoogleFonts.oswald(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.cyanAccent,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                        Text(
-                          '${_asesores.length} usuario(s) · ${_onlineUserIds.length} online',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            color: isDark ? Colors.white38 : Colors.black45,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh_rounded, size: 20),
-                    color: Colors.cyanAccent,
-                    onPressed: () {
-                      _fetchAsesores();
-                    },
-                    tooltip: 'Actualizar lista',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              if (_asesores.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'No hay asesores registrados aún.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white38 : Colors.black38,
-                      ),
-                    ),
-                  ),
-                )
-              else
-                ..._asesores.map((asesor) {
-                  final uid = asesor['id'] as String;
-                  final nombre = asesor['nombre'] ?? 'Sin nombre';
-                  final isOnline = _onlineUserIds.contains(uid);
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      onTap: () => _showPermissionsDialog(uid, nombre),
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.04)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isOnline
-                                ? Colors.greenAccent.withValues(alpha: 0.4)
-                                : (isDark ? Colors.white12 : Colors.black12),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            // Online indicator
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isOnline ? Colors.greenAccent : Colors.grey,
-                                boxShadow: isOnline
-                                    ? [BoxShadow(color: Colors.greenAccent.withValues(alpha: 0.5), blurRadius: 6)]
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            // Avatar
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: gold.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  nombre.toString().isNotEmpty
-                                      ? nombre.toString()[0].toUpperCase()
-                                      : '?',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900,
-                                    color: gold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    nombre,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-                                  ),
-                                  Text(
-                                    isOnline ? 'En línea' : 'Desconectado',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: isOnline ? Colors.greenAccent : Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(
-                              Icons.tune_rounded,
-                              color: gold,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              color: isDark ? Colors.white24 : Colors.black26,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-
-              const SizedBox(height: 24),
-              Divider(color: isDark ? Colors.white12 : Colors.black12),
-              const SizedBox(height: 24),
-
-              // ── LOS CELULARES DE LA PUERTA ───────────────────────────
-              // Hasta la 6.0.0 acá se ponía un PIN por evento y se pasaba el
-              // link de `/op`. Ya no andaba (la nube no le deja leer el evento
-              // a quien no tiene usuario) y ningún evento lo usaba: los
-              // celulares de la puerta se suman desde Recepción (sección 7).
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.phone_android_rounded, color: purple, size: 22),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        kCelularesDesdeRecepcion,
-                        style: GoogleFonts.outfit(
-                          fontSize: 13,
-                          color: isDark ? Colors.white70 : Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Referencia semanal cobrada vs cupo «caja fuerte» solo uso declarativo dueño (SQLite local).
+  // Se retiró la pestaña OPERADORES (6.2.1): daba permisos a cuentas con rol
+  // Asesor y no había ninguna en uso. Los permisos siguen en la nube y
+  // `AsesorHomeScreen` los lee igual.
 
   // Se retiró `_buildCajaFuertePersonalSection`: la UI del cofre físico era
   // un segundo libro llevado a mano, en su propia tabla y sin relación con

@@ -102,14 +102,6 @@ class CompromisosPersonalRepository {
     return out;
   }
 
-  /// Deuda total abierta, para el subtítulo de la sección.
-  Future<double> totalPendiente() async {
-    final cuentas = await listarConSaldo();
-    return cuentas
-        .where((c) => c.sigueAbierto)
-        .fold<double>(0, (s, c) => s + c.saldo);
-  }
-
   // ── ESCRITURA ──────────────────────────────────────────────────────────────
 
   Future<String> crear({

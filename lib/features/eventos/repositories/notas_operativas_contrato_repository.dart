@@ -36,9 +36,6 @@ class NotasOperativasContratoRepository {
     return map;
   }
 
-  Future<NotaOperativaContrato?> obtenerUno(String contratoAlumnoId) async =>
-      obtenerUnoEn(await LocalDatabase.instance, contratoAlumnoId);
-
   static Future<NotaOperativaContrato?> obtenerUnoEn(
     DatabaseExecutor db,
     String contratoAlumnoId,
