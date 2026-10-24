@@ -70,7 +70,7 @@ void main() {
       expect(futuro.vencimiento.month, 7);
     });
 
-    test('Lezcano: líneas informativas con mora congelada', () {
+    test('Lezcano: líneas informativas con la eximición', () {
       final lineas = CronogramaCuotasUtils.lineasInformativas(
         _contratoLezcano(),
         ahoraAr: DateTime(2026, 7, 7),
@@ -79,7 +79,8 @@ void main() {
       expect(lineas.cuotaPendiente, contains('2/9'));
       expect(lineas.cuotaPendiente, contains('vencida'));
       expect(lineas.proximoVencimiento, contains('31'));
-      expect(lineas.moraCongeladaHasta, isNotNull);
+      // Dice "Sin mora hasta": "Mora congelada" es otra cosa desde la 6.2.1.
+      expect(lineas.moraCongeladaHasta, startsWith('Sin mora hasta: '));
     });
 
     test('Alumno con 3 cuotas pagadas al 7-jul: cronograma al día', () {

@@ -233,8 +233,9 @@ class CronogramaCuotasUtils {
         c.moraExentaHasta!.day,
       );
       if (!hoySolo.isAfter(ex)) {
-        moraCongelada =
-            'Mora congelada hasta: ${ArTime.formatFechaCorta(ex)}';
+        // Es la eximición (saldó toda la mora, o un perdón). Decía "Mora
+        // congelada hasta" y se confundía con congelar la mora (6.2.1).
+        moraCongelada = 'Sin mora hasta: ${ArTime.formatFechaCorta(ex)}';
       }
     }
 

@@ -44,6 +44,7 @@ import 'services/cronograma_cuotas_utils.dart';
 import 'services/cobro_mora_resolver.dart';
 import 'services/filtro_mesas_sillas.dart';
 import 'services/filtro_mora_masivos.dart';
+import 'services/mora_congelada.dart';
 import 'services/mora_cuota_calculator.dart';
 import 'services/mora_concepto_rotulo.dart';
 import 'services/mora_tracked_origen.dart';
@@ -77,6 +78,7 @@ import 'widgets/modal_alumno_premium.dart';
 import 'widgets/nota_operativa_bottom_sheet.dart';
 import 'widgets/opciones_planilla_sorteo_dialog.dart';
 import 'widgets/perdonar_mora_alumno_dialog.dart';
+import 'widgets/congelar_mora_dialog.dart';
 import 'widgets/reparto_sillas_dialog.dart';
 import 'retiro_entradas_screen.dart';
 import '../mi_empresa/providers/finanzas_provider.dart';
@@ -1251,9 +1253,11 @@ class _DetalleEventoMasivoScreenState
         // que se lee todo el día. El piso de ACCIONES es el ancho real de sus
         // cinco íconos: por debajo de eso el último se va de la pantalla.
         final double anchoIconoFila = layoutCompact ? 34 : 40;
+        // En modo jefe, dos más: el copo de nieve de la mora congelada (6.2.1)
+        // y el menú ⋮.
         final double colAcciones = math.max(
           innerTable * 0.15,
-          anchoIconoFila * (modoJefe ? 6 : 5) + 8,
+          anchoIconoFila * (modoJefe ? 7 : 5) + 8,
         );
         final double colEstado = innerTable - colAcciones - colAlumno -
             colTelefono - colAcomp - colMesa - colContrato;
@@ -2441,6 +2445,12 @@ class _DetalleEventoMasivoScreenState
                                                   ),
                                                 ),
                                               ),
+                                            // La mora congelada, en celeste,
+                                            // para todos (6.2.1).
+                                            AvisoMoraCongelada(
+                                              contratoId: a.id,
+                                              tamano: layoutCompact ? 8 : 9,
+                                            ),
                                             if (moraPendienteFila > 0.01) ...[
                                               Padding(
                                                 padding: EdgeInsets.only(
@@ -2591,6 +2601,22 @@ class _DetalleEventoMasivoScreenState
                                     notaOp,
                                     layoutCompact,
                                   ),
+                                  // Congelar la mora (6.2.1): solo el jefe lo
+                                  // ve. Celeste si el alumno tiene algo
+                                  // congelado.
+                                  if (modoJefe)
+                                    _accionFilaIcono(
+                                      icon: Icons.ac_unit,
+                                      tooltip: MoraCongelada.de(a.id).algoCongelado
+                                          ? 'Mora congelada'
+                                          : 'Congelar mora',
+                                      color: MoraCongelada.de(a.id).algoCongelado
+                                          ? kCelesteCongelada
+                                          : null,
+                                      onPressed: () => _mostrarCongelarMora(a),
+                                      habilitado: !esBajaTemporal,
+                                      layoutCompact: layoutCompact,
+                                    ),
                                   // Las tres de jefe viven en un menú: son las
                                   // que menos se usan y las que más daño hacen
                                   // si se tocan de más.
@@ -4787,6 +4813,24 @@ class _DetalleEventoMasivoScreenState
     );
   }
 
+  /// El copo de nieve de la fila (6.2.1, solo modo jefe): Congelar, o Mora
+  /// congelada si ya tiene algo. Lee el contrato fresco, como el perdón.
+  Future<void> _mostrarCongelarMora(ContratoAlumno alumno) async {
+    if (!ref.read(esRolJefeProvider)) return;
+    final fresco =
+        await ref.read(contratosRepositoryProvider).getContratoById(alumno.id) ??
+        alumno;
+    if (!mounted) return;
+    final cambio = await showDialog<bool>(
+      context: context,
+      builder: (context) => CongelarMoraDialog(
+        contrato: fresco,
+        moraCobradaHistorial: _moraCobradaPorContrato[alumno.id] ?? 0.0,
+      ),
+    );
+    if (mounted && cambio == true) await _refreshAlumnos();
+  }
+
   Future<void> _mostrarModalPagoAlumno(ContratoAlumno alumno) async {
     final appRole = ref.read(appRoleProvider);
     if (appRole.esCaja && !appRole.tieneSesionCaja) {
@@ -5973,6 +6017,8 @@ class _DetalleEventoMasivoScreenState
                                       ),
                                     ),
                                   ),
+                                // La mora congelada, en celeste (6.2.1).
+                                AvisoMoraCongelada(contratoId: alumno.id, tamano: 11),
                               ],
                             ),
                           ),

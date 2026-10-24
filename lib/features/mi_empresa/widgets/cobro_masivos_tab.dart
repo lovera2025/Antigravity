@@ -17,6 +17,7 @@ import '../../eventos/services/cronograma_cuotas_utils.dart';
 import '../../eventos/services/mora_concepto_rotulo.dart';
 import '../../eventos/services/mora_cuota_calculator.dart';
 import '../../eventos/services/mora_tracked_origen.dart';
+import '../../eventos/widgets/congelar_mora_dialog.dart' show AvisoMoraCongelada;
 import '../providers/finanzas_provider.dart';
 
 /// Fila agregada para el listado Cobro (evento + institución).
@@ -1776,6 +1777,8 @@ class _CobroMasivosTabState extends ConsumerState<CobroMasivosTab> {
                         ),
                       ),
                     ),
+                  // La mora congelada, en celeste (6.2.1).
+                  AvisoMoraCongelada(contratoId: a.id, tamano: 10),
                 ],
               );
             }),

@@ -113,6 +113,24 @@ class MoraCongelada {
   /// Para los tests: el registro vuelve a vacío.
   static void vaciar() => _registro.clear();
 
+  /// Corre [cuenta] como si el alumno tuviera las pausas [m], y deja el
+  /// registro como estaba. Es para mostrar "Recalcular · $Y" antes de tocar:
+  /// la cuenta es la misma de siempre, con otras pausas. Sincrónico a
+  /// propósito: en el medio no corre nada más.
+  static T conPausas<T>(String contratoId, MoraCongelada m, T Function() cuenta) {
+    final antes = _registro[contratoId];
+    poner(contratoId, m);
+    try {
+      return cuenta();
+    } finally {
+      if (antes == null) {
+        _registro.remove(contratoId);
+      } else {
+        _registro[contratoId] = antes;
+      }
+    }
+  }
+
   // ── La cuenta ────────────────────────────────────────────────────────────
 
   /// Días en que la mora de la cuota [cuota] no corrió, contados hasta [al]
