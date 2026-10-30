@@ -210,40 +210,51 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
 - No comparar armados enteros con `firma`: mesa por mesa.
 - `flutter analyze` y los tests, en la PC (el contenedor remoto no tiene Flutter).
 
-## 5. Etapas (cada una cierra sola, con commit)
+## 5. Etapas (cada una cierra sola, con commit, y no se pasa a la siguiente con un test en rojo)
 
-1. **La cuenta** (`armar_a_medida.dart`) y sus tests (`test/ordenar_numeros_test.dart`):
-   - un salón acomodado queda igual y `cambio` es la identidad (ocho casos, como el test de `acomodar` contra
-     `armar`);
-   - Puerto Viejo tal como está en la nube (las 35 posiciones de arriba): de 1 a 35, y a lo sumo el salto entre lados;
-   - pasto al final; dos hojas; una fila incompleta; mesas sueltas fuera de fila;
-   - roturas a propósito, todas vistas.
-2. **Al guardar** (`editar_armado.dart` → `paraGuardar`, y la línea de "Antes de guardar" en `panel_acomodar.dart`):
-   - ordena sin familias con mesa; con familias, no toca nada; en el Canva, no toca nada;
-   - fijadas, libres y bloques siguen a su mesa física (test con una fijada en una mesa que cambia de número);
-   - una PC atrasada no pisa a la otra (`paraGuardar` ya relee la nube; un test de dos PCs como los de la 9c);
-   - `test/solo_modo_jefe_test.dart` y `puerta_sigue_al_salon_test` siguen pasando;
-   - test de pantalla en `plano_evento_cuerpo_test`.
-3. **El aviso** (`plano_de_la_fiesta.dart`) con su test.
-3b. **La barra** (`sesion_acomodo.dart`, `panel_acomodar.dart`, `plano_evento_cuerpo.dart`):
-   - sin familias, reacomoda con `acomodar` y es un paso de Deshacer al soltar; con familias o en el Canva, `separar`
-     como hoy;
-   - la distancia elegida queda en `config.medidas` al guardar, y Medidas la muestra;
-   - test de sesión (arrastrar sin soltar no agrega pasos; soltar agrega uno; Deshacer vuelve) y test de pantalla;
-   - sobre el mismo playón, la barra en 3 m y ACOMODAR con Medidas en 3 m dan lo mismo, mesa por mesa.
-3d. **"Lejos", con qué tan lejos** (`sorteo_mesas_dialog.dart`, `sorteo_mesas_motor.dart`, `sorteo_con_plano.dart`,
-   la planilla): la medición de hoy primero
-   (`tool/lejos_distancias_test.dart`), el cambio, la misma medición después; `sorteo_mesas_motor_test` (incluida la
-   factibilidad con miles de salones) y `sorteo_lejos_en_el_salon_test` siguen pasando; roturas a propósito.
-3c. **Juntas y separadas en el plano** (`estado_plano.dart` para saber qué es cada una, `pintor_plano.dart`,
-   `plano_papel.dart`, `imprimir_plano_dialog.dart`):
-   - la cuenta, con tests: una mesa, dos pegadas, tres en serpentina que dobla de fila, dos lejos, tres con una lejos,
-     el pasto, una familia en dos hojas;
-   - el dibujo en los tres estilos, en color y en blanco y negro;
-   - tocar una mesa separada resalta la otra.
-4. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después; un salón sorteado con familias
-   juntas y separadas, en pantalla y en PDF (color y blanco y negro). Mandárselas al usuario.
-5. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL.
+1. **Ordenar los números** (`ArmarAMedida.ordenarNumeros`), sin pantalla.
+2. **Ordenar al guardar** (`EditarArmado.paraGuardar` y "Antes de guardar" del panel).
+3. **El aviso de los números que no siguen el salón** (`PlanoDeLaFiesta.avisos`).
+4. **La barra de Acomodar**: reacomoda antes del sorteo, estira después.
+5. **Juntas y separadas en el plano**, en pantalla y en papel.
+6. **"Lejos" y qué tan lejos**: el diálogo de SORTEO, el motor, `SorteoConPlano`, el registro y la planilla.
+7. **El recorrido entero** (sección 5b, última fila de la tabla).
+8. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después; un salón sorteado con
+   familias juntas y separadas, en pantalla y en PDF (color y blanco y negro). Mandárselas al usuario.
+9. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL.
+
+## 5b. Qué prueba cada cosa acordada
+
+Cada fila es un test que tiene que existir y pasar. Además, en cada etapa, **roturas a propósito**: se rompe la cuenta
+a mano y el test tiene que ponerse en rojo (como en la 6.1.0).
+
+| Lo acordado | El test |
+|---|---|
+| Números del 1 a N, sin huecos, en serpentina | `ordenar_numeros_test`: Puerto Viejo con las 35 posiciones de la nube del 29-oct queda de 1 a 35, con un solo salto (el pasillo); pasto al final; dos hojas; fila incompleta; mesa suelta |
+| Ordenar no cambia un salón que ya está en orden | `ordenar_numeros_test`: sobre ocho salones acomodados, mesa por mesa igual y `cambio` vacío |
+| Se ordena solo al guardar, antes del sorteo | `ordenar_al_guardar_test`: sin familias, ordena; con familias, no toca ningún número; en el Canva, no toca nada |
+| Una mesa fijada sigue a su lugar, con otro número | `ordenar_al_guardar_test`: una fijada en la mesa que pasa del 15 al 2 queda fijada en la 2, en el mismo lugar; lo mismo con una libre y un bloque |
+| Una PC atrasada no pisa a la otra | `ordenar_al_guardar_test`: dos PCs, como los de la 9c |
+| Solo el jefe | `solo_modo_jefe_test` y `puerta_sigue_al_salon_test` siguen pasando sin cambios |
+| El aviso de los saltos | `plano_de_la_fiesta_test`: con 13 saltos avisa; recién acomodado, no |
+| La barra reacomoda antes del sorteo | `barra_acomodar_test`: arrastrar sin soltar no agrega pasos de Deshacer, soltar agrega uno, Deshacer vuelve; ninguna mesa encima de un sector ni fuera del hormigón; numeradas en serpentina; "Faltan N" cuando no entran |
+| Barra y ACOMODAR dan lo mismo | `barra_acomodar_test`: la barra en 3 m y ACOMODAR con Medidas en 3 m, mesa por mesa iguales |
+| La distancia queda en Medidas | `barra_acomodar_test`: después de guardar, `config.medidas.lugarMesaM` es la de la barra, y ACOMODAR OTRA VEZ la usa; `salon_convivencia_test`: sin claves nuevas en el JSON |
+| Después del sorteo, la barra estira sin cambiar ninguna mesa | `barra_acomodar_test`: con familias, ningún número ni familia cambia; los tests de `separar` de hoy siguen pasando |
+| El plano marca juntas y separadas | `familias_en_el_plano_test`: una mesa (nada), dos pegadas (juntas), tres que doblan de fila (juntas), dos lejos (separadas), tres con una lejos, pasto, dos hojas; P en la principal y A en las demás |
+| Se lee en blanco y negro | `familias_en_el_plano_test`: el dibujo en los tres estilos, con color y sin color, lleva cápsula, aro punteado y letras |
+| Tocar una separada resalta la otra | `plano_evento_cuerpo_test` |
+| Con adicional, siempre juntas | `sorteo_juntas_test`: 1.000 sorteos enteros (y 200 por división) sobre Normal 138, Técnica y Puerto Viejo, con las familias reales de la nube copiadas a datos de prueba: **ninguna familia sin "lejos" queda partida** |
+| Una mesa, una | `sorteo_juntas_test`: cada familia recibe exactamente las mesas que tiene en su cuenta |
+| "Lejos" nunca se toca | `sorteo_lejos_en_el_salon_test` (el de hoy), con las tres opciones |
+| "Qué tan lejos" se respeta | `tool/lejos_distancias_test.dart`: 1.000 sorteos por salón y por opción; cerca, casi siempre a 1 o 2 lugares; a unas mesas, entre 3 y 6; bien lejos, como hoy. La medición de hoy queda anotada antes del cambio |
+| Si no hay lugar a esa distancia, avisa | `sorteo_con_plano_test`: el salón lleno da la más cercana a lo pedido y el aviso con el nombre |
+| Lo pedido queda registrado | `sorteo_con_plano_test`: `_lejos` en `resultado`, y `sorteos_mesas.tipo` sin valores nuevos |
+| La planilla dice "lejos · cerca" | `planilla_sorteo_test` |
+| El motor sigue siendo factible | `sorteo_mesas_motor_test`, con los miles de salones de hoy y las tres opciones |
+| **El recorrido entero** | `recorrido_salon_test`: Puerto Viejo como está en la nube → guardar (se ordena) → sortear con dos familias "lejos" (una cerca, una bien lejos) → juntas, lejos y números en orden → deshacer → barra a 3 m → sortear de nuevo |
+
+Los tests corren en la PC del usuario (`flutter test`): el contenedor remoto no tiene Flutter.
 
 ## 6. Preguntas para el usuario
 

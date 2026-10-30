@@ -114,16 +114,30 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
   nueva** (como "no congelar a nadie" en la 6.2.1). La pantalla de OPERADORES lo avisa al destildar Caja.
 - El PIN sigue en texto, como hoy. Guardarlo cifrado es otro pendiente: no entra acá para no tocar el login de caja.
 
-## 5. Reglas que hay que respetar
+## 5. Reglas que hay que respetar, y qué prueba cada cosa
 
 - Crear, cambiar o desactivar un operador o sus permisos: doble llave de modo jefe (`kSoloEnModoJefe` y
   `_frenaSinModoJefe()`).
-- Un test que monte `_RoleRouter` con `entradas` y falle si aparece el `DashboardScreen`.
-- Un test que lea `EntradasHomeScreen` y `RetiroEntradasScreen` y falle si, sin permiso de Caja, aparece un camino al
-  cobro o a editar al alumno.
-- Sin fila de permisos, el operador entra como caja, igual que hoy (test). Con la fila en 0, no entra (test).
-- `test/borrados_de_otra_pc_test.dart` tiene que ver la tabla nueva.
-- `flutter analyze` y los tests, en la PC.
+- Cada fila de la tabla es un test que tiene que existir y pasar, con **roturas a propósito** en cada etapa.
+- `flutter analyze` y los tests, en la PC (el contenedor remoto no tiene Flutter).
+
+| Lo acordado | El test |
+|---|---|
+| Los operadores de hoy siguen siendo de caja | `permisos_operador_test`: sin fila de permisos, entra como caja, igual que hoy |
+| Cargado sin permisos no entra | `permisos_operador_test`: con la fila en 0, "Te faltan permisos" y vuelve a la entrada |
+| Un permiso: entra directo; los dos: elige | `entrada_operador_test` (pantalla): solo Caja → abrir caja; solo Entradas → `EntradasHomeScreen`; los dos → aparecen CAJA y ENTRADAS |
+| Solo Entradas no ve nada más | `entrada_operador_test`: `_RoleRouter` con `entradas` nunca arma el `DashboardScreen` |
+| Solo Entradas no cobra ni edita | `modo_entradas_cerrado_test`: lee `EntradasHomeScreen` y `RetiroEntradasScreen` y falla si sin Caja hay un camino al cobro o a editar al alumno; y `sesionCajaIdParaCobro` rechaza el modo entradas |
+| Con deuda: "que pase por caja" o COBRAR | `retiro_entradas_screen_test`: sin Caja, el aviso con el monto de `DeudaAlumno.total`; con Caja, COBRAR (y pide abrir la caja si no está abierta) |
+| Se destraba sola cuando la caja cobra | `retiro_entradas_screen_test`: un pago que baja de la otra PC destraba la entrega sin tocar nada |
+| Pasar a caja y volver, sin el PIN | `entrada_operador_test`: con los dos permisos, ENTRADAS → PASAR A CAJA → ENTRADAS |
+| Queda anotado quién entregó | `quien_opera_test`: en modo entradas, `entregado_por` es el nombre del operador |
+| Los PIN no chocan | `operadores_screen_test`: no deja repetir uno de otro operador ni el maestro |
+| Solo el jefe da permisos | `solo_modo_jefe_test`, ampliado a la pantalla de OPERADORES |
+| No se borra nada | `borrados_de_otra_pc_test` ve la tabla nueva en `_tablasSinRevisarBorrados` |
+| La nube y la PC dicen lo mismo | `permisos_operador_test`: compara `toJson` con las columnas del SQL, como `totem_config_test` |
+| La migración no toca lo de antes | `tool/verificar_migracion_v76_test.dart` sobre una copia de la base real: tabla por tabla, la vuelta a la 6.2.1 y el mismo SHA-256 de la real |
+| **El recorrido entero** | A mano, en dos PCs (etapa 5): solo Entradas en una y la caja en la otra; la familia debe, va a la caja, paga y se destraba. Y uno con los dos permisos en una sola PC |
 
 ## 6. Etapas (cada una cierra sola, con commit)
 
