@@ -182,3 +182,33 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 3. **¿Ve cuánto debe la familia?** Recomiendo que sí, para decírselo. La pantalla ya tiene "ocultar montos".
 4. **¿Ve todas las fiestas masivas, o el jefe elige cuáles?** Recomiendo todas: es más simple, y cada noche es una
    escuela.
+
+## 8. Por confirmar: venta de entradas sueltas (no programar hasta que el usuario confirme)
+
+Lo que dijo el usuario el 30-oct, todavía sin confirmar:
+- **Además de entregar** las entradas de los contratos (a los que pagaron), **vender entradas sueltas a cualquiera**
+  que venga a comprar, no solo a alumnos.
+- **El precio lo ponen ellos**, por fiesta.
+- **Que quede anotado** quién compró y retiró, que pagó, y **cuánto tiene que haber en la caja**.
+- Duda abierta: ¿esa plata va a la caja de siempre o a una caja aparte, "de lo que se vendió en el momento"?
+
+**Lo que ya resuelve la duda de la caja, con lo que existe:** las cajas son **por operador** (`sesiones_caja`, cada
+una con su cambio inicial y su arqueo). Si la venta es un cobro más, hecho con permiso de Caja:
+- quien solo vende entradas abre su caja y **esa caja tiene solo lo vendido**: es la caja aparte, sin inventar otra;
+- si el mismo operador también cobra cuotas, el cierre muestra **las entradas sueltas en un renglón propio**, con
+  cantidad, precio y total;
+- no hay plata sin caja: la app ya frena un cobro que no tiene caja abierta (`SinCajaAbiertaException`).
+
+**Lo que haría falta (borrador):**
+- Precio por fiesta, puesto en modo jefe: tabla aparte (`precios_entradas_evento`), no en `contratos_alumnos`.
+- Cada venta en una tabla aparte (`ventas_entradas`): fiesta, comprador (nombre y DNI), cantidad, precio, total, medio
+  de pago, caja (`sesion_caja_id`), quién vendió, números del talonario, anulada y su motivo. Nunca se borra: se anula.
+- En la pantalla de entradas, para quien tiene Caja: **VENDER ENTRADAS**, al lado de la entrega de los contratos.
+- Un resumen por fiesta: cuántas se vendieron, a quién, cuánto entró y en qué caja.
+
+**Preguntas para cuando se confirme:**
+1. ¿Las entradas sueltas son generales (sin cena)? ¿Con número del talonario, como las de los contratos?
+2. ¿Hay un tope por fiesta (lugares del salón)?
+3. ¿El comprador tiene que estar en la lista de la puerta (Recepción y tótem) o entra con la entrada en papel?
+4. ¿Un alumno puede comprar de más, o eso va por su contrato (sillas extra)?
+
