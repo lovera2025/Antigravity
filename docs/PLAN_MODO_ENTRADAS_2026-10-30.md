@@ -86,6 +86,22 @@ Depende de los permisos de quien está en el mostrador:
 - **Solo Entradas:** en lugar de COBRAR dice **"Debe $X. Que pase por caja a saldar todo; cuando pague, la entrega se
   destraba sola."** El monto sale de `DeudaAlumno.total`, el mismo que ve la caja.
 
+**En vivo con la caja** (pedido del usuario el 30-oct: "que pueda estar online esa caja y la del operario; viene a
+saldar, en tiempo real salta que pagó y le salta que puede liberar esa entrada"):
+- **Lo que ya existe:** la caja cobra, la cola sube a los 2 s (`_esperaAntesDeSubir`), sale el pulso y la PC de
+  entradas baja el pago en menos de un segundo; la pantalla se relee sola (`cambiosBajadosStream`, y cada 15 s por las
+  dudas). Son unos **3 a 5 segundos**, pero hoy la fila cambia en silencio.
+- **Lo que se suma:**
+  - Al mostrar "que pase por caja", la familia queda en una lista **"En caja"** arriba de la pantalla de entradas,
+    con lo que debe. Solo en memoria de esa pantalla: no es un dato nuevo.
+  - Cuando una de esas familias queda sin deuda (`DeudaAlumno.pagoTodo`), **salta un aviso: "PÉREZ pagó: ya podés
+    entregar"**, con un sonido corto y el botón **ENTREGAR**, que abre su entrega ya destrabada. Si pagó una parte,
+    el aviso dice cuánto falta.
+  - Si el diálogo de esa familia está abierto, se actualiza ahí mismo, sin cerrarlo.
+  - Una línea arriba dice si se está en vivo: **"En vivo con la caja"**, o **"Sin internet: lo que se cobre en la
+    caja no llega hasta que vuelva"**. Las dos PCs tienen que estar con internet (en la oficina, lo están).
+- Sirve igual para quien tiene Caja y Entradas en otra PC: el aviso no depende de quién cobró.
+
 Los otros bloqueos (cuenta que no coincide, sin mesa, mesas que no coinciden, no entran) dicen lo de hoy, con
 "pedile al jefe que la revise", y **sin editar al alumno** en modo entradas.
 
@@ -130,6 +146,9 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 | Solo Entradas no cobra ni edita | `modo_entradas_cerrado_test`: lee `EntradasHomeScreen` y `RetiroEntradasScreen` y falla si sin Caja hay un camino al cobro o a editar al alumno; y `sesionCajaIdParaCobro` rechaza el modo entradas |
 | Con deuda: "que pase por caja" o COBRAR | `retiro_entradas_screen_test`: sin Caja, el aviso con el monto de `DeudaAlumno.total`; con Caja, COBRAR (y pide abrir la caja si no está abierta) |
 | Se destraba sola cuando la caja cobra | `retiro_entradas_screen_test`: un pago que baja de la otra PC destraba la entrega sin tocar nada |
+| Salta el aviso "pagó: ya podés entregar" | `retiro_entradas_screen_test`: una familia en "En caja" que queda sin deuda muestra el aviso con ENTREGAR; un pago parcial dice cuánto falta; con el diálogo abierto, se actualiza ahí |
+| Se sabe si está en vivo | `retiro_entradas_screen_test`: sin internet, la línea "Sin internet…"; al volver, "En vivo con la caja" |
+| Llega en segundos | A mano, en dos PCs (etapa 5): del cobro al aviso, menos de 10 s |
 | Pasar a caja y volver, sin el PIN | `entrada_operador_test`: con los dos permisos, ENTRADAS → PASAR A CAJA → ENTRADAS |
 | Queda anotado quién entregó | `quien_opera_test`: en modo entradas, `entregado_por` es el nombre del operador |
 | Los PIN no chocan | `operadores_screen_test`: no deja repetir uno de otro operador ni el maestro |
@@ -154,8 +173,11 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 
 ## 7. Preguntas para el usuario
 
-1. **¿"Vender" es entregar?** Este plan supone que en ese mostrador solo se entregan las entradas que ya están en el
-   contrato. Si también se venden entradas o sillas sueltas, eso se cobra, y lo hace quien tenga Caja.
+1. **¿Qué se vende en ese mostrador?** (30-oct: el usuario dijo "vender las entradas, y aparte entregar las que
+   corresponden"). La app hoy no vende entradas sueltas: solo entrega las del contrato. Para venderlas hay que
+   saber qué son (¿entradas generales de más?, ¿sillas?), a qué precio, si van a la cuenta del alumno o son aparte, y
+   quién recibe la plata. **Si se cobra, lo hace quien tiene Caja**: la plata tiene que entrar en una caja con su
+   arqueo. Queda afuera de este plan hasta tener esas respuestas.
 2. **¿Puede anular una entrega quien tiene solo Entradas?** Recomiendo que no: queda para el jefe y para caja.
 3. **¿Ve cuánto debe la familia?** Recomiendo que sí, para decírselo. La pantalla ya tiene "ocultar montos".
 4. **¿Ve todas las fiestas masivas, o el jefe elige cuáles?** Recomiendo todas: es más simple, y cada noche es una
