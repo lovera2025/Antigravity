@@ -198,7 +198,41 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 - **Una persona tiene esa caja**: vende y va anotando. Es **lo último**: va después de todo lo demás de este plan y
   del plano.
 
-**Cómo encaja en este plan (propuesta, a revisar cuando se llegue):**
+**Lo que agregó el usuario (30-oct, 13:18; "te iré informando"):**
+- **Cada venta queda con quién vendió, a quién, cuánto y cómo se pagó.**
+- **El precio de la entrada lo ponen ellos**, en un lugar donde se escribe "$X".
+- **Las sillas extra también se compran ahí** ("allá en el predio"; después del sorteo de mesas, las sillas se compran
+  ahí). Quien compra sillas extra, para la mesa principal o la adicional, **paga el 50 % del valor de la entrada** por
+  cada una.
+- **Mejor con porcentajes**, como renglones que se tildan para aplicarlos, igual que en el modal de cobro de los
+  masivos.
+- Pago en **efectivo, transferencia o mixto**, con una pantalla parecida al cobro de los masivos.
+- **Un comprobante en PDF de media A4** (como los recibos de cobro, `_mediaA4` en `pdf_service.dart`), con los datos
+  de las **pulseras VIP y las normales**.
+
+**Cómo queda (propuesta, a revisar cuando se llegue):**
+- **Precios por fiesta, en modo jefe** (`precios_entradas_evento`, tabla aparte):
+  - **Valor de la entrada: $X.**
+  - **Renglones con porcentaje** sobre ese valor, que el jefe puede sumar o cambiar: de entrada, "Entrada suelta ·
+    100 %" y "Silla extra · 50 %". El monto de cada renglón sale solo: cambiar el valor de la entrada cambia todos.
+- **VENDER** (pantalla parecida al cobro de los masivos):
+  - **A quién:** un alumno de la escuela (se busca como en la grilla) o **una persona de afuera** (nombre; DNI si lo
+    dan).
+  - **Los renglones**, cada uno con su casilla y su cantidad: "Entradas sueltas × 2 · $X c/u", "Sillas extra × 2 ·
+    50 % · $X/2 c/u". Se tilda lo que se aplica y abajo va el total.
+  - **Cómo paga:** efectivo, transferencia o mixto (cuánto de cada uno), como en el cobro.
+  - Al confirmar: la venta queda en `ventas_entradas` con su caja de entradas, y sale el **comprobante de media A4**:
+    escuela, fecha y hora, quién vendió, a quién, los renglones, el total, cómo pagó, y **cuántas pulseras VIP y
+    cuántas normales** (con los números del talonario, si llevan).
+- **La silla extra comprada acá tiene que sumarse a la familia:** más lugares en `RetiroEntradas.entradasDe`, en el
+  reparto P/A (hasta 2 por mesa, como hoy) y en el plano. Sin escribir en `contratos_alumnos` (la trampa de las
+  columnas): se lee de `ventas_entradas`, por alumno. **A revisar con cuidado cuando se llegue**: hoy las sillas extra
+  salen de la cuenta del alumno, y no puede haber dos lugares que digan cosas distintas.
+- **Si "allá en el predio" es la noche de la fiesta**, sin internet: la caja de entradas tiene que funcionar sin
+  conexión (como Recepción) y subir todo al volver. Si es en la oficina, con internet, es más simple. Confirmar antes
+  de programar.
+
+**Cómo encaja con el resto de este plan:**
 - **Un tercer permiso, "Vender entradas"**, en la misma lista de OPERADORES. Separado de "Entradas" (entregar), así
   quien solo entrega nunca toca plata.
 - **La caja de entradas es otra cosa que la caja de cuotas**, y no se mezclan: no pasa por `sesiones_caja` ni por el
