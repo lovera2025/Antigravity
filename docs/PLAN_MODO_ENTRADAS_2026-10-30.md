@@ -210,16 +210,35 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 - **Un comprobante en PDF de media A4** (como los recibos de cobro, `_mediaA4` en `pdf_service.dart`), con los datos
   de las **pulseras VIP y las normales**.
 
+**Lo que agregó el usuario (30-oct, 13:24; "iremos afinando, le iré preguntando cómo va a querer"):**
+- **El porcentaje viene en 0**, no con el 50 % escrito: el descuento se pone a mano cuando corresponde.
+- **El que solo entrega** mira si la familia pagó todo su contrato; si no, tiene que ir a pagar a la caja (al jefe)
+  antes de que le den las entradas. Para eso **tiene que leer bien la base de los contratos**, al día: quién pagó y
+  quién no.
+- **Ventas a los de afuera: primero la anticipada y después la general** (dos precios o dos etapas). A pensar con el
+  jefe.
+- **El que vende entradas va directo a eso** al entrar.
+- **Al vender, se pide nombre y apellido** del comprador (obligatorio). Al confirmar el pago, **sale el PDF solo**,
+  como en los masivos.
+- **Un historial de las ventas**, que se pueda imprimir en PDF: quién compró, cuánto, cómo pagó, y **una tilde de
+  "verificado que pagó"**.
+
 **Cómo queda (propuesta, a revisar cuando se llegue):**
 - **Precios por fiesta, en modo jefe** (`precios_entradas_evento`, tabla aparte):
   - **Valor de la entrada: $X.**
-  - **Renglones con porcentaje** sobre ese valor, que el jefe puede sumar o cambiar: de entrada, "Entrada suelta ·
-    100 %" y "Silla extra · 50 %". El monto de cada renglón sale solo: cambiar el valor de la entrada cambia todos.
+  - **Etapas de precio** para los de afuera: anticipada y general (cada una con su valor y desde cuándo rige). A
+    definir con el jefe.
+  - **El descuento viene en 0 %** (decidido el 30-oct). Se escribe a mano en el renglón cuando corresponde (por
+    ejemplo, 50 % en las sillas extra).
+  - **Riesgo:** un descuento a mano es plata que no entra. Cada descuento queda escrito en la venta (cuánto y quién lo
+    puso), sale en el comprobante, en el historial y en el cierre de la caja de entradas como renglón propio
+    ("Descuentos: $Y"). A decidir con el jefe: si el operario puede ponerlo solo o necesita el modo jefe.
 - **VENDER** (pantalla parecida al cobro de los masivos):
   - **A quién:** un alumno de la escuela (se busca como en la grilla) o **una persona de afuera** (nombre; DNI si lo
     dan).
-  - **Los renglones**, cada uno con su casilla y su cantidad: "Entradas sueltas × 2 · $X c/u", "Sillas extra × 2 ·
-    50 % · $X/2 c/u". Se tilda lo que se aplica y abajo va el total.
+  - **Nombre y apellido del comprador, obligatorios** (sin eso no se confirma).
+  - **Los renglones**, cada uno con su casilla, su cantidad y su descuento (0 % de entrada): "Entradas × 2 · $X c/u",
+    "Sillas extra × 2 · descuento 50 % · $X/2 c/u". Se tilda lo que se aplica y abajo va el total.
   - **Cómo paga:** efectivo, transferencia o mixto (cuánto de cada uno), como en el cobro.
   - Al confirmar: la venta queda en `ventas_entradas` con su caja de entradas, y sale el **comprobante de media A4**:
     escuela, fecha y hora, quién vendió, a quién, los renglones, el total, cómo pagó, y **cuántas pulseras VIP y
@@ -231,6 +250,14 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 - **Si "allá en el predio" es la noche de la fiesta**, sin internet: la caja de entradas tiene que funcionar sin
   conexión (como Recepción) y subir todo al volver. Si es en la oficina, con internet, es más simple. Confirmar antes
   de programar.
+
+- **Historial de ventas por fiesta:** fecha y hora, comprador, renglones, total, cómo pagó, quién vendió, y la tilde
+  **"Pago verificado"** (quién la puso y cuándo; pensada para las transferencias). Se filtra por verificadas o no, se
+  reimprime el comprobante de cada una, y se imprime **el historial entero en PDF**, con la tilde en cada renglón.
+  Una venta no se borra: se anula, con el motivo, y sigue en el historial tachada.
+- **La entrega a los alumnos lee los contratos al día:** las mismas cuentas que el cobro (`DeudaAlumno`), con la
+  revisión de pagos borrados en la nube antes de decidir (`revisarPagosEnLaNube`, como hace el cobro) y el aviso en
+  vivo de la sección 3c.
 
 **Cómo encaja con el resto de este plan:**
 - **Un tercer permiso, "Vender entradas"**, en la misma lista de OPERADORES. Separado de "Entradas" (entregar), así
