@@ -51,20 +51,23 @@ oficina (la pantalla de Retiro de entradas que ya existe, v72). Ya están pagas 
   **permisos**, con casillas:
   - **Caja**: cobrar, abrir y cerrar caja (lo de hoy);
   - **Entradas**: entregar entradas y pulseras.
-  - Por lo menos uno tildado. La lista queda abierta a otros permisos (la barra, por ejemplo), pero este plan suma
-    solo Entradas.
+  - **Puede quedar sin ninguno** (decidido el 30-oct): el jefe carga a la persona con su nombre y PIN y le da los
+    permisos después. Hasta entonces, al entrar le sale **"Te faltan permisos: pedíselos al jefe"** y no pasa de ahí.
+  - La lista queda abierta a otros permisos (la barra, por ejemplo), pero este plan suma solo Entradas.
 - Doble llave de modo jefe, como todo lo que da permisos.
 - **Los operadores siguen en `operadores_caja`** (la caja y sus sesiones los necesitan ahí, con su clave foránea).
   **Los permisos van en una tabla aparte, `permisos_operador`**: una fila por operador, con id fijo (el del operador),
   `caja` y `entradas` (0/1), `updated_at`.
   - **No es una columna nueva en `operadores_caja`**: esa fila se reescribe entera al editar y al bajar, y una PC más
     vieja la volvería a subir sin la columna (la misma trampa de `contratos_alumnos`).
-  - **Sin fila, el operador es de caja sola**: los de hoy siguen igual, sin tocar nada.
+  - **Sin fila, el operador es de caja sola**: los de hoy siguen igual, sin tocar nada. **Con fila y las dos casillas
+    en 0, no tiene permisos.** Son dos cosas distintas y cada una lleva su test.
 
 ### 3b. La entrada a la app: un PIN y se despliegan las opciones
 
 - `RoleGateScreen`: **MODO JEFE** queda igual. **MODO CAJA** pasa a ser **OPERADOR**, con el mismo diálogo del PIN.
 - Con el PIN, según los permisos de ese operador:
+  - **ninguno**: "Te faltan permisos: pedíselos al jefe", y vuelve a la pantalla de entrada;
   - **uno solo**: entra directo (Caja, con "Abrir caja" como hoy; o Entradas);
   - **los dos**: se despliegan **CAJA** y **ENTRADAS**, y elige.
 - `AppRoleKind` suma `entradas`; `loginCaja` pasa a `loginOperador(pin)` y deja elegir. Entradas **no abre caja ni
@@ -107,8 +110,8 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
   - **Se corre antes de instalar, con el OK del usuario en el momento.**
 - Sync: baja y sube como `operadores_caja`. Nunca se borra una fila: va en `_tablasSinRevisarBorrados`, con el motivo.
 - **Convivencia con la 6.2.1:** una PC vieja no conoce los permisos y deja entrar a cualquier operador como caja.
-  **Regla: no crear operadores sin Caja hasta que las tres PCs tengan la versión nueva** (como "no congelar a nadie"
-  en la 6.2.1). La pantalla de OPERADORES lo avisa al destildar Caja.
+  **Regla: no crear operadores sin Caja (solo Entradas, o sin permisos) hasta que las tres PCs tengan la versión
+  nueva** (como "no congelar a nadie" en la 6.2.1). La pantalla de OPERADORES lo avisa al destildar Caja.
 - El PIN sigue en texto, como hoy. Guardarlo cifrado es otro pendiente: no entra acá para no tocar el login de caja.
 
 ## 5. Reglas que hay que respetar
@@ -118,7 +121,7 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 - Un test que monte `_RoleRouter` con `entradas` y falle si aparece el `DashboardScreen`.
 - Un test que lea `EntradasHomeScreen` y `RetiroEntradasScreen` y falle si, sin permiso de Caja, aparece un camino al
   cobro o a editar al alumno.
-- Sin fila de permisos, el operador entra como caja, igual que hoy (test).
+- Sin fila de permisos, el operador entra como caja, igual que hoy (test). Con la fila en 0, no entra (test).
 - `test/borrados_de_otra_pc_test.dart` tiene que ver la tabla nueva.
 - `flutter analyze` y los tests, en la PC.
 
