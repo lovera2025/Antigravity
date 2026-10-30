@@ -43,33 +43,47 @@ familia con principal y adicional puede no entrar pegada, o el sorteo decir que 
 
 ## 3. Lo que se agrega
 
-### 3a. ORDENAR LOS NÚMEROS (Acomodar, solo modo jefe)
+### 3a. Los números se ordenan solos al guardar el salón (antes del sorteo)
 
-Un botón al lado de ACOMODAR LAS MESAS. **Las mesas no se mueven: solo cambian los números**, para que queden 1..N
-en serpentina sobre donde el jefe las dejó.
+**Decidido por el usuario el 29-oct** (en vez de un botón que hay que acordarse de tocar). El jefe mueve, agrega o
+saca mesas como quiera; **al guardar, mientras no haya sorteo, la app las numera 1..N en orden según donde quedaron.
+Las mesas no se mueven: solo cambian los números.**
 
-- **Cuenta pura nueva** `ArmarAMedida.ordenarNumeros(ArmadoSalon a) → ArmadoSalon`:
+- **Cuenta pura nueva** `ArmarAMedida.ordenarNumeros(ArmadoSalon a) → ({ArmadoSalon armado, Map<int, int> cambio})`
+  (`cambio`: número viejo → número nuevo):
   - agrupa las mesas de cada hoja en filas (misma `y` con tolerancia de medio paso, el paso de `pasoDe`);
   - parte cada fila en izquierda y derecha por el centro (pasarela, si no escenario, si no el medio del borde: lo
     mismo que `acomodar`);
   - numera como `acomodar`: la izquierda desde el escenario y la derecha desde el fondo, alternando el sentido, y de
-    los dos sentidos queda el que deja menos `cortes`;
+    los dos sentidos queda el que deja menos `cortes` (ver la pregunta 3: el orden lo confirma el usuario);
   - **el pasto va al final**, con los números que siguen (como hoy);
   - las hojas en su orden (A y después B: la numeración sigue);
-  - `ultimoNumero` queda en `max(ultimoNumero, N)`.
-- **Mismas trabas que ACOMODAR** (`motivoSinAcomodar` sin la cantidad): apagado con familias con mesa ("deshacé el
-  sorteo primero") y en un armado del Canva (ver pregunta 2). Después del sorteo un número no cambia nunca: ya pudo
-  salir impreso o en una entrada.
-- **Pasa por `SesionAcomodo` como `rehecho: true`**: se ve "ASÍ QUEDARÍA · SIN GUARDAR", se deshace, y al guardar
-  (`paraGuardar(rehecho:)`) se quitan las fijadas, las libres y los bloques, con el aviso de siempre, porque sus
-  números quedaron en otra mesa.
-- Si ya están en orden, el botón dice "Los números ya están en orden" y no agrega un paso.
+  - del 1 a N **sin huecos**: antes del sorteo `ultimoNumero` vuelve a N (ningún número salió impreso con una
+    familia; ACOMODAR ya renumera igual).
+- **Dónde corre:** en `EditarArmado.paraGuardar`, como último paso del armado que se guarda, **solo si**:
+  - no hay familias con mesa (las mismas que frenan ACOMODAR: `enUso` sin las fijadas);
+  - el salón tiene el borde del playón (salón vacío, a medida o predio). **Los armados del Canva no**: traen la
+    numeración que hizo el jefe a mano.
+- **Lo que apunta a un número sigue a su mesa física** (no se borra, a diferencia de `rehecho`): con `cambio` se
+  traducen las claves de `config.fijadas` y `config.libres` y cada número de `BloqueDivision.mesas`. Una familia
+  fijada cerca del Ingreso sigue en la misma mesa, con otro número.
+- **Se ve antes de guardar**: en "Antes de guardar" del panel, una línea "Los números se ordenan: quedan del 1 al
+  35" (o nada si ya estaban en orden). Con Deshacer no se pierde nada: lo ordenado es lo que se guarda, no un paso
+  de la sesión.
+- **Después del sorteo los números no se tocan nunca** (pueden estar impresos o en una entrada). Si el jefe mueve
+  mesas con familias sentadas, cada una se lleva su número, como hoy. **Al deshacer el sorteo entero, el próximo
+  guardado del salón las vuelve a ordenar.** (Es lo que pasó en Puerto Viejo el 29-oct: sorteo 19:50, mesas
+  corridas a mano y guardadas 20:05 con el sorteo puesto, deshacer 20:12. Las siete familias con dos o más mesas
+  quedaron pegadas; los números, mezclados.)
+- **ACOMODAR LAS MESAS sigue como está** (ya numera en orden). Agrandar o achicar el playón o un sector no mueve
+  mesas ni números; al guardar se ordenan con las posiciones que tengan.
 
 ### 3b. El aviso en el plano
 
 `PlanoDeLaFiesta.avisos` suma uno cuando `armado.cortes.length` pasa de los saltos que trae la serpentina (el paso de
-un lado al otro y el cambio de hoja): "Los números no siguen el salón (13 saltos): en Personalizar → Acomodar,
-ORDENAR LOS NÚMEROS". No frena el sorteo; avisa.
+un lado al otro y el cambio de hoja). Sin sorteo: "Los números no siguen el salón (13 saltos): se ordenan al
+guardar en Personalizar". Con sorteo: lo mismo, pero "deshacé el sorteo para ordenarlos". No frena el sorteo; avisa.
+Sirve para los salones que ya están guardados así (Puerto Viejo) y para el Canva.
 
 ### 3c. Lo que no cambia
 
@@ -85,19 +99,26 @@ ORDENAR LOS NÚMEROS". No frena el sorteo; avisa.
 - `AvisoDelPlano`, no SnackBar.
 - La cuenta en función pura con test; la pantalla solo la llama.
 - **Sobre un salón recién acomodado, `ordenarNumeros` tiene que dar exactamente lo mismo, mesa por mesa** (es la misma
-  serpentina). Un cambio a una de las dos cuentas va en las dos.
+  serpentina). Un cambio a una de las dos cuentas va en las dos (y en `armar`).
+- **Convivencia:** una PC con la versión anterior abre y guarda un salón ordenado sin problema (son los mismos
+  datos con otros números). Pero esa PC no ordena al guardar: **el plano se toca desde una PC con la versión nueva**.
 - No comparar armados enteros con `firma`: mesa por mesa.
 - `flutter analyze` y los tests, en la PC (el contenedor remoto no tiene Flutter).
 
 ## 5. Etapas (cada una cierra sola, con commit)
 
 1. **La cuenta** (`armar_a_medida.dart`) y sus tests (`test/ordenar_numeros_test.dart`):
-   - un salón acomodado queda igual (ocho casos, como el test de `acomodar` contra `armar`);
+   - un salón acomodado queda igual y `cambio` es la identidad (ocho casos, como el test de `acomodar` contra
+     `armar`);
    - Puerto Viejo tal como está en la nube (las 35 posiciones de arriba): de 1 a 35, y a lo sumo el salto entre lados;
    - pasto al final; dos hojas; una fila incompleta; mesas sueltas fuera de fila;
    - roturas a propósito, todas vistas.
-2. **La sesión y el panel** (`sesion_acomodo.dart`, `panel_acomodar.dart`, `plano_evento_cuerpo.dart`): el botón,
-   apagado con su motivo, deshacer, y lo que se quita al guardar. Test de pantalla en `plano_evento_cuerpo_test`.
+2. **Al guardar** (`editar_armado.dart` → `paraGuardar`, y la línea de "Antes de guardar" en `panel_acomodar.dart`):
+   - ordena sin familias con mesa; con familias, no toca nada; en el Canva, no toca nada;
+   - fijadas, libres y bloques siguen a su mesa física (test con una fijada en una mesa que cambia de número);
+   - una PC atrasada no pisa a la otra (`paraGuardar` ya relee la nube; un test de dos PCs como los de la 9c);
+   - `test/solo_modo_jefe_test.dart` y `puerta_sigue_al_salon_test` siguen pasando;
+   - test de pantalla en `plano_evento_cuerpo_test`.
 3. **El aviso** (`plano_de_la_fiesta.dart`) con su test.
 4. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después. Mandárselas al usuario.
 5. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL.
@@ -107,13 +128,24 @@ ORDENAR LOS NÚMEROS". No frena el sorteo; avisa.
 1. **"Marcado para que estén lejos":** hoy se tilda en el diálogo de SORTEO, el día del sorteo, y no queda guardado
    antes. ¿Así está bien, o lo quieren marcar antes en la ficha del alumno (cuando la familia lo pide)? Lo segundo es
    una tabla nueva (no una columna de `contratos_alumnos`) y una migración: va aparte de este plan.
-2. **Armados del Canva** (Normal 2A, etc.): traen la numeración que hizo el jefe a mano. ¿ORDENAR también ahí, o solo
-   en los salones con borde del playón (los de hoy son todos "A medida" o "Salón vacío")? Recomiendo solo con borde,
-   como ACOMODAR.
-3. ¿El orden es la serpentina de siempre (izquierda desde el escenario, derecha desde el fondo)? Si "numéricamente"
-   quería decir otra cosa (por ejemplo, de izquierda a derecha como se lee, fila por fila), cambia la cuenta y hay
-   que decirlo antes de la etapa 1. Ojo: de izquierda a derecha, el último de una fila y el primero de la siguiente
-   quedan en las puntas opuestas, y la adicional se separaría de la principal.
+2. ~~Armados del Canva~~ **Decidido el 29-oct:** se ordena solo en los salones con borde del playón; el Canva
+   conserva la numeración del jefe.
+3. **El orden** (pendiente; el usuario lo consulta). Las dos maneras dan 1, 2, 3… hasta N; cambia dónde queda cada
+   número. Ejemplo con tres filas de cuatro, escenario arriba:
 
-Lo que recomiendo: la serpentina, solo con borde, y "lejos" se sigue marcando en SORTEO por ahora. Para Puerto Viejo,
-mientras tanto, alcanza con tocar ACOMODAR OTRA VEZ, pero eso vuelve a poner las mesas donde las calcula la app.
+   ```
+   Serpentina (la de siempre)      De corrido, como se lee
+     1   2   3   4                   1   2   3   4
+     8   7   6   5                   5   6   7   8
+     9  10  11  12                   9  10  11  12
+   ```
+
+   - En la serpentina **dos números seguidos siempre están pegados** (el 5 queda debajo del 4). Es como numeró el
+     jefe su Canva (página 3).
+   - Como se lee, el 4 y el 5 quedan en puntas opuestas. El sorteo no separaría a nadie (corta en cada punta), pero
+     **una familia no puede pasar de una fila a otra**: con filas de 4, la familia de Puerto Viejo que tuvo 5 mesas
+     (20 a 24) no entraría junta, y en general entran menos combinaciones.
+
+Lo que recomiendo: la serpentina, y "lejos" se sigue marcando en SORTEO por ahora. Puerto Viejo hoy no tiene familias
+con mesa: con la versión nueva, abrir el plano y guardar alcanza para que queden del 1 al 35 en orden, sin mover
+ninguna mesa.
