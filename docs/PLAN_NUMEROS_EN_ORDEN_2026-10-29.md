@@ -140,7 +140,36 @@ apellido, pero no se ve qué mesas son de la misma familia.
   plano impreso, una casilla con el mismo nombre en el diálogo de imprimir, también prendida.
 - **El tótem no cambia**: ya enciende las mesas de la familia que llega.
 
-### 3e. Lo que no cambia
+### 3e. "Lejos", pero cerca
+
+**Pedido del usuario el 30-oct:** que se respete que una familia con adicional quede junta, que la de una mesa tenga
+una, y que la marcada "lejos" quede separada, **"obviamente no tan lejos"**.
+
+**Revisado en el código el 30-oct:**
+- **Juntas: se cumple.** El motor pone cada bloque en casilleros corridos, `CasillerosPlano` corta en cada salto del
+  salón y `validar` rechaza a una familia nueva partida (`tramosPegados`). En el sorteo de prueba de Puerto Viejo del
+  29-oct, las siete familias con dos mesas o más quedaron con números corridos (2-3, 6-8, 9-10, 17-18, 20 a 24, 26-27,
+  28-29).
+- **Una mesa: se cumple** (`simples`, una cada uno).
+- **Lejos sin tocarse: se cumple** desde la 6.1.0 (`lejosEnElSalon`, medido en el salón, con sus tests).
+- **Pero "lejos" hoy es lo más lejos posible.** `SorteoMesasMotor.candidatasLejos` ordena las libres de la más lejana
+  a la más cercana, y `seCompleta` usa `_masLejos`. En la Normal (138 mesas), una familia en la 5 se lleva la
+  adicional a la otra punta del salón, o de su bloque si se sortea por división. Es lo contrario de lo pedido.
+
+**Ahora:** lejos es **la mesa libre más cercana que no toque a ninguna de la familia**, medida en metros en el salón
+dibujado (con al menos una mesa de por medio). Dentro de su bloque, si se sortea por división.
+- El motor recibe cómo ordenar las candidatas (un parámetro con el orden de hoy por defecto); `SorteoConPlano` le pasa
+  el orden por distancia real en el salón. **`esFactible` y `seCompleta` tienen que usar el mismo orden** que el
+  sorteo: si no, el botón se habilita con una cuenta y el sorteo hace otra.
+- Sin plano, lo mismo por número: la libre más cercana que no sea vecina.
+- **Riesgo:** las sueltas se ponen después de todos los bloques. En un salón muy justo, lo cercano ya puede estar
+  ocupado y la adicional cae donde quede. Si la medición lo muestra, se pone cada suelta enseguida después del bloque
+  de su familia (cambia `esFactible`: va con sus tests de miles de salones).
+- **Se mide antes y después**, como el arreglo de la 6.1.0: 1.000 sorteos por salón (Normal 138, Técnica, Puerto
+  Viejo 35), entero y por división, con 20 familias "1 lejos". Se anota a cuántos metros y a cuántas mesas quedó la
+  adicional. Lo esperado: casi siempre a una o dos mesas, y nunca tocándose.
+
+### 3f. Lo que no cambia
 
 - La regla 3 (adicional pegada, "lejos" opcional): ya está y se deja como está, salvo lo que diga la pregunta 1.
 - `SorteoMesasMotor`, `SorteoConPlano`, `CasillerosPlano`.
@@ -181,6 +210,9 @@ apellido, pero no se ve qué mesas son de la misma familia.
    - la distancia elegida queda en `config.medidas` al guardar, y Medidas la muestra;
    - test de sesión (arrastrar sin soltar no agrega pasos; soltar agrega uno; Deshacer vuelve) y test de pantalla;
    - sobre el mismo playón, la barra en 3 m y ACOMODAR con Medidas en 3 m dan lo mismo, mesa por mesa.
+3d. **"Lejos", pero cerca** (`sorteo_mesas_motor.dart`, `sorteo_con_plano.dart`): la medición de hoy primero
+   (`tool/lejos_distancias_test.dart`), el cambio, la misma medición después; `sorteo_mesas_motor_test` (incluida la
+   factibilidad con miles de salones) y `sorteo_lejos_en_el_salon_test` siguen pasando; roturas a propósito.
 3c. **Juntas y separadas en el plano** (`estado_plano.dart` para saber qué es cada una, `pintor_plano.dart`,
    `plano_papel.dart`, `imprimir_plano_dialog.dart`):
    - la cuenta, con tests: una mesa, dos pegadas, tres en serpentina que dobla de fila, dos lejos, tres con una lejos,
