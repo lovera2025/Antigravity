@@ -114,7 +114,33 @@ de Medidas. En Puerto Viejo, eso terminó con las mesas corridas a mano y los n�
 - El título de la barra dice cuál de las dos es, y una línea debajo explica por qué ("Antes del sorteo: las mesas se
   vuelven a acomodar" / "Ya hay familias con mesa: se estira sin cambiar ninguna mesa").
 
-### 3d. Lo que no cambia
+### 3d. En el plano se ve qué familias tienen adicional, juntas o separadas
+
+**Pedido del usuario el 30-oct.** Hoy cada mesa se pinta con el color de su división y la principal lleva el
+apellido, pero no se ve qué mesas son de la misma familia.
+
+- **Qué es cada una, sin guardar nada nuevo:** las mesas de la familia se parten en grupos pegados con
+  `SorteoConPlano.tramosPegados(armado, numeros)`, la misma medida que usa el sorteo:
+  - **una mesa**: nada nuevo;
+  - **un solo grupo de dos o más**: **juntas**;
+  - **más de un grupo**: **separadas** (lo que se marcó "lejos", o una familia que quedó partida).
+- **Cómo se dibuja** (`pintor_plano.dart`), encima del relleno de la división, que no cambia:
+  - **juntas**: una **cápsula** que une las mesas del grupo, por detrás, siguiendo la serpentina (también cuando dobla
+    de fila, como la 8 y la 9);
+  - **separadas**: un **aro punteado** en cada mesa, y abajo **"→ 30"** con el número de la otra mesa;
+  - en las dos, la **P** en la principal (la que lleva el apellido, `InfoMesa.principal`) y la **A** en las
+    adicionales.
+- **Los colores salen del tema de cada estilo** (`TemaPlano`), con un contraste revisado contra los colores de las
+  divisiones. **Nunca son la única marca**: la cápsula es línea llena, el aro es punteado, y van la P, la A y la
+  flecha. Así se lee igual en blanco y negro.
+- **Al tocar una mesa de una familia separada**, la otra se resalta (el foco de hoy), aunque esté en la otra hoja.
+- **Antes del sorteo**, lo mismo con las fijadas: una familia con dos mesas fijadas se ve junta o separada.
+- **La leyenda** suma "Juntas" y "Separadas" solo si en el salón hay alguna.
+- **Prendido o apagado:** en la pantalla del plano, un botón "Familias con adicional", prendido de entrada. En el
+  plano impreso, una casilla con el mismo nombre en el diálogo de imprimir, también prendida.
+- **El tótem no cambia**: ya enciende las mesas de la familia que llega.
+
+### 3e. Lo que no cambia
 
 - La regla 3 (adicional pegada, "lejos" opcional): ya está y se deja como está, salvo lo que diga la pregunta 1.
 - `SorteoMesasMotor`, `SorteoConPlano`, `CasillerosPlano`.
@@ -155,7 +181,14 @@ de Medidas. En Puerto Viejo, eso terminó con las mesas corridas a mano y los n�
    - la distancia elegida queda en `config.medidas` al guardar, y Medidas la muestra;
    - test de sesión (arrastrar sin soltar no agrega pasos; soltar agrega uno; Deshacer vuelve) y test de pantalla;
    - sobre el mismo playón, la barra en 3 m y ACOMODAR con Medidas en 3 m dan lo mismo, mesa por mesa.
-4. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después. Mandárselas al usuario.
+3c. **Juntas y separadas en el plano** (`estado_plano.dart` para saber qué es cada una, `pintor_plano.dart`,
+   `plano_papel.dart`, `imprimir_plano_dialog.dart`):
+   - la cuenta, con tests: una mesa, dos pegadas, tres en serpentina que dobla de fila, dos lejos, tres con una lejos,
+     el pasto, una familia en dos hojas;
+   - el dibujo en los tres estilos, en color y en blanco y negro;
+   - tocar una mesa separada resalta la otra.
+4. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después; un salón sorteado con familias
+   juntas y separadas, en pantalla y en PDF (color y blanco y negro). Mandárselas al usuario.
 5. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL.
 
 ## 6. Preguntas para el usuario
