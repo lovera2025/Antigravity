@@ -178,7 +178,7 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
    saber qué son (¿entradas generales de más?, ¿sillas?), a qué precio, si van a la cuenta del alumno o son aparte, y
    quién recibe la plata. **Si se cobra, lo hace quien tiene Caja**: la plata tiene que entrar en una caja con su
    arqueo. Queda afuera de este plan hasta tener esas respuestas.
-2. **¿Puede anular una entrega quien tiene solo Entradas?** Recomiendo que no: queda para el jefe y para caja.
+2. ~~¿Puede anular una entrega quien tiene solo Entradas?~~ **Decidido el 30-oct: anula solo el jefe** (sección 8).
 3. **¿Ve cuánto debe la familia?** Recomiendo que sí, para decírselo. La pantalla ya tiene "ocultar montos".
 4. **¿Ve todas las fiestas masivas, o el jefe elige cuáles?** Recomiendo todas: es más simple, y cada noche es una
    escuela.
@@ -255,6 +255,24 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
   **"Pago verificado"** (quién la puso y cuándo; pensada para las transferencias). Se filtra por verificadas o no, se
   reimprime el comprobante de cada una, y se imprime **el historial entero en PDF**, con la tilde en cada renglón.
   Una venta no se borra: se anula, con el motivo, y sigue en el historial tachada.
+- **Anular, solo el jefe** (pedido del usuario el 30-oct: "en modo jefe se debería poder anular una compra; el jefe
+  solo puede anular, con las entradas también"). Vale para **una venta** y para **una entrega de los contratos**.
+  Doble llave de modo jefe, como todo lo que cambia plata o entradas.
+  - **Anular una venta**, desde el historial: motivo obligatorio y **"¿Devolvieron las entradas y pulseras?"**, con los
+    números del talonario a la vista para revisarlos.
+    - **Devueltas:** esos números vuelven a quedar para vender.
+    - **No devueltas:** esos números quedan **anulados** y no se vuelven a vender; en la lista de la venta y en el
+      historial figuran como "anuladas, sin devolver" (por si aparecen en la puerta).
+  - **La plata se devuelve como un movimiento nuevo, nunca cambiando lo que ya se cerró** (igual que hoy con un cobro
+    anulado: `anuladoDespuesDelCierre`, en `cierre_caja_provider.dart`):
+    - con la caja de entradas abierta, la devolución sale de esa caja y su arqueo la descuenta;
+    - con la caja ya cerrada, el cierre queda como se contó ese día y abajo va una línea aparte: "Anulado después del
+      cierre: $X".
+  - La venta anulada sigue en el historial, tachada, con quién la anuló, cuándo, el motivo y si devolvieron las
+    entradas. El comprobante reimpreso dice "ANULADA".
+  - **Anular una entrega de los contratos** (lo de hoy, `RetiroEntradas.anular`): queda solo para el jefe, con la misma
+    pregunta de las entradas devueltas. Para quien tiene solo Entradas o Caja, el botón se ve apagado con el motivo
+    (`kSoloEnModoJefe`). Esto responde la pregunta 2 de la sección 7.
 - **La entrega a los alumnos lee los contratos al día:** las mismas cuentas que el cobro (`DeudaAlumno`), con la
   revisión de pagos borrados en la nube antes de decidir (`revisarPagosEnLaNube`, como hace el cobro) y el aviso en
   vivo de la sección 3c.
