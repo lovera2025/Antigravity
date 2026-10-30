@@ -167,6 +167,9 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
 
 - Las distancias se miden **en metros en el salón dibujado** y se cuentan en "lugares" (la distancia entre mesas de
   Medidas), así valen igual con las mesas a 2 m o a 3 m. Siempre **sin tocarse** (`lejosEnElSalon`, como hoy).
+- **Lo normal es sortear entero** (dicho por el usuario el 30-oct: "por división casi no se hará, pero está bien que
+  esté"). SORTEO ya viene en "entera" (`ModoSorteo.entera`, y ninguna fiesta tiene otro modo guardado). Las pruebas y
+  la medición van primero sobre el sorteo entero.
 - **Por división, todo es dentro de su bloque**: "bien lejos" es la otra punta del bloque, no del salón.
 - Si en el salón no queda ninguna mesa en esa franja, se toma la más cercana a la franja, y el resultado del sorteo
   lo dice ("PÉREZ: la adicional quedó a 8 lugares; no había lugar a unas mesas").
