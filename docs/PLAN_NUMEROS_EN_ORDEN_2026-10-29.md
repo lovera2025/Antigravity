@@ -85,7 +85,36 @@ un lado al otro y el cambio de hoja). Sin sorteo: "Los números no siguen el sal
 guardar en Personalizar". Con sorteo: lo mismo, pero "deshacé el sorteo para ordenarlos". No frena el sorteo; avisa.
 Sirve para los salones que ya están guardados así (Puerto Viejo) y para el Canva.
 
-### 3c. Lo que no cambia
+### 3c. La barra de Acomodar: antes del sorteo reacomoda, después estira
+
+**Pedido del usuario el 30-oct.** Hoy la barra "Separar o juntar" (`EditarArmado.separar`) estira las mesas parejo y
+no cambia números, pero no sabe de la pista, la barra, los baños ni el borde del hormigón. Si se sube mucho, las mesas
+de atrás quedan encima de un sector o fuera del playón. Encima, ACOMODAR OTRA VEZ la ignora y vuelve a la distancia
+de Medidas. En Puerto Viejo, eso terminó con las mesas corridas a mano y los números mezclados.
+
+**Ahora la barra hace lo que corresponde según el momento:**
+
+- **Sin familias con mesa y con el borde del playón** (salón vacío, a medida o predio): la barra es **"Distancia
+  entre mesas"**, de 1,5 a 5 m (`lugarMinimoM` a `lugarMaximoM`), de a 5 cm.
+  - **Mientras se arrastra, el salón se reacomoda en vivo**, con `ArmarAMedida.acomodar(cantidad, lugarM: valor)`.
+    Las mesas esquivan los sectores, quedan dentro del hormigón y se numeran en serpentina. Es la misma cuenta que
+    ACOMODAR LAS MESAS, así que no hay dos formas de acomodar.
+  - Al lado dice "Entran las 35" o "Faltan 3: bajá la distancia, agrandá el playón o achicá un sector".
+  - **Soltar es un paso de Deshacer**, como `acomodar`, con `rehecho: true`: al guardar se quitan las fijadas, las
+    libres y los bloques, con el aviso de siempre. Si había mesas corridas a mano, el aviso dice que se pierden (vuelven
+    con Deshacer).
+  - **La distancia se guarda en Medidas** al GUARDAR EL SALÓN (`config.medidas.lugarMesaM`, en `paraGuardar`, como
+    `conMedidasDelPlayon`). El casillero "De centro a centro" de Medidas y la barra dicen siempre lo mismo, y ACOMODAR
+    OTRA VEZ respeta lo que se eligió.
+  - Rendimiento: la cuenta es pura y chica (hasta ~150 mesas); se recalcula como mucho cada 50 ms mientras se arrastra.
+    Si en la PC del jefe se nota lenta, se reacomoda al soltar y mientras tanto se muestra la distancia.
+- **Con familias con mesa, o en un armado del Canva**: la barra es **"Separar o juntar"**, como hoy. Estira, no cambia
+  ningún número ni ninguna familia, con el alcance (todo, un lado, el bloque de una división) y la vista previa que
+  avisa cuántas quedan fuera o encima de un sector. Es la única forma de abrir el salón después del sorteo.
+- El título de la barra dice cuál de las dos es, y una línea debajo explica por qué ("Antes del sorteo: las mesas se
+  vuelven a acomodar" / "Ya hay familias con mesa: se estira sin cambiar ninguna mesa").
+
+### 3d. Lo que no cambia
 
 - La regla 3 (adicional pegada, "lejos" opcional): ya está y se deja como está, salvo lo que diga la pregunta 1.
 - `SorteoMesasMotor`, `SorteoConPlano`, `CasillerosPlano`.
@@ -120,6 +149,12 @@ Sirve para los salones que ya están guardados así (Puerto Viejo) y para el Can
    - `test/solo_modo_jefe_test.dart` y `puerta_sigue_al_salon_test` siguen pasando;
    - test de pantalla en `plano_evento_cuerpo_test`.
 3. **El aviso** (`plano_de_la_fiesta.dart`) con su test.
+3b. **La barra** (`sesion_acomodo.dart`, `panel_acomodar.dart`, `plano_evento_cuerpo.dart`):
+   - sin familias, reacomoda con `acomodar` y es un paso de Deshacer al soltar; con familias o en el Canva, `separar`
+     como hoy;
+   - la distancia elegida queda en `config.medidas` al guardar, y Medidas la muestra;
+   - test de sesión (arrastrar sin soltar no agrega pasos; soltar agrega uno; Deshacer vuelve) y test de pantalla;
+   - sobre el mismo playón, la barra en 3 m y ACOMODAR con Medidas en 3 m dan lo mismo, mesa por mesa.
 4. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después. Mandárselas al usuario.
 5. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL.
 
