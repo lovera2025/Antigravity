@@ -206,6 +206,13 @@ una con su cambio inicial y su arqueo). Si la venta es un cobro más, hecho con 
 - En la pantalla de entradas, para quien tiene Caja: **VENDER ENTRADAS**, al lado de la entrega de los contratos.
 - Un resumen por fiesta: cuántas se vendieron, a quién, cuánto entró y en qué caja.
 
+**Lo que el usuario quiere pensar (30-oct, "lo charlo y te confirmo"):**
+- **Una caja solo de entradas**, con su propio inicio, distinta de la de cuotas. Se puede hacer como una caja de tipo
+  "Entradas" (`sesiones_caja.etiqueta` o una tabla aparte de tipo), que solo acepta ventas de entradas y cierra con
+  su propio arqueo. Decidir antes si es eso o la caja del operador de siempre.
+- **Que no haya que ir por la grilla** (fiesta → ENTRADAS) para vender o entregar. `EntradasHomeScreen` (sección 3b)
+  ya lleva directo: PIN → fiesta → entradas. Para quien tiene Caja, el mismo acceso directo desde el dashboard.
+
 **Preguntas para cuando se confirme:**
 1. ¿Las entradas sueltas son generales (sin cena)? ¿Con número del talonario, como las de los contratos?
 2. ¿Hay un tope por fiesta (lugares del salón)?
