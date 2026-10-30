@@ -183,7 +183,33 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 4. **¿Ve todas las fiestas masivas, o el jefe elige cuáles?** Recomiendo todas: es más simple, y cada noche es una
    escuela.
 
-## 8. Por confirmar: venta de entradas sueltas (no programar hasta que el usuario confirme)
+## 8. Venta de entradas sueltas: lo que dijo el jefe, y lo que falta confirmar
+
+**Audios del jefe (30-oct, pasados por el usuario; transcriptos acá, el segundo se entiende a medias):**
+> "Claro, tenemos que hacer una caja de venta para cada escuela, para tener identificado cuántas se vendieron.
+> Exactamente, sí."
+>
+> "Eso es lo último, si se puede […] así como una caja así. Entonces le digo a [una persona]: […] tu caja, y vos
+> vendés la entrada y vas anotando cuántas entradas […]."
+
+**Lo que queda decidido con eso:**
+- **Una caja de venta de entradas por escuela** (por fiesta), aparte de la caja de cuotas, para saber cuántas se
+  vendieron en cada una.
+- **Una persona tiene esa caja**: vende y va anotando. Es **lo último**: va después de todo lo demás de este plan y
+  del plano.
+
+**Cómo encaja en este plan (propuesta, a revisar cuando se llegue):**
+- **Un tercer permiso, "Vender entradas"**, en la misma lista de OPERADORES. Separado de "Entradas" (entregar), así
+  quien solo entrega nunca toca plata.
+- **La caja de entradas es otra cosa que la caja de cuotas**, y no se mezclan: no pasa por `sesiones_caja` ni por el
+  cierre de cuotas. Tabla aparte (`cajas_entradas`): fiesta, operador, cambio inicial, abierta y cerrada, arqueo.
+  Una abierta por fiesta y operador a la vez.
+- Al cerrarla: **vendidas N × $precio = $total**, por medio de pago, y **cuánto tiene que haber en efectivo** (con el
+  cambio inicial). Su papel, como el cierre de caja de hoy.
+- Cada venta va en `ventas_entradas`, con `caja_entradas_id` (no `sesion_caja_id`). Lo demás, como el borrador de
+  abajo.
+
+### Borrador anterior (30-oct, antes de los audios)
 
 Lo que dijo el usuario el 30-oct, todavía sin confirmar:
 - **Además de entregar** las entradas de los contratos (a los que pagaron), **vender entradas sueltas a cualquiera**
@@ -192,7 +218,7 @@ Lo que dijo el usuario el 30-oct, todavía sin confirmar:
 - **Que quede anotado** quién compró y retiró, que pagó, y **cuánto tiene que haber en la caja**.
 - Duda abierta: ¿esa plata va a la caja de siempre o a una caja aparte, "de lo que se vendió en el momento"?
 
-**Lo que ya resuelve la duda de la caja, con lo que existe:** las cajas son **por operador** (`sesiones_caja`, cada
+**(Reemplazado por lo que dijo el jefe: caja aparte, por escuela.)** Lo que se había propuesto: las cajas son **por operador** (`sesiones_caja`, cada
 una con su cambio inicial y su arqueo). Si la venta es un cobro más, hecho con permiso de Caja:
 - quien solo vende entradas abre su caja y **esa caja tiene solo lo vendido**: es la caja aparte, sin inventar otra;
 - si el mismo operador también cobra cuotas, el cierre muestra **las entradas sueltas en un renglón propio**, con
