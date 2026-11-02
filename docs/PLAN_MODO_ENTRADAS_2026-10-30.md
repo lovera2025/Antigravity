@@ -48,8 +48,9 @@ oficina (la pantalla de Retiro de entradas que ya existe, v72). Ya están pagas 
 ### 3a. OPERADORES, con permisos (modo jefe)
 
 - El menú OPERADORES DE CAJA pasa a llamarse **OPERADORES**. Una sola lista; en cada uno, nombre, PIN, activo y sus
-  **permisos**, con casillas:
-  - **Caja**: cobrar, abrir y cerrar caja (lo de hoy);
+  **permisos**, con casillas (**nombres elegidos el 2-nov: Cobros · Entradas · Barra**; nada dice "Caja" a secas,
+  porque la de cuotas y la de barra son dos cajas distintas. Donde este plan dice "Caja" como permiso, es Cobros):
+  - **Cobros**: cobrar las cuotas de los eventos masivos, abrir y cerrar esa caja (lo de hoy);
   - **Entradas**: entregar entradas y pulseras.
   - **Barra** (2-nov): vender bebidas desde la tablet de la barra con su propia caja de barra (ver
     `docs/HOJA_DE_RUTA_2026-11-02.md`; el plan de la barra se escribe cuando la impresora pase la prueba). En esta
@@ -60,19 +61,21 @@ oficina (la pantalla de Retiro de entradas que ya existe, v72). Ya están pagas 
 - Doble llave de modo jefe, como todo lo que da permisos.
 - **Los operadores siguen en `operadores_caja`** (la caja y sus sesiones los necesitan ahí, con su clave foránea).
   **Los permisos van en una tabla aparte, `permisos_operador`**: una fila por operador, con id fijo (el del operador),
-  `caja` y `entradas` (0/1), `updated_at`.
+  `cobros`, `entradas` y `barra` (0/1), `updated_at`.
   - **No es una columna nueva en `operadores_caja`**: esa fila se reescribe entera al editar y al bajar, y una PC más
     vieja la volvería a subir sin la columna (la misma trampa de `contratos_alumnos`).
-  - **Sin fila, el operador es de caja sola**: los de hoy siguen igual, sin tocar nada. **Con fila y las dos casillas
-    en 0, no tiene permisos.** Son dos cosas distintas y cada una lleva su test.
+  - **Sin fila, el operador es de Cobros sola**: los de hoy (Maxi, Juan) siguen igual, con su mismo PIN y sin volver a
+    darles nada. **Con fila y las casillas en 0, no tiene permisos.** Son dos cosas distintas y cada una lleva su test.
+  - **Al abrir a uno de hoy en OPERADORES, Cobros aparece tildada** (decidido el 2-nov): guardar sin tocar nada no le
+    saca el permiso. Lleva su test.
 
 ### 3b. La entrada a la app: un PIN y se despliegan las opciones
 
 - `RoleGateScreen`: **MODO JEFE** queda igual. **MODO CAJA** pasa a ser **OPERADOR**, con el mismo diálogo del PIN.
 - Con el PIN, según los permisos de ese operador:
   - **ninguno**: "Te faltan permisos: pedíselos al jefe", y vuelve a la pantalla de entrada;
-  - **uno solo**: entra directo (Caja, con "Abrir caja" como hoy; o Entradas);
-  - **los dos**: se despliegan **CAJA** y **ENTRADAS**, y elige.
+  - **uno solo**: entra directo (Cobros, con "Abrir caja" como hoy; o Entradas, o Barra);
+  - **dos o más**: se despliegan los que tiene (**COBROS**, **ENTRADAS**, **BARRA**), y elige.
 - `AppRoleKind` suma `entradas`; `loginCaja` pasa a `loginOperador(pin)` y deja elegir. Entradas **no abre caja ni
   late**.
 - `_RoleRouter` (`main.dart`): con `entradas`, va a **`EntradasHomeScreen`**, nunca al `DashboardScreen`.
@@ -130,7 +133,13 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 - Sync: baja y sube como `operadores_caja`. Nunca se borra una fila: va en `_tablasSinRevisarBorrados`, con el motivo.
 - **Convivencia con la 6.2.1:** una PC vieja no conoce los permisos y deja entrar a cualquier operador como caja.
   **Regla: no crear operadores sin Caja (solo Entradas, o sin permisos) hasta que las tres PCs tengan la versión
-  nueva** (como "no congelar a nadie" en la 6.2.1). La pantalla de OPERADORES lo avisa al destildar Caja.
+  nueva** (como "no congelar a nadie" en la 6.2.1). La pantalla de OPERADORES lo avisa al destildar Cobros.
+- **El PIN tiene que andar en cualquier PC o tablet sin que entre el jefe** (el usuario lo vio el 2-nov: creaba un PIN
+  en una PC y en otra no le servía hasta entrar como jefe). Pasaba hasta la 4.9.6, porque sin un rol elegido la PC no
+  bajaba nada; desde el 8-sep baja cada 10 s también en la pantalla de entrada. Reglas nuevas, cada una con su test:
+  - si el PIN no está en esta PC y hay internet, se bajan `operadores_caja` y `permisos_operador` en el momento y se
+    prueba otra vez, antes de decir que es incorrecto;
+  - la tablet preparada en la oficina baja operadores y permisos, y "Lista para trabajar sin internet" lo dice.
 - El PIN sigue en texto, como hoy. Guardarlo cifrado es otro pendiente: no entra acá para no tocar el login de caja.
 
 ## 5. Reglas que hay que respetar, y qué prueba cada cosa

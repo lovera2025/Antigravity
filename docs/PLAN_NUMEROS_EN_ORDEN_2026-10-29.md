@@ -263,8 +263,8 @@ Los tests corren en la PC del usuario (`flutter test`): el contenedor remoto no 
    una tabla nueva (no una columna de `contratos_alumnos`) y una migración: va aparte de este plan.
 2. ~~Armados del Canva~~ **Decidido el 29-oct:** se ordena solo en los salones con borde del playón; el Canva
    conserva la numeración del jefe.
-3. **El orden** (pendiente; el usuario lo consulta). Las dos maneras dan 1, 2, 3… hasta N; cambia dónde queda cada
-   número. Ejemplo con tres filas de cuatro, escenario arriba:
+3. ~~El orden~~ **Decidido el 2-nov: la serpentina** (el usuario se lo mostró al jefe y le gustó). Las dos maneras dan
+   1, 2, 3… hasta N; cambia dónde queda cada número. Ejemplo con tres filas de cuatro, escenario arriba:
 
    ```
    Serpentina (la de siempre)      De corrido, como se lee

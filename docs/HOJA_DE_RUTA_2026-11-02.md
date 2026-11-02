@@ -11,16 +11,26 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 - **La foto de la mora** en la nube (`supabase/mora_fotos.sql`, tabla `mora_fotos`): la primera, sacada el 2-nov con
   643 alumnos. **Antes y después de cada versión se saca una** y se compara (CLAUDE.md, sección SQL).
 - **El registro de cada cambio a la mora** (`supabase/mora_cambios.sql`, tabla `mora_cambios` y su trigger, probados):
-  cuando una mora reviva, ahí está la escritura que lo hizo. Es lo primero que se mira.
+  cuando una mora reviva, ahí está la escritura que lo hizo. Es lo primero que se mira. Ya anotó su primer cobro real:
+  ESPINOZA, FRANCISCO, el mismo 2-nov. Un cobro que no toca la mora no se anota, y está bien.
 - **Todas las PCs en 6.2.1** (confirmado el 2-nov).
+- **La base comparada con la foto, el 2-nov:** los mismos 643 alumnos y los mismos 16 congelados, sin ninguna mora
+  revivida. Los únicos cambios son dos cobros normales.
 
 ## El orden
 
+**Publicar, solo con todo terminado y preguntándole antes al usuario** (2-nov). Mientras tanto se programa y se sube a
+la rama de desarrollo, que no llega a las PCs.
+
 ### 1. La impresora de la barra (rama `feature/barra-impresora`, ya subida)
+
+**Espera a que llegue la impresora y no frena al paso 2** (2-nov: el usuario todavía no la tiene). La rama está escrita
+sin compilar: nunca pasó por `flutter analyze`.
 
 Es una prueba de hardware, no programación: `tool/impresora_prueba.dart`, con los dos paquetes y los permisos de
 Android. Emparejar la Global, correr el arnés en un Android, tocar TICKET, ACENTOS, ANCHO y QR, y mirar el papel.
-Decide tres cosas del módulo: la tabla de caracteres, cuántas letras entran por renglón, y si el QR nativo sale.
+Decide tres cosas del módulo: la tabla de caracteres, cuántas letras entran por renglón, y si el QR nativo sale. Al
+arnés le falta un botón LOGO: el ticket lleva el logo de Junior Eventos, y en la Global va como imagen.
 **Antes de pasar la rama a la de desarrollo, un `flutter build windows`**: `print_bluetooth_thermal` también se
 compila para Windows y no tiene que molestar al programa de escritorio.
 
@@ -30,8 +40,8 @@ compila para Windows y no tiene que molestar al programa de escritorio.
 
 ### 2. El plano antes de los sorteos (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`)
 
-Va primero porque los sorteos de verdad son en noviembre y hoy Puerto Viejo tiene los números mezclados. Son seis
-cosas, con la tabla "lo acordado → el test" en la sección 5b:
+Es lo que se programa ahora: los sorteos de verdad son en noviembre y hoy Puerto Viejo tiene los números mezclados.
+**El jefe eligió la serpentina el 2-nov.** Son seis cosas, con la tabla "lo acordado → el test" en la sección 5b:
 1. los números se ordenan solos al guardar el salón (antes del sorteo);
 2. el aviso de los números que no siguen el salón;
 3. la barra de Acomodar reacomoda en vivo antes del sorteo y estira después;
@@ -40,30 +50,57 @@ cosas, con la tabla "lo acordado → el test" en la sección 5b:
 6. el recorrido entero como test.
 **Sin SQL.** Una versión (propuesta: 6.3.0).
 
+**Si aprieta el tiempo:** del 2-nov al 4-dic hay 32 días para los pasos 2, 3 y 4. Lo que los sorteos necesitan son las
+etapas 1 a 3 del plan, con el recorrido, las muestras y la versión. Las etapas 4 a 6 se pueden pasar a otra versión; lo
+decide el usuario cuando se llegue.
+
 > Frase: "Programá docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md en el orden de su sección 5, una etapa por commit, con los
 > tests de la sección 5b y roturas a propósito. No pases de etapa con un test en rojo. Al terminar, muestras."
 
 ### 3. Operadores con permisos (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, etapas 1 a 3)
 
-La base de Entradas y de Barra: una sola lista de OPERADORES con las casillas Caja, Entradas y Barra; con el PIN se
-despliegan las opciones; cargado sin permisos no entra. **Una tabla nueva** (`permisos_operador`, local v76 y nube,
-con la migración probada sobre una copia de la base real) y el registro de quién dio qué permiso. Los operadores de
-hoy siguen siendo de caja sin tocar nada. **Regla:** no crear operadores sin Caja hasta que las tres PCs tengan la
-versión.
+La base de Entradas y de Barra: una sola lista de OPERADORES con las casillas **Cobros, Entradas y Barra** (nombres
+elegidos el 2-nov: Cobros es la caja de cuotas de los eventos masivos, Barra es la caja de barra, y nada dice "Caja" a
+secas); con el PIN se despliegan las opciones; cargado sin permisos no entra. **Una tabla nueva** (`permisos_operador`,
+local v76 y nube, con la migración probada sobre una copia de la base real) y el registro de quién dio qué permiso.
+**Los operadores de hoy (Maxi, Juan) no se tocan:** siguen de Cobros con su mismo PIN, sin volver a darles nada.
+**Regla:** no crear operadores sin Cobros hasta que las tres PCs tengan la versión.
 
 > Frase: "Programá las etapas 1 a 3 de docs/PLAN_MODO_ENTRADAS_2026-10-30.md (la tabla permisos_operador con su SQL
-> sin correr, OPERADORES con las casillas Caja/Entradas/Barra, y la entrada con el PIN que despliega las opciones).
+> sin correr, OPERADORES con las casillas Cobros/Entradas/Barra, y la entrada con el PIN que despliega las opciones).
 > Con los tests de la sección 5. La migración v76 se prueba sobre una copia de mi base, con la app cerrada: avisame
 > cuando la necesites."
 
 ### 4. El módulo de barra (plan a escribir después del paso 1)
 
-Para el 4-dic. Lo decidido el 2-nov: la app instalada en las tablets Android (la misma de Recepción), logueada una
+Para el 4-dic. Lo decidido el 2-nov: la app instalada en las tablets Android, logueada una
 vez con la cuenta de la empresa; la cajera entra con su PIN (permiso Barra), elige la fiesta, abre **su caja de
 barra** (aparte de la de cuotas), conecta su Global y vende; cada tablet guarda en su base y sube cuando hay internet;
 BARRA en modo jefe (PC y web del iPhone) arma la lista de precios y ve cuánto hizo cada caja (efectivo,
-transferencia, mixto), por sede. Tres tablas nuevas (precios por fiesta, cajas de barra, ventas), con quién, cuándo
-y desde qué dispositivo. Las tablets se preparan en la oficina con internet ("Lista para trabajar sin internet").
+transferencia, mixto), por sede. Tablas nuevas (catálogo, precios por fiesta, cajas de barra, ventas), con quién,
+cuándo y desde qué dispositivo. Las tablets se preparan en la oficina con internet ("Lista para trabajar sin internet").
+
+**Etapa 0, antes de escribir el plan: la app de hoy corriendo en una tablet.** Hoy ninguna tablet tiene la app: los
+celulares y tablets de la puerta usan la web, y Android nunca se publicó (último cambio en mayo, firma de debug). La
+barra sería el primer Android en producción de una 6.x, y es el riesgo más grande para el 4-dic. Hay que verla
+logueada, con una fiesta bajada y Recepción abierta sin internet. Y hace falta una clave de firma propia: con la de
+debug, cambiar de PC de compilación obliga a desinstalar.
+
+**Lo decidido con las maquetas (2-nov, aprobadas por el usuario):**
+- **BARRA** es otra tarjeta del centro de comando, solo en modo jefe. La cajera no pasa por ahí: su PIN la lleva directo.
+- **Vender:** se tocan los productos y se arma la cuenta. **Cobrar:** efectivo con "recibe" y vuelto; transferencia con
+  la tilde "vi el comprobante"; mixto partido en dos y corregible. **Cerrar la caja:** pide el efectivo contado y anota
+  la diferencia, sin corregir nada.
+- **Responsive, en tablet y celular:** las pantallas siguen `CortesPantalla` (600 y 1.024 px, como Recepción). Celular:
+  productos arriba y la cuenta abajo. Tablet: lado a lado. PC del jefe: catálogo, precios y cajas.
+- **El catálogo:** BARRA → Catálogo carga los productos una vez (nombre y categoría). Por fiesta se eligen y se les pone
+  precio. Las tablets bajan esa lista al prepararse.
+- **El ticket** lleva el logo de Junior Eventos (`assets/icons/2.png`), el nombre y el valor de cada cosa, el total, el
+  medio de pago, el número y el QR. Sale a la Global por Bluetooth y también como PDF, del mismo modelo.
+- **Todo PDF de la barra sale en 58 mm y en A4:** el ticket, la lista de precios y el cierre de caja. En modo jefe se
+  elige el tamaño al imprimir; la tablet manda el ticket a la Global y guarda el PDF.
+- **El PIN tiene que andar en cualquier PC o tablet sin que entre el jefe.** Si el PIN no está acá y hay internet, se
+  bajan operadores y permisos y se prueba otra vez. La tablet preparada en la oficina los trae bajados.
 
 > Frase (cuando la impresora haya pasado): "Escribí el plan del módulo de barra como docs/PLAN_BARRA_<fecha>.md con lo
 > decidido en docs/HOJA_DE_RUTA_2026-11-02.md (paso 4) y lo que dio la prueba de la impresora. Sin programar hasta mi
@@ -75,6 +112,8 @@ La entrega según los permisos, el aviso en vivo "pagó: ya podés entregar" cua
 La **venta de entradas sueltas** (sección 8) queda para cuando el jefe la termine de definir; es lo último.
 
 ### Con cada versión
+
+Nada de esto arranca sin preguntarle al usuario (2-nov).
 
 1. Foto de la mora "antes de X.Y.Z".
 2. Los SQL de la versión, con el OK del usuario.
