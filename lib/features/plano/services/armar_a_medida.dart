@@ -4,6 +4,7 @@ import '../../../models/plano_evento.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/medidas_salon.dart';
 import 'cambios_de_mesa.dart';
+import 'editar_armado.dart';
 import 'medir_salon.dart';
 
 /// Con qué se arma el salón a medida del playón.
@@ -796,9 +797,7 @@ class ArmarAMedida {
                   : despejeSectorM),
             ),
       ];
-      final cx = pasarela?.caja.centroX ??
-          escenario?.caja.centroX ??
-          (izquierda + derecha) / 2;
+      final cx = _centroDeHoja(a, h);
       final adentro = pasarela == null
           ? 0.0
           : pasarela.caja.ancho / 2 + a.aUnidades(despejePasarelaM);
@@ -905,31 +904,17 @@ class ArmarAMedida {
     }
 
     // La serpentina del jefe, como en [armar].
-    final ultimaFila = usadas.length - 1;
-    List<MesaPlano> numerar(bool ultimaHaciaAdentro) {
-      final mesas = <MesaPlano>[];
-      void poner(String hoja, double x, double y) => mesas.add(MesaPlano(
-            numero: mesas.length + 1,
-            hoja: hoja,
-            x: x,
-            y: y,
-          ));
-      for (var f = 0; f <= ultimaFila; f++) {
-        final fila = usadas[f];
-        final haciaAdentro = (ultimaFila - f).isEven == ultimaHaciaAdentro;
-        for (final x in haciaAdentro ? fila.izq.reversed : fila.izq) {
-          poner(fila.hoja, x, fila.y);
-        }
-      }
-      for (var f = ultimaFila; f >= 0; f--) {
-        final fila = usadas[f];
-        final haciaAfuera = (ultimaFila - f).isEven == ultimaHaciaAdentro;
-        for (final x in haciaAfuera ? fila.der : fila.der.reversed) {
-          poner(fila.hoja, x, fila.y);
-        }
-      }
-      return mesas;
-    }
+    MesaPlano Function(double x) sinNumero(String hoja, double y) =>
+        (x) => MesaPlano(numero: 0, hoja: hoja, x: x, y: y);
+    final filasDeMesas = [
+      for (final f in usadas)
+        (
+          izq: f.izq.map(sinNumero(f.hoja, f.y)).toList(),
+          der: f.der.map(sinNumero(f.hoja, f.y)).toList(),
+        ),
+    ];
+    List<MesaPlano> numerar(bool ultimaHaciaAdentro) =>
+        _numeradas(_enSerpentina(filasDeMesas, ultimaHaciaAdentro));
 
     ArmadoSalon con(List<MesaPlano> mesas) => a.copyWith(
           mesas: mesas,
@@ -947,5 +932,194 @@ class ArmarAMedida {
       capacidad: capacidad,
       mesasPorFila: [for (final f in usadas) f.izq.length + f.der.length],
     );
+  }
+
+  /// El medio de una hoja, de donde salen el lado izquierdo y el derecho: la
+  /// pasarela, si no el escenario, si no el medio del borde. No es
+  /// `EditarArmado.centroX`, que mira el medio de las mesas: con una fila
+  /// recortada daría otro centro.
+  static double _centroDeHoja(ArmadoSalon a, HojaPlano h) {
+    double? deTipo(TipoSector tipo) {
+      for (final s in a.sectoresDeHoja(h.id)) {
+        if (s.tipo == tipo) return s.caja.centroX;
+      }
+      return null;
+    }
+
+    final puntos = h.contorno?.puntos;
+    final medio = puntos == null
+        ? h.caja.centroX
+        : (puntos.map((p) => p.x).reduce(math.min) +
+                puntos.map((p) => p.x).reduce(math.max)) /
+            2;
+    return deTipo(TipoSector.pasarela) ?? deTipo(TipoSector.escenario) ?? medio;
+  }
+
+  /// El recorrido de la serpentina del jefe: la izquierda desde el escenario y
+  /// la derecha desde el fondo, alternando el sentido en cada fila. En cada fila
+  /// los dos lados van del medio hacia afuera; [ultimaHaciaAdentro] dice para
+  /// dónde se recorre la última fila de la izquierda.
+  static List<T> _enSerpentina<T>(
+    List<({List<T> izq, List<T> der})> filas,
+    bool ultimaHaciaAdentro,
+  ) {
+    final orden = <T>[];
+    final ultima = filas.length - 1;
+    for (var f = 0; f <= ultima; f++) {
+      final haciaAdentro = (ultima - f).isEven == ultimaHaciaAdentro;
+      orden.addAll(haciaAdentro ? filas[f].izq.reversed : filas[f].izq);
+    }
+    for (var f = ultima; f >= 0; f--) {
+      final haciaAfuera = (ultima - f).isEven == ultimaHaciaAdentro;
+      orden.addAll(haciaAfuera ? filas[f].der : filas[f].der.reversed);
+    }
+    return orden;
+  }
+
+  /// Las mismas mesas, en su mismo lugar, numeradas en ese orden desde [desde].
+  static List<MesaPlano> _numeradas(List<MesaPlano> orden, {int desde = 1}) => [
+        for (var i = 0; i < orden.length; i++)
+          MesaPlano(
+            numero: desde + i,
+            hoja: orden[i].hoja,
+            x: orden[i].x,
+            y: orden[i].y,
+            pasto: orden[i].pasto,
+          ),
+      ];
+
+  /// Las [mesas] puestas en filas, en el orden en que [acomodar] las llena:
+  /// hoja por hoja y, en cada una, desde el escenario hacia el fondo y hacia el
+  /// frente, intercaladas. Sin escenario, de arriba hacia abajo.
+  static List<({List<MesaPlano> izq, List<MesaPlano> der})> _filasDe(
+    ArmadoSalon a,
+    List<MesaPlano> mesas,
+  ) {
+    final filas = <({List<MesaPlano> izq, List<MesaPlano> der})>[];
+    final hojas = <String>{
+      for (final h in a.hojas) h.id,
+      for (final m in mesas) m.hoja,
+    };
+    for (final id in hojas) {
+      final deLaHoja = [for (final m in mesas) if (m.hoja == id) m]
+        ..sort((x, y) => x.y.compareTo(y.y));
+      if (deLaHoja.isEmpty) continue;
+
+      final metros = EditarArmado.pasoDe(a, [for (final m in deLaHoja) m.numero]);
+      final paso = metros == null ? 2 * a.radio : a.aUnidades(metros);
+
+      // Una mesa es de la fila si está a menos de medio paso de la primera: una
+      // mesa corrida a mano sigue en su fila, y la de la fila siguiente no entra.
+      final porFila = <List<MesaPlano>>[];
+      for (final m in deLaHoja) {
+        if (porFila.isNotEmpty && m.y - porFila.last.first.y < paso / 2) {
+          porFila.last.add(m);
+        } else {
+          porFila.add([m]);
+        }
+      }
+
+      RectPlano? escenario;
+      for (final s in a.sectoresDeHoja(id)) {
+        if (s.tipo == TipoSector.escenario) {
+          escenario = s.caja;
+          break;
+        }
+      }
+      if (escenario != null) {
+        final e = escenario;
+        // Cuántos pasos hay desde el escenario, no qué lugar ocupa la fila: una
+        // fila que quedó vacía (la tapa una pista) también cuenta en [acomodar].
+        int turno(List<MesaPlano> fila) {
+          final y = fila.first.y;
+          final debajo = y >= e.centroY;
+          final pasos = ((debajo ? y - e.abajo : e.y - y) / paso).floor();
+          return 2 * math.max<int>(0, pasos) + (debajo ? 0 : 1);
+        }
+
+        porFila.sort((x, y) {
+          final porTurno = turno(x).compareTo(turno(y));
+          return porTurno != 0
+              ? porTurno
+              : (x.first.y - e.centroY)
+                  .abs()
+                  .compareTo((y.first.y - e.centroY).abs());
+        });
+      }
+
+      final hoja = a.hoja(id);
+      final xs = [for (final m in deLaHoja) m.x];
+      final cx = hoja != null
+          ? _centroDeHoja(a, hoja)
+          : (xs.reduce(math.min) + xs.reduce(math.max)) / 2;
+      for (final fila in porFila) {
+        filas.add((
+          izq: [for (final m in fila) if (m.x < cx) m]
+            ..sort((x, y) => y.x.compareTo(x.x)),
+          der: [for (final m in fila) if (m.x >= cx) m]
+            ..sort((x, y) => x.x.compareTo(y.x)),
+        ));
+      }
+    }
+    return filas;
+  }
+
+  /// [mesas] numeradas desde [desde], en el sentido que menos corta la
+  /// serpentina (a igualdad, terminando adentro, como [acomodar]).
+  static List<MesaPlano> _ordenadas(
+    ArmadoSalon a,
+    List<MesaPlano> mesas, {
+    int desde = 1,
+  }) {
+    final filas = _filasDe(a, mesas);
+    final adentroPrimero =
+        _numeradas(_enSerpentina(filas, true), desde: desde);
+    final afueraPrimero =
+        _numeradas(_enSerpentina(filas, false), desde: desde);
+    int cortes(List<MesaPlano> m) => a.copyWith(mesas: m).cortes.length;
+    return cortes(afueraPrimero) < cortes(adentroPrimero)
+        ? afueraPrimero
+        : adentroPrimero;
+  }
+
+  /// Numera el salón de 1 a N siguiendo donde están las mesas, **sin mover
+  /// ninguna**: solo cambian los números. Las del pasto van al final.
+  ///
+  /// Es la misma serpentina de [acomodar], también entre hojas: la izquierda de
+  /// la A y de la B, y la derecha de vuelta. Sobre un salón recién acomodado no
+  /// cambia nada. `cambio` dice número viejo → número nuevo, solo de las mesas
+  /// que cambian, para que lo que apunta a un número siga a su mesa.
+  ///
+  /// Solo es para antes del sorteo: `ultimoNumero` vuelve a N porque ningún
+  /// número salió impreso con una familia. Decidir cuándo corre es de quien la
+  /// llama.
+  static ({ArmadoSalon armado, Map<int, int> cambio}) ordenarNumeros(
+    ArmadoSalon a,
+  ) {
+    if (a.mesas.isEmpty) return (armado: a, cambio: const <int, int>{});
+
+    final comunes = _ordenadas(a, [for (final m in a.mesas) if (!m.pasto) m]);
+    final pasto = _ordenadas(
+      a,
+      [for (final m in a.mesas) if (m.pasto) m],
+      desde: comunes.length + 1,
+    );
+    final nuevas = [...comunes, ...pasto];
+
+    // La mesa de cada lugar: dos mesas no comparten hoja, x e y.
+    String lugar(MesaPlano m) => '${m.hoja}|${m.x}|${m.y}';
+    final numeroViejo = <String, int>{
+      for (final m in a.mesas) lugar(m): m.numero,
+    };
+    final cambio = <int, int>{
+      for (final m in nuevas)
+        if (numeroViejo[lugar(m)] != m.numero) numeroViejo[lugar(m)]!: m.numero,
+    };
+
+    final n = nuevas.length;
+    if (cambio.isEmpty && (a.ultimoNumero == null || a.ultimoNumero == n)) {
+      return (armado: a, cambio: cambio);
+    }
+    return (armado: a.copyWith(mesas: nuevas, ultimoNumero: n), cambio: cambio);
   }
 }

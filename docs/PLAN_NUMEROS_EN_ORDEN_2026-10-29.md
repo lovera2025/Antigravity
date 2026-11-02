@@ -57,7 +57,9 @@ Las mesas no se mueven: solo cambian los números.**
   - numera como `acomodar`: la izquierda desde el escenario y la derecha desde el fondo, alternando el sentido, y de
     los dos sentidos queda el que deja menos `cortes` (ver la pregunta 3: el orden lo confirma el usuario);
   - **el pasto va al final**, con los números que siguen (como hoy);
-  - las hojas en su orden (A y después B: la numeración sigue);
+  - con dos hojas, la misma serpentina de `acomodar` y `armar`: la izquierda de la A y de la B, y la derecha de vuelta
+    (corregido al programarlo, el 2-nov: "primero toda la A" no daba lo mismo que ACOMODAR, que es la regla de la
+    sección 4);
   - del 1 a N **sin huecos**: antes del sorteo `ultimoNumero` vuelve a N (ningún número salió impreso con una
     familia; ACOMODAR ya renumera igual).
 - **Dónde corre:** en `EditarArmado.paraGuardar`, como último paso del armado que se guarda, **solo si**:
@@ -212,8 +214,16 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
 
 ## 5. Etapas (cada una cierra sola, con commit, y no se pasa a la siguiente con un test en rojo)
 
-1. **Ordenar los números** (`ArmarAMedida.ordenarNumeros`), sin pantalla.
-2. **Ordenar al guardar** (`EditarArmado.paraGuardar` y "Antes de guardar" del panel).
+1. **Ordenar los números** (`ArmarAMedida.ordenarNumeros`), sin pantalla. **Hecha el 2-nov**
+   (`test/ordenar_numeros_test.dart`, con el plano real de Puerto Viejo; muestra en
+   `tool/numeros_en_orden_muestra_test.dart`).
+2. **Ordenar al guardar** (`EditarArmado.paraGuardar` y "Antes de guardar" del panel). Dos cosas para mirar al
+   empezar, vistas al cerrar la etapa 1:
+   - `comoSeGuarda` pasa por `recordandoNumeros`, que sube `ultimoNumero` al más alto del salón guardado. Eso deshace
+     el "vuelve a N" de `ordenarNumeros`: al ordenar, ese paso no tiene que volver a subirlo. Y la pantalla compara lo
+     guardado con `comoSeGuarda`, así que tiene que dar lo mismo que se guarda;
+   - `paraGuardar` calcula `sacadas` comparando números de `base` y `nuevo`: eso va antes de renumerar, porque después
+     los números ya no dicen qué mesa se sacó.
 3. **El aviso de los números que no siguen el salón** (`PlanoDeLaFiesta.avisos`).
 4. **La barra de Acomodar**: reacomoda antes del sorteo, estira después.
 5. **Juntas y separadas en el plano**, en pantalla y en papel.

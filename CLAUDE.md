@@ -46,6 +46,10 @@ PRESUPUESTOS en Mi Empresa, sin `/op` ni rutas viejas, y código muerto afuera) 
 todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos eventos del mismo presupuesto). Las
 novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
+**En curso desde el 2-nov: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`, sin publicar; el
+orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapa 1 hecha: `ArmarAMedida.ordenarNumeros`, la cuenta, todavía
+sin pantalla. **Publicar, solo con todo terminado y preguntándole antes al usuario.**
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:
