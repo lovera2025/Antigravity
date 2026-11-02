@@ -31,6 +31,7 @@ class VistaPlano extends StatefulWidget {
     this.mostrarRegla = false,
     this.mostrarMedidas = false,
     this.lugares,
+    this.zoom = 1,
     this.encima,
     this.onApretar,
     this.onArrastrar,
@@ -66,6 +67,10 @@ class VistaPlano extends StatefulWidget {
   /// Con las medidas de la fiesta, cada mesa lleva el círculo de lugar que
   /// pide, en rojo si no lo tiene (para acomodar el salón).
   final MedidasPlano? lugares;
+
+  /// Cuánto está acercada la vista, para el detalle que depende de cuánto se ve
+  /// una mesa. Quien la acerca pasa [NivelDetalle.zoomQueCuenta].
+  final double zoom;
 
   /// Algo más para dibujar encima del plano (la regla al acomodar el salón).
   final CustomPainter? encima;
@@ -169,6 +174,7 @@ class _VistaPlanoState extends State<VistaPlano>
                   regla: widget.mostrarRegla,
                   cotas: widget.mostrarMedidas,
                   lugares: widget.lugares,
+                  zoom: widget.zoom,
                 ),
               ),
             ),
@@ -187,6 +193,7 @@ class _VistaPlanoState extends State<VistaPlano>
                       pulso: widget.animar ? _pulso : _quieto,
                       ruta: widget.ruta,
                       progresoRuta: widget.progresoRuta,
+                      zoom: widget.zoom,
                     ),
                   ),
                 ),

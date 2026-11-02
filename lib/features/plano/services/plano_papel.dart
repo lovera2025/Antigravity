@@ -111,12 +111,15 @@ class PlanoPapel {
   /// sin apellido. Lo que queda afuera lo dice [textoAlFondo]. El escenario va
   /// siempre. En un armado del Canva no cambia nada: entran todos.
   ///
-  /// [proporcion] es el ancho sobre el alto del lugar donde se dibuja.
+  /// [proporcion] es el ancho sobre el alto del lugar donde se dibuja. [abajo] es
+  /// lo que hace falta de más debajo de la última fila de mesas, para lo que se
+  /// escribe ahí: no cuenta para decidir qué sector queda más al fondo.
   static RectPlano marco(
     ArmadoSalon armado,
     String hojaId, {
     double proporcion = 1.6,
     double gananciaMinima = 1.2,
+    double abajo = 0,
   }) {
     final hoja = armado.hoja(hojaId);
     if (hoja == null) return const RectPlano(0, 0, 1, 1);
@@ -139,6 +142,7 @@ class PlanoPapel {
       incluir(m.x - aire, m.y - aire, m.x + aire, m.y + aire);
     }
     final fondoDeLasMesas = y1;
+    if (mesas.isNotEmpty) y1 += abajo;
     for (final s in sectores) {
       if (hoja.contorno != null &&
           mesas.isNotEmpty &&

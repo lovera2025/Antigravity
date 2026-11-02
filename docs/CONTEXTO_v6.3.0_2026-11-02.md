@@ -73,20 +73,60 @@ desde una PC con la versión nueva. El renglón del sorteo suma `_lejos`, que la
 
 **La mora no se toca en toda esta versión:** ordenar y sortear escriben `planos_evento`, `sorteos_mesas` y los números de mesa.
 
+## La prueba con el mouse (2-nov, a pedido del usuario, que estaba en el celular)
+
+Claude manejó `tool/plano_prueba.dart` con el mouse, en la PC, sin base ni nube. Se le sumaron a esa ventana el sorteo de verdad
+(29 familias que piden justo las 35 mesas, dos "lejos": una cerca y una bien lejos) e IMPRIMIR, que deja el PDF en
+`build/plano_prueba`.
+
+| Paso | Resultado |
+|---|---|
+| Abrir el plano mezclado | Avisa los 13 saltos |
+| Mover una mesa y guardar | Pasa de 13 saltos a 1; las mesas no se mueven |
+| Lo mismo sin internet | No renumera (ver "Detalles", abajo) |
+| La barra, sin soltar y al soltar | Reacomoda en vivo, "Entran las 35", y soltar es un paso de Deshacer |
+| Sortear | Cápsulas, aros, P y A; tocar una mesa separada resalta la otra; la casilla apaga y prende |
+| Con familias, mover y guardar | Ningún número cambia; la barra pasa a "Separar o juntar", con el motivo |
+| Deshacer y guardar | Se ordena de nuevo, del 1 al 35, 1 salto |
+| Imprimir en color, en blanco y negro y sin familias | Una hoja A4; se lee en los tres |
+
+**Cuatro errores que los tests y las muestras no veían, los cuatro arreglados con su test y su rotura a propósito:**
+
+1. **En pantalla, acercar no traía nunca el apellido ni la flecha.** El nivel de detalle salía de la escala de "ajustar a la
+   pantalla", y el zoom agranda el dibujo por fuera. En un salón con el playón entero la mesa nunca llegaba a los 26 px. Era así
+   desde la 6.0.0, aunque el código decía "con zoom como para leer el apellido". Ahora `VistaPlano.zoom`, con
+   `NivelDetalle.zoomQueCuenta`, que da pocos valores: el salón se vuelve a pintar solo al cruzar un umbral.
+2. **En papel, Puerto Viejo salía sin ningún apellido.** La letra tenía de tope el 52 % del radio de la mesa: 3,5 pt, debajo del
+   mínimo de 4,3, y sobraba lugar. Ahora, si hay lugar a lo alto y a lo ancho (`apellidoMinimoAnchoPt`), va con la letra mínima.
+   Con las mesas de verdad apretadas sigue sin apellidos y el pie lo dice.
+3. **La flecha de la última fila quedaba afuera del recorte.** `PlanoPapel.marco(abajo:)` y `PlanoPdf.lugarDebajo` le hacen lugar.
+4. **Los apellidos salían corridos de su mesa, y los de la derecha tocaban el borde.** El nombre de un sector va con letras
+   separadas y en un PDF ese espaciado queda puesto: `_escribir` no lo volvía a cero.
+
+**Por qué no se vieron antes:** la muestra del PDF recortaba el salón a las mesas, así que enseñaba apellidos que el papel de
+verdad no traía. Ya no lo recorta.
+
+**Detalles, sin arreglar** (no rompen nada; los decide el usuario):
+- **A 4,1 m entran las 35, pero algunas quedan al lado de los camarines, y hay 4 saltos sin ningún aviso.** Es lo mejor que da esa
+  distancia, así que `_avisoDeSaltos` no dice nada, y el sorteo corta en cada salto. A los 3 m de hoy no pasa.
+- **Sin internet, "Antes de guardar" igual promete que los números se ordenan.** La pantalla no sabe que no hay internet hasta
+  guardar; después de guardar, el aviso de la app sí lo dice bien.
+- **Al soltar la barra, el panel baja** porque aparece el aviso de arriba, y la barra queda más abajo que donde se soltó.
+- **En papel no se ve el borde derecho del hormigón:** el recorte llega hasta las mesas y solo se dice lo que sigue al fondo.
+
 ## Lo que no se comprobó
 
-- **Nadie la usó todavía en una ventana de verdad.** Lo probado son los tests, con las pantallas montadas, y las muestras
-  miradas. La ventana de prueba compila para Windows, pero falta que el usuario la abra y la maneje con el mouse.
-- **El PDF se miró en chico** (en el panel, a 40 %): se leen las cápsulas, los aros, las letras y los apellidos. Conviene mirarlo
-  impreso de verdad antes del primer sorteo.
-- **Un test falló una vez y no se reprodujo:** `test/recepcion_suelta_canal_test.dart`, "sigue emitiendo la lista cuando cambia
-  algo". Pasó en las demás corridas completas y 8 de 8 corrido solo. No se tocó nada de Recepción, y el test espera 50 ms de
-  reloj: lo más probable es que sea la PC cargada, sin confirmar. Si vuelve a pasar, cambiarle la espera por un aviso.
+- **El PDF impreso en papel.** Se miró a tamaño real en pantalla (150 ppp), no impreso. La letra de los apellidos es de 4,3 pt: chica,
+  y hay que verla en la impresora de la oficina antes del primer sorteo.
+- **Los gestos con el dedo y el recorrido en dos PCs.** La prueba fue con un mouse, en una PC, sin nube.
+- **Los otros dos estilos en esta ventana.** Se probó Arquitecto; Gala y Neón, solo con los tests.
+- **`test/recepcion_suelta_canal_test.dart`**, que falló una vez: 10 de 10 corrido solo el 2-nov, y dos corridas completas en verde.
+  Sigue sin explicación. Si vuelve a pasar, cambiarle la espera de 50 ms por un aviso.
 
 ## Lo pendiente, en orden
 
-1. **El usuario mira la ventana de prueba y dice si se publica la 6.3.0.** Los sorteos de verdad son en noviembre y las fiestas
-   desde el 1-dic. Publicar: la lista de arriba, con él presente.
+1. **El usuario dice si se publica la 6.3.0.** Ya se probó con el mouse (arriba); conviene imprimir un plano antes. Los sorteos de
+   verdad son en noviembre y las fiestas desde el 1-dic. Publicar: la lista de arriba, con él presente.
 2. **Operadores con permisos** (paso 3 de la hoja): Cobros, Entradas y Barra. El plan ya está corregido:
    `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`. Lleva una tabla nueva y la migración v76, que se prueba sobre una copia de su base con
    la app cerrada: hay que pedírselo.

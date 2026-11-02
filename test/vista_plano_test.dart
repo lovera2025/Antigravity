@@ -235,6 +235,30 @@ void main() {
       expect(der.right, closeTo(1000, 0.001));
     });
 
+    test('el zoom que cuenta da el mismo nivel, y cambia solo en cada umbral', () {
+      expect(NivelDetalle.zoomQueCuenta(12, 1), 1);
+      expect(NivelDetalle.zoomQueCuenta(12, 1.5), 1, reason: 'sigue en 12 a 26');
+      expect(NivelDetalle.zoomQueCuenta(12, 2), 1);
+      expect(NivelDetalle.zoomQueCuenta(12, 2.4), closeTo(26 / 12, 0.001));
+      expect(
+        NivelDetalle.zoomQueCuenta(12, 6),
+        NivelDetalle.zoomQueCuenta(12, 2.4),
+        reason: 'de ahí en más no cambia nada',
+      );
+      expect(NivelDetalle.zoomQueCuenta(5, 2), closeTo(9 / 5, 0.001));
+      expect(NivelDetalle.zoomQueCuenta(0, 3), 1);
+      for (final r in [3.0, 5.0, 8.5, 12.0, 20.0, 30.0]) {
+        for (var z = 1.0; z <= 6; z += 0.1) {
+          final real = NivelDetalle.para(r * z);
+          final dibujado = NivelDetalle.para(r * NivelDetalle.zoomQueCuenta(r, z));
+          expect(dibujado.apellidos, real.apellidos, reason: 'r $r, zoom $z');
+          expect(dibujado.sillas, real.sillas, reason: 'r $r, zoom $z');
+          expect(dibujado.numeros, real.numeros, reason: 'r $r, zoom $z');
+          expect(dibujado.etiquetas, real.etiquetas, reason: 'r $r, zoom $z');
+        }
+      }
+    });
+
     test('solo la mesa principal lleva apellido, y solo con zoom', () {
       final conZoom = NivelDetalle.para(30);
       final sinZoom = NivelDetalle.para(17);

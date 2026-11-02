@@ -47,8 +47,8 @@ todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos 
 novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 **En curso desde el 2-nov: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`, sin publicar; el
-orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 a 8 hechas, sin publicar: `docs/CONTEXTO_v6.3.0_2026-11-02.md`.
-Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube. **Publicar, solo preguntándole
+orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 a 8 hechas y probadas con el mouse, sin publicar: `docs/CONTEXTO_v6.3.0_2026-11-02.md`.
+Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube; trae el sorteo de verdad, y al imprimir deja el PDF en `build/plano_prueba`. **Publicar, solo preguntándole
 antes al usuario.**
 
 ## Documentación del proyecto
@@ -231,7 +231,17 @@ vacío y después pone las mesas con un botón.
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin
 el texto de la excepción.
 
+**El detalle del plano depende de cuánto se ve la mesa, con el zoom** (6.3.0). El zoom agranda el dibujo por fuera, así que el pintor
+no se entera solo: `PlanoEventoCuerpo` le pasa `VistaPlano.zoom` con `NivelDetalle.zoomQueCuenta`, que cambia solo al cruzar un
+umbral (si no, se vuelve a pintar el salón en cada cuadro). Sin esto, en un salón con el playón entero el apellido no salía nunca.
+
+**Una muestra sale por el camino real, sin recortar el salón**: recortada, enseñó apellidos que el papel no traía. Lo visual se
+termina de probar en `tool/plano_prueba.dart`, con el mouse: ahí aparecieron cuatro errores con todos los tests en verde.
+
 **En papel:**
+- **la letra de los apellidos sigue a la mesa, pero si hay lugar a lo alto y a lo ancho va con la mínima** (`tamApellido`), y lo de
+  debajo de la última fila tiene su lugar en el recorte (`lugarDebajo`). **En un PDF el espaciado de letras queda puesto**: `_escribir`
+  lo pone siempre, también en cero, o lo que sigue al nombre de un sector sale más ancho de lo medido y corrido de su mesa;
 - **se recorta hasta la última fila de mesas** (`PlanoPapel.marco`). En una hoja con el borde del playón, un sector
   que queda entero más al fondo que las mesas (el Ingreso del salón vacío) no estira el recorte, y
   `PlanoPapel.textoAlFondo` lo dice ("…sigue 14 m más hacia el fondo, con el Ingreso"); si no, el papel llegaba al

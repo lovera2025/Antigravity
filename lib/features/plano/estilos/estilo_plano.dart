@@ -397,4 +397,25 @@ class NivelDetalle {
         etiquetas: radioPx >= 8,
         apellidos: radioPx >= 26,
       );
+
+  /// Los tamaños donde [para] cambia de nivel, de menor a mayor.
+  static const List<double> _umbrales = [8, 9, 12, 26];
+
+  /// El zoom que vale para dibujar: el más chico que da el mismo nivel que
+  /// [zoom]. Una mesa de [radioPx] sin zoom se ve de `radioPx * zoom`.
+  ///
+  /// Da siempre uno de pocos valores, así mientras se acerca el plano no se vuelve
+  /// a pintar el salón entero en cada cuadro: solo al cruzar un umbral.
+  static double zoomQueCuenta(double radioPx, double zoom) {
+    if (radioPx <= 0 || zoom <= 1) return 1;
+    final visto = radioPx * zoom;
+    var cuenta = 1.0;
+    for (final u in _umbrales) {
+      // Un pelito más: por el redondeo, `radioPx * (u / radioPx)` puede dar menos
+      // que el umbral y dibujarse con el nivel de abajo.
+      final justo = u / radioPx * 1.000001;
+      if (u > radioPx && visto >= u && justo > cuenta) cuenta = justo;
+    }
+    return cuenta;
+  }
 }

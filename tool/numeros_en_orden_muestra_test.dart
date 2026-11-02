@@ -294,11 +294,10 @@ void main() {
     final carpeta = _salida.isNotEmpty
         ? _salida
         : Directory.systemTemp.createTempSync('familias').path;
-    // Recortado a las mesas: con el playón entero salen chicas y sin apellido.
+    // El salón como es, sin recortarlo a las mesas: recortado, esta muestra enseñaba
+    // apellidos que el papel de verdad no traía, y nadie lo vio hasta el 2-nov.
     final plano = PlanoDeLaFiesta.desde(
-      armado: _encuadrado(
-        ArmarAMedida.ordenarNumeros(armadoDePuertoViejo()).armado,
-      ),
+      armado: ArmarAMedida.ordenarNumeros(armadoDePuertoViejo()).armado,
       config: ConfigPlano.vacia,
       alumnos: _familias,
     );

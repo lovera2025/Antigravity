@@ -134,6 +134,9 @@ class PlanoPdf {
   static const double apellidoMinimoPt = 4.3;
   static const double apellidoMaximoPt = 7.5;
 
+  /// Lo que ocupa un apellido de nueve letras con la letra más chica.
+  static const double apellidoMinimoAnchoPt = 25;
+
   /// El lugar de la regla en el pie. Es fijo: así el alto del pie no depende
   /// de la escala, que a su vez depende del alto del pie.
   static const double _anchoRegla = 120;
@@ -167,8 +170,48 @@ class PlanoPdf {
         ? double.infinity
         : (paso - 2 * ocupa(armado, estilo, escala)) * escala;
     final radioPt = armado.radio * TemaPlano.de(estilo).escalaMesa * escala;
-    final tam = [hueco * 0.8, radioPt * 0.52, apellidoMaximoPt].reduce(math.min);
+    // La letra sigue al tamaño de la mesa, pero una mesa chica con lugar alrededor
+    // (un salón con el playón entero, a 3 m) igual lleva el apellido, con la letra
+    // más chica que se lee. Si esto la dejara en cero, una familia separada no diría
+    // de quién es: el pedido del 2-nov. Sin lugar a lo ancho no: saldría "GÓ…".
+    final anchoPt = (PlanoPapel.pasoHorizontal(armado, hoja) ?? armado.radio * 3) *
+        0.86 *
+        escala;
+    final segunLaMesa = radioPt * 0.52;
+    final tam = [
+      hueco * 0.8,
+      anchoPt >= apellidoMinimoAnchoPt
+          ? math.max(segunLaMesa, apellidoMinimoPt)
+          : segunLaMesa,
+      apellidoMaximoPt,
+    ].reduce(math.min);
     return tam >= apellidoMinimoPt ? tam : 0;
+  }
+
+  /// Lo que el apellido y la flecha de la última fila necesitan por debajo del aire
+  /// que ya deja [PlanoPapel.marco], en unidades del plano. Si no se les hace lugar
+  /// quedan afuera del recorte, y el número de la otra mesa no se puede perder.
+  ///
+  /// Va de a 5 unidades: la escala depende del recorte y esto de la escala, y con
+  /// un valor exacto la cuenta podría no quedarse quieta.
+  static double lugarDebajo({
+    required ArmadoSalon armado,
+    required EstiloPlano estilo,
+    required double escala,
+    required double tamApellido,
+    required bool conFlecha,
+  }) {
+    if (tamApellido == 0 && !conFlecha) return 0;
+    final radioPt = armado.radio * TemaPlano.de(estilo).escalaMesa * escala;
+    final letraFlecha = tamApellido == 0
+        ? math.max(apellidoMinimoPt, radioPt * 0.5)
+        : tamApellido;
+    final textoPt =
+        tamApellido * 1.15 + (conFlecha ? letraFlecha * 1.15 : 0) + 1.5;
+    final falta = PlanoPdf.ocupa(armado, estilo, escala) +
+        textoPt / escala -
+        armado.radio * PlanoPapel.aireEnRadios;
+    return falta <= 0 ? 0 : (falta / 5).ceil() * 5.0;
   }
 
   static Future<Uint8List> construir({
@@ -418,6 +461,8 @@ class PlanoPdf {
       });
       RectPlano? marcoMedido;
       var avisa = false;
+      var abajo = 0.0;
+      final conFlecha = familias && plano.familias.haySeparadas;
       late _HojaPapel decidida;
       for (var vuelta = 0; vuelta < 4; vuelta++) {
         final ocupado = await _medirAlto(
@@ -432,7 +477,12 @@ class PlanoPdf {
         // hoja siguiente. Y un piso: con un encabezado desmedido el dibujo
         // sale chico, pero sale.
         final alto = math.max(80.0, altoUtil - ocupado - 2);
-        final marco = PlanoPapel.marco(armado, hoja.id, proporcion: ancho / alto);
+        final marco = PlanoPapel.marco(
+          armado,
+          hoja.id,
+          proporcion: ancho / alto,
+          abajo: abajo,
+        );
         final escala = math.min(ancho / marco.ancho, alto / marco.alto);
         final tam = tamApellido(
           armado: armado,
@@ -450,9 +500,17 @@ class PlanoPdf {
           avisaSinApellidos: avisa,
         );
         final faltan = tam == 0 && hayApellidos;
-        if (marco == marcoMedido && faltan == avisa) break;
+        final debajo = lugarDebajo(
+          armado: armado,
+          estilo: estilo,
+          escala: escala,
+          tamApellido: tam,
+          conFlecha: conFlecha,
+        );
+        if (marco == marcoMedido && faltan == avisa && debajo == abajo) break;
         marcoMedido = marco;
         avisa = faltan;
+        abajo = debajo;
       }
       return decidida;
     }
@@ -1106,7 +1164,10 @@ class _DibujoPlano extends pw.Widget {
         texto,
         cx - ancho / 2,
         cy - (ref.top + ref.bottom) / 2 * tam,
-        charSpace: espaciado == 0 ? null : espaciado,
+        // Siempre, también el cero: en un PDF el espaciado queda puesto hasta que
+        // alguien lo cambie. Con null, lo que venía después del nombre de un sector
+        // salía más ancho de lo medido, y corrido de su mesa.
+        charSpace: espaciado,
       );
   }
 

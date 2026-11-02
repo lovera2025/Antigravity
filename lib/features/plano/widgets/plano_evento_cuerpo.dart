@@ -1432,57 +1432,66 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                       // Mientras se arrastra una mesa, el plano se queda
                       // quieto.
                       panEnabled: !(_acomodo?.arrastrando ?? false),
-                      child: VistaPlano(
-                        armado: armado,
-                        hoja: _hoja,
-                        tema: tema,
-                        estado: _plano.estado,
-                        // Acomodando los números cambian de lugar: se marcan
-                        // las familias cuando el salón está guardado.
-                        familias: acomodando || !_marcarFamilias
-                            ? null
-                            : _plano.familias,
-                        // Acomodando no se apaga ninguna mesa: hay que ver
-                        // las vecinas.
-                        resaltadas: acomodando ? const {} : _resaltadas,
-                        seleccionada: acomodando ? null : _mesaElegida,
-                        // En Medidas y en Colores y textos no se elige
-                        // nada: el plano solo muestra cómo queda. En Acomodar
-                        // se elige apretando, para poder arrastrar.
-                        onTapMesa:
-                            _soloMuestra || acomodando ? null : _elegirMesa,
-                        mostrarMedidas: true,
-                        lugares: _modo == ModoPersonalizar.medidas
-                            ? _medidasEnPrueba ?? _plano.medidas
-                            : widget.mostrarLugares || acomodando
-                                ? _plano.medidas
-                                : null,
-                        encima: acomodando
-                            ? PintorAcomodo(
-                                armado: armado,
-                                hoja: _hoja,
-                                tema: tema,
-                                mesa: _mesaAcomodo,
-                                sector: _sectorAcomodo,
-                                vecinas: _mesaAcomodo == null
-                                    ? const []
-                                    : EditarArmado.vecinas(
-                                        armado,
-                                        _mesaAcomodo!,
-                                      ),
-                                pideM: _plano.medidas.lugarMesaM,
-                                manijas: _manijasDeLoElegido(armado),
-                                centroPlayon: _centroDelPlayon(armado),
-                                playon: _playonAcomodo
-                                    ? _contornoConManijas(armado)
-                                    : null,
-                                medidaSector: _medidaDelSector(armado),
-                                zoom: _zoom,
-                              )
-                            : null,
-                        onApretar: acomodando ? _apretar : null,
-                        onArrastrar: acomodando ? _arrastrar : null,
-                        onSoltar: acomodando ? _soltarArrastre : null,
+                      child: AnimatedBuilder(
+                        animation: _zoom,
+                        builder: (context, _) => VistaPlano(
+                          armado: armado,
+                          hoja: _hoja,
+                          tema: tema,
+                          estado: _plano.estado,
+                          // Sin esto, acercar no traía los apellidos ni las
+                          // flechas de las familias separadas.
+                          zoom: NivelDetalle.zoomQueCuenta(
+                            armado.radio * base,
+                            _escalaZoom,
+                          ),
+                          // Acomodando los números cambian de lugar: se marcan
+                          // las familias cuando el salón está guardado.
+                          familias: acomodando || !_marcarFamilias
+                              ? null
+                              : _plano.familias,
+                          // Acomodando no se apaga ninguna mesa: hay que ver
+                          // las vecinas.
+                          resaltadas: acomodando ? const {} : _resaltadas,
+                          seleccionada: acomodando ? null : _mesaElegida,
+                          // En Medidas y en Colores y textos no se elige
+                          // nada: el plano solo muestra cómo queda. En Acomodar
+                          // se elige apretando, para poder arrastrar.
+                          onTapMesa:
+                              _soloMuestra || acomodando ? null : _elegirMesa,
+                          mostrarMedidas: true,
+                          lugares: _modo == ModoPersonalizar.medidas
+                              ? _medidasEnPrueba ?? _plano.medidas
+                              : widget.mostrarLugares || acomodando
+                                  ? _plano.medidas
+                                  : null,
+                          encima: acomodando
+                              ? PintorAcomodo(
+                                  armado: armado,
+                                  hoja: _hoja,
+                                  tema: tema,
+                                  mesa: _mesaAcomodo,
+                                  sector: _sectorAcomodo,
+                                  vecinas: _mesaAcomodo == null
+                                      ? const []
+                                      : EditarArmado.vecinas(
+                                          armado,
+                                          _mesaAcomodo!,
+                                        ),
+                                  pideM: _plano.medidas.lugarMesaM,
+                                  manijas: _manijasDeLoElegido(armado),
+                                  centroPlayon: _centroDelPlayon(armado),
+                                  playon: _playonAcomodo
+                                      ? _contornoConManijas(armado)
+                                      : null,
+                                  medidaSector: _medidaDelSector(armado),
+                                  zoom: _zoom,
+                                )
+                              : null,
+                          onApretar: acomodando ? _apretar : null,
+                          onArrastrar: acomodando ? _arrastrar : null,
+                          onSoltar: acomodando ? _soltarArrastre : null,
+                        ),
                       ),
                     ),
                   ),

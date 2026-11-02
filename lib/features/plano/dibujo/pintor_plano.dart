@@ -143,12 +143,19 @@ class PintorPlano extends CustomPainter {
     this.regla = false,
     this.cotas = false,
     this.lugares,
+    this.zoom = 1,
   });
 
   final ArmadoSalon armado;
   final String hoja;
   final TemaPlano tema;
   final EstadoPlano estado;
+
+  /// Cuánto está acercada la vista. El zoom agranda el dibujo por fuera, sin que
+  /// este pintor se entere del tamaño: sin esto, el detalle que depende de cuánto
+  /// se ve la mesa (los apellidos) no aparecía nunca en un salón con el playón
+  /// entero, por más que se acercara.
+  final double zoom;
 
   /// Las familias con adicional, marcadas. Null: sin marcar.
   final FamiliasEnElPlano? familias;
@@ -192,7 +199,7 @@ class PintorPlano extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..color = tema.fondo);
     if (h == null) return;
     final encuadre = EncuadrePlano.de(h.caja, size);
-    final nivel = NivelDetalle.para(armado.radio * encuadre.escala);
+    final nivel = NivelDetalle.para(armado.radio * encuadre.escala * zoom);
 
     canvas.save();
     encuadre.aplicar(canvas);
@@ -1017,6 +1024,7 @@ class PintorPlano extends CustomPainter {
       old.regla != regla ||
       old.cotas != cotas ||
       old.lugares != lugares ||
+      old.zoom != zoom ||
       !setEquals(old.resaltadas, resaltadas);
 }
 
@@ -1055,11 +1063,15 @@ class PintorResaltado extends CustomPainter {
     required this.pulso,
     this.ruta,
     this.progresoRuta = 1,
+    this.zoom = 1,
   }) : super(repaint: pulso);
 
   final ArmadoSalon armado;
   final String hoja;
   final TemaPlano tema;
+
+  /// El mismo de [PintorPlano]: los dos tienen que ver el mismo detalle.
+  final double zoom;
 
   /// Para saber qué mesas llevan apellido debajo: el anillo no los cruza.
   final EstadoPlano estado;
@@ -1135,7 +1147,7 @@ class PintorResaltado extends CustomPainter {
 
     final p = pulso.value;
     final r = radioDibujo(armado, tema);
-    final nivel = NivelDetalle.para(armado.radio * encuadre.escala);
+    final nivel = NivelDetalle.para(armado.radio * encuadre.escala * zoom);
     final conSillas = tema.sillas && nivel.sillas;
     final enHoja = [
       for (final n in resaltadas)
@@ -1174,5 +1186,6 @@ class PintorResaltado extends CustomPainter {
       old.pulso != pulso ||
       old.ruta != ruta ||
       old.progresoRuta != progresoRuta ||
+      old.zoom != zoom ||
       !setEquals(old.resaltadas, resaltadas);
 }

@@ -1,7 +1,12 @@
 // La ventana de prueba del plano (tool/plano_prueba.dart) anda: abre sin base ni
 // nube y hace lo mismo que la app. Si deja de compilar o de guardar, salta acá.
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
+import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 
 import '../tool/plano_prueba.dart';
 
@@ -77,4 +82,74 @@ void main() {
     expect(find.text('13 saltos'), findsOneWidget);
     expect(find.textContaining('Los números se ordenan'), findsNothing);
   });
+
+  testWidgets('sortea de verdad sobre el salón ordenado, y se deshace',
+      (tester) async {
+    await abrir(tester);
+    await guardar(tester);
+    await tester.tap(find.byKey(const Key('prueba_sortear')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+    expect(
+      find.textContaining('Sorteo en esta ventana: 29 familias'),
+      findsOneWidget,
+      reason: 'las familias piden justo las 35 mesas, con dos "lejos"',
+    );
+    expect(find.text('SEPARAR O JUNTAR'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('prueba_deshacer')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('DISTANCIA ENTRE MESAS'), findsOneWidget);
+  });
+
+  // Lo encontró el recorrido con el mouse: en un salón con el playón entero, acercar
+  // no traía nunca ni el apellido ni la flecha de las familias separadas.
+  testWidgets('al acercar el plano aparecen los apellidos y las flechas',
+      (tester) async {
+    await abrir(tester);
+    await guardar(tester);
+    await tester.tap(find.byKey(const Key('prueba_sortear')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('salir_personalizar')));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    PintorPlano pintor() => tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((c) => c.painter)
+        .whereType<PintorPlano>()
+        .single;
+    int textos() {
+      final lienzo = _LienzoQueCuenta();
+      pintor().paint(lienzo, tester.getSize(find.byType(VistaPlano)));
+      return lienzo.textos;
+    }
+
+    final lejos = textos();
+    final sinAcercar = pintor();
+    await tester.tap(find.byKey(const Key('acercar')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('acercar')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('acercar')));
+    await tester.pump();
+    expect(pintor().zoom, greaterThan(sinAcercar.zoom));
+    expect(
+      textos() - lejos,
+      29 + 2 + 4 + 11,
+      reason: 'el apellido de las 29 familias, el de las 2 mesas lejos, sus 4 '
+          'flechas, y la P o la A de las 11 mesas de familias con adicional, '
+          'que en este tamaño de ventana también aparecen al acercar',
+    );
+  });
+}
+
+/// Un lienzo que no dibuja nada y cuenta los textos que le piden.
+class _LienzoQueCuenta implements Canvas {
+  int textos = 0;
+
+  @override
+  void drawParagraph(ui.Paragraph paragraph, Offset offset) => textos++;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

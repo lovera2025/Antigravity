@@ -1,5 +1,6 @@
 // El plano del salón en papel: que salga una hoja por cada hoja del armado, en
 // los tres estilos, con cualquier apellido, y que diga lo que tiene que decir.
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,12 +14,14 @@ import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart'
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
+import 'package:arguello_events/features/plano/services/plano_papel.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/plano_evento.dart';
 
 import 'helpers/leer_pdf.dart';
+import 'helpers/salon_puerto_viejo.dart';
 
 ContratoAlumno alumno(
   String id,
@@ -370,6 +373,90 @@ void main() {
           expect(tam, lessThan(hueco), reason: '${estilo.name} a $escala');
         }
       }
+    });
+
+    // Lo encontró el recorrido con el mouse (2-nov): con el playón entero, a 3 m,
+    // el tope por el tamaño de la mesa dejaba la letra en cero, y sobraba lugar.
+    test('Puerto Viejo real lleva los apellidos, también en la otra mesa', () async {
+      final armado = ArmarAMedida.ordenarNumeros(armadoDePuertoViejo()).armado;
+      final plano = PlanoDeLaFiesta.desde(
+        armado: armado,
+        config: ConfigPlano.vacia,
+        alumnos: [
+          alumno('a', 'GÓMEZ, SOFÍA', mesas: [5, 29]),
+          alumno('b', 'PÉREZ, ANA', mesas: [8]),
+        ],
+      );
+      final texto = contenidoDelPdf(await sinLetras(plano));
+      expect('(GÓMEZ)'.allMatches(texto), hasLength(2), reason: 'las dos mesas');
+      expect('(PÉREZ)'.allMatches(texto), hasLength(1));
+      expect(texto.contains('no se leen'), isFalse);
+    });
+
+    // Lo encontró el recorrido: el nombre de un sector va con letras separadas, y
+    // en un PDF eso queda puesto. Los apellidos salían más anchos de lo medido y
+    // corridos de su mesa.
+    test('después de un nombre con letras separadas se vuelve a cero', () async {
+      final armado = ArmarAMedida.ordenarNumeros(armadoDePuertoViejo()).armado;
+      final plano = PlanoDeLaFiesta.desde(
+        armado: armado,
+        config: ConfigPlano.vacia,
+        alumnos: [alumno('a', 'GÓMEZ, SOFÍA', mesas: [5])],
+      );
+      final texto = contenidoDelPdf(await sinLetras(plano));
+      final apellido = texto.indexOf('(GÓMEZ)');
+      expect(apellido, greaterThan(0));
+      final antes = texto.substring(0, apellido);
+      final ultimo = RegExp(r'(-?[\d.]+) Tc').allMatches(antes).last;
+      expect(double.parse(ultimo.group(1)!), 0);
+    });
+
+    // Lo encontró el recorrido: el apellido y la flecha de la última fila quedaban
+    // afuera del recorte. El número de la otra mesa no se puede perder.
+    test('el recorte deja lugar a lo que se escribe debajo de la última fila', () {
+      final armado = ArmarAMedida.ordenarNumeros(armadoDePuertoViejo()).armado;
+      const estilo = EstiloPlano.arquitecto;
+      const proporcion = 1.9;
+      var abajo = 0.0;
+      late RectPlano marco;
+      late double escala;
+      late double tam;
+      for (var vuelta = 0; vuelta < 4; vuelta++) {
+        marco = PlanoPapel.marco(armado, 'A', proporcion: proporcion, abajo: abajo);
+        escala = 480 / marco.alto;
+        tam = PlanoPdf.tamApellido(
+          armado: armado,
+          hoja: 'A',
+          estilo: estilo,
+          escala: escala,
+        );
+        abajo = PlanoPdf.lugarDebajo(
+          armado: armado,
+          estilo: estilo,
+          escala: escala,
+          tamApellido: tam,
+          conFlecha: true,
+        );
+      }
+      expect(tam, greaterThan(0));
+      final ultimaFila = armado.mesas.map((m) => m.y).reduce(max);
+      final fin = ultimaFila +
+          PlanoPdf.ocupa(armado, estilo, escala) +
+          (tam * 1.15 + tam * 1.15) / escala;
+      expect(marco.abajo, greaterThanOrEqualTo(fin));
+    });
+
+    test('sin nada para escribir debajo no se pide lugar', () {
+      expect(
+        PlanoPdf.lugarDebajo(
+          armado: armadoDePuertoViejo(),
+          estilo: EstiloPlano.arquitecto,
+          escala: 0.5,
+          tamApellido: 0,
+          conFlecha: false,
+        ),
+        0,
+      );
     });
 
     test('a una escala muy chica no hay apellidos; a una grande, sí', () {
