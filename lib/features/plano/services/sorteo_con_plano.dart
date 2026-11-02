@@ -6,6 +6,7 @@ import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/sorteo_mesas_motor.dart';
 import '../modelo/armado_salon.dart';
+import 'armar_a_medida.dart';
 import 'divisiones.dart';
 
 /// Las mesas del plano puestas en fila para el motor del sorteo.
@@ -72,6 +73,9 @@ class EntradaSorteoPlano {
   final List<ContratoAlumno> alumnos;
   final ExclusionSorteo exclusion;
   final Map<String, int> separaciones;
+
+  /// Qué tan lejos van las separadas de cada alumno. Sin decir: lo más lejos.
+  final Map<String, DistanciaLejos> distancias;
   final ModoSorteo modo;
 
   /// Claves de división ([Divisiones.clave]) en el orden elegido.
@@ -87,6 +91,7 @@ class EntradaSorteoPlano {
     required this.alumnos,
     this.exclusion = ExclusionSorteo.ninguna,
     this.separaciones = const {},
+    this.distancias = const {},
     this.modo = ModoSorteo.entera,
     this.ordenDivisiones = const [],
     this.usarPasto = false,
@@ -99,6 +104,7 @@ class EntradaSorteoPlano {
         alumnos: alumnos,
         exclusion: exclusion,
         separaciones: separaciones,
+        distancias: distancias,
         modo: modo,
         ordenDivisiones: ordenDivisiones,
         usarPasto: usar,
@@ -195,10 +201,15 @@ class ResultadoSorteoPlano {
   final List<BloqueDivision> bloques;
   final List<String> avisos;
 
+  /// Las mesas "lejos" que no quedaron a la distancia pedida, porque ahí no había
+  /// lugar. Se le dice al jefe al terminar.
+  final List<String> avisosLejos;
+
   const ResultadoSorteoPlano({
     required this.asignaciones,
     this.bloques = const [],
     this.avisos = const [],
+    this.avisosLejos = const [],
   });
 }
 
@@ -337,13 +348,120 @@ class SorteoConPlano {
         final r = _calcular(base, e, rng);
         final resultado = r.$2;
         if (resultado != null && _mismosBloques(previa.$1, r.$1)) {
-          return resultado;
+          return _conAvisosLejos(e, resultado);
         }
       } on StateError {
         // Este reparto no entró: se prueba otro.
       }
     }
-    return _calcular(base, e, Random(semilla)).$2!;
+    return _conAvisosLejos(e, _calcular(base, e, Random(semilla)).$2!);
+  }
+
+  // ── Qué tan lejos ───────────────────────────────────────────────────────
+
+  /// Hasta acá va "cerca", y de acá a [_unasMesasHasta] va "a unas mesas", en
+  /// lugares: la distancia entre mesas de este salón.
+  static const double _cercaHasta = 3;
+  static const double _unasMesasHasta = 6;
+
+  /// Un lugar, en unidades del plano: lo que vale la distancia entre mesas. Así
+  /// "cerca" dice lo mismo con las mesas a 2 m o a 3 m.
+  static double _lugar(ArmadoSalon a) =>
+      a.pegadasHastaU / ArmarAMedida.pegadasHastaPasos;
+
+  /// A cuántos lugares quedó la mesa suelta más alejada de [numeros] (las mesas de
+  /// una familia) de la más cercana de las suyas. Null si no hay ninguna suelta;
+  /// infinito si queda en otra hoja.
+  static double? lugaresDeLaSuelta(ArmadoSalon a, List<int> numeros) {
+    final grupos = gruposEnElSalon(a, numeros);
+    if (grupos.length < 2) return null;
+    final lugar = _lugar(a);
+    double? mayor;
+    for (final g in grupos) {
+      if (g.length != 1) continue;
+      final m = a.mesa(g.single);
+      if (m == null) continue;
+      var menor = double.infinity;
+      for (final n in numeros) {
+        final o = a.mesa(n);
+        if (n == g.single || o == null || o.hoja != m.hoja) continue;
+        menor = min(menor, m.distanciaA(o) / lugar);
+      }
+      if (mayor == null || menor > mayor) mayor = menor;
+    }
+    return mayor;
+  }
+
+  /// Las candidatas de una mesa "lejos" en el orden que se pidió, medido en el
+  /// salón dibujado. Las que tocan a la familia van al final: las descarta el
+  /// control de [lejosEnElSalon], y quedan por si no hay otra. Bien lejos es lo de
+  /// siempre: el orden del motor.
+  static OrdenLejos? _ordenLejos(_Base b, EntradaSorteoPlano e) {
+    if (e.distancias.isEmpty) return null;
+    final a = e.armado;
+    final lugar = _lugar(a);
+    return (alumnoId, candidatas, propios, rng) {
+      final d = e.distancias[alumnoId];
+      if (d == null || d == DistanciaLejos.bienLejos) return candidatas;
+      final suyas = [for (final c in propios) ?b.cas.numero(c)];
+      double clave(int casillero) {
+        final m = a.mesa(b.cas.numero(casillero)!)!;
+        var menor = double.infinity;
+        for (final n in suyas) {
+          if (a.pegadas(m.numero, n)) return 1e9;
+          final o = a.mesa(n)!;
+          if (o.hoja == m.hoja) menor = min(menor, m.distanciaA(o) / lugar);
+        }
+        if (menor == double.infinity) return 1e8;
+        if (d == DistanciaLejos.cerca) return menor;
+        return menor >= _cercaHasta - 1e-6 && menor <= _unasMesasHasta + 1e-6
+            ? 0
+            : menor < _cercaHasta
+                ? _cercaHasta - menor
+                : menor - _unasMesasHasta;
+      }
+
+      final azar = {for (final c in candidatas) c: rng.nextDouble()};
+      final claves = {for (final c in candidatas) c: clave(c)};
+      return [...candidatas]..sort((x, y) {
+          final c = claves[x]!.compareTo(claves[y]!);
+          return c != 0 ? c : azar[x]!.compareTo(azar[y]!);
+        });
+    };
+  }
+
+  /// Dice a quién no le tocó la distancia pedida. Solo a los que recién la
+  /// recibieron y con "cerca" o "a unas mesas": "bien lejos" es la que haya.
+  static ResultadoSorteoPlano _conAvisosLejos(
+    EntradaSorteoPlano e,
+    ResultadoSorteoPlano r,
+  ) {
+    final avisos = <String>[];
+    for (final x in e.alumnos) {
+      final d = e.distancias[x.id];
+      final nums = r.asignaciones[x.id];
+      if (d == null || d == DistanciaLejos.bienLejos || nums == null) continue;
+      final quedo = lugaresDeLaSuelta(e.armado, nums);
+      if (quedo == null) continue;
+      final bien = d == DistanciaLejos.cerca
+          ? quedo <= _cercaHasta + 1e-6
+          : quedo >= _cercaHasta - 1e-6 && quedo <= _unasMesasHasta + 1e-6;
+      if (bien) continue;
+      final coma = x.nombreAlumno.indexOf(',');
+      final apellido =
+          (coma < 0 ? x.nombreAlumno : x.nombreAlumno.substring(0, coma)).trim();
+      avisos.add(quedo == double.infinity
+          ? '$apellido: la adicional quedó en otra hoja; no había lugar ${d.texto}.'
+          : '$apellido: la adicional quedó a ${quedo.round()} lugares; no había '
+              'lugar ${d.texto}.');
+    }
+    if (avisos.isEmpty) return r;
+    return ResultadoSorteoPlano(
+      asignaciones: r.asignaciones,
+      bloques: r.bloques,
+      avisos: r.avisos,
+      avisosLejos: avisos,
+    );
   }
 
   /// Red final antes de guardar. Null si está todo bien, o el motivo.
@@ -678,12 +796,14 @@ class SorteoConPlano {
       for (final p in pedidos)
         if (p.esNuevo && p.separadas > 0) p,
     ];
+    final orden = _ordenLejos(b, e);
     for (var intento = 1;; intento++) {
       final r = SorteoMesasMotor.sortear(
         pedidos: pedidos,
         ocupadas: ocupadas,
         capacidad: capacidad,
         random: rng,
+        ordenLejos: orden,
       );
       final error = SorteoMesasMotor.validar(
         pedidos: pedidos,

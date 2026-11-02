@@ -16,10 +16,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/eventos/widgets/sorteo_mesas_dialog.dart';
 import 'package:arguello_events/features/plano/dibujo/pintor_plano.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
@@ -213,6 +215,80 @@ void main() {
       });
     });
   }
+
+  testWidgets('el diálogo de SORTEO, con "qué tan lejos"', (tester) async {
+    await cargarFuentesPlano();
+    final iconos = FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await iconos.load();
+    final carpeta = _salida.isNotEmpty
+        ? _salida
+        : Directory.systemTemp.createTempSync('familias').path;
+    tester.view.physicalSize = const Size(760, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    ContratoAlumno sinMesa(String apellido, {int extras = 0}) => ContratoAlumno(
+          id: apellido,
+          eventoId: 'muestra',
+          nombreAlumno: '$apellido, DE PRUEBA',
+          cantidadAcompanantes: 3,
+          montoTotalPactado: 300000,
+          saldoDeudor: 0,
+          mesaExtraPrecio: 70000.0 * extras,
+          mesaExtraCantidad: extras,
+          cursoDivision: '5° A',
+        );
+    final alumnos = [
+      sinMesa('ESPINDOLA', extras: 1),
+      sinMesa('GOMEZ', extras: 2),
+      sinMesa('HERRERA', extras: 1),
+      for (final a in ['ACOSTA', 'CASTRO', 'FERREYRA', 'IBARRA']) sinMesa(a),
+    ];
+    final clave = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(useMaterial3: true, fontFamily: FuentesPlano.linea),
+        home: RepaintBoundary(
+          key: clave,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: SorteoMesasDialog(
+              tituloInstitucion: 'ESCUELA DE MUESTRA',
+              alumnos: alumnos,
+              avisos: const [],
+              pagos: const {},
+              inicial: const SorteoMesasDialogResult(
+                capacidadSalon: 0,
+                separaciones: {'ESPINDOLA': 1, 'GOMEZ': 1},
+                distancias: {
+                  'ESPINDOLA': DistanciaLejos.cerca,
+                  'GOMEZ': DistanciaLejos.aUnasMesas,
+                },
+              ),
+              plano: PlanoEvento.nuevo(
+                eventoId: 'muestra',
+                armado: ArmarAMedida.ordenarNumeros(armadoDePuertoViejo()).armado,
+                estilo: EstiloPlano.arquitecto,
+                modo: ModoSorteo.entera,
+                ahora: DateTime.utc(2026, 11, 2),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+    await tester.runAsync(() async {
+      final boundary =
+          clave.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final imagen = await boundary.toImage(pixelRatio: 1.5);
+      final datos = await imagen.toByteData(format: ui.ImageByteFormat.png);
+      File('$carpeta${Platform.pathSeparator}Sorteo_que_tan_lejos.png')
+          .writeAsBytesSync(datos!.buffer.asUint8List());
+    });
+  });
 
   test('las familias en papel', () async {
     final carpeta = _salida.isNotEmpty

@@ -267,6 +267,7 @@ class PlanillaSorteo {
     NotaOperativaContrato? nota,
     SillasReparto? repartoElegido,
     Set<int> pasto = const {},
+    DistanciaLejos? lejos,
   }) {
     final tramos = SalonMesas.tramos(a);
     final crudo = a.numeroMesa?.trim() ?? '';
@@ -299,7 +300,10 @@ class PlanillaSorteo {
     final sinPagarMesas = pago != null && !pago.pagoMesas;
     final String adicional;
     if (partes.isNotEmpty) {
-      adicional = partes.join(' · ');
+      // Lo que se pidió, solo si de verdad quedó separada.
+      adicional = lejos != null && tramos.length > 1
+          ? '${partes.join(' · ')} · lejos · ${lejos.texto}'
+          : partes.join(' · ');
     } else if (extras > 0 && principal == null) {
       adicional = extras == 1
           ? '1 mesa extra${sinPagarMesas ? ' (sin pagar)' : ''}'
@@ -416,6 +420,7 @@ class PlanillaSorteo {
     Map<String, NotaOperativaContrato> notas = const {},
     Map<String, SillasReparto> repartos = const {},
     Set<int> pasto = const {},
+    Map<String, DistanciaLejos> lejos = const {},
   }) {
     final grupos = <String, List<ContratoAlumno>>{};
     for (final a in activos(alumnos)) {
@@ -437,6 +442,7 @@ class PlanillaSorteo {
                 nota: notas[a.id],
                 repartoElegido: repartos[a.id],
                 pasto: pasto,
+                lejos: lejos[a.id],
               ),
             )
             .toList(),

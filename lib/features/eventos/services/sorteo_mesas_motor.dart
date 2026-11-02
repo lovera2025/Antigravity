@@ -4,6 +4,15 @@ import 'dart:math';
 import '../../../models/contrato_alumno.dart';
 import 'mesas_extra_utils.dart';
 
+/// Reordena las candidatas de una mesa "lejos": la primera que deje terminar el
+/// salón es la que queda. [propios] son los números que ya tiene el alumno.
+typedef OrdenLejos = List<int> Function(
+  String alumnoId,
+  List<int> candidatas,
+  List<int> propios,
+  Random rng,
+);
+
 /// Lo que el sorteo tiene que resolver para un alumno.
 class PedidoSorteo {
   final String alumnoId;
@@ -202,11 +211,17 @@ class SorteoMesasMotor {
   ///
   /// Llamarlo con una capacidad que no pasa [esFactible] es un error de
   /// programación (el diálogo no lo permite), y se corta antes de tocar nada.
+  ///
+  /// [ordenLejos] reordena las candidatas de una mesa "lejos": decide cuál se
+  /// prueba primero, sin sacar ninguna. Por eso no cambia lo que entra: la que
+  /// usa [_Armado.seCompleta] sigue estando en la lista. Null: la más lejana
+  /// primero.
   static Map<String, List<int>> sortear({
     required List<PedidoSorteo> pedidos,
     required Set<int> ocupadas,
     required int capacidad,
     Random? random,
+    OrdenLejos? ordenLejos,
   }) {
     final rng = random ?? Random.secure();
     final armado = _Armado.inicial(pedidos, ocupadas, capacidad);
@@ -242,13 +257,18 @@ class SorteoMesasMotor {
       }
     }
 
-    // 2. Mesas sueltas de quienes pidieron separar: lo más lejos posible de
-    //    las suyas, nunca pegadas.
+    // 2. Mesas sueltas de quienes pidieron separar: en el orden que se pidió (lo
+    //    más lejos posible, si no se dijo otra cosa), nunca pegadas.
     for (var j = 0; j < piezas.sueltas.length; j++) {
       final suelta = piezas.sueltas[j];
       final resto = piezas.sueltas.sublist(j + 1);
       var puesta = false;
-      for (final n in armado.candidatasLejos(suelta.alumnoId, rng)) {
+      final candidatas = armado.candidatasLejos(suelta.alumnoId, rng);
+      final propios = armado.numeros[suelta.alumnoId]!;
+      final orden = ordenLejos == null || propios.isEmpty
+          ? candidatas
+          : ordenLejos(suelta.alumnoId, candidatas, propios, rng);
+      for (final n in orden) {
         final prueba = armado.copia()..ocupar(suelta.alumnoId, [n]);
         if (prueba.seCompleta(const [], resto, piezas.simples)) {
           armado.ocupar(suelta.alumnoId, [n]);
@@ -273,6 +293,28 @@ class SorteoMesasMotor {
         p.alumnoId: (List<int>.from(armado.numeros[p.alumnoId]!)..sort()),
     };
   }
+
+  /// "Qué tan lejos" por número, para un sorteo sin plano: cerca es la libre más
+  /// cercana que no sea vecina; a unas mesas, entre 3 y 6 números; bien lejos (o
+  /// sin decir), la más lejana.
+  static OrdenLejos ordenPorNumero(Map<String, DistanciaLejos> distancias) =>
+      (alumnoId, candidatas, propios, rng) {
+        final d = distancias[alumnoId];
+        if (d == null || d == DistanciaLejos.bienLejos) return candidatas;
+        int dist(int n) =>
+            propios.fold<int>(1 << 30, (m, o) => min(m, (n - o).abs()));
+        final azar = {for (final n in candidatas) n: rng.nextDouble()};
+        double clave(int n) {
+          final x = dist(n);
+          if (d == DistanciaLejos.cerca) return x.toDouble();
+          return x >= 3 && x <= 6 ? 0 : (x < 3 ? 3 - x : x - 6).toDouble();
+        }
+
+        return [...candidatas]..sort((a, b) {
+            final c = clave(a).compareTo(clave(b));
+            return c != 0 ? c : azar[a]!.compareTo(azar[b]!);
+          });
+      };
 
   /// Red de seguridad final. Devuelve `null` si todo está bien, o el motivo.
   static String? validar({

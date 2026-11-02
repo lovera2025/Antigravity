@@ -3567,6 +3567,7 @@ class _DetalleEventoMasivoScreenState
         repartos: _repartosPorContrato,
         pasto: plano?.armadoONull?.pasto ?? const {},
         bloques: plano?.config.bloques ?? const [],
+        lejos: RegistroSorteo.lejosDeLosSorteos(registros),
         lineaSorteo: lineaSorteo,
         soloUltimos: opciones.soloUltimos,
         version: opciones.version,
@@ -3808,6 +3809,7 @@ class _DetalleEventoMasivoScreenState
         pedidos: pedidos,
         ocupadas: ocupadas,
         capacidad: config.capacidadSalon,
+        ordenLejos: SorteoMesasMotor.ordenPorNumero(config.distancias),
       );
       // Red de seguridad: no debería encontrar nada nunca. Si encuentra algo,
       // no se guarda ni un número.
@@ -3839,6 +3841,7 @@ class _DetalleEventoMasivoScreenState
           TipoRegistroSorteo.sorteo,
           numeros,
           antes: UltimosSorteados.antesDe(alumnos, numeros),
+          lejos: _lejosParaElRegistro(config, numeros),
         ),
       );
       // La puerta sigue al sorteo. Antes de subir, para que viaje junto.
@@ -3913,6 +3916,7 @@ class _DetalleEventoMasivoScreenState
       alumnos: alumnos,
       exclusion: exclusion,
       separaciones: config.separaciones,
+      distancias: config.distancias,
       modo: config.modo!,
       ordenDivisiones: config.ordenDivisiones,
       usarPasto: config.usarPasto,
@@ -3967,6 +3971,7 @@ class _DetalleEventoMasivoScreenState
       TipoRegistroSorteo.sorteo,
       numeros,
       antes: UltimosSorteados.antesDe(alumnos, numeros),
+      lejos: _lejosParaElRegistro(config, numeros),
     );
     final planoNuevo = plano.copyWith(
       modoSorteo: config.modo,
@@ -4001,6 +4006,13 @@ class _DetalleEventoMasivoScreenState
         });
     await _fetchDatos(cargaSilenciosa: true);
     if (!mounted) return;
+    if (resultado.avisosLejos.isNotEmpty) {
+      await _avisarSorteo(
+        'Las mesas "lejos"',
+        resultado.avisosLejos.join('\n'),
+      );
+      if (!mounted) return;
+    }
 
     final bloques = resultado.bloques.isEmpty
         ? ''
@@ -4445,6 +4457,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, String> numeros, {
     Map<String, String>? antes,
     Map<String, String>? quedan,
+    Map<String, String>? lejos,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
@@ -4453,9 +4466,23 @@ class _DetalleEventoMasivoScreenState
         resultado: numeros,
         antes: antes,
         quedan: quedan,
+        lejos: lejos,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );
+
+  /// Qué tan lejos se pidió cada mesa de este sorteo: queda escrito en el renglón
+  /// y de ahí lo lee la planilla. Null si nadie tildó "lejos".
+  Map<String, String>? _lejosParaElRegistro(
+    SorteoMesasDialogResult config,
+    Map<String, String> numeros,
+  ) {
+    final lejos = {
+      for (final e in config.distancias.entries)
+        if (numeros.containsKey(e.key)) e.key: e.value.name,
+    };
+    return lejos.isEmpty ? null : lejos;
+  }
 
   Future<void> _restaurarSorteoAnterior() async {
     if (_frenaSinModoJefe()) return;

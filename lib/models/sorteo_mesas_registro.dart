@@ -44,6 +44,10 @@ class SorteoMesasRegistro {
   /// el deshacer fue parcial; `null` en el que borra a toda la escuela.
   final Map<String, String>? quedan;
 
+  /// En un sorteo: alumno → qué tan lejos se pidió (`DistanciaLejos.name`), solo
+  /// de los que tildaron "lejos". `null` si no hubo ninguno.
+  final Map<String, String>? lejos;
+
   final String? hechoPor;
   final DateTime createdAt;
 
@@ -54,6 +58,7 @@ class SorteoMesasRegistro {
     required this.resultado,
     this.antes,
     this.quedan,
+    this.lejos,
     this.hechoPor,
     required this.createdAt,
   });
@@ -63,6 +68,7 @@ class SorteoMesasRegistro {
   /// falta una columna nueva, ni en la base ni en la nube.
   static const claveAntes = '_antes';
   static const claveQuedan = '_quedan';
+  static const claveLejos = '_lejos';
 
   int get alumnos => resultado.length;
 
@@ -82,6 +88,7 @@ class SorteoMesasRegistro {
     final resultado = <String, String>{};
     Map<String, String>? antes;
     Map<String, String>? quedan;
+    Map<String, String>? lejos;
     try {
       final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
       if (decodificado is Map) {
@@ -91,6 +98,8 @@ class SorteoMesasRegistro {
             antes = _mapa(e.value);
           } else if (clave == claveQuedan) {
             quedan = _mapa(e.value);
+          } else if (clave == claveLejos) {
+            lejos = _mapa(e.value);
           } else if (!clave.startsWith('_')) {
             resultado[clave] = e.value?.toString() ?? '';
           }
@@ -108,6 +117,7 @@ class SorteoMesasRegistro {
       resultado: resultado,
       antes: antes,
       quedan: quedan,
+      lejos: lejos,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -126,6 +136,7 @@ class SorteoMesasRegistro {
         ...resultado,
         claveAntes: ?antes,
         claveQuedan: ?quedan,
+        claveLejos: ?lejos,
       }),
       'alumnos': alumnos,
       'hecho_por': hechoPor,

@@ -78,6 +78,9 @@ class SorteoMesasDialog extends StatefulWidget {
 class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   late final TextEditingController _capacidadCtrl;
   late final Map<String, int> _separaciones;
+
+  /// Qué tan lejos van las separadas de cada alumno. Viene en "cerca".
+  late final Map<String, DistanciaLejos> _distancias;
   late final Set<int> _ocupadas;
   late final CandidatosPorPago _candidatos;
 
@@ -107,6 +110,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         alumnos: widget.alumnos,
         exclusion: _exclusion,
         separaciones: _separaciones,
+        distancias: _distancias,
         modo: _modo,
         ordenDivisiones: _orden,
         usarPasto: _usarPasto,
@@ -125,6 +129,8 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       (ex.sinMesa.toList()..sort()).join(','),
       (ex.soloBase.toList()..sort()).join(','),
       (_separaciones.entries.map((e) => '${e.key}=${e.value}').toList()..sort())
+          .join(','),
+      (_distancias.entries.map((e) => '${e.key}=${e.value.name}').toList()..sort())
           .join(','),
     ].join('|');
     if (clave != _claveMemo || _memo == null) {
@@ -172,6 +178,9 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     super.initState();
     _ocupadas = SorteoMesasMotor.ocupadas(widget.alumnos);
     _separaciones = Map<String, int>.from(widget.inicial?.separaciones ?? {});
+    _distancias = Map<String, DistanciaLejos>.from(
+      widget.inicial?.distancias ?? const {},
+    );
     _candidatos = candidatosPorPago(widget.alumnos, widget.pagos);
     _soloPagado = widget.inicial?.soloPagado ?? true;
     _incluirBase = {...?widget.inicial?.incluirBase};
@@ -243,10 +252,15 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   void _cambiarSeparacion(String alumnoId, int? cantidad) => _cambiar(() {
         if (cantidad == null || cantidad < 1) {
           _separaciones.remove(alumnoId);
+          _distancias.remove(alumnoId);
         } else {
           _separaciones[alumnoId] = cantidad;
+          _distancias[alumnoId] ??= DistanciaLejos.cerca;
         }
       });
+
+  void _cambiarDistancia(String alumnoId, DistanciaLejos distancia) =>
+      _cambiar(() => _distancias[alumnoId] = distancia);
 
   void _alternar(Set<String> conjunto, String id, bool incluir) =>
       _cambiar(() => incluir ? conjunto.add(id) : conjunto.remove(id));
@@ -477,7 +491,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                 _Titulo('Con mesas extra (${conMesasExtra.length})'),
                 Text(
                   'Van todas juntas. Si alguien pidió separarlas, tildalo y '
-                  'elegí cuántas quedan lejos de su bloque.',
+                  'elegí cuántas quedan lejos de su bloque y qué tan lejos.',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 6),
@@ -493,7 +507,9 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                         ? null
                         : 'ya tiene ${SalonMesas.textoMesas(a)}',
                     separadas: _separaciones[a.id],
+                    distancia: _distancias[a.id] ?? DistanciaLejos.cerca,
                     onCambiar: (v) => _cambiarSeparacion(a.id, v),
+                    onDistancia: (v) => _cambiarDistancia(a.id, v),
                   ),
               ],
               if (conSillasExtra.isNotEmpty) ...[
@@ -543,6 +559,10 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                     SorteoMesasDialogResult(
                       capacidadSalon: capacidad ?? 0,
                       separaciones: Map<String, int>.from(_separaciones),
+                      distancias: {
+                        for (final id in _separaciones.keys)
+                          id: _distancias[id] ?? DistanciaLejos.cerca,
+                      },
                       soloPagado: _soloPagado,
                       incluirBase: Set<String>.from(_incluirBase),
                       incluirExtras: Set<String>.from(_incluirExtras),
@@ -931,14 +951,18 @@ class _FilaMesasExtra extends StatelessWidget {
   /// o no pagó). `null` si se sortean: ahí se puede pedir separarlas.
   final String? bloqueo;
   final int? separadas;
+  final DistanciaLejos distancia;
   final ValueChanged<int?> onCambiar;
+  final ValueChanged<DistanciaLejos> onDistancia;
 
   const _FilaMesasExtra({
     required this.alumno,
     required this.pagoMesas,
     required this.bloqueo,
     required this.separadas,
+    required this.distancia,
     required this.onCambiar,
+    required this.onDistancia,
   });
 
   @override
@@ -1007,6 +1031,44 @@ class _FilaMesasExtra extends StatelessWidget {
                     Expanded(
                       child: Text(
                         _resumen(mesas, separadas!.clamp(1, extras)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (sortea && marcado)
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(
+                  children: [
+                    const Text('Qué tan lejos:'),
+                    const SizedBox(width: 12),
+                    DropdownButton<DistanciaLejos>(
+                      key: Key('distancia_lejos_${alumno.id}'),
+                      value: distancia,
+                      items: [
+                        for (final d in DistanciaLejos.values)
+                          DropdownMenuItem(value: d, child: Text(d.rotulo)),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) onDistancia(v);
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        switch (distancia) {
+                          DistanciaLejos.cerca =>
+                            'Una mesa de por medio, sin tocarse.',
+                          DistanciaLejos.aUnasMesas =>
+                            'Otra zona, a la vista.',
+                          DistanciaLejos.bienLejos =>
+                            'La otra punta del salón, o de su bloque.',
+                        },
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,

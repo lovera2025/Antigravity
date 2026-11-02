@@ -47,9 +47,9 @@ todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos 
 novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 **En curso desde el 2-nov: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`, sin publicar; el
-orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 y 2 hechas: los números se ordenan solos al guardar el
-salón. Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube. **Publicar, solo
-con todo terminado y preguntándole antes al usuario.**
+orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 a 8 hechas, sin publicar: `docs/CONTEXTO_v6.3.0_2026-11-02.md`.
+Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube. **Publicar, solo preguntándole
+antes al usuario.**
 
 ## Documentación del proyecto
 
@@ -150,8 +150,9 @@ El detalle de cada parte, con sus decisiones, está en `docs/CONTEXTO_FASE3_PLAN
   Lo nuevo del registro viaja adentro del texto `resultado`, con claves que empiezan con guion bajo (`_antes`,
   `_quedan`); una clave así que la versión no conoce se ignora.
 
-**El sorteo sobre el plano no toca el motor.** `SorteoMesasMotor` sigue igual; `SorteoConPlano` le arma las
-entradas y traduce la salida.
+**El sorteo sobre el plano no toca el motor.** `SorteoConPlano` le arma las entradas y traduce la salida. Lo único que
+le pasa es `OrdenLejos`: en qué orden probar las candidatas de una mesa "lejos" (cerca, a unas mesas, bien lejos), sin sacar
+ninguna. Por eso lo que entra no depende de esa opción.
 - **El sorteo no recorre las mesas por número.** `CasillerosPlano` las pone en fila: primero las comunes, por
   número, y **el pasto al final**; en cada corte (otra hoja, mesas sueltas, un número que no existe) mete un
   casillero fantasma, siempre ocupado, para que una familia no quede a los dos lados.
@@ -172,6 +173,11 @@ entradas y traduce la salida.
   `ArmarAMedida.ordenarNumeros`; `ultimoNumero` vuelve a N). Las mesas no se mueven. Las fijadas, las libres y los
   bloques siguen a su mesa (`conNumerosNuevos`). No en un armado del Canva, ni **sin internet**: esa PC no puede saber si
   la otra ya sorteó.
+- **La barra de Acomodar depende del momento** (`SesionAcomodo.barraReacomoda`): sin familias con mesa y con el borde del
+  playón, "Distancia entre mesas", que reacomoda en vivo con la misma cuenta de ACOMODAR LAS MESAS y al guardar pasa a Medidas;
+  si no, "Separar o juntar", que estira sin cambiar ninguna mesa.
+- **Juntas y separadas se dibujan sin dato nuevo** (`PlanoDeLaFiesta.familias`, con `tramosPegados`), en pantalla y en papel, y
+  nunca solo con un color.
 - **"Lejos" se mide en el salón dibujado, igual que "juntas"** (6.1.0). Para el motor, lejos es "no en casilleros
   seguidos", y en el salón dos mesas no seguidas pueden tocarse: en el sorteo por división quedaban así entre el 4 % y
   el 8 %.

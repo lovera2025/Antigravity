@@ -188,6 +188,27 @@ class RegistroSorteo {
     return nombradas.contains;
   }
 
+  /// Alumno → qué tan lejos se pidió su mesa en el último sorteo que le tocó, para
+  /// la planilla. Quien se volvió a sortear sin la marca, o se deshizo, sale.
+  static Map<String, DistanciaLejos> lejosDeLosSorteos(
+    List<SorteoMesasRegistro> registros,
+  ) {
+    final out = <String, DistanciaLejos>{};
+    for (final r in registros) {
+      for (final id in r.resultado.keys) {
+        final d = r.tipo == TipoRegistroSorteo.deshacer
+            ? null
+            : DistanciaLejos.deClave(r.lejos?[id]);
+        if (d == null) {
+          out.remove(id);
+        } else {
+          out[id] = d;
+        }
+      }
+    }
+    return out;
+  }
+
   /// Repasa el registro en orden y compara con las mesas de hoy.
   ///
   /// Lo que queda de [esperado] es lo que *debería* haber hoy si nadie hubiera

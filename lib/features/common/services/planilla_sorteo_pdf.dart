@@ -9,6 +9,7 @@ import '../../../models/evento.dart';
 import '../../../models/nota_operativa_contrato.dart';
 import '../../../models/plano_evento.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/pago_para_sorteo.dart';
 import '../../eventos/services/planilla_sorteo.dart';
 import '../../eventos/services/salon_mesas.dart';
@@ -90,6 +91,9 @@ class PlanillaSorteoPdf {
     /// cada división. Sin plano, la planilla sale como siempre.
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
+
+    /// Qué tan lejos se pidió cada mesa marcada "lejos" en el último sorteo.
+    Map<String, DistanciaLejos> lejos = const {},
     String? lineaSorteo,
 
     /// [alumnos] son solo los últimos sorteados: salen en una hoja corrida.
@@ -134,6 +138,7 @@ class PlanillaSorteoPdf {
       notas: notas,
       repartos: repartos,
       pasto: pasto,
+      lejos: lejos,
     );
 
     final secciones = soloUltimos

@@ -3,12 +3,43 @@ import '../../../models/mesa_extra_item.dart';
 import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
 
+/// Qué tan lejos va una mesa marcada "lejos". Siempre sin tocar a su familia.
+enum DistanciaLejos {
+  /// La libre más cercana que no toque: una mesa de por medio, o la fila de al
+  /// lado sin tocarse.
+  cerca('Cerca', 'cerca'),
+
+  /// Entre 3 y 6 lugares de su familia: otra zona, a la vista.
+  aUnasMesas('A unas mesas', 'a unas mesas'),
+
+  /// La más lejana que haya: la otra punta del salón, o de su bloque.
+  bienLejos('Bien lejos', 'bien lejos');
+
+  /// En el diálogo.
+  final String rotulo;
+
+  /// En la planilla y en los avisos.
+  final String texto;
+
+  const DistanciaLejos(this.rotulo, this.texto);
+
+  static DistanciaLejos? deClave(String? clave) {
+    for (final d in values) {
+      if (d.name == clave) return d;
+    }
+    return null;
+  }
+}
+
 /// Resultado del diálogo de sorteo.
 class SorteoMesasDialogResult {
   final int capacidadSalon;
 
   /// Alumno → cuántas de sus mesas van sueltas, lejos de su bloque.
   final Map<String, int> separaciones;
+
+  /// Alumno → qué tan lejos van sus mesas separadas.
+  final Map<String, DistanciaLejos> distancias;
 
   /// "Solo a lo que tiene algo pagado" (true) o "a todo lo cargado" (false).
   final bool soloPagado;
@@ -35,6 +66,7 @@ class SorteoMesasDialogResult {
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
+    this.distancias = const {},
     this.soloPagado = false,
     this.incluirBase = const {},
     this.incluirExtras = const {},

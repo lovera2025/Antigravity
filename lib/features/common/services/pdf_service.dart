@@ -4205,6 +4205,7 @@ class PdfService {
     Map<String, SillasReparto> repartos = const {},
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
+    Map<String, DistanciaLejos> lejos = const {},
     String? lineaSorteo,
     bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
@@ -4220,6 +4221,7 @@ class PdfService {
       repartos: repartos,
       pasto: pasto,
       bloques: bloques,
+      lejos: lejos,
       lineaSorteo: lineaSorteo,
       soloUltimos: soloUltimos,
       version: version,
@@ -4289,6 +4291,7 @@ class PdfService {
     Map<String, SillasReparto> repartos = const {},
     Set<int> pasto = const {},
     List<BloqueDivision> bloques = const [],
+    Map<String, DistanciaLejos> lejos = const {},
     String? lineaSorteo,
 
     /// [alumnos] son solo los últimos sorteados: una hoja corrida.
@@ -4304,6 +4307,7 @@ class PdfService {
       repartos: repartos,
       pasto: pasto,
       bloques: bloques,
+      lejos: lejos,
       lineaSorteo: lineaSorteo,
       soloUltimos: soloUltimos,
       version: version,

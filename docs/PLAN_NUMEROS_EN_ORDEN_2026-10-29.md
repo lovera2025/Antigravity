@@ -234,11 +234,14 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
    también la respeta.
 5. **Juntas y separadas en el plano**, en pantalla y en papel. **Hecha el 2-nov** (`FamiliasEnElPlano`, `test/familias_en_el_plano_test.dart`).
    La flecha es "→ 30"; si la letra del PDF no la tiene, dice "a la 30". Las muestras: `tool/numeros_en_orden_muestra_test.dart`.
-6. **"Lejos" y qué tan lejos**: el diálogo de SORTEO, el motor, `SorteoConPlano`, el registro y la planilla.
-7. **El recorrido entero** (sección 5b, última fila de la tabla).
+6. **"Lejos" y qué tan lejos**: el diálogo de SORTEO, el motor, `SorteoConPlano`, el registro y la planilla. **Hecha el 2-nov.**
+   La medición, en `docs/CONTEXTO_v6.3.0_2026-11-02.md`.
+7. **El recorrido entero** (sección 5b, última fila de la tabla). **Hecha el 2-nov** (`test/recorrido_salon_test.dart`).
 8. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después; un salón sorteado con
-   familias juntas y separadas, en pantalla y en PDF (color y blanco y negro). Mandárselas al usuario.
-9. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL.
+   familias juntas y separadas, en pantalla y en PDF (color y blanco y negro). Mandárselas al usuario. **Hecha el 2-nov**
+   (`tool/numeros_en_orden_muestra_test.dart`).
+9. Versión, CONTEXTO nuevo, una línea en CLAUDE.md, instalador. Sin SQL. **Hechos el CONTEXTO y el CLAUDE.md; la versión y el
+   instalador, cuando el usuario diga de publicar.**
 
 ## 5b. Qué prueba cada cosa acordada
 
@@ -275,7 +278,7 @@ Los tests corren en la PC del usuario (`flutter test`): el contenedor remoto no 
 
 ## 6. Preguntas para el usuario
 
-1. **"Marcado para que estén lejos":** hoy se tilda en el diálogo de SORTEO, el día del sorteo, y no queda guardado
+1. **"Marcado para que estén lejos"** (por ahora, en SORTEO, como se recomienda abajo)**:** hoy se tilda en el diálogo de SORTEO, el día del sorteo, y no queda guardado
    antes. ¿Así está bien, o lo quieren marcar antes en la ficha del alumno (cuando la familia lo pide)? Lo segundo es
    una tabla nueva (no una columna de `contratos_alumnos`) y una migración: va aparte de este plan.
 2. ~~Armados del Canva~~ **Decidido el 29-oct:** se ordena solo en los salones con borde del playón; el Canva
