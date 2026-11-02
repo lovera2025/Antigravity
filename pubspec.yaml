@@ -55,6 +55,11 @@ dependencies:
   window_manager: ^0.5.1
   shared_preferences: ^2.5.1
   qr_flutter: ^4.1.0
+  # La impresora térmica de la barra (Global 58 mm, Bluetooth): los bytes
+  # ESC/POS del ticket y el envío por Bluetooth clásico desde Android.
+  # Primero en el arnés tool/impresora_prueba.dart; después, el módulo de barra.
+  esc_pos_utils_plus: ^2.0.4
+  print_bluetooth_thermal: ^1.2.5
   url_launcher: ^6.3.0
   sqflite_common: ^2.5.6
   sqflite_common_ffi: ^2.4.0+2

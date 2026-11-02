@@ -1,5 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- La impresora térmica de la barra, por Bluetooth clásico. Desde Android 12
+         el permiso es "dispositivos cercanos" (BLUETOOTH_CONNECT), que la app
+         pide al conectar; en los anteriores, BLUETOOTH. Sin ubicación. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <application
         android:label="Junior Eventos"
         android:name="${applicationName}"
