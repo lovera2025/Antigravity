@@ -51,6 +51,9 @@ oficina (la pantalla de Retiro de entradas que ya existe, v72). Ya están pagas 
   **permisos**, con casillas:
   - **Caja**: cobrar, abrir y cerrar caja (lo de hoy);
   - **Entradas**: entregar entradas y pulseras.
+  - **Barra** (2-nov): vender bebidas desde la tablet de la barra con su propia caja de barra (ver
+    `docs/HOJA_DE_RUTA_2026-11-02.md`; el plan de la barra se escribe cuando la impresora pase la prueba). En esta
+    etapa la casilla existe y se guarda; lo que abre, cuando esté el módulo.
   - **Puede quedar sin ninguno** (decidido el 30-oct): el jefe carga a la persona con su nombre y PIN y le da los
     permisos después. Hasta entonces, al entrar le sale **"Te faltan permisos: pedíselos al jefe"** y no pasa de ahí.
   - La lista queda abierta a otros permisos (la barra, por ejemplo), pero este plan suma solo Entradas.
