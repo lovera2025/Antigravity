@@ -108,6 +108,33 @@ void main() {
     expect(f.marcas[30]!.otra, 5);
   });
 
+  test('cada mesa de una familia separada sabe de quién es', () {
+    final f = de([_familia('gomez', [15, 16, 26], extras: 2)]);
+    for (final n in [15, 16, 26]) {
+      expect(f.marcas[n]!.apellido, 'GOMEZ', reason: '$n');
+    }
+    // La principal ya lo escribe: el apellido no sale dos veces.
+    expect(f.marcas[15]!.principal, isTrue);
+    expect(f.marcas[15]!.apellidoQueFalta(yaLoLleva: true), isNull);
+    // Las otras, incluida la tercera, lejos de las demás, sí.
+    expect(f.marcas[16]!.apellidoQueFalta(yaLoLleva: false), 'GOMEZ');
+    expect(f.marcas[26]!.apellidoQueFalta(yaLoLleva: false), 'GOMEZ');
+  });
+
+  test('con dos familias separadas, cada mesa lleva el suyo', () {
+    final f = de([
+      _familia('gomez', [15, 26], extras: 1),
+      _familia('sosa', [5, 40], extras: 1),
+    ]);
+    expect(f.marcas[26]!.apellido, 'GOMEZ');
+    expect(f.marcas[40]!.apellido, 'SOSA');
+  });
+
+  test('una familia junta no lo necesita: se lee por la línea', () {
+    final f = de([_familia('gomez', [5, 6], extras: 1)]);
+    expect(f.marcas[6]!.apellidoQueFalta(yaLoLleva: false), isNull);
+  });
+
   test('tres con una lejos: la cápsula en las dos y el aro en las tres', () {
     final f = de([_familia('a', [5, 6, 30], extras: 2)]);
     expect(f.capsulas, [[5, 6]]);

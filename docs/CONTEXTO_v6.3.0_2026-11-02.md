@@ -13,13 +13,16 @@ sigue: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 | 1 y 2 | Sin familias con mesa, los números se ordenan solos al guardar el salón, sin mover ninguna mesa. Un salón ya mezclado se arregla con abrirlo y guardar | `ArmarAMedida.ordenarNumeros`, `EditarArmado.paraGuardar` |
 | 3 | El plano avisa cuántos saltos hay si los números no siguen el salón | `PlanoDeLaFiesta._avisoDeSaltos` |
 | 4 | La barra de Acomodar: antes del sorteo reacomoda en vivo; después, o en el Canva, estira | `SesionAcomodo.moverLaBarra`, `PanelAcomodar` |
-| 5 | Juntas y separadas marcadas en el plano y en papel, con P y A. Casilla "Familias con adicional" en pantalla y al imprimir | `FamiliasEnElPlano`, `PintorPlano`, `PlanoPdf` |
+| 5 | Juntas y separadas marcadas en el plano y en papel, con P y A. Toda mesa de una familia separada lleva el apellido y, abajo, "→ la otra mesa". Casilla "Familias con adicional" en pantalla y al imprimir | `FamiliasEnElPlano`, `PintorPlano`, `PlanoPdf` |
 | 6 | Al marcar "lejos" se elige qué tan lejos: cerca (viene elegida), a unas mesas o bien lejos. Lo pedido queda en el registro y en la planilla | `DistanciaLejos`, `SorteoConPlano._ordenLejos` |
 | 7 | El recorrido entero como test | `test/recorrido_salon_test.dart` |
 | 8 | Muestras | `tool/numeros_en_orden_muestra_test.dart` |
 
 ## Decisiones que no estaban en el plan
 
+- **El apellido en toda mesa separada** (pedido del usuario el 2-nov, mirando la muestra: "la tercera de GOMEZ" no se sabía de
+  quién era). Va en un renglón y la flecha en otro: un apellido largo se corta con "…", y el número de la otra mesa no se puede
+  perder.
 - **Sin internet no se ordena** (`leidoDeLaNube`). Esa PC no puede saber si la otra ya sorteó, y renumerar debajo de familias
   sentadas sería grave. Se ordena la próxima vez que se guarde con internet, y el aviso lo dice.
 - **Con dos hojas la numeración es la serpentina de `acomodar` y `armar`** (la izquierda de A y de B, y la derecha de vuelta),
@@ -69,3 +72,30 @@ guarda se queda en esa ventana. No abrir la app completa desde el código: usa l
 desde una PC con la versión nueva. El renglón del sorteo suma `_lejos`, que la 6.2.1 ignora porque empieza con guion bajo.
 
 **La mora no se toca en toda esta versión:** ordenar y sortear escriben `planos_evento`, `sorteos_mesas` y los números de mesa.
+
+## Lo que no se comprobó
+
+- **Nadie la usó todavía en una ventana de verdad.** Lo probado son los tests, con las pantallas montadas, y las muestras
+  miradas. La ventana de prueba compila para Windows, pero falta que el usuario la abra y la maneje con el mouse.
+- **El PDF se miró en chico** (en el panel, a 40 %): se leen las cápsulas, los aros, las letras y los apellidos. Conviene mirarlo
+  impreso de verdad antes del primer sorteo.
+- **Un test falló una vez y no se reprodujo:** `test/recepcion_suelta_canal_test.dart`, "sigue emitiendo la lista cuando cambia
+  algo". Pasó en las demás corridas completas y 8 de 8 corrido solo. No se tocó nada de Recepción, y el test espera 50 ms de
+  reloj: lo más probable es que sea la PC cargada, sin confirmar. Si vuelve a pasar, cambiarle la espera por un aviso.
+
+## Lo pendiente, en orden
+
+1. **El usuario mira la ventana de prueba y dice si se publica la 6.3.0.** Los sorteos de verdad son en noviembre y las fiestas
+   desde el 1-dic. Publicar: la lista de arriba, con él presente.
+2. **Operadores con permisos** (paso 3 de la hoja): Cobros, Entradas y Barra. El plan ya está corregido:
+   `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`. Lleva una tabla nueva y la migración v76, que se prueba sobre una copia de su base con
+   la app cerrada: hay que pedírselo.
+3. **La app de hoy corriendo en una tablet** (etapa 0 del paso 4): ninguna tablet tiene la app, y es el riesgo más grande para el
+   4-dic. Hace falta un Android conectado y una clave de firma propia.
+4. **La impresora** (paso 1): espera a que el usuario la tenga. La rama `feature/barra-impresora` está sin compilar, y a su arnés le
+   falta el botón LOGO.
+5. **El plan del módulo de barra** (paso 4): después de la impresora, con lo aprobado en las maquetas, que está en la hoja.
+6. **Entradas** (paso 5). La venta suelta es lo último.
+
+**Queda abierto, sin apuro:** marcar "lejos" antes, en la ficha del alumno. Hoy se tilda en SORTEO. Llevaría una tabla nueva, y va
+aparte si lo piden.

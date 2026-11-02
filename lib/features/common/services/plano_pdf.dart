@@ -940,6 +940,14 @@ class _DibujoPlano extends pw.Widget {
       _escribir(g, fNumeros, texto, tam, cx, cy, color, referencia: '0');
 
       final marca = familias?.marcas[m.numero];
+      // El apellido de esta mesa: el de la principal o, en una familia separada, el
+      // de cualquiera de sus mesas. A este tamaño puede no entrar ninguno.
+      final conApellido = llevaApellido(m.numero);
+      final apellidoDeLaMesa = tamApellido == 0
+          ? null
+          : conApellido
+              ? (info.ocupante ?? info.fijadaPara!).apellido
+              : marca?.apellidoQueFalta(yaLoLleva: false);
       if (marca != null) {
         if (marca.separada) {
           g
@@ -970,7 +978,7 @@ class _DibujoPlano extends pw.Widget {
             ancho: anchoApellido,
             alto: (tamApellido == 0 ? r * 0.5 : tamApellido) / s,
           );
-          final debajo = tamApellido > 0 && llevaApellido(m.numero);
+          final debajo = apellidoDeLaMesa != null;
           // Sin la flecha en esta letra, se dice en palabras.
           final texto = fEtiquetas.isRuneSupported(0x2192)
               ? '\u2192 $otra'
@@ -988,15 +996,14 @@ class _DibujoPlano extends pw.Widget {
         }
       }
 
-      if (tamApellido > 0 && llevaApellido(m.numero)) {
-        final familia = info.ocupante ?? info.fijadaPara!;
+      if (apellidoDeLaMesa != null) {
         final franja = PlanoPapel.franjaApellido(
           m,
           ocupa: ocupa,
           ancho: anchoApellido,
           alto: tamApellido / s,
         );
-        var apellido = _seguro(fApellidos, familia.apellido);
+        var apellido = _seguro(fApellidos, apellidoDeLaMesa);
         var tamEste = tamApellido;
         final maximo = franja.ancho * s;
         final medido = fApellidos.stringMetrics(apellido).advanceWidth * tamEste;
@@ -1040,7 +1047,9 @@ class _DibujoPlano extends pw.Widget {
                   tamEtiqueta +
               tamEtiqueta * 1.1) /
           s,
-      llevaApellido: llevaApellido,
+      // El nombre de la división no va donde ya hay un apellido o una flecha.
+      llevaApellido: (n) =>
+          llevaApellido(n) || (familias?.marcas[n]?.separada ?? false),
       anchoApellido: anchoApellido,
       altoApellido: tamApellido / s,
     );

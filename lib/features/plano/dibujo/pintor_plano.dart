@@ -550,10 +550,14 @@ class PintorPlano extends CustomPainter {
     // Con sillas, la línea queda justo arriba de la franja.
     final franja = franjaApellido(c, r, caja, conSillas: conSillas)
         .shift(Offset(0, marca != null && !conSillas ? 4 : 0));
-    if (familia != null) {
+    final apellido = familia?.apellido ??
+        (nivel.adornos && nivel.apellidos
+            ? marca?.apellidoQueFalta(yaLoLleva: false)
+            : null);
+    if (apellido != null) {
       _apellido(
         canvas,
-        familia.apellido,
+        apellido,
         franja,
         foco ? tema.titulo : tema.tituloSuave,
       );
@@ -562,11 +566,12 @@ class PintorPlano extends CustomPainter {
       _marcaDeFamilia(canvas, c, r, marca, conSillas);
       final otra = marca.otra;
       if (otra != null && nivel.apellidos) {
-        // Debajo del apellido, si la mesa lo lleva.
+        // En su propio renglón, debajo del apellido: un apellido largo se corta
+        // con "…", y el número de la otra mesa no se puede perder.
         _apellido(
           canvas,
           '→ $otra',
-          familia == null ? franja : franja.shift(Offset(0, franja.height + 2)),
+          apellido == null ? franja : franja.shift(Offset(0, franja.height + 2)),
           tema.marcaFamilia,
         );
       }

@@ -40,8 +40,9 @@ compila para Windows y no tiene que molestar al programa de escritorio.
 
 ### 2. El plano antes de los sorteos (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`)
 
-Es lo que se programa ahora: los sorteos de verdad son en noviembre y hoy Puerto Viejo tiene los números mezclados.
-**El jefe eligió la serpentina el 2-nov.** Son seis cosas, con la tabla "lo acordado → el test" en la sección 5b:
+**Programado el 2-nov, sin publicar: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Falta que el usuario lo mire y diga si se publica.**
+Los sorteos de verdad son en noviembre y hoy Puerto Viejo tiene los números mezclados. **El jefe eligió la serpentina el 2-nov.**
+Son seis cosas, con la tabla "lo acordado → el test" en la sección 5b:
 1. los números se ordenan solos al guardar el salón (antes del sorteo);
 2. el aviso de los números que no siguen el salón;
 3. la barra de Acomodar reacomoda en vivo antes del sorteo y estira después;

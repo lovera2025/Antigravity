@@ -14,11 +14,23 @@ class MarcaDeMesa {
   /// [separada].
   final int? otra;
 
+  /// El apellido de la familia.
+  final String apellido;
+
   const MarcaDeMesa({
     required this.principal,
+    required this.apellido,
     this.separada = false,
     this.otra,
   });
+
+  /// El apellido que esta mesa tiene que escribir además del de siempre. Una mesa
+  /// de una familia separada lo lleva aunque no sea la principal: lejos de las
+  /// otras, si no, no se sabe de quién es (lo pidió el usuario el 2-nov, mirando la
+  /// tercera mesa de una familia). Null si no hace falta: junta con las suyas se
+  /// lee por la línea, o [yaLoLleva] porque es la principal.
+  String? apellidoQueFalta({required bool yaLoLleva}) =>
+      separada && !yaLoLleva ? apellido : null;
 }
 
 /// Qué familias tienen adicional en el salón, y si quedaron juntas o separadas.
@@ -54,10 +66,12 @@ class FamiliasEnElPlano {
     // Las mesas de cada familia que están en este salón: las que ocupa y las que
     // tiene fijadas. Una mesa que el armado no tiene no se puede dibujar.
     final porFamilia = <String, Set<int>>{};
+    final apellidos = <String, String>{};
     for (final i in estado.mesas) {
       final fijada = i.fijadaPara;
       for (final o in [...i.ocupantes, ?fijada]) {
         porFamilia.putIfAbsent(o.id, () => {}).add(i.numero);
+        apellidos[o.id] = o.apellido;
       }
     }
 
@@ -85,6 +99,7 @@ class FamiliasEnElPlano {
             n,
             () => MarcaDeMesa(
               principal: estado.info(n).principal,
+              apellido: apellidos[id]!,
               separada: separada,
               otra: separada ? tramos[(i + 1) % tramos.length].first : null,
             ),
