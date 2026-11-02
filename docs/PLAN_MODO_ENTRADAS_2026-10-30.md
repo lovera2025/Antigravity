@@ -134,6 +134,14 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 
 - Crear, cambiar o desactivar un operador o sus permisos: doble llave de modo jefe (`kSoloEnModoJefe` y
   `_frenaSinModoJefe()`).
+- **Rastro de cada movimiento** (pedido del usuario el 2-nov, para poder seguir qué pasó): toda tabla nueva (permisos,
+  entradas, barra) lleva `hecho_por` (el nombre de `quienOpera`), `created_at`, `updated_at` (el trigger de la nube) y
+  `device_id` (el id de instalación de la PC o la tablet). **Nada se edita ni se borra**: una venta o una entrega se
+  anula con una marca nueva (quién, cuándo, motivo) y la fila original queda. Los cambios de permisos van a un registro
+  propio, solo-agregar (`permisos_operador_cambios`: operador, qué permiso, dado o sacado, quién, cuándo).
+- **Los pagos de los masivos no se tocan**: las ventas no son `pagos_contrato_alumno`, la caja de entradas o de barra no
+  es `sesiones_caja`, y los permisos no son columnas de `operadores_caja`. Saldos, mora y cierre de caja de cuotas
+  siguen leyendo lo de siempre.
 - Cada fila de la tabla es un test que tiene que existir y pasar, con **roturas a propósito** en cada etapa.
 - `flutter analyze` y los tests, en la PC (el contenedor remoto no tiene Flutter).
 
