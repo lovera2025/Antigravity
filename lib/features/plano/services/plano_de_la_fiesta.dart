@@ -8,10 +8,12 @@ import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
+import '../modelo/armados_predefinidos.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
 import 'armar_a_medida.dart';
 import 'divisiones.dart';
+import 'editar_armado.dart';
 import 'medir_salon.dart';
 
 /// Algo del plano que conviene mirar, dicho en palabras, con la mesa a la que
@@ -167,6 +169,37 @@ class PlanoDeLaFiesta {
           if (SalonMesas.tieneNumeros(a)) ocupanteDe(a, repartos[a.id]),
       ];
 
+  /// Los números no siguen el salón: hay más saltos que los que trae la
+  /// serpentina (el paso de un lado al otro y el cambio de hoja). En cada salto
+  /// el sorteo corta, así que una familia con varias mesas puede no entrar junta.
+  /// Avisa y no frena. Null si está bien.
+  ///
+  /// Los saltos esperados son los del mismo salón con los números en orden; en un
+  /// armado del Canva, los de ese armado como salió de fábrica, que no se ordena.
+  static AvisoPlano? _avisoDeSaltos(
+    ArmadoSalon armado, {
+    required bool hayFamilias,
+  }) {
+    final hay = armado.cortes.length;
+    if (hay == 0) return null;
+    final conBorde = EditarArmado.conBordeDelPlayon(armado);
+    final esperados = conBorde
+        ? ArmarAMedida.ordenarNumeros(armado).armado.cortes.length
+        : ArmadosPredefinidos.porClave(armado.clave)?.cortes.length;
+    if (esperados == null || hay <= esperados) return null;
+    final saltos = hay == 1 ? '1 salto' : '$hay saltos';
+    return AvisoPlano(
+      !conBorde
+          ? 'Los números no siguen el salón ($saltos): este armado no se ordena '
+              'solo. Corré las mesas en Personalizar → Acomodar.'
+          : hayFamilias
+              ? 'Los números no siguen el salón ($saltos): deshacé el sorteo para '
+                  'ordenarlos.'
+              : 'Los números no siguen el salón ($saltos): se ordenan al guardar '
+                  'en Personalizar → Acomodar.',
+    );
+  }
+
   factory PlanoDeLaFiesta.desde({
     required ArmadoSalon armado,
     required ConfigPlano config,
@@ -315,6 +348,12 @@ class PlanoDeLaFiesta {
         mesa: mesa,
       ));
     }
+
+    final saltos = _avisoDeSaltos(
+      armado,
+      hayFamilias: alumnos.any(SalonMesas.tieneNumeros),
+    );
+    if (saltos != null) avisos.add(saltos);
 
     for (final (a, b) in Divisiones.parecidas(estado.divisiones)) {
       avisos.add(AvisoPlano(

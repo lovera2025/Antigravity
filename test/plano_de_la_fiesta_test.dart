@@ -4,6 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/plano/modelo/estado_plano.dart';
 import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
@@ -12,6 +13,8 @@ import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart'
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
+
+import 'helpers/salon_puerto_viejo.dart';
 
 ContratoAlumno alumno(
   String id, {
@@ -211,6 +214,82 @@ void main() {
         alumnos: const [],
       );
       expect(p.capacidadPlayon, 180);
+    });
+  });
+
+  group('el aviso de los números que no siguen el salón', () {
+    Iterable<String> deSaltos(PlanoDeLaFiesta p) => [
+          for (final a in p.avisos)
+            if (a.texto.startsWith('Los números no siguen')) a.texto,
+        ];
+
+    PlanoDeLaFiesta conAlumnos(ArmadoSalon a, [List<ContratoAlumno>? alumnos]) =>
+        PlanoDeLaFiesta.desde(
+          armado: a,
+          config: ConfigPlano.vacia,
+          alumnos: alumnos ?? const [],
+        );
+
+    final puertoViejo = armadoDePuertoViejo();
+
+    test('sin sorteo: se ordenan al guardar', () {
+      final p = conAlumnos(puertoViejo);
+      expect(deSaltos(p), [
+        'Los números no siguen el salón (13 saltos): se ordenan al guardar en '
+            'Personalizar → Acomodar.',
+      ]);
+      expect(p.avisos.where((a) => a.grave), isEmpty, reason: 'no frena');
+    });
+
+    test('con sorteo: hay que deshacerlo', () {
+      expect(deSaltos(conAlumnos(puertoViejo, [alumno('a', mesas: [8])])), [
+        'Los números no siguen el salón (13 saltos): deshacé el sorteo para '
+            'ordenarlos.',
+      ]);
+    });
+
+    test('ya ordenado o recién acomodado, nada', () {
+      expect(
+        deSaltos(conAlumnos(ArmarAMedida.ordenarNumeros(puertoViejo).armado)),
+        isEmpty,
+      );
+      expect(deSaltos(conAlumnos(aMedida)), isEmpty);
+      expect(
+        deSaltos(conAlumnos(ArmarAMedida.acomodar(
+          ArmarAMedida.vacio(ArmarAMedida.playonDe(puertoViejo)!),
+          cantidad: 35,
+        ).armado)),
+        isEmpty,
+      );
+    });
+
+    test('un armado del Canva como vino de fábrica, nada', () {
+      for (final a in ArmadosPredefinidos.todos) {
+        expect(deSaltos(conAlumnos(a)), isEmpty, reason: a.clave);
+      }
+    });
+
+    test('un armado del Canva mezclado avisa, sin prometer que se ordena', () {
+      final m = pagina3.mesas;
+      final mezclado = pagina3.copyWith(mesas: [
+        for (final (i, x) in m.indexed)
+          MesaPlano(
+            numero: m[(i * 7) % m.length].numero,
+            hoja: x.hoja,
+            x: x.x,
+            y: x.y,
+            pasto: x.pasto,
+          ),
+      ]);
+      final texto = deSaltos(conAlumnos(mezclado)).single;
+      expect(texto, contains('este armado no se ordena solo'));
+    });
+
+    test('un salón vacío, nada', () {
+      expect(
+        deSaltos(conAlumnos(puertoViejo.copyWith(mesas: const []))),
+        isEmpty,
+      );
     });
   });
 
