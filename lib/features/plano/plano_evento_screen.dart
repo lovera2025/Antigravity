@@ -970,6 +970,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     ArmadoSalon nuevo,
     Map<int, String> enUso,
     bool rehecho,
+    double? lugarBarraM,
   ) {
     final fijadasOLibres = (_plano?.config.fijadas.length ?? 0) +
         (_plano?.config.libres.length ?? 0);
@@ -983,6 +984,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         enUsoVisto: enUso,
         rehecho: rehecho,
         leidoDeLaNube: _leidoDeLaNube,
+        lugarBarraM: lugarBarraM,
       ),
       // Con la escuela ya sorteada, las mesas que se suman son para quien
       // todavía no tiene: se dice cómo sigue.

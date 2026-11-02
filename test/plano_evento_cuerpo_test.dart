@@ -131,7 +131,7 @@ AccionesPlano _acciones(
           colores == null ? null : (c, _) => colores.add(c),
       onGuardarArmado: salon == null
           ? null
-          : (b, n, _, rehecho) {
+          : (b, n, _, rehecho, _) {
               salon.add((b, n));
               rehechos?.add(rehecho);
             },

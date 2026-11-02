@@ -35,6 +35,41 @@ void main() {
     expect(find.textContaining('con los números en orden'), findsOneWidget);
   });
 
+  testWidgets('la barra reacomoda en vivo, y soltar deja deshacer',
+      (tester) async {
+    await abrir(tester);
+    expect(find.text('DISTANCIA ENTRE MESAS'), findsOneWidget);
+    expect(find.text('SEPARAR O JUNTAR'), findsNothing);
+    final barra = find.byKey(const Key('distancia_mesas'));
+    tester.widget<Slider>(barra).onChanged!(2.5);
+    await tester.pump();
+    expect(find.text('2,5 m'), findsOneWidget);
+    expect(find.text('Entran las 35.'), findsOneWidget);
+    tester.widget<Slider>(barra).onChangeEnd!(2.5);
+    await tester.pump();
+    expect(find.textContaining('Las mesas se acomodaron a 2,5 m'), findsOneWidget);
+
+    final deshacer = find.byKey(const Key('acomodar_deshacer'));
+    await tester.ensureVisible(deshacer);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(deshacer);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('3 m'), findsOneWidget, reason: 'la distancia de antes');
+    expect(find.text('Entran las 35.'), findsNothing);
+  });
+
+  testWidgets('con familias con mesa, la barra estira', (tester) async {
+    await abrir(tester);
+    await tester.tap(find.byKey(const Key('prueba_sentados')));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('SEPARAR O JUNTAR'), findsOneWidget);
+    expect(find.text('DISTANCIA ENTRE MESAS'), findsNothing);
+    expect(
+      find.textContaining('se estira sin cambiar ninguna mesa'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('con familias con mesa, los números no cambian', (tester) async {
     await abrir(tester);
     await tester.tap(find.byKey(const Key('prueba_sentados')));

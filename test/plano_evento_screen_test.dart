@@ -850,6 +850,21 @@ void main() {
       expect(mundo.contratos.asignaciones, isEmpty);
     });
 
+    testWidgets('la distancia de la barra queda en Medidas al guardar',
+        (tester) async {
+      final mundo = await puertoViejo(tester);
+      await _personalizar(tester, 'acomodar');
+      final barra = find.byKey(const Key('distancia_mesas'));
+      tester.widget<Slider>(barra).onChanged!(2.5);
+      tester.widget<Slider>(barra).onChangeEnd!(2.5);
+      await tester.pump();
+      await _guardar(tester, 'guardar_acomodo');
+      final guardado = mundo.guardado;
+      expect(guardado.config.medidas.lugarMesaM, 2.5);
+      expect(guardado.armado.distanciaM(1, 2), closeTo(2.5, 1e-6));
+      expect(find.textContaining('cambió mientras lo acomodabas'), findsNothing);
+    });
+
     testWidgets('sin internet se guarda, pero los números se ordenan después',
         (tester) async {
       final mundo = await puertoViejo(tester);

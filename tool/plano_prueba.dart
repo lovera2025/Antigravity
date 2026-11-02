@@ -67,6 +67,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     ArmadoSalon nuevo,
     Map<int, String> enUso,
     bool rehecho,
+    double? lugarBarraM,
   ) {
     final cambio = EditarArmado.paraGuardar(
       base: base,
@@ -77,6 +78,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       enUsoVisto: enUso,
       rehecho: rehecho,
       leidoDeLaNube: _conInternet,
+      lugarBarraM: lugarBarraM,
     );
     setState(() {
       final config = cambio.config;

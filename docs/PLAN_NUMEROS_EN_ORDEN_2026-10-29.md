@@ -229,7 +229,9 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
      verdad y el plano real de Puerto Viejo, sin base ni nube.
 3. **El aviso de los números que no siguen el salón** (`PlanoDeLaFiesta.avisos`). **Hecha el 2-nov.** En el Canva los saltos esperados son
    los del armado de fábrica (si no, avisaría siempre), y el aviso no promete que se ordene.
-4. **La barra de Acomodar**: reacomoda antes del sorteo, estira después.
+4. **La barra de Acomodar**: reacomoda antes del sorteo, estira después. **Hecha el 2-nov** (`test/barra_acomodar_test.dart`).
+   La distancia elegida viaja aparte (`lugarBarraM`) hasta GUARDAR y ahí pasa a Medidas; hasta entonces, ACOMODAR OTRA VEZ
+   también la respeta.
 5. **Juntas y separadas en el plano**, en pantalla y en papel.
 6. **"Lejos" y qué tan lejos**: el diálogo de SORTEO, el motor, `SorteoConPlano`, el registro y la planilla.
 7. **El recorrido entero** (sección 5b, última fila de la tabla).

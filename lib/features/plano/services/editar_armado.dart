@@ -1047,6 +1047,8 @@ class EditarArmado {
   ///   Canva tampoco: traen la numeración que hizo el jefe.
   /// - [leidoDeLaNube]: sin internet no se ordena, porque esta PC no puede saber
   ///   si la otra ya sorteó. Se ordena la próxima vez que se guarde con internet.
+  /// - [lugarBarraM]: la distancia elegida con la barra de Acomodar pasa a Medidas,
+  ///   así el casillero y la barra dicen lo mismo y ACOMODAR OTRA VEZ la respeta.
   static CambioDeConfig paraGuardar({
     required ArmadoSalon base,
     required ArmadoSalon nuevo,
@@ -1056,6 +1058,7 @@ class EditarArmado {
     required Map<int, String> enUsoVisto,
     bool rehecho = false,
     bool leidoDeLaNube = true,
+    double? lugarBarraM,
   }) {
     if (firma(fresco) != firma(base)) {
       return const CambioDeConfig.noSePuede(
@@ -1106,13 +1109,29 @@ class EditarArmado {
         : const <int, int>{};
     return CambioDeConfig.ok(
       conNumerosNuevos(
-        conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
+        _conLugarDeLaBarra(
+          conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
+          lugarBarraM,
+        ),
         cambio,
         nuevo,
       ),
       sacadas,
       armado: comoSeGuarda(nuevo, base, ordenar: ordenar),
     );
+  }
+
+  /// La distancia de la barra en Medidas, en centímetros. Fuera de lo que admiten
+  /// las medidas no la cambia: al leerla volvería a la de fábrica.
+  static ConfigPlano _conLugarDeLaBarra(ConfigPlano config, double? lugarM) {
+    if (lugarM == null) return config;
+    final m = (lugarM * 100).round() / 100;
+    if (m < MedidasPlano.lugarMinimoM ||
+        m > MedidasPlano.lugarMaximoM ||
+        m == config.medidas.lugarMesaM) {
+      return config;
+    }
+    return config.copyWith(medidas: config.medidas.copyWith(lugarMesaM: m));
   }
 
   /// Hoja por hoja, el salón trae el borde del playón: el salón vacío, a medida

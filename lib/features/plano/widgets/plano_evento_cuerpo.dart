@@ -69,13 +69,15 @@ class AccionesPlano {
   /// Guardar el salón acomodado a mano: [base] es el que estaba guardado al
   /// empezar, [nuevo] el que quedó y [enUso] las mesas que tenían familia o
   /// estaban fijadas al empezar. [rehecho]: salió de ACOMODAR LAS MESAS o de
-  /// VACIAR EL SALÓN, y al guardar se quitan las fijadas y las libres. Null:
-  /// no hay pestaña Acomodar.
+  /// VACIAR EL SALÓN, y al guardar se quitan las fijadas y las libres.
+  /// [lugarBarraM]: la distancia elegida con la barra, si se tocó. Null: no hay
+  /// pestaña Acomodar.
   final void Function(
     ArmadoSalon base,
     ArmadoSalon nuevo,
     Map<int, String> enUso,
     bool rehecho,
+    double? lugarBarraM,
   )? onGuardarArmado;
 
   /// GUARDAR COMO PREDIO… (6.1.0): el espacio que se ve en Acomodar ([actual],
@@ -295,6 +297,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   static const double _recorridoMinimoPx = 6;
   String _alcance = 'hoja';
   double? _pasoSeparar;
+
+  /// Cuándo se reacomodó por última vez con la barra: como mucho cada 50 ms.
+  DateTime? _ultimaBarra;
   String? _mensajeAcomodo;
   bool _confirmarDescartar = false;
 
@@ -1826,7 +1831,10 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         motivoSinAcomodar: s.motivoSinAcomodar(cantidad),
         onAcomodar: () => setState(() {
           final habia = armado.mesas.isNotEmpty;
-          final r = s.acomodar(cantidad, lugarM: _plano.medidas.lugarMesaM);
+          final r = s.acomodar(
+            cantidad,
+            lugarM: s.lugarDeLaBarra ?? _plano.medidas.lugarMesaM,
+          );
           _mesaAcomodo = null;
           _sectorAcomodo = null;
           _playonAcomodo = false;
@@ -1898,6 +1906,41 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           setState(() => hecho(null));
           widget.acciones?.onGuardarComoPredio?.call(s.base, s.actual);
         },
+        barraReacomoda: s.barraReacomoda,
+        motivoEstira: s.haySorteo
+            ? 'Ya hay familias con mesa: se estira sin cambiar ninguna mesa.'
+            : 'Este armado del Canva se estira sin cambiar ninguna mesa.',
+        lugarBarra: _pasoSeparar ?? s.lugarDeLaBarra ?? s.distanciaDelSalon,
+        textoBarra: _pasoSeparar == null && s.lugarDeLaBarra == null
+            ? null
+            : cantidad > armado.mesas.length
+                ? '${cantidad - armado.mesas.length == 1 ? 'Falta 1' : 'Faltan ${cantidad - armado.mesas.length}'}: '
+                    'bajá la distancia, agrandá el playón o achicá un sector.'
+                : 'Entran las $cantidad.',
+        faltanEnBarra: cantidad > armado.mesas.length,
+        onLugar: (v) => setState(() {
+          _pasoSeparar = v;
+          _mesaAcomodo = null;
+          _sectorAcomodo = null;
+          _playonAcomodo = false;
+          _confirmarDescartar = false;
+          final ahora = DateTime.now();
+          final ultima = _ultimaBarra;
+          if (ultima == null ||
+              ahora.difference(ultima) >= const Duration(milliseconds: 50)) {
+            _ultimaBarra = ahora;
+            s.moverLaBarra(cantidad, v);
+          }
+        }),
+        onSoltarLugar: (v) => setState(() {
+          // La última posición: la pudo saltear el límite de cada 50 ms.
+          s.moverLaBarra(cantidad, v);
+          s.soltarLaBarra();
+          _pasoSeparar = null;
+          _ultimaBarra = null;
+          hecho('Las mesas se acomodaron a ${MedirSalon.metros(v, decimales: 2)}: '
+              'lo corrido a mano vuelve con Deshacer. Todavía no se guardó.');
+        }),
         alcances: alcances,
         alcance: alcance,
         onAlcance: (v) => setState(() {
@@ -1950,7 +1993,13 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         onGuardar: () {
           setState(() => _pista = null);
           widget.acciones?.onGuardarArmado
-              ?.call(s.base, s.actual, s.enUsoAlEmpezar, s.rehecho);
+              ?.call(
+                s.base,
+                s.actual,
+                s.enUsoAlEmpezar,
+                s.rehecho,
+                s.lugarDeLaBarra,
+              );
         },
         // Descartar se lleva todo lo acomodado: se pide dos veces, y aun así
         // se puede deshacer (un doble clic no pierde una hora de trabajo).

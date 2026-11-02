@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../modelo/armado_salon.dart';
+import '../../modelo/medidas_salon.dart';
 import '../../services/editar_armado.dart';
 import '../../services/medir_salon.dart';
 import '../../services/sesion_acomodo.dart';
@@ -68,6 +69,21 @@ class PanelAcomodar extends StatefulWidget {
 
   /// Por qué no se puede guardar como predio. Null: se puede.
   final String? motivoSinPredio;
+
+  // ── La barra ──
+  /// Sin familias con mesa y con el borde del playón, la barra es "Distancia
+  /// entre mesas" y reacomoda en vivo. Si no, es "Separar o juntar".
+  final bool barraReacomoda;
+
+  /// Por qué la barra estira y no reacomoda.
+  final String? motivoEstira;
+  final double lugarBarra;
+
+  /// Cuántas entran a esa distancia. Null: todavía no se tocó.
+  final String? textoBarra;
+  final bool faltanEnBarra;
+  final ValueChanged<double>? onLugar;
+  final ValueChanged<double>? onSoltarLugar;
 
   // ── Separar o juntar ──
   final List<AlcanceSeparar> alcances;
@@ -137,6 +153,13 @@ class PanelAcomodar extends StatefulWidget {
     required this.onMedidaSector,
     this.onGuardarPredio,
     this.motivoSinPredio,
+    this.barraReacomoda = false,
+    this.motivoEstira,
+    this.lugarBarra = MedidasPlano.lugarPorDefectoM,
+    this.textoBarra,
+    this.faltanEnBarra = false,
+    this.onLugar,
+    this.onSoltarLugar,
     required this.alcances,
     required this.alcance,
     required this.onAlcance,
@@ -384,7 +407,67 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   key: const Key('motivo_sin_vaciar'),
                   style: gris,
                 ),
+              if (widget.barraReacomoda) ...[
+                titulo('DISTANCIA ENTRE MESAS'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Slider(
+                        key: const Key('distancia_mesas'),
+                        min: MedidasPlano.lugarMinimoM,
+                        max: MedidasPlano.lugarMaximoM,
+                        divisions: ((MedidasPlano.lugarMaximoM -
+                                    MedidasPlano.lugarMinimoM) /
+                                0.05)
+                            .round(),
+                        value: widget.lugarBarra.clamp(
+                          MedidasPlano.lugarMinimoM,
+                          MedidasPlano.lugarMaximoM,
+                        ),
+                        onChanged: ocupado || widget.motivoSinAcomodar != null
+                            ? null
+                            : widget.onLugar,
+                        onChangeEnd:
+                            ocupado || widget.motivoSinAcomodar != null
+                                ? null
+                                : widget.onSoltarLugar,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 58,
+                      child: Text(
+                        MedirSalon.metros(widget.lugarBarra, decimales: 2),
+                        key: const Key('distancia_metros'),
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Antes del sorteo: las mesas se vuelven a acomodar.',
+                  key: const Key('distancia_explica'),
+                  style: gris,
+                ),
+                if (widget.textoBarra != null)
+                  Text(
+                    widget.textoBarra!,
+                    key: const Key('distancia_texto'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: widget.faltanEnBarra
+                          ? Colors.red.shade700
+                          : Colors.green.shade800,
+                    ),
+                  ),
+              ] else ...[
               titulo('SEPARAR O JUNTAR'),
+              if (widget.motivoEstira != null)
+                Text(
+                  widget.motivoEstira!,
+                  key: const Key('separar_explica'),
+                  style: gris,
+                ),
               if (alcances.isEmpty)
                 Text('En esta hoja no hay mesas para separar.', style: gris)
               else ...[
@@ -480,6 +563,7 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                       ],
                     ),
                   ),
+              ],
               ],
               titulo('EL ESPACIO'),
               for (final item in widget.espacio)

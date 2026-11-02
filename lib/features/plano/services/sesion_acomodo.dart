@@ -123,6 +123,7 @@ class SesionAcomodo {
       (hayCambios || faltaOrdenar) &&
       bloqueos.isEmpty &&
       !arrastrando &&
+      !moviendoLaBarra &&
       _previa == null;
 
   ArmadoSalon? _revisadoParaOrdenar;
@@ -160,9 +161,11 @@ class SesionAcomodo {
   void _apilar(ArmadoSalon armado) {
     _pila.add(armado);
     _pilaRehecho.add(_rehecho);
+    _pilaLugar.add(_lugarDeLaBarra);
     if (_pila.length > _maximoDeshacer) {
       _pila.removeAt(0);
       _pilaRehecho.removeAt(0);
+      _pilaLugar.removeAt(0);
     }
   }
 
@@ -342,6 +345,65 @@ class SesionAcomodo {
         altoM: altoM,
       ));
 
+  // ── La barra que reacomoda (antes del sorteo) ───────────────────────────
+
+  ArmadoSalon? _antesDeLaBarra;
+  double? _lugarDeLaBarra;
+  double? _lugarEnVivo;
+  final List<double?> _pilaLugar = [];
+
+  /// Sin familias con mesa y con el borde del playón, la barra es "Distancia
+  /// entre mesas" y reacomoda el salón. Si no, es "Separar o juntar" y estira sin
+  /// cambiar ninguna mesa: es la única forma de abrir el salón después del sorteo.
+  bool get barraReacomoda => !haySorteo && _conBorde;
+
+  bool get moviendoLaBarra => _antesDeLaBarra != null;
+
+  /// La distancia que se eligió con la barra. Null si no se tocó. Al guardar pasa
+  /// a Medidas, y ACOMODAR OTRA VEZ la respeta.
+  double? get lugarDeLaBarra => _lugarDeLaBarra;
+
+  /// A qué distancia están las mesas de lo acomodado, en metros.
+  double get distanciaDelSalon {
+    final pegadas = _actual.distanciaPegadas;
+    return pegadas == null
+        ? medidas.lugarMesaM
+        : _actual.aMetros(pegadas / ArmarAMedida.pegadasHastaPasos);
+  }
+
+  /// Mientras se arrastra, el salón se reacomoda en vivo con la misma cuenta de
+  /// ACOMODAR LAS MESAS. Todo el arrastre es un solo paso de Deshacer. Null si no
+  /// se puede ([motivoSinAcomodar]).
+  ArmadoAMedida? moverLaBarra(int cantidad, double lugarM) {
+    if (!barraReacomoda || motivoSinAcomodar(cantidad) != null) return null;
+    _previa = null;
+    _antesDeLaBarra ??= _actual;
+    final r = ArmarAMedida.acomodar(
+      _antesDeLaBarra!,
+      cantidad: cantidad,
+      lugarM: lugarM,
+    );
+    _actual = r.armado;
+    _lugarEnVivo = lugarM;
+    return r;
+  }
+
+  /// Soltar la barra es un paso de Deshacer. El salón quedó rehecho: al guardar se
+  /// quitan las fijadas, las libres y los bloques, con el aviso de siempre.
+  void soltarLaBarra() {
+    final antes = _antesDeLaBarra;
+    _antesDeLaBarra = null;
+    if (antes == null) return;
+    _actual = EditarArmado.ajustarCajas(_actual, base);
+    if (EditarArmado.firma(antes) == EditarArmado.firma(_actual)) {
+      _actual = antes;
+      return;
+    }
+    _apilar(antes);
+    _rehecho = true;
+    _lugarDeLaBarra = _lugarEnVivo;
+  }
+
   // ── Separar o juntar ────────────────────────────────────────────────────
 
   /// Muestra cómo quedaría, sin cambiar nada todavía. Lo que entra y lo que
@@ -378,13 +440,16 @@ class SesionAcomodo {
     if (_pila.isEmpty) return;
     _actual = _pila.removeLast();
     _rehecho = _pilaRehecho.removeLast();
+    _lugarDeLaBarra = _pilaLugar.removeLast();
   }
 
   /// Vuelve al salón guardado. Es un paso más: Deshacer trae de vuelta lo
   /// que se había acomodado.
   void descartar() {
     _antesDeArrastrar = null;
+    _antesDeLaBarra = null;
     _poner(base, rehecho: false);
+    _lugarDeLaBarra = null;
   }
 
   // ── Acomodar y vaciar (6.1.0, "el salón primero") ───────────────────────
@@ -474,6 +539,7 @@ class SesionAcomodo {
     final motivo = motivoSinOriginal;
     if (motivo != null) return motivo;
     _poner(EditarArmado.original(_actual, predios: predios)!);
+    _lugarDeLaBarra = null;
     return null;
   }
 
