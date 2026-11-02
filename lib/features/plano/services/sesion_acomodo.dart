@@ -120,7 +120,29 @@ class SesionAcomodo {
   List<String> get bloqueos => [for (final b in bloqueosConMesas) b.texto];
 
   bool get puedeGuardar =>
-      hayCambios && bloqueos.isEmpty && !arrastrando && _previa == null;
+      (hayCambios || faltaOrdenar) &&
+      bloqueos.isEmpty &&
+      !arrastrando &&
+      _previa == null;
+
+  ArmadoSalon? _revisadoParaOrdenar;
+  bool? _haySorteoAlRevisar;
+  bool _faltaOrdenar = false;
+
+  /// Al guardar, los números cambiarían: no están en orden, no hay familias con
+  /// mesa y el salón trae el borde del playón. Se puede guardar aunque no se haya
+  /// tocado nada: es lo que deja arreglar un salón que ya quedó mezclado.
+  bool get faltaOrdenar {
+    if (!identical(_revisadoParaOrdenar, _actual) ||
+        _haySorteoAlRevisar != haySorteo) {
+      _revisadoParaOrdenar = _actual;
+      _haySorteoAlRevisar = haySorteo;
+      _faltaOrdenar = !haySorteo &&
+          EditarArmado.conBordeDelPlayon(_actual) &&
+          ArmarAMedida.ordenarNumeros(_actual).cambio.isNotEmpty;
+    }
+    return _faltaOrdenar;
+  }
 
   /// Un paso más, que se puede deshacer. [rehecho]: si el paso deja el salón
   /// rehecho o no; null, como estaba.
@@ -369,8 +391,7 @@ class SesionAcomodo {
 
   /// El salón tiene el borde del playón en cada hoja: el salón vacío y "A
   /// medida". Los del Canva no: acomodarlos solos rompería un armado del jefe.
-  bool get _conBorde =>
-      _actual.hojas.isNotEmpty && _actual.hojas.every((h) => h.contorno != null);
+  bool get _conBorde => EditarArmado.conBordeDelPlayon(_actual);
 
   static const _sinBorde = 'Este armado es del Canva: para acomodar las mesas '
       'solas, elegí Salón vacío o A medida en Estilo y armado.';
@@ -503,6 +524,12 @@ class SesionAcomodo {
                 '${AvisoAcomodo.enLista(afuera)}. Correlas o marcalas de '
                 'pasto.',
         afuera,
+      ));
+    }
+    if (faltaOrdenar) {
+      r.add(AvisoAcomodo(
+        'Los números se ordenan al guardar: quedan del 1 al '
+        '${_actual.mesas.length}. Ninguna mesa se mueve.',
       ));
     }
     return r;

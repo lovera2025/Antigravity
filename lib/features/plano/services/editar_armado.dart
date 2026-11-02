@@ -105,8 +105,9 @@ enum Manija {
 /// mover sectores, y separar o juntar un grupo entero.
 ///
 /// Todo es cuenta pura sobre la copia del armado de la fiesta: recibe un
-/// armado y devuelve otro. **Nunca cambia el número de una mesa**: lo que se
-/// corre es el dibujo, no la familia.
+/// armado y devuelve otro. **Acomodar nunca cambia el número de una mesa**: lo
+/// que se corre es el dibujo, no la familia. Los números se ordenan recién al
+/// guardar, y solo sin familias con mesa ([paraGuardar]).
 class EditarArmado {
   EditarArmado._();
 
@@ -1038,6 +1039,14 @@ class EditarArmado {
   ///   (6.1.0). Los números quedaron en otro lugar: se quitan las fijadas, las
   ///   libres y los bloques (el jefe lo vio en "Antes de guardar"), y una
   ///   fijada ya no frena que se saque su mesa. Una familia con mesa sí.
+  /// - Sin ninguna familia con mesa, y en un salón con el borde del playón, los
+  ///   números se ordenan del 1 al N según donde quedaron las mesas
+  ///   (`ArmarAMedida.ordenarNumeros`), y las fijadas, las libres y los bloques
+  ///   siguen a su mesa con el número nuevo. **Con familias con mesa ningún
+  ///   número se toca:** pueden estar impresos o en una entrada. Los armados del
+  ///   Canva tampoco: traen la numeración que hizo el jefe.
+  /// - [leidoDeLaNube]: sin internet no se ordena, porque esta PC no puede saber
+  ///   si la otra ya sorteó. Se ordena la próxima vez que se guarde con internet.
   static CambioDeConfig paraGuardar({
     required ArmadoSalon base,
     required ArmadoSalon nuevo,
@@ -1046,6 +1055,7 @@ class EditarArmado {
     required Iterable<ContratoAlumno> alumnos,
     required Map<int, String> enUsoVisto,
     bool rehecho = false,
+    bool leidoDeLaNube = true,
   }) {
     if (firma(fresco) != firma(base)) {
       return const CambioDeConfig.noSePuede(
@@ -1087,22 +1097,94 @@ class EditarArmado {
                   if (!sacadas.contains(e.key)) e.key: e.value,
               })
             : config;
+    // Las sacadas se calcularon arriba: después de ordenar, los números ya no
+    // dicen qué mesa se sacó.
+    final ordenar = leidoDeLaNube &&
+        enUso(alumnos, config.copyWith(fijadas: const {})).isEmpty;
+    final cambio = _seOrdena(nuevo, ordenar)
+        ? ArmarAMedida.ordenarNumeros(nuevo).cambio
+        : const <int, int>{};
     return CambioDeConfig.ok(
-      conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
+      conNumerosNuevos(
+        conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
+        cambio,
+        nuevo,
+      ),
       sacadas,
-      armado: comoSeGuarda(nuevo, base),
+      armado: comoSeGuarda(nuevo, base, ordenar: ordenar),
     );
   }
 
-  /// [nuevo] como queda guardado sobre [base]: con el número más alto anotado
-  /// ([recordandoNumeros]) y, si es el salón vacío, con el nombre según tenga
-  /// mesas o no (`ArmarAMedida.conNombreSegunMesas`), sea por ACOMODAR LAS
-  /// MESAS, por VACIAR o agregándolas a mano.
+  /// Hoja por hoja, el salón trae el borde del playón: el salón vacío, a medida
+  /// o un predio. Los armados del Canva no.
+  static bool conBordeDelPlayon(ArmadoSalon a) =>
+      a.hojas.isNotEmpty && a.hojas.every((h) => h.contorno != null);
+
+  static bool _seOrdena(ArmadoSalon a, bool ordenar) =>
+      ordenar && a.mesas.isNotEmpty && conBordeDelPlayon(a);
+
+  /// Lo que apunta a un número sigue a su mesa física: las fijadas, las libres y
+  /// los bloques, con [cambio] (número viejo → nuevo) sobre las mesas de [nuevo].
+  /// Un número que ya no tiene mesa se va: con los números corridos caería en la
+  /// mesa de otro. Sin cambios, [config] queda como está.
+  static ConfigPlano conNumerosNuevos(
+    ConfigPlano config,
+    Map<int, int> cambio,
+    ArmadoSalon nuevo,
+  ) {
+    if (cambio.isEmpty) return config;
+    int? traducir(int n) => nuevo.existe(n) ? (cambio[n] ?? n) : null;
+    return config.copyWith(
+      fijadas: {
+        for (final e in config.fijadas.entries)
+          ?traducir(e.key): e.value,
+      },
+      libres: {
+        for (final e in config.libres.entries)
+          ?traducir(e.key): e.value,
+      },
+      bloques: [
+        for (final b in config.bloques)
+          if ([
+            for (final n in b.mesas ??
+                [for (var n = b.desde; n <= b.hasta; n++) n])
+              ?traducir(n),
+          ]
+            case final mesas when mesas.isNotEmpty)
+            BloqueDivision.deMesas(b.division, mesas..sort()),
+      ],
+    );
+  }
+
+  /// [nuevo] como queda guardado sobre [base]: si es el salón vacío, con el
+  /// nombre según tenga mesas o no (`ArmarAMedida.conNombreSegunMesas`), sea por
+  /// ACOMODAR LAS MESAS, por VACIAR o agregándolas a mano. Con [ordenar] (y si el
+  /// salón se puede ordenar), con los números del 1 al N. Si no, con el número
+  /// más alto anotado ([recordandoNumeros]).
   ///
   /// La pantalla compara lo guardado con esto, no con lo que se ve: si no,
   /// después de guardar creería que la otra PC cambió el salón.
-  static ArmadoSalon comoSeGuarda(ArmadoSalon nuevo, ArmadoSalon base) =>
-      ArmarAMedida.conNombreSegunMesas(recordandoNumeros(nuevo, base));
+  static ArmadoSalon comoSeGuarda(
+    ArmadoSalon nuevo,
+    ArmadoSalon base, {
+    required bool ordenar,
+  }) =>
+      ArmarAMedida.conNombreSegunMesas(
+        _seOrdena(nuevo, ordenar)
+            ? ArmarAMedida.ordenarNumeros(nuevo).armado
+            : recordandoNumeros(nuevo, base),
+      );
+
+  /// ¿[guardado] tiene alguna mesa con otro número que en [nuevo]? Es decir, si
+  /// al guardar se ordenaron los números.
+  static bool seRenumero(ArmadoSalon nuevo, ArmadoSalon guardado) =>
+      guardado.mesas.any((m) {
+        final antes = nuevo.mesa(m.numero);
+        return antes == null ||
+            antes.hoja != m.hoja ||
+            antes.x != m.x ||
+            antes.y != m.y;
+      });
 
   /// Si el playón se cambió con las manijas (6.1.0), las medidas guardadas lo
   /// siguen: de ellas sale "en el playón entran hasta N", y la pestaña Medidas

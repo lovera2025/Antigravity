@@ -47,8 +47,9 @@ todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos 
 novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 **En curso desde el 2-nov: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`, sin publicar; el
-orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapa 1 hecha: `ArmarAMedida.ordenarNumeros`, la cuenta, todavía
-sin pantalla. **Publicar, solo con todo terminado y preguntándole antes al usuario.**
+orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 y 2 hechas: los números se ordenan solos al guardar el
+salón. Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube. **Publicar, solo
+con todo terminado y preguntándole antes al usuario.**
 
 ## Documentación del proyecto
 
@@ -165,8 +166,12 @@ entradas y traduce la salida.
 - **"Sortear a los que faltan" es el mismo botón SORTEO**: completa sin mover a nadie. `UltimosSorteados` y
   `LoQueSeDeshace` (`ultimos_sorteados.dart`) dicen quiénes son los del último sorteo y qué pasa al deshacer solo
   ese. Una familia se revierte solo si hoy tiene exactamente lo que ese sorteo le dejó.
-- **El número de una mesa que se sacó y se guardó no se vuelve a dar** (`ArmadoSalon.ultimoNumero`): ya pudo salir
-  impreso.
+- **Con familias con mesa, el número de una mesa que se sacó y se guardó no se vuelve a dar** (`ArmadoSalon.ultimoNumero`):
+  ya pudo salir impreso.
+- **Sin familias con mesa, los números se ordenan solos al guardar** (`EditarArmado.paraGuardar`, con
+  `ArmarAMedida.ordenarNumeros`; `ultimoNumero` vuelve a N). Las mesas no se mueven. Las fijadas, las libres y los
+  bloques siguen a su mesa (`conNumerosNuevos`). No en un armado del Canva, ni **sin internet**: esa PC no puede saber si
+  la otra ya sorteó.
 - **"Lejos" se mide en el salón dibujado, igual que "juntas"** (6.1.0). Para el motor, lejos es "no en casilleros
   seguidos", y en el salón dos mesas no seguidas pueden tocarse: en el sorteo por división quedaban así entre el 4 % y
   el 8 %.

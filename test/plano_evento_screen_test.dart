@@ -49,6 +49,8 @@ import 'package:arguello_events/models/predio.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 
+import 'helpers/salon_puerto_viejo.dart';
+
 const _eventoId = 'e0000000-0000-4000-8000-000000000001';
 final _ahora = DateTime.utc(2026, 10, 7, 15);
 
@@ -743,7 +745,9 @@ void main() {
       await _guardar(tester, 'guardar_acomodo');
       expect(mundo.guardado.armado.mesas.length, 41);
       expect(mundo.planos.guardados, hasLength(1));
-      expect(_dicho(tester), 'El salón quedó guardado.');
+      // La mesa nueva cae al fondo, donde gira la serpentina: sin sorteo, los
+      // números se ordenan.
+      expect(_dicho(tester), 'El salón quedó guardado, con los números en orden.');
       // Las mesas no se tocan desde acá: solo el plano.
       expect(mundo.contratos.asignaciones, isEmpty);
     });
@@ -808,6 +812,73 @@ void main() {
       expect(mundo.planos.guardados, isEmpty);
       expect(_cartel(tester).$1, 'No se puede');
       await _contestar(tester, 'ENTENDIDO');
+    });
+
+    Future<_Mundo> puertoViejo(WidgetTester tester) => _abrir(
+          tester,
+          alumnos: _sinSortear(),
+          antes: (m) {
+            m.planos.aca = PlanoEvento.nuevo(
+              eventoId: _eventoId,
+              armado: armadoDePuertoViejo(),
+              estilo: EstiloPlano.arquitecto,
+              modo: ModoSorteo.entera,
+              ahora: _ahora,
+            );
+            m.planos.nube = m.planos.aca;
+          },
+        );
+
+    testWidgets('un salón mezclado se ordena con solo abrirlo y guardar',
+        (tester) async {
+      final mundo = await puertoViejo(tester);
+      await _personalizar(tester, 'acomodar');
+      expect(
+        find.textContaining('Los números se ordenan al guardar'),
+        findsOneWidget,
+      );
+      await _guardar(tester, 'guardar_acomodo');
+      final guardado = mundo.guardado.armado;
+      expect(guardado.numeros, [for (var n = 1; n <= 35; n++) n]);
+      expect(guardado.cortes, {17});
+      expect(_dicho(tester), 'El salón quedó guardado, con los números en orden.');
+      // Después de guardar, la pantalla no cree que la otra PC lo cambió.
+      expect(find.textContaining('cambió mientras lo acomodabas'), findsNothing);
+      expect(find.text('SALÓN GUARDADO'), findsOneWidget);
+      expect(find.textContaining('Los números se ordenan'), findsNothing);
+      // Las familias no se tocan.
+      expect(mundo.contratos.asignaciones, isEmpty);
+    });
+
+    testWidgets('sin internet se guarda, pero los números se ordenan después',
+        (tester) async {
+      final mundo = await puertoViejo(tester);
+      await _personalizar(tester, 'acomodar');
+      // Con un cambio de verdad: sin cambios, la pantalla no compara nada.
+      await _tocar(tester, 'acomodar_agregar');
+      mundo.planos.sinRed = true;
+      mundo.conexion.estado = AppConnectivity.offline;
+      mundo.contratos.distintasEnLaOtraPc = null;
+      mundo.subida.sube = false;
+
+      await _guardar(tester, 'guardar_acomodo');
+      expect(_cartel(tester).$1, 'Sin conexión');
+      await _contestar(tester, 'SEGUIR');
+      // Las 35 quedaron con el número que tenían, y la nueva con el que sigue.
+      final guardado = mundo.guardado.armado;
+      final deAntes = armadoDePuertoViejo();
+      expect(guardado.numeros, [for (var n = 1; n <= 36; n++) n]);
+      for (final m in deAntes.mesas) {
+        expect(guardado.mesa(m.numero)!.x, m.x);
+        expect(guardado.mesa(m.numero)!.y, m.y);
+      }
+      expect(
+        _dicho(tester),
+        'El salón quedó guardado. Los números se ordenan la próxima vez que lo '
+        'guardes con internet. Quedó en esta PC; sube cuando vuelva la conexión.',
+      );
+      // Lo guardado sin ordenar es lo guardado: no cree que lo cambió la otra PC.
+      expect(find.textContaining('cambió mientras lo acomodabas'), findsNothing);
     });
   });
 

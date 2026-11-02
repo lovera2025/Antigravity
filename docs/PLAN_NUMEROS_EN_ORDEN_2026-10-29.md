@@ -217,13 +217,16 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
 1. **Ordenar los números** (`ArmarAMedida.ordenarNumeros`), sin pantalla. **Hecha el 2-nov**
    (`test/ordenar_numeros_test.dart`, con el plano real de Puerto Viejo; muestra en
    `tool/numeros_en_orden_muestra_test.dart`).
-2. **Ordenar al guardar** (`EditarArmado.paraGuardar` y "Antes de guardar" del panel). Dos cosas para mirar al
-   empezar, vistas al cerrar la etapa 1:
-   - `comoSeGuarda` pasa por `recordandoNumeros`, que sube `ultimoNumero` al más alto del salón guardado. Eso deshace
-     el "vuelve a N" de `ordenarNumeros`: al ordenar, ese paso no tiene que volver a subirlo. Y la pantalla compara lo
-     guardado con `comoSeGuarda`, así que tiene que dar lo mismo que se guarda;
-   - `paraGuardar` calcula `sacadas` comparando números de `base` y `nuevo`: eso va antes de renumerar, porque después
-     los números ya no dicen qué mesa se sacó.
+2. **Ordenar al guardar** (`EditarArmado.paraGuardar` y "Antes de guardar" del panel). **Hecha el 2-nov**
+   (`test/ordenar_al_guardar_test.dart`). Lo que se agregó al programarla, y no estaba en este plan:
+   - **sin internet no se ordena** (`leidoDeLaNube`): esa PC no puede saber si la otra ya sorteó, y renumerar debajo de
+     familias sentadas sería grave. Se ordena la próxima vez que se guarde con internet, y el aviso lo dice;
+   - **un salón mezclado se puede guardar sin tocar nada** (`SesionAcomodo.faltaOrdenar`): si no, Puerto Viejo no
+     tendría cómo arreglarse "abriendo y guardando", como dice la sección 6;
+   - un número que ya no tiene mesa (una fijada huérfana) se va al renumerar: con los números corridos caería en la
+     mesa de otro.
+   - **Para mirarlo sin publicar:** `flutter run -d windows -t tool/plano_prueba.dart`, una ventana con la pantalla de
+     verdad y el plano real de Puerto Viejo, sin base ni nube.
 3. **El aviso de los números que no siguen el salón** (`PlanoDeLaFiesta.avisos`).
 4. **La barra de Acomodar**: reacomoda antes del sorteo, estira después.
 5. **Juntas y separadas en el plano**, en pantalla y en papel.

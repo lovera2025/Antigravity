@@ -380,17 +380,32 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     if (sesion != null && !identical(sesion.base, _plano.armado)) {
       final guardado = EditarArmado.firma(_plano.armado);
       if (guardado != EditarArmado.firma(sesion.base)) {
-        if (!sesion.hayCambios ||
+        // Con los números ordenados o sin ordenar: sin internet no se ordenan.
+        bool seGuardo(bool ordenar) =>
             guardado ==
-                EditarArmado.firma(
-                  EditarArmado.comoSeGuarda(sesion.actual, sesion.base),
-                )) {
+            EditarArmado.firma(
+              EditarArmado.comoSeGuarda(
+                sesion.actual,
+                sesion.base,
+                ordenar: ordenar,
+              ),
+            );
+        if (!sesion.hayCambios || seGuardo(true) || seGuardo(false)) {
           // Se guardó lo acomodado (o no había nada pendiente): se sigue desde
-          // lo que quedó.
+          // lo que quedó, con la misma mesa elegida aunque ahora tenga otro
+          // número.
           final mesa = _mesaAcomodo;
+          final lugar = mesa == null ? null : sesion.actual.mesa(mesa);
           _limpiarAcomodo();
           _acomodo = _nuevaSesion();
-          if (mesa != null && _plano.armado.existe(mesa)) _mesaAcomodo = mesa;
+          if (lugar != null) {
+            for (final m in _plano.armado.mesas) {
+              if (m.hoja == lugar.hoja && m.x == lugar.x && m.y == lugar.y) {
+                _mesaAcomodo = m.numero;
+                break;
+              }
+            }
+          }
         } else {
           _pista = 'El salón guardado cambió mientras lo acomodabas: tocá '
               'DESCARTAR para ver cómo quedó.';

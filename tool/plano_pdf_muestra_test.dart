@@ -270,7 +270,7 @@ void main() {
     final acomodado = ArmarAMedida.acomodar(vacio, cantidad: mesas);
     expect(acomodado.faltan, 0, reason: 'entran todas');
     // Como queda al tocar GUARDAR EL SALÓN (con el nombre que corresponde).
-    final guardado = EditarArmado.comoSeGuarda(acomodado.armado, vacio);
+    final guardado = EditarArmado.comoSeGuarda(acomodado.armado, vacio, ordenar: true);
     expect(guardado.nombre, 'A medida del playón');
     final plano = _sorteada(guardado, alumnos);
     for (final bn in [false, true]) {
@@ -307,7 +307,7 @@ void main() {
     final mesas = alumnos.fold(0, (s, a) => s + SalonMesas.mesas(a));
     final acomodado = ArmarAMedida.acomodar(movido, cantidad: mesas);
     expect(acomodado.faltan, 0, reason: 'entran todas');
-    final guardado = EditarArmado.comoSeGuarda(acomodado.armado, movido);
+    final guardado = EditarArmado.comoSeGuarda(acomodado.armado, movido, ordenar: true);
     expect(guardado.clave, startsWith('predio@'));
     expect(guardado.nombre, 'Buena Vista');
     final plano = _sorteada(guardado, alumnos);

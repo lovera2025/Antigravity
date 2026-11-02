@@ -703,6 +703,10 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
 
   // ── Personalizar: fijar y dejar libres ──────────────────────────────────
 
+  /// La última lectura de [_cambiarConfig] vino de la nube. Sin ella no se
+  /// ordenan los números del salón: esta PC no puede saber si la otra sorteó.
+  bool _leidoDeLaNube = true;
+
   /// Cambia lo configurado del plano (fijar, dejar libre): relee el plano de
   /// la nube y las familias, vuelve a hacer la cuenta sobre eso y recién ahí
   /// guarda.
@@ -740,6 +744,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         return;
       }
       final alumnos = await contratos.getByEvento(eventoId);
+      _leidoDeLaNube = lectura.deLaNube;
       final cambio = calcular(fresco, alumnos);
       final config = cambio.config;
       if (config == null) {
@@ -977,17 +982,36 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         alumnos: alumnos,
         enUsoVisto: enUso,
         rehecho: rehecho,
+        leidoDeLaNube: _leidoDeLaNube,
       ),
       // Con la escuela ya sorteada, las mesas que se suman son para quien
       // todavía no tiene: se dice cómo sigue.
-      hecho: (c) => _hayFamiliasConMesa &&
-              (c.armado?.mesas.length ?? 0) > base.mesas.length
-          ? 'El salón quedó guardado. Para darle mesa a quien todavía no '
+      hecho: (c) {
+        if (_hayFamiliasConMesa &&
+            (c.armado?.mesas.length ?? 0) > base.mesas.length) {
+          return 'El salón quedó guardado. Para darle mesa a quien todavía no '
               'tiene, tocá SORTEO en la fiesta: los que ya tienen no se '
-              'mueven.'
-          : rehecho && fijadasOLibres > 0
-              ? 'El salón quedó guardado, sin las mesas fijadas ni las libres.'
-              : 'El salón quedó guardado.',
+              'mueven.';
+        }
+        final guardado = c.armado;
+        final ordenado =
+            guardado != null && EditarArmado.seRenumero(nuevo, guardado);
+        final texto = ordenado
+            ? 'El salón quedó guardado, con los números en orden.'
+            : 'El salón quedó guardado.';
+        final sinFijadas = rehecho && fijadasOLibres > 0
+            ? ' Sin las mesas fijadas ni las libres.'
+            : '';
+        final falta = !_leidoDeLaNube &&
+                !_hayFamiliasConMesa &&
+                !ordenado &&
+                EditarArmado.conBordeDelPlayon(nuevo) &&
+                ArmarAMedida.ordenarNumeros(nuevo).cambio.isNotEmpty
+            ? ' Los números se ordenan la próxima vez que lo guardes con '
+                'internet.'
+            : '';
+        return '$texto$sinFijadas$falta';
+      },
     );
   }
 

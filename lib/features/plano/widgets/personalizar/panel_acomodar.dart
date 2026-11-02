@@ -627,7 +627,12 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                 key: const Key('guardar_acomodo'),
                 onPressed: puedeGuardar && !ocupado ? onGuardar : null,
                 icon: const Icon(Icons.check, size: 18),
-                label: Text(hayCambios ? 'GUARDAR EL SALÓN' : 'SALÓN GUARDADO'),
+                // Sin cambios también se guarda si faltan ordenar los números.
+                label: Text(
+                  hayCambios || puedeGuardar
+                      ? 'GUARDAR EL SALÓN'
+                      : 'SALÓN GUARDADO',
+                ),
               ),
             ),
             if (hayCambios) ...[

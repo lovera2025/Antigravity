@@ -288,7 +288,7 @@ void main() {
     test('lo que la pantalla compara después de guardar es lo guardado', () {
       final nuevo = ArmarAMedida.acomodar(lleno, cantidad: 35).armado;
       expect(
-        EditarArmado.firma(EditarArmado.comoSeGuarda(nuevo, lleno)),
+        EditarArmado.firma(EditarArmado.comoSeGuarda(nuevo, lleno, ordenar: true)),
         EditarArmado.firma(guardar(nuevo).armado!),
       );
     });

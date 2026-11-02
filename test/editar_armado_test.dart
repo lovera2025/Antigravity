@@ -614,17 +614,21 @@ void main() {
       expect(s.puedeGuardar, isFalse);
     });
 
-    // El número de una mesa que se sacó y se guardó no se vuelve a dar: ya
-    // pudo haber salido en un plano impreso o en el Historial.
+    // Con familias con mesa, el número de una mesa que se sacó y se guardó no se
+    // vuelve a dar: ya pudo haber salido en un plano impreso o en el Historial.
+    // (Sin familias, los números se ordenan al guardar y vuelven a ir de 1 a N:
+    // test/ordenar_al_guardar_test.dart.)
     group('el número de una mesa que se sacó no se vuelve a dar', () {
+      final sentada = [_alumno('gomez', [1])];
+
       /// Lo que queda guardado al tocar GUARDAR EL SALÓN.
       ArmadoSalon guardar(SesionAcomodo s) => EditarArmado.paraGuardar(
             base: s.base,
             nuevo: s.actual,
             fresco: s.base,
             config: ConfigPlano.vacia,
-            alumnos: const [],
-            enUsoVisto: const {},
+            alumnos: sentada,
+            enUsoVisto: EditarArmado.enUso(sentada, ConfigPlano.vacia),
           ).armado!;
 
       test('se saca la última, se guarda, y la que se agrega después lleva el '
@@ -1284,7 +1288,8 @@ void main() {
           for (final m in a.mesasDeHoja(h.id)) {
             if (m.y > fondo) fondo = m.y;
           }
-          final s = SesionAcomodo(base: a);
+          // Con familias con mesa: sin ellas, avisaría que los números se ordenan.
+          final s = SesionAcomodo(base: a, haySorteo: true);
           final nuevas = [for (var i = 0; i < 4; i++) s.agregar(h.id)];
           final caso = '${a.clave} ${h.id}';
           for (final (i, n) in nuevas.indexed) {
