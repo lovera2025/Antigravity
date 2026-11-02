@@ -123,6 +123,10 @@ class TemaPlano {
   Color colorDivision(int? i) =>
       i == null || i < 0 ? mesaBorde : divisiones[i % divisiones.length];
 
+  /// Las marcas de las familias con adicional: el color del texto, que ya contrasta
+  /// con el fondo en cada estilo.
+  Color get marcaFamilia => titulo;
+
   Color numeroDeDivision(int? i) {
     final l = numeroDivision;
     if (l == null || i == null || i < 0) return numero;

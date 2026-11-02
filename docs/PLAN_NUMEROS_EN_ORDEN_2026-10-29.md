@@ -232,7 +232,8 @@ En el diálogo de SORTEO, al tildar "lejos" en un alumno, además de **cuántas*
 4. **La barra de Acomodar**: reacomoda antes del sorteo, estira después. **Hecha el 2-nov** (`test/barra_acomodar_test.dart`).
    La distancia elegida viaja aparte (`lugarBarraM`) hasta GUARDAR y ahí pasa a Medidas; hasta entonces, ACOMODAR OTRA VEZ
    también la respeta.
-5. **Juntas y separadas en el plano**, en pantalla y en papel.
+5. **Juntas y separadas en el plano**, en pantalla y en papel. **Hecha el 2-nov** (`FamiliasEnElPlano`, `test/familias_en_el_plano_test.dart`).
+   La flecha es "→ 30"; si la letra del PDF no la tiene, dice "a la 30". Las muestras: `tool/numeros_en_orden_muestra_test.dart`.
 6. **"Lejos" y qué tan lejos**: el diálogo de SORTEO, el motor, `SorteoConPlano`, el registro y la planilla.
 7. **El recorrido entero** (sección 5b, última fila de la tabla).
 8. **Muestras** (`tool/plano_pantalla_muestra_test.dart`): Puerto Viejo antes y después; un salón sorteado con

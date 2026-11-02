@@ -298,6 +298,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
   String _alcance = 'hoja';
   double? _pasoSeparar;
 
+  /// Las familias con adicional se marcan en el plano. Prendido de entrada.
+  bool _marcarFamilias = true;
+
   /// Cuándo se reacomodó por última vez con la barra: como mucho cada 50 ms.
   DateTime? _ultimaBarra;
   String? _mensajeAcomodo;
@@ -1434,6 +1437,11 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                         hoja: _hoja,
                         tema: tema,
                         estado: _plano.estado,
+                        // Acomodando los números cambian de lugar: se marcan
+                        // las familias cuando el salón está guardado.
+                        familias: acomodando || !_marcarFamilias
+                            ? null
+                            : _plano.familias,
                         // Acomodando no se apaga ninguna mesa: hay que ver
                         // las vecinas.
                         resaltadas: acomodando ? const {} : _resaltadas,
@@ -2281,6 +2289,29 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         ),
       if (estado.haySinDivision)
         renglon(tema.mesaBorde, Divisiones.sinDivision, mesasDe[null] ?? 0),
+      if (_plano.familias.hayAlguna) ...[
+        CheckboxListTile(
+          key: const Key('familias_adicional'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: _marcarFamilias,
+          onChanged: (v) => setState(() => _marcarFamilias = v ?? true),
+          title: const Text('Familias con adicional'),
+        ),
+        if (_marcarFamilias && _plano.familias.hayJuntas)
+          _RenglonMarca(
+            key: const Key('leyenda_juntas'),
+            separada: false,
+            texto: 'Juntas: las une una línea',
+          ),
+        if (_marcarFamilias && _plano.familias.haySeparadas)
+          _RenglonMarca(
+            key: const Key('leyenda_separadas'),
+            separada: true,
+            texto: 'Separadas: aro punteado y la otra mesa',
+          ),
+      ],
       const SizedBox(height: 12),
     ];
   }
@@ -2545,4 +2576,71 @@ class _Regla extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Un renglón de la leyenda de las familias con adicional, con su marca.
+class _RenglonMarca extends StatelessWidget {
+  final bool separada;
+  final String texto;
+
+  const _RenglonMarca({super.key, required this.separada, required this.texto});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 14,
+              child: CustomPaint(
+                painter: _MarcaDeLeyenda(separada: separada),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(texto)),
+          ],
+        ),
+      );
+}
+
+class _MarcaDeLeyenda extends CustomPainter {
+  final bool separada;
+
+  const _MarcaDeLeyenda({required this.separada});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pincel = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.black87;
+    if (!separada) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(size.height / 2),
+        ),
+        pincel,
+      );
+      return;
+    }
+    final rect = Rect.fromCircle(
+      center: size.center(Offset.zero),
+      radius: size.height / 2,
+    );
+    const trazos = 8;
+    for (var i = 0; i < trazos; i++) {
+      canvas.drawArc(
+        rect,
+        i * 2 * 3.14159265 / trazos,
+        3.14159265 / trazos,
+        false,
+        pincel,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MarcaDeLeyenda old) => old.separada != separada;
 }

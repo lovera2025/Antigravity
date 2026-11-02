@@ -1232,11 +1232,12 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     final plano = _plano;
     final vista = _vista;
     if (_ocupado || plano == null || vista == null) return;
-    final blancoYNegro = await elegirComoImprimirPlano(
+    final como = await elegirComoImprimirPlano(
       context,
       hojas: vista.armado.hojas.length,
+      hayFamilias: vista.familias.hayAlguna,
     );
-    if (blancoYNegro == null || !mounted) return;
+    if (como == null || !mounted) return;
     try {
       await PdfService.generarPlanoPdf(
         widget.evento,
@@ -1249,7 +1250,8 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
             movimientos: _movimientos,
           ),
         ),
-        blancoYNegro: blancoYNegro,
+        blancoYNegro: como.blancoYNegro,
+        familias: como.familias,
       );
     } catch (e) {
       _decir('No se pudo armar el plano para imprimir.', error: e);

@@ -8,6 +8,7 @@ import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../services/familias_en_el_plano.dart';
 import '../services/medir_salon.dart';
 
 /// Cómo se acomoda una hoja del plano en un rectángulo de pantalla: se escala
@@ -136,6 +137,7 @@ class PintorPlano extends CustomPainter {
     required this.hoja,
     required this.tema,
     required this.estado,
+    this.familias,
     this.resaltadas = const {},
     this.seleccionada,
     this.regla = false,
@@ -147,6 +149,9 @@ class PintorPlano extends CustomPainter {
   final String hoja;
   final TemaPlano tema;
   final EstadoPlano estado;
+
+  /// Las familias con adicional, marcadas. Null: sin marcar.
+  final FamiliasEnElPlano? familias;
   final Set<int> resaltadas;
   final int? seleccionada;
 
@@ -218,6 +223,7 @@ class PintorPlano extends CustomPainter {
 
     final mesas = armado.mesasDeHoja(hoja);
     if (lugares != null && nivel.etiquetas) _lugares(canvas, mesas);
+    if (nivel.adornos) _capsulas(canvas, nivel);
     if (_foco.isEmpty) {
       for (final m in mesas) {
         _mesa(canvas, m, nivel, h.caja);
@@ -539,14 +545,116 @@ class PintorPlano extends CustomPainter {
     if (nivel.numeros) _numero(canvas, m, c, r, info, foco);
 
     final familia = familiaConApellido(info, nivel);
+    final marca = familias?.marcas[m.numero];
+    // Sin sillas, la línea de la familia pasa donde iría el apellido: baja un poco.
+    // Con sillas, la línea queda justo arriba de la franja.
+    final franja = franjaApellido(c, r, caja, conSillas: conSillas)
+        .shift(Offset(0, marca != null && !conSillas ? 4 : 0));
     if (familia != null) {
       _apellido(
         canvas,
         familia.apellido,
-        franjaApellido(c, r, caja, conSillas: conSillas),
+        franja,
         foco ? tema.titulo : tema.tituloSuave,
       );
     }
+    if (marca != null && nivel.adornos) {
+      _marcaDeFamilia(canvas, c, r, marca, conSillas);
+      final otra = marca.otra;
+      if (otra != null && nivel.apellidos) {
+        // Debajo del apellido, si la mesa lo lleva.
+        _apellido(
+          canvas,
+          '→ $otra',
+          familia == null ? franja : franja.shift(Offset(0, franja.height + 2)),
+          tema.marcaFamilia,
+        );
+      }
+    }
+  }
+
+  // ── Las familias con adicional ──────────────────────────────────────────
+
+  /// Lo que se deja alrededor de la mesa para la cápsula y el aro: las sillas
+  /// quedan adentro (llegan hasta r + 12,5) y la línea, arriba del apellido, que
+  /// empieza en r + 17.
+  double _aireDeFamilia(bool conSillas) => conSillas ? 14 : 6;
+
+  /// Una cápsula por cada tramo de mesas pegadas, debajo de las mesas: una línea
+  /// llena que sigue la serpentina, también cuando dobla de fila.
+  void _capsulas(Canvas canvas, NivelDetalle nivel) {
+    final tramos = familias?.capsulas;
+    if (tramos == null || tramos.isEmpty) return;
+    final conSillas = tema.sillas && nivel.sillas;
+    final ancho =
+        2 * (radioDibujo(armado, tema) + _aireDeFamilia(conSillas));
+    for (final tramo in tramos) {
+      final puntos = [
+        for (final n in tramo)
+          if (armado.mesa(n) case final m? when m.hoja == hoja) Offset(m.x, m.y),
+      ];
+      if (puntos.length < 2) continue;
+      final camino = Path()..moveTo(puntos.first.dx, puntos.first.dy);
+      for (final q in puntos.skip(1)) {
+        camino.lineTo(q.dx, q.dy);
+      }
+      Paint trazo(double grosor, Color color) => Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = grosor
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = color;
+      canvas.drawPath(camino, trazo(ancho + 3, tema.marcaFamilia));
+      canvas.drawPath(camino, trazo(ancho, tema.fondo));
+    }
+  }
+
+  /// La letra de la mesa (P la principal, A las demás), a las siete, y el aro
+  /// punteado si la familia quedó separada.
+  void _marcaDeFamilia(
+    Canvas canvas,
+    Offset c,
+    double r,
+    MarcaDeMesa marca,
+    bool conSillas,
+  ) {
+    final color = tema.marcaFamilia;
+    if (marca.separada) {
+      final aro = r + _aireDeFamilia(conSillas);
+      final rect = Rect.fromCircle(center: c, radius: aro);
+      final pincel = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = color;
+      const trazos = 14;
+      for (var i = 0; i < trazos; i++) {
+        canvas.drawArc(
+          rect,
+          i * 2 * math.pi / trazos,
+          math.pi / trazos,
+          false,
+          pincel,
+        );
+      }
+    }
+    final centro = c + Offset(-r * 0.72, r * 0.72);
+    final a = r * 0.38;
+    canvas.drawCircle(centro, a, Paint()..color = tema.fondo);
+    canvas.drawCircle(
+      centro,
+      a,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = color,
+    );
+    final tp = _texto(
+      marca.principal ? 'P' : 'A',
+      a * 1.3,
+      color,
+      peso: FontWeight.w700,
+    );
+    tp.paint(canvas, centro - Offset(tp.width / 2, tp.height / 2));
   }
 
   /// El apellido, centrado en su [franja]. Si no entra, primero se achica la
@@ -899,6 +1007,7 @@ class PintorPlano extends CustomPainter {
       old.hoja != hoja ||
       old.tema != tema ||
       old.estado != estado ||
+      old.familias != familias ||
       old.seleccionada != seleccionada ||
       old.regla != regla ||
       old.cotas != cotas ||

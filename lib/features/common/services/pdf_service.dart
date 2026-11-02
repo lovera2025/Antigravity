@@ -4358,6 +4358,7 @@ class PdfService {
     required EstiloPlano estilo,
     String? lineaSorteo,
     bool blancoYNegro = false,
+    bool familias = true,
     DateTime? generada,
   }) async {
     final fuentes = await _fuentesOutfit();
@@ -4367,6 +4368,7 @@ class PdfService {
       estilo: estilo,
       lineaSorteo: lineaSorteo,
       blancoYNegro: blancoYNegro,
+      familias: familias,
       regular: fuentes?.$1,
       negrita: fuentes?.$2,
       letraPlano: await _letraDelPlano(estilo),
@@ -4380,6 +4382,7 @@ class PdfService {
     required EstiloPlano estilo,
     String? lineaSorteo,
     bool blancoYNegro = false,
+    bool familias = true,
   }) async {
     final bytes = await construirPlanoPdf(
       evento,
@@ -4387,6 +4390,7 @@ class PdfService {
       estilo: estilo,
       lineaSorteo: lineaSorteo,
       blancoYNegro: blancoYNegro,
+      familias: familias,
     );
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(
       RegExp(r'[^a-zA-Z0-9_\-\.]'),

@@ -33,11 +33,13 @@ void main() {
   }
 
   testWidgets('BLANCO Y NEGRO devuelve true', (tester) async {
-    expect(await elegir(tester, 'imprimir_bn'), isTrue);
+    final r = await elegir(tester, 'imprimir_bn') as ComoImprimirPlano;
+    expect(r.blancoYNegro, isTrue);
   });
 
   testWidgets('EN COLOR devuelve false', (tester) async {
-    expect(await elegir(tester, 'imprimir_color'), isFalse);
+    final r = await elegir(tester, 'imprimir_color') as ComoImprimirPlano;
+    expect(r.blancoYNegro, isFalse);
   });
 
   testWidgets('CANCELAR no imprime nada', (tester) async {

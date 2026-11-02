@@ -14,6 +14,7 @@ import '../modelo/medidas_salon.dart';
 import 'armar_a_medida.dart';
 import 'divisiones.dart';
 import 'editar_armado.dart';
+import 'familias_en_el_plano.dart';
 import 'medir_salon.dart';
 
 /// Algo del plano que conviene mirar, dicho en palabras, con la mesa a la que
@@ -52,7 +53,11 @@ class PlanoDeLaFiesta {
   final List<OcupaHoja> ocupa;
   final List<AvisoPlano> avisos;
 
-  const PlanoDeLaFiesta._({
+  /// Las familias con adicional: juntas o separadas.
+  late final FamiliasEnElPlano familias =
+      FamiliasEnElPlano.desde(armado, estado);
+
+  PlanoDeLaFiesta._({
     required this.armado,
     required this.config,
     required this.estado,

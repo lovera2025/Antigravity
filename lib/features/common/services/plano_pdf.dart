@@ -11,6 +11,7 @@ import '../../plano/estilos/estilo_plano.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../plano/modelo/estado_plano.dart';
 import '../../plano/services/medir_salon.dart';
+import '../../plano/services/familias_en_el_plano.dart';
 import '../../plano/services/plano_de_la_fiesta.dart';
 import '../../plano/services/plano_papel.dart';
 import 'planilla_tema.dart';
@@ -176,6 +177,10 @@ class PlanoPdf {
     required EstiloPlano estilo,
     String? lineaSorteo,
     bool blancoYNegro = false,
+
+    /// Las familias con adicional van marcadas: juntas con una línea, separadas
+    /// con un aro punteado y el número de la otra mesa.
+    bool familias = true,
     pw.Font? regular,
     pw.Font? negrita,
 
@@ -209,6 +214,7 @@ class PlanoPdf {
         '${cuando.year} · ${_dos(cuando.hour)}:${_dos(cuando.minute)}';
     final resumen = PlanoPapel.resumen(armado, estado);
     final divisiones = PlanoPapel.divisiones(estado);
+    final marcas = familias ? plano.familias : null;
     final hojas = armado.hojas;
     final ancho = _formato.width - 2 * PlanillaTema.margen;
 
@@ -319,6 +325,37 @@ class PlanoPdf {
                     item(mesa(llena: true, sillasExtra: 1), 'Lleva sillas extra'),
                   if (resumen.conflictos > 0)
                     item(mesa(conflicto: true), 'Revisar: no cierra'),
+                  if (marcas?.hayJuntas ?? false)
+                    item(
+                      pw.Container(
+                        width: 13,
+                        height: 7,
+                        decoration: pw.BoxDecoration(
+                          borderRadius: pw.BorderRadius.circular(3.5),
+                          border: pw.Border.all(
+                            color: _Tinta.negro,
+                            width: 0.6,
+                          ),
+                        ),
+                      ),
+                      'Juntas',
+                    ),
+                  if (marcas?.haySeparadas ?? false)
+                    item(
+                      pw.CustomPaint(
+                        size: const PdfPoint(9, 9),
+                        painter: (g, size) {
+                          g
+                            ..setStrokeColor(_Tinta.negro)
+                            ..setLineWidth(0.6)
+                            ..setLineDashPattern([1.2, 1])
+                            ..drawEllipse(size.x / 2, size.y / 2, 3.6, 3.6)
+                            ..strokePath()
+                            ..setLineDashPattern();
+                        },
+                      ),
+                      'Separadas: al lado, la otra mesa',
+                    ),
                   if (sinApellidos)
                     pw.Text(
                       'A este tamaño los apellidos no se leen: están en la '
@@ -450,6 +487,7 @@ class PlanoPdf {
                 armado: armado,
                 hoja: h,
                 estado: estado,
+                familias: marcas,
                 estilo: estilo,
                 tinta: tinta,
                 bloques: plano.config.bloques,
@@ -696,6 +734,7 @@ class _DibujoPlano extends pw.Widget {
     required this.armado,
     required this.hoja,
     required this.estado,
+    required this.familias,
     required this.estilo,
     required this.tinta,
     required this.bloques,
@@ -707,6 +746,7 @@ class _DibujoPlano extends pw.Widget {
   final ArmadoSalon armado;
   final _HojaPapel hoja;
   final EstadoPlano estado;
+  final FamiliasEnElPlano? familias;
   final EstiloPlano estilo;
   final _Tinta tinta;
   final List<BloqueDivision> bloques;
@@ -827,6 +867,38 @@ class _DibujoPlano extends pw.Widget {
       return i.principal && (i.ocupante ?? i.fijadaPara) != null;
     }
 
+    // Debajo de las mesas: la cápsula que une a cada familia. Sobre blanco, con
+    // línea negra: se lee igual en color y en blanco y negro.
+    final aire = (conSillas ? 14.0 : 5.0) * s;
+    for (final tramo in familias?.capsulas ?? const <List<int>>[]) {
+      final puntos = [
+        for (final n in tramo) ?armado.mesa(n),
+      ].where((m) => m.hoja == hoja.hoja.id).toList();
+      if (puntos.length < 2) continue;
+      void linea() {
+        g.moveTo(px(puntos.first.x), py(puntos.first.y));
+        for (final q in puntos.skip(1)) {
+          g.lineTo(px(q.x), py(q.y));
+        }
+      }
+
+      g
+        ..saveContext()
+        ..setLineCap(PdfLineCap.round)
+        ..setLineJoin(PdfLineJoin.round)
+        ..setStrokeColor(_Tinta.negro)
+        ..setLineWidth(2 * (r + aire) + 1.2);
+      linea();
+      g
+        ..strokePath()
+        ..setStrokeColor(_Tinta.blanco)
+        ..setLineWidth(2 * (r + aire));
+      linea();
+      g
+        ..strokePath()
+        ..restoreContext();
+    }
+
     for (final m in mesas) {
       final info = estado.info(m.numero);
       final llena = info.estado == EstadoMesa.ocupada ||
@@ -866,6 +938,55 @@ class _DibujoPlano extends pw.Widget {
           ..fillPath();
       }
       _escribir(g, fNumeros, texto, tam, cx, cy, color, referencia: '0');
+
+      final marca = familias?.marcas[m.numero];
+      if (marca != null) {
+        if (marca.separada) {
+          g
+            ..setStrokeColor(_Tinta.negro)
+            ..setLineWidth(0.7)
+            ..setLineDashPattern([2.2, 1.6])
+            ..drawEllipse(cx, cy, r + aire, r + aire)
+            ..strokePath()
+            ..setLineDashPattern();
+        }
+        // La letra, a las siete: P la principal, A las demás.
+        final a = math.max(1.9, r * 0.36);
+        final lx = cx - r * 0.72, ly = cy - r * 0.72;
+        g
+          ..setFillColor(_Tinta.blanco)
+          ..setStrokeColor(_Tinta.negro)
+          ..setLineWidth(0.45)
+          ..drawEllipse(lx, ly, a, a)
+          ..fillAndStrokePath();
+        _escribir(g, fEtiquetas, marca.principal ? 'P' : 'A', a * 1.3, lx, ly,
+            _Tinta.negro,
+            referencia: 'H');
+        final otra = marca.otra;
+        if (otra != null) {
+          final franja = PlanoPapel.franjaApellido(
+            m,
+            ocupa: ocupa,
+            ancho: anchoApellido,
+            alto: (tamApellido == 0 ? r * 0.5 : tamApellido) / s,
+          );
+          final debajo = tamApellido > 0 && llevaApellido(m.numero);
+          // Sin la flecha en esta letra, se dice en palabras.
+          final texto = fEtiquetas.isRuneSupported(0x2192)
+              ? '\u2192 $otra'
+              : 'a la $otra';
+          _escribir(
+            g,
+            fEtiquetas,
+            texto,
+            math.max(4.3, tamApellido == 0 ? r * 0.5 : tamApellido * 0.9),
+            cx,
+            py(franja.centroY + (debajo ? franja.alto * 1.15 : 0)),
+            _Tinta.negro,
+            referencia: 'H',
+          );
+        }
+      }
 
       if (tamApellido > 0 && llevaApellido(m.numero)) {
         final familia = info.ocupante ?? info.fijadaPara!;

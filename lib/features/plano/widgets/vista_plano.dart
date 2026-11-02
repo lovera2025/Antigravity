@@ -5,6 +5,7 @@ import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../services/familias_en_el_plano.dart';
 
 /// Una hoja del plano, dibujada en un estilo, con las mesas tocables.
 ///
@@ -18,6 +19,7 @@ class VistaPlano extends StatefulWidget {
     required this.hoja,
     required this.tema,
     required this.estado,
+    this.familias,
     this.resaltadas = const {},
     this.seleccionada,
     this.onTapMesa,
@@ -39,6 +41,9 @@ class VistaPlano extends StatefulWidget {
   final String hoja;
   final TemaPlano tema;
   final EstadoPlano estado;
+
+  /// Las familias con adicional, marcadas. Null: sin marcar.
+  final FamiliasEnElPlano? familias;
   final Set<int> resaltadas;
   final int? seleccionada;
   final ValueChanged<int>? onTapMesa;
@@ -158,6 +163,7 @@ class _VistaPlanoState extends State<VistaPlano>
                   hoja: widget.hoja,
                   tema: widget.tema,
                   estado: widget.estado,
+                  familias: widget.familias,
                   resaltadas: widget.resaltadas,
                   seleccionada: widget.seleccionada,
                   regla: widget.mostrarRegla,
