@@ -755,6 +755,14 @@ y abrirlas (la revisión de la mora corre al arrancar); foto "después de X.Y.Z"
 a quién le subió la mora, se le fue la eximición o el perdón, o se le descongeló. La sección 4 vuelve a un alumno a la
 foto de antes. La app no conoce la tabla; se corre desde el SQL Editor o el MCP.
 
+**Cada cambio a la mora de un alumno queda anotado en la nube** (`supabase/mora_cambios.sql`, tabla `mora_cambios` y
+el trigger `contratos_alumnos_mora_cambios`, corridos el 2-nov-2026 y probados con una escritura revertida). Anota
+antes → después de los seis campos de la mora y el saldo, qué otras columnas vinieron en la misma escritura (si cambió
+el saldo fue un cobro; si cambió otra cosa, una edición; si nada, la revisión) y el usuario. **Solo anota, nunca
+frena**: si no puede, la escritura sigue. Cuando una mora reviva, esta tabla dice qué escritura lo hizo: ese es el
+camino a cerrar en el código, con su test. La app no la lee (sin políticas); una pantalla "Historial de la mora" queda
+para después de operadores y barra.
+
 **Los SQL de una versión se corren antes de instalarla**, con el OK del usuario
 en el momento. Sin las tablas en la nube, lo que se cargue en las PCs queda
 trabado en la cola. (La regla de "después de las 20 hs" la sacó el usuario el
