@@ -748,6 +748,13 @@ No hay CLI de Supabase configurado. Convención: cada sentencia riesgosa lleva s
 `ROLLBACK` escrito arriba, comentado, y el archivo termina con las consultas de
 verificación: los conteos de antes y después, que tienen que dar igual.
 
+**Antes y después de cada versión, una foto de la mora** (`supabase/mora_fotos.sql`, tabla `mora_fotos` en la nube,
+creada el 2-nov-2026 con la primera foto: 643 alumnos). Con cada actualización revivían moras cobradas o perdonadas y
+no había con qué compararlas. Ahora: foto "antes de X.Y.Z" antes de correr los SQL e instalar; instalar las tres PCs
+y abrirlas (la revisión de la mora corre al arrancar); foto "después de X.Y.Z"; y la comparación de la sección 3 lista
+a quién le subió la mora, se le fue la eximición o el perdón, o se le descongeló. La sección 4 vuelve a un alumno a la
+foto de antes. La app no conoce la tabla; se corre desde el SQL Editor o el MCP.
+
 **Los SQL de una versión se corren antes de instalarla**, con el OK del usuario
 en el momento. Sin las tablas en la nube, lo que se cargue en las PCs queda
 trabado en la cola. (La regla de "después de las 20 hs" la sacó el usuario el
