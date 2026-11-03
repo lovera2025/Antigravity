@@ -15,14 +15,17 @@ import '../repositories/sesiones_caja_repository.dart';
 import '../services/caja_auto_sync_service.dart';
 
 /// Cómo se entró. `entradas` no abre caja y no pasa por el panel: va a
-/// `EntradasHomeScreen`.
-enum AppRoleKind { none, jefe, caja, entradas }
+/// `EntradasHomeScreen`. `barra` tampoco: va a `BarraHomeScreen`, con su propia caja
+/// de barra, que no es la de cuotas.
+enum AppRoleKind { none, jefe, caja, entradas, barra }
 
 /// Qué pantalla le toca a quien tiene rol de Admin en la nube.
-enum DestinoDeEntrada { elegir, entradas, panel }
+enum DestinoDeEntrada { elegir, entradas, barra, panel }
 
-/// **Con `entradas` nunca se arma el panel:** quien solo entrega no ve otra cosa.
+/// **Con `entradas` o `barra` nunca se arma el panel:** quien solo entrega o vende
+/// en la barra no ve otra cosa.
 DestinoDeEntrada destinoDeEntrada(AppRoleState app) {
+  if (app.esBarra) return DestinoDeEntrada.barra;
   if (app.esEntradas) return DestinoDeEntrada.entradas;
   if (app.kind == AppRoleKind.none) return DestinoDeEntrada.elegir;
   if (app.esCaja && !app.tieneSesionCaja) return DestinoDeEntrada.elegir;
@@ -120,6 +123,7 @@ class AppRoleState {
   bool get esJefe => kind == AppRoleKind.jefe;
   bool get esCaja => kind == AppRoleKind.caja;
   bool get esEntradas => kind == AppRoleKind.entradas;
+  bool get esBarra => kind == AppRoleKind.barra;
   bool get tieneSesionCaja =>
       esCaja && sesionActiva != null && sesionActiva!.estaAbierta;
 
@@ -289,6 +293,21 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     await ref.read(adminAuthProvider.notifier).logout();
     state = AppRoleState(
       kind: AppRoleKind.entradas,
+      operador: op,
+      permisos: permisos,
+    );
+  }
+
+  /// Entra a la barra: **no abre la caja de cuotas ni late**. La caja de barra la
+  /// abre la cajera en su pantalla, con la fiesta elegida.
+  Future<void> entrarComoBarra(
+    OperadorCaja op,
+    PermisosEfectivos permisos,
+  ) async {
+    _stopHeartbeat();
+    await ref.read(adminAuthProvider.notifier).logout();
+    state = AppRoleState(
+      kind: AppRoleKind.barra,
       operador: op,
       permisos: permisos,
     );

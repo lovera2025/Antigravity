@@ -112,6 +112,29 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
       ];
 
   @override
+  Future<Set<String>> fiestasConPrecio() async => {
+        for (final f in await _leer(
+          'barra_precios',
+          where: 'activo = 1',
+        ))
+          f['evento_id'] as String,
+      };
+
+  @override
+  Future<int> ventasSinSubir() async {
+    try {
+      final db = await _abrir();
+      final filas = await db.rawQuery(
+        "SELECT COUNT(DISTINCT registro_id) AS n FROM _sync_queue WHERE tabla = 'barra_ventas'",
+      );
+      return (filas.first['n'] as num?)?.toInt() ?? 0;
+    } catch (e) {
+      debugPrint('⚠️ Barra: no se pudieron contar las ventas sin subir: $e');
+      return 0;
+    }
+  }
+
+  @override
   Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) async {
     final db = await _abrir();
     final equipo = await _equipo();
@@ -134,6 +157,17 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
         for (final f in await _leer(
           'barra_cajas',
           where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'numero_caja, abierta_at',
+        ))
+          CajaBarra.fromMap(f),
+      ];
+
+  @override
+  Future<List<CajaBarra>> cajasAbiertas(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_cajas',
+          where: 'evento_id = ? AND cerrada_at IS NULL',
           whereArgs: [eventoId],
           orderBy: 'numero_caja, abierta_at',
         ))
@@ -192,6 +226,30 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
   }
 
   @override
+  Future<CajaBarra> ponerCambio(CajaBarra caja, double cambio, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final filas = await txn.query(
+        'barra_cajas',
+        where: 'id = ?',
+        whereArgs: [caja.id],
+        limit: 1,
+      );
+      if (filas.isEmpty) {
+        throw StateError('la caja ${caja.numeroCaja} no está en este equipo');
+      }
+      final enLaBase = CajaBarra.fromMap(filas.first);
+      if (!enLaBase.abierta) return enLaBase;
+      final ahora = _reloj();
+      final conCambio =
+          enLaBase.conCambio(cambio).sellada(hechoPor: quien, deviceId: equipo, ahora: ahora);
+      await _guardar(txn, 'barra_cajas', conCambio.id, conCambio.toMap());
+      return conCambio;
+    });
+  }
+
+  @override
   Future<CajaBarra> cerrarCaja(
     CajaBarra caja, {
     required double efectivoContado,
@@ -237,7 +295,8 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
     double efectivo = 0,
     double transferencia = 0,
     double? recibe,
-    bool comprobanteVisto = false,
+    double recargo = 0,
+    double? recargoPct,
     required String quien,
   }) async {
     final db = await _abrir();
@@ -272,7 +331,8 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
         efectivo: efectivo,
         transferencia: transferencia,
         recibe: recibe,
-        comprobanteVisto: comprobanteVisto,
+        recargo: recargo,
+        recargoPct: recargoPct,
         hechoPor: quien,
         deviceId: equipo,
         ahora: _reloj(),

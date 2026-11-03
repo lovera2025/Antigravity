@@ -108,6 +108,14 @@ class _Arriba extends ConsumerWidget {
                   ),
                 ),
               ),
+            DestinoDeEntrada.barra => Scaffold(
+                body: Center(
+                  child: FilledButton(
+                    onPressed: ref.read(appRoleProvider.notifier).logoutApp,
+                    child: const Text('Acá abre la barra (tool/barra_prueba.dart). SALIR'),
+                  ),
+                ),
+              ),
             DestinoDeEntrada.panel => const _PanelMinimo(),
           },
         ),

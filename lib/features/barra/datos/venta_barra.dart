@@ -6,6 +6,10 @@ import 'lectura_de_filas.dart';
 /// Cómo se pagó una venta de la barra.
 enum MedioBarra {
   efectivo,
+
+  /// Todo lo que entra por Mercado Pago: el posnet con QR, débito o transferencia. El
+  /// posnet está en la cuenta de quien cobra, que ve el pago en el momento: no hay
+  /// comprobante que mirar (decidido el 3-nov).
   transferencia,
 
   /// Parte en efectivo y parte por transferencia.
@@ -76,10 +80,13 @@ class VentaBarra {
   /// Correlativo dentro de su caja: "Caja 2 · N° 0017".
   final int numero;
   final List<RenglonVenta> renglones;
+
+  /// La suma de los renglones: lo que valen las bebidas. El recargo va aparte.
   final double total;
   final MedioBarra medio;
 
-  /// Lo que se cobró en efectivo y por transferencia. Suman el [total].
+  /// Lo que se cobró en efectivo y por transferencia (esta, con el recargo). Suman el
+  /// [total] más el [recargo].
   final double efectivo;
   final double transferencia;
 
@@ -87,8 +94,12 @@ class VentaBarra {
   final double? recibe;
   final double vuelto;
 
-  /// La cajera tildó que vio el comprobante de la transferencia.
-  final bool comprobanteVisto;
+  /// Lo que se cobró de más por pagar por transferencia: no es de ninguna bebida, y
+  /// el cierre lo muestra aparte.
+  final double recargo;
+
+  /// El porcentaje con que se calculó el [recargo]. Null si fue en pesos o sin recargo.
+  final double? recargoPct;
   final String? hechoPor;
   final String? deviceId;
   final String createdAt;
@@ -106,17 +117,21 @@ class VentaBarra {
     this.transferencia = 0,
     this.recibe,
     this.vuelto = 0,
-    this.comprobanteVisto = false,
+    this.recargo = 0,
+    this.recargoPct,
     this.hechoPor,
     this.deviceId,
     required this.createdAt,
     required this.updatedAt,
   });
 
+  /// Lo que pagó, con el recargo.
+  double get cobrado => total + recargo;
+
   /// Una venta nueva, con su número. **Tiene que cerrar**: el total es la suma de los
-  /// renglones, el efectivo más la transferencia dan el total, el vuelto es lo que
-  /// sobra de lo recibido, y una transferencia lleva el comprobante visto. Si no
-  /// cierra es un error del programa, y la venta no se arma.
+  /// renglones, el efectivo más la transferencia dan el total más el recargo, el
+  /// recargo va solo con algo transferido, y el vuelto es lo que sobra de lo recibido.
+  /// Si no cierra es un error del programa, y la venta no se arma.
   factory VentaBarra.nueva({
     required String cajaBarraId,
     required String eventoId,
@@ -126,7 +141,8 @@ class VentaBarra {
     double efectivo = 0,
     double transferencia = 0,
     double? recibe,
-    bool comprobanteVisto = false,
+    double recargo = 0,
+    double? recargoPct,
     String? hechoPor,
     String? deviceId,
     required DateTime ahora,
@@ -143,8 +159,16 @@ class VentaBarra {
     final total = renglones.fold<double>(0, (s, r) => s + r.subtotal);
     if (efectivo.isNaN || efectivo < 0) no('efectivo negativo');
     if (transferencia.isNaN || transferencia < 0) no('transferencia negativa');
-    if (centavos(efectivo) + centavos(transferencia) != centavos(total)) {
-      no('efectivo $efectivo + transferencia $transferencia no da el total $total');
+    if (recargo.isNaN || recargo < 0) no('recargo negativo');
+    if (centavos(recargo) > 0 && centavos(transferencia) == 0) {
+      no('el recargo va solo con algo por transferencia');
+    }
+    if (centavos(recargo) > centavos(transferencia)) {
+      no('el recargo $recargo es más que la transferencia $transferencia');
+    }
+    if (centavos(efectivo) + centavos(transferencia) != centavos(total) + centavos(recargo)) {
+      no('efectivo $efectivo + transferencia $transferencia no da el total $total '
+          'más el recargo $recargo');
     }
     switch (medio) {
       case MedioBarra.efectivo:
@@ -157,9 +181,6 @@ class VentaBarra {
         }
       case MedioBarra.otro:
         no('el medio de pago no se conoce');
-    }
-    if (centavos(transferencia) > 0 && !comprobanteVisto) {
-      no('la transferencia lleva el comprobante visto');
     }
     double vuelto = 0;
     if (recibe != null) {
@@ -181,7 +202,8 @@ class VentaBarra {
       transferencia: transferencia,
       recibe: recibe,
       vuelto: vuelto,
-      comprobanteVisto: comprobanteVisto,
+      recargo: centavos(recargo) / 100,
+      recargoPct: centavos(recargo) > 0 ? recargoPct : null,
       hechoPor: hechoPor,
       deviceId: deviceId,
       createdAt: iso,
@@ -203,7 +225,8 @@ class VentaBarra {
         'transferencia': transferencia,
         'recibe': recibe,
         'vuelto': vuelto,
-        'comprobante_visto': comprobanteVisto ? 1 : 0,
+        'recargo': recargo,
+        'recargo_pct': recargoPct,
         'hecho_por': hechoPor,
         'device_id': deviceId,
         'created_at': createdAt,
@@ -237,7 +260,8 @@ class VentaBarra {
         transferencia: comoDouble(m['transferencia']),
         recibe: comoDoubleONull(m['recibe']),
         vuelto: comoDouble(m['vuelto']),
-        comprobanteVisto: comoBool(m['comprobante_visto']),
+        recargo: comoDouble(m['recargo']),
+        recargoPct: comoDoubleONull(m['recargo_pct']),
         hechoPor: comoTextoONull(m['hecho_por']),
         deviceId: comoTextoONull(m['device_id']),
         createdAt: comoTexto(m['created_at']),

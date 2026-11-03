@@ -48,10 +48,10 @@ void main() {
           PermisoOperador.entradas);
     });
 
-    test('solo Barra: todavía no hay adónde ir', () {
+    test('solo Barra: entra derecho a la barra', () {
       final o = OpcionesDeEntrada.de(const PermisosEfectivos(barra: true));
-      expect(o.aviso, kBarraTodaviaNo);
-      expect(o.directo, isNull);
+      expect(o.aviso, isNull);
+      expect(o.directo, PermisoOperador.barra);
     });
 
     test('varios: elige, siempre en el mismo orden', () {
@@ -82,6 +82,13 @@ void main() {
       );
     });
 
+    test('Barra nunca arma el panel', () {
+      expect(
+        destinoDeEntrada(const AppRoleState(kind: AppRoleKind.barra)),
+        DestinoDeEntrada.barra,
+      );
+    });
+
     test('el jefe, al panel', () {
       expect(
         destinoDeEntrada(const AppRoleState(kind: AppRoleKind.jefe)),
@@ -98,6 +105,7 @@ void main() {
         router,
         contains('DestinoDeEntrada.entradas => const EntradasHomeScreen()'),
       );
+      expect(router, contains('DestinoDeEntrada.barra => const BarraHomeScreen()'));
       expect(RegExp('DashboardScreen').allMatches(router), hasLength(1));
     });
   });
@@ -289,7 +297,7 @@ void main() {
       expect(find.textContaining('Abrir caja'), findsNothing);
     });
 
-    testWidgets('con varios se despliegan, y Barra se ve apagada con el motivo', (tester) async {
+    testWidgets('con varios se despliegan los tres, todos prendidos', (tester) async {
       prueba.permisos.poner(
         _ana,
         const PermisosEfectivos(cobros: true, entradas: true, barra: true),
@@ -300,12 +308,38 @@ void main() {
       expect(find.text('COBROS'), findsOneWidget);
       expect(find.text('ENTRADAS'), findsOneWidget);
       expect(find.text('BARRA'), findsOneWidget);
-      expect(find.text(kBarraTodaviaNo), findsOneWidget);
+      for (final p in ['cobros', 'entradas', 'barra']) {
+        expect(
+          tester.widget<ButtonStyleButton>(find.byKey(Key('entrada_$p'))).onPressed,
+          isNotNull,
+          reason: p,
+        );
+      }
       expect(contenedor(tester).read(appRoleProvider).kind, AppRoleKind.none);
 
       await tester.tap(find.byKey(const Key('entrada_entradas')));
       await pasar(tester);
       expect(contenedor(tester).read(appRoleProvider).esEntradas, isTrue);
+    });
+
+    testWidgets('BARRA entra a la barra, sin abrir la caja de cuotas', (tester) async {
+      prueba.permisos.poner(_ana, const PermisosEfectivos(entradas: true, barra: true));
+      await abrir(tester);
+      await ponerPin(tester, '5555');
+      await tester.tap(find.byKey(const Key('entrada_barra')));
+      await pasar(tester);
+      final app = contenedor(tester).read(appRoleProvider);
+      expect(app.esBarra, isTrue);
+      expect(app.pideAbrirCaja, isFalse);
+      expect(prueba.sesiones.abiertas, isEmpty);
+      expect(destinoDeEntrada(app), DestinoDeEntrada.barra);
+    });
+
+    testWidgets('solo Barra: entra derecho', (tester) async {
+      prueba.permisos.poner(_ana, const PermisosEfectivos(barra: true));
+      await abrir(tester);
+      await ponerPin(tester, '5555');
+      expect(contenedor(tester).read(appRoleProvider).esBarra, isTrue);
     });
 
     testWidgets('VOLVER deja elegir otra vez cómo entrar', (tester) async {
@@ -427,10 +461,10 @@ void main() {
   group('lo que vive en otros archivos', () {
     String leer(String ruta) => File(ruta).readAsStringSync().replaceAll('\r\n', '\n');
 
-    test('lo entregado en modo Entradas sube solo', () {
+    test('lo entregado en modo Entradas y lo vendido en la barra suben solos', () {
       expect(
         leer('lib/features/common/widgets/operational_sync_coordinator.dart'),
-        contains('role.esJefe || role.esCaja || role.esEntradas'),
+        contains('role.esJefe || role.esCaja || role.esEntradas || role.esBarra'),
       );
     });
 

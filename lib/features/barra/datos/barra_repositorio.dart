@@ -52,6 +52,17 @@ abstract interface class BarraDeLaCaja {
 
   Future<List<PrecioBarra>> precios(String eventoId, {bool conBajas = false});
 
+  /// Las fiestas con al menos un precio activo en este equipo: las únicas que la
+  /// cajera puede elegir.
+  Future<Set<String>> fiestasConPrecio();
+
+  /// Las cajas abiertas de la fiesta que conoce este equipo, de cualquier operador:
+  /// para avisar si el número elegido ya lo tiene otra.
+  Future<List<CajaBarra>> cajasAbiertas(String eventoId);
+
+  /// Cuántas ventas de este equipo esperan subir.
+  Future<int> ventasSinSubir();
+
   /// La caja abierta de [operadorId] en esa fiesta, **en este equipo**. Null si no
   /// tiene.
   Future<CajaBarra?> cajaAbierta({
@@ -79,9 +90,14 @@ abstract interface class BarraDeLaCaja {
     double efectivo = 0,
     double transferencia = 0,
     double? recibe,
-    bool comprobanteVisto = false,
+    double recargo = 0,
+    double? recargoPct,
     required String quien,
   });
+
+  /// Pone el cambio con que arrancó la caja, cuando lo haya: abrir no lo pregunta.
+  /// Una caja cerrada queda como se cerró.
+  Future<CajaBarra> ponerCambio(CajaBarra caja, double cambio, {required String quien});
 
   /// Por número.
   Future<List<VentaBarra>> ventasDeLaCaja(String cajaId);

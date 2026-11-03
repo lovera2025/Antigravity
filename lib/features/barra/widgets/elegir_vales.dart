@@ -46,12 +46,16 @@ class ElegirVales extends StatefulWidget {
   final String fiesta;
   final ImprimirPapel imprimir;
 
+  /// Cada vez que sale un vale: si ya no queda nada sin vale.
+  final ValueChanged<bool>? alImprimir;
+
   const ElegirVales({
     super.key,
     required this.venta,
     required this.caja,
     required this.fiesta,
     required this.imprimir,
+    this.alImprimir,
   });
 
   @override
@@ -99,6 +103,10 @@ class _ElegirValesState extends State<ElegirVales> {
       _imprimiendo = false;
       if (salio) {
         _valesImpresos++;
+        // Después del setState de quien imprimió, que descuenta lo que salió.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.alImprimir?.call(_todoImpreso);
+        });
       } else {
         _aviso = 'No salió el vale. ¿La impresora está prendida y cerca? Tocá de nuevo.';
       }

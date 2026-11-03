@@ -3,7 +3,8 @@ import 'pesos.dart';
 
 /// El mixto: parte en efectivo y parte por transferencia, en dos casilleros atados.
 /// Escribir uno completa el otro para que sumen el total, y **los dos se pueden
-/// corregir**: el último que se tocó manda.
+/// corregir**: el último que se tocó manda. Son las partes de lo que valen las bebidas:
+/// el recargo va aparte, en [CobroBarra].
 class PartidoMixto {
   final double total;
   final double efectivo;
@@ -28,51 +29,91 @@ class PartidoMixto {
   bool get lasDosPartes => centavos(efectivo) > 0 && centavos(transferencia) > 0;
 }
 
-/// Lo que se cobra en COBRAR: el medio, lo que entrega en efectivo, la tilde del
-/// comprobante y el mixto. Dice si se puede confirmar y, si no, **por qué**, con las
-/// palabras que lee la cajera. No cambia nunca: cada cambio da un cobro nuevo.
+/// Cómo se calcula el recargo por transferencia: un porcentaje de lo transferido, o
+/// unos pesos escritos a mano.
+enum ModoRecargo { porcentaje, pesos }
+
+/// Redondea a pesos enteros: en la barra no hay centavos.
+double _aPesos(double v) => v.isNaN ? 0 : v.roundToDouble();
+
+/// Lo que se cobra al tocar EFECTIVO, TRANSFERENCIA o MIXTO: lo que entrega en efectivo,
+/// el mixto y el recargo por transferencia. Dice si se puede confirmar y, si no,
+/// **por qué**, con las palabras que lee la cajera. No cambia nunca: cada cambio da un
+/// cobro nuevo.
 ///
-/// Lo que confirma arma una venta que cierra (`VentaBarra.nueva`): un test lo prueba
-/// con todos los medios.
+/// **Transferencia es todo lo que entra por Mercado Pago** (posnet con QR, débito o
+/// transferencia): quien cobra lo ve en el momento, así que no hay comprobante que
+/// tildar (decidido el 3-nov).
+///
+/// **El recargo va solo sobre lo que se transfiere** (en el mixto, sobre esa parte), en
+/// pesos enteros. Lo que confirma arma una venta que cierra (`VentaBarra.nueva`), con
+/// la transferencia ya con el recargo: un test lo prueba con todos los medios.
 class CobroBarra {
+  /// Lo que valen las bebidas.
   final double total;
   final MedioBarra medio;
 
   /// Lo que entrega en efectivo, para el vuelto. Null: no se anotó (paga justo).
   final double? recibe;
-  final bool comprobanteVisto;
   final PartidoMixto mixto;
+
+  /// El check del recargo.
+  final bool recargoPrendido;
+  final ModoRecargo modoRecargo;
+  final double recargoPct;
+  final double recargoPesos;
 
   const CobroBarra._({
     required this.total,
     required this.medio,
     required this.recibe,
-    required this.comprobanteVisto,
     required this.mixto,
+    required this.recargoPrendido,
+    required this.modoRecargo,
+    required this.recargoPct,
+    required this.recargoPesos,
   });
 
-  /// Un cobro nuevo, en efectivo, sin nada anotado.
-  factory CobroBarra.de(double total) => CobroBarra._(
-        total: total,
-        medio: MedioBarra.efectivo,
-        recibe: null,
-        comprobanteVisto: false,
-        mixto: PartidoMixto.de(total),
-      );
+  /// Un cobro nuevo por [medio], sin nada anotado, con el recargo como lo dejó este
+  /// equipo la última vez.
+  factory CobroBarra.de(
+    double total, {
+    MedioBarra medio = MedioBarra.efectivo,
+    bool recargo = true,
+    double recargoPct = 5,
+  }) {
+    if (medio == MedioBarra.otro) throw ArgumentError.value(medio, 'medio', 'no se cobra así');
+    return CobroBarra._(
+      total: total,
+      medio: medio,
+      recibe: null,
+      mixto: PartidoMixto.de(total),
+      recargoPrendido: recargo,
+      modoRecargo: ModoRecargo.porcentaje,
+      recargoPct: recargoPct,
+      recargoPesos: 0,
+    );
+  }
 
   CobroBarra _con({
     MedioBarra? medio,
     double? recibe,
     bool sinRecibe = false,
-    bool? comprobanteVisto,
     PartidoMixto? mixto,
+    bool? recargoPrendido,
+    ModoRecargo? modoRecargo,
+    double? recargoPct,
+    double? recargoPesos,
   }) =>
       CobroBarra._(
         total: total,
         medio: medio ?? this.medio,
         recibe: sinRecibe ? null : (recibe ?? this.recibe),
-        comprobanteVisto: comprobanteVisto ?? this.comprobanteVisto,
         mixto: mixto ?? this.mixto,
+        recargoPrendido: recargoPrendido ?? this.recargoPrendido,
+        modoRecargo: modoRecargo ?? this.modoRecargo,
+        recargoPct: recargoPct ?? this.recargoPct,
+        recargoPesos: recargoPesos ?? this.recargoPesos,
       );
 
   /// Cambiar de medio deja lo demás como estaba, por si vuelve.
@@ -84,11 +125,31 @@ class CobroBarra {
   /// Null o un casillero vacío: paga justo.
   CobroBarra conRecibe(double? r) => r == null ? _con(sinRecibe: true) : _con(recibe: r);
 
-  CobroBarra conComprobante(bool visto) => _con(comprobanteVisto: visto);
-
   CobroBarra conEfectivoDelMixto(double e) => _con(mixto: mixto.conEfectivo(e));
 
+  /// La parte de las bebidas que se transfiere, sin el recargo.
   CobroBarra conTransferenciaDelMixto(double t) => _con(mixto: mixto.conTransferencia(t));
+
+  /// Lo que la cajera escribe en "Por transferencia" del mixto: **con el recargo
+  /// incluido**, que es lo que se ve. De ahí sale la parte de las bebidas.
+  CobroBarra conTransfiereDelMixto(double t) {
+    final liquido = !recargoPrendido
+        ? t
+        : switch (modoRecargo) {
+            ModoRecargo.porcentaje => _aPesos(t / (1 + recargoPct.clamp(0, 100) / 100)),
+            ModoRecargo.pesos => t - recargoPesos,
+          };
+    return conTransferenciaDelMixto(liquido);
+  }
+
+  CobroBarra conRecargo(bool prendido) => _con(recargoPrendido: prendido);
+  CobroBarra conModoRecargo(ModoRecargo m) => _con(modoRecargo: m);
+
+  /// Lo negativo queda en cero; más de 100 %, en 100.
+  CobroBarra conRecargoPct(double pct) =>
+      _con(recargoPct: pct.isNaN ? 0 : pct.clamp(0, 100).toDouble());
+  CobroBarra conRecargoPesos(double p) =>
+      _con(recargoPesos: p.isNaN || p < 0 ? 0 : _aPesos(p));
 
   double get efectivo => switch (medio) {
         MedioBarra.efectivo => total,
@@ -96,7 +157,28 @@ class CobroBarra {
         MedioBarra.transferencia || MedioBarra.otro => 0,
       };
 
+  /// La parte de las bebidas que se paga por transferencia, sin el recargo.
   double get transferencia => deCentavos(centavos(total) - centavos(efectivo));
+
+  /// Lo que se cobra de más por transferir. Cero sin transferencia o con el check
+  /// apagado.
+  double get recargo {
+    if (!recargoPrendido || centavos(transferencia) <= 0) return 0;
+    return switch (modoRecargo) {
+      ModoRecargo.porcentaje => _aPesos(transferencia * recargoPct / 100),
+      ModoRecargo.pesos => recargoPesos,
+    };
+  }
+
+  /// El porcentaje que queda anotado en la venta: null si fue en pesos o sin recargo.
+  double? get recargoPctQueQueda =>
+      centavos(recargo) > 0 && modoRecargo == ModoRecargo.porcentaje ? recargoPct : null;
+
+  /// Lo que hay que transferir: la parte de las bebidas más el recargo.
+  double get transfiere => deCentavos(centavos(transferencia) + centavos(recargo));
+
+  /// Todo lo que paga, con el recargo.
+  double get aCobrar => deCentavos(centavos(total) + centavos(recargo));
 
   /// Lo que entregó, si cuenta: por transferencia no se entrega efectivo.
   double? get recibeQueCuenta => medio == MedioBarra.transferencia ? null : recibe;
@@ -112,16 +194,21 @@ class CobroBarra {
   String? get falta {
     if (centavos(total) <= 0) return 'La cuenta está vacía';
     if (medio == MedioBarra.mixto && !mixto.lasDosPartes) {
-      return 'El mixto lleva una parte en efectivo y otra por transferencia';
+      return 'Poné cuánto es en efectivo y cuánto por transferencia';
+    }
+    if (recargoPrendido && centavos(transferencia) > 0) {
+      if (modoRecargo == ModoRecargo.porcentaje && recargoPct <= 0) {
+        return 'Poné el porcentaje del recargo';
+      }
+      if (modoRecargo == ModoRecargo.pesos && recargoPesos <= 0) {
+        return 'Poné el recargo en pesos';
+      }
     }
     final r = recibeQueCuenta;
     if (r != null && centavos(r) < centavos(efectivo)) {
       return medio == MedioBarra.mixto
           ? 'Entrega menos que la parte en efectivo'
           : 'Entrega menos que el total';
-    }
-    if (centavos(transferencia) > 0 && !comprobanteVisto) {
-      return 'Falta tildar "Vi el comprobante"';
     }
     return null;
   }

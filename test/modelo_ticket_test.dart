@@ -60,7 +60,6 @@ void main() {
         efectivo: efectivo,
         transferencia: transferencia,
         recibe: recibe,
-        comprobanteVisto: medio != MedioBarra.efectivo,
         ahora: vendida,
       );
 
@@ -111,6 +110,31 @@ void main() {
       'Recibe                  \$ 10.000',
       'Vuelto                       \$ 0',
     ]));
+  });
+
+  test('con recargo por transferencia, el ticket lo dice aparte y suma lo cobrado', () {
+    final v = VentaBarra.nueva(
+      cajaBarraId: caja.id,
+      eventoId: _evento,
+      numero: 17,
+      renglones: const [
+        RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 2),
+      ],
+      medio: MedioBarra.transferencia,
+      transferencia: 7350,
+      recargo: 350,
+      recargoPct: 5,
+      ahora: vendida,
+    );
+    expect(
+      _papel(ModeloTicket.deVenta(v, caja: caja, fiesta: 'Puerto Viejo')),
+      containsAllInOrder([
+        'TOTAL                    \$ 7.000',
+        'Recargo transf.            \$ 350',
+        'COBRADO                  \$ 7.350',
+        'Transferencia            \$ 7.350',
+      ]),
+    );
   });
 
   test('una venta anulada lo dice arriba y abajo, con el motivo, y no da las gracias', () {

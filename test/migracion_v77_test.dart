@@ -233,7 +233,7 @@ void main() {
     });
     expect(await columnas('barra_ventas'), {
       'id', 'caja_barra_id', 'evento_id', 'numero', 'renglones', 'total', 'medio',
-      'efectivo', 'transferencia', 'recibe', 'vuelto', 'comprobante_visto', ...comunes,
+      'efectivo', 'transferencia', 'recibe', 'vuelto', 'recargo', 'recargo_pct', ...comunes,
     });
     expect(await columnas('barra_anulaciones'), {
       'id', 'venta_id', 'caja_barra_id', 'evento_id', 'motivo', ...comunes,

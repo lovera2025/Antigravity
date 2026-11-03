@@ -139,8 +139,10 @@ class _OperationalSyncCoordinatorState
       // mirando datos de la última vez que alguien apretó sincronizar.
       //
       // Bajar no compromete nada: escribe filas de la nube en la base local.
-      // Entradas también: lo entregado tiene que llegar a la otra PC.
-      final puedeSubirSolo = role.esJefe || role.esCaja || role.esEntradas;
+      // Entradas también: lo entregado tiene que llegar a la otra PC. Y la barra: lo
+      // vendido sube solo cuando vuelve el internet.
+      final puedeSubirSolo =
+          role.esJefe || role.esCaja || role.esEntradas || role.esBarra;
 
       // Al jefe ya no se le pide caja abierta.
       //

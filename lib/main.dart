@@ -16,6 +16,7 @@ import 'features/auth/login_screen.dart';
 import 'features/auth/sesion_sin_internet.dart';
 import 'features/caja_sesiones/providers/app_role_provider.dart';
 import 'features/caja_sesiones/widgets/role_gate_screen.dart';
+import 'features/barra/widgets/barra_home_screen.dart';
 import 'features/entradas/entradas_home_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/splash/splash_screen.dart';
@@ -704,6 +705,7 @@ class _RoleRouter extends ConsumerWidget {
           return switch (destinoDeEntrada(appRole)) {
             DestinoDeEntrada.elegir => const RoleGateScreen(),
             DestinoDeEntrada.entradas => const EntradasHomeScreen(),
+            DestinoDeEntrada.barra => const BarraHomeScreen(),
             DestinoDeEntrada.panel => const DashboardScreen(),
           };
         }

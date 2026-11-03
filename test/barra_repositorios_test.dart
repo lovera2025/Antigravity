@@ -227,6 +227,50 @@ void main() {
       expect(() => CajaBarra.abrir(eventoId: _evento, numeroCaja: 0, ahora: reloj), throwsArgumentError);
       expect(() => CajaBarra.abrir(eventoId: _evento, numeroCaja: 1, cambioInicial: -1, ahora: reloj), throwsArgumentError);
     });
+
+    test('el cambio se pone después de abrir, y sube; una caja cerrada queda como se cerró', () async {
+      final caja = await barra.abrirCaja(
+        eventoId: _evento,
+        operadorId: _marta,
+        operadorNombre: 'Marta',
+        numeroCaja: 2,
+      );
+      expect(caja.cambioInicial, 0, reason: 'abrir no lo pregunta');
+      final conCambio = await barra.ponerCambio(caja, 15000, quien: 'Marta');
+      expect(conCambio.cambioInicial, 15000);
+      expect(CajaBarra.fromMap((await db.query('barra_cajas')).single).cambioInicial, 15000);
+      expect(jsonDecode((await encolado('barra_cajas')).single['payload'] as String)['cambio_inicial'], 15000);
+      await barra.cerrarCaja(conCambio, efectivoContado: 15000, diferencia: 0, quien: 'Marta');
+      expect((await barra.ponerCambio(conCambio, 1, quien: 'Marta')).cambioInicial, 15000);
+      expect(() => caja.conCambio(-1), throwsArgumentError);
+    });
+
+    test('las cajas abiertas de la fiesta, de cualquiera: para avisar un número repetido', () async {
+      await abrirLaDeMarta();
+      final deJuan = await barra.abrirCaja(
+        eventoId: _evento,
+        operadorId: _juan,
+        operadorNombre: 'Juan',
+        numeroCaja: 4,
+      );
+      await barra.abrirCaja(eventoId: _otraFiesta, operadorId: _juan, operadorNombre: 'Juan', numeroCaja: 1);
+      expect([for (final c in await barra.cajasAbiertas(_evento)) c.numeroCaja], [2, 4]);
+      await barra.cerrarCaja(deJuan, efectivoContado: 0, diferencia: 0, quien: 'Juan');
+      expect([for (final c in await barra.cajasAbiertas(_evento)) c.numeroCaja], [2]);
+    });
+  });
+
+  test('las fiestas con algún precio activo, en este equipo', () async {
+    const prod = 'b0000000-0000-4000-8000-000000000001';
+    await barra.guardarPrecio(
+      PrecioBarra.para(eventoId: _evento, productoId: prod, precio: 1, ahora: reloj),
+      quien: 'Jefe',
+    );
+    await barra.guardarPrecio(
+      PrecioBarra.para(eventoId: _otraFiesta, productoId: prod, precio: 1, activo: false, ahora: reloj),
+      quien: 'Jefe',
+    );
+    expect(await barra.fiestasConPrecio(), {_evento});
   });
 
   group('las ventas', () {
@@ -254,9 +298,10 @@ void main() {
         renglones: [renglon('Cerveza lata', 3500, 2), renglon('Agua', 1500, 1)],
         medio: MedioBarra.mixto,
         efectivo: 5000,
-        transferencia: 3500,
+        transferencia: 3675,
         recibe: 5000,
-        comprobanteVisto: true,
+        recargo: 175,
+        recargoPct: 5,
         quien: 'Marta',
       );
       final leida = VentaBarra.fromMap((await db.query('barra_ventas')).single);
@@ -264,7 +309,10 @@ void main() {
       expect(leida.total, 8500);
       expect(leida.medio, MedioBarra.mixto);
       expect(leida.vuelto, 0);
-      expect(leida.comprobanteVisto, isTrue);
+      expect(leida.transferencia, 3675, reason: 'lo transferido, con el recargo');
+      expect(leida.recargo, 175);
+      expect(leida.recargoPct, 5);
+      expect(leida.cobrado, 8675);
       expect(leida.hechoPor, 'Marta');
       expect(leida.eventoId, _evento);
       expect((await encolado('barra_ventas')).single['registro_id'], v.id);
@@ -291,7 +339,7 @@ void main() {
         double efectivo = 7000,
         double transferencia = 0,
         double? recibe,
-        bool comprobante = false,
+        double recargo = 0,
       }) =>
           VentaBarra.nueva(
             cajaBarraId: 'c',
@@ -302,7 +350,7 @@ void main() {
             efectivo: efectivo,
             transferencia: transferencia,
             recibe: recibe,
-            comprobanteVisto: comprobante,
+            recargo: recargo,
             ahora: reloj,
           );
 
@@ -313,20 +361,29 @@ void main() {
 
       test('si lo cobrado no da el total', () {
         expect(() => armar(efectivo: 6000), throwsArgumentError);
-        expect(() => armar(medio: MedioBarra.mixto, efectivo: 5000, transferencia: 1000, comprobante: true),
+        expect(() => armar(medio: MedioBarra.mixto, efectivo: 5000, transferencia: 1000),
             throwsArgumentError);
       });
 
-      test('una transferencia sin el comprobante visto', () {
-        expect(() => armar(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 7000),
+      test('una transferencia se arma sin comprobante: quien cobra la ve en el posnet', () {
+        expect(armar(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 7000).total, 7000);
+      });
+
+      test('el recargo: va con transferencia, y lo cobrado da el total más el recargo', () {
+        final v = armar(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 7350, recargo: 350);
+        expect(v.total, 7000);
+        expect(v.cobrado, 7350);
+        expect(() => armar(recargo: 350, efectivo: 7350), throwsArgumentError,
+            reason: 'en efectivo no hay recargo');
+        expect(() => armar(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 7000, recargo: 350),
+            throwsArgumentError, reason: 'lo transferido no trae el recargo');
+        expect(() => armar(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 6650, recargo: -350),
             throwsArgumentError);
-        expect(armar(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 7000, comprobante: true).total,
-            7000);
       });
 
       test('un mixto con una sola parte, o un medio que no corresponde', () {
         expect(() => armar(medio: MedioBarra.mixto, efectivo: 7000, transferencia: 0), throwsArgumentError);
-        expect(() => armar(medio: MedioBarra.efectivo, efectivo: 3500, transferencia: 3500, comprobante: true),
+        expect(() => armar(medio: MedioBarra.efectivo, efectivo: 3500, transferencia: 3500),
             throwsArgumentError);
         expect(() => armar(medio: MedioBarra.otro), throwsArgumentError);
       });
@@ -339,6 +396,16 @@ void main() {
         final v = armar(renglones: [renglon('Algo', 1333.33, 3)], efectivo: 3999.99);
         expect(v.total, 3999.99);
       });
+    });
+
+    test('cuántas ventas esperan subir: las de la cola', () async {
+      final caja = await abrirLaDeMarta();
+      expect(await barra.ventasSinSubir(), 0);
+      final a = await venderUnaCerveza(caja);
+      await venderUnaCerveza(caja);
+      expect(await barra.ventasSinSubir(), 2);
+      await db.delete('_sync_queue', where: 'registro_id = ?', whereArgs: [a.id]);
+      expect(await barra.ventasSinSubir(), 1);
     });
 
     test('unos renglones ilegibles no frenan la lista: la venta queda con sus montos', () {

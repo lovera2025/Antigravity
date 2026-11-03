@@ -23,6 +23,9 @@ class CierreDeBarra {
   final double efectivoAnulado;
   final double transferenciaAnulada;
 
+  /// De lo cobrado por transferencia, lo que fue recargo: no es de ninguna bebida.
+  final double recargos;
+
   const CierreDeBarra({
     required this.cambioInicial,
     required this.ventas,
@@ -32,6 +35,7 @@ class CierreDeBarra {
     required this.transferencia,
     required this.efectivoAnulado,
     required this.transferenciaAnulada,
+    this.recargos = 0,
   });
 
   /// Las de [caja] entre [ventas]; las de otra caja no se cuentan.
@@ -43,6 +47,7 @@ class CierreDeBarra {
     final anuladasIds = ventasAnuladas(anulaciones);
     var cuentan = 0, anuladas = 0, mixtos = 0;
     var efectivo = 0, transferencia = 0, efectivoAnulado = 0, transferenciaAnulada = 0;
+    var recargos = 0;
     for (final v in ventas) {
       if (v.cajaBarraId != caja.id) continue;
       if (anuladasIds.contains(v.id)) {
@@ -55,6 +60,7 @@ class CierreDeBarra {
       if (v.medio == MedioBarra.mixto) mixtos++;
       efectivo += centavos(v.efectivo);
       transferencia += centavos(v.transferencia);
+      recargos += centavos(v.recargo);
     }
     return CierreDeBarra(
       cambioInicial: caja.cambioInicial,
@@ -65,10 +71,11 @@ class CierreDeBarra {
       transferencia: deCentavos(transferencia),
       efectivoAnulado: deCentavos(efectivoAnulado),
       transferenciaAnulada: deCentavos(transferenciaAnulada),
+      recargos: deCentavos(recargos),
     );
   }
 
-  /// Lo vendido que cuenta, en efectivo y por transferencia.
+  /// Lo cobrado que cuenta, en efectivo y por transferencia (con los recargos).
   double get total => deCentavos(centavos(efectivo) + centavos(transferencia));
 
   /// El cambio con que abrió más el efectivo de lo vendido.
@@ -108,6 +115,7 @@ class ResumenDeCajas {
   final int mixtos;
   final double efectivo;
   final double transferencia;
+  final double recargos;
 
   /// La suma de lo contado y de las diferencias, **de las cajas ya cerradas**.
   final double contado;
@@ -120,6 +128,7 @@ class ResumenDeCajas {
     required this.mixtos,
     required this.efectivo,
     required this.transferencia,
+    this.recargos = 0,
     required this.contado,
     required this.diferencia,
   });
@@ -141,13 +150,14 @@ class ResumenDeCajas {
         ResumenDeCaja(c, CierreDeBarra.de(c, listaVentas, listaAnulaciones)),
     ];
     var v = 0, an = 0, mx = 0;
-    var ef = 0, tr = 0, cont = 0, dif = 0;
+    var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0;
     for (final r in resumenes) {
       v += r.cuentas.ventas;
       an += r.cuentas.anuladas;
       mx += r.cuentas.mixtos;
       ef += centavos(r.cuentas.efectivo);
       tr += centavos(r.cuentas.transferencia);
+      rec += centavos(r.cuentas.recargos);
       if (!r.caja.abierta) {
         cont += centavos(r.contado ?? 0);
         dif += centavos(r.diferencia ?? 0);
@@ -160,6 +170,7 @@ class ResumenDeCajas {
       mixtos: mx,
       efectivo: deCentavos(ef),
       transferencia: deCentavos(tr),
+      recargos: deCentavos(rec),
       contado: deCentavos(cont),
       diferencia: deCentavos(dif),
     );

@@ -119,6 +119,32 @@ class CajaBarra {
     );
   }
 
+  /// La misma caja con el cambio con que arrancó: abrirla no lo pregunta, se pone
+  /// después si hay. No puede ser negativo.
+  CajaBarra conCambio(double cambio) {
+    if (cambio.isNaN || cambio < 0) {
+      throw ArgumentError.value(cambio, 'cambio', 'no puede ser negativo');
+    }
+    return CajaBarra(
+      id: id,
+      eventoId: eventoId,
+      operadorId: operadorId,
+      operadorNombre: operadorNombre,
+      numeroCaja: numeroCaja,
+      sede: sede,
+      cambioInicial: cambio,
+      abiertaAt: abiertaAt,
+      cerradaAt: cerradaAt,
+      efectivoContado: efectivoContado,
+      diferencia: diferencia,
+      notaCierre: notaCierre,
+      hechoPor: hechoPor,
+      deviceId: deviceId,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
   /// Con quién la tocó por última vez, desde qué equipo y cuándo: lo pone el
   /// repositorio.
   CajaBarra sellada({

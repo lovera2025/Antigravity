@@ -131,34 +131,89 @@ void main() {
       expect(c.conRecibe(null).puedeConfirmar, isTrue, reason: 'borrar lo que entrega es pagar justo');
     });
 
-    test('por transferencia, sin la tilde no confirma; con la tilde sí', () {
-      final c = CobroBarra.de(7000).conMedio(MedioBarra.transferencia);
+    test('por transferencia se confirma sin tilde: quien cobra ve el pago en el posnet', () {
+      final c = CobroBarra.de(7000, recargo: false).conMedio(MedioBarra.transferencia);
       expect(c.efectivo, 0);
       expect(c.transferencia, 7000);
-      expect(c.falta, 'Falta tildar "Vi el comprobante"');
-      expect(c.conComprobante(true).puedeConfirmar, isTrue);
+      expect(c.recargo, 0);
+      expect(c.transfiere, 7000);
+      expect(c.puedeConfirmar, isTrue);
+    });
+
+    test('el recargo: un % de lo transferido, en pesos enteros, y se suma a lo que paga', () {
+      final c = CobroBarra.de(50000, medio: MedioBarra.transferencia);
+      expect(c.recargoPrendido, isTrue, reason: 'viene prendido');
+      expect(c.recargoPct, 5);
+      expect(c.recargo, 2500);
+      expect(c.transfiere, 52500);
+      expect(c.aCobrar, 52500);
+      expect(c.recargoPctQueQueda, 5);
+      expect(c.conRecargoPct(3.5).recargo, 1750);
+      expect(CobroBarra.de(3333, medio: MedioBarra.transferencia).recargo, 167, reason: '166,65 redondea');
+    });
+
+    test('el recargo en pesos, escrito a mano; y el check lo apaga', () {
+      final c = CobroBarra.de(50000, medio: MedioBarra.transferencia)
+          .conModoRecargo(ModoRecargo.pesos)
+          .conRecargoPesos(2000);
+      expect(c.recargo, 2000);
+      expect(c.transfiere, 52000);
+      expect(c.recargoPctQueQueda, isNull, reason: 'en pesos no queda %');
+      expect(c.conRecargo(false).recargo, 0);
+      expect(c.conRecargo(false).aCobrar, 50000);
+    });
+
+    test('el recargo prendido sin número no confirma, y dice por qué', () {
+      final c = CobroBarra.de(50000, medio: MedioBarra.transferencia);
+      expect(c.conRecargoPct(0).falta, 'Poné el porcentaje del recargo');
+      expect(c.conModoRecargo(ModoRecargo.pesos).falta, 'Poné el recargo en pesos');
+      expect(c.conRecargoPct(0).conRecargo(false).puedeConfirmar, isTrue);
+    });
+
+    test('en efectivo no hay recargo, aunque el check esté prendido', () {
+      final c = CobroBarra.de(7000);
+      expect(c.recargoPrendido, isTrue);
+      expect(c.recargo, 0);
+      expect(c.aCobrar, 7000);
     });
 
     test('por transferencia, lo que se había anotado en efectivo no cuenta', () {
-      final c = CobroBarra.de(7000).conRecibe(5000).conMedio(MedioBarra.transferencia).conComprobante(true);
+      final c = CobroBarra.de(7000).conRecibe(5000).conMedio(MedioBarra.transferencia);
       expect(c.recibeQueCuenta, isNull);
       expect(c.vuelto, isNull);
       expect(c.puedeConfirmar, isTrue);
     });
 
-    test('mixto: suma el total, lleva las dos partes y la tilde', () {
-      var c = CobroBarra.de(8500).conMedio(MedioBarra.mixto);
-      expect(c.falta, 'El mixto lleva una parte en efectivo y otra por transferencia');
-      c = c.conEfectivoDelMixto(5000);
-      expect(c.efectivo + c.transferencia, 8500);
-      expect(c.falta, 'Falta tildar "Vi el comprobante"');
-      c = c.conComprobante(true);
+    test('mixto: suma el total, lleva las dos partes, y el recargo va solo sobre lo transferido', () {
+      var c = CobroBarra.de(50000, medio: MedioBarra.mixto);
+      expect(c.falta, 'Poné cuánto es en efectivo y cuánto por transferencia');
+      c = c.conEfectivoDelMixto(20000);
+      expect(c.efectivo + c.transferencia, 50000);
+      expect(c.recargo, 1500, reason: '5 % de 30.000');
+      expect(c.transfiere, 31500);
+      expect(c.aCobrar, 51500);
       expect(c.puedeConfirmar, isTrue);
-      c = c.conRecibe(4000);
-      expect(c.falta, 'Entrega menos que la parte en efectivo');
       c = c.conRecibe(10000);
+      expect(c.falta, 'Entrega menos que la parte en efectivo');
+      c = c.conRecibe(25000);
       expect(c.vuelto, 5000);
       expect(c.puedeConfirmar, isTrue);
+    });
+
+    test('mixto: "Por transferencia" se escribe con el recargo adentro, como se ve', () {
+      final c = CobroBarra.de(50000, medio: MedioBarra.mixto).conTransfiereDelMixto(31500);
+      expect(c.transferencia, 30000);
+      expect(c.efectivo, 20000);
+      expect(c.transfiere, 31500);
+      final enPesos = CobroBarra.de(50000, medio: MedioBarra.mixto)
+          .conModoRecargo(ModoRecargo.pesos)
+          .conRecargoPesos(1000)
+          .conTransfiereDelMixto(31000);
+      expect(enPesos.transferencia, 30000);
+      expect(enPesos.transfiere, 31000);
+      final sinRecargo = CobroBarra.de(50000, medio: MedioBarra.mixto, recargo: false)
+          .conTransfiereDelMixto(31000);
+      expect(sinRecargo.transferencia, 31000);
     });
 
     test('cambiar de medio y volver deja lo que estaba', () {
@@ -184,11 +239,16 @@ void main() {
         CobroBarra.de(total),
         CobroBarra.de(total).conRecibe(10000),
         CobroBarra.de(total).conRecibe(total),
-        CobroBarra.de(total).conMedio(MedioBarra.transferencia).conComprobante(true),
-        CobroBarra.de(total).conRecibe(20000).conMedio(MedioBarra.transferencia).conComprobante(true),
+        CobroBarra.de(total).conMedio(MedioBarra.transferencia),
+        CobroBarra.de(total, recargo: false).conMedio(MedioBarra.transferencia),
+        CobroBarra.de(total).conRecibe(20000).conMedio(MedioBarra.transferencia),
+        CobroBarra.de(total, medio: MedioBarra.transferencia)
+            .conModoRecargo(ModoRecargo.pesos)
+            .conRecargoPesos(700),
         for (final e in <double>[0.01, 100, 5000, 8499.99])
-          CobroBarra.de(total).conMedio(MedioBarra.mixto).conEfectivoDelMixto(e).conComprobante(true),
-        CobroBarra.de(total).conMedio(MedioBarra.mixto).conTransferenciaDelMixto(1500).conComprobante(true).conRecibe(7000),
+          CobroBarra.de(total).conMedio(MedioBarra.mixto).conEfectivoDelMixto(e),
+        CobroBarra.de(total).conMedio(MedioBarra.mixto).conTransferenciaDelMixto(1500).conRecibe(7000),
+        CobroBarra.de(total, medio: MedioBarra.mixto).conTransfiereDelMixto(4000),
       ];
       for (final c in cobros) {
         expect(c.puedeConfirmar, isTrue, reason: '${c.medio} ${c.efectivo}');
@@ -199,12 +259,15 @@ void main() {
           renglones: renglones,
           medio: c.medio,
           efectivo: c.efectivo,
-          transferencia: c.transferencia,
+          transferencia: c.transfiere,
           recibe: c.recibeQueCuenta,
-          comprobanteVisto: c.comprobanteVisto,
+          recargo: c.recargo,
+          recargoPct: c.recargoPctQueQueda,
           ahora: ahora,
         );
         expect(v.total, total);
+        expect(v.recargo, c.recargo);
+        expect(v.cobrado, c.aCobrar);
         expect(v.vuelto, c.vuelto ?? 0);
       }
     });
@@ -259,7 +322,6 @@ void main() {
       medio: medio,
       efectivo: efectivo ?? (medio == MedioBarra.transferencia ? 0 : total - transferencia),
       transferencia: medio == MedioBarra.transferencia ? total : transferencia,
-      comprobanteVisto: medio != MedioBarra.efectivo,
       ahora: ahora,
     );
   }
@@ -311,6 +373,28 @@ void main() {
       final cierre = CierreDeBarra.de(a, [vender(a, [cervezas(1)]), vender(b, [cervezas(5)])], const []);
       expect(cierre.ventas, 1);
       expect(cierre.efectivo, 3500);
+    });
+
+    test('los recargos entran en la transferencia y se cuentan aparte; no en el efectivo', () {
+      final c = caja(2);
+      final conRecargo = VentaBarra.nueva(
+        cajaBarraId: c.id,
+        eventoId: _evento,
+        numero: ++numero,
+        renglones: [cervezas(2)],
+        medio: MedioBarra.mixto,
+        efectivo: 3000,
+        transferencia: 4200,
+        recargo: 200,
+        recargoPct: 5,
+        ahora: ahora,
+      );
+      final cierre = CierreDeBarra.de(c, [conRecargo, vender(c, [aguas(1)])], const []);
+      expect(cierre.transferencia, 4200);
+      expect(cierre.recargos, 200);
+      expect(cierre.total, 8700);
+      expect(cierre.efectivoEsperado, 24500);
+      expect(ResumenDeCajas.de(cajas: [c], ventas: [conRecargo], anulaciones: const []).recargos, 200);
     });
 
     test('la diferencia en palabras', () {

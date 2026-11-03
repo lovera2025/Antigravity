@@ -186,7 +186,6 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
         efectivo: mixta ? 10000 : 16000,
         transferencia: mixta ? 6000 : 0,
         recibe: 20000,
-        comprobanteVisto: mixta,
         ahora: DateTime.now(),
       );
 

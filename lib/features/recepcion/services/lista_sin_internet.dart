@@ -197,6 +197,11 @@ class EstadoSinInternet {
         '${l.minute.toString().padLeft(2, '0')}';
   }
 
+  /// Lo mismo, para la línea de la barra (`barra_sin_internet.dart`).
+  static String horaDe(DateTime t) => _hora(t);
+  static String cuandoFue(DateTime t, DateTime ahora, {bool hoy = false}) =>
+      _cuando(t, ahora, hoy: hoy);
+
   /// "21:40", "ayer 21:40" o "12/12 21:40"; con [hoy], "hoy 21:40".
   static String _cuando(DateTime t, DateTime ahora, {bool hoy = false}) {
     final l = t.toLocal(), a = ahora.toLocal();

@@ -1,7 +1,6 @@
 import '../models/permisos_operador.dart';
 
 const kTeFaltanPermisos = 'Te faltan permisos: pedíselos al jefe';
-const kBarraTodaviaNo = 'La barra todavía no está en esta versión';
 
 /// Qué pasa después de poner un PIN correcto, según sus permisos.
 class OpcionesDeEntrada {
@@ -23,11 +22,7 @@ class OpcionesDeEntrada {
   factory OpcionesDeEntrada.de(PermisosEfectivos p) {
     final lista = p.lista;
     if (lista.isEmpty) return const OpcionesDeEntrada._(aviso: kTeFaltanPermisos);
-    if (lista.length == 1) {
-      return lista.single == PermisoOperador.barra
-          ? const OpcionesDeEntrada._(aviso: kBarraTodaviaNo)
-          : OpcionesDeEntrada._(directo: lista.single);
-    }
+    if (lista.length == 1) return OpcionesDeEntrada._(directo: lista.single);
     return OpcionesDeEntrada._(paraElegir: lista);
   }
 }

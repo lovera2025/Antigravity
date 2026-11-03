@@ -108,13 +108,7 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
       case PermisoOperador.entradas:
         await notifier.entrarComoEntradas(quien.operador, quien.permisos);
       case PermisoOperador.barra:
-        // Apagado en la pantalla: todavía no hay adónde ir.
-        if (mounted) {
-          setState(() {
-            _busy = false;
-            _error = kBarraTodaviaNo;
-          });
-        }
+        await notifier.entrarComoBarra(quien.operador, quien.permisos);
     }
     // Si entró, el router reemplaza esta pantalla; si falta abrir la caja, la
     // pide [_abrirCaja].
@@ -271,17 +265,11 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
           width: double.infinity,
           child: OutlinedButton.icon(
             key: Key('entrada_${p.name}'),
-            // La barra se ve apagada, con el motivo: si desapareciera, no se
-            // sabría que está dada.
-            onPressed: p == PermisoOperador.barra
-                ? null
-                : () => _entrarA(p, quien),
+            onPressed: () => _entrarA(p, quien),
             icon: Icon(icono(p)),
             style: OutlinedButton.styleFrom(
               foregroundColor: gold,
-              side: BorderSide(
-                color: p == PermisoOperador.barra ? Colors.grey : gold,
-              ),
+              side: const BorderSide(color: gold),
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             label: Text(
@@ -293,12 +281,6 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
             ),
           ),
         ),
-        if (p == PermisoOperador.barra)
-          const Padding(
-            key: Key('entrada_barra_motivo'),
-            padding: EdgeInsets.only(top: 6),
-            child: Text(kBarraTodaviaNo, style: TextStyle(fontSize: 12)),
-          ),
         const SizedBox(height: 14),
       ],
       TextButton(

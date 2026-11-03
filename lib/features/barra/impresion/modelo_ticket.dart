@@ -82,6 +82,10 @@ abstract final class ModeloTicket {
         RenglonTicket('${r.cantidad} x ${r.nombre}', pesos(r.subtotal)),
       const SeparadorTicket(),
       RenglonTicket('TOTAL', pesos(venta.total), negrita: true),
+      if (centavos(venta.recargo) > 0) ...[
+        RenglonTicket('Recargo transf.', pesos(venta.recargo)),
+        RenglonTicket('COBRADO', pesos(venta.cobrado), negrita: true),
+      ],
       if (hayEfectivo || !hayTransferencia)
         RenglonTicket('Efectivo', pesos(venta.efectivo)),
       if (hayTransferencia) RenglonTicket('Transferencia', pesos(venta.transferencia)),
@@ -171,6 +175,8 @@ abstract final class ModeloTicket {
       if (cuentas.mixtos > 0) RenglonTicket('De ellas, mixtas', '${cuentas.mixtos}'),
       RenglonTicket('Efectivo', pesos(cuentas.efectivo)),
       RenglonTicket('Transferencia', pesos(cuentas.transferencia)),
+      if (centavos(cuentas.recargos) > 0)
+        RenglonTicket('De ellos, recargos', pesos(cuentas.recargos)),
       RenglonTicket('TOTAL VENDIDO', pesos(cuentas.total), negrita: true),
       if (cuentas.anuladas > 0) ...[
         RenglonTicket('Anuladas (no cuentan)', '${cuentas.anuladas}'),
