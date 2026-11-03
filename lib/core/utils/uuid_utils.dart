@@ -86,6 +86,20 @@ class UuidUtils {
   static String moraCongeladaId(String contratoAlumnoId) =>
       _uuidDe('mora_congelada_v1|$contratoAlumnoId');
 
+  /// PK estable para `permisos_operador` (v76): una fila por operador. Si el jefe
+  /// los cambia desde dos PCs, escriben la misma fila (gana la última).
+  static String permisosOperadorId(String operadorId) =>
+      _uuidDe('permisos_operador_v1|$operadorId');
+
+  /// PK de un renglón de `permisos_operador_cambios`: un permiso de un operador en
+  /// un momento. Si la subida se reintenta, no se duplica.
+  static String cambioDePermisoId(
+    String operadorId,
+    String permiso,
+    String momento,
+  ) =>
+      _uuidDe('permisos_operador_cambios_v1|$operadorId|$permiso|$momento');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

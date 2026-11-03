@@ -363,6 +363,8 @@ class SyncEngine {
     'mesas_movimientos': 'updated_at',
     'predios': 'updated_at',
     'mora_congelada': 'updated_at',
+    'permisos_operador': 'updated_at',
+    'permisos_operador_cambios': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1171,6 +1173,9 @@ class SyncEngine {
     // La mora congelada cambia lo que se cobra: la otra PC tiene que verla en
     // segundos, como un cobro (6.2.1).
     'mora_congelada',
+    // Junto con los operadores: un PIN recién dado en otra PC tiene que entrar con
+    // sus permisos, también desde la pantalla de entrada.
+    'permisos_operador',
   ];
 
   /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
@@ -1214,6 +1219,8 @@ class SyncEngine {
     // Los predios con nombre (6.1.0): se guardan de vez en cuando, desde la
     // oficina. Un minuto de demora no molesta.
     'predios',
+    // El registro de quién dio qué permiso: se lee para seguir qué pasó.
+    'permisos_operador_cambios',
   ];
 
   /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
@@ -1552,6 +1559,11 @@ class SyncEngine {
           table == 'cierre_caja_anotaciones')
         return 5;
       if (table == 'operadores_caja') return 1;
+      // Después de su operador, como una hija.
+      if (table == 'permisos_operador' ||
+          table == 'permisos_operador_cambios') {
+        return 2;
+      }
       // Antes que los egresos (que caen en el 2 por defecto): el egreso lleva
       // `compromiso_id`, así que la cuenta tiene que existir arriba primero.
       if (table == 'compromisos_personal') return 1;
@@ -1896,6 +1908,8 @@ class SyncEngine {
       _pullTable(db, 'mesas_movimientos', 'updated_at'),
       _pullTable(db, 'predios', 'updated_at'),
       _pullTable(db, 'mora_congelada', 'updated_at'),
+      _pullTable(db, 'permisos_operador', 'updated_at'),
+      _pullTable(db, 'permisos_operador_cambios', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2804,6 +2818,27 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      'permisos_operador': [
+        'id',
+        'operador_id',
+        'cobros',
+        'entradas',
+        'barra',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'permisos_operador_cambios': [
+        'id',
+        'operador_id',
+        'permiso',
+        'dado',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -2955,6 +2990,9 @@ class SyncEngine {
     'predios': 'borrar le pone borrado_at: la fila no se saca',
     'mora_congelada':
         'una fila por alumno, con id fijo: descongelar la actualiza, no se borra',
+    'permisos_operador':
+        'una fila por operador, con id fijo: sacar un permiso la actualiza, no se borra',
+    'permisos_operador_cambios': 'solo se agregan renglones',
   };
 
   /// Para los tests: las tablas que se revisan.

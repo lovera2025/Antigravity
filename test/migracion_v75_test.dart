@@ -274,7 +274,7 @@ void main() {
       final fotoOriginal = await foto(original);
       await original.close();
 
-      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory);
+      final copia = await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 75);
       expect(copia, isNotNull);
       expect(copia!.path, endsWith('antes_de_v75.db'));
       final abierta = await factory.openDatabase(copia.path);
@@ -287,7 +287,7 @@ void main() {
       await crearBaseV74();
       final db = await abrirEnVersion(75);
       await db.close();
-      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory), isNull);
+      expect(await LocalDatabase.copiaAntesDeMigrar(path, factory: factory, versionNueva: 75), isNull);
     });
   });
 }

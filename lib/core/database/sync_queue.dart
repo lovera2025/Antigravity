@@ -351,6 +351,10 @@ class SyncQueue {
         'prestamo_alquiler_lineas': 'prestamo_id',
         'pagos_prestamo_alquiler': 'prestamo_id',
       },
+      'operadores_caja': {
+        'permisos_operador': 'operador_id',
+        'permisos_operador_cambios': 'operador_id',
+      },
     };
 
     final hijas = relaciones[padreTabla];

@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 75;
+  static const int _version = 76;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -111,6 +111,11 @@ class LocalDatabase {
       await crearTablasV75(db);
     } catch (e) {
       debugPrint('⚠️ Tabla v75 sin crear: $e');
+    }
+    try {
+      await crearTablasV76(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v76 sin crear: $e');
     }
     return db;
   }
@@ -695,6 +700,7 @@ class LocalDatabase {
     await crearTablasV73(db);
     await crearTablasV74(db);
     await crearTablasV75(db);
+    await crearTablasV76(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -838,6 +844,40 @@ class LocalDatabase {
         medidas TEXT NOT NULL DEFAULT '{}',
         borrado_at TEXT,
         hecho_por TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  /// Las tablas de la v76: los permisos de los operadores (Cobros, Entradas,
+  /// Barra), una fila por operador, y el registro de quién dio o sacó cada uno.
+  ///
+  /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF NOT
+  /// EXISTS`. No van en `operadores_caja` porque esa fila se reescribe entera al
+  /// editar y al bajar. Nada se borra: un operador sin fila es de Cobros solo.
+  static Future<void> crearTablasV76(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS permisos_operador (
+        id TEXT PRIMARY KEY,
+        operador_id TEXT NOT NULL UNIQUE,
+        cobros INTEGER NOT NULL DEFAULT 0,
+        entradas INTEGER NOT NULL DEFAULT 0,
+        barra INTEGER NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS permisos_operador_cambios (
+        id TEXT PRIMARY KEY,
+        operador_id TEXT NOT NULL,
+        permiso TEXT NOT NULL,
+        dado INTEGER NOT NULL,
+        hecho_por TEXT,
+        device_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -3097,6 +3137,20 @@ class LocalDatabase {
         debugPrint('✅ Migración v75 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v75: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 75, las tablas de la v76 no aparecen.
+    if (oldVersion < 76 && newVersion >= 76) {
+      debugPrint('  🔧 v76: los permisos de los operadores');
+      // Igual que las de antes: solo tablas nuevas, sin tocar datos ni
+      // marcadores. Si fallara, la app abre igual y [_initDb] lo reintenta en
+      // cada arranque.
+      try {
+        await crearTablasV76(db);
+        debugPrint('✅ Migración v76 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v76: $e');
       }
     }
   }
