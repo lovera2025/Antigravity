@@ -1,0 +1,100 @@
+import 'anulacion_barra.dart';
+import 'caja_barra.dart';
+import 'precio_barra.dart';
+import 'producto_barra.dart';
+import 'venta_barra.dart';
+
+export 'anulacion_barra.dart';
+export 'caja_barra.dart';
+export 'precio_barra.dart';
+export 'producto_barra.dart';
+export 'venta_barra.dart';
+
+/// Lo que hace el jefe con la barra: el catálogo, los precios de cada fiesta, mirar
+/// las cajas y anular. Lo mismo en la PC ([BarraLocal], la base y la cola de subida)
+/// y en la web del iPhone ([BarraNube], la nube directo).
+///
+/// [quien] es el nombre que queda en `hecho_por`.
+abstract interface class BarraDelJefe {
+  /// Por orden y nombre. Con [conBajas] también los dados de baja.
+  Future<List<ProductoBarra>> productos({bool conBajas = false});
+
+  /// Lo guarda como está, con quién, desde qué equipo y cuándo.
+  Future<ProductoBarra> guardarProducto(ProductoBarra producto, {required String quien});
+
+  /// Los precios de la fiesta, por orden. Con [conBajas] también los sacados.
+  Future<List<PrecioBarra>> precios(String eventoId, {bool conBajas = false});
+
+  Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien});
+
+  Future<List<CajaBarra>> cajas(String eventoId);
+
+  /// Todas las de la fiesta, también las anuladas: lo que dice si cuentan es
+  /// [anulaciones].
+  Future<List<VentaBarra>> ventas(String eventoId);
+
+  Future<List<AnulacionBarra>> anulaciones(String eventoId);
+
+  /// **La venta no se toca:** se agrega su anulación. Anular de nuevo la misma venta
+  /// devuelve la anulación que ya había.
+  Future<AnulacionBarra> anular(
+    VentaBarra venta, {
+    required String motivo,
+    required String quien,
+  });
+}
+
+/// Lo que hace la cajera, **solo en su equipo** (la tablet o la PC): abrir su caja,
+/// vender y cerrarla. Todo se guarda en la base del equipo y sube solo cuando hay
+/// internet. La web no vende.
+abstract interface class BarraDeLaCaja {
+  Future<List<ProductoBarra>> productos({bool conBajas = false});
+
+  Future<List<PrecioBarra>> precios(String eventoId, {bool conBajas = false});
+
+  /// La caja abierta de [operadorId] en esa fiesta, **en este equipo**. Null si no
+  /// tiene.
+  Future<CajaBarra?> cajaAbierta({
+    required String eventoId,
+    required String operadorId,
+  });
+
+  /// Abre una caja en este equipo. Si [operadorId] ya tiene una abierta en esa fiesta
+  /// en este equipo, devuelve esa: no se abren dos por tocar dos veces.
+  Future<CajaBarra> abrirCaja({
+    required String eventoId,
+    required String operadorId,
+    required String operadorNombre,
+    required int numeroCaja,
+    String? sede,
+    double cambioInicial = 0,
+  });
+
+  /// Guarda la venta con el número que le toca en su caja, en una transacción.
+  /// La venta se guarda **antes** de imprimir: sin impresora, igual queda.
+  Future<VentaBarra> vender({
+    required CajaBarra caja,
+    required List<RenglonVenta> renglones,
+    required MedioBarra medio,
+    double efectivo = 0,
+    double transferencia = 0,
+    double? recibe,
+    bool comprobanteVisto = false,
+    required String quien,
+  });
+
+  /// Por número.
+  Future<List<VentaBarra>> ventasDeLaCaja(String cajaId);
+
+  Future<List<AnulacionBarra>> anulacionesDeLaCaja(String cajaId);
+
+  /// La cierra con lo que contó la cajera y la diferencia. Una caja ya cerrada queda
+  /// como se cerró: no se vuelve a cerrar.
+  Future<CajaBarra> cerrarCaja(
+    CajaBarra caja, {
+    required double efectivoContado,
+    required double diferencia,
+    String? nota,
+    required String quien,
+  });
+}

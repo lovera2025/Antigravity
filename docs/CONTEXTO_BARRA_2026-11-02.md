@@ -3,9 +3,62 @@
 2-nov-2026, noche. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
 El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado (3-nov): la etapa 1 cerrada.** El papel se miró y quedó fijo en `OpcionesEscPos.deLaPrueba`; la impresora se recuerda por equipo y
-se conecta sola, en la PC y en el celular Android del usuario. **Lo que sigue es la etapa 2 (los datos).** La app todavía no tiene barra. Sin
-versión, sin release, sin web, sin SQL nuevo. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
+**Estado (3-nov): las etapas 1 y 2 cerradas.** La impresora, probada en papel desde la PC y desde un celular Android. Los datos de la barra
+(v77, el sync y el SQL de la nube **sin correr**), con la migración probada sobre una copia de la base real. **Lo que sigue es la etapa 3 (las
+cuentas).** La app todavía no tiene pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.2.1. Publicar, solo
+preguntándole antes al usuario.
+
+## Etapa 2: los datos (3-nov)
+
+**Cinco tablas nuevas, v77** (`LocalDatabase.crearTablasV77`), y su SQL de la nube, **sin correr**:
+`supabase/migrations/20261103140000_barra.sql`.
+
+| Tabla | Id | Para qué |
+|---|---|---|
+| `barra_productos` | aleatorio | el catálogo, de todas las fiestas; dar de baja es `activo = 0` |
+| `barra_precios` | fijo, `UuidUtils.barraPrecioId(fiesta, producto)` | el precio de un producto en una fiesta, con stock y aviso si se controla |
+| `barra_cajas` | aleatorio | la caja de barra que abre la cajera en su equipo (no es la de cuotas) |
+| `barra_ventas` | aleatorio | una venta; **nunca se edita ni se borra**; los renglones con el nombre y el precio del momento |
+| `barra_anulaciones` | fijo, `UuidUtils.barraAnulacionId(venta)` | anular es otra fila: una por venta |
+
+- **Los modelos** (`lib/features/barra/datos/`): `ProductoBarra`, `PrecioBarra`, `CajaBarra`, `VentaBarra` (con `RenglonVenta` y `MedioBarra`) y
+  `AnulacionBarra`. **Una venta que no cierra no se arma** (`VentaBarra.nueva`): el total es la suma de los renglones, efectivo más
+  transferencia dan el total, el vuelto es lo que sobra de lo recibido, y una transferencia lleva el comprobante visto. Lo leído **nunca tira**:
+  unos renglones rotos dejan la venta sin renglones y con sus montos; un medio que esta versión no conoce es `MedioBarra.otro`.
+- **Dos interfaces** (`barra_repositorio.dart`): `BarraDelJefe` (catálogo, precios, mirar cajas y ventas, anular) y `BarraDeLaCaja` (abrir,
+  vender, cerrar). `BarraLocal` hace las dos sobre la base y la cola; `BarraNube` hace solo la del jefe, directo en la nube, para la web del
+  iPhone: **la web no vende**.
+- **El número del ticket** sale de `MAX(numero) + 1` de su caja, en la misma transacción que guarda la venta: ocho ventas a la vez dan del 1 al 8.
+- **Una caja vive en un solo equipo:** `cajaAbierta` y `abrirCaja` miran solo las de este equipo; tocar dos veces abrir no abre dos.
+- **Cerrar la caja** escribe lo contado y la diferencia, y una caja cerrada no se vuelve a cerrar. **Anular** no toca la venta, y anular dos veces
+  deja la primera anulación.
+- **El sync:** las cinco en `_incrementalColumns` y en la bajada general; cajas, ventas y anulaciones en `_tablasDelCobro` (cada 10 s); productos
+  y precios en `_tablasDeCarga` (cada minuto). Prioridad de subida: productos 1, precios y cajas 2, ventas 4, anulaciones 5. Las cinco en
+  `_tablasSinRevisarBorrados`, con el motivo. **`SyncEngine.tablasDeLaBarra`** (la fiesta, los operadores con sus permisos, el catálogo y los
+  precios) y `bajarParaLaBarra()`, para preparar la tablet en la oficina.
+- **La web pagina de a 1000** (una fiesta puede tener más ventas) y **ordena siempre con `ascending: true`**: un test encontró que el paquete
+  ordena de mayor a menor si no se le dice.
+
+**La migración sobre una copia de la base real** (`tool/verificar_migracion_v77_test.dart`, 3-nov, con la app cerrada): la base estaba en la v75
+(la 6.2.1) y saltó a la 77; las 35 tablas de antes, iguales fila por fila; aparecieron las 7 nuevas (las 2 de los permisos y las 5 de la barra),
+vacías; el esquema de lo de antes, igual; se vuelve a la 6.2.1 y de nuevo a la 77 con los mismos datos; y la base real quedó con el mismo SHA-256.
+
+**Tests:** `migracion_v77` (de 75 y de 76 a 77, dos veces, vuelta a la 6.2.1, sin únicos), `sql_v77_coherencia`, `sync_tablas_v77` (con la
+bajada de la tablet sobre una nube simulada), `barra_repositorios` y `barra_nube`. Roturas a propósito vistas en rojo: el número repetido,
+las ventas fuera del ciclo de 10 s, un CHECK en la nube y un índice único en la PC.
+
+**Decisiones que no estaban en el plan:**
+- **Ninguna tabla de la barra va en la limpieza padre-hija de la cola** (`_cleanOrphanQueueEntries`). Esa limpieza saca de la cola las hijas
+  de un padre que se borra: con una venta adentro, borrar la fiesta en el equipo perdería una venta que no subió. En la nube no hay clave
+  foránea que la rechace, así que sube igual. El plan decía ponerlas.
+- **`barra_cajas` lleva `operador_nombre`**: el nombre de la cajera ese día, para el ticket y el cierre aunque después le cambien el nombre.
+- **Sin índices únicos fuera del id, también en la PC:** al bajar, la fila entra con `INSERT OR REPLACE`, y un único repetido haría que SQLite
+  borre la otra fila sin avisar.
+- **Quedan para su etapa:** el depósito `barra` de las fotos y `ImagenDeProducto` (etapa 7, con el catálogo), `esBarra` en el coordinador del
+  sync y `PuestaAlDiaBarra` (etapa 4, con la entrada de la cajera), y `subirYa` en cada venta (etapa 5).
+
+**Antes de instalar, el SQL de la barra tiene que estar corrido:** sin las tablas en la nube, cada PC falla al bajarlas en cada ciclo, lo vendido
+queda trabado en la cola y **la revisión de la mora no corre** (espera una bajada sin fallas).
 
 ## Lo que dio el celular (3-nov, con capturas de su pantalla)
 
@@ -99,9 +152,9 @@ Con trozos de 180 bytes y 20 ms de pausa no perdió ningún renglón, tampoco en
 
 ## Lo pendiente, en orden
 
-**Etapa 1: cerrada el 3-nov.**
+**Etapas 1 (la impresora) y 2 (los datos): cerradas el 3-nov.**
 
-**Después, cada una con sus tests:** 2. los datos (v77, sync, SQL) · 3. las cuentas (venta, vuelto, mixto, cierre, stock) · 4. la cajera: entrar, fiesta, caja, VENDER · 5. cobrar e imprimir
+**Después, cada una con sus tests:** 3. las cuentas (venta, vuelto, mixto, cierre, stock) · 4. la cajera: entrar, fiesta, caja, VENDER · 5. cobrar e imprimir
 · 6. cerrar la caja · 7. el jefe en la PC: catálogo con fotos, precios con stock, cajas, anular, PDF 58 mm y A4 · 8. el jefe en la web del iPhone · 9. Android con su firma
 · 10. de punta a punta, sin internet · 11. Entradas, etapas 4 a 6 · 12. versión y publicación, cuando el usuario diga.
 

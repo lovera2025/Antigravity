@@ -100,6 +100,16 @@ class UuidUtils {
   ) =>
       _uuidDe('permisos_operador_cambios_v1|$operadorId|$permiso|$momento');
 
+  /// PK estable para `barra_precios` (v77): un producto en una fiesta. Si el jefe
+  /// le pone precio desde dos PCs, escriben la misma fila (gana la última).
+  static String barraPrecioId(String eventoId, String productoId) =>
+      _uuidDe('barra_precios_v1|$eventoId|$productoId');
+
+  /// PK estable para `barra_anulaciones` (v77): una por venta. Anular dos veces la
+  /// misma venta, desde la PC y desde la web, deja una sola anulación.
+  static String barraAnulacionId(String ventaId) =>
+      _uuidDe('barra_anulaciones_v1|$ventaId');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

@@ -365,6 +365,11 @@ class SyncEngine {
     'mora_congelada': 'updated_at',
     'permisos_operador': 'updated_at',
     'permisos_operador_cambios': 'updated_at',
+    'barra_productos': 'updated_at',
+    'barra_precios': 'updated_at',
+    'barra_cajas': 'updated_at',
+    'barra_ventas': 'updated_at',
+    'barra_anulaciones': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1176,6 +1181,11 @@ class SyncEngine {
     // Junto con los operadores: un PIN recién dado en otra PC tiene que entrar con
     // sus permisos, también desde la pantalla de entrada.
     'permisos_operador',
+    // La barra en la fiesta (v77): el jefe mira las cajas en vivo y una anulación
+    // tiene que llegar enseguida a la tablet que vendió.
+    'barra_cajas',
+    'barra_ventas',
+    'barra_anulaciones',
   ];
 
   /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
@@ -1221,6 +1231,10 @@ class SyncEngine {
     'predios',
     // El registro de quién dio qué permiso: se lee para seguir qué pasó.
     'permisos_operador_cambios',
+    // El catálogo y los precios de la barra (v77): los carga el jefe en la oficina.
+    // La tablet los baja al prepararse ([bajarParaLaBarra]).
+    'barra_productos',
+    'barra_precios',
   ];
 
   /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
@@ -1569,6 +1583,12 @@ class SyncEngine {
       if (table == 'compromisos_personal') return 1;
       // Los predios no cuelgan de nada: son de todas las fiestas.
       if (table == 'predios') return 1;
+      // La barra (v77), de padres a hijas. En la nube no hay claves foráneas, así
+      // que el orden no traba nada: es para que el jefe vea primero lo que cuelga.
+      if (table == 'barra_productos') return 1;
+      if (table == 'barra_precios' || table == 'barra_cajas') return 2;
+      if (table == 'barra_ventas') return 4;
+      if (table == 'barra_anulaciones') return 5;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -1910,6 +1930,11 @@ class SyncEngine {
       _pullTable(db, 'mora_congelada', 'updated_at'),
       _pullTable(db, 'permisos_operador', 'updated_at'),
       _pullTable(db, 'permisos_operador_cambios', 'updated_at'),
+      _pullTable(db, 'barra_productos', 'updated_at'),
+      _pullTable(db, 'barra_precios', 'updated_at'),
+      _pullTable(db, 'barra_cajas', 'updated_at'),
+      _pullTable(db, 'barra_ventas', 'updated_at'),
+      _pullTable(db, 'barra_anulaciones', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2433,6 +2458,35 @@ class SyncEngine {
     }
   }
 
+  /// Lo que una caja de barra necesita para vender sin internet (v77): la fiesta, los
+  /// operadores con sus permisos (el PIN anda sin el jefe), el catálogo y los precios.
+  /// Las cajas y las ventas no: cada equipo tiene las suyas, y las de las otras cajas
+  /// llegan con el ciclo de siempre cuando hay internet.
+  static const tablasDeLaBarra = [
+    'eventos',
+    'operadores_caja',
+    'permisos_operador',
+    'barra_productos',
+    'barra_precios',
+  ];
+
+  /// Baja ya las [tablasDeLaBarra], para preparar la tablet en la oficina. Devuelve
+  /// si bajaron todas. Igual que [bajarParaLaPuerta]: no espera al ciclo ni cambia el
+  /// estado del motor.
+  Future<bool> bajarParaLaBarra() async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return false;
+    try {
+      final db = await LocalDatabase.instance;
+      final bien = await Future.wait([
+        for (final tabla in tablasDeLaBarra) _pullTable(db, tabla, 'updated_at'),
+      ]);
+      return bien.every((b) => b);
+    } catch (e) {
+      debugPrint('⚠️ No bajaron las tablas de la barra: $e');
+      return false;
+    }
+  }
+
   /// Filtra payload antes de subir: solo columnas de nube, sin campos solo SQLite.
   ///
   /// Los cuatro campos de mora operativa (`mora_exenta_hasta`,
@@ -2843,6 +2897,79 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      'barra_productos': [
+        'id',
+        'nombre',
+        'categoria',
+        'activo',
+        'orden',
+        'imagen_url',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_precios': [
+        'id',
+        'evento_id',
+        'producto_id',
+        'precio',
+        'activo',
+        'orden',
+        'stock_inicial',
+        'aviso_stock',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_cajas': [
+        'id',
+        'evento_id',
+        'operador_id',
+        'operador_nombre',
+        'numero_caja',
+        'sede',
+        'cambio_inicial',
+        'abierta_at',
+        'cerrada_at',
+        'efectivo_contado',
+        'diferencia',
+        'nota_cierre',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_ventas': [
+        'id',
+        'caja_barra_id',
+        'evento_id',
+        'numero',
+        'renglones',
+        'total',
+        'medio',
+        'efectivo',
+        'transferencia',
+        'recibe',
+        'vuelto',
+        'comprobante_visto',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
+      'barra_anulaciones': [
+        'id',
+        'venta_id',
+        'caja_barra_id',
+        'evento_id',
+        'motivo',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -2997,6 +3124,12 @@ class SyncEngine {
     'permisos_operador':
         'una fila por operador, con id fijo: sacar un permiso la actualiza, no se borra',
     'permisos_operador_cambios': 'solo se agregan renglones',
+    'barra_productos': 'dar de baja le pone activo en 0: la fila no se saca',
+    'barra_precios':
+        'una fila por producto y fiesta, con id fijo: sacarlo de la lista le pone activo en 0',
+    'barra_cajas': 'cerrarla la actualiza: una caja no se borra',
+    'barra_ventas': 'una venta nunca se edita ni se borra: anularla es otra fila',
+    'barra_anulaciones': 'solo se agregan filas, una por venta, con id fijo',
   };
 
   /// Para los tests: las tablas que se revisan.

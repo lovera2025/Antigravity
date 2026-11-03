@@ -55,8 +55,13 @@ antes al usuario.**
 un SQL sin correr. Faltan las etapas 4 a 6 antes de usarlo: quien tiene solo Entradas todavía puede anular una entrega. Entrada:
 `docs/CONTEXTO_OPERADORES_2026-11-02.md`. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`. **Publicar la rama lleva las dos cosas.**
 
-**En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`). La etapa 1 se cerró el 3-nov y sigue la 2 (los datos): la app ya imprime
-por Bluetooth desde la PC y desde un celular Android (`lib/features/barra/impresion/`, `flutter run -d windows -t tool/impresora_prueba.dart`), pero todavía no tiene barra. La impresora es una **TP-POS58 por BLE**, y la escritura va
+**En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`). Las etapas 1 (la impresora) y 2 (los datos) se cerraron el 3-nov y sigue la 3 (las cuentas): la app ya imprime
+por Bluetooth desde la PC y desde un celular Android (`lib/features/barra/impresion/`, `flutter run -d windows -t tool/impresora_prueba.dart`), pero todavía no tiene pantallas de barra.
+**Los datos** son cinco tablas de la v77 (`barra_productos`, `barra_precios`, `barra_cajas`, `barra_ventas`, `barra_anulaciones`), con su SQL
+`supabase/migrations/20261103140000_barra.sql` **sin correr**, y viven en `lib/features/barra/datos/`: `BarraDelJefe` (PC y web) y `BarraDeLaCaja`
+(solo en el equipo: la web no vende). **Una venta nunca se edita: anular es otra fila.** El número del ticket es por caja, en la misma
+transacción, y una caja vive en un solo equipo. Ninguna tabla de la barra va en la limpieza padre-hija de la cola: perdería una venta sin subir.
+**En `BarraNube`, `order` va siempre con `ascending: true`:** el paquete ordena de mayor a menor si no se le dice. La impresora es una **TP-POS58 por BLE**, y la escritura va
 sin respuesta: "impreso" no dice que el papel salió bien, hay que mirarlo, **con foto** (el 3-nov el "salió bien" escondía los acentos rotos). Lo que dio
 el papel está en `OpcionesEscPos.deLaPrueba`: **los acentos van con la tabla 850** (`tabla_850.dart`; con la 1252 salen letras raras), 32 letras por
 renglón (`renglonesDe` parte por palabras), QR nativo y el isotipo. La impresora se recuerda por equipo (`ImpresoraRecordada`) y se conecta sola.
@@ -83,7 +88,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 76) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 77) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).

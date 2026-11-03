@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 76;
+  static const int _version = 77;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -116,6 +116,11 @@ class LocalDatabase {
       await crearTablasV76(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v76 sin crear: $e');
+    }
+    try {
+      await crearTablasV77(db);
+    } catch (e) {
+      debugPrint('⚠️ Tablas v77 sin crear: $e');
     }
     return db;
   }
@@ -701,6 +706,7 @@ class LocalDatabase {
     await crearTablasV74(db);
     await crearTablasV75(db);
     await crearTablasV76(db);
+    await crearTablasV77(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -882,6 +888,119 @@ class LocalDatabase {
         updated_at TEXT NOT NULL
       )
     ''');
+  }
+
+  /// Las tablas de la v77: la barra. El catálogo de productos, el precio de cada
+  /// uno en cada fiesta, las cajas de barra, las ventas y sus anulaciones.
+  ///
+  /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF NOT
+  /// EXISTS`. Ninguna toca lo de los cobros: la caja de barra no es la de cuotas.
+  /// **Nada se borra:** un producto se da de baja, una caja se cierra, y una venta
+  /// nunca se edita (anularla es una fila nueva en `barra_anulaciones`).
+  ///
+  /// **Sin índices únicos fuera del id**, a propósito: al bajar, la fila entra con
+  /// `INSERT OR REPLACE`, y un único repetido haría que SQLite borre la otra fila
+  /// sin avisar. El número del ticket no se repite porque una caja vive en un solo
+  /// equipo y se numera en la misma transacción.
+  static Future<void> crearTablasV77(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_productos (
+        id TEXT PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        categoria TEXT,
+        activo INTEGER NOT NULL DEFAULT 1,
+        orden INTEGER NOT NULL DEFAULT 0,
+        imagen_url TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_precios (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        producto_id TEXT NOT NULL,
+        precio REAL NOT NULL,
+        activo INTEGER NOT NULL DEFAULT 1,
+        orden INTEGER NOT NULL DEFAULT 0,
+        stock_inicial INTEGER,
+        aviso_stock INTEGER,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_precios_evento ON barra_precios(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_cajas (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        operador_id TEXT,
+        operador_nombre TEXT,
+        numero_caja INTEGER NOT NULL,
+        sede TEXT,
+        cambio_inicial REAL NOT NULL DEFAULT 0,
+        abierta_at TEXT NOT NULL,
+        cerrada_at TEXT,
+        efectivo_contado REAL,
+        diferencia REAL,
+        nota_cierre TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_cajas_evento ON barra_cajas(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_ventas (
+        id TEXT PRIMARY KEY,
+        caja_barra_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        numero INTEGER NOT NULL,
+        renglones TEXT NOT NULL,
+        total REAL NOT NULL,
+        medio TEXT NOT NULL,
+        efectivo REAL NOT NULL DEFAULT 0,
+        transferencia REAL NOT NULL DEFAULT 0,
+        recibe REAL,
+        vuelto REAL NOT NULL DEFAULT 0,
+        comprobante_visto INTEGER NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_ventas_caja ON barra_ventas(caja_barra_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_ventas_evento ON barra_ventas(evento_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_anulaciones (
+        id TEXT PRIMARY KEY,
+        venta_id TEXT NOT NULL,
+        caja_barra_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        motivo TEXT NOT NULL,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_anulaciones_evento ON barra_anulaciones(evento_id)',
+    );
   }
 
   /// La tabla de la v75 (6.2.1): la mora congelada, una fila por alumno.
@@ -3151,6 +3270,20 @@ class LocalDatabase {
         debugPrint('✅ Migración v76 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v76: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 76, las tablas de la v77 no aparecen.
+    if (oldVersion < 77 && newVersion >= 77) {
+      debugPrint('  🔧 v77: la barra');
+      // Igual que las de antes: solo tablas nuevas, sin tocar datos ni
+      // marcadores. Si fallara, la app abre igual y [_initDb] lo reintenta en
+      // cada arranque.
+      try {
+        await crearTablasV77(db);
+        debugPrint('✅ Migración v77 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v77: $e');
       }
     }
   }

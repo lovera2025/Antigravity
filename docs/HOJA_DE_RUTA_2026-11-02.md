@@ -24,11 +24,12 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 | 1. La impresora | **Hecha el 3-nov:** papel mirado (acentos con la tabla 850, renglones por palabras, QR nativo, el isotipo); imprime desde la PC y desde un celular Android, y se conecta sola. `docs/CONTEXTO_BARRA_2026-11-02.md` |
 | 2. El plano | Programado y probado con el mouse, sin publicar. `docs/CONTEXTO_v6.3.0_2026-11-02.md` |
 | 3. Operadores | Programado y probado con el mouse, sin publicar, con el SQL sin correr. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
-| 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** En la etapa 1 |
+| 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** Etapas 1 y 2 hechas el 3-nov (la impresora y los datos: v77, con el SQL sin correr); sigue la 3 |
 | 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
 | Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la impresora** |
 
-**Lo que sigue:** la etapa 2 del plan de la barra (los datos: v77, sync y el SQL sin correr).
+**Lo que sigue:** la etapa 3 del plan de la barra (las cuentas: la venta, el vuelto, el mixto, el cierre y el stock). Publicar la rama lleva
+ahora dos SQL que corren antes de instalar: los permisos (v76) y la barra (v77).
 
 ## El orden
 
