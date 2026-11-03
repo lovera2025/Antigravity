@@ -12,33 +12,34 @@ typedef ImprimirPapel = Future<bool> Function(List<LineaTicket> lineas);
 
 enum _Forma { todoJunto, porSeparado }
 
-/// Una bebida de la venta, en POR SEPARADO.
+/// Una bebida de la venta, con lo que ya salió en vales.
 class _Bebida {
   final RenglonVenta renglon;
   final valePor = TextEditingController();
 
-  /// Por cuánto salió cada vale de esta bebida, en orden: 3, 2...
+  /// Cuánto de esta bebida llevó cada vale en que salió, en orden: 3, 2...
   final impresos = <int>[];
 
   _Bebida(this.renglon);
 
   int get quedan => renglon.cantidad - impresos.fold<int>(0, (s, n) => s + n);
-  int? get _numero => valePor.text.trim().isEmpty ? null : int.tryParse(valePor.text.trim());
+  int? get numero => valePor.text.trim().isEmpty ? null : int.tryParse(valePor.text.trim());
 
   /// Por cuánto sale el próximo vale: lo escrito o, vacío, todas las que quedan.
-  int get proximo => _numero ?? quedan;
-  bool get valido => valePorValido(quedan, _numero);
+  int get proximo => numero ?? quedan;
+  bool get valido => valePorValido(quedan, numero);
   bool get terminada => quedan == 0;
 }
 
-/// Después de cobrar, cómo salen los vales de la venta (pedido del jefe, 3-nov):
-/// - **TODO JUNTO**: un vale con todas las bebidas;
+/// Después de cobrar, cómo salen los vales de la venta (pedido del jefe, 3-nov). Se pasa
+/// de una forma a la otra cuando se quiere:
+/// - **TODO JUNTO**: un vale con todo lo que queda (al principio, toda la compra);
 /// - **POR SEPARADO**: cada bebida con su casilla "vale por" y su IMPRIMIR. **Cada vale lo
 ///   arma la cajera:** escribe por cuánto, imprime, y la casilla queda vacía para el
 ///   próximo, hasta que no quede ninguna. Vacía, el vale es por todas las que quedan.
 ///
-/// **Un vale por papel:** cada IMPRIMIR saca uno solo, nunca una tira. Con un vale ya
-/// impreso la forma no se cambia: daría vales de más.
+/// **Un vale por papel:** cada IMPRIMIR saca uno solo, nunca una tira. Lo que ya salió en
+/// un vale no vuelve a salir: TODO JUNTO lleva solo lo que queda.
 class ElegirVales extends StatefulWidget {
   final VentaBarra venta;
   final CajaBarra caja;
@@ -60,14 +61,13 @@ class ElegirVales extends StatefulWidget {
 class _ElegirValesState extends State<ElegirVales> {
   _Forma? _forma;
   late final _bebidas = [for (final r in widget.venta.renglones) _Bebida(r)];
-  bool _juntoImpreso = false;
+
+  /// Cuántos vales salieron de la venta: el próximo lleva el siguiente número.
+  int _valesImpresos = 0;
   bool _imprimiendo = false;
   String? _aviso;
 
-  bool get _algoImpreso => _juntoImpreso || _bebidas.any((b) => b.impresos.isNotEmpty);
-
-  /// Cuántos vales salieron de toda la venta: el próximo lleva el siguiente número.
-  int get _valesImpresos => _bebidas.fold(0, (s, b) => s + b.impresos.length);
+  bool get _todoImpreso => _bebidas.every((b) => b.terminada);
 
   @override
   void dispose() {
@@ -97,14 +97,32 @@ class _ElegirValesState extends State<ElegirVales> {
     if (!mounted) return salio;
     setState(() {
       _imprimiendo = false;
-      if (!salio) _aviso = 'No salió el vale. ¿La impresora está prendida y cerca? Tocá de nuevo.';
+      if (salio) {
+        _valesImpresos++;
+      } else {
+        _aviso = 'No salió el vale. ¿La impresora está prendida y cerca? Tocá de nuevo.';
+      }
     });
     return salio;
   }
 
+  /// Un vale con todo lo que queda. Si es el primero de la venta, es el único: sin número.
   Future<void> _imprimirTodoJunto() async {
-    if (await _mandar(Vale.todoJunto(widget.venta)) && mounted) {
-      setState(() => _juntoImpreso = true);
+    if (_todoImpreso) return;
+    final vale = _valesImpresos == 0
+        ? Vale.todoJunto(widget.venta)
+        : Vale.conLoQueQueda(
+            [for (final b in _bebidas) BebidaDelVale(b.quedan, b.renglon.nombre)],
+            numero: _valesImpresos + 1,
+          );
+    final llevo = [for (final b in _bebidas) b.quedan];
+    if (await _mandar(vale) && mounted) {
+      setState(() {
+        for (var i = 0; i < _bebidas.length; i++) {
+          if (llevo[i] > 0) _bebidas[i].impresos.add(llevo[i]);
+          _bebidas[i].valePor.clear();
+        }
+      });
     }
   }
 
@@ -143,20 +161,22 @@ class _ElegirValesState extends State<ElegirVales> {
         const SizedBox(height: 8),
         Row(
           children: [
-            Expanded(child: _botonForma(_Forma.todoJunto, 'TODO JUNTO', 'Un vale con todo')),
+            Expanded(
+              child: _botonForma(
+                _Forma.todoJunto,
+                'TODO JUNTO',
+                _valesImpresos == 0 ? 'Un vale con todo' : 'Un vale con lo que queda',
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(child: _botonForma(_Forma.porSeparado, 'POR SEPARADO', 'Para ir retirando de a poco')),
           ],
         ),
-        if (_algoImpreso)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text('Ya salió un vale: la forma no se cambia.', style: tema.textTheme.bodySmall),
-          ),
         const SizedBox(height: 12),
         if (_forma == _Forma.todoJunto) _todoJunto(tema),
-        if (_forma == _Forma.porSeparado) ...[
+        if (_forma == _Forma.porSeparado)
           for (var i = 0; i < _bebidas.length; i++) _sector(tema, i),
+        if (_forma != null) ...[
           const SizedBox(height: 4),
           Text(_queFalta(), key: const Key('falta-imprimir'), style: tema.textTheme.bodySmall),
         ],
@@ -171,17 +191,18 @@ class _ElegirValesState extends State<ElegirVales> {
 
   Widget _botonForma(_Forma forma, String titulo, String detalle) {
     final elegida = _forma == forma;
+    final colores = Theme.of(context).colorScheme;
     return OutlinedButton(
       key: Key(forma == _Forma.todoJunto ? 'forma-todo-junto' : 'forma-por-separado'),
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         side: BorderSide(
           width: elegida ? 2 : 1,
-          color: elegida ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+          color: elegida ? colores.primary : Theme.of(context).dividerColor,
         ),
-        backgroundColor: elegida ? Theme.of(context).colorScheme.primaryContainer : null,
+        backgroundColor: elegida ? colores.primaryContainer : null,
       ),
-      onPressed: _algoImpreso || _imprimiendo ? null : () => setState(() => _forma = forma),
+      onPressed: _imprimiendo ? null : () => setState(() => _forma = forma),
       child: Column(
         children: [
           Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -192,28 +213,34 @@ class _ElegirValesState extends State<ElegirVales> {
   }
 
   Widget _todoJunto(ThemeData tema) {
-    final todo = [for (final r in widget.venta.renglones) '${r.cantidad} ${r.nombre}'].join(', ');
+    final queda = [
+      for (final b in _bebidas)
+        if (b.quedan > 0) '${b.quedan} ${b.renglon.nombre.toLowerCase()}',
+    ].join(', ');
     return Card(
+      color: _todoImpreso ? tema.colorScheme.secondaryContainer : null,
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Un solo vale: $todo'),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: _juntoImpreso
-                  ? const _Listo('Vale impreso')
-                  : FilledButton.icon(
-                      key: const Key('imprimir-todo-junto'),
-                      onPressed: _imprimiendo ? null : _imprimirTodoJunto,
-                      icon: const Icon(Icons.print),
-                      label: const Text('IMPRIMIR'),
-                    ),
-            ),
-          ],
-        ),
+        child: _todoImpreso
+            ? const _Listo('Todo impreso')
+            : Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Text(
+                    _valesImpresos == 0 ? 'Un solo vale: $queda' : 'Un vale con lo que queda: $queda',
+                    key: const Key('lo-que-queda'),
+                  ),
+                  FilledButton.icon(
+                    key: const Key('imprimir-todo-junto'),
+                    onPressed: _imprimiendo ? null : _imprimirTodoJunto,
+                    icon: const Icon(Icons.print),
+                    label: const Text('IMPRIMIR'),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -231,7 +258,7 @@ class _ElegirValesState extends State<ElegirVales> {
     } else {
       final detalle = !b.valido
           ? 'Va de 1 a ${b.quedan}'
-          : b.impresos.isEmpty
+          : hechos == null
               ? 'Quedan ${b.quedan}'
               : 'Quedan ${b.quedan} · $hechos';
       abajo = Wrap(
@@ -263,7 +290,7 @@ class _ElegirValesState extends State<ElegirVales> {
             icon: const Icon(Icons.print),
             label: Text(!b.valido
                 ? 'IMPRIMIR'
-                : b._numero == null
+                : b.numero == null
                     ? 'IMPRIMIR LAS ${b.quedan}'
                     : 'IMPRIMIR VALE POR ${b.proximo}'),
           ),
@@ -308,7 +335,7 @@ class _Listo extends StatelessWidget {
         children: [
           const Icon(Icons.check_circle, color: Colors.green, size: 20),
           const SizedBox(width: 6),
-          Text(texto, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Flexible(child: Text(texto, style: const TextStyle(fontWeight: FontWeight.bold))),
         ],
       );
 }

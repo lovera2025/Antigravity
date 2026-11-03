@@ -116,12 +116,12 @@ abstract final class ModeloTicket {
     required String fiesta,
     CopiaDeVale? copia,
   }) {
-    // "Caja 2 · Marta · N° 0017-3": la cajera en el medio, y por separado el orden del
-    // vale en la venta.
+    // "Caja 2 · Marta · N° 0017-3": la cajera en el medio, y el orden del vale en la
+    // venta si no es el único.
     final numero = [
       'Caja ${caja.numeroCaja}',
       if (caja.operadorNombre != null) caja.operadorNombre!,
-      'N° ${venta.numero.toString().padLeft(4, '0')}${vale.porSeparado ? '-${vale.numero}' : ''}',
+      'N° ${venta.numero.toString().padLeft(4, '0')}${vale.numero == null ? '' : '-${vale.numero}'}',
     ].join(' · ');
     return [
       if (copia != null) const GrandeTicket('*** COPIA ***'),

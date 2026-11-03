@@ -11,7 +11,7 @@ pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.
 ## Para retomar en otro chat
 
 **Dónde quedó (3-nov, tarde):** todo commiteado y subido. Después de la etapa 3 se hizo un tramo corto, **el "3b": los vales** (abajo). La
-suite entera, en verde (3.328 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario pruebe la
+suite entera, en verde (3.330 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario pruebe la
 pantalla de los vales (botón VALES), mande la foto y se los muestre al jefe con la maqueta.
 
 ## El 3b: los vales, en vez del ticket (3-nov, pedido del jefe)
@@ -19,7 +19,9 @@ pantalla de los vales (botón VALES), mande la foto y se los muestre al jefe con
 El jefe pidió que de una compra salga **un vale**, no el ticket: sin logo, sin precios, **sin QR** ("es muy un embole") y con lo que se
 entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el chat:
 - **Dos formas al cobrar:** **TODO JUNTO** (un vale con todas las bebidas, para quien retira de una vez) y **POR SEPARADO** (para ir
-  retirando de a poco). "Sin papel" lo sacó el jefe.
+  retirando de a poco). "Sin papel" lo sacó el jefe. **Se pasa de una a la otra cuando se quiere** (lo pidió el usuario probándolo): después de
+  sacar algunos por separado, TODO JUNTO saca un vale con todo lo que queda ("Un vale con lo que queda: 5 cerveza lata, 1 fernet…"). Lo que
+  ya salió no vuelve a salir. Si TODO JUNTO es el primero, es el único vale y va sin número de vale ("N° 0017").
 - **Por separado, cada bebida es su sector, con una sola casilla "vale por ___" y su propio IMPRIMIR, y cada vale lo arma la cajera a
   mano** (lo corrigió el usuario probándolo: "poner SIGUIENTE y bloquearme de poner manual no da"). Escribe 3, IMPRIMIR, sale un vale por
   3; la casilla queda vacía y dice "Quedan 7 · Salió 1 vale: 3"; escribe 2, y así hasta que no queda nada ("Todo en vales: 3 · 2 · 5").
@@ -35,15 +37,16 @@ entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el
 - **Abrir la caja no pregunta el cambio ni el turno** (es de noche, nada de mañana/tarde): el cambio se pone después, con un ícono, si hay.
 - **Una persona controla el sector de barras con un iPhone:** es la web en modo jefe, que ya estaba en el plan (etapa 6).
 
-**Lo programado:** `cuentas/vales_de_barra.dart` (`Vale.todoJunto`, `Vale.deUnaBebida`, `valePorValido`, `CopiaDeVale`); `GrandeTicket` y
+**Lo programado:** `cuentas/vales_de_barra.dart` (`Vale.todoJunto`, `Vale.conLoQueQueda`, `Vale.deUnaBebida`, `valePorValido`,
+`CopiaDeVale`); `GrandeTicket` y
 `renglonesGrandes` en `impresion/ticket_esc_pos.dart` (doble de alto y de ancho, 16 letras partidas por palabras; `soloAlto`, 32);
 `ModeloTicket.deVale` y `diaFechaYHora` ("Vie 04/12/2026 - 23:41"). Tests: `test/vales_de_barra_test.dart`, el grupo "el vale" de
 `modelo_ticket_test` y la letra grande en `impresora_barra_test`.
 
 **La pantalla de después de cobrar: `widgets/elegir_vales.dart` (`ElegirVales`)**, sin base, con la impresora como un `ImprimirPapel` (true si
-salió); la va a usar COBRAR en la etapa 5. Con un vale impreso la forma no se cambia; si uno no sale, lo dice, no descuenta y deja lo escrito
-para volver a mandarlo. `test/elegir_vales_test.dart` (7 tests, uno a 360 px). Roturas vistas en rojo: la casilla que no se vacía, dejar pasar
-más de lo que queda, numerar por bebida, mandar todo en tira y cambiar la forma después de imprimir. (Antes de que el usuario lo corrigiera,
+salió); la va a usar COBRAR en la etapa 5. Si un vale no sale, lo dice, no descuenta y deja lo escrito para volver a mandarlo.
+`test/elegir_vales_test.dart` (8 tests, uno a 360 px). Roturas vistas en rojo: la casilla que no se vacía, dejar pasar más de lo que queda,
+numerar por bebida, mandar todo en tira, TODO JUNTO con la compra entera después de otros vales, y trabar la forma. (Antes de que el usuario lo corrigiera,
 la casilla partía la bebida en vales fijos y salían de a uno con SIGUIENTE; una prueba anterior que los mandaba seguidos sacó una tira larga.)
 
 **Para mirarlo:** en `tool/impresora_prueba.dart`, **VALES** abre esa pantalla con una compra inventada (10 cervezas, 2 fernet, 3 aguas) y

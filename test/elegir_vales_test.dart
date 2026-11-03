@@ -77,14 +77,58 @@ void main() {
   bool apagado(WidgetTester tester, String key) =>
       tester.widget<ButtonStyleButton>(find.byKey(Key(key))).onPressed == null;
 
-  testWidgets('todo junto: un solo vale con todas las bebidas', (tester) async {
+  testWidgets('todo junto: un solo vale con todas las bebidas, sin número de vale', (tester) async {
     final impresora = await abrir(tester);
     await tocar(tester, 'forma-todo-junto');
     await tocar(tester, 'imprimir-todo-junto');
     expect(impresora.papeles, hasLength(1));
-    expect(impresora.papeles.single, containsAllInOrder(['10 CERVEZA LATA', '2 FERNET CON COCA', '3 AGUA SIN GAS']));
-    expect(find.text('Vale impreso'), findsOneWidget);
+    expect(impresora.papeles.single, containsAllInOrder([
+      'Caja 2 · Marta · N° 0017',
+      '10 CERVEZA LATA',
+      '2 FERNET CON COCA',
+      '3 AGUA SIN GAS',
+    ]));
+    expect(find.text('Todo impreso'), findsWidgets);
     expect(find.byKey(const Key('imprimir-todo-junto')), findsNothing, reason: 'no se imprime dos veces');
+    await tocar(tester, 'forma-por-separado');
+    expect(find.byKey(const Key('imprimir-0')), findsNothing, reason: 'por separado no queda nada');
+    expect(find.text('Todo en vales: 10'), findsOneWidget);
+  });
+
+  testWidgets('por separado un poco, y todo junto lo que queda', (tester) async {
+    final impresora = await abrir(tester);
+    await tocar(tester, 'forma-por-separado');
+    await escribir(tester, 0, '5');
+    await tocar(tester, 'imprimir-0');
+    await escribir(tester, 1, '1');
+    await tocar(tester, 'imprimir-1');
+
+    await tocar(tester, 'forma-todo-junto');
+    expect(find.text('Un vale con lo que queda: 5 cerveza lata, 1 fernet con coca, 3 agua sin gas'), findsOneWidget);
+    await tocar(tester, 'imprimir-todo-junto');
+    expect(impresora.papeles, hasLength(3));
+    expect(impresora.papeles.last, containsAllInOrder([
+      'Caja 2 · Marta · N° 0017-3',
+      '5 CERVEZA LATA',
+      '1 FERNET CON COCA',
+      '3 AGUA SIN GAS',
+    ]));
+    expect(find.text('Todo impreso'), findsWidgets);
+
+    await tocar(tester, 'forma-por-separado');
+    expect(find.text('Todo en vales: 5 · 5'), findsOneWidget);
+    expect(find.text('Todo en vales: 1 · 1'), findsOneWidget);
+    expect(find.text('Todo en vales: 3'), findsOneWidget);
+  });
+
+  testWidgets('todo junto no lleva lo que ya salió entero', (tester) async {
+    final impresora = await abrir(tester);
+    await tocar(tester, 'forma-por-separado');
+    await tocar(tester, 'imprimir-2');
+    await tocar(tester, 'forma-todo-junto');
+    await tocar(tester, 'imprimir-todo-junto');
+    expect(impresora.papeles.last, isNot(contains('3 AGUA SIN GAS')));
+    expect(impresora.papeles.last, containsAllInOrder(['10 CERVEZA LATA', '2 FERNET CON COCA']));
   });
 
   testWidgets('por separado: cada vale por lo que se escribe, hasta que no queda nada', (tester) async {
@@ -147,14 +191,6 @@ void main() {
     expect(find.text('Va de 1 a 2'), findsOneWidget, reason: 'quedan 2');
     expect(apagado(tester, 'imprimir-0'), isTrue);
     expect(impresora.papeles, hasLength(1));
-  });
-
-  testWidgets('con un vale impreso, la forma ya no se cambia', (tester) async {
-    await abrir(tester);
-    await tocar(tester, 'forma-por-separado');
-    await tocar(tester, 'imprimir-1');
-    expect(find.text('Ya salió un vale: la forma no se cambia.'), findsOneWidget);
-    expect(apagado(tester, 'forma-todo-junto'), isTrue);
   });
 
   testWidgets('si no sale, lo dice y deja lo escrito para volver a mandarlo', (tester) async {

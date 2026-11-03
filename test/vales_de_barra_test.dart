@@ -31,6 +31,21 @@ void main() {
     expect(() => Vale.deUnaBebida(cerveza, cantidad: 3, numero: 0), throwsArgumentError);
   });
 
+  test('con lo que queda: solo las bebidas con algo, y con su número', () {
+    final vale = Vale.conLoQueQueda(
+      const [BebidaDelVale(5, 'Cerveza lata'), BebidaDelVale(0, 'Fernet'), BebidaDelVale(3, 'Agua')],
+      numero: 3,
+    );
+    expect(vale.bebidas, [const BebidaDelVale(5, 'Cerveza lata'), const BebidaDelVale(3, 'Agua')]);
+    expect(vale.porSeparado, isFalse);
+    expect(vale.numero, 3);
+    expect(
+      () => Vale.conLoQueQueda(const [BebidaDelVale(0, 'Agua')], numero: 2),
+      throwsArgumentError,
+      reason: 'no queda nada',
+    );
+  });
+
   test('todo junto: un vale con todas las bebidas de la venta', () {
     final venta = VentaBarra.nueva(
       cajaBarraId: 'c',
@@ -47,5 +62,6 @@ void main() {
     final vale = Vale.todoJunto(venta);
     expect(vale.bebidas, [const BebidaDelVale(10, 'Cerveza lata'), const BebidaDelVale(3, 'Agua')]);
     expect(vale.porSeparado, isFalse);
+    expect(vale.numero, isNull, reason: 'es el único vale de la venta');
   });
 }
