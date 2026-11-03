@@ -3,10 +3,42 @@
 2-nov-2026, noche. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
 El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado (3-nov): las etapas 1 y 2 cerradas.** La impresora, probada en papel desde la PC y desde un celular Android. Los datos de la barra
-(v77, el sync y el SQL de la nube **sin correr**), con la migración probada sobre una copia de la base real. **Lo que sigue es la etapa 3 (las
-cuentas).** La app todavía no tiene pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.2.1. Publicar, solo
-preguntándole antes al usuario.
+**Estado (3-nov): las etapas 1, 2 y 3 cerradas.** La impresora, probada en papel desde la PC y desde un celular Android. Los datos de la barra
+(v77, el sync y el SQL de la nube **sin correr**), con la migración probada sobre una copia de la base real. Las cuentas y lo que dice cada
+papel. **Lo que sigue es la etapa 4 (la cajera: entrar, fiesta, caja, VENDER).** La app todavía no tiene pantallas de barra. Sin versión, sin
+release, sin web. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
+
+## Etapa 3: las cuentas (3-nov)
+
+Todo puro, sin pantalla ni base, en `lib/features/barra/cuentas/`, y lo que dice cada papel en `impresion/modelo_ticket.dart`:
+
+- **`pesos`**: "$ 7.000", "$ 3.999,99". Las cuentas van **en centavos enteros** (`centavos`): 3 x 1.333,33 da 3.999,99. La de la app
+  (`toCurrency`) pone siempre ",00" y no entra en el renglón.
+- **`CuentaBarra`**, la cuenta de VENDER: sumar, restar (en cero sale), quitar, vaciar. Cada toque da una cuenta nueva, y cada renglón se queda
+  con el precio con que se sumó.
+- **`CobroBarra`** y **`PartidoMixto`**, COBRAR: efectivo con lo que entrega y el vuelto (sin anotar lo que entrega, paga justo);
+  transferencia con la tilde "Vi el comprobante"; mixto en dos casilleros atados que se corrigen. `falta` dice por qué no se puede confirmar,
+  con las palabras de la cajera. **Un test arma la venta con cada cobro que se puede confirmar, y todas cierran.**
+- **`NumeroDeTicket`**: "Caja 2 · N° 0017" y el QR `je:barra:<id de la venta>`, que se lee de vuelta (`ventaDelQr`). El "·" sale bien en la
+  TP-POS58: es el mismo byte que en la prueba de la 1252 salió así.
+- **`CierreDeBarra`**: ventas, mixtas, efectivo, transferencia y **el efectivo esperado: el cambio inicial más lo cobrado en efectivo**.
+  **Una venta anulada no cuenta, tampoco en el esperado** (se supone que esa plata se devolvió; decisión del 3-nov, el usuario no la objetó).
+  Lo anulado se muestra aparte. `diferenciaEnPalabras`: "Justo, sin diferencia", "Sobran $ 500", "Faltan $ 500".
+- **`ResumenDeCajas`**, CAJAS del jefe: cada caja por número con sus cuentas, y los totales; lo contado y la diferencia, de las cerradas.
+  **La diferencia es la que se anotó al cerrar**: si el jefe anula después, el cierre no se corrige.
+- **`StockDeLaBarra`**: lo cargado menos lo vendido que cuenta, por fiesta. Avisa al llegar al mínimo, y en cero siempre. **No frena la venta**:
+  puede quedar negativo. Para el jefe, solo los controlados y los que están en aviso arriba.
+- **`fiestasConPrecios`**: las fiestas que la cajera puede elegir, las que tienen algún precio activo.
+- **`ModeloTicket.deVenta`** (con la anulada: "*** ANULADA ***" arriba y abajo, con el motivo, sin las gracias) y **`deCierre`** (una caja
+  abierta sale sin lo contado). La hora, siempre en Argentina (`ArTime`), y los textos largos partidos por palabras (`partirPorPalabras`).
+  Los tests comparan el papel renglón por renglón, a 32 letras.
+- **La ventana de prueba** imprime TICKET y CIERRE con `ModeloTicket` y datos inventados.
+
+**Tests:** `barra_cuentas_test` y `modelo_ticket_test`. Roturas a propósito vistas en rojo: el cierre contando las anuladas, la
+transferencia sin tilde, el mixto que no suma y el stock contando las anuladas. **No probado:** que la hora salga en Argentina en un equipo
+con otro huso (esta PC ya está en el de Argentina; la cuenta usa `ArTime`, que no mira el del equipo).
+
+**Lo que la etapa 3 deja para las pantallas:** `EstadoSinInternetBarra` y `PuestaAlDiaBarra` (etapa 4, con la puesta al día de la tablet).
 
 ## Etapa 2: los datos (3-nov)
 
@@ -152,9 +184,9 @@ Con trozos de 180 bytes y 20 ms de pausa no perdió ningún renglón, tampoco en
 
 ## Lo pendiente, en orden
 
-**Etapas 1 (la impresora) y 2 (los datos): cerradas el 3-nov.**
+**Etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas): cerradas el 3-nov.**
 
-**Después, cada una con sus tests:** 3. las cuentas (venta, vuelto, mixto, cierre, stock) · 4. la cajera: entrar, fiesta, caja, VENDER · 5. cobrar e imprimir
+**Después, cada una con sus tests:** 4. la cajera: entrar, fiesta, caja, VENDER · 5. cobrar e imprimir
 · 6. cerrar la caja · 7. el jefe en la PC: catálogo con fotos, precios con stock, cajas, anular, PDF 58 mm y A4 · 8. el jefe en la web del iPhone · 9. Android con su firma
 · 10. de punta a punta, sin internet · 11. Entradas, etapas 4 a 6 · 12. versión y publicación, cuando el usuario diga.
 

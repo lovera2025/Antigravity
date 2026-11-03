@@ -135,19 +135,20 @@ List<String> renglonesDe(
   final lugar = der.isEmpty ? letras : letras - der.length - 1;
   if (lugar < 1) {
     return [
-      ..._partirPorPalabras(izquierda.trim(), letras),
+      ...partirPorPalabras(izquierda.trim(), letras),
       der.length > letras ? der.substring(0, letras) : der.padLeft(letras),
     ];
   }
-  final partes = _partirPorPalabras(izquierda.trim(), lugar);
+  final partes = partirPorPalabras(izquierda.trim(), lugar);
   return [
     if (der.isEmpty) partes.first else partes.first.padRight(letras - der.length) + der,
     ...partes.skip(1),
   ];
 }
 
-/// Nunca vacía: sin texto da un renglón en blanco.
-List<String> _partirPorPalabras(String texto, int ancho) {
+/// [texto] en renglones de hasta [ancho] letras, partido por palabras. Nunca vacía:
+/// sin texto da un renglón en blanco.
+List<String> partirPorPalabras(String texto, int ancho) {
   final renglones = <String>[];
   var actual = '';
   for (var palabra in texto.split(RegExp(r'\s+'))) {

@@ -1,0 +1,217 @@
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+
+import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
+import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
+import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
+
+/// Qué dice cada papel de la barra, renglón por renglón, como sale en los 32 lugares de
+/// la TP-POS58. Incluida la venta anulada y el cierre.
+const _evento = 'e0000000-0000-4000-8000-000000000001';
+
+/// Cómo se vería en el papel: cada línea con sus renglones de 32.
+List<String> _papel(List<LineaTicket> lineas) => [
+      for (final l in lineas)
+        ...switch (l) {
+          LogoTicket() => ['[LOGO]'],
+          TituloTicket() => ['[TITULO] ${l.texto}'],
+          TextoTicket() => [l.texto],
+          RenglonTicket() => renglonesDe(l.izquierda, l.derecha),
+          SeparadorTicket() => ['-' * 32],
+          QrTicket() => ['[QR] ${l.dato}'],
+        },
+    ];
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // 23:41 en Argentina del 4-dic es 02:41 UTC del 5-dic.
+  final vendida = DateTime.utc(2026, 12, 5, 2, 41);
+  final caja = CajaBarra.abrir(
+    eventoId: _evento,
+    operadorNombre: 'Marta',
+    numeroCaja: 2,
+    cambioInicial: 20000,
+    ahora: DateTime.utc(2026, 12, 5, 1),
+  );
+
+  VentaBarra venta({
+    MedioBarra medio = MedioBarra.efectivo,
+    double efectivo = 16000,
+    double transferencia = 0,
+    double? recibe = 20000,
+  }) =>
+      VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 17,
+        renglones: const [
+          RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 2),
+          RenglonVenta(productoId: 'b', nombre: 'Fernet con coca', precio: 6000, cantidad: 1),
+          RenglonVenta(productoId: 'c', nombre: 'Agua', precio: 1000, cantidad: 3),
+        ],
+        medio: medio,
+        efectivo: efectivo,
+        transferencia: transferencia,
+        recibe: recibe,
+        comprobanteVisto: medio != MedioBarra.efectivo,
+        ahora: vendida,
+      );
+
+  test('la hora va en Argentina, sea cual sea la del equipo', () {
+    expect(ModeloTicket.fechaYHora('2026-12-05T02:41:00.000Z'), '04/12/2026 - 23:41');
+    expect(ModeloTicket.fechaYHora('2026-12-04T23:41:00-03:00'), '04/12/2026 - 23:41');
+    expect(ModeloTicket.fechaYHora('basura'), '');
+  });
+
+  test('el ticket de una venta en efectivo, renglón por renglón', () {
+    final v = venta();
+    expect(_papel(ModeloTicket.deVenta(v, caja: caja, fiesta: 'Puerto Viejo')), [
+      '[TITULO] JUNIOR EVENTOS',
+      'BARRA',
+      'Puerto Viejo',
+      '04/12/2026 - 23:41',
+      'Caja 2 - Marta',
+      '-' * 32,
+      '2 x Cerveza lata         \$ 7.000',
+      '1 x Fernet con coca      \$ 6.000',
+      '3 x Agua                 \$ 3.000',
+      '-' * 32,
+      'TOTAL                   \$ 16.000',
+      'Efectivo                \$ 16.000',
+      'Recibe                  \$ 20.000',
+      'Vuelto                   \$ 4.000',
+      '-' * 32,
+      'Caja 2 · N° 0017',
+      '[QR] je:barra:${v.id}',
+      '¡Gracias, salud!',
+    ]);
+  });
+
+  test('por transferencia no sale efectivo ni vuelto', () {
+    final v = venta(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 16000, recibe: null);
+    final papel = _papel(ModeloTicket.deVenta(v, caja: caja, fiesta: 'Puerto Viejo'));
+    expect(papel, contains('Transferencia           \$ 16.000'));
+    expect(papel.where((r) => r.startsWith('Efectivo') || r.startsWith('Vuelto')), isEmpty);
+  });
+
+  test('un mixto dice las dos partes y el vuelto de lo que entregó', () {
+    final v = venta(medio: MedioBarra.mixto, efectivo: 10000, transferencia: 6000, recibe: 10000);
+    final papel = _papel(ModeloTicket.deVenta(v, caja: caja, fiesta: 'Puerto Viejo'));
+    expect(papel, containsAllInOrder([
+      'TOTAL                   \$ 16.000',
+      'Efectivo                \$ 10.000',
+      'Transferencia            \$ 6.000',
+      'Recibe                  \$ 10.000',
+      'Vuelto                       \$ 0',
+    ]));
+  });
+
+  test('una venta anulada lo dice arriba y abajo, con el motivo, y no da las gracias', () {
+    final v = venta();
+    final a = AnulacionBarra.de(
+      v,
+      motivo: 'se cobró dos veces',
+      hechoPor: 'Jefe',
+      ahora: DateTime.utc(2026, 12, 5, 3),
+    );
+    final papel = _papel(ModeloTicket.deVenta(v, caja: caja, fiesta: 'Puerto Viejo', anulacion: a));
+    expect(papel.where((r) => r == '*** ANULADA ***'), hasLength(2));
+    expect(papel.indexOf('*** ANULADA ***'), lessThan(papel.indexOf('TOTAL                   \$ 16.000')));
+    expect(papel, contains('Motivo: se cobró dos veces'));
+    expect(papel, contains('05/12/2026 - 00:00 - Jefe'));
+    expect(papel, isNot(contains('¡Gracias, salud!')));
+  });
+
+  test('un nombre de fiesta largo se parte por palabras', () {
+    final papel = _papel(ModeloTicket.deVenta(
+      venta(),
+      caja: caja,
+      fiesta: 'Escuela Normal Superior Mariano Acosta Promoción 2026',
+    ));
+    expect(papel, containsAllInOrder(['Escuela Normal Superior Mariano', 'Acosta Promoción 2026']));
+  });
+
+  test('con logo, va primero', () {
+    final logo = img.Image(width: 8, height: 8);
+    expect(ModeloTicket.deVenta(venta(), caja: caja, fiesta: 'x', logo: logo).first, isA<LogoTicket>());
+  });
+
+  group('el cierre', () {
+    final ventas = [
+      venta(),
+      venta(medio: MedioBarra.transferencia, efectivo: 0, transferencia: 16000, recibe: null),
+    ];
+
+    test('cerrada: lo vendido, lo esperado, lo contado y la diferencia anotada', () {
+      final anulada = venta(recibe: null);
+      final todas = [...ventas, anulada];
+      final anulaciones = [AnulacionBarra.de(anulada, motivo: 'error', ahora: vendida)];
+      final cerrada = caja.cerrada(
+        efectivoContado: 35500,
+        diferencia: -500,
+        nota: 'faltó un billete de quinientos',
+        ahora: DateTime.utc(2026, 12, 5, 6, 30),
+      );
+      final papel = _papel(ModeloTicket.deCierre(
+        cerrada,
+        CierreDeBarra.de(cerrada, todas, anulaciones),
+        fiesta: 'Puerto Viejo',
+      ));
+      expect(papel, [
+        '[TITULO] JUNIOR EVENTOS',
+        'CIERRE DE CAJA - BARRA',
+        'Puerto Viejo',
+        'Abrió 04/12/2026 - 22:00',
+        'Caja 2 - Marta',
+        'Cerró 05/12/2026 - 03:30',
+        '-' * 32,
+        'Ventas                         2',
+        'Efectivo                \$ 16.000',
+        'Transferencia           \$ 16.000',
+        'TOTAL VENDIDO           \$ 32.000',
+        'Anuladas (no cuentan)          1',
+        'Lo anulado              \$ 16.000',
+        '-' * 32,
+        'Cambio inicial          \$ 20.000',
+        'Efectivo esperado       \$ 36.000',
+        'Efectivo contado        \$ 35.500',
+        r'Faltan $ 500',
+        '-' * 32,
+        'Nota: faltó un billete de',
+        'quinientos',
+      ]);
+    });
+
+    test('abierta: lo dice, y sale sin lo contado', () {
+      final papel = _papel(ModeloTicket.deCierre(
+        caja,
+        CierreDeBarra.de(caja, ventas, const []),
+        fiesta: 'Puerto Viejo',
+      ));
+      expect(papel, contains('*** CAJA ABIERTA ***'));
+      expect(papel.where((r) => r.startsWith('Efectivo contado')), isEmpty);
+      expect(papel.where((r) => r.startsWith('Faltan') || r.startsWith('Sobran')), isEmpty);
+    });
+  });
+
+  test('en la impresora: ningún renglón pasa las 32 letras y los acentos van en la 850', () async {
+    final perfil = await CapabilityProfile.load();
+    final v = venta();
+    final a = AnulacionBarra.de(v, motivo: 'se cobró dos veces', ahora: vendida);
+    final lineas = [
+      ...ModeloTicket.deVenta(v, caja: caja, fiesta: 'Puerto Viejo', anulacion: a),
+      ...ModeloTicket.deCierre(caja, CierreDeBarra.de(caja, [v], [a]), fiesta: 'Puerto Viejo'),
+    ];
+    for (final r in _papel(lineas)) {
+      if (r.startsWith('[')) continue;
+      expect(r.length, lessThanOrEqualTo(32), reason: r);
+    }
+    final s = bytesComoTexto(TicketEscPos(perfil).armar(lineas));
+    expect(s, contains('Caja 2 · N° 0017'));
+    expect(s, contains('Motivo: se cobró dos veces'));
+    expect(s, contains('Abrió 04/12/2026 - 22:00'));
+  });
+}

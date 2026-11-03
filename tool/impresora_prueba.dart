@@ -10,7 +10,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
+import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
+import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
 import 'package:arguello_events/features/barra/impresion/canal_universal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
@@ -158,10 +161,62 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
   }
 
   /// El ticket como va a salir en la app, con lo que quedó en `OpcionesEscPos.deLaPrueba`.
+  // Una caja y dos ventas inventadas, para sacar el ticket y el cierre como van a salir
+  // en la app (`ModeloTicket`). No se guardan en ningún lado.
+  static final _caja = CajaBarra.abrir(
+    eventoId: 'e0000000-0000-4000-8000-000000000001',
+    operadorNombre: 'Marta',
+    numeroCaja: 2,
+    cambioInicial: 20000,
+    ahora: DateTime.now(),
+  );
+
+  static VentaBarra _venta({int numero = 17, bool mixta = false}) => VentaBarra.nueva(
+        cajaBarraId: _caja.id,
+        eventoId: _caja.eventoId,
+        numero: numero,
+        renglones: const [
+          RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 2),
+          RenglonVenta(productoId: 'b', nombre: 'Fernet con coca', precio: 6000, cantidad: 1),
+          RenglonVenta(productoId: 'c', nombre: 'Agua sin gas', precio: 1000, cantidad: 3),
+        ],
+        medio: mixta ? MedioBarra.mixto : MedioBarra.efectivo,
+        efectivo: mixta ? 10000 : 16000,
+        transferencia: mixta ? 6000 : 0,
+        recibe: 20000,
+        comprobanteVisto: mixta,
+        ahora: DateTime.now(),
+      );
+
+  /// El ticket de una venta como sale en la app, con lo que quedó en
+  /// `OpcionesEscPos.deLaPrueba`.
   Future<void> _ticket() async {
     final armador = await TicketEscPos.cargar();
     final logo = await armador.opciones.logo.cargar(rootBundle);
-    await _mandar('TICKET', armador.armar(ticketDePrueba(logo: logo)));
+    await _mandar(
+      'TICKET',
+      armador.armar(ModeloTicket.deVenta(_venta(), caja: _caja, fiesta: 'Puerto Viejo', logo: logo)),
+    );
+  }
+
+  /// El papel del cierre de una caja con dos ventas, una anulada, y $ 500 de menos.
+  Future<void> _cierre() async {
+    final armador = await TicketEscPos.cargar();
+    final ventas = [_venta(), _venta(numero: 18, mixta: true), _venta(numero: 19)];
+    final anulaciones = [
+      AnulacionBarra.de(ventas.last, motivo: 'se cobró dos veces', ahora: DateTime.now()),
+    ];
+    final cuentas = CierreDeBarra.de(_caja, ventas, anulaciones);
+    final cerrada = _caja.cerrada(
+      efectivoContado: cuentas.efectivoEsperado - 500,
+      diferencia: -500,
+      nota: 'faltó un billete de quinientos',
+      ahora: DateTime.now(),
+    );
+    await _mandar(
+      'CIERRE',
+      armador.armar(ModeloTicket.deCierre(cerrada, cuentas, fiesta: 'Puerto Viejo')),
+    );
   }
 
   Future<void> _acentos() async {
@@ -245,6 +300,7 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
                 boton('ANCHO', _ancho),
                 boton('QR', _qr),
                 boton('LOGO', _logo),
+                boton('CIERRE', _cierre),
                 OutlinedButton(
                   onPressed: _elegida == null || _ocupado ? null : _olvidar,
                   child: const Text('OLVIDAR'),
