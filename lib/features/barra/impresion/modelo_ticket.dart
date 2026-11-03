@@ -116,11 +116,12 @@ abstract final class ModeloTicket {
     required String fiesta,
     CopiaDeVale? copia,
   }) {
-    // "Caja 2 · Marta · N° 0017": la cajera en el medio del número del ticket.
+    // "Caja 2 · Marta · N° 0017-3": la cajera en el medio, y por separado el orden del
+    // vale en la venta.
     final numero = [
       'Caja ${caja.numeroCaja}',
       if (caja.operadorNombre != null) caja.operadorNombre!,
-      'N° ${venta.numero.toString().padLeft(4, '0')}',
+      'N° ${venta.numero.toString().padLeft(4, '0')}${vale.porSeparado ? '-${vale.numero}' : ''}',
     ].join(' · ');
     return [
       if (copia != null) const GrandeTicket('*** COPIA ***'),
@@ -132,7 +133,6 @@ abstract final class ModeloTicket {
         GrandeTicket(vale.bebidas.single.nombre.toUpperCase()),
       ] else
         for (final b in vale.bebidas) GrandeTicket('${b.cantidad} ${b.nombre.toUpperCase()}'),
-      if (vale.de > 1) TextoTicket('${vale.numero} DE ${vale.de}', negrita: true),
       if (copia != null) ...[
         ..._centrado('Copia ${copia.numero}'
             '${copia.hechoPor == null ? '' : ' - ${copia.hechoPor}'}'),

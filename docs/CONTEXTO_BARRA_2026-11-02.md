@@ -11,7 +11,7 @@ pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.
 ## Para retomar en otro chat
 
 **Dónde quedó (3-nov, tarde):** todo commiteado y subido. Después de la etapa 3 se hizo un tramo corto, **el "3b": los vales** (abajo). La
-suite entera, en verde (3.331 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario pruebe la
+suite entera, en verde (3.328 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario pruebe la
 pantalla de los vales (botón VALES), mande la foto y se los muestre al jefe con la maqueta.
 
 ## El 3b: los vales, en vez del ticket (3-nov, pedido del jefe)
@@ -20,11 +20,14 @@ El jefe pidió que de una compra salga **un vale**, no el ticket: sin logo, sin 
 entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el chat:
 - **Dos formas al cobrar:** **TODO JUNTO** (un vale con todas las bebidas, para quien retira de una vez) y **POR SEPARADO** (para ir
   retirando de a poco). "Sin papel" lo sacó el jefe.
-- **Por separado, cada bebida es su sector, con una sola casilla "vale por ___" (vacía: la cajera la escribe si aplica) y su propio botón
-  IMPRIMIR.** 10 cervezas y "vale por 3" son 4 vales: 3, 3, 3 y 1. Sin número, un vale con todas. Lo impreso queda marcado y su botón se apaga.
-- **Cada vale sale solo, cuadradito, y se arranca antes del siguiente** (nada de tira). Lleva todo para reclamarlo, porque el barman se lo
-  queda: la fiesta en negrita, el día, la fecha y la hora, "Caja 2 · Marta · N° 0017", "VALE POR 3 / CERVEZA LATA" en grande, "1 DE 4" y
-  "Vale solo hoy · una sola vez / El barman se queda el vale".
+- **Por separado, cada bebida es su sector, con una sola casilla "vale por ___" y su propio IMPRIMIR, y cada vale lo arma la cajera a
+  mano** (lo corrigió el usuario probándolo: "poner SIGUIENTE y bloquearme de poner manual no da"). Escribe 3, IMPRIMIR, sale un vale por
+  3; la casilla queda vacía y dice "Quedan 7 · Salió 1 vale: 3"; escribe 2, y así hasta que no queda nada ("Todo en vales: 3 · 2 · 5").
+  Vacía, el botón dice "IMPRIMIR LAS 5": un vale por todas las que quedan. No deja pasar más de lo que queda.
+- **Cada vale sale solo, cuadradito, un papel por IMPRIMIR** (nada de tira). Lleva todo para reclamarlo, porque el barman se lo queda: la
+  fiesta en negrita, el día, la fecha y la hora, "Caja 2 · Marta · N° 0017-3" (el -3 es el orden del vale en toda la venta, así no hay dos
+  iguales aunque sean de bebidas distintas), "VALE POR 3 / CERVEZA LATA" en grande y "Vale solo hoy · una sola vez / El barman se queda el
+  vale".
 - **Contra el engaño, sin aparato:** el barman se queda el vale; la fiesta y el día dicen de qué noche es; una fotocopia se nota; la cajera
   reimprime solo la última venta, una vez; el jefe, cualquiera, y sale **\*\*\* COPIA \*\*\*** arriba y abajo con quién, cuándo y el motivo
   ("se entrega solo con el jefe"). Todo queda anotado.
@@ -32,18 +35,16 @@ entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el
 - **Abrir la caja no pregunta el cambio ni el turno** (es de noche, nada de mañana/tarde): el cambio se pone después, con un ícono, si hay.
 - **Una persona controla el sector de barras con un iPhone:** es la web en modo jefe, que ya estaba en el plan (etapa 6).
 
-**Lo programado (solo el papel, sin pantallas ni base):** `cuentas/vales_de_barra.dart` (`Vale.todoJunto`, `Vale.porSeparadoDe`,
-`partirEnVales`, `valePorValido`, `CopiaDeVale`); `GrandeTicket` y `renglonesGrandes` en `impresion/ticket_esc_pos.dart` (doble de alto y de
-ancho, 16 letras partidas por palabras; `soloAlto`, 32); `ModeloTicket.deVale` y `diaFechaYHora` ("Vie 04/12/2026 - 23:41"). Tests:
-`test/vales_de_barra_test.dart`, el grupo "el vale" de `modelo_ticket_test` y la letra grande en `impresora_barra_test`. Roturas a propósito
-vistas en rojo (el último vale con lo que sobra, las 16 letras, la COPIA de abajo).
+**Lo programado:** `cuentas/vales_de_barra.dart` (`Vale.todoJunto`, `Vale.deUnaBebida`, `valePorValido`, `CopiaDeVale`); `GrandeTicket` y
+`renglonesGrandes` en `impresion/ticket_esc_pos.dart` (doble de alto y de ancho, 16 letras partidas por palabras; `soloAlto`, 32);
+`ModeloTicket.deVale` y `diaFechaYHora` ("Vie 04/12/2026 - 23:41"). Tests: `test/vales_de_barra_test.dart`, el grupo "el vale" de
+`modelo_ticket_test` y la letra grande en `impresora_barra_test`.
 
-**La pantalla de después de cobrar ya existe: `widgets/elegir_vales.dart` (`ElegirVales`)**, sin base, con la impresora como un
-`ImprimirPapel` (true si salió); la va a usar COBRAR en la etapa 5. TODO JUNTO o POR SEPARADO; por bebida, la casilla "vale por" (solo
-números; "Va de 1 a 10" si no sirve, y no deja imprimir), "4 vales: 3 · 3 · 3 · 1" e IMPRIMIR. **Sale un vale por vez: después de cada uno,
-"Salió el vale 1 de 4: arrancalo" y SIGUIENTE** (el 3-nov la prueba que los mandaba seguidos, con 4 s entre uno y otro, sacó una tira larga).
-Con un vale impreso la forma no se cambia; si uno no sale, lo dice y SIGUIENTE manda el mismo. `test/elegir_vales_test.dart` (7 tests, uno a
-360 px). Roturas vistas: la tira y cambiar la forma después de imprimir.
+**La pantalla de después de cobrar: `widgets/elegir_vales.dart` (`ElegirVales`)**, sin base, con la impresora como un `ImprimirPapel` (true si
+salió); la va a usar COBRAR en la etapa 5. Con un vale impreso la forma no se cambia; si uno no sale, lo dice, no descuenta y deja lo escrito
+para volver a mandarlo. `test/elegir_vales_test.dart` (7 tests, uno a 360 px). Roturas vistas en rojo: la casilla que no se vacía, dejar pasar
+más de lo que queda, numerar por bebida, mandar todo en tira y cambiar la forma después de imprimir. (Antes de que el usuario lo corrigiera,
+la casilla partía la bebida en vales fijos y salían de a uno con SIGUIENTE; una prueba anterior que los mandaba seguidos sacó una tira larga.)
 
 **Para mirarlo:** en `tool/impresora_prueba.dart`, **VALES** abre esa pantalla con una compra inventada (10 cervezas, 2 fernet, 3 aguas) y
 la impresora de verdad; **COPIA** imprime un vale reimpreso. La maqueta, con los dos botones, la casilla y el IMPRIMIR por bebida:
@@ -51,8 +52,8 @@ la impresora de verdad; **COPIA** imprime un vale reimpreso. La maqueta, con los
 todo junto unos 6 cm; uno por separado unos 5 cm. La medida justa, de la foto.
 
 **Dónde entra en las etapas:** la 4 (la cajera) lleva abrir sin cambio ni turno y el ícono del cambio; la 5 (cobrar e imprimir) lleva los
-dos botones, la casilla, la impresión de a uno, reimprimir con freno y ANULAR de la cajera. **Datos de la 5, decididos:** `vale_por` adentro
-del JSON `renglones` de `barra_ventas` (sin columna); una tabla nueva `barra_reimpresiones`, que solo agrega, dentro de la v77 (no se
+dos botones, la casilla, la impresión de a uno, reimprimir con freno y ANULAR de la cajera. **Datos de la 5, decididos:** por cuánto salió cada vale
+(`[3, 2, 5]`, con su número en la venta) adentro del JSON `renglones` de `barra_ventas` (sin columna), para reimprimir el mismo; una tabla nueva `barra_reimpresiones`, que solo agrega, dentro de la v77 (no se
 publicó): con ella hay que volver a probar la migración sobre una copia de la base real, con la app cerrada.
 
 **La rama lleva, sin publicar:** el plano antes de los sorteos (6.3.0, `docs/CONTEXTO_v6.3.0_2026-11-02.md`), operadores con permisos (etapas 1

@@ -217,8 +217,8 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
       );
 
   /// La pantalla de después de cobrar (`ElegirVales`), con la impresora de verdad: se
-  /// elige TODO JUNTO o POR SEPARADO, y cada vale sale solo, con SIGUIENTE. Cada vez que
-  /// se abre es una compra nueva.
+  /// elige TODO JUNTO o POR SEPARADO, y por separado cada vale se arma a mano y sale solo.
+  /// Cada vez que se abre es una compra nueva.
   Future<void> _vales() async {
     final armador = await TicketEscPos.cargar();
     if (!mounted) return;
@@ -248,7 +248,7 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
     await _mandar(
       'COPIA',
       armador.armar(ModeloTicket.deVale(
-        Vale.porSeparadoDe(venta.renglones.first, valePor: 3).first,
+        Vale.deUnaBebida(venta.renglones.first, cantidad: 3, numero: 1),
         venta: venta,
         caja: _caja,
         fiesta: 'Puerto Viejo',

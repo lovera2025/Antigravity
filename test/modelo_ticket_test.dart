@@ -163,44 +163,18 @@ void main() {
       expect(_papel(lineas).where((r) => r.contains(r'$')), isEmpty, reason: 'sin precios');
     });
 
-    test('por separado: "vale por" y la bebida en grande, y cuál es de cuántos', () {
-      final v = VentaBarra.nueva(
-        cajaBarraId: caja.id,
-        eventoId: _evento,
-        numero: 17,
-        renglones: const [
-          RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10),
-        ],
-        medio: MedioBarra.efectivo,
-        efectivo: 35000,
-        ahora: vendida,
-      );
-      final vales = Vale.porSeparadoDe(v.renglones.single, valePor: 3);
-      expect(vales, hasLength(4));
-      expect(_papel(ModeloTicket.deVale(vales.first, venta: v, caja: caja, fiesta: 'Puerto Viejo')), [
+    test('por separado: "vale por" y la bebida en grande, y el número del vale en la venta', () {
+      final v = venta();
+      final vale = Vale.deUnaBebida(v.renglones.first, cantidad: 2, numero: 3);
+      expect(_papel(ModeloTicket.deVale(vale, venta: v, caja: caja, fiesta: 'Puerto Viejo')), [
         'PUERTO VIEJO',
         'Vie 04/12/2026 - 23:41',
-        'Caja 2 · Marta · N° 0017',
-        '[GRANDE] VALE POR 3',
+        'Caja 2 · Marta · N° 0017-3',
+        '[GRANDE] VALE POR 2',
         '[GRANDE] CERVEZA LATA',
-        '1 DE 4',
         'Vale solo hoy · una sola vez',
         'El barman se queda el vale',
       ]);
-      final ultimo = _papel(ModeloTicket.deVale(vales.last, venta: v, caja: caja, fiesta: 'Puerto Viejo'));
-      expect(ultimo, containsAllInOrder(['[GRANDE] VALE POR 1', '[GRANDE] CERVEZA LATA', '4 DE 4']));
-    });
-
-    test('un solo vale no dice "1 de 1"', () {
-      final v = venta();
-      final papel = _papel(ModeloTicket.deVale(
-        Vale.porSeparadoDe(v.renglones.first).single,
-        venta: v,
-        caja: caja,
-        fiesta: 'Puerto Viejo',
-      ));
-      expect(papel, contains('[GRANDE] VALE POR 2'));
-      expect(papel.where((r) => r.contains(' DE ')), isEmpty);
     });
 
     test('una copia lo dice en grande arriba y abajo, con quién, cuándo y por qué', () {
@@ -250,8 +224,12 @@ void main() {
       );
       final lineas = [
         ...ModeloTicket.deVale(Vale.todoJunto(v), venta: v, caja: caja, fiesta: 'Escuela Normal Promoción 2026'),
-        for (final vale in Vale.porSeparadoDe(v.renglones.first, valePor: 1))
-          ...ModeloTicket.deVale(vale, venta: v, caja: caja, fiesta: 'Puerto Viejo'),
+        ...ModeloTicket.deVale(
+          Vale.deUnaBebida(v.renglones.first, cantidad: 1, numero: 12),
+          venta: v,
+          caja: caja,
+          fiesta: 'Puerto Viejo',
+        ),
       ];
       for (final r in _papel(lineas)) {
         if (r.startsWith('[GRANDE] ')) {

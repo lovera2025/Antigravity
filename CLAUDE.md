@@ -59,7 +59,7 @@ un SQL sin correr. Faltan las etapas 4 a 6 antes de usarlo: quien tiene solo Ent
 que empieza con **"Para retomar en otro chat"**). Las etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas, `lib/features/barra/cuentas/`, y lo que dice cada papel,
 `impresion/modelo_ticket.dart`) se cerraron el 3-nov y sigue la 4 (la cajera). **Las cuentas van en centavos enteros** (`centavos`), y **una venta
 anulada no cuenta, tampoco en el efectivo esperado del cierre**. **El papel de cada compra es un vale, no el ticket** (pedido del jefe, 3-nov,
-el "3b"): sin logo, sin precios y sin QR, TODO JUNTO o POR SEPARADO ("vale por", `cuentas/vales_de_barra.dart`), uno por papel, en letras
+el "3b"): sin logo, sin precios y sin QR, TODO JUNTO o POR SEPARADO (cada vale armado a mano con su "vale por" hasta que no quede nada: `widgets/elegir_vales.dart`), uno por papel, en letras
 grandes (`GrandeTicket`), y **el barman se lo queda**: ese es el control, junto con la fiesta y el día impresos y la COPIA marcada. La app ya imprime
 por Bluetooth desde la PC y desde un celular Android (`lib/features/barra/impresion/`, `flutter run -d windows -t tool/impresora_prueba.dart`), pero todavía no tiene pantallas de barra.
 **Los datos** son cinco tablas de la v77 (`barra_productos`, `barra_precios`, `barra_cajas`, `barra_ventas`, `barra_anulaciones`), con su SQL

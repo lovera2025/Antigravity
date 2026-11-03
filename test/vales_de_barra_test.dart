@@ -3,51 +3,32 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:arguello_events/features/barra/cuentas/vales_de_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 
-/// Cuántos vales salen de una bebida comprada por separado, con la casilla "vale por".
+/// Los vales de una venta: todo junto, o por separado, cada uno armado a mano.
 void main() {
-  test('10 y "vale por 3" son 3, 3, 3 y 1: el último con lo que sobra', () {
-    expect(partirEnVales(10, 3), [3, 3, 3, 1]);
-    expect(partirEnVales(10, 2), [2, 2, 2, 2, 2]);
-    expect(partirEnVales(10, 1), List.filled(10, 1));
-    expect(partirEnVales(10, 10), [10]);
-  });
+  const cerveza = RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10);
 
-  test('sin "vale por", un vale con todas', () {
-    expect(partirEnVales(10, null), [10]);
-    expect(partirEnVales(1, null), [1]);
-  });
-
-  test('un "vale por" que no sirve no arma vales', () {
-    expect(valePorValido(10, 0), isFalse);
-    expect(valePorValido(10, 11), isFalse);
-    expect(valePorValido(10, -2), isFalse);
+  test('"vale por" sirve de 1 a las que quedan, y vacío es por todas las que quedan', () {
+    expect(valePorValido(10, 3), isTrue);
+    expect(valePorValido(10, 10), isTrue);
     expect(valePorValido(10, null), isTrue);
-    expect(() => partirEnVales(10, 0), throwsArgumentError);
-    expect(() => partirEnVales(10, 11), throwsArgumentError);
-    expect(() => partirEnVales(0, null), throwsArgumentError);
+    expect(valePorValido(7, 8), isFalse, reason: 'quedan 7');
+    expect(valePorValido(10, 0), isFalse);
+    expect(valePorValido(10, -2), isFalse);
+    expect(valePorValido(0, null), isFalse, reason: 'no queda nada');
+    expect(valePorValido(0, 1), isFalse);
   });
 
-  test('los vales suman siempre lo comprado', () {
-    for (var cantidad = 1; cantidad <= 30; cantidad++) {
-      for (var por = 1; por <= cantidad; por++) {
-        final partes = partirEnVales(cantidad, por);
-        expect(partes.fold<int>(0, (s, p) => s + p), cantidad, reason: '$cantidad por $por');
-        expect(partes.every((p) => p >= 1 && p <= por), isTrue, reason: '$cantidad por $por');
-      }
-    }
+  test('por separado: un vale por lo que se escribió, con su número en la venta', () {
+    final vale = Vale.deUnaBebida(cerveza, cantidad: 3, numero: 2);
+    expect(vale.bebidas, [const BebidaDelVale(3, 'Cerveza lata')]);
+    expect(vale.porSeparado, isTrue);
+    expect(vale.numero, 2);
   });
 
-  test('por separado: cada vale sabe cuál es de cuántos', () {
-    const r = RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10);
-    final vales = Vale.porSeparadoDe(r, valePor: 3);
-    expect([for (final v in vales) v.bebidas.single], [
-      const BebidaDelVale(3, 'Cerveza lata'),
-      const BebidaDelVale(3, 'Cerveza lata'),
-      const BebidaDelVale(3, 'Cerveza lata'),
-      const BebidaDelVale(1, 'Cerveza lata'),
-    ]);
-    expect([for (final v in vales) '${v.numero} de ${v.de}'], ['1 de 4', '2 de 4', '3 de 4', '4 de 4']);
-    expect(vales.every((v) => v.porSeparado), isTrue);
+  test('un vale por más de lo comprado, o por nada, no se arma', () {
+    expect(() => Vale.deUnaBebida(cerveza, cantidad: 11, numero: 1), throwsArgumentError);
+    expect(() => Vale.deUnaBebida(cerveza, cantidad: 0, numero: 1), throwsArgumentError);
+    expect(() => Vale.deUnaBebida(cerveza, cantidad: 3, numero: 0), throwsArgumentError);
   });
 
   test('todo junto: un vale con todas las bebidas de la venta', () {
@@ -56,7 +37,7 @@ void main() {
       eventoId: 'e',
       numero: 1,
       renglones: const [
-        RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10),
+        cerveza,
         RenglonVenta(productoId: 'b', nombre: 'Agua', precio: 1000, cantidad: 3),
       ],
       medio: MedioBarra.efectivo,
@@ -66,6 +47,5 @@ void main() {
     final vale = Vale.todoJunto(venta);
     expect(vale.bebidas, [const BebidaDelVale(10, 'Cerveza lata'), const BebidaDelVale(3, 'Agua')]);
     expect(vale.porSeparado, isFalse);
-    expect('${vale.numero} de ${vale.de}', '1 de 1');
   });
 }

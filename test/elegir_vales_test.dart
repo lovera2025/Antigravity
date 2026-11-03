@@ -5,8 +5,9 @@ import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 import 'package:arguello_events/features/barra/widgets/elegir_vales.dart';
 
-/// La pantalla de después de cobrar: TODO JUNTO o POR SEPARADO, con "vale por" e
-/// IMPRIMIR por bebida, y un vale por papel (pedido del jefe, 3-nov).
+/// La pantalla de después de cobrar: TODO JUNTO o POR SEPARADO; por separado, cada vale
+/// lo arma la cajera escribiendo por cuánto, hasta que no quede nada (pedido del jefe,
+/// 3-nov). Un vale por papel.
 const _evento = 'e0000000-0000-4000-8000-000000000001';
 
 /// Lo que la impresora recibió: cada papel con sus líneas grandes y chicas, como texto.
@@ -68,6 +69,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> escribir(WidgetTester tester, int bebida, String texto) async {
+    await tester.enterText(find.byKey(Key('vale-por-$bebida')), texto);
+    await tester.pump();
+  }
+
+  bool apagado(WidgetTester tester, String key) =>
+      tester.widget<ButtonStyleButton>(find.byKey(Key(key))).onPressed == null;
+
   testWidgets('todo junto: un solo vale con todas las bebidas', (tester) async {
     final impresora = await abrir(tester);
     await tocar(tester, 'forma-todo-junto');
@@ -78,48 +87,66 @@ void main() {
     expect(find.byKey(const Key('imprimir-todo-junto')), findsNothing, reason: 'no se imprime dos veces');
   });
 
-  testWidgets('por separado: "vale por 3" son 4 vales, y sale uno por vez con SIGUIENTE', (tester) async {
+  testWidgets('por separado: cada vale por lo que se escribe, hasta que no queda nada', (tester) async {
     final impresora = await abrir(tester);
     await tocar(tester, 'forma-por-separado');
-    await tester.enterText(find.byKey(const Key('vale-por-0')), '3');
-    await tester.pump();
-    expect(find.text('4 vales: 3 · 3 · 3 · 1'), findsOneWidget);
+    expect(find.text('Quedan 10'), findsOneWidget);
 
+    await escribir(tester, 0, '3');
+    expect(find.text('IMPRIMIR VALE POR 3'), findsOneWidget);
     await tocar(tester, 'imprimir-0');
-    expect(impresora.papeles, hasLength(1), reason: 'un solo papel, no la tira');
-    expect(impresora.papeles.last, containsAllInOrder(['VALE POR 3', 'CERVEZA LATA', '1 DE 4']));
-    expect(find.text('Salió el vale 1 de 4: arrancalo'), findsOneWidget);
+    expect(impresora.papeles, hasLength(1), reason: 'un solo papel por IMPRIMIR');
+    expect(impresora.papeles.last, containsAllInOrder(['Caja 2 · Marta · N° 0017-1', 'VALE POR 3', 'CERVEZA LATA']));
+    expect(tester.widget<TextField>(find.byKey(const Key('vale-por-0'))).controller!.text, isEmpty,
+        reason: 'la casilla queda vacía para el próximo');
+    expect(find.text('Quedan 7 · Salió 1 vale: 3'), findsOneWidget);
 
-    for (var n = 2; n <= 4; n++) {
-      await tocar(tester, 'siguiente-0');
-      expect(impresora.papeles, hasLength(n));
-    }
-    expect(impresora.papeles.last, containsAllInOrder(['VALE POR 1', 'CERVEZA LATA', '4 DE 4']));
-    expect(find.text('4 vales impresos'), findsOneWidget);
-    expect(find.byKey(const Key('siguiente-0')), findsNothing);
+    await escribir(tester, 0, '2');
+    await tocar(tester, 'imprimir-0');
+    expect(impresora.papeles.last, containsAllInOrder(['Caja 2 · Marta · N° 0017-2', 'VALE POR 2']));
+    expect(find.text('Quedan 5 · Salieron 2 vales: 3 · 2'), findsOneWidget);
+
+    // Vacía: un vale por todas las que quedan.
+    expect(find.text('IMPRIMIR LAS 5'), findsOneWidget);
+    await tocar(tester, 'imprimir-0');
+    expect(impresora.papeles.last, contains('VALE POR 5'));
+    expect(impresora.papeles, hasLength(3));
+    expect(find.text('Todo en vales: 3 · 2 · 5'), findsOneWidget);
+    expect(find.byKey(const Key('imprimir-0')), findsNothing);
     expect(find.text('Falta imprimir: fernet con coca, agua sin gas'), findsOneWidget);
   });
 
-  testWidgets('sin "vale por", un vale con todas las de esa bebida', (tester) async {
+  testWidgets('los vales se numeran en toda la venta, aunque sean de bebidas distintas', (tester) async {
     final impresora = await abrir(tester);
     await tocar(tester, 'forma-por-separado');
-    expect(find.text('1 vale de 3'), findsOneWidget);
-    await tocar(tester, 'imprimir-2');
-    expect(impresora.papeles.single, containsAllInOrder(['VALE POR 3', 'AGUA SIN GAS']));
-    expect(impresora.papeles.single.any((r) => r.contains(' DE ')), isFalse);
-    expect(find.text('Vale impreso'), findsOneWidget);
+    await escribir(tester, 0, '4');
+    await tocar(tester, 'imprimir-0');
+    await escribir(tester, 1, '1');
+    await tocar(tester, 'imprimir-1');
+    await escribir(tester, 0, '1');
+    await tocar(tester, 'imprimir-0');
+    expect([for (final p in impresora.papeles) p[2]], [
+      'Caja 2 · Marta · N° 0017-1',
+      'Caja 2 · Marta · N° 0017-2',
+      'Caja 2 · Marta · N° 0017-3',
+    ]);
   });
 
-  testWidgets('un "vale por" que no sirve no deja imprimir', (tester) async {
+  testWidgets('no deja pasar más de lo que queda', (tester) async {
     final impresora = await abrir(tester);
     await tocar(tester, 'forma-por-separado');
-    for (final malo in ['0', '11']) {
-      await tester.enterText(find.byKey(const Key('vale-por-0')), malo);
-      await tester.pump();
-      expect(find.text('Va de 1 a 10'), findsOneWidget, reason: malo);
-      expect(tester.widget<ButtonStyleButton>(find.byKey(const Key('imprimir-0'))).onPressed, isNull);
-    }
-    expect(impresora.papeles, isEmpty);
+    await escribir(tester, 0, '11');
+    expect(find.text('Va de 1 a 10'), findsOneWidget);
+    expect(apagado(tester, 'imprimir-0'), isTrue);
+    await escribir(tester, 0, '0');
+    expect(apagado(tester, 'imprimir-0'), isTrue);
+
+    await escribir(tester, 0, '8');
+    await tocar(tester, 'imprimir-0');
+    await escribir(tester, 0, '3');
+    expect(find.text('Va de 1 a 2'), findsOneWidget, reason: 'quedan 2');
+    expect(apagado(tester, 'imprimir-0'), isTrue);
+    expect(impresora.papeles, hasLength(1));
   });
 
   testWidgets('con un vale impreso, la forma ya no se cambia', (tester) async {
@@ -127,29 +154,29 @@ void main() {
     await tocar(tester, 'forma-por-separado');
     await tocar(tester, 'imprimir-1');
     expect(find.text('Ya salió un vale: la forma no se cambia.'), findsOneWidget);
-    expect(tester.widget<ButtonStyleButton>(find.byKey(const Key('forma-todo-junto'))).onPressed, isNull);
+    expect(apagado(tester, 'forma-todo-junto'), isTrue);
   });
 
-  testWidgets('si no sale, lo dice y el mismo vale se vuelve a mandar', (tester) async {
+  testWidgets('si no sale, lo dice y deja lo escrito para volver a mandarlo', (tester) async {
     final impresora = await abrir(tester);
     await tocar(tester, 'forma-por-separado');
-    await tester.enterText(find.byKey(const Key('vale-por-0')), '5');
-    await tester.pump();
+    await escribir(tester, 0, '5');
     impresora.anda = false;
     await tocar(tester, 'imprimir-0');
     expect(find.textContaining('No salió el vale'), findsOneWidget);
+    expect(find.text('Quedan 10'), findsOneWidget, reason: 'no se descuenta lo que no salió');
     impresora.anda = true;
-    await tocar(tester, 'siguiente-0');
-    expect(impresora.papeles.single, containsAllInOrder(['VALE POR 5', '1 DE 2']));
+    await tocar(tester, 'imprimir-0');
+    expect(impresora.papeles.single, containsAllInOrder(['Caja 2 · Marta · N° 0017-1', 'VALE POR 5']));
+    expect(find.text('Quedan 5 · Salió 1 vale: 5'), findsOneWidget);
   });
 
   testWidgets('en un celular entra sin desbordar', (tester) async {
     await abrir(tester, tamano: const Size(360, 740));
     await tocar(tester, 'forma-por-separado');
-    await tester.enterText(find.byKey(const Key('vale-por-0')), '3');
-    await tester.pump();
+    await escribir(tester, 0, '3');
     await tocar(tester, 'imprimir-0');
     expect(tester.takeException(), isNull);
-    expect(find.textContaining('SIGUIENTE (2 de 4)'), findsOneWidget);
+    expect(find.text('Quedan 7 · Salió 1 vale: 3'), findsOneWidget);
   });
 }
