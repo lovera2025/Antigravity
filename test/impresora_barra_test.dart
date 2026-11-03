@@ -433,6 +433,15 @@ void main() {
       expect(s.endsWith('\x1DV\x00') || s.contains('\x1DV'), isTrue);
     });
 
+    test('al final avanza lo justo y pide el corte, sin los 5 renglones en blanco del paquete', () {
+      final bytes = TicketEscPos(perfil).armar(const [TextoTicket('hola')]);
+      // ...el último renglón, un salto, avanzar 3 (ESC d 3) y cortar (GS V 0).
+      expect(bytes.sublist(bytes.length - 7), [0x0A, 0x1B, 0x64, 3, 0x1D, 0x56, 0x30]);
+      expect(bytes.sublist(bytes.length - 8, bytes.length - 7), isNot([0x0A]),
+          reason: 'un solo salto después del texto');
+      expect(OpcionesEscPos.deLaPrueba.avanceAlFinal, 3);
+    });
+
     test('sin cortar, no corta: para encadenar papeles', () {
       expect(armar(const [TextoTicket('a')], cortar: false), isNot(contains('\x1DV')));
     });

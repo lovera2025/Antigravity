@@ -32,7 +32,11 @@ Todo puro, sin pantalla ni base, en `lib/features/barra/cuentas/`, y lo que dice
 - **`ModeloTicket.deVenta`** (con la anulada: "*** ANULADA ***" arriba y abajo, con el motivo, sin las gracias) y **`deCierre`** (una caja
   abierta sale sin lo contado). La hora, siempre en Argentina (`ArTime`), y los textos largos partidos por palabras (`partirPorPalabras`).
   Los tests comparan el papel renglón por renglón, a 32 letras.
-- **La ventana de prueba** imprime TICKET y CIERRE con `ModeloTicket` y datos inventados.
+- **La ventana de prueba** imprime TICKET y CIERRE con `ModeloTicket` y datos inventados. **Salieron bien en el papel** (foto del usuario,
+  3-nov): el isotipo, los acentos, las columnas, el QR, la hora y las cuentas del cierre.
+- **Al final, 3 renglones en blanco y el pedido de corte solo** (`OpcionesEscPos.avanceAlFinal`, `pedidoDeCorte`). Antes eran 8: 3 nuestros
+  y 5 que `Generator.cut` agrega antes de cortar, papel tirado en una impresora sin cortador como la TP-POS58 (se arranca contra la tapa). Con 3,
+  lo último impreso sale entero y el blanco entre dos papeles es corto (foto del usuario, 3-nov).
 
 **Tests:** `barra_cuentas_test` y `modelo_ticket_test`. Roturas a propósito vistas en rojo: el cierre contando las anuladas, la
 transferencia sin tilde, el mixto que no suma y el stock contando las anuladas. **No probado:** que la hora salga en Argentina en un equipo

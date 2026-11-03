@@ -81,20 +81,31 @@ class OpcionesEscPos {
 
   final LogoDelPapel logo;
 
+  /// Cuántos renglones en blanco avanza al terminar, para que lo último impreso pase el
+  /// borde donde se arranca el papel. Sin cortador, más es papel tirado.
+  final int avanceAlFinal;
+
   const OpcionesEscPos({
     this.conAcentos = true,
     this.logo = LogoDelPapel.isotipo,
+    this.avanceAlFinal = 3,
   });
 
   /// Lo que dio la TP-POS58 con el papel en la mano, el 3-nov-2026: los acentos van con
   /// la tabla 850 (con la 1252 salían letras raras); el QR nativo se lee con el celular;
   /// las 32 letras entran justas en un renglón; y el isotipo se lee mejor que la silueta
-  /// de `2.png`. Es lo que usa la app.
+  /// de `2.png`. Es lo que usa la app. No tiene cortador: el papel se arranca contra la
+  /// tapa, y al final avanza lo justo.
   static const deLaPrueba = OpcionesEscPos(
     conAcentos: true,
     logo: LogoDelPapel.isotipo,
+    avanceAlFinal: 3,
   );
 }
+
+/// El pedido de corte, solo: `Generator.cut` le suma antes 5 renglones en blanco, que
+/// en una impresora sin cortador son papel tirado. Una que corta, corta acá.
+const pedidoDeCorte = [0x1D, 0x56, 0x30];
 
 /// Convierte el texto en lo que la impresora puede escribir, y **nunca tira**: el nombre
 /// de un producto con un emoji no puede frenar una venta. Sin acentos los cambia por la
@@ -228,8 +239,8 @@ class TicketEscPos {
           bytes.addAll(g.imageRaster(l.imagen));
       }
     }
-    bytes.addAll(g.feed(3));
-    if (cortar) bytes.addAll(g.cut());
+    bytes.addAll(g.feed(opciones.avanceAlFinal));
+    if (cortar) bytes.addAll(pedidoDeCorte);
     return bytes;
   }
 }
