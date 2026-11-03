@@ -16,6 +16,7 @@ import 'features/auth/login_screen.dart';
 import 'features/auth/sesion_sin_internet.dart';
 import 'features/caja_sesiones/providers/app_role_provider.dart';
 import 'features/caja_sesiones/widgets/role_gate_screen.dart';
+import 'features/entradas/entradas_home_screen.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/splash/splash_screen.dart';
 import 'features/cotizacion/public_selection_screen.dart';
@@ -700,13 +701,11 @@ class _RoleRouter extends ConsumerWidget {
       },
       data: (role) {
         if (role.isAdmin) {
-          if (appRole.kind == AppRoleKind.none) {
-            return const RoleGateScreen();
-          }
-          if (appRole.esCaja && !appRole.tieneSesionCaja) {
-            return const RoleGateScreen();
-          }
-          return const DashboardScreen();
+          return switch (destinoDeEntrada(appRole)) {
+            DestinoDeEntrada.elegir => const RoleGateScreen(),
+            DestinoDeEntrada.entradas => const EntradasHomeScreen(),
+            DestinoDeEntrada.panel => const DashboardScreen(),
+          };
         }
         return const AsesorHomeScreen();
       },

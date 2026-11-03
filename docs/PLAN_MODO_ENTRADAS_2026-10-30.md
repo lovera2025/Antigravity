@@ -180,6 +180,8 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 
 ## 6. Etapas (cada una cierra sola, con commit)
 
+**Etapas 1 a 3 hechas el 2-nov, y la parte de la migración de la etapa 6:** `docs/CONTEXTO_OPERADORES_2026-11-02.md`. Faltan la 4, la 5 y el resto de la 6.
+
 1. **Los permisos**: tabla `permisos_operador` (v76), modelo, repositorio, "sin fila = caja", tests y el SQL (sin
    correr).
 2. **OPERADORES**: una lista, con las casillas Caja y Entradas, y el aviso de la convivencia.

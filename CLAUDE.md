@@ -51,6 +51,10 @@ orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 a 8 hechas y prob
 Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube; trae el sorteo de verdad, y al imprimir deja el PDF en `build/plano_prueba`. **Publicar, solo preguntándole
 antes al usuario.**
 
+**También en la rama, sin publicar: operadores con permisos** (2-nov, etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), con la migración v76 y
+un SQL sin correr. Faltan las etapas 4 a 6 antes de usarlo: quien tiene solo Entradas todavía puede anular una entrega. Entrada:
+`docs/CONTEXTO_OPERADORES_2026-11-02.md`. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`. **Publicar la rama lleva las dos cosas.**
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:
@@ -70,7 +74,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 75) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 76) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -114,6 +118,16 @@ de toda la app está en `user_role_provider.dart:66`.
 **Desde la 6.2.1 no se asignan desde la app:** la pestaña OPERADORES de Mi Empresa se sacó (no había asesores en
 uso: una sola cuenta, sin entrar desde abril). Los permisos siguen en la nube (`permisos_usuario`) y
 `AsesorHomeScreen` los lee; para darlos, SQL o volver a poner la pestaña (está en la historia de git).
+
+**Los operadores tienen otros permisos, que no son esos** (sin publicar): Cobros, Entradas y Barra, en la tabla aparte `permisos_operador` (v76), y en
+`permisos_operador_cambios` quién dio o sacó cada uno. Los carga el jefe en OPERADORES (`operadores_caja_screen.dart`, con doble llave).
+- **Sin fila, es de Cobros solo (`PermisosEfectivos.de`); con fila en cero, no tiene permisos.** Son dos cosas distintas: así Maxi y Juan siguen igual, sin
+  volver a darles nada. Guardar sin cambiar nada no escribe.
+- **Un PIN y se despliegan las opciones** (`OpcionesDeEntrada`, en `RoleGateScreen`). `buscarOperador` baja de la nube un PIN que no está en esta PC, antes de
+  decir que es incorrecto. Barra se guarda, pero todavía no abre nada (`kBarraTodaviaNo`).
+- **`destinoDeEntrada` decide la pantalla, y con `AppRoleKind.entradas` nunca arma el panel:** va a `EntradasHomeScreen`, sin camino a cobrar ni a editar
+  (`test/modo_entradas_cerrado_test.dart`). `sesionCajaIdParaCobro` lo rechaza.
+- **De la caja a Entradas, la caja queda abierta y latiendo.** Entrar directo a Entradas no abre ni mira ninguna caja.
 
 **Ojo:** hay un segundo concepto de "admin" totalmente independiente, por PIN
 local (`admin_provider.dart`, PIN maestro `2026`, TTL 3 min), que gatea Mi

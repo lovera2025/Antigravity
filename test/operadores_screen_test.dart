@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:arguello_events/features/caja_sesiones/models/operador_caja.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/repositories/operadores_caja_repository.dart';
@@ -11,95 +10,16 @@ import 'package:arguello_events/features/caja_sesiones/repositories/permisos_ope
 import 'package:arguello_events/features/caja_sesiones/services/pin_de_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/operadores_caja_screen.dart';
 
+import 'helpers/operadores_en_memoria.dart';
+
 const _maxi = 'a0000000-0000-4000-8000-000000000001';
 const _juan = 'a0000000-0000-4000-8000-000000000002';
-
-OperadorCaja _op(String id, String nombre, String pin) => OperadorCaja(
-      id: id,
-      nombre: nombre,
-      pin: pin,
-      activo: true,
-      createdAt: DateTime.utc(2026, 5),
-      updatedAt: DateTime.utc(2026, 5),
-    );
-
-/// Los operadores, en memoria.
-class _Operadores implements OperadoresCajaRepository {
-  final List<OperadorCaja> lista;
-  final eliminados = <String>[];
-
-  _Operadores(this.lista);
-
-  @override
-  Future<List<OperadorCaja>> listar({
-    bool soloActivos = false,
-    bool incluirModoJefe = false,
-  }) async =>
-      List.of(lista);
-
-  @override
-  Future<OperadorCaja> crear({required String nombre, required String pin}) async {
-    final op = _op('a0000000-0000-4000-8000-00000000000${lista.length + 1}', nombre, pin);
-    lista.add(op);
-    return op;
-  }
-
-  @override
-  Future<OperadorCaja> actualizar(OperadorCaja op) async {
-    lista[lista.indexWhere((o) => o.id == op.id)] = op;
-    return op;
-  }
-
-  @override
-  Future<void> eliminar(String id) async {
-    eliminados.add(id);
-    lista.removeWhere((o) => o.id == id);
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-/// Los permisos, en memoria. Hace la misma cuenta que la base: si no cambió nada,
-/// no escribe.
-class _Permisos extends PermisosOperadorRepository {
-  final filas = <String, PermisosOperador>{};
-  final guardados = <String>[];
-
-  @override
-  Future<Map<String, PermisosOperador>> todas() async => Map.of(filas);
-
-  @override
-  Future<List<CambioDePermiso>> guardar({
-    required String operadorId,
-    required PermisosEfectivos permisos,
-    required String quien,
-    DateTime? ahora,
-  }) async {
-    final cambios = CambioDePermiso.entre(
-      operadorId: operadorId,
-      antes: PermisosEfectivos.de(filas[operadorId]),
-      despues: permisos,
-      hechoPor: quien,
-      ahora: DateTime.utc(2026, 11, 3),
-    );
-    if (cambios.isEmpty) return const [];
-    guardados.add(quien);
-    filas[operadorId] = PermisosOperador.para(
-      operadorId: operadorId,
-      permisos: permisos,
-      hechoPor: quien,
-      ahora: DateTime.utc(2026, 11, 3),
-    );
-    return cambios;
-  }
-}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('qué le falta a la ficha', () {
-    final maxi = _op(_maxi, 'Maxi', '1234');
+    final maxi = operadorDePrueba(_maxi, 'Maxi', '1234');
 
     String? problema(String nombre, String pin, {String? id, bool maestro = false}) =>
         problemaDelOperador(
@@ -136,8 +56,8 @@ void main() {
   });
 
   group('la pantalla', () {
-    late _Operadores operadores;
-    late _Permisos permisos;
+    late OperadoresEnMemoria operadores;
+    late PermisosEnMemoria permisos;
 
     Future<void> abrir(WidgetTester tester, {bool jefe = true}) async {
       tester.view.physicalSize = const Size(1200, 1000);
@@ -169,8 +89,8 @@ void main() {
     }
 
     setUp(() {
-      operadores = _Operadores([_op(_maxi, 'Maxi', '1234'), _op(_juan, 'Juan', '4321')]);
-      permisos = _Permisos();
+      operadores = OperadoresEnMemoria([operadorDePrueba(_maxi, 'Maxi', '1234'), operadorDePrueba(_juan, 'Juan', '4321')]);
+      permisos = PermisosEnMemoria();
     });
 
     testWidgets('se llama OPERADORES y dice qué puede hacer cada uno', (tester) async {

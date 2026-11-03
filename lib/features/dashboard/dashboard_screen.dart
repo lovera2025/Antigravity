@@ -1556,6 +1556,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     }
 
+    if (ref.read(appRoleProvider).esCaja &&
+        ref.read(appRoleProvider).permisos.entradas) {
+      addDest(
+        destination: const NavigationDrawerDestination(
+          icon: Icon(Icons.confirmation_number_outlined),
+          selectedIcon: Icon(
+            Icons.confirmation_number,
+            color: Color(0xFFD4AF37),
+          ),
+          label: Text('ENTRADAS'),
+        ),
+        onTap: () => ref.read(appRoleProvider.notifier).pasarAEntradas(),
+      );
+    }
+
     if (!modoJefe) {
       addDest(
         destination: const NavigationDrawerDestination(

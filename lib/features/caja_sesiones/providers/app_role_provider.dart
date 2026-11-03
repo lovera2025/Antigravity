@@ -2,16 +2,35 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/instalacion_id.dart';
 import '../../common/providers/admin_provider.dart';
 import '../models/modo_jefe_caja.dart';
 import '../models/operador_caja.dart';
+import '../models/permisos_operador.dart';
 import '../models/sesion_caja.dart';
 import '../repositories/operadores_caja_repository.dart';
+import '../repositories/permisos_operador_repository.dart';
 import '../repositories/sesiones_caja_repository.dart';
 import '../services/caja_auto_sync_service.dart';
 
-enum AppRoleKind { none, jefe, caja }
+/// Cómo se entró. `entradas` no abre caja y no pasa por el panel: va a
+/// `EntradasHomeScreen`.
+enum AppRoleKind { none, jefe, caja, entradas }
+
+/// Qué pantalla le toca a quien tiene rol de Admin en la nube.
+enum DestinoDeEntrada { elegir, entradas, panel }
+
+/// **Con `entradas` nunca se arma el panel:** quien solo entrega no ve otra cosa.
+DestinoDeEntrada destinoDeEntrada(AppRoleState app) {
+  if (app.esEntradas) return DestinoDeEntrada.entradas;
+  if (app.kind == AppRoleKind.none) return DestinoDeEntrada.elegir;
+  if (app.esCaja && !app.tieneSesionCaja) return DestinoDeEntrada.elegir;
+  return DestinoDeEntrada.panel;
+}
+
+/// Lo que se encontró con un PIN.
+typedef OperadorYPermisos = ({OperadorCaja operador, PermisosEfectivos permisos});
 
 /// Qué se sabe de una caja del mismo operador abierta en **otro** dispositivo.
 ///
@@ -84,14 +103,23 @@ class AppRoleState {
   final OperadorCaja? operador;
   final SesionCaja? sesionActiva;
 
+  /// Los permisos del operador que entró.
+  final PermisosEfectivos permisos;
+
+  /// Entró a Cobros sin caja abierta: la pantalla de entrada le pide abrirla.
+  final bool pideAbrirCaja;
+
   const AppRoleState({
     this.kind = AppRoleKind.none,
     this.operador,
     this.sesionActiva,
+    this.permisos = PermisosEfectivos.soloCobros,
+    this.pideAbrirCaja = false,
   });
 
   bool get esJefe => kind == AppRoleKind.jefe;
   bool get esCaja => kind == AppRoleKind.caja;
+  bool get esEntradas => kind == AppRoleKind.entradas;
   bool get tieneSesionCaja =>
       esCaja && sesionActiva != null && sesionActiva!.estaAbierta;
 
@@ -99,6 +127,8 @@ class AppRoleState {
     AppRoleKind? kind,
     OperadorCaja? operador,
     SesionCaja? sesionActiva,
+    PermisosEfectivos? permisos,
+    bool? pideAbrirCaja,
     bool clearOperador = false,
     bool clearSesion = false,
   }) {
@@ -106,6 +136,8 @@ class AppRoleState {
       kind: kind ?? this.kind,
       operador: clearOperador ? null : (operador ?? this.operador),
       sesionActiva: clearSesion ? null : (sesionActiva ?? this.sesionActiva),
+      permisos: permisos ?? this.permisos,
+      pideAbrirCaja: pideAbrirCaja ?? this.pideAbrirCaja,
     );
   }
 }
@@ -221,15 +253,76 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     return CierreCajaResultado(cerrada: cerrada, sincronizado: sincronizado);
   }
 
-  /// PIN de operador → rol caja; reanuda sesión abierta si existe.
-  Future<String?> loginCaja(String pin) async {
-    final repo = ref.read(operadoresCajaRepositoryProvider);
-    final op = await repo.findByPin(pin);
-    if (op == null) return 'PIN de caja incorrecto o operador inactivo';
-    if (esOperadorModoJefeId(op.id)) {
-      return 'PIN de caja incorrecto o operador inactivo';
-    }
+  Future<OperadorCaja?> _operadorDelPin(String pin) async {
+    final op = await ref.read(operadoresCajaRepositoryProvider).findByPin(pin);
+    return op == null || esOperadorModoJefeId(op.id) ? null : op;
+  }
 
+  /// De quién es este PIN, con sus permisos. Null si no es de nadie.
+  ///
+  /// **Si no está en esta PC y hay internet, baja los operadores y prueba otra
+  /// vez** antes de decir que es incorrecto: un PIN recién creado en otra PC tiene
+  /// que andar acá sin que entre el jefe. Sin internet no espera nada.
+  Future<OperadorYPermisos?> buscarOperador(String pin) async {
+    var op = await _operadorDelPin(pin);
+    if (op == null &&
+        ref.read(connectivityServiceProvider).currentStatus !=
+            AppConnectivity.offline) {
+      await ref
+          .read(cajaAutoSyncServiceProvider)
+          .refreshBeforeOpen()
+          .timeout(kEsperaDelPinEnLaNube, onTimeout: () => false);
+      op = await _operadorDelPin(pin);
+    }
+    if (op == null) return null;
+    final permisos =
+        await ref.read(permisosOperadorRepositoryProvider).de(op.id);
+    return (operador: op, permisos: permisos);
+  }
+
+  /// Entra a Entradas: **no abre caja ni late**.
+  Future<void> entrarComoEntradas(
+    OperadorCaja op,
+    PermisosEfectivos permisos,
+  ) async {
+    _stopHeartbeat();
+    await ref.read(adminAuthProvider.notifier).logout();
+    state = AppRoleState(
+      kind: AppRoleKind.entradas,
+      operador: op,
+      permisos: permisos,
+    );
+  }
+
+  /// Quien está en Entradas y también tiene Cobros, sin volver a poner el PIN.
+  Future<void> pasarACaja() async {
+    final op = state.operador;
+    if (op == null || !state.esEntradas || !state.permisos.cobros) return;
+    await entrarComoCaja(op, state.permisos);
+  }
+
+  /// Quien está en la caja y también tiene Entradas, sin volver a poner el PIN.
+  /// **La caja queda abierta y latiendo:** ir a entregar no es cerrar el turno.
+  void pasarAEntradas() {
+    if (!state.esCaja || !state.permisos.entradas) return;
+    state = state.copyWith(kind: AppRoleKind.entradas, pideAbrirCaja: false);
+  }
+
+  /// No quiso abrir la caja: si tiene Entradas vuelve ahí; si no, a la entrada.
+  Future<void> noAbrioLaCaja() async {
+    final op = state.operador;
+    if (op != null && state.permisos.entradas) {
+      await entrarComoEntradas(op, state.permisos);
+      return;
+    }
+    await logoutApp();
+  }
+
+  /// Entra a Cobros; reanuda sesión abierta si existe.
+  Future<void> entrarComoCaja(
+    OperadorCaja op,
+    PermisosEfectivos permisos,
+  ) async {
     _stopHeartbeat();
     await ref.read(adminAuthProvider.notifier).logout();
 
@@ -248,12 +341,13 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
       kind: AppRoleKind.caja,
       operador: op,
       sesionActiva: abierta,
+      permisos: permisos,
+      pideAbrirCaja: abierta == null,
     );
     if (abierta != null) {
       _startHeartbeat(abierta.id);
       unawaited(sesRepo.heartbeat(abierta.id));
     }
-    return null;
   }
 
   /// Qué se sabe de una caja de este operador abierta en otro dispositivo.
@@ -343,7 +437,7 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
       notaApertura: nota,
       deviceId: deviceId,
     );
-    state = state.copyWith(sesionActiva: sesion);
+    state = state.copyWith(sesionActiva: sesion, pideAbrirCaja: false);
     _startHeartbeat(sesion.id);
     await sesRepo.flushBestEffort();
   }
@@ -446,12 +540,12 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
           // La cerraron desde otra PC (o el jefe la cerró). Soltarla en vez de
           // seguir latiendo sobre una caja que ya no existe.
           _stopHeartbeat();
-          state = state.esJefe
+          state = state.esJefe || state.esEntradas
               ? state.copyWith(clearSesion: true)
               : const AppRoleState();
           return;
         }
-        if (state.esCaja || state.esJefe) {
+        if (state.esCaja || state.esJefe || state.esEntradas) {
           state = state.copyWith(sesionActiva: fresh);
         }
       } catch (_) {}
@@ -463,6 +557,9 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     _heartbeatTimer = null;
   }
 }
+
+/// Cuánto se espera a la nube por un PIN que no está en esta PC.
+const kEsperaDelPinEnLaNube = Duration(seconds: 8);
 
 final appRoleProvider = NotifierProvider<AppRoleNotifier, AppRoleState>(
   AppRoleNotifier.new,

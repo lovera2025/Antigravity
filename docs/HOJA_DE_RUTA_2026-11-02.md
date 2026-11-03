@@ -60,6 +60,8 @@ decide el usuario cuando se llegue.
 
 ### 3. Operadores con permisos (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, etapas 1 a 3)
 
+**Programado el 2-nov, sin publicar y con el SQL sin correr: `docs/CONTEXTO_OPERADORES_2026-11-02.md`.** La migración v76 ya se probó sobre una copia de la base real. Lo que queda antes de usarlo es el paso 5.
+
 La base de Entradas y de Barra: una sola lista de OPERADORES con las casillas **Cobros, Entradas y Barra** (nombres
 elegidos el 2-nov: Cobros es la caja de cuotas de los eventos masivos, Barra es la caja de barra, y nada dice "Caja" a
 secas); con el PIN se despliegan las opciones; cargado sin permisos no entra. **Una tabla nueva** (`permisos_operador`,

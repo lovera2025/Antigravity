@@ -139,7 +139,8 @@ class _OperationalSyncCoordinatorState
       // mirando datos de la última vez que alguien apretó sincronizar.
       //
       // Bajar no compromete nada: escribe filas de la nube en la base local.
-      final puedeSubirSolo = role.esJefe || role.esCaja;
+      // Entradas también: lo entregado tiene que llegar a la otra PC.
+      final puedeSubirSolo = role.esJefe || role.esCaja || role.esEntradas;
 
       // Al jefe ya no se le pide caja abierta.
       //

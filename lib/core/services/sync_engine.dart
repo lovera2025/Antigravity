@@ -2406,6 +2406,10 @@ class SyncEngine {
     'contratos_alumnos',
     'sillas_reparto',
     'planos_evento',
+    // La tablet preparada en la oficina se lleva los PIN: en el salón puede no
+    // haber internet para ir a buscarlos.
+    'operadores_caja',
+    'permisos_operador',
   ];
 
   /// Baja ya las [tablasDeLaPuerta], para "Lista para trabajar sin internet"
