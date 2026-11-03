@@ -21,14 +21,14 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 
 | Paso | Estado |
 |---|---|
-| 1. La impresora | **Llegó y ya imprimió desde la app, por Bluetooth, desde esta PC. Falta mirar el papel.** `docs/CONTEXTO_BARRA_2026-11-02.md` |
+| 1. La impresora | **Papel mirado el 3-nov (acentos con la tabla 850, renglones por palabras, QR nativo, el isotipo); se recuerda y se conecta sola. Falta imprimir desde el celular.** `docs/CONTEXTO_BARRA_2026-11-02.md` |
 | 2. El plano | Programado y probado con el mouse, sin publicar. `docs/CONTEXTO_v6.3.0_2026-11-02.md` |
 | 3. Operadores | Programado y probado con el mouse, sin publicar, con el SQL sin correr. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
 | 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** En la etapa 1 |
 | 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
 | Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la impresora** |
 
-**Lo que sigue:** el usuario mira el ticket, y se termina la etapa 1 del plan de la barra.
+**Lo que sigue:** la impresora desde el celular del usuario, que cierra la etapa 1; después la etapa 2 del plan de la barra (los datos).
 
 ## El orden
 

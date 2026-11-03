@@ -1,8 +1,10 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+
+import 'tabla_850.dart';
 
 /// Una línea de lo que se imprime. La misma lista va a servir para el PDF del ticket.
 sealed class LineaTicket {
@@ -43,29 +45,72 @@ class LogoTicket extends LineaTicket {
   const LogoTicket(this.imagen);
 }
 
+/// Cuál logo va arriba del ticket y cómo se pasa a negro, que es lo único que imprime
+/// el papel térmico.
+enum LogoDelPapel {
+  /// `2.png`: blanco y magenta sobre transparente, todo en negro.
+  silueta('assets/icons/2.png'),
+
+  /// `isotipo-ej.png`: negro y magenta sobre fondo claro, lo oscuro en negro.
+  isotipo('assets/icons/isotipo-ej.png');
+
+  final String asset;
+  const LogoDelPapel(this.asset);
+
+  img.Image? paraPapel(Uint8List png, {int ancho = 240}) => switch (this) {
+        LogoDelPapel.silueta => LogoParaPapel.silueta(png, ancho: ancho),
+        LogoDelPapel.isotipo => LogoParaPapel.umbral(png, ancho: ancho),
+      };
+
+  /// Null si el archivo no está o no se puede leer: el ticket sale sin logo.
+  Future<img.Image?> cargar(AssetBundle bundle) async {
+    try {
+      final datos = await bundle.load(asset);
+      return paraPapel(datos.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 /// Lo que depende de la impresora. Lo fija la prueba con el papel en la mano.
 class OpcionesEscPos {
-  /// Con qué tabla salen los acentos. Null: se imprimen sin acentos.
-  final String? tablaCaracteres;
+  /// Con la tabla 850 (`tabla_850.dart`). False: se imprimen sin acentos, que se leen
+  /// en cualquier impresora.
+  final bool conAcentos;
 
-  const OpcionesEscPos({this.tablaCaracteres = 'CP1252'});
+  final LogoDelPapel logo;
+
+  const OpcionesEscPos({
+    this.conAcentos = true,
+    this.logo = LogoDelPapel.isotipo,
+  });
+
+  /// Lo que dio la TP-POS58 con el papel en la mano, el 3-nov-2026: los acentos van con
+  /// la tabla 850 (con la 1252 salían letras raras); el QR nativo se lee con el celular;
+  /// las 32 letras entran justas en un renglón; y el isotipo se lee mejor que la silueta
+  /// de `2.png`. Es lo que usa la app.
+  static const deLaPrueba = OpcionesEscPos(
+    conAcentos: true,
+    logo: LogoDelPapel.isotipo,
+  );
 }
 
 /// Convierte el texto en lo que la impresora puede escribir, y **nunca tira**: el nombre
-/// de un producto con un emoji no puede frenar una venta. Sin tabla, además, saca los
-/// acentos: con otra tabla saldrían letras raras.
+/// de un producto con un emoji no puede frenar una venta. Sin acentos los cambia por la
+/// letra sola: "Café" sale "Cafe".
 String textoParaPapel(String texto, {required bool conAcentos}) {
   const sinAcento = {
     'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n',
     'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U', 'Ü': 'U', 'Ñ': 'N',
-    '¿': '?', '¡': '!', '°': 'o', '·': '-',
+    '¿': '?', '¡': '!', '°': 'o', 'º': 'o', 'ª': 'a', '·': '-',
   };
   final salida = StringBuffer();
   for (final runa in texto.runes) {
     final letra = String.fromCharCode(runa);
     if (!conAcentos && sinAcento.containsKey(letra)) {
       salida.write(sinAcento[letra]);
-    } else if (runa <= 0xFF && (conAcentos || runa < 0x80)) {
+    } else if (runa < 0x80 || (conAcentos && entraEnLa850(letra))) {
       salida.write(letra);
     } else {
       salida.write('?');
@@ -74,24 +119,82 @@ String textoParaPapel(String texto, {required bool conAcentos}) {
   return salida.toString();
 }
 
-/// Arma los bytes ESC/POS de un papel de 58 mm: 32 letras por renglón.
+/// Cuántas letras entran en un renglón de 58 mm. Se vio en el papel el 3-nov-2026: las
+/// 32 cifras de la prueba ANCHO entran justas.
+const letrasPorRenglon = 32;
+
+/// Los renglones de un [RenglonTicket]: el importe a la derecha del primero y el nombre
+/// partido por palabras, sin pisarlo. Una palabra que no entra sola se corta. Así un
+/// producto de nombre largo no queda "product / o".
+List<String> renglonesDe(
+  String izquierda,
+  String derecha, {
+  int letras = letrasPorRenglon,
+}) {
+  final der = derecha.trim();
+  final lugar = der.isEmpty ? letras : letras - der.length - 1;
+  if (lugar < 1) {
+    return [
+      ..._partirPorPalabras(izquierda.trim(), letras),
+      der.length > letras ? der.substring(0, letras) : der.padLeft(letras),
+    ];
+  }
+  final partes = _partirPorPalabras(izquierda.trim(), lugar);
+  return [
+    if (der.isEmpty) partes.first else partes.first.padRight(letras - der.length) + der,
+    ...partes.skip(1),
+  ];
+}
+
+/// Nunca vacía: sin texto da un renglón en blanco.
+List<String> _partirPorPalabras(String texto, int ancho) {
+  final renglones = <String>[];
+  var actual = '';
+  for (var palabra in texto.split(RegExp(r'\s+'))) {
+    while (palabra.length > ancho) {
+      if (actual.isNotEmpty) {
+        renglones.add(actual);
+        actual = '';
+      }
+      renglones.add(palabra.substring(0, ancho));
+      palabra = palabra.substring(ancho);
+    }
+    if (palabra.isEmpty) continue;
+    if (actual.isEmpty) {
+      actual = palabra;
+    } else if (actual.length + 1 + palabra.length <= ancho) {
+      actual = '$actual $palabra';
+    } else {
+      renglones.add(actual);
+      actual = palabra;
+    }
+  }
+  if (actual.isNotEmpty || renglones.isEmpty) renglones.add(actual);
+  return renglones;
+}
+
+/// Arma los bytes ESC/POS de un papel de 58 mm: [letrasPorRenglon] letras por renglón.
 class TicketEscPos {
   final CapabilityProfile perfil;
   final OpcionesEscPos opciones;
 
-  const TicketEscPos(this.perfil, {this.opciones = const OpcionesEscPos()});
+  const TicketEscPos(this.perfil, {this.opciones = OpcionesEscPos.deLaPrueba});
 
   static Future<TicketEscPos> cargar({
-    OpcionesEscPos opciones = const OpcionesEscPos(),
+    OpcionesEscPos opciones = OpcionesEscPos.deLaPrueba,
   }) async =>
       TicketEscPos(await CapabilityProfile.load(), opciones: opciones);
 
   List<int> armar(List<LineaTicket> lineas, {bool cortar = true}) {
-    final g = Generator(PaperSize.mm58, perfil);
-    final conAcentos = opciones.tablaCaracteres != null;
+    final conAcentos = opciones.conAcentos;
+    final g = Generator(
+      PaperSize.mm58,
+      perfil,
+      codec: conAcentos ? tabla850 : latin1,
+    );
     String t(String s) => textoParaPapel(s, conAcentos: conAcentos);
     final bytes = <int>[...g.reset()];
-    if (conAcentos) bytes.addAll(g.setGlobalCodeTable(opciones.tablaCaracteres));
+    if (conAcentos) bytes.addAll(g.setGlobalCodeTable('CP850'));
     for (final l in lineas) {
       switch (l) {
         case TituloTicket():
@@ -113,18 +216,9 @@ class TicketEscPos {
             ),
           ));
         case RenglonTicket():
-          bytes.addAll(g.row([
-            PosColumn(
-              text: t(l.izquierda),
-              width: 8,
-              styles: PosStyles(bold: l.negrita),
-            ),
-            PosColumn(
-              text: t(l.derecha),
-              width: 4,
-              styles: PosStyles(align: PosAlign.right, bold: l.negrita),
-            ),
-          ]));
+          for (final r in renglonesDe(t(l.izquierda), t(l.derecha))) {
+            bytes.addAll(g.text(r, styles: PosStyles(bold: l.negrita)));
+          }
         case SeparadorTicket():
           bytes.addAll(g.hr());
         case QrTicket():
@@ -206,5 +300,5 @@ List<LineaTicket> ticketDePrueba({img.Image? logo}) => [
 /// La línea de letras para ver cómo salen los acentos con cada tabla.
 const lineaDeAcentos = 'áéíóúñ ÁÉÍÓÚÑ ü ¿¡ N° \$ 1/2';
 
-/// Para que los tests puedan buscar un texto en los bytes.
-String bytesComoTexto(List<int> bytes) => latin1.decode(bytes, allowInvalid: true);
+/// Para que los tests puedan buscar un texto en los bytes, con los acentos de la tabla 850.
+String bytesComoTexto(List<int> bytes) => tabla850.decode(bytes);

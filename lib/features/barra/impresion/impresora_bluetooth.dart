@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
 import 'canal_ble.dart';
+import 'impresora_recordada.dart';
+
+export 'impresora_recordada.dart';
 
 /// Por dónde le escriben las impresoras térmicas, en orden de preferencia. Los tres
 /// primeros son los que trae la TP-POS58.
@@ -68,10 +71,27 @@ bool pareceImpresora(String nombre) => RegExp(
       caseSensitive: false,
     ).hasMatch(nombre);
 
-enum ResultadoImpresion { impreso, noConectada, fallo }
+enum ResultadoImpresion {
+  impreso,
+
+  /// En este equipo nunca se eligió una impresora.
+  sinImpresoraElegida,
+
+  /// Hay una elegida, pero no contesta: apagada, lejos o sin batería.
+  noConectada,
+
+  /// Se cortó mandando, y también al volver a probar.
+  fallo,
+}
+
+/// Cómo quedó la impresora después de [ImpresoraBluetooth.reconectar].
+enum EstadoImpresora { lista, sinElegir, noContesta }
 
 /// La impresora de la barra: conectarse y mandarle bytes. Lo que dice el ticket lo
 /// arma `TicketEscPos`; acá no se sabe qué se imprime.
+///
+/// Se elige una vez por equipo ([conectar]) y después se conecta sola: antes de cada
+/// ticket mira si sigue conectada y, si no, vuelve a la que quedó recordada.
 class ImpresoraBluetooth {
   final CanalBle canal;
 
@@ -79,22 +99,40 @@ class ImpresoraBluetooth {
   /// renglones sin avisar.
   final Duration pausa;
 
+  /// Dónde queda guardada la impresora de este equipo. Null: solo se recuerda mientras
+  /// la pantalla está abierta.
+  final ImpresoraRecordada? recordada;
+
   String? _id;
   CaracteristicaBle? _caracteristica;
   int _tamano = tamanoDeTrozo(null);
   Future<void> _ultimo = Future<void>.value();
+  ImpresoraElegida? _elegida;
+  bool _leyoLaRecordada = false;
 
   ImpresoraBluetooth(
     this.canal, {
     this.pausa = const Duration(milliseconds: 20),
+    this.recordada,
   });
 
   String? get conectadaA => _id;
   CaracteristicaBle? get caracteristica => _caracteristica;
   int get tamano => _tamano;
 
-  /// Se conecta y busca por dónde escribirle. False si no tiene por dónde.
-  Future<bool> conectar(String id) async {
+  /// La impresora de este equipo, la conectada o la recordada. Null si nunca se eligió.
+  Future<ImpresoraElegida?> elegida() async {
+    if (!_leyoLaRecordada) {
+      _elegida ??= await recordada?.leer();
+      _leyoLaRecordada = true;
+    }
+    return _elegida;
+  }
+
+  /// Se conecta, busca por dónde escribirle y la deja como la impresora de este
+  /// equipo. False si no tiene por dónde: ese aparato no queda elegido.
+  Future<bool> conectar(String id, {String nombre = ''}) async {
+    if (_id != null && _id != id) await desconectar();
     await canal.conectar(id);
     final elegida = elegirCaracteristica(await canal.caracteristicas(id));
     if (elegida == null) {
@@ -110,14 +148,64 @@ class ImpresoraBluetooth {
     _id = id;
     _caracteristica = elegida;
     _tamano = tamanoDeTrozo(mtu);
+    await _recordar(id, nombre);
     return true;
   }
 
+  Future<void> _recordar(String id, String nombre) async {
+    final antes = _elegida;
+    final ahora = ImpresoraElegida(
+      id: id,
+      nombre: nombre.isEmpty && antes?.id == id ? antes!.nombre : nombre,
+    );
+    _elegida = ahora;
+    _leyoLaRecordada = true;
+    if (antes == null || !antes.esLaMisma(ahora)) await recordada?.guardar(ahora);
+  }
+
+  /// La deja lista para imprimir: si sigue conectada no hace nada y, si no, se conecta
+  /// a la de este equipo. Para llamarla al abrir VENDER, al volver del segundo plano y
+  /// antes de cada ticket. Nunca tira.
+  Future<EstadoImpresora> reconectar() async {
+    final id = _id;
+    if (id != null && await _sigueConectada(id)) return EstadoImpresora.lista;
+    final destino = await elegida();
+    if (destino == null) return EstadoImpresora.sinElegir;
+    try {
+      final ok = await conectar(destino.id, nombre: destino.nombre);
+      return ok ? EstadoImpresora.lista : EstadoImpresora.noContesta;
+    } catch (_) {
+      _id = null;
+      _caracteristica = null;
+      return EstadoImpresora.noContesta;
+    }
+  }
+
+  Future<bool> _sigueConectada(String id) async {
+    try {
+      return await canal.estaConectado(id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Corta la conexión, pero la impresora sigue siendo la de este equipo.
   Future<void> desconectar() async {
     final id = _id;
     _id = null;
     _caracteristica = null;
-    if (id != null) await canal.desconectar(id);
+    if (id == null) return;
+    try {
+      await canal.desconectar(id);
+    } catch (_) {}
+  }
+
+  /// Este equipo deja de tener impresora: hasta elegir otra, no imprime.
+  Future<void> olvidar() async {
+    await desconectar();
+    _elegida = null;
+    _leyoLaRecordada = true;
+    await recordada?.olvidar();
   }
 
   /// Manda [bytes] entero. **De a un ticket por vez:** dos a la vez saldrían
@@ -129,17 +217,37 @@ class ImpresoraBluetooth {
   }
 
   Future<ResultadoImpresion> _mandar(List<int> bytes) async {
+    switch (await reconectar()) {
+      case EstadoImpresora.sinElegir:
+        return ResultadoImpresion.sinImpresoraElegida;
+      case EstadoImpresora.noContesta:
+        return ResultadoImpresion.noConectada;
+      case EstadoImpresora.lista:
+        break;
+    }
+    if (await _escribir(bytes)) return ResultadoImpresion.impreso;
+    // Se cortó a la mitad. La conexión puede haber quedado colgada: se suelta, se
+    // vuelve a conectar y se manda el ticket entero otra vez, una sola vez. Mejor un
+    // pedazo repetido en el papel que un ticket que no sale.
+    await desconectar();
+    if (await reconectar() != EstadoImpresora.lista) return ResultadoImpresion.fallo;
+    return await _escribir(bytes)
+        ? ResultadoImpresion.impreso
+        : ResultadoImpresion.fallo;
+  }
+
+  Future<bool> _escribir(List<int> bytes) async {
     final id = _id;
     final c = _caracteristica;
-    if (id == null || c == null) return ResultadoImpresion.noConectada;
+    if (id == null || c == null) return false;
     try {
       for (final trozo in partirEnTrozos(bytes, _tamano)) {
         await canal.escribir(id, c, trozo);
         if (pausa > Duration.zero) await Future<void>.delayed(pausa);
       }
-      return ResultadoImpresion.impreso;
+      return true;
     } catch (_) {
-      return ResultadoImpresion.fallo;
+      return false;
     }
   }
 }

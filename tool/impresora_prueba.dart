@@ -28,11 +28,57 @@ class PruebaDeImpresora extends StatefulWidget {
 }
 
 class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
-  final _impresora = ImpresoraBluetooth(CanalUniversalBle());
+  final _impresora = ImpresoraBluetooth(
+    CanalUniversalBle(),
+    recordada: const ImpresoraRecordada(),
+  );
   final _encontrados = <String, DispositivoBle>{};
   final _registro = <String>[];
   StreamSubscription<DispositivoBle>? _busqueda;
   bool _ocupado = false;
+  ImpresoraElegida? _elegida;
+
+  @override
+  void initState() {
+    super.initState();
+    _alAbrir();
+  }
+
+  /// Lo mismo que va a hacer VENDER: si este equipo ya tiene impresora, se conecta sola.
+  Future<void> _alAbrir() async {
+    final elegida = await _impresora.elegida();
+    if (elegida == null) {
+      _anotar('Este equipo no tiene impresora elegida: BUSCAR y CONECTAR');
+      return;
+    }
+    setState(() {
+      _elegida = elegida;
+      _ocupado = true;
+      _encontrados[elegida.id] = DispositivoBle(
+        id: elegida.id,
+        nombre: elegida.nombre.isEmpty ? 'La de este equipo' : elegida.nombre,
+      );
+    });
+    _anotar('Recordada: ${elegida.nombre} (${elegida.id}). Conectando sola...');
+    final inicio = Stopwatch()..start();
+    try {
+      await _impresora.canal.pedirPermisos();
+    } catch (e) {
+      _anotar('No pude pedir los permisos: $e');
+    }
+    final estado = await _impresora.reconectar();
+    _anotar(estado == EstadoImpresora.lista
+        ? 'Conectada sola en ${inicio.elapsedMilliseconds} ms, '
+            'de a ${_impresora.tamano} bytes'
+        : 'No contesta (${estado.name}): ¿está prendida y cerca?');
+    if (mounted) setState(() => _ocupado = false);
+  }
+
+  Future<void> _olvidar() async {
+    await _impresora.olvidar();
+    setState(() => _elegida = null);
+    _anotar('Olvidada: este equipo ya no tiene impresora');
+  }
 
   void _anotar(String s) {
     debugPrint('IMPRESORA: $s');
@@ -87,7 +133,8 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
     final inicio = Stopwatch()..start();
     try {
       _anotar('Conectando a ${d.nombre}...');
-      final ok = await _impresora.conectar(d.id);
+      final ok = await _impresora.conectar(d.id, nombre: d.nombre);
+      if (ok) _elegida = await _impresora.elegida();
       final c = _impresora.caracteristica;
       _anotar(ok
           ? 'Conectada en ${inicio.elapsedMilliseconds} ms. Escribe por ${c?.uuid} '
@@ -110,22 +157,23 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
     if (mounted) setState(() => _ocupado = false);
   }
 
+  /// El ticket como va a salir en la app, con lo que quedó en `OpcionesEscPos.deLaPrueba`.
   Future<void> _ticket() async {
-    final datos = await rootBundle.load('assets/icons/2.png');
-    final logo = LogoParaPapel.silueta(datos.buffer.asUint8List());
     final armador = await TicketEscPos.cargar();
+    final logo = await armador.opciones.logo.cargar(rootBundle);
     await _mandar('TICKET', armador.armar(ticketDePrueba(logo: logo)));
   }
 
   Future<void> _acentos() async {
     final con = await TicketEscPos.cargar();
     final sin = await TicketEscPos.cargar(
-      opciones: const OpcionesEscPos(tablaCaracteres: null),
+      opciones: const OpcionesEscPos(conAcentos: false),
     );
     await _mandar('ACENTOS', [
       ...con.armar(const [
-        TextoTicket('Con la tabla CP1252:', centrado: false),
+        TextoTicket('Con la tabla 850:', centrado: false),
         TextoTicket(lineaDeAcentos, centrado: false),
+        TextoTicket('¡Gracias, salud! Caja 2 - N° 0017', centrado: false),
       ], cortar: false),
       ...sin.armar(const [
         TextoTicket('Sin acentos:', centrado: false),
@@ -140,6 +188,10 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
       TextoTicket('12345678901234567890123456789012', centrado: false),
       SeparadorTicket(),
       RenglonTicket('Un nombre de producto muy largo que no entra', r'$ 123.000'),
+      RenglonTicket('2 x Fernet con coca', r'$ 12.000'),
+      RenglonTicket('1 x Champán Chandon Extra Brut', r'$ 45.000'),
+      SeparadorTicket(),
+      RenglonTicket('TOTAL', r'$ 180.000', negrita: true),
     ]));
   }
 
@@ -153,10 +205,8 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
 
   Future<void> _logo() async {
     final a = await TicketEscPos.cargar();
-    final dos = await rootBundle.load('assets/icons/2.png');
-    final iso = await rootBundle.load('assets/icons/isotipo-ej.png');
-    final uno = LogoParaPapel.silueta(dos.buffer.asUint8List());
-    final otro = LogoParaPapel.umbral(iso.buffer.asUint8List());
+    final uno = await LogoDelPapel.silueta.cargar(rootBundle);
+    final otro = await LogoDelPapel.isotipo.cargar(rootBundle);
     await _mandar('LOGO', a.armar([
       const TextoTicket('2.png, silueta:'),
       if (uno != null) LogoTicket(uno),
@@ -167,9 +217,11 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
 
   @override
   Widget build(BuildContext context) {
-    final conectada = _impresora.conectadaA != null && !_ocupado;
+    // Con una impresora elegida se puede mandar aunque se haya cortado: imprimir
+    // reconecta solo, que es lo que se prueba.
+    final puede = _elegida != null && !_ocupado;
     Widget boton(String texto, Future<void> Function() hacer) => FilledButton(
-          onPressed: conectada ? hacer : null,
+          onPressed: puede ? hacer : null,
           child: Text(texto),
         );
     return Scaffold(
@@ -193,6 +245,10 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
                 boton('ANCHO', _ancho),
                 boton('QR', _qr),
                 boton('LOGO', _logo),
+                OutlinedButton(
+                  onPressed: _elegida == null || _ocupado ? null : _olvidar,
+                  child: const Text('OLVIDAR'),
+                ),
               ],
             ),
             const SizedBox(height: 8),

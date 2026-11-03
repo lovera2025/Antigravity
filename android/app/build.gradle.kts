@@ -20,8 +20,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.arguello_events"
+        // El id de la app en Android. Se cambió el 3-nov-2026, antes de instalarla en ninguna
+        // tablet: cambiarlo después la haría otra app, sin las ventas guardadas en la vieja.
+        applicationId = "ar.com.junioreventos.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

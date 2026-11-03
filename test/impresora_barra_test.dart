@@ -1,12 +1,18 @@
-import 'dart:typed_data';
-
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
+import 'package:arguello_events/features/barra/impresion/tabla_850.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
+
+class _BundleVacio extends CachingAssetBundle {
+  @override
+  Future<ByteData> load(String key) => Future.error(StateError('no está: $key'));
+}
 
 /// Los tres caminos de escritura que trae la TP-POS58, más lo que no sirve para imprimir.
 const _tpPos58 = [
@@ -40,7 +46,14 @@ const _tpPos58 = [
 class _CanalEnMemoria implements CanalBle {
   List<CaracteristicaBle> lista = _tpPos58;
   int? mtu = 185;
-  int fallaEnTrozo = -1;
+
+  /// En qué escrituras se corta, contando desde 0 todas las que se intentaron.
+  final cortarEn = <int>{};
+  int _intentos = 0;
+
+  /// Apagada: no se deja conectar.
+  bool apagada = false;
+  int conexiones = 0;
   final conectados = <String>[];
   final escrito = <Uint8List>[];
 
@@ -53,7 +66,12 @@ class _CanalEnMemoria implements CanalBle {
   @override
   Future<void> dejarDeBuscar() async {}
   @override
-  Future<void> conectar(String id) async => conectados.add(id);
+  Future<void> conectar(String id) async {
+    if (apagada) throw StateError('no contesta');
+    conexiones++;
+    conectados.add(id);
+  }
+
   @override
   Future<void> desconectar(String id) async => conectados.remove(id);
   @override
@@ -69,7 +87,10 @@ class _CanalEnMemoria implements CanalBle {
 
   @override
   Future<void> escribir(String id, CaracteristicaBle c, Uint8List bytes) async {
-    if (escrito.length == fallaEnTrozo) throw StateError('se cortó');
+    if (cortarEn.contains(_intentos++)) {
+      conectados.remove(id);
+      throw StateError('se cortó');
+    }
     escrito.add(bytes);
   }
 }
@@ -153,9 +174,13 @@ void main() {
       impresora = ImpresoraBluetooth(canal, pausa: Duration.zero);
     });
 
-    test('sin conectarse no toca el canal: lo dice', () async {
-      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.noConectada);
+    test('sin impresora elegida no toca el canal: lo dice', () async {
+      expect(
+        await impresora.imprimir([1, 2, 3]),
+        ResultadoImpresion.sinImpresoraElegida,
+      );
       expect(canal.escrito, isEmpty);
+      expect(canal.conexiones, 0);
     });
 
     test('se conecta, elige por dónde y manda todo en trozos', () async {
@@ -180,15 +205,46 @@ void main() {
       expect(impresora.conectadaA, isNull);
     });
 
-    test('si se corta a la mitad lo dice, sin tirar, y el próximo ticket sale', () async {
+    test('si se corta a la mitad, reconecta y manda el ticket entero una vez más', () async {
       await impresora.conectar('tp');
-      canal.fallaEnTrozo = 1;
+      canal.cortarEn.add(1);
+      final bytes = List<int>.generate(500, (i) => i % 256);
+      expect(await impresora.imprimir(bytes), ResultadoImpresion.impreso);
+      expect(canal.conexiones, 2);
+      // El primer trozo salió antes del corte; después, el ticket entero.
+      expect(canal.escrito.skip(1).expand((t) => t).toList(), bytes);
+    });
+
+    test('si se vuelve a cortar lo dice, sin tirar, y el próximo ticket sale', () async {
+      await impresora.conectar('tp');
+      canal.cortarEn.addAll({1, 3});
       final bytes = List<int>.filled(500, 7);
       expect(await impresora.imprimir(bytes), ResultadoImpresion.fallo);
       canal
-        ..fallaEnTrozo = -1
+        ..cortarEn.clear()
         ..escrito.clear();
       expect(await impresora.imprimir(bytes), ResultadoImpresion.impreso);
+      expect(canal.escrito.expand((t) => t).toList(), bytes);
+    });
+
+    test('si se desconectó entre un ticket y otro, se conecta sola antes', () async {
+      await impresora.conectar('tp');
+      canal.conectados.clear();
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+      expect(canal.conexiones, 2);
+      expect(canal.escrito.expand((t) => t).toList(), [1, 2, 3]);
+    });
+
+    test('apagada: lo dice sin tirar y no escribe nada', () async {
+      await impresora.conectar('tp');
+      canal
+        ..conectados.clear()
+        ..apagada = true;
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.noConectada);
+      expect(canal.escrito, isEmpty);
+      expect(await impresora.reconectar(), EstadoImpresora.noContesta);
+      canal.apagada = false;
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
     });
 
     test('dos tickets a la vez no se mezclan', () async {
@@ -197,6 +253,91 @@ void main() {
       final b = List<int>.filled(400, 2);
       await Future.wait([impresora.imprimir(a), impresora.imprimir(b)]);
       expect(canal.escrito.expand((t) => t).toList(), [...a, ...b]);
+    });
+
+    test('dos tickets a la vez con un corte en el primero tampoco', () async {
+      await impresora.conectar('tp');
+      canal.cortarEn.add(1);
+      final a = List<int>.filled(400, 1);
+      final b = List<int>.filled(400, 2);
+      await Future.wait([impresora.imprimir(a), impresora.imprimir(b)]);
+      expect(canal.escrito.skip(1).expand((t) => t).toList(), [...a, ...b]);
+    });
+  });
+
+  group('la impresora de este equipo', () {
+    late _CanalEnMemoria canal;
+    const recordada = ImpresoraRecordada();
+
+    ImpresoraBluetooth nueva() =>
+        ImpresoraBluetooth(canal, pausa: Duration.zero, recordada: recordada);
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      canal = _CanalEnMemoria();
+    });
+
+    test('al conectarla queda guardada, con su nombre', () async {
+      expect(await nueva().conectar('tp', nombre: 'TP-POS58'), isTrue);
+      final guardada = await recordada.leer();
+      expect(guardada?.id, 'tp');
+      expect(guardada?.nombre, 'TP-POS58');
+    });
+
+    test('al volver a abrir, imprime sin elegirla de nuevo', () async {
+      await nueva().conectar('tp', nombre: 'TP-POS58');
+      canal.conectados.clear();
+      final otra = nueva();
+      expect((await otra.elegida())?.nombre, 'TP-POS58');
+      expect(await otra.imprimir([9, 9]), ResultadoImpresion.impreso);
+      expect(otra.conectadaA, 'tp');
+    });
+
+    test('reconectar sin nada elegido no toca el canal', () async {
+      expect(await nueva().reconectar(), EstadoImpresora.sinElegir);
+      expect(canal.conexiones, 0);
+    });
+
+    test('un aparato que no imprime no queda elegido', () async {
+      canal.lista = [_tpPos58.first];
+      expect(await nueva().conectar('auriculares', nombre: 'Auris'), isFalse);
+      expect(await recordada.leer(), isNull);
+    });
+
+    test('olvidarla la saca del equipo y no imprime más', () async {
+      final i = nueva();
+      await i.conectar('tp', nombre: 'TP-POS58');
+      await i.olvidar();
+      expect(await recordada.leer(), isNull);
+      expect(canal.conectados, isEmpty);
+      expect(await i.imprimir([1]), ResultadoImpresion.sinImpresoraElegida);
+      expect(
+        await nueva().imprimir([1]),
+        ResultadoImpresion.sinImpresoraElegida,
+      );
+      expect(canal.escrito, isEmpty);
+    });
+
+    test('elegir otra cambia la guardada y suelta la anterior', () async {
+      final i = nueva();
+      await i.conectar('tp', nombre: 'TP-POS58');
+      await i.conectar('otra', nombre: 'PT-210');
+      expect((await recordada.leer())?.id, 'otra');
+      expect(canal.conectados, ['otra']);
+    });
+
+    test('reconectar sola no le borra el nombre', () async {
+      await nueva().conectar('tp', nombre: 'TP-POS58');
+      canal.conectados.clear();
+      final otra = nueva();
+      expect(await otra.reconectar(), EstadoImpresora.lista);
+      expect((await recordada.leer())?.nombre, 'TP-POS58');
+    });
+
+    test('lo guardado roto es como no tener impresora', () async {
+      SharedPreferences.setMockInitialValues({ImpresoraRecordada.claveId: ''});
+      expect(await recordada.leer(), isNull);
+      expect(await nueva().imprimir([1]), ResultadoImpresion.sinImpresoraElegida);
     });
   });
 
@@ -212,6 +353,68 @@ void main() {
     test('lo que no se puede escribir no frena la venta', () {
       expect(textoParaPapel('Cerveza 🍺', conAcentos: true), 'Cerveza ?');
       expect(textoParaPapel('€ 10', conAcentos: false), '? 10');
+      expect(textoParaPapel('€ 10 · Crème', conAcentos: true), '? 10 · Cr?me');
+    });
+  });
+
+  group('la tabla 850, la que lee la TP-POS58', () {
+    test('las letras del castellano van a su lugar de la 850', () {
+      expect(tabla850.encode('áéíóúñ'), [0xA0, 0x82, 0xA1, 0xA2, 0xA3, 0xA4]);
+      expect(tabla850.encode('ÁÉÍÓÚÑ'), [0xB5, 0x90, 0xD6, 0xE0, 0xE9, 0xA5]);
+      expect(tabla850.encode('ü¿¡°'), [0x81, 0xA8, 0xAD, 0xF8]);
+      expect(tabla850.encode(r'Caja 2 $ 1/2'), r'Caja 2 $ 1/2'.codeUnits);
+    });
+
+    test('lo que no está sale "?", sin tirar, y se lee de vuelta', () {
+      expect(tabla850.encode('€'), [0x3F]);
+      expect(tabla850.decode(tabla850.encode('¡Gracias! N° 17')), '¡Gracias! N° 17');
+    });
+
+    test('la letra suelta: entra o no entra', () {
+      expect(entraEnLa850('ñ'), isTrue);
+      expect(entraEnLa850('a'), isTrue);
+      expect(entraEnLa850('è'), isFalse);
+      expect(entraEnLa850('🍺'), isFalse);
+    });
+  });
+
+  group('los renglones de un producto', () {
+    test('lo que entra va en un renglón, con el importe al borde', () {
+      final r = renglonesDe('2 x Cerveza lata', r'$ 7.000');
+      expect(r, ['2 x Cerveza lata         \$ 7.000']);
+      expect(r.single.length, letrasPorRenglon);
+    });
+
+    test('un nombre largo se parte por palabras y no pisa el importe', () {
+      final r = renglonesDe(
+        'Un nombre de producto muy largo que no entra',
+        r'$ 123.000',
+      );
+      expect(r, [
+        'Un nombre de producto  \$ 123.000',
+        'muy largo que no entra',
+      ]);
+      expect(r.every((s) => s.length <= letrasPorRenglon), isTrue);
+    });
+
+    test('una palabra que no entra sola se corta', () {
+      final r = renglonesDe('Supercalifragilisticoespialidoso', r'$ 1');
+      expect(r.first, 'Supercalifragilisticoespiali \$ 1');
+      expect(r.last, 'doso');
+    });
+
+    test('sin importe, el nombre usa el renglón entero', () {
+      expect(renglonesDe('Efectivo', ''), ['Efectivo']);
+      expect(renglonesDe('', ''), ['']);
+    });
+
+    test('en el ticket ningún renglón pasa las 32 letras', () async {
+      final perfil = await CapabilityProfile.load();
+      final s = bytesComoTexto(TicketEscPos(perfil).armar(const [
+        RenglonTicket('1 x Champán Chandon Extra Brut del bueno', r'$ 45.000'),
+      ]));
+      expect(s, contains('1 x Champán Chandon     \$ 45.000'));
+      expect(s, contains('Extra Brut del bueno'));
     });
   });
 
@@ -234,19 +437,28 @@ void main() {
       expect(armar(const [TextoTicket('a')], cortar: false), isNot(contains('\x1DV')));
     });
 
-    test('con la tabla, la pide y deja los acentos', () {
-      final s = armar(const [TextoTicket('Café')]);
-      expect(s, contains('\x1Bt'));
-      expect(s, contains('Café'));
+    test('con acentos pide la tabla 850 y los manda en la 850', () {
+      final bytes = TicketEscPos(perfil).armar(const [TextoTicket('Café')]);
+      expect(bytesComoTexto(bytes), contains('\x1Bt\x02'));
+      expect(bytesComoTexto(bytes), contains('Café'));
+      final s = String.fromCharCodes(bytes);
+      expect(s, contains('Caf\x82'), reason: 'la é de la 850, no la de Latin-1');
+      expect(s, isNot(contains('Caf\xE9')));
     });
 
-    test('sin tabla no la pide, y saca los acentos', () {
+    test('sin acentos no pide tabla, y los saca', () {
       final s = armar(
         const [TextoTicket('Café')],
-        o: const OpcionesEscPos(tablaCaracteres: null),
+        o: const OpcionesEscPos(conAcentos: false),
       );
       expect(s, isNot(contains('\x1Bt')));
       expect(s, contains('Cafe'));
+    });
+
+    test('lo que usa la app es lo que dio el papel', () {
+      expect(OpcionesEscPos.deLaPrueba.conAcentos, isTrue);
+      expect(OpcionesEscPos.deLaPrueba.logo, LogoDelPapel.isotipo);
+      expect(TicketEscPos(perfil).opciones, same(OpcionesEscPos.deLaPrueba));
     });
 
     test('el QR va nativo', () {
@@ -305,5 +517,19 @@ void main() {
       expect(bytesComoTexto(conLogo), contains('\x1Dv0'), reason: 'raster');
     });
 
+    test('los dos logos de la app se cargan y salen en blanco y negro', () async {
+      for (final logo in LogoDelPapel.values) {
+        final i = await logo.cargar(rootBundle);
+        expect(i, isNotNull, reason: logo.asset);
+        expect(i!.width, 240);
+        final tonos = {for (final p in i) p.r.toInt()};
+        expect(tonos.difference({0, 255}), isEmpty, reason: logo.asset);
+        expect(tonos, contains(0), reason: '${logo.asset} no puede salir en blanco');
+      }
+    });
+
+    test('un logo que no está deja el ticket sin logo, sin tirar', () async {
+      expect(await LogoDelPapel.isotipo.cargar(_BundleVacio()), isNull);
+    });
   });
 }
