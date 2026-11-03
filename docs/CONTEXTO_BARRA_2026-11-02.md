@@ -1,12 +1,52 @@
 # La barra y la impresora (en curso, SIN PUBLICAR)
 
-2-nov-2026, noche. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
+2 y 3-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
 El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 **Estado (3-nov): las etapas 1, 2 y 3 cerradas.** La impresora, probada en papel desde la PC y desde un celular Android. Los datos de la barra
 (v77, el sync y el SQL de la nube **sin correr**), con la migración probada sobre una copia de la base real. Las cuentas y lo que dice cada
-papel. **Lo que sigue es la etapa 4 (la cajera: entrar, fiesta, caja, VENDER).** La app todavía no tiene pantallas de barra. Sin versión, sin
-release, sin web. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
+papel, mirado en el papel con fotos. **Lo que sigue es la etapa 4 (la cajera: entrar, fiesta, caja, VENDER).** La app todavía no tiene
+pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
+
+## Para retomar en otro chat
+
+**Dónde quedó (3-nov, mañana):** todo commiteado y subido; el último commit es `74336c4`. La suite entera, en verde (3.306 tests).
+`flutter analyze` sin nada nuevo. Ningún archivo a medias.
+
+**La rama lleva, sin publicar:** el plano antes de los sorteos (6.3.0, `docs/CONTEXTO_v6.3.0_2026-11-02.md`), operadores con permisos (etapas 1
+a 3, `docs/CONTEXTO_OPERADORES_2026-11-02.md`) y la barra, etapas 1 a 3 (este archivo). **Dos SQL sin correr, antes de instalar:**
+`supabase/migrations/20261103120000_permisos_operador.sql` (v76) y `supabase/migrations/20261103140000_barra.sql` (v77).
+
+**Lo que sigue: la etapa 4, la cajera.** Antes de programar, el plan corto y el OK del usuario (así trabaja: una etapa por vez, cada una cierra
+con tests, roturas a propósito, commit, push y este archivo al día). Lo que entra, según la sección 3 del plan:
+- **Entrar:** `AppRoleKind.barra` (hoy el enum es `none, jefe, caja, entradas`, en `caja_sesiones/providers/app_role_provider.dart`);
+  `destinoDeEntrada` lleva a `BarraHomeScreen` (nueva, en `lib/features/barra/`). `kBarraTodaviaNo` desaparece de
+  `caja_sesiones/services/entrada_de_operador.dart`, de `caja_sesiones/widgets/role_gate_screen.dart` y de su test. Molde: cómo se hizo
+  Entradas (`lib/features/entradas/entradas_home_screen.dart`, `test/modo_entradas_cerrado_test.dart`).
+- **Elegir la fiesta:** solo las que tienen precios (`fiestasConPrecios`), con la línea "Lista para trabajar sin internet" de la barra:
+  `EstadoSinInternetBarra` y `PuestaAlDiaBarra`, calcados de los de la puerta (`recepcion/services/lista_sin_internet.dart`), sobre
+  `SyncEngine.bajarParaLaBarra()`.
+- **Abrir su caja:** número 1 a 6, cambio inicial y sede (`BarraDeLaCaja.abrirCaja`). Dos cajas con el mismo número en la misma fiesta se
+  avisan al abrir.
+- **VENDER**, según `CortesPantalla` (600 y 1.024 px): en el celular los productos arriba y la cuenta abajo; en la tablet, lado a lado. Chips
+  de categoría, tocar suma, − / + / quitar, VACIAR (`CuentaBarra`), y lo que queda de cada producto (`StockDeLaBarra`). Al abrir VENDER y al
+  volver del segundo plano, `ImpresoraBluetooth.reconectar()`. El botón COBRAR lleva a la etapa 5.
+- **`esBarra` en `common/widgets/operational_sync_coordinator.dart`:** que lo vendido suba solo.
+- **Los tests:** `test/helpers/barra_en_memoria.dart`, `test/barra_pantalla_test.dart` (la pantalla de verdad a 360 y a 1024 px),
+  `test/modo_barra_cerrado_test.dart` (ningún camino a cobrar cuotas ni al panel; `sesionCajaIdParaCobro` rechaza a barra) y
+  `entrada_operador_test` ampliado. **Y con el mouse**, en `tool/barra_prueba.dart` (nuevo, sin base ni nube): lo visual se termina de probar
+  en la ventana de verdad.
+
+**Lo que se habló y quedó decidido el 3-nov:**
+- **El catálogo es general, el precio va por fiesta.** El usuario pensaba que el precio era general; se le explicó y dijo "está bien". Si
+  después quiere un precio general con cambios por fiesta, se cambia fácil mientras no se publique: las tablas no están en ninguna PC.
+- **Una venta anulada no cuenta en el efectivo esperado del cierre** (se supone que la plata se devolvió). Se le dijo y no lo objetó.
+- **Lo impreso se mira con foto**: el 2-nov "salió bien" escondía los acentos rotos.
+
+**Para probar la impresora:** `flutter run -d windows -t tool/impresora_prueba.dart` (se conecta sola a la TP-POS58 recordada; TICKET y
+CIERRE salen con `ModeloTicket`). Para manejarla con capturas, el permiso es para la ruta entera de
+`build\windows\x64\runner\Debug\arguello_events.exe`. La impresora atiende a un equipo por vez: cerrar la ventana de la PC antes de usar
+el celular. El APK del celular: ver "El APK para mandar al celular", abajo.
 
 ## Etapa 3: las cuentas (3-nov)
 
@@ -190,11 +230,24 @@ Con trozos de 180 bytes y 20 ms de pausa no perdió ningún renglón, tampoco en
 
 **Etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas): cerradas el 3-nov.**
 
-**Después, cada una con sus tests:** 4. la cajera: entrar, fiesta, caja, VENDER · 5. cobrar e imprimir
-· 6. cerrar la caja · 7. el jefe en la PC: catálogo con fotos, precios con stock, cajas, anular, PDF 58 mm y A4 · 8. el jefe en la web del iPhone · 9. Android con su firma
-· 10. de punta a punta, sin internet · 11. Entradas, etapas 4 a 6 · 12. versión y publicación, cuando el usuario diga.
+**Después, cada una con sus tests** (el detalle de la 4, arriba en "Para retomar"):
+4. la cajera: entrar, fiesta, caja, VENDER;
+5. cobrar e imprimir: COBRAR con `CobroBarra`, guardar con `BarraDeLaCaja.vender` **antes** de imprimir, `subirYa` con internet, el ticket por
+   Bluetooth con `ModeloTicket.deVenta` y su PDF (58 mm), REIMPRIMIR; sin impresora, la venta igual queda y se avisa;
+6. cerrar la caja: contado a ciegas, `CierreDeBarra`, `cerrarCaja`, el papel y el PDF del cierre;
+7. el jefe en la PC: catálogo con fotos (el depósito `barra` de Storage, con su SQL aparte, e `ImagenDeProducto`), precios con stock y "copiar
+   de otra fiesta", CAJAS (`ResumenDeCajas`, el stock con los que están en aviso arriba), anular con motivo, PDF 58 mm y A4, la lista de precios;
+8. el jefe en la web del iPhone, sobre `BarraNube`;
+9. Android con su firma: la clave la genero yo fuera del repo (`Documentos\Junior Eventos\claves\`), `key.properties` fuera de git, y el
+   usuario la copia a un lugar seguro;
+10. de punta a punta, sin internet, con modo avión;
+11. Entradas, etapas 4 a 6 (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`);
+12. versión y publicación, cuando el usuario diga: foto de la mora antes, los dos SQL (v76 y v77) con su OK, release de Windows, web y APK
+    firmado, foto después.
 
-**Lo que le toca al usuario:** comprar la tablet cuanto antes, así el APK se prueba en ella desde ya, y copiar a un lugar seguro la clave de firma cuando exista.
+**Lo que le toca al usuario:** comprar la tablet cuanto antes, así el APK se prueba en ella desde ya, y copiar a un lugar seguro la clave de firma
+cuando exista. **Antes de instalar la app firmada en su celular, desinstalar la ventana de prueba** (`ar.com.junioreventos.app`, con la clave de
+prueba): con otra firma no se instala encima.
 
 **Lo pedido el 2-nov que entra en esas etapas:** cada producto con su foto, para que se vea como un buen catálogo · imprimir el catálogo · alerta de stock · imprimir la caja de
 cada persona al terminar · la web del jefe entera · entrar con internet baja todo, se trabaja sin internet, y al volver sube solo y el jefe lo ve enseguida · **todo con sus tests.**

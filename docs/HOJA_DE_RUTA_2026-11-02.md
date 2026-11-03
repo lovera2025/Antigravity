@@ -17,7 +17,7 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 - **La base comparada con la foto, el 2-nov:** los mismos 643 alumnos y los mismos 16 congelados, sin ninguna mora
   revivida. Los únicos cambios son dos cobros normales.
 
-## Dónde estamos (2-nov, noche)
+## Dónde estamos (3-nov, mañana)
 
 | Paso | Estado |
 |---|---|
@@ -26,11 +26,14 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 | 3. Operadores | Programado y probado con el mouse, sin publicar, con el SQL sin correr. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
 | 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** Etapas 1 a 3 hechas el 3-nov (la impresora, los datos v77 con el SQL sin correr, y las cuentas); sigue la 4, la cajera |
 | 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
-| Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la impresora** |
+| Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la barra (etapas 1 a 3)** |
 
 **Lo que sigue:** la etapa 4 del plan de la barra (la cajera: entrar con su PIN, elegir la fiesta, abrir su caja y VENDER, en celular y en
-tablet). Publicar la rama lleva
-ahora dos SQL que corren antes de instalar: los permisos (v76) y la barra (v77).
+tablet). El detalle, en "Para retomar en otro chat" de `docs/CONTEXTO_BARRA_2026-11-02.md`. Publicar la rama lleva ahora dos SQL que corren
+antes de instalar: los permisos (v76) y la barra (v77).
+
+> Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
+> corto de la etapa 4 (la cajera) antes de programar."
 
 ## El orden
 
@@ -39,8 +42,9 @@ la rama de desarrollo, que no llega a las PCs.
 
 ### 1. La impresora de la barra (rama `feature/barra-impresora`, ya subida)
 
-**Llegó el 2-nov: es una TP-POS58 por Bluetooth de bajo consumo, no una Global.** Lo que sigue de este paso quedó viejo: la prueba ya
-no usa esa rama ni esos paquetes. Se hace con `tool/impresora_prueba.dart` en la rama de desarrollo, y corre también en Windows.
+**Hecho el 3-nov** (`docs/CONTEXTO_BARRA_2026-11-02.md`). **Llegó el 2-nov: es una TP-POS58 por Bluetooth de bajo consumo, no una Global.**
+Lo que sigue de este paso quedó viejo y queda como historia: la prueba no usó esa rama ni esos paquetes, sino `tool/impresora_prueba.dart` en
+la rama de desarrollo, que corre en Windows y en Android.
 
 Es una prueba de hardware, no programación: `tool/impresora_prueba.dart`, con los dos paquetes y los permisos de
 Android. Emparejar la Global, correr el arnés en un Android, tocar TICKET, ACENTOS, ANCHO y QR, y mirar el papel.
