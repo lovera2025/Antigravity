@@ -10,15 +10,51 @@ pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.
 
 ## Para retomar en otro chat
 
-**Dónde quedó (3-nov, mañana):** todo commiteado y subido; el último commit con código es `74336c4` (después, solo lo escrito). La suite entera, en verde (3.306 tests).
-`flutter analyze` sin nada nuevo. Ningún archivo a medias.
+**Dónde quedó (3-nov, tarde):** todo commiteado y subido. Después de la etapa 3 se hizo un tramo corto, **el "3b": los vales** (abajo). La
+suite entera, en verde (3.324 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario imprima los vales
+(botón VALES), mande la foto y se los muestre al jefe con la maqueta.
+
+## El 3b: los vales, en vez del ticket (3-nov, pedido del jefe)
+
+El jefe pidió que de una compra salga **un vale**, no el ticket: sin logo, sin precios, **sin QR** ("es muy un embole") y con lo que se
+entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el chat:
+- **Dos formas al cobrar:** **TODO JUNTO** (un vale con todas las bebidas, para quien retira de una vez) y **POR SEPARADO** (para ir
+  retirando de a poco). "Sin papel" lo sacó el jefe.
+- **Por separado, cada bebida es su sector, con una sola casilla "vale por ___" (vacía: la cajera la escribe si aplica) y su propio botón
+  IMPRIMIR.** 10 cervezas y "vale por 3" son 4 vales: 3, 3, 3 y 1. Sin número, un vale con todas. Lo impreso queda marcado y su botón se apaga.
+- **Cada vale sale solo, cuadradito, y se arranca antes del siguiente** (nada de tira). Lleva todo para reclamarlo, porque el barman se lo
+  queda: la fiesta en negrita, el día, la fecha y la hora, "Caja 2 · Marta · N° 0017", "VALE POR 3 / CERVEZA LATA" en grande, "1 DE 4" y
+  "Vale solo hoy · una sola vez / El barman se queda el vale".
+- **Contra el engaño, sin aparato:** el barman se queda el vale; la fiesta y el día dicen de qué noche es; una fotocopia se nota; la cajera
+  reimprime solo la última venta, una vez; el jefe, cualquiera, y sale **\*\*\* COPIA \*\*\*** arriba y abajo con quién, cuándo y el motivo
+  ("se entrega solo con el jefe"). Todo queda anotado.
+- **La cajera también anula**, con el motivo obligatorio y anotado (quién, cuándo, desde qué equipo), como hoy el jefe.
+- **Abrir la caja no pregunta el cambio ni el turno** (es de noche, nada de mañana/tarde): el cambio se pone después, con un ícono, si hay.
+- **Una persona controla el sector de barras con un iPhone:** es la web en modo jefe, que ya estaba en el plan (etapa 6).
+
+**Lo programado (solo el papel, sin pantallas ni base):** `cuentas/vales_de_barra.dart` (`Vale.todoJunto`, `Vale.porSeparadoDe`,
+`partirEnVales`, `valePorValido`, `CopiaDeVale`); `GrandeTicket` y `renglonesGrandes` en `impresion/ticket_esc_pos.dart` (doble de alto y de
+ancho, 16 letras partidas por palabras; `soloAlto`, 32); `ModeloTicket.deVale` y `diaFechaYHora` ("Vie 04/12/2026 - 23:41"). Tests:
+`test/vales_de_barra_test.dart`, el grupo "el vale" de `modelo_ticket_test` y la letra grande en `impresora_barra_test`. Roturas a propósito
+vistas en rojo (el último vale con lo que sobra, las 16 letras, la COPIA de abajo).
+
+**Para mirarlo:** el botón **VALES** de `tool/impresora_prueba.dart` imprime uno todo junto, los 4 de la cerveza de a uno (4 s para
+arrancar cada uno: lo decide el papel) y una copia. La maqueta, con los dos botones, la casilla y el IMPRIMIR por bebida:
+`build/maquetas/vales_de_la_barra.html` (no va a git; se rehace desde el chat). Papel estimado: el ticket de hoy unos 12,5 cm; un vale
+todo junto unos 6 cm; uno por separado unos 5 cm. La medida justa, de la foto.
+
+**Dónde entra en las etapas:** la 4 (la cajera) lleva abrir sin cambio ni turno y el ícono del cambio; la 5 (cobrar e imprimir) lleva los
+dos botones, la casilla, la impresión de a uno, reimprimir con freno y ANULAR de la cajera. **Datos de la 5, decididos:** `vale_por` adentro
+del JSON `renglones` de `barra_ventas` (sin columna); una tabla nueva `barra_reimpresiones`, que solo agrega, dentro de la v77 (no se
+publicó): con ella hay que volver a probar la migración sobre una copia de la base real, con la app cerrada.
 
 **La rama lleva, sin publicar:** el plano antes de los sorteos (6.3.0, `docs/CONTEXTO_v6.3.0_2026-11-02.md`), operadores con permisos (etapas 1
 a 3, `docs/CONTEXTO_OPERADORES_2026-11-02.md`) y la barra, etapas 1 a 3 (este archivo). **Dos SQL sin correr, antes de instalar:**
 `supabase/migrations/20261103120000_permisos_operador.sql` (v76) y `supabase/migrations/20261103140000_barra.sql` (v77).
 
 **Lo que sigue: la etapa 4, la cajera.** Antes de programar, el plan corto y el OK del usuario (así trabaja: una etapa por vez, cada una cierra
-con tests, roturas a propósito, commit, push y este archivo al día). Lo que entra, según la sección 3 del plan:
+con tests, roturas a propósito, commit, push y este archivo al día). Lo que entra, según la sección 3 del plan (con lo que cambió el 3b:
+abrir sin cambio ni turno):
 - **Entrar:** `AppRoleKind.barra` (hoy el enum es `none, jefe, caja, entradas`, en `caja_sesiones/providers/app_role_provider.dart`);
   `destinoDeEntrada` lleva a `BarraHomeScreen` (nueva, en `lib/features/barra/`). `kBarraTodaviaNo` desaparece de
   `caja_sesiones/services/entrada_de_operador.dart`, de `caja_sesiones/widgets/role_gate_screen.dart` y de su test. Molde: cómo se hizo
@@ -26,8 +62,8 @@ con tests, roturas a propósito, commit, push y este archivo al día). Lo que en
 - **Elegir la fiesta:** solo las que tienen precios (`fiestasConPrecios`), con la línea "Lista para trabajar sin internet" de la barra:
   `EstadoSinInternetBarra` y `PuestaAlDiaBarra`, calcados de los de la puerta (`recepcion/services/lista_sin_internet.dart`), sobre
   `SyncEngine.bajarParaLaBarra()`.
-- **Abrir su caja:** número 1 a 6, cambio inicial y sede (`BarraDeLaCaja.abrirCaja`). Dos cajas con el mismo número en la misma fiesta se
-  avisan al abrir.
+- **Abrir su caja:** número 1 a 6 y sede (`BarraDeLaCaja.abrirCaja`), **sin preguntar el cambio ni el turno** (3b). El cambio se pone
+  después, con un ícono en la pantalla de la caja o al cerrar. Dos cajas con el mismo número en la misma fiesta se avisan al abrir.
 - **VENDER**, según `CortesPantalla` (600 y 1.024 px): en el celular los productos arriba y la cuenta abajo; en la tablet, lado a lado. Chips
   de categoría, tocar suma, − / + / quitar, VACIAR (`CuentaBarra`), y lo que queda de cada producto (`StockDeLaBarra`). Al abrir VENDER y al
   volver del segundo plano, `ImpresoraBluetooth.reconectar()`. El botón COBRAR lleva a la etapa 5.

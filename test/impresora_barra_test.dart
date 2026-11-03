@@ -470,6 +470,32 @@ void main() {
       expect(TicketEscPos(perfil).opciones, same(OpcionesEscPos.deLaPrueba));
     });
 
+    test('la letra grande: doble de alto y de ancho, en negrita, y vuelve a la normal', () {
+      final s = armar(const [GrandeTicket('VALE POR 3'), TextoTicket('chica')]);
+      expect(s, contains('\x1D!\x11'), reason: 'GS ! con doble alto y doble ancho');
+      expect(s, contains('\x1BE\x01'), reason: 'negrita');
+      final grande = s.indexOf('VALE POR 3');
+      final chica = s.indexOf('chica');
+      expect(s.substring(grande, chica), contains('\x1D!\x00'), reason: 'la siguiente sale normal');
+    });
+
+    test('solo alto: doble de alto y ancho normal', () {
+      expect(armar(const [GrandeTicket('CERVEZA LATA', soloAlto: true)]), contains('\x1D!\x01'));
+    });
+
+    test('en grande se parte por palabras, en 16 letras o en 32 solo alto', () {
+      expect(renglonesGrandes('2 FERNET CON COCA'), ['2 FERNET CON', 'COCA']);
+      expect(renglonesGrandes('2 FERNET CON COCA', soloAlto: true), ['2 FERNET CON COCA']);
+      final s = armar(const [GrandeTicket('2 FERNET CON COCA')]);
+      expect(s, contains('2 FERNET CON'));
+      expect(s, isNot(contains('2 FERNET CON COCA')));
+    });
+
+    test('los acentos en grande van en la 850', () {
+      final bytes = TicketEscPos(perfil).armar(const [GrandeTicket('CAFÉ')]);
+      expect(String.fromCharCodes(bytes), contains('CAF\x90'), reason: 'la É de la 850');
+    });
+
     test('el QR va nativo', () {
       expect(armar(const [QrTicket('je:barra:1')]), contains('\x1D(k'));
     });

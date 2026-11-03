@@ -4,6 +4,7 @@ import '../../../core/utils/ar_time.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/numero_de_ticket.dart';
 import '../cuentas/pesos.dart';
+import '../cuentas/vales_de_barra.dart';
 import '../datos/barra_repositorio.dart';
 import 'ticket_esc_pos.dart';
 
@@ -17,6 +18,15 @@ abstract final class ModeloTicket {
     final ar = ArTime.toAr(dt);
     String dos(int n) => n.toString().padLeft(2, '0');
     return '${dos(ar.day)}/${dos(ar.month)}/${ar.year} - ${dos(ar.hour)}:${dos(ar.minute)}';
+  }
+
+  static const _dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+  /// "Vie 04/12/2026 - 23:41": con el día, para que un vale de otra noche se note.
+  static String diaFechaYHora(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '';
+    return '${_dias[ArTime.toAr(dt).weekday - 1]} ${fechaYHora(iso)}';
   }
 
   static String _caja(CajaBarra caja) {
@@ -92,6 +102,48 @@ abstract final class ModeloTicket {
             '${anulacion.hechoPor == null ? '' : ' - ${anulacion.hechoPor}'}'),
       ] else
         const TextoTicket('¡Gracias, salud!'),
+    ];
+  }
+
+  /// Un vale: lo que el barman entrega y se queda. Sin logo, sin precios y sin QR, y con
+  /// todo lo que hace falta para reclamarlo: la fiesta, el día y la hora, la caja con su
+  /// cajera y el número de la venta. Lo que se entrega va en letras dobles. Una
+  /// [copia] lo dice en grande arriba y abajo, con quién, cuándo y por qué.
+  static List<LineaTicket> deVale(
+    Vale vale, {
+    required VentaBarra venta,
+    required CajaBarra caja,
+    required String fiesta,
+    CopiaDeVale? copia,
+  }) {
+    // "Caja 2 · Marta · N° 0017": la cajera en el medio del número del ticket.
+    final numero = [
+      'Caja ${caja.numeroCaja}',
+      if (caja.operadorNombre != null) caja.operadorNombre!,
+      'N° ${venta.numero.toString().padLeft(4, '0')}',
+    ].join(' · ');
+    return [
+      if (copia != null) const GrandeTicket('*** COPIA ***'),
+      ..._centrado(fiesta.toUpperCase(), negrita: true),
+      TextoTicket(diaFechaYHora(venta.createdAt)),
+      ..._centrado(numero),
+      if (vale.porSeparado) ...[
+        GrandeTicket('VALE POR ${vale.bebidas.single.cantidad}'),
+        GrandeTicket(vale.bebidas.single.nombre.toUpperCase()),
+      ] else
+        for (final b in vale.bebidas) GrandeTicket('${b.cantidad} ${b.nombre.toUpperCase()}'),
+      if (vale.de > 1) TextoTicket('${vale.numero} DE ${vale.de}', negrita: true),
+      if (copia != null) ...[
+        ..._centrado('Copia ${copia.numero}'
+            '${copia.hechoPor == null ? '' : ' - ${copia.hechoPor}'}'),
+        TextoTicket(fechaYHora(copia.createdAt)),
+        ..._centrado('Motivo: ${copia.motivo}'),
+        const TextoTicket('Se entrega solo con el jefe'),
+        const GrandeTicket('*** COPIA ***'),
+      ] else ...[
+        const TextoTicket('Vale solo hoy · una sola vez'),
+        const TextoTicket('El barman se queda el vale'),
+      ],
     ];
   }
 

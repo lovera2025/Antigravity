@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/vales_de_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
@@ -18,6 +19,9 @@ List<String> _papel(List<LineaTicket> lineas) => [
           LogoTicket() => ['[LOGO]'],
           TituloTicket() => ['[TITULO] ${l.texto}'],
           TextoTicket() => [l.texto],
+          GrandeTicket() => [
+              for (final r in renglonesGrandes(l.texto, soloAlto: l.soloAlto)) '[GRANDE] $r',
+            ],
           RenglonTicket() => renglonesDe(l.izquierda, l.derecha),
           SeparadorTicket() => ['-' * 32],
           QrTicket() => ['[QR] ${l.dato}'],
@@ -137,6 +141,141 @@ void main() {
   test('con logo, va primero', () {
     final logo = img.Image(width: 8, height: 8);
     expect(ModeloTicket.deVenta(venta(), caja: caja, fiesta: 'x', logo: logo).first, isA<LogoTicket>());
+  });
+
+  group('el vale', () {
+    test('todo junto: un solo vale con todas las bebidas, sin logo, sin precios y sin QR', () {
+      final v = venta();
+      final lineas = ModeloTicket.deVale(Vale.todoJunto(v), venta: v, caja: caja, fiesta: 'Puerto Viejo');
+      expect(_papel(lineas), [
+        'PUERTO VIEJO',
+        'Vie 04/12/2026 - 23:41',
+        'Caja 2 · Marta · N° 0017',
+        '[GRANDE] 2 CERVEZA LATA',
+        '[GRANDE] 1 FERNET CON',
+        '[GRANDE] COCA',
+        '[GRANDE] 3 AGUA',
+        'Vale solo hoy · una sola vez',
+        'El barman se queda el vale',
+      ]);
+      expect(lineas.whereType<LogoTicket>(), isEmpty);
+      expect(lineas.whereType<QrTicket>(), isEmpty);
+      expect(_papel(lineas).where((r) => r.contains(r'$')), isEmpty, reason: 'sin precios');
+    });
+
+    test('por separado: "vale por" y la bebida en grande, y cuál es de cuántos', () {
+      final v = VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 17,
+        renglones: const [
+          RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 35000,
+        ahora: vendida,
+      );
+      final vales = Vale.porSeparadoDe(v.renglones.single, valePor: 3);
+      expect(vales, hasLength(4));
+      expect(_papel(ModeloTicket.deVale(vales.first, venta: v, caja: caja, fiesta: 'Puerto Viejo')), [
+        'PUERTO VIEJO',
+        'Vie 04/12/2026 - 23:41',
+        'Caja 2 · Marta · N° 0017',
+        '[GRANDE] VALE POR 3',
+        '[GRANDE] CERVEZA LATA',
+        '1 DE 4',
+        'Vale solo hoy · una sola vez',
+        'El barman se queda el vale',
+      ]);
+      final ultimo = _papel(ModeloTicket.deVale(vales.last, venta: v, caja: caja, fiesta: 'Puerto Viejo'));
+      expect(ultimo, containsAllInOrder(['[GRANDE] VALE POR 1', '[GRANDE] CERVEZA LATA', '4 DE 4']));
+    });
+
+    test('un solo vale no dice "1 de 1"', () {
+      final v = venta();
+      final papel = _papel(ModeloTicket.deVale(
+        Vale.porSeparadoDe(v.renglones.first).single,
+        venta: v,
+        caja: caja,
+        fiesta: 'Puerto Viejo',
+      ));
+      expect(papel, contains('[GRANDE] VALE POR 2'));
+      expect(papel.where((r) => r.contains(' DE ')), isEmpty);
+    });
+
+    test('una copia lo dice en grande arriba y abajo, con quién, cuándo y por qué', () {
+      final v = venta();
+      final papel = _papel(ModeloTicket.deVale(
+        Vale.todoJunto(v),
+        venta: v,
+        caja: caja,
+        fiesta: 'Puerto Viejo',
+        copia: const CopiaDeVale(
+          numero: 1,
+          createdAt: '2026-12-05T04:30:00.000Z',
+          hechoPor: 'Jefe',
+          motivo: 'se cortó el papel',
+        ),
+      ));
+      expect(papel.first, '[GRANDE] *** COPIA ***');
+      expect(papel.last, '[GRANDE] *** COPIA ***');
+      expect(papel, containsAllInOrder(['Copia 1 - Jefe', '05/12/2026 - 01:30']));
+      expect(papel, contains('Motivo: se cortó el papel'));
+      expect(papel, contains('Se entrega solo con el jefe'));
+      expect(papel, isNot(contains('Vale solo hoy · una sola vez')));
+    });
+
+    test('sin cajera anotada, la caja y el número igual', () {
+      final sinNombre = CajaBarra.abrir(eventoId: _evento, numeroCaja: 3, ahora: vendida);
+      final v = venta();
+      expect(
+        _papel(ModeloTicket.deVale(Vale.todoJunto(v), venta: v, caja: sinNombre, fiesta: 'x')),
+        contains('Caja 3 · N° 0017'),
+      );
+    });
+
+    test('en la impresora: lo grande entra en 16 letras, lo demás en 32, y los acentos en la 850', () async {
+      final perfil = await CapabilityProfile.load();
+      final v = VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 17,
+        renglones: const [
+          RenglonVenta(productoId: 'a', nombre: 'Champán Chandon Extra Brut', precio: 45000, cantidad: 2),
+          RenglonVenta(productoId: 'b', nombre: 'Café', precio: 1000, cantidad: 1),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 91000,
+        ahora: vendida,
+      );
+      final lineas = [
+        ...ModeloTicket.deVale(Vale.todoJunto(v), venta: v, caja: caja, fiesta: 'Escuela Normal Promoción 2026'),
+        for (final vale in Vale.porSeparadoDe(v.renglones.first, valePor: 1))
+          ...ModeloTicket.deVale(vale, venta: v, caja: caja, fiesta: 'Puerto Viejo'),
+      ];
+      for (final r in _papel(lineas)) {
+        if (r.startsWith('[GRANDE] ')) {
+          expect(r.length - '[GRANDE] '.length, lessThanOrEqualTo(16), reason: r);
+        } else {
+          expect(r.length, lessThanOrEqualTo(32), reason: r);
+        }
+      }
+      expect(_papel(lineas), containsAllInOrder([
+        '[GRANDE] 2 CHAMPÁN',
+        '[GRANDE] CHANDON EXTRA',
+        '[GRANDE] BRUT',
+      ]));
+      final s = bytesComoTexto(TicketEscPos(perfil).armar(lineas));
+      expect(s, contains('CAFÉ'));
+      expect(s, contains('PROMOCIÓN'));
+    });
+
+    test('el día va en Argentina', () {
+      expect(ModeloTicket.diaFechaYHora('2026-12-05T02:41:00.000Z'), 'Vie 04/12/2026 - 23:41');
+      expect(ModeloTicket.diaFechaYHora('2026-12-05T12:00:00.000Z'), 'Sáb 05/12/2026 - 09:00');
+      expect(ModeloTicket.diaFechaYHora('2026-12-07T02:59:00.000Z'), 'Dom 06/12/2026 - 23:59');
+      expect(ModeloTicket.diaFechaYHora('basura'), '');
+    });
   });
 
   group('el cierre', () {

@@ -23,6 +23,16 @@ class TextoTicket extends LineaTicket {
   const TextoTicket(this.texto, {this.centrado = true, this.negrita = false});
 }
 
+/// Letras dobles, en negrita y centradas, como el título: lo que el barman lee de lejos en
+/// un vale. Se parte por palabras en [renglonesGrandes].
+class GrandeTicket extends LineaTicket {
+  final String texto;
+
+  /// Solo doble de alto: entran 32 letras por renglón en vez de 16.
+  final bool soloAlto;
+  const GrandeTicket(this.texto, {this.soloAlto = false});
+}
+
 /// Izquierda y derecha en el mismo renglón: "2 x Cerveza" y "$ 7.000".
 class RenglonTicket extends LineaTicket {
   final String izquierda;
@@ -134,6 +144,11 @@ String textoParaPapel(String texto, {required bool conAcentos}) {
 /// 32 cifras de la prueba ANCHO entran justas.
 const letrasPorRenglon = 32;
 
+/// Los renglones de un [GrandeTicket]: con letras dobles entran la mitad, y se parte por
+/// palabras para que la impresora no corte "CERVE / ZA".
+List<String> renglonesGrandes(String texto, {bool soloAlto = false}) =>
+    partirPorPalabras(texto.trim(), soloAlto ? letrasPorRenglon : letrasPorRenglon ~/ 2);
+
 /// Los renglones de un [RenglonTicket]: el importe a la derecha del primero y el nombre
 /// partido por palabras, sin pisarlo. Una palabra que no entra sola se corta. Así un
 /// producto de nombre largo no queda "product / o".
@@ -227,6 +242,18 @@ class TicketEscPos {
               bold: l.negrita,
             ),
           ));
+        case GrandeTicket():
+          for (final r in renglonesGrandes(t(l.texto), soloAlto: l.soloAlto)) {
+            bytes.addAll(g.text(
+              r,
+              styles: PosStyles(
+                align: PosAlign.center,
+                bold: true,
+                height: PosTextSize.size2,
+                width: l.soloAlto ? PosTextSize.size1 : PosTextSize.size2,
+              ),
+            ));
+          }
         case RenglonTicket():
           for (final r in renglonesDe(t(l.izquierda), t(l.derecha))) {
             bytes.addAll(g.text(r, styles: PosStyles(bold: l.negrita)));

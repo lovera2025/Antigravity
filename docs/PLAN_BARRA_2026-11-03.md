@@ -32,6 +32,12 @@ probado, operadores, la impresora), el CONTEXTO que corresponda, `CLAUDE.md` y l
 
 ## Decisiones (lo aprobado, más lo que resolví yo y se puede cambiar)
 
+> **Cambio del 3-nov (pedido del jefe, el "3b"):** el papel de cada compra es **un vale**, no el ticket: sin logo, sin precios, **sin QR**,
+> con lo que se entrega en letras grandes. TODO JUNTO o POR SEPARADO (cada bebida con su casilla "vale por" y su IMPRIMIR), un vale por
+> papel, el barman se lo queda, COPIA marcada y anotada, la cajera también anula con motivo, y abrir la caja no pregunta el cambio ni el
+> turno. El ticket con precios queda para quien lo pida. Lo que dice cada línea de abajo sobre el ticket y su QR queda para ese ticket.
+> El detalle, en "El 3b: los vales" de `docs/CONTEXTO_BARRA_2026-11-02.md`.
+
 - **"Por sede" = por fiesta.** La ficha del evento no tiene sede. La caja lleva `sede` como texto opcional (prellenado con el
   predio del plano si lo hay), y el jefe ve las cajas agrupadas por fiesta.
 - **El logo en papel** va como **silueta negra** de `assets/icons/2.png` (es blanco y magenta sobre transparente: en papel

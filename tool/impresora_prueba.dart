@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/vales_de_barra.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
@@ -199,6 +200,64 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
     );
   }
 
+  /// Cuánto espera entre un vale y el siguiente, para arrancarlo antes de que salga el
+  /// otro. Lo decide el papel en la mano.
+  static const _paraArrancar = Duration(seconds: 4);
+
+  /// Los vales como van a salir (pedido del jefe, 3-nov): uno TODO JUNTO, los de la
+  /// cerveza POR SEPARADO con "vale por 3" (3, 3, 3 y 1), de a uno, y una COPIA.
+  Future<void> _vales() async {
+    final armador = await TicketEscPos.cargar();
+    final venta = VentaBarra.nueva(
+      cajaBarraId: _caja.id,
+      eventoId: _caja.eventoId,
+      numero: 17,
+      renglones: const [
+        RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10),
+        RenglonVenta(productoId: 'b', nombre: 'Fernet con coca', precio: 6000, cantidad: 2),
+        RenglonVenta(productoId: 'c', nombre: 'Agua sin gas', precio: 1000, cantidad: 3),
+      ],
+      medio: MedioBarra.efectivo,
+      efectivo: 50000,
+      ahora: DateTime.now(),
+    );
+    final papeles = <(String, List<LineaTicket>)>[
+      (
+        'VALE TODO JUNTO',
+        ModeloTicket.deVale(Vale.todoJunto(venta), venta: venta, caja: _caja, fiesta: 'Puerto Viejo'),
+      ),
+      for (final vale in Vale.porSeparadoDe(venta.renglones.first, valePor: 3))
+        (
+          'VALE ${vale.numero} DE ${vale.de}',
+          ModeloTicket.deVale(vale, venta: venta, caja: _caja, fiesta: 'Puerto Viejo'),
+        ),
+      (
+        'COPIA',
+        ModeloTicket.deVale(
+          Vale.porSeparadoDe(venta.renglones.first, valePor: 3).first,
+          venta: venta,
+          caja: _caja,
+          fiesta: 'Puerto Viejo',
+          copia: CopiaDeVale(
+            numero: 1,
+            createdAt: DateTime.now().toUtc().toIso8601String(),
+            hechoPor: 'Jefe',
+            motivo: 'se cortó el papel',
+          ),
+        ),
+      ),
+    ];
+    for (var i = 0; i < papeles.length; i++) {
+      if (i > 0) {
+        _anotar('Arrancá el papel: el siguiente sale en ${_paraArrancar.inSeconds} s');
+        setState(() => _ocupado = true);
+        await Future<void>.delayed(_paraArrancar);
+        if (!mounted) return;
+      }
+      await _mandar(papeles[i].$1, armador.armar(papeles[i].$2));
+    }
+  }
+
   /// El papel del cierre de una caja con dos ventas, una anulada, y $ 500 de menos.
   Future<void> _cierre() async {
     final armador = await TicketEscPos.cargar();
@@ -296,6 +355,7 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
                   child: const Text('BUSCAR'),
                 ),
                 boton('TICKET', _ticket),
+                boton('VALES', _vales),
                 boton('ACENTOS', _acentos),
                 boton('ANCHO', _ancho),
                 boton('QR', _qr),
