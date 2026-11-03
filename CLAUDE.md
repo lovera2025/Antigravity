@@ -57,7 +57,11 @@ un SQL sin correr. Faltan las etapas 4 a 6 antes de usarlo: quien tiene solo Ent
 
 **En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`,
 que empieza con **"Para retomar en otro chat"**). Las etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas, `lib/features/barra/cuentas/`, y lo que dice cada papel,
-`impresion/modelo_ticket.dart`) se cerraron el 3-nov y sigue la 4 (la cajera). **Las cuentas van en centavos enteros** (`centavos`), y **una venta
+`impresion/modelo_ticket.dart`) se cerraron el 3-nov, y también la 4: **la cajera entra con su PIN (`AppRoleKind.barra`, que nunca arma el
+panel), elige la fiesta, abre su caja sin cambio ni turno y vende** (`widgets/barra_home_screen.dart`, `vender_screen.dart`, `cobrar_hoja.dart`;
+para mirarla, `flutter run -d windows -t tool/barra_prueba.dart`). Sigue la 5. **Debajo del total, EFECTIVO · TRANSFERENCIA · MIXTO; transferencia
+es todo lo de Mercado Pago, sin comprobante que tildar; el recargo por transferencia va sobre lo transferido** y la venta lo guarda aparte
+(`recargo`: `efectivo + transferencia = total + recargo`). **Las cuentas van en centavos enteros** (`centavos`), y **una venta
 anulada no cuenta, tampoco en el efectivo esperado del cierre**. **El papel de cada compra es un vale, no el ticket** (pedido del jefe, 3-nov,
 el "3b"): sin logo, sin precios y sin QR, TODO JUNTO o POR SEPARADO (cada vale armado a mano con su "vale por" hasta que no quede nada: `widgets/elegir_vales.dart`), uno por papel, en letras
 grandes (`GrandeTicket`), y **el barman se lo queda**: ese es el control, junto con la fiesta y el día impresos y la COPIA marcada. La app ya imprime
@@ -143,7 +147,7 @@ uso: una sola cuenta, sin entrar desde abril). Los permisos siguen en la nube (`
 - **Sin fila, es de Cobros solo (`PermisosEfectivos.de`); con fila en cero, no tiene permisos.** Son dos cosas distintas: así Maxi y Juan siguen igual, sin
   volver a darles nada. Guardar sin cambiar nada no escribe.
 - **Un PIN y se despliegan las opciones** (`OpcionesDeEntrada`, en `RoleGateScreen`). `buscarOperador` baja de la nube un PIN que no está en esta PC, antes de
-  decir que es incorrecto. Barra se guarda, pero todavía no abre nada (`kBarraTodaviaNo`).
+  decir que es incorrecto. Barra entra a `BarraHomeScreen` (`entrarComoBarra`, sin caja de cuotas ni latido; `test/modo_barra_cerrado_test.dart`).
 - **`destinoDeEntrada` decide la pantalla, y con `AppRoleKind.entradas` nunca arma el panel:** va a `EntradasHomeScreen`, sin camino a cobrar ni a editar
   (`test/modo_entradas_cerrado_test.dart`). `sesionCajaIdParaCobro` lo rechaza.
 - **De la caja a Entradas, la caja queda abierta y latiendo.** Entrar directo a Entradas no abre ni mira ninguna caja.

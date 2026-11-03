@@ -3,16 +3,60 @@
 2 y 3-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
 El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado (3-nov): las etapas 1, 2 y 3 cerradas.** La impresora, probada en papel desde la PC y desde un celular Android. Los datos de la barra
-(v77, el sync y el SQL de la nube **sin correr**), con la migración probada sobre una copia de la base real. Las cuentas y lo que dice cada
-papel, mirado en el papel con fotos. **Lo que sigue es la etapa 4 (la cajera: entrar, fiesta, caja, VENDER).** La app todavía no tiene
-pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
+**Estado (3-nov, noche): las etapas 1 a 4 cerradas, y el 3b (los vales).** La impresora, probada en papel desde la PC y desde un celular
+Android. Los datos de la barra (v77, el sync y el SQL de la nube **sin correr**). Las cuentas y lo que dice cada papel. **La cajera ya entra
+con su PIN, elige la fiesta, abre su caja, vende, cobra e imprime los vales** (etapa 4, abajo). Sin versión, sin release, sin web. Las PCs
+siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
 
 ## Para retomar en otro chat
 
-**Dónde quedó (3-nov, tarde):** todo commiteado y subido. Después de la etapa 3 se hizo un tramo corto, **el "3b": los vales** (abajo). La
-suite entera, en verde (3.330 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario pruebe la
-pantalla de los vales (botón VALES), mande la foto y se los muestre al jefe con la maqueta.
+**Dónde quedó (3-nov, noche):** todo commiteado y subido. La suite entera, en verde (3.397 tests). `flutter analyze` sin nada nuevo.
+Ningún archivo a medias. **Para mirarlo con el mouse:** `flutter run -d windows -t tool/barra_prueba.dart` (sin base ni nube; PIN Marta
+1111, Tati 5555; botón para cortar el internet; los vales salen por la TP-POS58 de verdad). **Falta:** que el usuario la recorra y mande la
+foto de los vales. **Antes de publicar:** volver a probar la migración v77 sobre una copia de la base real (la tabla `barra_ventas` cambió:
+sin `comprobante_visto`, con `recargo` y `recargo_pct`), con la app cerrada.
+
+**Lo que sigue: la etapa 5**, con su plan corto y el OK del usuario antes: reimprimir con freno (la cajera solo la última venta, una vez;
+el jefe cualquiera, con COPIA), ANULAR también la cajera con motivo, el ticket con precios solo si lo piden, y guardar por cuánto salió
+cada vale (adentro de `renglones`) para reimprimir el mismo. **Pendiente que pidió el usuario el 3-nov:** que la cajera sepa si a la
+impresora le falta papel. Hoy la app solo le escribe; hay que probar con un botón PAPEL en `tool/impresora_prueba.dart` si la TP-POS58
+contesta el pedido de estado (`DLE EOT 4`) por Bluetooth. Si contesta, VENDER avisa "sin papel" antes de cobrar; si no, queda como está.
+
+## Etapa 4: la cajera (3-nov, noche)
+
+Lo que se ve, en orden (todo en `lib/features/barra/`, y se adapta a celular, tablet y PC con `CortesPantalla`):
+- **Entrar:** el PIN con permiso Barra entra derecho (`AppRoleKind.barra`, `entrarComoBarra`: sin caja de cuotas, sin latido, apaga el modo
+  jefe); con varios permisos, BARRA ya está prendido. `destinoDeEntrada` lo manda a `BarraHomeScreen` antes que nada. `kBarraTodaviaNo` ya
+  no existe. Lo vendido sube solo (`esBarra` en el coordinador de sync).
+- **`BarraHomeScreen`:** "BARRA · MARTA", SALIR, la línea "Lista para trabajar sin internet" de la barra (`services/barra_sin_internet.dart`:
+  `EstadoSinInternetBarra`, `PuestaAlDiaBarra` sobre `SyncEngine.bajarParaLaBarra()`; cuenta las ventas que esperan subir) y las fiestas
+  **con precios en este equipo y por hacer**, masivas o particulares (`fiestasParaLaBarra`).
+- **Abrir la caja** (`abrir_caja_barra_dialog.dart`): el número (1 a 6) y, si hace falta, dónde está. Nada de cambio ni de turno. Si otra
+  caja abierta de la fiesta ya tiene ese número, lo dice con el nombre y deja seguir. Con la caja ya abierta en este equipo, entra derecho.
+- **VENDER** (`vender_screen.dart`): buscador (sin acentos, palabra por palabra) y chips de categoría; tarjetas con el precio, lo que lleva
+  la cuenta y el stock ("Quedan 3", "Agotado", sin frenar la venta). En el celular la cuenta va abajo, con el total y los tres botones
+  siempre a la vista, y se despliega tocando el total; en la tablet y la PC, al costado. Arriba, el ícono del **cambio** (se pone cuando
+  haya: `BarraDeLaCaja.ponerCambio`) y el de la **impresora** (verde si está lista; abre `ElegirImpresoraScreen` para elegirla o cambiarla).
+- **EFECTIVO · TRANSFERENCIA · MIXTO** (`cobrar_hoja.dart`, hoja en el celular y diálogo en la tablet): la plata a mano con
+  `PesosEnterosFormatter`; el vuelto; **transferencia sin comprobante** (es todo lo que entra por Mercado Pago, posnet con QR, débito o
+  transferencia: quien cobra lo ve en el momento); el **recargo** con su check, por % (arranca en el último que usó el equipo, 5 la primera
+  vez, `RecargoRecordado`) o en $; en el mixto las dos casillas se escriben y la de transferencia ya trae el recargo. Las cuentas son
+  `CobroBarra` (`recargo`, `transfiere`, `aCobrar`, `conTransfiereDelMixto`).
+- **Confirmar:** la venta se guarda **antes de imprimir**, sube si hay internet (`subirVentaProvider`) y sigue la pantalla de los vales,
+  con "Venta guardada" y el vuelto. LISTO vuelve a VENDER con la cuenta vacía; si quedan bebidas sin vale, pregunta antes.
+
+**Los datos cambiaron, dentro de la v77 (no publicada):** `barra_ventas` pierde `comprobante_visto` y suma `recargo` (lo cobrado de más) y
+`recargo_pct`. `VentaBarra.total` sigue siendo lo que valen las bebidas; `efectivo + transferencia = total + recargo`; `cobrado` es lo que
+pagó. El cierre cuenta los recargos aparte (`CierreDeBarra.recargos`, "De ellos, recargos" en el papel) y el ticket con precios dice
+"Recargo transf." y "COBRADO". Cambiaron a la vez la base (`crearTablasV77`), el SQL, el motor de sync y sus tests.
+
+**Tests:** `test/barra_home_test.dart`, `test/barra_pantalla_test.dart` (VENDER de verdad a 360×740, 740×360, 800×1280 y 1280×800: sin
+desbordes y con los tres botones a la vista; los tres cobros, el recargo en % y en $, el mixto por las dos casillas, el cambio, los vales,
+sin impresora, y la base que no guarda), `test/modo_barra_cerrado_test.dart`, `test/pesos_enteros_formatter_test.dart`,
+`test/productos_para_vender_test.dart`, y lo nuevo en `entrada_operador_test`, `barra_cuentas_test`, `barra_repositorios_test` y
+`modelo_ticket_test`. Con `test/helpers/barra_en_memoria.dart`. **Los tests encontraron** dos desbordes en el celular (la fila del total y las
+tarjetas con el celular acostado) y que los productos mezclaban precios de otra fiesta: arreglados. Roturas a propósito vistas en rojo: la
+Barra que cae en el panel, el recargo que no se guarda y el recargo sobre el total en vez de lo transferido.
 
 ## El 3b: los vales, en vez del ticket (3-nov, pedido del jefe)
 
@@ -41,10 +85,11 @@ entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el
   mientras se escribe ("2-0-0-0-0" se ve "$ 20.000"), en pesos enteros, sin centavos. No es el `CurrencyInputFormatter` de las cuotas, que
   entra por la derecha con centavos.
 - **Recargo por transferencia**, como en el cobro de cuotas: un check que se prende o se apaga, **por %** o **en $** a mano. Va solo
-  sobre lo que se transfiere (en el mixto, sobre la parte transferida), y la tilde dice "Vi el comprobante de $ 55.000" con el recargo
-  sumado. **El % lo pone el jefe por fiesta, en BARRA junto con los precios; la cajera lo puede cambiar en cada cobro.** Datos (etapa 5,
-  dentro de la v77, que no se publicó): la venta guarda cuánto fue de recargo, y el cierre lo muestra aparte, porque no es de ningún
-  producto. El % de la fiesta va en una tabla aparte, una fila por fiesta con id fijo (no en `eventos`).
+  sobre lo que se transfiere (en el mixto, sobre la parte transferida), y la casilla de transferencia ya lo muestra sumado. **Sin "Vi el
+  comprobante"** (lo sacó el usuario: el posnet de Mercado Pago está en la cuenta de quien cobra, que ve el pago al momento). **El % lo pone
+  el jefe por fiesta, en BARRA junto con los precios (etapa 7); la cajera lo puede cambiar en cada cobro.** Mientras tanto arranca en el último
+  que usó el equipo. La venta guarda cuánto fue de recargo y el cierre lo muestra aparte (hecho en la etapa 4). El % de la fiesta va en una
+  tabla aparte, una fila por fiesta con id fijo (no en `eventos`).
 - **Abrir la caja no pregunta el cambio ni el turno** (es de noche, nada de mañana/tarde): el cambio se pone después, con un ícono, si hay.
 - **Una persona controla el sector de barras con un iPhone:** es la web en modo jefe, que ya estaba en el plan (etapa 6).
 
@@ -72,12 +117,11 @@ la 6 (el jefe) lleva el % de recargo de cada fiesta. **Datos de la 5, decididos:
 publicó): con ella hay que volver a probar la migración sobre una copia de la base real, con la app cerrada.
 
 **La rama lleva, sin publicar:** el plano antes de los sorteos (6.3.0, `docs/CONTEXTO_v6.3.0_2026-11-02.md`), operadores con permisos (etapas 1
-a 3, `docs/CONTEXTO_OPERADORES_2026-11-02.md`) y la barra, etapas 1 a 3 (este archivo). **Dos SQL sin correr, antes de instalar:**
+a 3, `docs/CONTEXTO_OPERADORES_2026-11-02.md`) y la barra, etapas 1 a 4 (este archivo). **Dos SQL sin correr, antes de instalar:**
 `supabase/migrations/20261103120000_permisos_operador.sql` (v76) y `supabase/migrations/20261103140000_barra.sql` (v77).
 
-**Lo que sigue: la etapa 4, la cajera.** Antes de programar, el plan corto y el OK del usuario (así trabaja: una etapa por vez, cada una cierra
-con tests, roturas a propósito, commit, push y este archivo al día). Lo que entra, según la sección 3 del plan (con lo que cambió el 3b:
-abrir sin cambio ni turno):
+**Cómo se planeó la etapa 4 (queda como historia; lo hecho está arriba, en "Etapa 4: la cajera").** Lo que entraba, según la sección 3 del
+plan (con lo que cambió el 3b: abrir sin cambio ni turno):
 - **Entrar:** `AppRoleKind.barra` (hoy el enum es `none, jefe, caja, entradas`, en `caja_sesiones/providers/app_role_provider.dart`);
   `destinoDeEntrada` lleva a `BarraHomeScreen` (nueva, en `lib/features/barra/`). `kBarraTodaviaNo` desaparece de
   `caja_sesiones/services/entrada_de_operador.dart`, de `caja_sesiones/widgets/role_gate_screen.dart` y de su test. Molde: cómo se hizo

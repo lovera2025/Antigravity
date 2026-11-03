@@ -24,16 +24,17 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 | 1. La impresora | **Hecha el 3-nov:** papel mirado (acentos con la tabla 850, renglones por palabras, QR nativo, el isotipo); imprime desde la PC y desde un celular Android, y se conecta sola. `docs/CONTEXTO_BARRA_2026-11-02.md` |
 | 2. El plano | Programado y probado con el mouse, sin publicar. `docs/CONTEXTO_v6.3.0_2026-11-02.md` |
 | 3. Operadores | Programado y probado con el mouse, sin publicar, con el SQL sin correr. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
-| 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** Etapas 1 a 3 hechas el 3-nov (la impresora, los datos v77 con el SQL sin correr, y las cuentas), y el 3b: los vales que pidió el jefe, en papel (falta la foto); sigue la 4, la cajera |
+| 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** Etapas 1 a 4 hechas el 3-nov (la impresora, los datos v77 con el SQL sin correr, las cuentas y la cajera vendiendo con sus tres cobros y el recargo), y el 3b: los vales que pidió el jefe. Para mirarla: `tool/barra_prueba.dart`. Sigue la 5 (reimprimir, anular) |
 | 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
 | Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la barra (etapas 1 a 3)** |
 
-**Lo que sigue:** la etapa 4 del plan de la barra (la cajera: entrar con su PIN, elegir la fiesta, abrir su caja y VENDER, en celular y en
-tablet). El detalle, en "Para retomar en otro chat" de `docs/CONTEXTO_BARRA_2026-11-02.md`. Publicar la rama lleva ahora dos SQL que corren
-antes de instalar: los permisos (v76) y la barra (v77).
+**Lo que sigue:** la etapa 5 del plan de la barra (reimprimir con freno, anular también la cajera, el ticket con precios si lo piden) y
+probar si la impresora avisa que le falta papel. El detalle, en "Para retomar en otro chat" de `docs/CONTEXTO_BARRA_2026-11-02.md`. Publicar
+la rama lleva dos SQL que corren antes de instalar: los permisos (v76) y la barra (v77), y antes la migración v77 se vuelve a probar sobre
+una copia de la base real.
 
 > Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
-> corto de la etapa 4 (la cajera) antes de programar."
+> corto de la etapa 5 antes de programar."
 
 ## El orden
 
