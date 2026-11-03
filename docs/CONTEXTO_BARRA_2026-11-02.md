@@ -10,7 +10,7 @@ pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.
 
 ## Para retomar en otro chat
 
-**Dónde quedó (3-nov, mañana):** todo commiteado y subido; el último commit es `74336c4`. La suite entera, en verde (3.306 tests).
+**Dónde quedó (3-nov, mañana):** todo commiteado y subido; el último commit con código es `74336c4` (después, solo lo escrito). La suite entera, en verde (3.306 tests).
 `flutter analyze` sin nada nuevo. Ningún archivo a medias.
 
 **La rama lleva, sin publicar:** el plano antes de los sorteos (6.3.0, `docs/CONTEXTO_v6.3.0_2026-11-02.md`), operadores con permisos (etapas 1
