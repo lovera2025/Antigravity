@@ -1,0 +1,309 @@
+import 'dart:typed_data';
+
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+
+import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
+import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
+import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
+
+/// Los tres caminos de escritura que trae la TP-POS58, más lo que no sirve para imprimir.
+const _tpPos58 = [
+  CaracteristicaBle(
+    servicio: '00001800-0000-1000-8000-00805f9b34fb',
+    uuid: '00002a00-0000-1000-8000-00805f9b34fb',
+    escribe: true,
+  ),
+  CaracteristicaBle(
+    servicio: '0000ff00-0000-1000-8000-00805f9b34fb',
+    uuid: '0000ff02-0000-1000-8000-00805f9b34fb',
+    escribeSinRespuesta: true,
+  ),
+  CaracteristicaBle(
+    servicio: 'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+    uuid: 'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f',
+    escribe: true,
+  ),
+  CaracteristicaBle(
+    servicio: '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+    uuid: '49535343-8841-43f4-a8d4-ecbe34729bb3',
+    escribe: true,
+    escribeSinRespuesta: true,
+  ),
+  CaracteristicaBle(
+    servicio: '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+    uuid: '49535343-1e4d-4bd9-ba61-23c647249616',
+  ),
+];
+
+class _CanalEnMemoria implements CanalBle {
+  List<CaracteristicaBle> lista = _tpPos58;
+  int? mtu = 185;
+  int fallaEnTrozo = -1;
+  final conectados = <String>[];
+  final escrito = <Uint8List>[];
+
+  @override
+  Future<void> pedirPermisos() async {}
+  @override
+  Future<List<DispositivoBle>> emparejados() async => const [];
+  @override
+  Stream<DispositivoBle> buscar() => const Stream.empty();
+  @override
+  Future<void> dejarDeBuscar() async {}
+  @override
+  Future<void> conectar(String id) async => conectados.add(id);
+  @override
+  Future<void> desconectar(String id) async => conectados.remove(id);
+  @override
+  Future<bool> estaConectado(String id) async => conectados.contains(id);
+  @override
+  Future<List<CaracteristicaBle>> caracteristicas(String id) async => lista;
+  @override
+  Future<int> pedirMtu(String id, int m) async {
+    final valor = mtu;
+    if (valor == null) throw StateError('no deja pedirlo');
+    return valor;
+  }
+
+  @override
+  Future<void> escribir(String id, CaracteristicaBle c, Uint8List bytes) async {
+    if (escrito.length == fallaEnTrozo) throw StateError('se cortó');
+    escrito.add(bytes);
+  }
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('por dónde se le escribe', () {
+    test('la TP-POS58: el UART de ISSC, que es el primero conocido', () {
+      expect(
+        elegirCaracteristica(_tpPos58)!.uuid,
+        '49535343-8841-43f4-a8d4-ecbe34729bb3',
+      );
+    });
+
+    test('otra impresora, con un servicio FF00', () {
+      expect(
+        elegirCaracteristica(_tpPos58.sublist(0, 3))!.uuid,
+        '0000ff02-0000-1000-8000-00805f9b34fb',
+      );
+    });
+
+    test('un modelo desconocido: la primera que escriba, sin tocar las del sistema', () {
+      const rara = CaracteristicaBle(
+        servicio: 'aaaaaaaa-0000-1000-8000-00805f9b34fb',
+        uuid: 'bbbbbbbb-0000-1000-8000-00805f9b34fb',
+        escribeSinRespuesta: true,
+      );
+      expect(elegirCaracteristica([_tpPos58.first, rara]), same(rara));
+    });
+
+    test('solo del sistema, o nada que escriba: no hay por dónde', () {
+      expect(elegirCaracteristica([_tpPos58.first]), isNull);
+      expect(elegirCaracteristica([_tpPos58.last]), isNull);
+      expect(elegirCaracteristica(const []), isNull);
+    });
+
+    test('las mayúsculas del UUID no cambian nada', () {
+      const mayus = CaracteristicaBle(
+        servicio: '49535343-FE7D-4AE5-8FA9-9FAFD205E455',
+        uuid: '49535343-8841-43F4-A8D4-ECBE34729BB3',
+        escribe: true,
+      );
+      expect(elegirCaracteristica([_tpPos58[2], mayus]), same(mayus));
+    });
+  });
+
+  group('los trozos', () {
+    test('el tamaño sale del MTU, con piso y techo', () {
+      expect(tamanoDeTrozo(null), 20);
+      expect(tamanoDeTrozo(23), 20);
+      expect(tamanoDeTrozo(10), 20);
+      expect(tamanoDeTrozo(100), 97);
+      expect(tamanoDeTrozo(512), 180);
+    });
+
+    test('parte en orden y no pierde ningún byte', () {
+      final bytes = List<int>.generate(1000, (i) => i % 256);
+      for (final tam in [20, 97, 180, 1000, 5000]) {
+        final trozos = partirEnTrozos(bytes, tam);
+        expect(trozos.expand((t) => t).toList(), bytes, reason: 'de a $tam');
+        expect(trozos.every((t) => t.length <= tam), isTrue);
+      }
+      expect(partirEnTrozos(const [], 20), isEmpty);
+    });
+  });
+
+  test('reconoce el nombre de una impresora', () {
+    expect(pareceImpresora('TP-POS58'), isTrue);
+    expect(pareceImpresora('Global PT-210'), isTrue);
+    expect(pareceImpresora('GK-995W BT5.2-1'), isFalse);
+    expect(pareceImpresora('Xinua-TB'), isFalse);
+  });
+
+  group('la impresora', () {
+    late _CanalEnMemoria canal;
+    late ImpresoraBluetooth impresora;
+
+    setUp(() {
+      canal = _CanalEnMemoria();
+      impresora = ImpresoraBluetooth(canal, pausa: Duration.zero);
+    });
+
+    test('sin conectarse no toca el canal: lo dice', () async {
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.noConectada);
+      expect(canal.escrito, isEmpty);
+    });
+
+    test('se conecta, elige por dónde y manda todo en trozos', () async {
+      expect(await impresora.conectar('tp'), isTrue);
+      expect(impresora.tamano, 180);
+      final bytes = List<int>.generate(500, (i) => i % 256);
+      expect(await impresora.imprimir(bytes), ResultadoImpresion.impreso);
+      expect(canal.escrito.expand((t) => t).toList(), bytes);
+      expect(canal.escrito, hasLength(3));
+    });
+
+    test('si no dejan pedir el MTU, se manda de a 20 igual', () async {
+      canal.mtu = null;
+      expect(await impresora.conectar('tp'), isTrue);
+      expect(impresora.tamano, 20);
+    });
+
+    test('un aparato que no imprime no queda conectado', () async {
+      canal.lista = [_tpPos58.first];
+      expect(await impresora.conectar('auriculares'), isFalse);
+      expect(canal.conectados, isEmpty);
+      expect(impresora.conectadaA, isNull);
+    });
+
+    test('si se corta a la mitad lo dice, sin tirar, y el próximo ticket sale', () async {
+      await impresora.conectar('tp');
+      canal.fallaEnTrozo = 1;
+      final bytes = List<int>.filled(500, 7);
+      expect(await impresora.imprimir(bytes), ResultadoImpresion.fallo);
+      canal
+        ..fallaEnTrozo = -1
+        ..escrito.clear();
+      expect(await impresora.imprimir(bytes), ResultadoImpresion.impreso);
+    });
+
+    test('dos tickets a la vez no se mezclan', () async {
+      await impresora.conectar('tp');
+      final a = List<int>.filled(400, 1);
+      final b = List<int>.filled(400, 2);
+      await Future.wait([impresora.imprimir(a), impresora.imprimir(b)]);
+      expect(canal.escrito.expand((t) => t).toList(), [...a, ...b]);
+    });
+  });
+
+  group('el texto para el papel', () {
+    test('con la tabla, los acentos quedan', () {
+      expect(textoParaPapel('Café ñandú ¡Sí!', conAcentos: true), 'Café ñandú ¡Sí!');
+    });
+
+    test('sin tabla, se sacan', () {
+      expect(textoParaPapel('Café ñandú ¡Sí! N°', conAcentos: false), 'Cafe nandu !Si! No');
+    });
+
+    test('lo que no se puede escribir no frena la venta', () {
+      expect(textoParaPapel('Cerveza 🍺', conAcentos: true), 'Cerveza ?');
+      expect(textoParaPapel('€ 10', conAcentos: false), '? 10');
+    });
+  });
+
+  group('los bytes del ticket', () {
+    late CapabilityProfile perfil;
+    setUpAll(() async => perfil = await CapabilityProfile.load());
+
+    String armar(List<LineaTicket> l, {OpcionesEscPos? o, bool cortar = true}) =>
+        bytesComoTexto(TicketEscPos(perfil, opciones: o ?? const OpcionesEscPos())
+            .armar(l, cortar: cortar));
+
+    test('empieza reiniciando la impresora y termina cortando', () {
+      final s = armar(const [TextoTicket('hola')]);
+      expect(s.startsWith('\x1B@'), isTrue);
+      expect(s, contains('hola'));
+      expect(s.endsWith('\x1DV\x00') || s.contains('\x1DV'), isTrue);
+    });
+
+    test('sin cortar, no corta: para encadenar papeles', () {
+      expect(armar(const [TextoTicket('a')], cortar: false), isNot(contains('\x1DV')));
+    });
+
+    test('con la tabla, la pide y deja los acentos', () {
+      final s = armar(const [TextoTicket('Café')]);
+      expect(s, contains('\x1Bt'));
+      expect(s, contains('Café'));
+    });
+
+    test('sin tabla no la pide, y saca los acentos', () {
+      final s = armar(
+        const [TextoTicket('Café')],
+        o: const OpcionesEscPos(tablaCaracteres: null),
+      );
+      expect(s, isNot(contains('\x1Bt')));
+      expect(s, contains('Cafe'));
+    });
+
+    test('el QR va nativo', () {
+      expect(armar(const [QrTicket('je:barra:1')]), contains('\x1D(k'));
+    });
+
+    test('el ticket entero se arma, con un importe alineado a la derecha', () {
+      final s = armar(ticketDePrueba());
+      expect(s, contains('JUNIOR EVENTOS'));
+      expect(s, contains(r'$ 16.000'));
+      expect(s, contains('N° 0017'));
+    });
+  });
+
+  group('el logo para el papel', () {
+    Uint8List png(img.Image i) => Uint8List.fromList(img.encodePng(i));
+
+    test('silueta: lo claro sobre transparente sale negro, y el resto blanco', () {
+      final original = img.Image(width: 100, height: 100, numChannels: 4);
+      img.fillRect(
+        original,
+        x1: 0, y1: 0, x2: 49, y2: 99,
+        color: img.ColorRgba8(255, 255, 255, 255),
+      );
+      final s = LogoParaPapel.silueta(png(original), ancho: 40)!;
+      expect(s.width, 40);
+      expect(s.getPixel(5, 20).r, 0, reason: 'lo blanco opaco va en negro');
+      expect(s.getPixel(35, 20).r, 255, reason: 'lo transparente queda papel');
+    });
+
+    test('umbral: lo oscuro sale negro, lo claro no', () {
+      final original = img.Image(width: 100, height: 100);
+      img.fill(original, color: img.ColorRgb8(255, 255, 255));
+      img.fillRect(
+        original,
+        x1: 0, y1: 0, x2: 49, y2: 99,
+        color: img.ColorRgb8(10, 10, 10),
+      );
+      final u = LogoParaPapel.umbral(png(original), ancho: 40)!;
+      expect(u.getPixel(5, 20).r, 0);
+      expect(u.getPixel(35, 20).r, 255);
+    });
+
+    test('una imagen rota no tira', () {
+      expect(LogoParaPapel.silueta(Uint8List.fromList([1, 2, 3])), isNull);
+      expect(LogoParaPapel.umbral(Uint8List.fromList([1, 2, 3])), isNull);
+    });
+
+    test('con logo, el ticket lleva la imagen', () async {
+      final logo = img.Image(width: 40, height: 40);
+      img.fill(logo, color: img.ColorRgb8(0, 0, 0));
+      final armador = TicketEscPos(await CapabilityProfile.load());
+      final sinLogo = armador.armar(const [TextoTicket('a')]);
+      final conLogo = armador.armar([LogoTicket(logo), const TextoTicket('a')]);
+      expect(conLogo.length, greaterThan(sinLogo.length + 100));
+      expect(bytesComoTexto(conLogo), contains('\x1Dv0'), reason: 'raster');
+    });
+
+  });
+}

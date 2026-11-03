@@ -55,6 +55,11 @@ antes al usuario.**
 un SQL sin correr. Faltan las etapas 4 a 6 antes de usarlo: quien tiene solo Entradas todavía puede anular una entrega. Entrada:
 `docs/CONTEXTO_OPERADORES_2026-11-02.md`. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`. **Publicar la rama lleva las dos cosas.**
 
+**En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`). Va en la etapa 1: la app ya imprime
+por Bluetooth (`lib/features/barra/impresion/`, `flutter run -d windows -t tool/impresora_prueba.dart`), pero todavía no tiene barra. La impresora es una **TP-POS58 por BLE**, y la escritura va
+sin respuesta: "impreso" no dice que el papel salió bien, hay que mirarlo. `universal_ble` queda en la 3.1.0 (la 3.1.1 choca con `file_picker` 10). **Después de la barra, Entradas 4 a 6, y se
+publica todo en una.**
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:

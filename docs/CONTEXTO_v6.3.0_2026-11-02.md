@@ -132,9 +132,8 @@ verdad no traía. Ya no lo recorta.
    la app cerrada: hay que pedírselo.
 3. **La app de hoy corriendo en una tablet** (etapa 0 del paso 4): ninguna tablet tiene la app, y es el riesgo más grande para el
    4-dic. Hace falta un Android conectado y una clave de firma propia.
-4. **La impresora** (paso 1): espera a que el usuario la tenga. La rama `feature/barra-impresora` está sin compilar, y a su arnés le
-   falta el botón LOGO.
-5. **El plan del módulo de barra** (paso 4): después de la impresora, con lo aprobado en las maquetas, que está en la hoja.
+4. **La impresora** (paso 1): llegó el 2-nov y ya imprimió desde la app: `docs/CONTEXTO_BARRA_2026-11-02.md`.
+5. **El módulo de barra** (paso 4): plan aprobado, `docs/PLAN_BARRA_2026-11-03.md`.
 6. **Entradas** (paso 5). La venta suelta es lo último.
 
 **Queda abierto, sin apuro:** marcar "lejos" antes, en la ficha del alumno. Hoy se tilda en SORTEO. Llevaría una tabla nueva, y va

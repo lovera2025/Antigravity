@@ -75,6 +75,13 @@ dependencies:
   # Los colores de "Tu fondo" salen de la imagen (`lectura_del_fondo.dart`). Ya
   # venía con Flutter: la misma versión que fija el SDK.
   material_color_utilities: ^0.13.0
+  # La impresora de la barra (TP-POS58, Bluetooth de bajo consumo): la misma API en
+  # Android y Windows. Hasta la 3.1.0: desde la 3.1.1 pide un `dbus` que choca con
+  # `file_picker` 10. `esc_pos_utils_plus` arma los bytes del ticket; `image` hace la
+  # silueta del logo y ya venía con `excel`.
+  universal_ble: ">=3.1.0 <3.1.1"
+  esc_pos_utils_plus: ^2.0.4
+  image: ^4.3.0
 
 
 dev_dependencies:

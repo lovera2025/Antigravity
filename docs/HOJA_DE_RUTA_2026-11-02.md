@@ -17,6 +17,19 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 - **La base comparada con la foto, el 2-nov:** los mismos 643 alumnos y los mismos 16 congelados, sin ninguna mora
   revivida. Los únicos cambios son dos cobros normales.
 
+## Dónde estamos (2-nov, noche)
+
+| Paso | Estado |
+|---|---|
+| 1. La impresora | **Llegó y ya imprimió desde la app, por Bluetooth, desde esta PC. Falta mirar el papel.** `docs/CONTEXTO_BARRA_2026-11-02.md` |
+| 2. El plano | Programado y probado con el mouse, sin publicar. `docs/CONTEXTO_v6.3.0_2026-11-02.md` |
+| 3. Operadores | Programado y probado con el mouse, sin publicar, con el SQL sin correr. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
+| 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** En la etapa 1 |
+| 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
+| Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la impresora** |
+
+**Lo que sigue:** el usuario mira el ticket, y se termina la etapa 1 del plan de la barra.
+
 ## El orden
 
 **Publicar, solo con todo terminado y preguntándole antes al usuario** (2-nov). Mientras tanto se programa y se sube a
@@ -24,8 +37,8 @@ la rama de desarrollo, que no llega a las PCs.
 
 ### 1. La impresora de la barra (rama `feature/barra-impresora`, ya subida)
 
-**Espera a que llegue la impresora y no frena al paso 2** (2-nov: el usuario todavía no la tiene). La rama está escrita
-sin compilar: nunca pasó por `flutter analyze`.
+**Llegó el 2-nov: es una TP-POS58 por Bluetooth de bajo consumo, no una Global.** Lo que sigue de este paso quedó viejo: la prueba ya
+no usa esa rama ni esos paquetes. Se hace con `tool/impresora_prueba.dart` en la rama de desarrollo, y corre también en Windows.
 
 Es una prueba de hardware, no programación: `tool/impresora_prueba.dart`, con los dos paquetes y los permisos de
 Android. Emparejar la Global, correr el arnés en un Android, tocar TICKET, ACENTOS, ANCHO y QR, y mirar el papel.
@@ -74,7 +87,7 @@ local v76 y nube, con la migración probada sobre una copia de la base real) y e
 > Con los tests de la sección 5. La migración v76 se prueba sobre una copia de mi base, con la app cerrada: avisame
 > cuando la necesites."
 
-### 4. El módulo de barra (plan a escribir después del paso 1)
+### 4. El módulo de barra (`docs/PLAN_BARRA_2026-11-03.md`, aprobado el 2-nov)
 
 Para el 4-dic. Lo decidido el 2-nov: la app instalada en las tablets Android, logueada una
 vez con la cuenta de la empresa; la cajera entra con su PIN (permiso Barra), elige la fiesta, abre **su caja de

@@ -71,5 +71,6 @@ solo pediría separarlo. Lo que esperaría: terminar las etapas 4 a 6 y publicar
 1. **Entradas, etapas 4 a 6** (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`): la entrega según los permisos, "que pase por caja" con el monto, el aviso en
    vivo, anular solo el jefe y la prueba en dos PCs. Antes, la sección 7 del plan: la pregunta 3 (¿ve cuánto debe?) está sin contestar; se recomienda que sí.
 2. **La app de hoy en una tablet** (etapa 0 del módulo de barra): hace falta un Android conectado y una clave de firma propia.
-3. **La impresora y el plan de la barra**, cuando la impresora esté.
+3. **La impresora y el plan de la barra:** ya llegó y el plan está aprobado (`docs/PLAN_BARRA_2026-11-03.md`). Este orden quedó viejo: va primero la barra, y
+   Entradas es su etapa 11.
 4. **Publicar**, cuando el usuario diga.
