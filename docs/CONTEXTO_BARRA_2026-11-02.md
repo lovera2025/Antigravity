@@ -22,6 +22,21 @@ cada vale (adentro de `renglones`) para reimprimir el mismo. **Pendiente que pid
 impresora le falta papel. Hoy la app solo le escribe; hay que probar con un botón PAPEL en `tool/impresora_prueba.dart` si la TP-POS58
 contesta el pedido de estado (`DLE EOT 4`) por Bluetooth. Si contesta, VENDER avisa "sin papel" antes de cobrar; si no, queda como está.
 
+**Decidido el 3-nov (noche), para hacer en su etapa:**
+- **El stock de todas las cajas, también sin internet, por la red del salón.** El jefe quiere que lo que vende una caja se vea en las
+  demás. Con internet ya pasa (las ventas suben y bajan). Sin internet: **habrá un router TP-Link en el salón** al que se conectan todas
+  las tablets, y una hace de central, como la notebook de la puerta (`recepcion/central/`, `CentralPuerta`): recibe las ventas de cada
+  caja y reparte el stock de todas. Si la central no está, cada tablet sigue vendiendo y descontando lo suyo. Falta decidir qué equipo es la
+  central (la notebook de la puerta u otra tablet). Es una etapa nueva, antes de la prueba de punta a punta. **La red tiene señal pero no
+  internet** (lo aclaró el usuario), y **va a haber varios TP-Link, lejos unos de otros**: tienen que formar una sola red (uno principal y
+  los demás como repetidores o puntos de acceso con el mismo nombre de red, o un mesh tipo Deco). Si cada uno arma su red aparte, las
+  tablets de un router no ven a las del otro.
+- **Sin stock, pregunta antes** (elegido por el usuario): la tarjeta se ve apagada con "Agotado" y, si la tocan, "Según lo cargado no queda.
+  ¿Vender igual?". **"Quedan" tiene que bajar con lo que ya está en la cuenta** (hoy en VENDER baja solo con lo vendido: hay que restar
+  también la cuenta). Y en la misma tarjeta se suma y se quita (+ / −).
+- **El diseño se elige:** Noche dorada o Mostrador, cada equipo recuerda el suyo, con la foto de cada producto bien a la vista. Maqueta:
+  `build/maquetas/barra_disenios.html`.
+
 ## Etapa 4: la cajera (3-nov, noche)
 
 Lo que se ve, en orden (todo en `lib/features/barra/`, y se adapta a celular, tablet y PC con `CortesPantalla`):
