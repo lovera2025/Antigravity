@@ -11,8 +11,8 @@ pantallas de barra. Sin versión, sin release, sin web. Las PCs siguen con la 6.
 ## Para retomar en otro chat
 
 **Dónde quedó (3-nov, tarde):** todo commiteado y subido. Después de la etapa 3 se hizo un tramo corto, **el "3b": los vales** (abajo). La
-suite entera, en verde (3.324 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario imprima los vales
-(botón VALES), mande la foto y se los muestre al jefe con la maqueta.
+suite entera, en verde (3.331 tests). `flutter analyze` sin nada nuevo. Ningún archivo a medias. **Falta:** que el usuario pruebe la
+pantalla de los vales (botón VALES), mande la foto y se los muestre al jefe con la maqueta.
 
 ## El 3b: los vales, en vez del ticket (3-nov, pedido del jefe)
 
@@ -38,8 +38,15 @@ ancho, 16 letras partidas por palabras; `soloAlto`, 32); `ModeloTicket.deVale` y
 `test/vales_de_barra_test.dart`, el grupo "el vale" de `modelo_ticket_test` y la letra grande en `impresora_barra_test`. Roturas a propósito
 vistas en rojo (el último vale con lo que sobra, las 16 letras, la COPIA de abajo).
 
-**Para mirarlo:** el botón **VALES** de `tool/impresora_prueba.dart` imprime uno todo junto, los 4 de la cerveza de a uno (4 s para
-arrancar cada uno: lo decide el papel) y una copia. La maqueta, con los dos botones, la casilla y el IMPRIMIR por bebida:
+**La pantalla de después de cobrar ya existe: `widgets/elegir_vales.dart` (`ElegirVales`)**, sin base, con la impresora como un
+`ImprimirPapel` (true si salió); la va a usar COBRAR en la etapa 5. TODO JUNTO o POR SEPARADO; por bebida, la casilla "vale por" (solo
+números; "Va de 1 a 10" si no sirve, y no deja imprimir), "4 vales: 3 · 3 · 3 · 1" e IMPRIMIR. **Sale un vale por vez: después de cada uno,
+"Salió el vale 1 de 4: arrancalo" y SIGUIENTE** (el 3-nov la prueba que los mandaba seguidos, con 4 s entre uno y otro, sacó una tira larga).
+Con un vale impreso la forma no se cambia; si uno no sale, lo dice y SIGUIENTE manda el mismo. `test/elegir_vales_test.dart` (7 tests, uno a
+360 px). Roturas vistas: la tira y cambiar la forma después de imprimir.
+
+**Para mirarlo:** en `tool/impresora_prueba.dart`, **VALES** abre esa pantalla con una compra inventada (10 cervezas, 2 fernet, 3 aguas) y
+la impresora de verdad; **COPIA** imprime un vale reimpreso. La maqueta, con los dos botones, la casilla y el IMPRIMIR por bebida:
 `build/maquetas/vales_de_la_barra.html` (no va a git; se rehace desde el chat). Papel estimado: el ticket de hoy unos 12,5 cm; un vale
 todo junto unos 6 cm; uno por separado unos 5 cm. La medida justa, de la foto.
 

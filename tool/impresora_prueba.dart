@@ -18,6 +18,7 @@ import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
 import 'package:arguello_events/features/barra/impresion/canal_universal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
+import 'package:arguello_events/features/barra/widgets/elegir_vales.dart';
 
 void main() => runApp(const MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -200,62 +201,65 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
     );
   }
 
-  /// Cuánto espera entre un vale y el siguiente, para arrancarlo antes de que salga el
-  /// otro. Lo decide el papel en la mano.
-  static const _paraArrancar = Duration(seconds: 4);
+  /// Una compra inventada de 10 cervezas, 2 fernet y 3 aguas, para probar los vales.
+  static VentaBarra _ventaDeVales() => VentaBarra.nueva(
+        cajaBarraId: _caja.id,
+        eventoId: _caja.eventoId,
+        numero: 17,
+        renglones: const [
+          RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10),
+          RenglonVenta(productoId: 'b', nombre: 'Fernet con coca', precio: 6000, cantidad: 2),
+          RenglonVenta(productoId: 'c', nombre: 'Agua sin gas', precio: 1000, cantidad: 3),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 50000,
+        ahora: DateTime.now(),
+      );
 
-  /// Los vales como van a salir (pedido del jefe, 3-nov): uno TODO JUNTO, los de la
-  /// cerveza POR SEPARADO con "vale por 3" (3, 3, 3 y 1), de a uno, y una COPIA.
+  /// La pantalla de después de cobrar (`ElegirVales`), con la impresora de verdad: se
+  /// elige TODO JUNTO o POR SEPARADO, y cada vale sale solo, con SIGUIENTE. Cada vez que
+  /// se abre es una compra nueva.
   Future<void> _vales() async {
     final armador = await TicketEscPos.cargar();
-    final venta = VentaBarra.nueva(
-      cajaBarraId: _caja.id,
-      eventoId: _caja.eventoId,
-      numero: 17,
-      renglones: const [
-        RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 10),
-        RenglonVenta(productoId: 'b', nombre: 'Fernet con coca', precio: 6000, cantidad: 2),
-        RenglonVenta(productoId: 'c', nombre: 'Agua sin gas', precio: 1000, cantidad: 3),
-      ],
-      medio: MedioBarra.efectivo,
-      efectivo: 50000,
-      ahora: DateTime.now(),
-    );
-    final papeles = <(String, List<LineaTicket>)>[
-      (
-        'VALE TODO JUNTO',
-        ModeloTicket.deVale(Vale.todoJunto(venta), venta: venta, caja: _caja, fiesta: 'Puerto Viejo'),
-      ),
-      for (final vale in Vale.porSeparadoDe(venta.renglones.first, valePor: 3))
-        (
-          'VALE ${vale.numero} DE ${vale.de}',
-          ModeloTicket.deVale(vale, venta: venta, caja: _caja, fiesta: 'Puerto Viejo'),
-        ),
-      (
-        'COPIA',
-        ModeloTicket.deVale(
-          Vale.porSeparadoDe(venta.renglones.first, valePor: 3).first,
-          venta: venta,
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('Vales de una compra')),
+        body: ElegirVales(
+          venta: _ventaDeVales(),
           caja: _caja,
           fiesta: 'Puerto Viejo',
-          copia: CopiaDeVale(
-            numero: 1,
-            createdAt: DateTime.now().toUtc().toIso8601String(),
-            hechoPor: 'Jefe',
-            motivo: 'se cortó el papel',
-          ),
+          imprimir: (lineas) async {
+            final bytes = armador.armar(lineas);
+            final inicio = Stopwatch()..start();
+            final r = await _impresora.imprimir(bytes);
+            _anotar('VALE: ${r.name}, ${bytes.length} bytes en ${inicio.elapsedMilliseconds} ms');
+            return r == ResultadoImpresion.impreso;
+          },
         ),
       ),
-    ];
-    for (var i = 0; i < papeles.length; i++) {
-      if (i > 0) {
-        _anotar('Arrancá el papel: el siguiente sale en ${_paraArrancar.inSeconds} s');
-        setState(() => _ocupado = true);
-        await Future<void>.delayed(_paraArrancar);
-        if (!mounted) return;
-      }
-      await _mandar(papeles[i].$1, armador.armar(papeles[i].$2));
-    }
+    ));
+  }
+
+  /// Un vale reimpreso por el jefe: sale con COPIA arriba y abajo.
+  Future<void> _copia() async {
+    final armador = await TicketEscPos.cargar();
+    final venta = _ventaDeVales();
+    await _mandar(
+      'COPIA',
+      armador.armar(ModeloTicket.deVale(
+        Vale.porSeparadoDe(venta.renglones.first, valePor: 3).first,
+        venta: venta,
+        caja: _caja,
+        fiesta: 'Puerto Viejo',
+        copia: CopiaDeVale(
+          numero: 1,
+          createdAt: DateTime.now().toUtc().toIso8601String(),
+          hechoPor: 'Jefe',
+          motivo: 'se cortó el papel',
+        ),
+      )),
+    );
   }
 
   /// El papel del cierre de una caja con dos ventas, una anulada, y $ 500 de menos.
@@ -356,6 +360,7 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
                 ),
                 boton('TICKET', _ticket),
                 boton('VALES', _vales),
+                boton('COPIA', _copia),
                 boton('ACENTOS', _acentos),
                 boton('ANCHO', _ancho),
                 boton('QR', _qr),
