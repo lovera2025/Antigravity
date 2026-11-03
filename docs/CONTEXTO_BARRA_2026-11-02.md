@@ -28,9 +28,15 @@ contesta el pedido de estado (`DLE EOT 4`) por Bluetooth. Si contesta, VENDER av
   las tablets, y una hace de central, como la notebook de la puerta (`recepcion/central/`, `CentralPuerta`): recibe las ventas de cada
   caja y reparte el stock de todas. Si la central no está, cada tablet sigue vendiendo y descontando lo suyo. Falta decidir qué equipo es la
   central (la notebook de la puerta u otra tablet). Es una etapa nueva, antes de la prueba de punta a punta. **La red tiene señal pero no
-  internet** (lo aclaró el usuario), y **va a haber varios TP-Link, lejos unos de otros**: tienen que formar una sola red (uno principal y
-  los demás como repetidores o puntos de acceso con el mismo nombre de red, o un mesh tipo Deco). Si cada uno arma su red aparte, las
-  tablets de un router no ven a las del otro.
+  internet** (lo aclaró el usuario), y **va a haber varios TP-Link, distintos de los de la puerta y lejos unos de otros**. **El stock es
+  general** (lo carga el jefe en modo jefe el día antes, y todas las cajas descuentan del mismo), y **todas tienen que ver en vivo cómo se
+  va gastando, haya o no internet**. Para eso **las redes se unen con cable de red** (decidido el 3-nov): de un puerto LAN a un puerto LAN
+  (nunca el WAN), un TP-Link principal y los demás en modo "Punto de acceso" (o, si el modelo no lo trae, con otra dirección LAN y el
+  DHCP apagado), todos con el mismo nombre de wifi y clave; tramos de hasta 100 m, con un switch en el medio si hace falta. **La central
+  la programa una etapa propia**: una tablet de la barra recibe las ventas de todas y reparte el stock; si no está o se corta un cable,
+  cada caja sigue vendiendo con el último stock que conoce y avisa "Sin conexión desde las 23:40". Con internet, además, sube como siempre.
+  **En la app, sea cual sea la conexión, "Quedan" tiene que descontar lo vendido por todas las cajas de la fiesta** (hoy VENDER lee solo
+  las ventas de su caja) y actualizarse solo cuando llegan ventas nuevas.
 - **Sin stock, pregunta antes** (elegido por el usuario): la tarjeta se ve apagada con "Agotado" y, si la tocan, "Según lo cargado no queda.
   ¿Vender igual?". **"Quedan" tiene que bajar con lo que ya está en la cuenta** (hoy en VENDER baja solo con lo vendido: hay que restar
   también la cuenta). Y en la misma tarjeta se suma y se quita (+ / −).
