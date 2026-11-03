@@ -1547,7 +1547,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         destination: const NavigationDrawerDestination(
           icon: Icon(Icons.badge_outlined),
           selectedIcon: Icon(Icons.badge, color: Color(0xFFD4AF37)),
-          label: Text('OPERADORES DE CAJA'),
+          label: Text('OPERADORES'),
         ),
         onTap: () => Navigator.push(
           context,

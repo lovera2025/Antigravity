@@ -74,6 +74,44 @@ void main() {
     expect(funciones.keys.toSet(), {'_guardar', '_cambiarConfig', '_cambiarMesas'});
   });
 
+  test('OPERADORES: crear, cambiar, eliminar y dar permisos preguntan por el modo '
+      'jefe', () {
+    const ruta = 'lib/features/caja_sesiones/widgets/operadores_caja_screen.dart';
+    final fuente = leer(ruta);
+    final funciones = funcion.allMatches(fuente).toList();
+    final escribe = RegExp(r'\.(crear|actualizar|eliminar)\(|\.guardar\(\s*operadorId');
+    final encontradas = <String>{};
+    for (final g in escribe.allMatches(fuente)) {
+      final donde = funciones.lastWhere((f) => f.start < g.start);
+      encontradas.add(donde.group(1)!);
+      expect(
+        fuente.substring(donde.start, g.start),
+        contains('_frenaSinModoJefe()'),
+        reason: '${donde.group(1)} escribe sin preguntar por el modo jefe',
+      );
+    }
+    expect(encontradas, {'_eliminar', '_editar'});
+
+    final i = fuente.indexOf('bool _frenaSinModoJefe() {');
+    expect(i, greaterThan(0));
+    final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
+    expect(cuerpo, contains('if (ref.read(esRolJefeProvider)) return false;'));
+    expect(cuerpo, contains('return true;'));
+  });
+
+  test('los permisos los guarda solo la pantalla de OPERADORES', () {
+    final guardan = <String>[];
+    for (final f in Directory('lib').listSync(recursive: true).whereType<File>()) {
+      if (!f.path.endsWith('.dart')) continue;
+      final fuente = f.readAsStringSync();
+      if (fuente.contains('permisosOperadorRepositoryProvider') &&
+          RegExp(r'\.guardar\(\s*operadorId').hasMatch(fuente)) {
+        guardan.add(f.path.replaceAll('\\', '/'));
+      }
+    }
+    expect(guardan, ['lib/features/caja_sesiones/widgets/operadores_caja_screen.dart']);
+  });
+
   test('los predios (6.1.0): guardarlos, renombrarlos y borrarlos pregunta por '
       'el modo jefe', () {
     final fuente = leer(pantallaPlano);
