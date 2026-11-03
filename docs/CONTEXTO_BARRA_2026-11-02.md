@@ -34,6 +34,17 @@ entrega en letras grandes, como "JUNIOR EVENTOS". Lo hablado, con muestras en el
   reimprime solo la última venta, una vez; el jefe, cualquiera, y sale **\*\*\* COPIA \*\*\*** arriba y abajo con quién, cuándo y el motivo
   ("se entrega solo con el jefe"). Todo queda anotado.
 - **La cajera también anula**, con el motivo obligatorio y anotado (quién, cuándo, desde qué equipo), como hoy el jefe.
+- **Vender y pagar en una sola pantalla** (3-nov, con maquetas en el chat): se tocan los productos, la cuenta muestra el total y abajo
+  hay **tres botones: EFECTIVO, TRANSFERENCIA y MIXTO**. No hay un COBRAR que después pregunte el medio: cada botón abre su cobro. Al
+  confirmar se guarda la venta y sigue "¿Cómo se imprime?" (los vales).
+- **La plata se escribe a mano, sin botones de billetes** (los sacó el usuario): cada casilla trae el "$" puesto y se lee con los puntos
+  mientras se escribe ("2-0-0-0-0" se ve "$ 20.000"), en pesos enteros, sin centavos. No es el `CurrencyInputFormatter` de las cuotas, que
+  entra por la derecha con centavos.
+- **Recargo por transferencia**, como en el cobro de cuotas: un check que se prende o se apaga, **por %** o **en $** a mano. Va solo
+  sobre lo que se transfiere (en el mixto, sobre la parte transferida), y la tilde dice "Vi el comprobante de $ 55.000" con el recargo
+  sumado. **El % lo pone el jefe por fiesta, en BARRA junto con los precios; la cajera lo puede cambiar en cada cobro.** Datos (etapa 5,
+  dentro de la v77, que no se publicó): la venta guarda cuánto fue de recargo, y el cierre lo muestra aparte, porque no es de ningún
+  producto. El % de la fiesta va en una tabla aparte, una fila por fiesta con id fijo (no en `eventos`).
 - **Abrir la caja no pregunta el cambio ni el turno** (es de noche, nada de mañana/tarde): el cambio se pone después, con un ícono, si hay.
 - **Una persona controla el sector de barras con un iPhone:** es la web en modo jefe, que ya estaba en el plan (etapa 6).
 
@@ -54,8 +65,9 @@ la impresora de verdad; **COPIA** imprime un vale reimpreso. La maqueta, con los
 `build/maquetas/vales_de_la_barra.html` (no va a git; se rehace desde el chat). Papel estimado: el ticket de hoy unos 12,5 cm; un vale
 todo junto unos 6 cm; uno por separado unos 5 cm. La medida justa, de la foto.
 
-**Dónde entra en las etapas:** la 4 (la cajera) lleva abrir sin cambio ni turno y el ícono del cambio; la 5 (cobrar e imprimir) lleva los
-dos botones, la casilla, la impresión de a uno, reimprimir con freno y ANULAR de la cajera. **Datos de la 5, decididos:** por cuánto salió cada vale
+**Dónde entra en las etapas:** la 4 (la cajera) lleva abrir sin cambio ni turno, el ícono del cambio y VENDER con los tres botones de
+pago abajo; la 5 (cobrar e imprimir) lleva el cobro de cada medio con el recargo, los vales, reimprimir con freno y ANULAR de la cajera;
+la 6 (el jefe) lleva el % de recargo de cada fiesta. **Datos de la 5, decididos:** por cuánto salió cada vale
 (`[3, 2, 5]`, con su número en la venta) adentro del JSON `renglones` de `barra_ventas` (sin columna), para reimprimir el mismo; una tabla nueva `barra_reimpresiones`, que solo agrega, dentro de la v77 (no se
 publicó): con ella hay que volver a probar la migración sobre una copia de la base real, con la app cerrada.
 
