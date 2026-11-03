@@ -3,9 +3,21 @@
 2-nov-2026, noche. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
 El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado (3-nov): la etapa 1 casi cerrada. El papel se miró y quedó fijo en `OpcionesEscPos.deLaPrueba`; la impresora se recuerda por equipo y
-se conecta sola; el APK de la ventana de prueba compila. Falta probarla desde el celular del usuario. La app todavía no tiene barra. Sin
-versión, sin release, sin web, sin SQL nuevo. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.**
+**Estado (3-nov): la etapa 1 cerrada.** El papel se miró y quedó fijo en `OpcionesEscPos.deLaPrueba`; la impresora se recuerda por equipo y
+se conecta sola, en la PC y en el celular Android del usuario. **Lo que sigue es la etapa 2 (los datos).** La app todavía no tiene barra. Sin
+versión, sin release, sin web, sin SQL nuevo. Las PCs siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
+
+## Lo que dio el celular (3-nov, con capturas de su pantalla)
+
+| | En la PC | En el celular Android |
+|---|---|---|
+| Conectar la primera vez | 1,6 a 2,5 s | 1,5 s |
+| Por dónde escribe | el UART de ISSC, sin respuesta | el mismo |
+| De a cuánto | 180 bytes | 180 bytes: el MTU se negocia bien, no hizo falta tocar `pedirMtu` |
+| Reabrir la ventana | "Conectada sola" en 1,9 s | "Conectada sola" en 0,4 s |
+
+El usuario dijo que las impresiones salieron "un lujo". Las capturas no muestran el renglón de TICKET del celular: que imprimió desde ahí
+lo dice él.
 
 ## Lo que dio el papel (3-nov, mirado por el usuario, con fotos)
 
@@ -79,17 +91,15 @@ Con trozos de 180 bytes y 20 ms de pausa no perdió ningún renglón, tampoco en
 
 ## Lo que no se comprobó
 
-- **Android con la impresora.** El APK compila y está en el celular del usuario; falta que imprima desde ahí y que se conecte sola al reabrir.
 - **Un corte de verdad a la mitad de un ticket.** El reintento está probado en los tests, no con la impresora. **Si se corta en medio del logo**, la
   impresora puede quedar esperando el resto de la imagen y tomarse el principio del reintento como imagen: saldría una franja rara arriba del ticket
   repetido. Se mira apagando la impresora a la mitad de un LOGO.
-- **El ticket completo con el isotipo y la 850** salió de la app el 3-nov (7.880 bytes en 1,1 s); el usuario no lo comentó todavía.
+- **Una tablet.** Se probó en el celular del usuario; la tablet de la barra todavía no se compró.
+- **La app entera en Android.** Lo que compiló es la ventana de prueba; la app con la base, el sync y el login va en la etapa 9.
 
 ## Lo pendiente, en orden
 
-**Etapa 1, lo que falta:**
-1. **La impresora desde el celular del usuario** (`build/Prueba-impresora.apk`): BUSCAR, CONECTAR, TICKET, y cerrarla y abrirla para ver que se
-   conecta sola. Si en Android sale de a 20 bytes y lento, mirar `pedirMtu`.
+**Etapa 1: cerrada el 3-nov.**
 
 **Después, cada una con sus tests:** 2. los datos (v77, sync, SQL) · 3. las cuentas (venta, vuelto, mixto, cierre, stock) · 4. la cajera: entrar, fiesta, caja, VENDER · 5. cobrar e imprimir
 · 6. cerrar la caja · 7. el jefe en la PC: catálogo con fotos, precios con stock, cajas, anular, PDF 58 mm y A4 · 8. el jefe en la web del iPhone · 9. Android con su firma
