@@ -232,6 +232,13 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 - **Un comprobante en PDF de media A4** (como los recibos de cobro, `_mediaA4` en `pdf_service.dart`), con los datos
   de las **pulseras VIP y las normales**.
 
+**Lo que aclaró el usuario (4-nov), mirando "0 de 280" en ENTRADAS de Puerto Viejo:** solo la mesa del contrato trae
+sus **8 entradas sin cargo**. La mesa adicional ($70.000, 8 sillas) y cada silla extra ($8.000) pagan el lugar, **no la
+entrada**: cada entrada de esos lugares se compra al **50 % de su valor** ("si la entrada sale $10.000, paga $5.000").
+Hoy el retiro de entradas (`RetiroEntradas.entradasDe`) da sin cargo las de todos los lugares: en Puerto Viejo, 280 en
+vez de 168 (21 mesas del contrato; las 14 adicionales suman 112 entradas al 50 %). **Hay que cambiarlo antes de la
+primera entrega en la oficina.** Al 4-nov no se había entregado ninguna.
+
 **Lo que agregó el usuario (30-oct, 13:24; "iremos afinando, le iré preguntando cómo va a querer"):**
 - **El porcentaje viene en 0**, no con el 50 % escrito: el descuento se pone a mano cuando corresponde.
 - **El que solo entrega** mira si la familia pagó todo su contrato; si no, tiene que ir a pagar a la caja (al jefe)
