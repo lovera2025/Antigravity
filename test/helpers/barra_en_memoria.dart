@@ -1,7 +1,10 @@
+import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:flutter_riverpod/misc.dart' show Override;
 
 import 'package:arguello_events/core/utils/uuid_utils.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/estilos/disenio_barra.dart';
+import 'package:arguello_events/features/barra/services/imagen_de_producto.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
@@ -231,6 +234,23 @@ class RecargoEnMemoria extends RecargoRecordado {
   }
 }
 
+/// El diseño recordado, en memoria.
+class DisenioEnMemoria extends DisenioRecordado {
+  DisenioBarra disenio;
+  var guardados = 0;
+
+  DisenioEnMemoria([this.disenio = DisenioBarra.nocheDorada]);
+
+  @override
+  Future<DisenioBarra> leer() async => disenio;
+
+  @override
+  Future<void> guardar(DisenioBarra d) async {
+    disenio = d;
+    guardados++;
+  }
+}
+
 /// Una fiesta inventada.
 Evento fiestaDePrueba(String id, String nombre, DateTime fecha, {String modalidad = 'masivo'}) => Evento(
       id: id,
@@ -247,6 +267,11 @@ class BarraEnPrueba {
   final barra = BarraEnMemoria();
   final papel = PapelEnMemoria();
   final recargo = RecargoEnMemoria();
+  final disenio = DisenioEnMemoria();
+
+  /// La foto de cada producto. Por defecto ninguna (la inicial): así los tests no leen
+  /// archivos. Un test la cambia para ver la foto.
+  ImageProvider? Function(ProductoBarra) imagen = (_) => null;
   final eventos = <Evento>[];
   final subidas = <String>[];
   var bajadas = 0;
@@ -257,6 +282,8 @@ class BarraEnPrueba {
         barraDeLaCajaProvider.overrideWithValue(barra),
         papelDeLaBarraProvider.overrideWithValue(papel),
         recargoRecordadoProvider.overrideWithValue(recargo),
+        disenioRecordadoProvider.overrideWithValue(disenio),
+        imagenDelProductoProvider.overrideWithValue((p) => imagen(p)),
         eventosDeLaBarraProvider.overrideWith((ref) async => eventos),
         subirVentaProvider.overrideWithValue((v) async => subidas.add(v.id)),
         accesosBarraProvider.overrideWithValue(AccesosBarra(

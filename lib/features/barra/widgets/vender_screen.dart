@@ -13,13 +13,17 @@ import '../cuentas/cuenta_barra.dart';
 import '../cuentas/pesos.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
+import '../estilos/disenio_barra.dart';
 import '../impresion/impresora_bluetooth.dart';
 import '../providers/barra_providers.dart';
+import '../services/imagen_de_producto.dart';
 import '../services/productos_para_vender.dart';
 import 'cobrar_hoja.dart';
+import 'elegir_disenio.dart';
 import 'elegir_impresora_screen.dart';
 import 'elegir_vales.dart';
 import 'pesos_enteros_formatter.dart';
+import 'tarjeta_producto.dart';
 
 /// VENDER: se tocan los productos y se arma la cuenta; debajo del total, **EFECTIVO,
 /// TRANSFERENCIA y MIXTO** abren su cobro (pedido del 3-nov: sin un COBRAR que después
@@ -29,17 +33,40 @@ import 'pesos_enteros_formatter.dart';
 /// **Se adapta al ancho** (`CortesPantalla`): en el celular los productos arriba y la
 /// cuenta abajo, con el total y los tres botones siempre a la vista; en la tablet y la
 /// PC, lado a lado.
-class VenderScreen extends ConsumerStatefulWidget {
+///
+/// **Con el diseño de este equipo** (Noche dorada o Mostrador, `disenio_barra.dart`):
+/// el tema va acá arriba, así la pantalla de adentro abre la hoja de cobro y los
+/// avisos con sus colores.
+class VenderScreen extends ConsumerWidget {
   final Evento fiesta;
   final CajaBarra caja;
 
   const VenderScreen({super.key, required this.fiesta, required this.caja});
 
   @override
-  ConsumerState<VenderScreen> createState() => _VenderScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final disenio = ref.watch(disenioDeLaBarraProvider);
+    return Theme(
+      data: temaDeVender(disenio, base: Theme.of(context)),
+      child: DecoratedBox(
+        decoration: BoxDecoration(gradient: TemaBarra.de(disenio).fondo),
+        child: _Vender(fiesta: fiesta, caja: caja),
+      ),
+    );
+  }
 }
 
-class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBindingObserver {
+class _Vender extends ConsumerStatefulWidget {
+  final Evento fiesta;
+  final CajaBarra caja;
+
+  const _Vender({required this.fiesta, required this.caja});
+
+  @override
+  ConsumerState<_Vender> createState() => _VenderState();
+}
+
+class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   List<ProductoEnVenta> _productos = const [];
   Map<String, StockDeProducto> _stock = const {};
   bool _cargando = true;
@@ -201,8 +228,13 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     unawaited(ref.read(subirVentaProvider)(venta));
     if (!mounted) return;
     _vaciar();
+    // La pantalla de los vales es otra ruta: lleva el tema de VENDER a mano.
+    final tema = Theme.of(context);
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _ValesDeLaVenta(venta: venta, caja: _caja, fiesta: _fiesta),
+      builder: (_) => Theme(
+        data: tema,
+        child: _ValesDeLaVenta(venta: venta, caja: _caja, fiesta: _fiesta),
+      ),
     ));
     if (mounted) unawaited(_cargar());
   }
@@ -245,6 +277,8 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     final impresoraLista = _impresora == EstadoImpresora.lista;
 
     return Scaffold(
+      // El degradé del diseño lo pinta VenderScreen, detrás.
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -258,6 +292,12 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
           ],
         ),
         actions: [
+          IconButton(
+            key: const Key('vender_disenio'),
+            tooltip: 'Cómo se ve',
+            onPressed: () => elegirDisenio(context, ref, muestra: _productos.firstOrNull),
+            icon: const Icon(Icons.palette_outlined),
+          ),
           IconButton(
             key: const Key('vender_cambio'),
             tooltip: _caja.cambioInicial > 0
@@ -301,7 +341,10 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
                       ),
                     ),
                     const VerticalDivider(width: 1),
-                    SizedBox(width: pc ? 420 : ancho * 0.4, child: _cuentaCompleta()),
+                    SizedBox(
+                      width: pc ? 420 : ancho * 0.4,
+                      child: ColoredBox(color: TemaBarra.of(context).panel, child: _cuentaCompleta()),
+                    ),
                   ],
                 ),
     );
@@ -330,7 +373,6 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
                       }),
                     ),
               isDense: true,
-              border: const OutlineInputBorder(),
             ),
             onChanged: (t) => setState(() => _busqueda = t),
           ),
@@ -376,95 +418,66 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
             : 'Ningún producto con "${_busqueda.trim()}".'),
       );
     }
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-      // Alto fijo: con la tablet o el celular acostados, una proporción dejaba la
-      // tarjeta más baja que su nombre y su precio.
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columnas,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        mainAxisExtent: 150,
-      ),
-      itemCount: lista.length,
-      itemBuilder: (_, i) => _tarjeta(lista[i]),
+    final disenio = TemaBarra.of(context).disenio;
+    const espacio = 10.0;
+    const margen = 12.0;
+    return LayoutBuilder(
+      builder: (context, lugar) {
+        // El alto sale del ancho de cada tarjeta: la foto va en 4:3 y debajo el
+        // precio (y en Mostrador el nombre y el − n +). Así no se desborda en
+        // ningún tamaño ni con el equipo acostado.
+        final anchoTarjeta = (lugar.maxWidth - margen * 2 - espacio * (columnas - 1)) / columnas;
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(margen, 4, margen, margen),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnas,
+            mainAxisSpacing: espacio,
+            crossAxisSpacing: espacio,
+            mainAxisExtent: TarjetaProducto.alto(disenio, anchoTarjeta),
+          ),
+          itemCount: lista.length,
+          itemBuilder: (_, i) => _tarjeta(lista[i]),
+        );
+      },
     );
   }
 
   Widget _tarjeta(ProductoEnVenta p) {
-    final tema = Theme.of(context);
-    final cantidad = _cuenta.cantidadDe(p.id);
     final aviso = _stock[p.id]?.aviso;
     final quedan = _quedan(p.id);
     final sinStock = quedan != null && quedan <= 0;
-    final enAviso = quedan != null && (sinStock || (aviso != null && quedan <= aviso));
-    return Opacity(
-      opacity: sinStock && cantidad == 0 ? 0.55 : 1,
-      child: Card(
-        key: Key('producto_${p.id}'),
-        clipBehavior: Clip.antiAlias,
-        color: cantidad > 0 ? tema.colorScheme.primaryContainer : null,
-        child: InkWell(
-          onTap: () => _sumar(p),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // El nombre usa lo que queda: el precio, el stock y el + / − siempre se ven.
-                Expanded(
-                  child: Text(
-                    p.nombre,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                ),
-                Text(pesos(p.precio.precio), style: const TextStyle(fontSize: 16)),
-                if (quedan != null)
-                  Text(
-                    sinStock
-                        ? (cantidad > 0 ? 'Sin stock' : 'Agotado')
-                        : 'Quedan $quedan',
-                    key: Key('stock_${p.id}'),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: enAviso ? tema.colorScheme.error : tema.hintColor,
-                      fontWeight: enAviso ? FontWeight.bold : null,
-                    ),
-                  ),
-                if (cantidad > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _BotonDeTarjeta(
-                          key: Key('tarjeta_restar_${p.id}'),
-                          icono: Icons.remove,
-                          alTocar: () => setState(() => _cuenta = _cuenta.restar(p.id)),
-                        ),
-                        Text('$cantidad', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        _BotonDeTarjeta(
-                          key: Key('tarjeta_sumar_${p.id}'),
-                          icono: Icons.add,
-                          alTocar: () => _sumar(p),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return TarjetaProducto(
+      producto: p,
+      cantidad: _cuenta.cantidadDe(p.id),
+      quedan: quedan,
+      enAviso: quedan != null && (sinStock || (aviso != null && quedan <= aviso)),
+      imagen: _imagen(p.producto),
+      alSumar: () => _sumar(p),
+      alRestar: () => setState(() => _cuenta = _cuenta.restar(p.id)),
     );
   }
 
-  Widget _renglon(RenglonVenta r) => ListTile(
+  ImageProvider? _imagen(ProductoBarra p) => ref.read(imagenDelProductoProvider)(p);
+
+  Widget _renglon(RenglonVenta r) {
+    final producto = _productos.where((x) => x.id == r.productoId).firstOrNull;
+    final imagen = producto == null ? null : _imagen(producto.producto);
+    return ListTile(
         key: Key('renglon_${r.productoId}'),
         dense: true,
         contentPadding: const EdgeInsets.only(left: 12, right: 4),
+        leading: imagen == null
+            ? null
+            : ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image(
+                  image: imagen,
+                  width: 34,
+                  height: 34,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox(width: 34, height: 34),
+                ),
+              ),
         title: Text('${r.cantidad} x ${r.nombre}', maxLines: 2, overflow: TextOverflow.ellipsis),
         subtitle: Text(pesos(r.subtotal)),
         trailing: Row(
@@ -504,69 +517,121 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
           ],
         ),
       );
+  }
 
-  Widget _total() => Row(
-        children: [
-          const Text('Total', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  pesos(_cuenta.total),
-                  key: const Key('vender_total'),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+  Widget _total() {
+    final t = TemaBarra.of(context);
+    return Row(
+      children: [
+        const Text('Total', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                pesos(_cuenta.total),
+                key: const Key('vender_total'),
+                style: TextStyle(
+                  fontSize: t.disenio == DisenioBarra.mostrador ? 34 : 30,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: t.total,
                 ),
               ),
             ),
           ),
-        ],
-      );
+        ),
+      ],
+    );
+  }
 
-  Widget _botonesPago() {
+  /// Los tres pagos con los colores del diseño. En Mostrador, en la tablet y la PC con
+  /// lugar de alto, van como barras anchas una debajo de otra, con su letra chica.
+  Widget _botonesPago({bool enFila = false}) {
+    final t = TemaBarra.of(context);
     final puede = !_cuenta.estaVacia && !_cobrando;
-    Widget boton(MedioBarra medio, String texto, IconData icono, {bool principal = false}) {
-      final hijo = FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icono, size: 18),
-            const SizedBox(width: 6),
-            Text(texto, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
+    final apilados = t.pagosApilados && !enFila && MediaQuery.sizeOf(context).height >= 600;
+
+    Widget boton(MedioBarra medio, String texto, String detalle, IconData icono, Color fondo, Color letra,
+        {bool conBorde = false}) {
+      final contenido = apilados
+          ? Row(
+              children: [
+                Icon(icono, size: 20),
+                const SizedBox(width: 10),
+                Text(texto, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    detalle,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                  ),
+                ),
+              ],
+            )
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icono, size: 18),
+                  const SizedBox(width: 6),
+                  Text(texto, style: const TextStyle(fontWeight: FontWeight.w800)),
+                ],
+              ),
+            );
+      final estilo = ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.disabled) ? fondo.withValues(alpha: fondo.a * 0.35) : fondo,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.disabled) ? letra.withValues(alpha: 0.45) : letra,
+        ),
+        side: conBorde
+            ? WidgetStateProperty.resolveWith((s) => BorderSide(
+                  color: TemaBarra.dorado.withValues(alpha: s.contains(WidgetState.disabled) ? 0.35 : 1),
+                  width: 1.5,
+                ))
+            : null,
+        shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+        padding: WidgetStateProperty.all(
+          EdgeInsets.symmetric(horizontal: apilados ? 18 : 6, vertical: apilados ? 16 : 15),
         ),
       );
-      final estilo = ButtonStyle(
-        padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 6, vertical: 14)),
-      );
-      return Expanded(
-        child: principal
-            ? FilledButton(
-                key: Key('pagar_${medio.name}'),
-                style: estilo,
-                onPressed: puede ? () => _cobrar(medio) : null,
-                child: hijo,
-              )
-            : FilledButton.tonal(
-                key: Key('pagar_${medio.name}'),
-                style: estilo,
-                onPressed: puede ? () => _cobrar(medio) : null,
-                child: hijo,
-              ),
-      );
+      final b = conBorde
+          ? OutlinedButton(
+              key: Key('pagar_${medio.name}'),
+              style: estilo,
+              onPressed: puede ? () => _cobrar(medio) : null,
+              child: contenido,
+            )
+          : FilledButton(
+              key: Key('pagar_${medio.name}'),
+              style: estilo,
+              onPressed: puede ? () => _cobrar(medio) : null,
+              child: contenido,
+            );
+      return apilados ? b : Expanded(child: b);
     }
 
+    final botones = [
+      boton(MedioBarra.efectivo, 'EFECTIVO', 'con vuelto', Icons.payments_outlined, t.efectivo, Colors.white),
+      boton(MedioBarra.transferencia, 'TRANSFERENCIA', 'Mercado Pago · QR', Icons.qr_code_2, t.transferencia,
+          Colors.white),
+      boton(MedioBarra.mixto, 'MIXTO', 'parte y parte', Icons.call_split, t.mixto, t.mixtoTexto,
+          conBorde: t.mixtoConBorde),
+    ];
+    if (apilados) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [botones[0], const SizedBox(height: 8), botones[1], const SizedBox(height: 8), botones[2]],
+      );
+    }
     return Row(
-      children: [
-        boton(MedioBarra.efectivo, 'EFECTIVO', Icons.payments_outlined, principal: true),
-        const SizedBox(width: 6),
-        boton(MedioBarra.transferencia, 'TRANSFERENCIA', Icons.qr_code_2),
-        const SizedBox(width: 6),
-        boton(MedioBarra.mixto, 'MIXTO', Icons.call_split),
-      ],
+      children: [botones[0], const SizedBox(width: 8), botones[1], const SizedBox(width: 8), botones[2]],
     );
   }
 
@@ -608,6 +673,7 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     final alto = MediaQuery.sizeOf(context).height;
     return Material(
       elevation: 8,
+      color: TemaBarra.of(context).panel,
       child: SafeArea(
         top: false,
         child: Padding(
@@ -656,7 +722,11 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
                           child: Text(
                             pesos(_cuenta.total),
                             key: const Key('vender_total'),
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: TemaBarra.of(context).total,
+                            ),
                           ),
                         ),
                       ),
@@ -665,36 +735,13 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
                 ),
               ),
               const SizedBox(height: 6),
-              _botonesPago(),
+              _botonesPago(enFila: true),
             ],
           ),
         ),
       ),
     );
   }
-}
-
-/// El + y el − de la tarjeta de un producto.
-class _BotonDeTarjeta extends StatelessWidget {
-  final IconData icono;
-  final VoidCallback alTocar;
-
-  const _BotonDeTarjeta({super.key, required this.icono, required this.alTocar});
-
-  @override
-  Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.primary,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: alTocar,
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: Icon(icono, size: 18, color: Theme.of(context).colorScheme.onPrimary),
-          ),
-        ),
-      );
 }
 
 /// El cambio con que arrancó la caja. El diálogo es dueño de su casilla: si la
@@ -809,12 +856,13 @@ class _ValesDeLaVentaState extends ConsumerState<_ValesDeLaVenta> {
                 Card(
                   key: const Key('vales_venta_guardada'),
                   margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  color: Colors.green.shade50,
+                  // Sobre el fondo oscuro del diseño: verde tenue, no el claro de antes.
+                  color: Colors.green.withValues(alpha: 0.16),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
-                        Icon(Icons.check_circle, color: Colors.green.shade700),
+                        Icon(Icons.check_circle, color: Colors.green.shade400),
                         const SizedBox(width: 8),
                         Expanded(child: Text('Venta guardada: ${pesos(v.cobrado)}')),
                         if (v.vuelto > 0)
