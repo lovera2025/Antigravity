@@ -234,7 +234,8 @@ nombre del operador: `quienOperaDe` tiene que conocer el modo entradas.
 
 **Lo que aclaró el usuario (4-nov), mirando "0 de 280" en ENTRADAS de Puerto Viejo:** solo la mesa del contrato trae
 sus **8 entradas sin cargo**. La mesa adicional ($70.000, 8 sillas) y cada silla extra ($8.000) pagan el lugar, **no la
-entrada**: cada entrada de esos lugares se compra al **50 % de su valor** ("si la entrada sale $10.000, paga $5.000").
+entrada**: cada entrada de esos lugares se compra al **50 % de su valor** ("si la entrada sale $10.000, paga $5.000";
+**los $10.000 son un ejemplo: el precio de la entrada todavía no se sabe**, lo dijo el 4-nov).
 Hoy el retiro de entradas (`RetiroEntradas.entradasDe`) da sin cargo las de todos los lugares: en Puerto Viejo, 280 en
 vez de 168 (21 mesas del contrato; las 14 adicionales suman 112 entradas al 50 %). **Hay que cambiarlo antes de la
 primera entrega en la oficina.** Al 4-nov no se había entregado ninguna.
