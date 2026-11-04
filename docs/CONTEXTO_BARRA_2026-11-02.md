@@ -22,12 +22,32 @@ parte B (las fotos de los tragos van adentro de la app y cada producto toma la s
 "Sin stock" si se vende igual, y **el + / − en la misma tarjeta**. El + de la cuenta pasa por el mismo `_sumar`. Tests en
 `test/barra_pantalla_test.dart` (25), con 3 roturas vistas en rojo.
 
+**El diseño y las fotos, hechos el 4-nov** (en la rama, sin publicar):
+- **Dos diseños a elección**, como en la maqueta: **Noche dorada** y **Mostrador** (`estilos/disenio_barra.dart`: `DisenioBarra`,
+  `TemaBarra` como `ThemeExtension`, `temaDeVender`). **Cada equipo recuerda el suyo** (`DisenioRecordado`, clave `barra.disenio`) y se
+  cambia con el ícono de paleta de VENDER (`widgets/elegir_disenio.dart`, con una tarjeta de verdad de cada uno). El tema va **arriba**
+  de VENDER (`VenderScreen` envuelve a `_Vender`): si no, la hoja de cobro y los avisos salían con los colores de la app. La pantalla de
+  los vales es otra ruta y lleva el tema a mano.
+- **La tarjeta** (`widgets/tarjeta_producto.dart`): la foto en 4:3 (el alto de la grilla sale del ancho, así no se desborda en ningún
+  tamaño), sin foto las iniciales, agotada en gris; en Mostrador el − n + siempre, con el − apagado en cero que **se come el toque** (un
+  test encontró que pasaba a la tarjeta y sumaba uno). Mostrador en la tablet: los tres pagos como barras, con su letra chica.
+- **Las fotos vienen adentro de la app** (`assets/barra/`, 74, unos 2 MB): "el jefe no las va a cargar". Cada producto toma la suya **por
+  el nombre** (`estilos/fotos_de_la_barra.dart`, `FotoDeLaBarra.para`): **primero lo que se toma** (tragos, bebidas blancas por marca y
+  cervezas por marca, con la lata aparte en Quilmes y Heineken), **después la cerveza sin marca** por estilo (IPA/APA, roja, negra, rubia)
+  y por cómo se sirve, y **al final lo sin alcohol** (gaseosas, energizantes y agua por marca). Así "Fernet con coca" es fernet y "Speed con
+  vodka" es vodka. Si el jefe elige otra de la biblioteca (`biblioteca:<clave>` en `imagenUrl`) o sube una propia (`http…`), esa gana
+  (`services/imagen_de_producto.dart`; la propia se guarda en el equipo, nunca `NetworkImage` en la PC).
+- **De dónde salió cada foto:** Unsplash (sin crédito) y, para las marcas, Openverse (Flickr y Wikimedia Commons, Creative Commons con
+  crédito). El autor y la licencia de cada una: `docs/FOTOS_DE_LA_BARRA.md`; un test exige que cada foto tenga su renglón. **No se copió
+  nada de páginas de marcas ni de supermercados.** Marcas sin foto libre (Schneider, Andes rubia, Palermo, Gancia, Fernet Branca como
+  botella, Beefeater, Baileys, José Cuervo, Chandon, Paso de los Toros, 7up): salen con la foto de su tipo y el nombre encima; se pueden
+  sumar con una foto sacada por ellos.
+- Tests: `test/barra_disenio_test.dart` (los dos diseños en 4 tamaños, recordar, elegir, foto o inicial, agotada, pagos), y
+  `test/fotos_de_la_barra_test.dart` (más de 90 nombres, cada foto alcanzable por algún nombre, cada archivo en la app y en los créditos,
+  ninguna foto suelta). Muestras: `tool/barra_muestra_test.dart`.
+
 **Lo siguiente, en orden:**
-1. **El diseño elegido, en la app:** dos estilos a elección, **Noche dorada** (negro y dorado, foto grande con el nombre encima, precio
-   dorado, + / − en dorado) y **Mostrador** (tarjetas blancas, foto arriba, precio enorme, + / − abajo, los tres pagos como barras grandes
-   en la tablet); **cada equipo recuerda el suyo**; la foto de cada producto (`ProductoBarra.imagenUrl`; en la tablet guardada en el
-   equipo, `ImagenDeProducto` como `FotoGuardada`, ver la decisión de las fotos) y, sin foto, la inicial. Maqueta aprobada:
-   `build/maquetas/barra_disenios.html` (no va a git; usa fotos de ejemplo de Unsplash).
+1. ~~El diseño elegido, con las fotos~~: hecho el 4-nov (arriba).
 2. **La etapa 5:** reimprimir con freno (la cajera solo la última venta, una vez; el jefe cualquiera, con COPIA), ANULAR también la cajera
    con motivo, el ticket con precios solo si lo piden, y guardar por cuánto salió cada vale para reimprimir el mismo.
 3. **La central de la barra en la red del salón** (etapa nueva, ver "Decidido el 3-nov (noche)" abajo): los TP-Link unidos con cable y una

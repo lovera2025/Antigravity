@@ -64,13 +64,16 @@ void main() {
         var orden = 0;
         for (final (n, cat, precio, stock) in [
           ('Fernet con coca', 'Tragos', 6000.0, null),
-          ('Cerveza lata', 'Cervezas', 3500.0, 24),
-          ('Gin tonic', 'Tragos', 7000.0, null),
+          ('Quilmes lata', 'Cervezas', 3500.0, 24),
+          ('Imperial Golden', 'Cervezas', 3800.0, null),
           ('Speed con vodka', 'Tragos', 8000.0, 3),
-          ('Mojito', 'Tragos', 7000.0, null),
+          ('Gin tonic', 'Tragos', 7000.0, null),
+          ('Caipirinha', 'Tragos', 7000.0, null),
+          ('Smirnoff', 'Botellas', 45000.0, null),
           ('Champán Chandon', 'Espumantes', 45000.0, null),
-          ('Gaseosa', 'Sin alcohol', 2000.0, null),
-          ('Agua sin gas', 'Sin alcohol', 1000.0, 0),
+          ('Coca-Cola', 'Sin alcohol', 2000.0, null),
+          ('Speed', 'Sin alcohol', 3000.0, null),
+          ('Agua Villavicencio', 'Sin alcohol', 1000.0, 0),
           ('Combo egresados', 'Promos', 15000.0, null),
         ]) {
           final p = b.producto(n, categoria: cat);

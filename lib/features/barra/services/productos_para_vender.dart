@@ -44,9 +44,14 @@ List<String> categoriasDe(Iterable<ProductoEnVenta> lista) {
   return vistas;
 }
 
-/// Sin acentos y en minúscula, para buscar: "fernét" encuentra "Fernet".
+/// Sin acentos y en minúscula, para buscar: "fernét" encuentra "Fernet", y "Jäger"
+/// es "jager" (las marcas traen letras de otros idiomas).
 String paraBuscar(String s) {
-  const cambios = {'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n'};
+  const cambios = {
+    'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n', //
+    'ä': 'a', 'ë': 'e', 'ï': 'i', 'ö': 'o', 'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+    'â': 'a', 'ê': 'e', 'î': 'i', 'ô': 'o', 'û': 'u', 'ã': 'a', 'õ': 'o', 'ç': 'c',
+  };
   final b = StringBuffer();
   for (final letra in s.toLowerCase().split('')) {
     b.write(cambios[letra] ?? letra);

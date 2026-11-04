@@ -19,29 +19,88 @@ void main() {
       ('Fernet Branca 1L', 'fernet'),
       ('Gin tonic', 'gin_tonic'),
       ('Speed con vodka', 'vodka'),
-      ('Vodka con naranja', 'vodka'),
+      ('Vodka con Red Bull', 'vodka'),
+      ('Vodka con naranja', 'destornillador'),
+      ('Destornillador', 'destornillador'),
       ('Campari con naranja', 'campari'),
       ('Aperol spritz', 'aperol'),
+      ('Cynar con pomelo', 'cynar'),
+      ('Gancia con Sprite', 'gancia'),
+      ('Vermú con soda', 'vermut'),
+      ('Martini Rosso', 'vermut'),
+      ('Gin de frutos rojos', 'gin_frutos_rojos'),
       ('Whisky', 'whisky'),
       ('Cuba libre', 'ron'),
       ('Margarita', 'tequila'),
-      ('Mojito', 'trago_frutal'),
-      ('Caipiroska de frutilla', 'trago_frutal'),
+      ('Tequila sunrise', 'tequila_sunrise'),
+      ('Shot de tequila', 'shot'),
+      ('Mojito', 'mojito'),
+      ('Caipiroska de frutilla', 'caipirinha'),
+      ('Daiquiri de frutilla', 'daiquiri'),
+      ('Piña colada', 'pina_colada'),
+      ('Blue lagoon', 'trago_azul'),
+      ('Clericó', 'clerico'),
+      ('Sex on the beach', 'trago_frutal'),
+      // Las cervezas por marca, y la lata cuando hay una aparte.
+      ('Quilmes', 'quilmes'),
+      ('Cerveza Quilmes porrón', 'quilmes'),
+      ('Quilmes lata 473', 'quilmes_lata'),
+      ('Heineken', 'heineken'),
+      ('Heineken lata', 'heineken_lata'),
+      ('Brahma lata', 'brahma'),
+      ('Andes Origen Negra', 'andes'),
+      ('Patagonia Amber Lager', 'patagonia'),
+      ('Stella Artois', 'stella'),
+      ('Coronita', 'corona'),
+      ('Budweiser', 'budweiser'),
+      ('Amstel', 'amstel'),
+      ('Miller lata', 'miller'),
+      ('Guinness', 'cerveza_negra'),
+      // Sin marca: por estilo, y si no por cómo se sirve.
+      ('IPA', 'cerveza_ipa'),
+      ('Cerveza APA tirada', 'cerveza_ipa'),
+      ('Cerveza roja', 'cerveza_roja'),
+      ('Stout', 'cerveza_negra'),
+      ('Pinta de rubia', 'cerveza_rubia'),
+      ('Imperial Golden', 'imperial_golden'),
+      ('Imperial lata 710', 'imperial'),
+      ('Cerveza rubia', 'cerveza_rubia'),
       ('Cerveza lata', 'cerveza_lata'),
       ('Cerveza', 'cerveza_lata'),
-      ('Cerveza Quilmes porrón', 'cerveza_porron'),
       ('Cerveza tirada', 'cerveza_tirada'),
-      ('Pinta de rubia', 'cerveza_tirada'),
+      ('Cerveza porrón', 'cerveza_porron'),
+      // Bebidas blancas por marca.
+      ('Smirnoff con Speed', 'smirnoff'),
+      ('Absolut', 'absolut'),
+      ('Gin Gordon\'s', 'gordons'),
+      ('Bombay Sapphire tonic', 'bombay'),
+      ('Johnnie Walker Red Label', 'johnnie_walker'),
+      ('Jack Daniel\'s con coca', 'jack_daniels'),
+      ('Chivas Regal 12', 'chivas'),
+      ('Bacardi', 'bacardi'),
+      ('Havana Club 7', 'havana_club'),
+      ('Jäger', 'jagermeister'),
+      ('Malibu con piña', 'malibu'),
+      ('Cinzano Rosso', 'cinzano'),
       ('Vino tinto Malbec', 'vino_tinto'),
       ('Vino blanco', 'vino_blanco'),
       ('Champán Chandon Extra Brut', 'champan'),
       ('Champaña', 'champan'),
+      // Sin alcohol.
       ('Agua sin gas', 'agua'),
       ('Agua con gas', 'agua_con_gas'),
+      ('Agua Villavicencio', 'villavicencio'),
       ('Agua tónica', 'gaseosa'),
       ('Gaseosa', 'gaseosa'),
-      ('Coca lata', 'gaseosa'),
-      ('Sprite', 'gaseosa'),
+      ('Coca lata', 'coca_cola'),
+      ('Coca-Cola', 'coca_cola'),
+      ('Sprite', 'sprite'),
+      ('Fanta', 'fanta'),
+      ('Pepsi', 'pepsi'),
+      ('Speed', 'speed'),
+      ('Red Bull', 'red_bull'),
+      ('Monster', 'monster'),
+      ('Limonada con menta', 'limonada'),
       ('Jugo de naranja', 'jugo'),
       ('Café', 'cafe'),
     ]) {
@@ -63,10 +122,23 @@ void main() {
       expect(FotoDeLaBarra.para('Ginger ale'), isNot('gin_tonic'));
     });
 
-    test('cada regla lleva a una foto de la biblioteca', () {
-      for (final n in ['fernet', 'gin', 'vodka', 'campari', 'aperol', 'whisky', 'ron', 'tequila', 'mojito',
-          'cerveza', 'cerveza tirada', 'cerveza porron', 'vino', 'vino blanco', 'champan', 'agua',
-          'agua con gas', 'gaseosa', 'jugo', 'cafe']) {
+    test('cada foto de la biblioteca la puede tomar algún nombre, y ninguna está dos veces', () {
+      expect(FotoDeLaBarra.claves.toSet().length, FotoDeLaBarra.claves.length);
+      final nombres = [
+        'fernet', 'gin', 'gin frutos rojos', 'vodka', 'destornillador', 'campari', 'aperol', 'cynar',
+        'gancia', 'vermut', 'whisky', 'ron', 'tequila', 'tequila sunrise', 'shot', 'mojito', 'caipi',
+        'daiquiri', 'pina colada', 'trago azul', 'frutal', 'clerico', 'cerveza', 'cerveza porron',
+        'cerveza tirada', 'cerveza rubia', 'cerveza roja', 'cerveza negra', 'ipa', 'quilmes',
+        'quilmes lata', 'brahma', 'andes', 'patagonia', 'imperial', 'imperial golden', 'stella', 'heineken', 'heineken lata', 'corona',
+        'budweiser', 'amstel', 'miller', 'warsteiner', 'isenbeck', 'smirnoff', 'absolut', 'gordons',
+        'bombay', 'johnnie walker', 'jack daniels', 'chivas', 'bacardi', 'havana club', 'jagermeister',
+        'malibu', 'cinzano', 'vino', 'vino blanco', 'champan', 'agua', 'agua con gas', 'villavicencio',
+        'gaseosa', 'coca', 'sprite', 'fanta', 'pepsi', 'speed', 'red bull', 'monster', 'jugo',
+        'limonada', 'cafe',
+      ];
+      final tomadas = {for (final n in nombres) FotoDeLaBarra.para(n)};
+      expect(tomadas, containsAll(FotoDeLaBarra.claves), reason: 'una foto que ningún nombre toma no se ve nunca');
+      for (final n in nombres) {
         expect(FotoDeLaBarra.claves, contains(FotoDeLaBarra.para(n)), reason: n);
       }
     });
@@ -105,13 +177,24 @@ void main() {
     });
   });
 
-  test('cada foto de la biblioteca está en la app', () {
+  test('cada foto de la biblioteca está en la app, y tiene su renglón en los créditos', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(pubspec, contains('- ${FotoDeLaBarra.carpeta}/'), reason: 'la carpeta tiene que ir en los assets');
+    final creditos = File('docs/FOTOS_DE_LA_BARRA.md').readAsStringSync();
     for (final c in FotoDeLaBarra.claves) {
       final f = File(FotoDeLaBarra.ruta(c));
       expect(f.existsSync(), isTrue, reason: 'falta ${f.path}');
       expect(f.lengthSync(), lessThan(120 * 1024), reason: '${f.path}: achicarla');
+      expect(creditos, contains('`$c.jpg`'), reason: 'falta de dónde salió $c.jpg y su licencia');
     }
+    // Y ninguna foto suelta en la carpeta que la app no use: pesa y no se ve nunca.
+    final enLaCarpeta = Directory(FotoDeLaBarra.carpeta)
+        .listSync()
+        .whereType<File>()
+        .map((f) => f.uri.pathSegments.last)
+        .where((n) => n.endsWith('.jpg'))
+        .map((n) => n.substring(0, n.length - 4))
+        .toSet();
+    expect(enLaCarpeta, FotoDeLaBarra.claves.toSet());
   });
 }

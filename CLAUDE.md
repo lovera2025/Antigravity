@@ -77,8 +77,11 @@ sin respuesta: "impreso" no dice que el papel salió bien, hay que mirarlo, **co
 el papel está en `OpcionesEscPos.deLaPrueba`: **los acentos van con la tabla 850** (`tabla_850.dart`; con la 1252 salen letras raras), 32 letras por
 renglón (`renglonesDe` parte por palabras), QR nativo y el isotipo. La impresora se recuerda por equipo (`ImpresoraRecordada`) y se conecta sola.
 `universal_ble` queda en la 3.1.0 (la 3.1.1 choca con `file_picker` 10), y para que compile en Android `android/build.gradle.kts` le aplica el plugin de
-Kotlin (espera el Android Gradle Plugin 9). El `applicationId` de Android es `ar.com.junioreventos.app`. **Después de la barra, Entradas 4 a 6, y se
-publica todo en una.**
+Kotlin (espera el Android Gradle Plugin 9). El `applicationId` de Android es `ar.com.junioreventos.app`. **VENDER tiene dos diseños** (Noche dorada y Mostrador, `estilos/disenio_barra.dart`; cada
+equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro de la app** (`assets/barra/`, 74): cada producto toma la suya por el nombre
+(`FotoDeLaBarra.para`: primero lo que se toma, después la cerveza sin marca, al final lo sin alcohol). **Una foto nueva lleva su renglón en
+`docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
+**Después de la barra, Entradas 4 a 6, y se publica todo en una.**
 
 ## Documentación del proyecto
 
