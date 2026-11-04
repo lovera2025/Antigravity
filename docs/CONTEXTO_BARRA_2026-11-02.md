@@ -10,32 +10,30 @@ siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
 
 ## Para retomar en otro chat
 
-**⚠ ÚLTIMO ESTADO (3-nov, muy tarde): hay un cambio A MEDIAS, sin commitear, en `lib/features/barra/widgets/vender_screen.dart`,
-`lib/features/barra/datos/barra_repositorio.dart` y `test/helpers/barra_en_memoria.dart`** (lo pidió el usuario: "pasalo si es corto"):
-- `BarraDeLaCaja` suma `ventas(eventoId)` y `anulaciones(eventoId)` (BarraLocal ya las tenía por `BarraDelJefe`; `BarraEnMemoria` también).
-- VENDER: **el stock es general**: `_cargar` lee las ventas de **todas las cajas de la fiesta** (antes solo las de su caja) y se vuelve a
-  leer solo cuando baja algo (`ref.listenManual(operationalSyncRevisionProvider, ...)`); **"Quedan" resta también lo que ya está en la
-  cuenta** (`_quedan`); **sin stock pregunta antes** ("No queda … ¿Vender igual?", `Key('sin_stock')` / `sin_stock_vender_igual`, una vez por
-  producto y por cuenta, `_sinStockIgual`, que se limpia en `_vaciar`); la tarjeta apagada con "Agotado", "Sin stock" si se vende igual, y
-  **el + / − en la misma tarjeta** (`tarjeta_restar_<id>`, `tarjeta_sumar_<id>`, `_BotonDeTarjeta`); alto de tarjeta 150; el + de la cuenta
-  pasa por el mismo `_sumar`.
-- `flutter analyze` de `lib/features/barra` sin nada. **Falta:** poner al día `test/barra_pantalla_test.dart` (el test "el stock avisa sin
-  frenar la venta" ahora tiene que esperar la pregunta en la 6ª agua; sumar tests de "Quedan" que baja con la cuenta, el stock con una
-  venta de otra caja, el + / − de la tarjeta y VENDER IGUAL), correr la suite, roturas a propósito, y commit + push.
+**4-nov: la barra (etapas 1 a 4) salió dormida dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`).
+**El SQL de la barra (v77) ya está corrido en la nube**: lo que le cambie a sus tablas va en tablas nuevas, como siempre. Lo que sigue
+es otra versión, antes del 4-dic. El plan del diseño con las fotos, aprobado: `C:\Users\lover\.claude\plans\retomemos-la-etapa-de-cheeky-sparkle.md`,
+parte B (las fotos de los tragos van adentro de la app y cada producto toma la suya por el nombre: "el jefe no las va a cargar").
+
+**VENDER, cerrado el 4-nov (`c9fc4c0`):** **el stock es general**: lee las ventas de **todas las cajas de la fiesta**
+(`BarraDeLaCaja.ventas(eventoId)`) y se vuelve a leer cuando baja algo (`ref.listenManual(operationalSyncRevisionProvider, ...)`);
+**"Quedan" resta también lo que ya está en la cuenta** (`_quedan`); **sin stock pregunta antes** ("No queda … ¿Vender igual?",
+`Key('sin_stock')`, una vez por producto y por cuenta, `_sinStockIgual`, que se limpia en `_vaciar`); la tarjeta apagada con "Agotado",
+"Sin stock" si se vende igual, y **el + / − en la misma tarjeta**. El + de la cuenta pasa por el mismo `_sumar`. Tests en
+`test/barra_pantalla_test.dart` (25), con 3 roturas vistas en rojo.
 
 **Lo siguiente, en orden:**
-1. Terminar lo de arriba (tests y commit).
-2. **El diseño elegido, en la app:** dos estilos a elección, **Noche dorada** (negro y dorado, foto grande con el nombre encima, precio
+1. **El diseño elegido, en la app:** dos estilos a elección, **Noche dorada** (negro y dorado, foto grande con el nombre encima, precio
    dorado, + / − en dorado) y **Mostrador** (tarjetas blancas, foto arriba, precio enorme, + / − abajo, los tres pagos como barras grandes
    en la tablet); **cada equipo recuerda el suyo**; la foto de cada producto (`ProductoBarra.imagenUrl`; en la tablet guardada en el
    equipo, `ImagenDeProducto` como `FotoGuardada`, ver la decisión de las fotos) y, sin foto, la inicial. Maqueta aprobada:
    `build/maquetas/barra_disenios.html` (no va a git; usa fotos de ejemplo de Unsplash).
-3. **La etapa 5:** reimprimir con freno (la cajera solo la última venta, una vez; el jefe cualquiera, con COPIA), ANULAR también la cajera
+2. **La etapa 5:** reimprimir con freno (la cajera solo la última venta, una vez; el jefe cualquiera, con COPIA), ANULAR también la cajera
    con motivo, el ticket con precios solo si lo piden, y guardar por cuánto salió cada vale para reimprimir el mismo.
-4. **La central de la barra en la red del salón** (etapa nueva, ver "Decidido el 3-nov (noche)" abajo): los TP-Link unidos con cable y una
+3. **La central de la barra en la red del salón** (etapa nueva, ver "Decidido el 3-nov (noche)" abajo): los TP-Link unidos con cable y una
    tablet que recibe las ventas de todas y reparte el stock en vivo sin internet.
-5. Probar si la impresora avisa que le falta papel (botón PAPEL en `tool/impresora_prueba.dart`, `DLE EOT 4`).
-6. Antes de publicar: volver a probar la migración v77 sobre una copia de la base real (con la app cerrada) y los dos SQL (v76 y v77).
+4. Probar si la impresora avisa que le falta papel (botón PAPEL en `tool/impresora_prueba.dart`, `DLE EOT 4`).
+5. ~~Antes de publicar: la migración v77 sobre una copia y los dos SQL~~: hecho el 4-nov, con la 6.3.0.
 
 **Lo anterior a eso (3-nov, noche):** todo commiteado y subido hasta `bd183ba`. La suite, en verde (3.397 tests). **Para mirarlo con el mouse:** `flutter run -d windows -t tool/barra_prueba.dart` (sin base ni nube; PIN Marta
 1111, Tati 5555; botón para cortar el internet; los vales salen por la TP-POS58 de verdad). **Falta:** que el usuario la recorra y mande la

@@ -1,10 +1,14 @@
 # Recepción y el tótem sin internet (modo local)
 
+**El ensayo con el router de verdad, hecho** (lo contó el usuario el 4-nov): con la 6.2.1 instalada en la notebook, dos iPhone y
+su Android por la notebook central, y el router con la fibra sacada (la señal sigue, sin internet). Se marcaron ingresos y, al
+volver la fibra, aparecieron en la nube. El 4-nov a la tarde se lo muestra a la recepcionista; si aparece algo, lo avisa.
+
 **El 23-oct, el primer ensayo sin internet encontró la página del celular en blanco**: Flutter web bajaba la letra
 Roboto de Google antes de dibujar. Arreglado en la 6.2.1 (la app trae su Roboto; ver
-`docs/CONTEXTO_v6.2.1_2026-10-23.md`), sin publicar. Falta repetir el ensayo con la 6.2.1 instalada.
+`docs/CONTEXTO_v6.2.1_2026-10-23.md`).
 
-**Estado:** hecho y probado con su celular (15-oct); falta solo el ensayo con el router de verdad. **Va en la 6.0.0**
+**Estado:** hecho, probado con su celular (15-oct) y ensayado con el router de verdad (antes del 4-nov). **Va en la 6.0.0**
 (decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra
 forma** (15-oct, sección 7): los puestos van a ser celulares (o tablets), así que **una notebook del salón hace de
 central** y los celulares le hablan por el wifi del router; ver "La sección 7" en

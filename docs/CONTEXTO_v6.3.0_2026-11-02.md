@@ -1,10 +1,22 @@
-# La 6.3.0 (programada, SIN PUBLICAR): el plano antes de los sorteos
+# La 6.3.0: el plano antes de los sorteos
 
 2-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Plan: `docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`. El orden de todo lo que
 sigue: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado: etapas 1 a 8 hechas y subidas a la rama. No hay cambio de versión, ni release, ni web: `pubspec.yaml` sigue en
-6.2.1. Publicar, solo preguntándole antes al usuario** (lo pidió el 2-nov). Las PCs siguen con la 6.2.1.
+**Estado (4-nov): en publicación.** Se publica sola, antes que la barra, porque el usuario quería armar el plano el 4-nov y los
+sorteos son en noviembre ("una sola versión cuando esté completo" cedió por eso: decisión del usuario el 3-nov). Ver "La
+publicación (4-nov)", abajo.
+
+## Qué más lleva la versión, dormido
+
+La rama lleva también **operadores con permisos** (`docs/CONTEXTO_OPERADORES_2026-11-02.md`, etapas 1 a 3) y **la barra, etapas 1 a 4**
+(`docs/CONTEXTO_BARRA_2026-11-02.md`). Salen así:
+- **MODO CAJA pasa a OPERADOR.** Maxi y Juan entran igual, a Cobros, sin que nadie les dé nada (sin fila de permisos = Cobros solo).
+- **En modo jefe, OPERADORES suma las casillas Cobros, Entradas y Barra.** Hasta la próxima versión: **no darle Entradas a nadie**
+  (todavía deja anular una entrega: etapas 4 a 6) y **no crear operadores sin Cobros** hasta que las tres PCs tengan la 6.3.0.
+- **Barra** se puede tildar pero no sirve: sin catálogo (etapa 7) la cajera no ve ninguna fiesta.
+- **La base pasa de la v75 a la v77** (7 tablas nuevas, vacías). `copiaAntesDeMigrar` deja `antes_de_v76.db` o `antes_de_v77.db`.
+  La 6.2.1 abre igual una base en la 77: volver atrás es reinstalarla.
 
 ## Qué se hizo
 
@@ -59,19 +71,35 @@ flutter run -d windows -t tool/plano_prueba.dart
 Es la pantalla del plano de verdad, con el plano real de Puerto Viejo y 35 alumnos inventados, sin base ni nube. Lo que se
 guarda se queda en esa ventana. No abrir la app completa desde el código: usa la base y la nube de verdad.
 
-## Lo que falta para publicar
+## La publicación (4-nov)
 
-**Sin SQL y sin migración.** Cuando el usuario lo diga, con él presente:
+Con el OK del usuario ("ahora podemos publicar", y "Sí, dale" para la foto y los SQL).
 
-1. Foto de la mora "antes de 6.3.0" (`supabase/mora_fotos.sql`, sección 2).
-2. Versión en `pubspec.yaml` y en `installer/junior_eventos_setup.iss`, y novedades.
-3. Release y web. Instalar las tres PCs el mismo día.
-4. Foto "después de 6.3.0" y la comparación de la sección 3: tiene que dar vacío. Si no, mirar `mora_cambios`.
+1. **VENDER de la barra cerrado** (el cambio que había quedado a medias el 3-nov): `c9fc4c0`. La suite entera: 3.400 tests en verde.
+2. **La migración v77 sobre una copia de la base real** (`tool/verificar_migracion_v77_test.dart`, la app cerrada): de la v75 a la
+   77; las 35 tablas de antes iguales fila por fila (643 alumnos, 4.592 pagos, 16 congelados); las 7 nuevas vacías; el esquema de
+   lo de antes igual; la vuelta a la 6.2.1 y de nuevo a la 77 sin cambios; la base real con el mismo SHA-256.
+3. **Versión `6.3.0+62`** en `pubspec.yaml` y en el instalador. Novedades: **"El plano, ordenado para los sorteos"**
+   (`build/novedades_6.3.0.md`).
+4. **Foto de la mora "antes de 6.3.0"**, 13:30: 643 alumnos, 26 congelados (eran 16 el 2-nov: el jefe congeló más con la 6.2.1).
+   `foto_id` `1a906a4e-7953-4c59-96c9-192b378d5c82`.
+5. **Los dos SQL**, 13:30, por `apply_migration` (`permisos_operador` y `barra`, lo mismo que los archivos del repo). Conteos
+   antes y después iguales: 643 contratos, 4.729 pagos, 4 operadores con la misma huella, 209 sesiones, 30 eventos, 16 invitados,
+   4 filas de `totem_config`. Las 7 tablas nuevas vacías, con RLS, su policy, un disparador de alta y uno de cambio, y fuera de
+   Realtime. La oficina estaba cobrando: ningún pago entró entre los dos conteos.
+
+**Falta:**
+1. El instalador, el release y la web.
+2. Que el usuario instale las tres PCs (el operario primero) y avise. **El plano se arma desde una PC con la 6.3.0.**
+3. Foto "después de 6.3.0" y la comparación de la sección 3: tiene que dar vacío. Si no, mirar `mora_cambios`.
 
 **Convivencia:** una PC con la 6.2.1 abre y guarda un salón ordenado sin problema, pero no ordena al guardar. El plano se toca
 desde una PC con la versión nueva. El renglón del sorteo suma `_lejos`, que la 6.2.1 ignora porque empieza con guion bajo.
 
 **La mora no se toca en toda esta versión:** ordenar y sortear escriben `planos_evento`, `sorteos_mesas` y los números de mesa.
+
+**Sin plano también se sortea** (lo preguntó el usuario el 4-nov): SORTEO sin plano es el de siempre, por número de mesa, y la
+planilla sale como siempre. Con plano, el sorteo sigue el salón dibujado y el resultado se ve en el plano, en el papel y en el tótem.
 
 ## La prueba con el mouse (2-nov, a pedido del usuario, que estaba en el celular)
 

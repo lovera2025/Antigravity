@@ -46,14 +46,14 @@ PRESUPUESTOS en Mi Empresa, sin `/op` ni rutas viejas, y código muerto afuera) 
 todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos eventos del mismo presupuesto). Las
 novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
-**En curso desde el 2-nov: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`, sin publicar; el
-orden de todo, en `docs/HOJA_DE_RUTA_2026-11-02.md`). Etapas 1 a 8 hechas y probadas con el mouse, sin publicar: `docs/CONTEXTO_v6.3.0_2026-11-02.md`.
-Para mirarlo sin publicar: `flutter run -d windows -t tool/plano_prueba.dart`, sin base ni nube; trae el sorteo de verdad, y al imprimir deja el PDF en `build/plano_prueba`. **Publicar, solo preguntándole
-antes al usuario.**
+**La 6.3.0: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`; el orden de todo, en
+`docs/HOJA_DE_RUTA_2026-11-02.md`). **En publicación el 4-nov**, sola y antes que la barra, porque los sorteos son en noviembre (decisión
+del usuario): la foto de la mora "antes" y **los dos SQL (v76 y v77) ya corridos**; falta el release, la web, instalar las tres PCs y la foto
+"después". Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
 
-**También en la rama, sin publicar: operadores con permisos** (2-nov, etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), con la migración v76 y
-un SQL sin correr. Faltan las etapas 4 a 6 antes de usarlo: quien tiene solo Entradas todavía puede anular una entrega. Entrada:
-`docs/CONTEXTO_OPERADORES_2026-11-02.md`. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`. **Publicar la rama lleva las dos cosas.**
+**La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
+**y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una
+entrega) **ni crear operadores sin Cobros** hasta que las tres PCs tengan la 6.3.0. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`.
 
 **En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`,
 que empieza con **"Para retomar en otro chat"**). Las etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas, `lib/features/barra/cuentas/`, y lo que dice cada papel,

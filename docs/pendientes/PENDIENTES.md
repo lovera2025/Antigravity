@@ -89,8 +89,9 @@ priorizó el sorteo de noviembre. El contexto está en
   completa quedó hecha el 14-oct (el tótem abre con la lista, la foto guardada,
   entrar con la sesión vencida y "Lista para trabajar sin internet"); **los
   puestos, hechos el 15-oct**: celulares o tablets por una notebook central en
-  el wifi del router (sección 7), probado con su celular; falta el ensayo con
-  el router de verdad. Pedido
+  el wifi del router (sección 7), probado con su celular; **el ensayo con el
+  router de verdad, hecho** (dos iPhone y un Android, sin la fibra; contado el
+  4-nov). Pedido
   el 24-sep y otra vez el 13-oct; trae **la regla que vale para todas las
   partes que faltan**.
 - [Cerrar la lista de la puerta a los anónimos](rls-invitados.md) — hoy
