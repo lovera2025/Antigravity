@@ -3,7 +3,7 @@
 2-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Plan: `docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`. El orden de todo lo que
 sigue: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado (4-nov): en publicación.** Se publica sola, antes que la barra, porque el usuario quería armar el plano el 4-nov y los
+**Estado (4-nov): PUBLICADA** (SQL, release y web). Falta instalar las tres PCs y la foto de la mora "después". Se publica sola, antes que la barra, porque el usuario quería armar el plano el 4-nov y los
 sorteos son en noviembre ("una sola versión cuando esté completo" cedió por eso: decisión del usuario el 3-nov). Ver "La
 publicación (4-nov)", abajo.
 
@@ -88,10 +88,17 @@ Con el OK del usuario ("ahora podemos publicar", y "Sí, dale" para la foto y lo
    4 filas de `totem_config`. Las 7 tablas nuevas vacías, con RLS, su policy, un disparador de alta y uno de cambio, y fuera de
    Realtime. La oficina estaba cobrando: ningún pago entró entre los dos conteos.
 
+6. **El instalador:** `installer/dist/Setup Junior Eventos v6.3.0.exe`, 38.562.627 bytes, SHA-256 `C36A1BDD…9298DCFF`.
+7. **El release:** `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build/novedades_6.3.0.md`. Las novedades dicen **"El plano,
+   ordenado para los sorteos"** (el usuario dejó elegir; no se nombra OPERADORES para que no se use antes de tiempo).
+   `/releases/latest` da `v6.3.0`, la etiqueta en `39c3d5f`, y el instalador bajado de GitHub es idéntico al armado.
+8. **La web:** `flutter build web --release`, a `.vercel/output/static`, y `npx vercel deploy --prebuilt --prod`. Publicada
+   `arguello-events-n8t71m964`; para volver atrás, la de antes es `arguello-events-3wzvwmlhr` (6.2.1). Comprobado: `version.json` da
+   `6.3.0`/`62`; `/`, `?cotizar`, `/lista` y `/op` responden; la Roboto se sirve desde la web.
+
 **Falta:**
-1. El instalador, el release y la web.
-2. Que el usuario instale las tres PCs (el operario primero) y avise. **El plano se arma desde una PC con la 6.3.0.**
-3. Foto "después de 6.3.0" y la comparación de la sección 3: tiene que dar vacío. Si no, mirar `mora_cambios`.
+1. Que el usuario instale las tres PCs (el operario primero) y avise. **El plano se arma desde una PC con la 6.3.0.**
+2. Foto "después de 6.3.0" y la comparación de la sección 3: tiene que dar vacío. Si no, mirar `mora_cambios`.
 
 **Convivencia:** una PC con la 6.2.1 abre y guarda un salón ordenado sin problema, pero no ordena al guardar. El plano se toca
 desde una PC con la versión nueva. El renglón del sorteo suma `_lejos`, que la 6.2.1 ignora porque empieza con guion bajo.

@@ -47,9 +47,9 @@ todo lo de su presupuesto** (detalle de cada servicio, lugar, combos; nunca dos 
 novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/CONTEXTO_v6.2.1_2026-10-23.md`.
 
 **La 6.3.0: el plano antes de los sorteos** (`docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`; el orden de todo, en
-`docs/HOJA_DE_RUTA_2026-11-02.md`). **En publicación el 4-nov**, sola y antes que la barra, porque los sorteos son en noviembre (decisión
-del usuario): la foto de la mora "antes" y **los dos SQL (v76 y v77) ya corridos**; falta el release, la web, instalar las tres PCs y la foto
-"después". Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
+`docs/HOJA_DE_RUTA_2026-11-02.md`). **Publicada el 4-nov** (los dos SQL, v76 y v77, el release y la web), sola y antes que la barra, porque
+los sorteos son en noviembre (decisión del usuario). Las novedades dicen "El plano, ordenado para los sorteos". Falta instalar las tres PCs
+(lo hace el usuario y avisa) y la foto de la mora "después". Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
 
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
 **y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una
