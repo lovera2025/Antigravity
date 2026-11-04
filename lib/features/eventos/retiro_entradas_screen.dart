@@ -586,9 +586,12 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                 color: resumen.conDeuda > 0 ? Colors.red.shade700 : null,
               ),
               _tarjeta(
-                'Entradas entregadas',
+                'Sin cargo entregadas',
                 '${resumen.entradasEntregadas} de ${resumen.entradasTotales}',
               ),
+              // Las de las mesas adicionales y las sillas extra: no se entregan
+              // acá, se compran aparte al 50 %.
+              _tarjeta('Al 50 %, aparte', '${resumen.alCincuenta}'),
             ],
           ),
         ),
@@ -776,8 +779,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
                   ),
                   Text(
                     '${!compacta && division.isNotEmpty ? '$division · ' : ''}'
-                    'mesa $mesa · ${e.lugares} entradas '
-                    '(${e.vip} VIP + ${e.generales} generales)',
+                    'mesa $mesa · ${e.sinCargo} sin cargo '
+                    '(${e.vip} VIP + ${e.generales} generales)'
+                    '${e.alCincuenta > 0 ? ' · ${e.alCincuenta} al 50 %' : ''}',
                     style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
                   ),
                   if (r != null && r.entregado && !compacta)

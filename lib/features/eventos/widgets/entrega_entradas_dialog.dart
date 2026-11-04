@@ -466,6 +466,18 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     ];
   }
 
+  /// "su mesa adicional", "sus 4 mesas adicionales y sus 2 sillas extra".
+  static String _deDonde(ContratoAlumno a) {
+    final mesas = SalonMesas.mesasExtra(a);
+    final sillas = SalonMesas.sillasExtra(a);
+    return [
+      if (mesas == 1) 'su mesa adicional',
+      if (mesas > 1) 'sus $mesas mesas adicionales',
+      if (sillas == 1) 'su silla extra',
+      if (sillas > 1) 'sus $sillas sillas extra',
+    ].join(' y ');
+  }
+
   String _textoAnulada(EntradasRetiro r) =>
       'Tuvo una entrega anulada'
       '${r.anuladoAt == null ? '' : ' el ${ArTime.formatFechaHora(r.anuladoAt!)}'}'
@@ -518,6 +530,22 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           ),
         ],
       ),
+      // Solo la mesa del contrato trae sus entradas sin cargo: las de la mesa
+      // adicional y las sillas extra no se entregan acá.
+      if (e.alCincuenta > 0) ...[
+        const SizedBox(height: 8),
+        Text(
+          key: const Key('entrega_al_cincuenta'),
+          '${e.alCincuenta == 1 ? 'La entrada' : 'Las ${e.alCincuenta} entradas'} '
+          'de ${_deDonde(a)} no ${e.alCincuenta == 1 ? 'va' : 'van'} sin cargo: '
+          '${e.alCincuenta == 1 ? 'se compra' : 'se compran'} aparte, al 50 %.',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: Colors.orange.shade800,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
       Align(
         alignment: Alignment.centerLeft,
         child: TextButton(

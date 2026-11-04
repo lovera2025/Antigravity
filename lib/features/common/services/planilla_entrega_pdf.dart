@@ -37,6 +37,7 @@ class PlanillaEntregaPdf {
     'Mesa',
     'VIP',
     'Gen.',
+    'Al 50 %',
     'Generales del … al …',
     'Menores de 10',
     'Parentesco',
@@ -50,7 +51,9 @@ class PlanillaEntregaPdf {
   ///   "RETIR / Ó";
   /// - "Hermano/a mayor" necesita ~75 pt: con 1.05 iba en dos líneas, el
   ///   renglón crecía y una división de 26 ya no entraba en una hoja.
-  static const _anchos = [2.3, 0.75, 0.45, 0.5, 1.75, 0.75, 1.25, 2.85, 0.6];
+  /// "Al 50 %" (4-nov) también sale de la del nombre, que sigue siendo la más
+  /// ancha.
+  static const _anchos = [2.3, 0.75, 0.45, 0.5, 0.6, 1.75, 0.75, 1.25, 2.25, 0.6];
 
   /// Alto mínimo de cada renglón: tiene que entrar un nombre escrito a mano.
   static const double altoRenglon = 19;
@@ -91,6 +94,7 @@ class PlanillaEntregaPdf {
     const leyenda = <(PdfColor?, String)>[
       (null, 'VIP: con cena, sin número'),
       (null, 'Generales: con número del talonario'),
+      (null, 'Al 50 %: de la mesa adicional y las sillas extra, se compran aparte'),
       (null, 'Menores de 10: no llevan entrada'),
     ];
 
@@ -123,6 +127,7 @@ class PlanillaEntregaPdf {
           final entradas =
               filas.fold<int>(0, (s, f) => s + f.vip + f.generales);
           final vip = filas.fold<int>(0, (s, f) => s + f.vip);
+          final alCincuenta = filas.fold<int>(0, (s, f) => s + f.alCincuenta);
           final retiraron = filas.where((f) => f.entregado).length;
           return (
             nombre: d,
@@ -131,8 +136,9 @@ class PlanillaEntregaPdf {
                   institucion: institucion,
                   version: 'Retiro de entradas',
                   generada: textoGenerada,
-                  control: '${filas.length} egresados · $entradas entradas '
+                  control: '${filas.length} egresados · $entradas sin cargo '
                       '($vip VIP y ${entradas - vip} generales)'
+                      '${alCincuenta > 0 ? ' · $alCincuenta al 50 %, aparte' : ''}'
                       '${retiraron > 0 ? ' · ya retiraron $retiraron' : ''}'
                       ' · Quien retira escribe su nombre y apellido: no se firma.',
                 ),
@@ -233,7 +239,7 @@ class PlanillaEntregaPdf {
             for (var i = 0; i < columnas.length; i++)
               t.celdaTitulo(
                 columnas[i],
-                align: i >= 2 && i <= 3 ? pw.TextAlign.center : pw.TextAlign.left,
+                align: i >= 2 && i <= 4 ? pw.TextAlign.center : pw.TextAlign.left,
               ),
           ],
         ),
@@ -281,6 +287,7 @@ class PlanillaEntregaPdf {
         celda(f.mesa, centro: true),
         celda('${f.vip}', centro: true),
         celda('${f.generales}', centro: true),
+        celda(f.alCincuenta == 0 ? '-' : '${f.alCincuenta}', centro: true),
         f.noEntregar != null
             ? celda(f.noEntregar!, negrita: true, color: t.rojo)
             : celda(f.delAl),

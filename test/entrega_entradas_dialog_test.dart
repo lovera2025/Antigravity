@@ -96,7 +96,14 @@ void main() {
   testWidgets('sin completar, marca lo que falta y no entrega', (tester) async {
     await _abrir(tester);
     expect(find.text('3'), findsOneWidget); // VIP
-    expect(find.text('16'), findsOneWidget); // generales
+    // Solo la mesa del contrato va sin cargo: 8 lugares, 3 con cena y 5
+    // generales. Las 11 de la mesa adicional y las sillas extra, aparte.
+    expect(find.text('5'), findsOneWidget); // generales
+    expect(
+      find.text('Las 11 entradas de su mesa adicional y sus 3 sillas extra no van '
+          'sin cargo: se compran aparte, al 50 %.'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('CONFIRMAR ENTREGA'));
     await tester.pumpAndSettle();
     expect(find.text('Escribí los números del talonario.'), findsOneWidget);
@@ -138,7 +145,7 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextField, 'Del'), '1043');
     await tester.pump();
-    expect(find.text('al 1058'), findsOneWidget);
+    expect(find.text('al 1047'), findsOneWidget);
     await tester.tap(find.text('Madre'));
     await tester.enterText(
       find.widgetWithText(TextField, 'Nombre y apellido de quien retira'),
@@ -154,7 +161,7 @@ void main() {
 
     expect(accion, isA<EntregarEntradas>());
     final e = accion! as EntregarEntradas;
-    expect(e.tramos, const [TramoTalonario(1043, 1058)]);
+    expect(e.tramos, const [TramoTalonario(1043, 1047)]);
     expect(e.parentesco, ParentescoRetiro.madre);
     expect(e.nombre, 'Laura Benítez');
     expect(e.menores10, 1);
@@ -164,7 +171,7 @@ void main() {
     await _abrir(
       tester,
       deOtros: {
-        'PÉREZ, JUAN': const [TramoTalonario(1050, 1060)],
+        'PÉREZ, JUAN': const [TramoTalonario(1045, 1060)],
       },
     );
     await tester.enterText(find.widgetWithText(TextField, 'Del'), '1043');
@@ -180,7 +187,7 @@ void main() {
     await tester.tap(find.text('CONFIRMAR ENTREGA'));
     await tester.pumpAndSettle();
     expect(
-      find.text('El 1050 ya se le dio a PÉREZ, JUAN (1050 al 1060).'),
+      find.text('El 1045 ya se le dio a PÉREZ, JUAN (1045 al 1060).'),
       findsOneWidget,
     );
     expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget);
@@ -208,7 +215,7 @@ void main() {
     final entregado = RetiroEntradas.nuevaEntrega(
       alumno: _alumno(),
       entradas: RetiroEntradas.entradasDe(_alumno()),
-      tramos: const [TramoTalonario(1043, 1058)],
+      tramos: const [TramoTalonario(1043, 1047)],
       menores10: 1,
       parentesco: ParentescoRetiro.madre,
       nombre: 'Laura Benítez',
@@ -240,7 +247,7 @@ void main() {
     await tester.tap(find.text('abrir'));
     await tester.pumpAndSettle();
     expect(find.textContaining('LAURA BENÍTEZ'), findsOneWidget);
-    expect(find.textContaining('1043 al 1058'), findsOneWidget);
+    expect(find.textContaining('1043 al 1047'), findsOneWidget);
 
     await tester.tap(find.text('ANULAR ENTREGA'));
     await tester.pump();

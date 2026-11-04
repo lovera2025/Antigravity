@@ -387,6 +387,10 @@ Están diseñados y aprobados con maquetas: son los seis pendientes de "Tótem y
 
 **El retiro de entradas** (v72, `retiro_entradas_screen.dart`) es otra cosa: la entrega de entradas y pulseras en la
 oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados`.
+- **Solo la mesa del contrato trae sus 8 entradas sin cargo** (6.3.1, regla del usuario del 4-nov). La mesa adicional y las sillas
+  extra pagan el lugar, no la entrada: esas se compran aparte, **al 50 %** de su valor, y no se entregan en el retiro
+  (`EntradasDeAlumno.alCincuenta`). El precio de la entrada todavía no se sabe: nada lleva un precio fijo. Cobrarlas es la venta de
+  entradas (sección 8 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), sin programar. Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
 
 **Escondido, el tótem se pausa.** `KioskLauncher.close()` manda `pausar` antes de esconder la ventana: suelta
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la

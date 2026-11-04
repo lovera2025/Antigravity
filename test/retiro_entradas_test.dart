@@ -78,20 +78,58 @@ DeudaAlumno _deuda(ContratoAlumno a, List<Map<String, dynamic>> pagos) =>
 
 void main() {
   group('entradas', () {
-    test('2 mesas y 3 sillas: 19 lugares, 3 VIP y 16 generales', () {
+    // Regla del usuario (4-nov-2026): solo la mesa del contrato trae sus 8
+    // entradas sin cargo. La mesa adicional y las sillas extra pagan el lugar,
+    // no la entrada: esas se compran aparte, al 50 %.
+    test('2 mesas y 3 sillas: 19 lugares; 8 sin cargo (3 VIP y 5 generales) y 11 al 50 %', () {
       final e = RetiroEntradas.entradasDe(
         _alumno(extras: 1, sillas: 3, acompanantes: ['MAMÁ', 'PAPÁ']),
       );
       expect(e.lugares, 19);
       expect(e.vip, 3);
-      expect(e.generales, 16);
+      expect(e.generales, 5);
+      expect(e.sinCargo, 8);
+      expect(e.alCincuenta, 11);
       expect(e.entran, isTrue);
+    });
+
+    test('solo la mesa del contrato: las 8 sin cargo y ninguna al 50 %', () {
+      final e = RetiroEntradas.entradasDe(_alumno(acompanantes: ['MAMÁ']));
+      expect(e.sinCargo, 8);
+      expect(e.generales, 6);
+      expect(e.alCincuenta, 0);
+    });
+
+    test('con 4 mesas adicionales (GAUNA, GERALDINE): 8 sin cargo y 32 al 50 %', () {
+      final e = RetiroEntradas.entradasDe(_alumno(extras: 4, mesas: [1, 2, 3, 4, 5]));
+      expect(e.lugares, 40);
+      expect(e.sinCargo, 8);
+      expect(e.generales, 7);
+      expect(e.alCincuenta, 32);
+    });
+
+    test('las sillas extra también van al 50 %, aunque estén en la mesa del contrato', () {
+      final e = RetiroEntradas.entradasDe(_alumno(sillas: 2));
+      expect(e.lugares, 10);
+      expect(e.sinCargo, 8);
+      expect(e.alCincuenta, 2);
     });
 
     test('las sillas sin precio no suman lugares', () {
       final e = RetiroEntradas.entradasDe(_alumno(sillas: 2, precioSillas: 0));
       expect(e.lugares, 8);
       expect(e.generales, 7);
+      expect(e.alCincuenta, 0);
+    });
+
+    test('más VIP que la mesa del contrato: ocupan primero la adicional, sin cobrarles la entrada', () {
+      final e = RetiroEntradas.entradasDe(
+        _alumno(extras: 1, mesas: [12, 13], acompanantes: List.filled(9, 'X')),
+      );
+      expect(e.vip, 10);
+      expect(e.generales, 0);
+      expect(e.sinCargo, 10);
+      expect(e.alCincuenta, 6);
     });
 
     test('más personas con cena que lugares: no entran', () {
@@ -101,6 +139,7 @@ void main() {
       expect(e.vip, 9);
       expect(e.entran, isFalse);
       expect(e.generales, 0);
+      expect(e.alCincuenta, 0);
     });
   });
 
@@ -317,7 +356,7 @@ void main() {
         RetiroEntradas.nuevaEntrega(
           alumno: a,
           entradas: entradas,
-          tramos: const [TramoTalonario(1043, 1058)],
+          tramos: const [TramoTalonario(1043, 1047)],
           menores10: 1,
           parentesco: ParentescoRetiro.madre,
           nombre: '  laura   benítez ',
@@ -326,12 +365,12 @@ void main() {
           anterior: anterior,
         );
 
-    test('la entrega guarda lo que se llevó y quién', () {
+    test('la entrega guarda lo que se llevó sin cargo, y quién', () {
       final r = entregar();
       expect(r.entregado, isTrue);
       expect(r.vip, 3);
-      expect(r.generales, 16);
-      expect(r.entradas, 19);
+      expect(r.generales, 5);
+      expect(r.entradas, 8, reason: 'las 11 al 50 % no se entregan acá');
       expect(r.retiroNombre, 'LAURA BENÍTEZ');
       expect(r.escribioEnPlanilla, isTrue);
       expect(r.otraPersonaMotivo, isNull);
@@ -350,7 +389,7 @@ void main() {
       expect(r.anuladoMotivo, 'Compró otra silla');
       expect(r.anuladoPor, 'Jefe');
       expect(r.entregadoPor, 'Operador');
-      expect(r.tramos, const [TramoTalonario(1043, 1058)]);
+      expect(r.tramos, const [TramoTalonario(1043, 1047)]);
     });
 
     test('volver a entregar conserva la anulación anterior', () {
@@ -381,14 +420,23 @@ void main() {
       expect(EntradasRetiro.fromMap(nube).escribioEnPlanilla, isTrue);
     });
 
-    test('si después compró otra silla, falta entregar una general', () {
+    test('si después compró otra silla, no le falta nada sin cargo: esa va al 50 %', () {
       final r = entregar();
       final hoy = RetiroEntradas.entradasDe(
         _alumno(extras: 1, sillas: 4, acompanantes: ['MAMÁ', 'PAPÁ']),
       );
-      expect(RetiroEntradas.cambioLaCuenta(r, hoy), isTrue);
-      expect(RetiroEntradas.diferencia(r, hoy), (vip: 0, generales: 1));
+      expect(RetiroEntradas.cambioLaCuenta(r, hoy), isFalse);
+      expect(hoy.alCincuenta, 12);
       expect(RetiroEntradas.cambioLaCuenta(r, entradas), isFalse);
+    });
+
+    test('si después sumó un acompañante, un VIP más y una general menos', () {
+      final r = entregar();
+      final hoy = RetiroEntradas.entradasDe(
+        _alumno(extras: 1, sillas: 3, acompanantes: ['MAMÁ', 'PAPÁ', 'ABUELA']),
+      );
+      expect(RetiroEntradas.cambioLaCuenta(r, hoy), isTrue);
+      expect(RetiroEntradas.diferencia(r, hoy), (vip: 1, generales: -1));
     });
   });
 
@@ -398,7 +446,8 @@ void main() {
       final f = RetiroEntradas.filaPlanilla(a, deuda: _deuda(a, _pagosCompletos(a)));
       expect(f.mesa, '13-14');
       expect(f.vip, 3);
-      expect(f.generales, 16);
+      expect(f.generales, 5);
+      expect(f.alCincuenta, 11);
       expect(f.delAl, isEmpty);
       expect(f.parentesco, isEmpty);
       expect(f.noEntregar, isNull);
@@ -416,7 +465,7 @@ void main() {
       final r = RetiroEntradas.nuevaEntrega(
         alumno: a,
         entradas: RetiroEntradas.entradasDe(a),
-        tramos: const [TramoTalonario(1043, 1058)],
+        tramos: const [TramoTalonario(1043, 1047)],
         menores10: 2,
         parentesco: ParentescoRetiro.abuelo,
         nombre: 'Rosa Gómez',
@@ -428,7 +477,7 @@ void main() {
         retiro: r,
         deuda: _deuda(a, _pagosCompletos(a)),
       );
-      expect(f.delAl, '1043 al 1058');
+      expect(f.delAl, '1043 al 1047');
       expect(f.menores, '2');
       expect(f.parentesco, 'Abuelo/a');
       expect(f.entregado, isTrue);
@@ -570,6 +619,24 @@ void main() {
       expect(r.conDeuda, 1);
       expect(r.entradasEntregadas, 8);
       expect(r.entradasTotales, 24);
+      expect(r.alCincuenta, 0);
+    });
+
+    test('Puerto Viejo: 21 alumnos y 14 mesas adicionales dan 168 sin cargo y 112 al 50 %', () {
+      // Las mesas adicionales como estaban el 4-nov: 4, 2 y ocho familias con 1.
+      const extras = [4, 2, 1, 1, 1, 1, 1, 1, 1, 1];
+      final alumnos = [
+        for (var i = 0; i < 21; i++)
+          _alumno(
+            id: 'pv$i',
+            nombre: 'ALUMNO $i',
+            extras: i < extras.length ? extras[i] : 0,
+          ),
+      ];
+      final r = RetiroEntradas.resumen(alumnos, const {}, const {});
+      expect(r.entradasTotales, 168);
+      expect(r.alCincuenta, 112);
+      expect(r.entradasEntregadas, 0);
     });
   });
 }

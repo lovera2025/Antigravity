@@ -9,6 +9,11 @@ import 'mora_cuota_calculator.dart';
 import 'salon_mesas.dart';
 
 /// Las entradas que le corresponden a un egresado, según su cuenta.
+///
+/// **Solo la mesa del contrato trae sus entradas sin cargo** (regla del usuario,
+/// 4-nov-2026). La mesa adicional y las sillas extra pagan el lugar, no la
+/// entrada: cada entrada de esos lugares se compra aparte, al 50 % de su valor.
+/// En la oficina se entregan solo las sin cargo ([vip] y [generales]).
 class EntradasDeAlumno {
   /// Lugares: 8 por mesa más las sillas extra que figuran en la cuenta.
   final int lugares;
@@ -18,8 +23,21 @@ class EntradasDeAlumno {
 
   const EntradasDeAlumno({required this.lugares, required this.vip});
 
-  /// El resto de los lugares, con número del talonario.
-  int get generales => max(0, lugares - vip);
+  /// Los lugares de la mesa del contrato: los únicos con la entrada sin cargo.
+  static const lugaresSinCargo = SalonMesas.sillasPorMesa;
+
+  int get _deLaMesaDelContrato => min(lugares, lugaresSinCargo);
+
+  /// Las sin cargo que no son VIP: con número del talonario.
+  int get generales => max(0, _deLaMesaDelContrato - vip);
+
+  /// Lo que se lleva sin cargo en la oficina: VIP y generales.
+  int get sinCargo => vip + generales;
+
+  /// Los lugares de la mesa adicional y de las sillas extra: su entrada se
+  /// compra aparte, al 50 %. Los VIP que no entran en la mesa del contrato
+  /// ocupan primero esos lugares: su cena ya está en la cuenta.
+  int get alCincuenta => max(0, lugares - max(_deLaMesaDelContrato, vip));
 
   bool get entran => vip <= lugares;
 }
@@ -88,6 +106,9 @@ class FilaPlanillaEntrega {
   final int vip;
   final int generales;
 
+  /// Las de la mesa adicional y las sillas extra: se compran aparte, al 50 %.
+  final int alCincuenta;
+
   /// Los números del talonario si ya se entregó; vacío si no.
   final String delAl;
 
@@ -108,6 +129,7 @@ class FilaPlanillaEntrega {
     required this.mesa,
     required this.vip,
     required this.generales,
+    required this.alCincuenta,
     required this.delAl,
     required this.menores,
     required this.parentesco,
@@ -124,7 +146,12 @@ class ResumenRetiro {
   /// Sin retirar y con deuda: no se les puede entregar.
   final int conDeuda;
   final int entradasEntregadas;
+
+  /// Las sin cargo de todos: las de la mesa del contrato.
   final int entradasTotales;
+
+  /// Las de las mesas adicionales y las sillas extra: se compran al 50 %.
+  final int alCincuenta;
 
   const ResumenRetiro({
     required this.alumnos,
@@ -132,6 +159,7 @@ class ResumenRetiro {
     required this.conDeuda,
     required this.entradasEntregadas,
     required this.entradasTotales,
+    required this.alCincuenta,
   });
 
   int get faltan => alumnos - retiraron;
@@ -390,6 +418,7 @@ class RetiroEntradas {
       mesa: SalonMesas.textoMesasPuerta(a) ?? '-',
       vip: entregado ? retiro!.vip : e.vip,
       generales: entregado ? retiro!.generales : e.generales,
+      alCincuenta: e.alCincuenta,
       delAl: entregado ? TramoTalonario.legible(retiro!.tramos) : '',
       menores: entregado ? '${retiro!.menores10}' : '',
       parentesco: entregado ? retiro!.parentesco?.etiqueta ?? '' : '',
@@ -404,9 +433,12 @@ class RetiroEntradas {
     Map<String, DeudaAlumno> deudas,
   ) {
     var total = 0, retiraron = 0, conDeuda = 0, entregadas = 0, totales = 0;
+    var alCincuenta = 0;
     for (final a in alumnos) {
       total++;
-      totales += entradasDe(a).lugares;
+      final e = entradasDe(a);
+      totales += e.sinCargo;
+      alCincuenta += e.alCincuenta;
       final r = retiros[a.id];
       if (r != null && r.entregado) {
         retiraron++;
@@ -422,6 +454,7 @@ class RetiroEntradas {
       conDeuda: conDeuda,
       entradasEntregadas: entregadas,
       entradasTotales: totales,
+      alCincuenta: alCincuenta,
     );
   }
 }
