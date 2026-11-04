@@ -130,6 +130,14 @@ class BarraEnMemoria implements BarraDeLaCaja {
   }
 
   @override
+  Future<List<VentaBarra>> ventas(String eventoId) async =>
+      [for (final v in ventasGuardadas) if (v.eventoId == eventoId) v];
+
+  @override
+  Future<List<AnulacionBarra>> anulaciones(String eventoId) async =>
+      [for (final a in anulacionesGuardadas) if (a.eventoId == eventoId) a];
+
+  @override
   Future<List<VentaBarra>> ventasDeLaCaja(String cajaId) async =>
       [for (final v in ventasGuardadas) if (v.cajaBarraId == cajaId) v];
 

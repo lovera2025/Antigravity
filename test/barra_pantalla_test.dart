@@ -7,6 +7,7 @@ import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/widgets/vender_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
+import 'package:arguello_events/features/common/widgets/operational_sync_coordinator.dart';
 import 'package:arguello_events/models/evento.dart';
 
 import 'helpers/barra_en_memoria.dart';
@@ -144,11 +145,97 @@ void main() {
     expect(producto(cerveza), findsOneWidget);
   });
 
-  testWidgets('el stock avisa sin frenar la venta', (tester) async {
+  String stock(WidgetTester tester, ProductoBarra p) => textoDe(tester, 'stock_${p.id}');
+  Finder pregunta() => find.byKey(const Key('sin_stock'));
+
+  testWidgets('Quedan baja con la cuenta; sin stock pregunta antes, y se puede vender igual', (tester) async {
     await abrir(tester);
-    expect(find.text('Quedan 5'), findsOneWidget);
-    await tocar(tester, producto(agua), veces: 7);
-    expect(total(tester), r'$ 7.000', reason: 'se puede seguir sumando');
+    expect(stock(tester, agua), 'Quedan 5');
+    await tocar(tester, producto(agua), veces: 2);
+    expect(stock(tester, agua), 'Quedan 3', reason: 'lo que ya está en la cuenta también cuenta');
+    await tocar(tester, producto(agua), veces: 3);
+    expect(stock(tester, agua), 'Sin stock');
+    expect(pregunta(), findsNothing, reason: 'las 5 cargadas se venden sin preguntar');
+    expect(total(tester), r'$ 5.000');
+
+    await tocar(tester, producto(agua));
+    expect(pregunta(), findsOneWidget);
+    expect(find.text('No queda agua sin gas'), findsOneWidget);
+    await tocar(tester, find.text('NO'));
+    expect(total(tester), r'$ 5.000', reason: 'con NO no se suma');
+
+    await tocar(tester, producto(agua));
+    expect(pregunta(), findsOneWidget, reason: 'con NO vuelve a preguntar');
+    await tocar(tester, find.byKey(const Key('sin_stock_vender_igual')));
+    expect(total(tester), r'$ 6.000');
+    await tocar(tester, producto(agua));
+    expect(pregunta(), findsNothing, reason: 'dijo que sí: en esta cuenta no pregunta más');
+    expect(total(tester), r'$ 7.000');
+
+    await tocar(tester, find.byKey(const Key('vender_vaciar')));
+    expect(stock(tester, agua), 'Quedan 5');
+    await tocar(tester, producto(agua), veces: 5);
+    expect(pregunta(), findsNothing);
+    await tocar(tester, producto(agua));
+    expect(pregunta(), findsOneWidget, reason: 'una cuenta nueva vuelve a preguntar');
+  });
+
+  testWidgets('el + de la cuenta también pregunta sin stock', (tester) async {
+    await abrir(tester);
+    await tocar(tester, producto(agua), veces: 5);
+    await tocar(tester, find.byKey(Key('sumar_${agua.id}')));
+    expect(pregunta(), findsOneWidget);
+    await tocar(tester, find.text('NO'));
+    expect(total(tester), r'$ 5.000');
+  });
+
+  testWidgets('el + y el − de la tarjeta', (tester) async {
+    await abrir(tester);
+    expect(find.byKey(Key('tarjeta_sumar_${cerveza.id}')), findsNothing, reason: 'fuera de la cuenta, sin botones');
+    await tocar(tester, producto(cerveza));
+    expect(find.byKey(Key('tarjeta_restar_${cerveza.id}')), findsOneWidget);
+    await tocar(tester, find.byKey(Key('tarjeta_sumar_${cerveza.id}')));
+    expect(total(tester), r'$ 7.000');
+    await tocar(tester, find.byKey(Key('tarjeta_restar_${cerveza.id}')), veces: 2);
+    expect(total(tester), r'$ 0');
+    expect(find.byKey(Key('tarjeta_sumar_${cerveza.id}')), findsNothing);
+  });
+
+  testWidgets('el stock es de toda la fiesta: descuenta lo que venden las otras cajas al bajar', (tester) async {
+    await abrir(tester);
+    expect(stock(tester, agua), 'Quedan 5');
+    final b = prueba.barra;
+    final otra = await b.abrirCaja(
+      eventoId: fiesta.id,
+      operadorId: 'a0000000-0000-4000-8000-000000000002',
+      operadorNombre: 'Tati',
+      numeroCaja: 3,
+    );
+    Future<void> venderEnLaOtra(int aguas) => b.vender(
+          caja: otra,
+          renglones: [RenglonVenta(productoId: agua.id, nombre: agua.nombre, precio: 1000, cantidad: aguas)],
+          medio: MedioBarra.efectivo,
+          efectivo: 1000.0 * aguas,
+          quien: 'Tati',
+        );
+    Future<void> bajo() async {
+      ProviderScope.containerOf(tester.element(find.byType(VenderScreen)))
+          .read(operationalSyncRevisionProvider.notifier)
+          .bump();
+      await tester.pumpAndSettle();
+    }
+
+    await venderEnLaOtra(2);
+    await tester.pumpAndSettle();
+    expect(stock(tester, agua), 'Quedan 5', reason: 'hasta que baja, no se entera');
+    await bajo();
+    expect(stock(tester, agua), 'Quedan 3');
+
+    await venderEnLaOtra(3);
+    await bajo();
+    expect(stock(tester, agua), 'Agotado');
+    await tocar(tester, producto(agua));
+    expect(pregunta(), findsOneWidget, reason: 'agotado por otra caja, también pregunta');
   });
 
   testWidgets('EFECTIVO: lo que entrega, el vuelto, y la venta se guarda con los vales', (tester) async {

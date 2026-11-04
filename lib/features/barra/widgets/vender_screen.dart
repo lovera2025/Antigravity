@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/evento.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
+import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../cuentas/cobro_barra.dart';
 import '../cuentas/cuenta_barra.dart';
@@ -53,6 +54,9 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
   /// En el celular, si la cuenta está desplegada.
   bool _cuentaAbierta = false;
 
+  /// Los productos sin stock que la cajera dijo que se venden igual, en esta cuenta.
+  final _sinStockIgual = <String>{};
+
   String get _fiesta => EventoPresentacion.tituloPrincipal(widget.fiesta);
 
   @override
@@ -61,6 +65,8 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     unawaited(_cargar());
     unawaited(_prepararImpresora());
+    // Cuando bajan ventas de las otras cajas, "Quedan" se pone al día solo.
+    ref.listenManual(operationalSyncRevisionProvider, (_, _) => unawaited(_cargar()));
   }
 
   @override
@@ -79,8 +85,9 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     final barra = ref.read(barraDeLaCajaProvider);
     final productos = await barra.productos();
     final precios = await barra.precios(widget.fiesta.id);
-    final ventas = await barra.ventasDeLaCaja(_caja.id);
-    final anulaciones = await barra.anulacionesDeLaCaja(_caja.id);
+    // El stock es general: lo descuentan todas las cajas de la fiesta, no solo esta.
+    final ventas = await barra.ventas(widget.fiesta.id);
+    final anulaciones = await barra.anulaciones(widget.fiesta.id);
     if (!mounted) return;
     setState(() {
       _productos = productosParaVender(productos, precios, eventoId: widget.fiesta.id);
@@ -99,8 +106,49 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     if (mounted) setState(() => _impresora = estado);
   }
 
-  void _sumar(ProductoEnVenta p) => setState(() {
-        _cuenta = _cuenta.sumar(productoId: p.id, nombre: p.nombre, precio: p.precio.precio);
+  /// Lo que queda de un producto: lo cargado por el jefe, menos lo vendido por todas
+  /// las cajas y lo que ya está en esta cuenta. Null: no se controla.
+  int? _quedan(String productoId) {
+    final s = _stock[productoId];
+    if (s == null || !s.controla) return null;
+    return s.queda! - _cuenta.cantidadDe(productoId);
+  }
+
+  /// Suma uno. Sin stock, pregunta antes (una vez por producto y por cuenta): el
+  /// stock avisa, pero lo cargado puede estar corto o sin internet otra caja ya vendió.
+  Future<void> _sumar(ProductoEnVenta p) async {
+    final q = _quedan(p.id);
+    if (q != null && q <= 0 && !_sinStockIgual.contains(p.id)) {
+      final igual = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          key: const Key('sin_stock'),
+          title: Text('No queda ${p.nombre.toLowerCase()}'),
+          content: const Text(
+            'Según lo que cargó el jefe ya se vendieron todos. Si hay, se puede vender igual.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('NO')),
+            FilledButton(
+              key: const Key('sin_stock_vender_igual'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('VENDER IGUAL'),
+            ),
+          ],
+        ),
+      );
+      if (igual != true || !mounted) return;
+      _sinStockIgual.add(p.id);
+    }
+    setState(() {
+      _cuenta = _cuenta.sumar(productoId: p.id, nombre: p.nombre, precio: p.precio.precio);
+    });
+  }
+
+  void _vaciar() => setState(() {
+        _cuenta = CuentaBarra.vacia;
+        _cuentaAbierta = false;
+        _sinStockIgual.clear();
       });
 
   Future<void> _cobrar(MedioBarra medio) async {
@@ -152,10 +200,7 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
     }
     unawaited(ref.read(subirVentaProvider)(venta));
     if (!mounted) return;
-    setState(() {
-      _cuenta = CuentaBarra.vacia;
-      _cuentaAbierta = false;
-    });
+    _vaciar();
     await Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => _ValesDeLaVenta(venta: venta, caja: _caja, fiesta: _fiesta),
     ));
@@ -339,7 +384,7 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
         crossAxisCount: columnas,
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
-        mainAxisExtent: 132,
+        mainAxisExtent: 150,
       ),
       itemCount: lista.length,
       itemBuilder: (_, i) => _tarjeta(lista[i]),
@@ -349,55 +394,67 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
   Widget _tarjeta(ProductoEnVenta p) {
     final tema = Theme.of(context);
     final cantidad = _cuenta.cantidadDe(p.id);
-    final stock = _stock[p.id];
-    final queda = stock?.queda;
-    return Card(
-      key: Key('producto_${p.id}'),
-      clipBehavior: Clip.antiAlias,
-      color: cantidad > 0 ? tema.colorScheme.primaryContainer : null,
-      child: InkWell(
-        onTap: () => _sumar(p),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // El nombre usa lo que queda: el precio y el stock siempre se ven.
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        p.nombre,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
-                    ),
-                    if (cantidad > 0)
-                      CircleAvatar(
-                        radius: 12,
-                        backgroundColor: tema.colorScheme.primary,
-                        child: Text(
-                          '$cantidad',
-                          style: TextStyle(fontSize: 12, color: tema.colorScheme.onPrimary),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Text(pesos(p.precio.precio), style: const TextStyle(fontSize: 16)),
-              if (stock != null && stock.controla)
-                Text(
-                  stock.agotado ? 'Agotado' : 'Quedan $queda',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: stock.enAviso ? tema.colorScheme.error : tema.hintColor,
-                    fontWeight: stock.enAviso ? FontWeight.bold : null,
+    final aviso = _stock[p.id]?.aviso;
+    final quedan = _quedan(p.id);
+    final sinStock = quedan != null && quedan <= 0;
+    final enAviso = quedan != null && (sinStock || (aviso != null && quedan <= aviso));
+    return Opacity(
+      opacity: sinStock && cantidad == 0 ? 0.55 : 1,
+      child: Card(
+        key: Key('producto_${p.id}'),
+        clipBehavior: Clip.antiAlias,
+        color: cantidad > 0 ? tema.colorScheme.primaryContainer : null,
+        child: InkWell(
+          onTap: () => _sumar(p),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // El nombre usa lo que queda: el precio, el stock y el + / − siempre se ven.
+                Expanded(
+                  child: Text(
+                    p.nombre,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
-            ],
+                Text(pesos(p.precio.precio), style: const TextStyle(fontSize: 16)),
+                if (quedan != null)
+                  Text(
+                    sinStock
+                        ? (cantidad > 0 ? 'Sin stock' : 'Agotado')
+                        : 'Quedan $quedan',
+                    key: Key('stock_${p.id}'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: enAviso ? tema.colorScheme.error : tema.hintColor,
+                      fontWeight: enAviso ? FontWeight.bold : null,
+                    ),
+                  ),
+                if (cantidad > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _BotonDeTarjeta(
+                          key: Key('tarjeta_restar_${p.id}'),
+                          icono: Icons.remove,
+                          alTocar: () => setState(() => _cuenta = _cuenta.restar(p.id)),
+                        ),
+                        Text('$cantidad', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        _BotonDeTarjeta(
+                          key: Key('tarjeta_sumar_${p.id}'),
+                          icono: Icons.add,
+                          alTocar: () => _sumar(p),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -425,9 +482,17 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
               tooltip: 'Uno más',
               visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.add_circle_outline),
-              onPressed: () => setState(() {
-                _cuenta = _cuenta.sumar(productoId: r.productoId, nombre: r.nombre, precio: r.precio);
-              }),
+              onPressed: () {
+                // Por el mismo camino que la tarjeta: sin stock, pregunta.
+                final p = _productos.where((x) => x.id == r.productoId).firstOrNull;
+                if (p != null) {
+                  unawaited(_sumar(p));
+                } else {
+                  setState(() {
+                    _cuenta = _cuenta.sumar(productoId: r.productoId, nombre: r.nombre, precio: r.precio);
+                  });
+                }
+              },
             ),
             IconButton(
               key: Key('quitar_${r.productoId}'),
@@ -518,7 +583,7 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
                 ),
                 TextButton(
                   key: const Key('vender_vaciar'),
-                  onPressed: _cuenta.estaVacia ? null : () => setState(() => _cuenta = CuentaBarra.vacia),
+                  onPressed: _cuenta.estaVacia ? null : _vaciar,
                   child: const Text('VACIAR'),
                 ),
               ],
@@ -562,10 +627,7 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     key: const Key('vender_vaciar'),
-                    onPressed: () => setState(() {
-                      _cuenta = CuentaBarra.vacia;
-                      _cuentaAbierta = false;
-                    }),
+                    onPressed: _vaciar,
                     child: const Text('VACIAR'),
                   ),
                 ),
@@ -610,6 +672,29 @@ class _VenderScreenState extends ConsumerState<VenderScreen> with WidgetsBinding
       ),
     );
   }
+}
+
+/// El + y el − de la tarjeta de un producto.
+class _BotonDeTarjeta extends StatelessWidget {
+  final IconData icono;
+  final VoidCallback alTocar;
+
+  const _BotonDeTarjeta({super.key, required this.icono, required this.alTocar});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Theme.of(context).colorScheme.primary,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: alTocar,
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: Icon(icono, size: 18, color: Theme.of(context).colorScheme.onPrimary),
+          ),
+        ),
+      );
 }
 
 /// El cambio con que arrancó la caja. El diálogo es dueño de su casilla: si la

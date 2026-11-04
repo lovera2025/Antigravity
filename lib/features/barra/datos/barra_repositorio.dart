@@ -99,6 +99,12 @@ abstract interface class BarraDeLaCaja {
   /// Una caja cerrada queda como se cerró.
   Future<CajaBarra> ponerCambio(CajaBarra caja, double cambio, {required String quien});
 
+  /// Todas las de la fiesta que conoce este equipo, de todas las cajas: el stock es
+  /// general, y lo descuentan todas.
+  Future<List<VentaBarra>> ventas(String eventoId);
+
+  Future<List<AnulacionBarra>> anulaciones(String eventoId);
+
   /// Por número.
   Future<List<VentaBarra>> ventasDeLaCaja(String cajaId);
 
