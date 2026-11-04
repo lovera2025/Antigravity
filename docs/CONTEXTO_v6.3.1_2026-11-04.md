@@ -1,7 +1,9 @@
 # La 6.3.1: las entradas sin cargo son solo las de la mesa del contrato
 
 4-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Sale sobre la 6.3.0 (`docs/CONTEXTO_v6.3.0_2026-11-02.md`), publicada el mismo
-día. **Sin SQL y sin migración.**
+día. **Sin SQL y sin migración. PUBLICADA el 4-nov** (ver "La publicación", al final). La oficina, con la 6.2.1, pasa directo a la
+6.3.1; la PC del usuario, que ya tenía la 6.3.0, la recibe como actualización. Volver a subir la 6.3.0 con el arreglo no servía: la app
+avisa solo cuando el número es más alto, y habría dos 6.3.0 distintas.
 
 ## Qué pasó
 
@@ -50,3 +52,16 @@ salga.
   la planilla en cero.
 - **La planilla de muestra** (`tool/planilla_entrega_muestra_test.dart`), mirada en el navegador: la columna entra, "RETIRÓ" y
   "Hermano/a mayor" siguen en un renglón y una división de 26 sigue entrando en una hoja.
+
+## La publicación (4-nov)
+
+Con el OK del usuario ("Sí, publicala").
+
+1. **El instalador:** `installer/dist/Setup Junior Eventos v6.3.1.exe`, 38.563.325 bytes, SHA-256 `6FC72CC8…91FE5988`.
+2. **El release:** las novedades dicen **"Entradas: sin cargo, solo las de la mesa del contrato; las de la mesa adicional y las sillas
+   extra, al 50 %"**. `/releases/latest` da `v6.3.1`, la etiqueta en `b487a91`, y el instalador bajado de GitHub es idéntico al armado.
+3. **La web:** publicada `arguello-events-il5pmk3ph`; la de antes es `arguello-events-n8t71m964` (6.3.0). `version.json` da
+   `6.3.1`/`63`; `/`, `?cotizar`, `/lista` y `/op` responden.
+
+**Falta:** que el usuario instale las tres PCs (el operario primero) y avise, y la foto de la mora "después" (la de "antes de 6.3.0"
+sirve: esta versión no toca la mora).
