@@ -50,8 +50,7 @@ novedades dicen "Nuevas capacidades en el modo jefe, limpieza". Entrada: `docs/C
 `docs/HOJA_DE_RUTA_2026-11-02.md`). **Publicada el 4-nov** (los dos SQL, v76 y v77, el release y la web), sola y antes que la barra, porque
 los sorteos son en noviembre (decisión del usuario). Las novedades dicen "El plano, ordenado para los sorteos". **El mismo día salió la
 6.3.1** (`docs/CONTEXTO_v6.3.1_2026-11-04.md`, sin SQL): en ENTRADAS, sin cargo solo las 8 de la mesa del contrato; las de la mesa adicional
-y las sillas extra, al 50 %, aparte. La oficina pasa directo de la 6.2.1 a la 6.3.1. **La PC de la casa ya la tiene (4-nov); faltan las dos
-de la oficina** (lo hace el usuario y avisa) y después la foto de la mora "después" (se compara con la "antes de 6.3.0"). Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
+y las sillas extra, al 50 %, aparte. **Instalada en las tres PCs (4-nov)**, y la foto de la mora "después" comparada con la de antes: vacía. Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
 
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
 **y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una

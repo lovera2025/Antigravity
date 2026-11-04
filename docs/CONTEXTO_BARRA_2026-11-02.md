@@ -1,19 +1,41 @@
-# La barra y la impresora (en curso, SIN PUBLICAR)
+# La barra y la impresora (en curso)
 
-2 y 3-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
+2 a 4-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. El plan entero, aprobado por el usuario: `docs/PLAN_BARRA_2026-11-03.md`.
 El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
-
-**Estado (3-nov, noche): las etapas 1 a 4 cerradas, y el 3b (los vales).** La impresora, probada en papel desde la PC y desde un celular
-Android. Los datos de la barra (v77, el sync y el SQL de la nube **sin correr**). Las cuentas y lo que dice cada papel. **La cajera ya entra
-con su PIN, elige la fiesta, abre su caja, vende, cobra e imprime los vales** (etapa 4, abajo). Sin versión, sin release, sin web. Las PCs
-siguen con la 6.2.1. Publicar, solo preguntándole antes al usuario.
 
 ## Para retomar en otro chat
 
-**4-nov: la barra (etapas 1 a 4) salió dormida dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`).
-**El SQL de la barra (v77) ya está corrido en la nube**: lo que le cambie a sus tablas va en tablas nuevas, como siempre. Lo que sigue
-es otra versión, antes del 4-dic. El plan del diseño con las fotos, aprobado: `C:\Users\lover\.claude\plans\retomemos-la-etapa-de-cheeky-sparkle.md`,
-parte B (las fotos de los tragos van adentro de la app y cada producto toma la suya por el nombre: "el jefe no las va a cargar").
+**Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
+los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
+`docs/CONTEXTO_v6.3.1_2026-11-04.md`). **Los SQL de la barra (v77) y de los permisos (v76) ya están corridos en la nube**: lo que le cambie
+a sus tablas va en tablas nuevas, como siempre. Ninguna PC tiene un producto ni un precio cargado: todavía no hay pantalla del jefe.
+
+**Después de publicar, en la rama y sin publicar:** VENDER con el stock de toda la fiesta, los dos diseños (Noche dorada y Mostrador) y
+74 fotos de tragos y marcas adentro de la app (el detalle, abajo).
+
+**Regla del usuario (4-nov): se sigue sin publicar hasta completar todas las etapas que quedan**, y se publica todo en una sola versión
+antes del 4-dic, preguntándole. Commit y push a la rama sí. Cada etapa empieza con su plan corto y su OK.
+
+**Lo que queda, con lo que ya tiene hecho por dentro** (casi todo lo que falta son pantallas):
+
+| Etapa | Ya hecho | Falta |
+|---|---|---|
+| 5. Reimprimir y anular | El papel de la COPIA (`CopiaDeVale`) y el de la venta anulada (`ModeloTicket.deVenta`); anular se guarda (`BarraDelJefe.anular`) | Las pantallas y el freno (la cajera solo la última venta, una vez; el jefe cualquiera); ANULAR de la cajera con motivo; el ticket con precios si lo piden; guardar por cuánto salió cada vale (en `renglones`) |
+| La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)") | Una tablet que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet |
+| El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
+| 6. Cerrar la caja | Las cuentas (`CierreDeBarra`), el papel (`ModeloTicket.deCierre`, ya salió bien impreso) y el guardado (`cerrarCaja`) | La pantalla de contar a ciegas y el PDF del cierre |
+| 7. El jefe en la PC | Los datos (`BarraDelJefe`: catálogo, precios con stock, cajas, anular), las cuentas (`ResumenDeCajas`, `StockDeLaBarra`) y las 74 fotos | Todas las pantallas: catálogo (elegir la foto de la biblioteca o subir una), precios por fiesta, "copiar de otra fiesta", el % de recargo, CAJAS, anular, PDF 58 mm y A4, la lista de precios |
+| 8. El jefe en el iPhone | `BarraNube` (lee y anula directo en la nube) | Las pantallas, en la web |
+| 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
+| 10. De punta a punta | Nada | Con modo avión, sin internet |
+| Entradas 4 a 6 | Las etapas 1 a 3, publicadas apagadas | La entrega según los permisos, "pagó: ya podés entregar", anular solo el jefe (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`) |
+| Publicar | Los SQL de la barra y los permisos, corridos | Foto de la mora antes, versión, release, web, APK firmado, foto después |
+
+**Lo que le toca al usuario:** imprimir un plano antes del primer sorteo; comprar la tablet de la barra; hasta la próxima versión, nadie
+con Entradas y nadie sin Cobros. (Las tres PCs ya tienen la 6.3.1, y la foto de la mora "después" dio vacía.)
+
+> Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto
+> de la etapa 5 antes de programar."
 
 **VENDER, cerrado el 4-nov (`c9fc4c0`):** **el stock es general**: lee las ventas de **todas las cajas de la fiesta**
 (`BarraDeLaCaja.ventas(eventoId)`) y se vuelve a leer cuando baja algo (`ref.listenManual(operationalSyncRevisionProvider, ...)`);
@@ -46,25 +68,12 @@ parte B (las fotos de los tragos van adentro de la app y cada producto toma la s
   `test/fotos_de_la_barra_test.dart` (más de 90 nombres, cada foto alcanzable por algún nombre, cada archivo en la app y en los créditos,
   ninguna foto suelta). Muestras: `tool/barra_muestra_test.dart`.
 
-**Lo siguiente, en orden:**
-1. ~~El diseño elegido, con las fotos~~: hecho el 4-nov (arriba).
-2. **La etapa 5:** reimprimir con freno (la cajera solo la última venta, una vez; el jefe cualquiera, con COPIA), ANULAR también la cajera
-   con motivo, el ticket con precios solo si lo piden, y guardar por cuánto salió cada vale para reimprimir el mismo.
-3. **La central de la barra en la red del salón** (etapa nueva, ver "Decidido el 3-nov (noche)" abajo): los TP-Link unidos con cable y una
-   tablet que recibe las ventas de todas y reparte el stock en vivo sin internet.
-4. Probar si la impresora avisa que le falta papel (botón PAPEL en `tool/impresora_prueba.dart`, `DLE EOT 4`).
-5. ~~Antes de publicar: la migración v77 sobre una copia y los dos SQL~~: hecho el 4-nov, con la 6.3.0.
+**Para mirarlo con el mouse:** `flutter run -d windows -t tool/barra_prueba.dart` (sin base ni nube; PIN Marta 1111, Tati 5555; botón para
+cortar el internet; los vales salen por la TP-POS58 de verdad; los productos ya salen con sus fotos). **Falta:** que el usuario la recorra y
+mande la foto de los vales.
 
-**Lo anterior a eso (3-nov, noche):** todo commiteado y subido hasta `bd183ba`. La suite, en verde (3.397 tests). **Para mirarlo con el mouse:** `flutter run -d windows -t tool/barra_prueba.dart` (sin base ni nube; PIN Marta
-1111, Tati 5555; botón para cortar el internet; los vales salen por la TP-POS58 de verdad). **Falta:** que el usuario la recorra y mande la
-foto de los vales. **Antes de publicar:** volver a probar la migración v77 sobre una copia de la base real (la tabla `barra_ventas` cambió:
-sin `comprobante_visto`, con `recargo` y `recargo_pct`), con la app cerrada.
-
-**Lo que sigue: la etapa 5**, con su plan corto y el OK del usuario antes: reimprimir con freno (la cajera solo la última venta, una vez;
-el jefe cualquiera, con COPIA), ANULAR también la cajera con motivo, el ticket con precios solo si lo piden, y guardar por cuánto salió
-cada vale (adentro de `renglones`) para reimprimir el mismo. **Pendiente que pidió el usuario el 3-nov:** que la cajera sepa si a la
-impresora le falta papel. Hoy la app solo le escribe; hay que probar con un botón PAPEL en `tool/impresora_prueba.dart` si la TP-POS58
-contesta el pedido de estado (`DLE EOT 4`) por Bluetooth. Si contesta, VENDER avisa "sin papel" antes de cobrar; si no, queda como está.
+**El aviso de papel, pedido el 3-nov:** hoy la app solo le escribe a la impresora. Si la TP-POS58 contesta el pedido de estado (`DLE EOT 4`)
+por Bluetooth, VENDER avisa "sin papel" antes de cobrar; si no, queda como está.
 
 **Decidido el 3-nov (noche), para hacer en su etapa:**
 - **El stock de todas las cajas, también sin internet, por la red del salón.** El jefe quiere que lo que vende una caja se vea en las
@@ -396,22 +405,20 @@ Con trozos de 180 bytes y 20 ms de pausa no perdió ningún renglón, tampoco en
 
 ## Lo pendiente, en orden
 
-**Etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas): cerradas el 3-nov.**
-
-**Después, cada una con sus tests** (el detalle de la 4, arriba en "Para retomar"):
-4. la cajera: entrar, fiesta, caja, VENDER;
-5. cobrar e imprimir: COBRAR con `CobroBarra`, guardar con `BarraDeLaCaja.vender` **antes** de imprimir, `subirYa` con internet, el ticket por
-   Bluetooth con `ModeloTicket.deVenta` y su PDF (58 mm), REIMPRIMIR; sin impresora, la venta igual queda y se avisa;
-6. cerrar la caja: contado a ciegas, `CierreDeBarra`, `cerrarCaja`, el papel y el PDF del cierre;
-7. el jefe en la PC: catálogo con fotos (el depósito `barra` de Storage, con su SQL aparte, e `ImagenDeProducto`), precios con stock y "copiar
-   de otra fiesta", CAJAS (`ResumenDeCajas`, el stock con los que están en aviso arriba), anular con motivo, PDF 58 mm y A4, la lista de precios;
-8. el jefe en la web del iPhone, sobre `BarraNube`;
-9. Android con su firma: la clave la genero yo fuera del repo (`Documentos\Junior Eventos\claves\`), `key.properties` fuera de git, y el
-   usuario la copia a un lugar seguro;
-10. de punta a punta, sin internet, con modo avión;
-11. Entradas, etapas 4 a 6 (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`);
-12. versión y publicación, cuando el usuario diga: foto de la mora antes, los dos SQL (v76 y v77) con su OK, release de Windows, web y APK
-    firmado, foto después.
+**Al 4-nov: la tabla de "Para retomar en otro chat", arriba, es la que vale.** Esto queda como el detalle de cada etapa:
+- **5. Cobrar e imprimir:** cobrar, guardar antes de imprimir, subir con internet y los vales, **hechos en la etapa 4**. Falta REIMPRIMIR con
+  freno, ANULAR de la cajera, el ticket con precios por Bluetooth y su PDF (58 mm).
+- **6. Cerrar la caja:** contado a ciegas, `CierreDeBarra`, `cerrarCaja`, el papel y el PDF del cierre.
+- **7. El jefe en la PC:** catálogo con fotos (**las 74 de la biblioteca ya están**; subir una propia necesita el depósito `barra` de Storage,
+  con su SQL aparte, y la guardada en el equipo ya está en `imagenDelProducto`), precios con stock y "copiar de otra fiesta", CAJAS
+  (`ResumenDeCajas`, el stock con los que están en aviso arriba), anular con motivo, PDF 58 mm y A4, la lista de precios.
+- **8. El jefe en la web del iPhone,** sobre `BarraNube`.
+- **9. Android con su firma:** la clave la genero yo fuera del repo (`Documentos\Junior Eventos\claves\`), `key.properties` fuera de git, y el
+  usuario la copia a un lugar seguro.
+- **10. De punta a punta,** sin internet, con modo avión.
+- **11. Entradas, etapas 4 a 6** (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`).
+- **12. Versión y publicación,** cuando el usuario diga: foto de la mora antes, los SQL nuevos que haya (los de v76 y v77 ya están corridos),
+  release de Windows, web y APK firmado, foto después.
 
 **Lo que le toca al usuario:** comprar la tablet cuanto antes, así el APK se prueba en ella desde ya, y copiar a un lugar seguro la clave de firma
 cuando exista. **Antes de instalar la app firmada en su celular, desinstalar la ventana de prueba** (`ar.com.junioreventos.app`, con la clave de

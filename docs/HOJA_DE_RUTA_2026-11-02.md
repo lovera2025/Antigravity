@@ -17,21 +17,19 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 - **La base comparada con la foto, el 2-nov:** los mismos 643 alumnos y los mismos 16 congelados, sin ninguna mora
   revivida. Los únicos cambios son dos cobros normales.
 
-## Dónde estamos (3-nov, mañana)
+## Dónde estamos (4-nov, noche)
 
 | Paso | Estado |
 |---|---|
 | 1. La impresora | **Hecha el 3-nov:** papel mirado (acentos con la tabla 850, renglones por palabras, QR nativo, el isotipo); imprime desde la PC y desde un celular Android, y se conecta sola. `docs/CONTEXTO_BARRA_2026-11-02.md` |
-| 2. El plano | Programado y probado con el mouse, sin publicar. `docs/CONTEXTO_v6.3.0_2026-11-02.md` |
-| 3. Operadores | Programado y probado con el mouse, sin publicar, con el SQL sin correr. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
-| 4. La barra | **Plan aprobado: `docs/PLAN_BARRA_2026-11-03.md`, 12 etapas.** Etapas 1 a 4 hechas el 3-nov (la impresora, los datos v77 con el SQL sin correr, las cuentas y la cajera vendiendo con sus tres cobros y el recargo), y el 3b: los vales que pidió el jefe. Para mirarla: `tool/barra_prueba.dart`. Sigue la 5 (reimprimir, anular) |
+| 2. El plano | **PUBLICADO el 4-nov en la 6.3.0** (y la 6.3.1 encima, con las entradas sin cargo solo de la mesa del contrato). **Instalado en las tres PCs**; la foto de la mora "después" dio vacía. `docs/CONTEXTO_v6.3.0_2026-11-02.md`, `docs/CONTEXTO_v6.3.1_2026-11-04.md` |
+| 3. Operadores | Etapas 1 a 3 **publicadas apagadas** en la 6.3.0, con su SQL (v76) corrido. Hasta la próxima versión: nadie con Entradas, nadie sin Cobros. `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
+| 4. La barra | Etapas 1 a 4 **publicadas apagadas** en la 6.3.0, con su SQL (v77) corrido. **En la rama, sin publicar:** el stock de toda la fiesta, los dos diseños y 74 fotos de tragos y marcas. Sigue la 5 (reimprimir, anular). La tabla de lo que queda, en "Para retomar en otro chat" de `docs/CONTEXTO_BARRA_2026-11-02.md` |
 | 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
-| Publicar | Todo en una sola versión, cuando el usuario diga. **Hoy la rama lleva el plano, operadores y la barra (etapas 1 a 3)** |
+| Publicar | **Decidido el 4-nov: nada más hasta terminar todas las etapas**, y después una sola versión antes del 4-dic, preguntando |
 
-**Lo que sigue:** la etapa 5 del plan de la barra (reimprimir con freno, anular también la cajera, el ticket con precios si lo piden) y
-probar si la impresora avisa que le falta papel. El detalle, en "Para retomar en otro chat" de `docs/CONTEXTO_BARRA_2026-11-02.md`. Publicar
-la rama lleva dos SQL que corren antes de instalar: los permisos (v76) y la barra (v77), y antes la migración v77 se vuelve a probar sobre
-una copia de la base real.
+**Lo que sigue:** la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el ticket con precios si lo piden) y probar si la
+impresora avisa que le falta papel. Los SQL de v76 y v77 ya están en la nube: lo nuevo que necesite la nube va en tablas nuevas.
 
 > Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
 > corto de la etapa 5 antes de programar."

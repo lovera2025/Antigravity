@@ -3,7 +3,8 @@
 2-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Plan: `docs/PLAN_NUMEROS_EN_ORDEN_2026-10-29.md`. El orden de todo lo que
 sigue: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
-**Estado (4-nov): PUBLICADA** (SQL, release y web). Falta instalar las tres PCs y la foto de la mora "después". Se publica sola, antes que la barra, porque el usuario quería armar el plano el 4-nov y los
+**Estado (4-nov): PUBLICADA** (SQL, release y web), y el mismo día la 6.3.1 encima. **Las tres PCs con la 6.3.1** y la foto de la mora
+"después" comparada: vacía (ver `docs/CONTEXTO_v6.3.1_2026-11-04.md`). Nada pendiente. Se publica sola, antes que la barra, porque el usuario quería armar el plano el 4-nov y los
 sorteos son en noviembre ("una sola versión cuando esté completo" cedió por eso: decisión del usuario el 3-nov). Ver "La
 publicación (4-nov)", abajo.
 

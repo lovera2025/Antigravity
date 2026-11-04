@@ -66,5 +66,9 @@ Con el OK del usuario ("Sí, publicala").
 **La PC de la casa ya la tiene** (lo dijo el usuario el 4-nov): la migración a la v77 corrió a las 13:43, con la 6.3.0, y dejó
 `backups\antes_de_v77.db`.
 
-**Falta:** las dos PCs de la oficina (el operario primero), y después la foto de la mora "después" (se compara con la "antes de
-6.3.0": esta versión no toca la mora).
+**Las dos de la oficina, también** (lo dijo el usuario el 4-nov, a la tarde): **las tres PCs en la 6.3.1.**
+
+**La foto de la mora "después de 6.3.1"**, 16:32 (`foto_id` `1d2b6ce8-7222-4b83-98e6-5b1f1310d91d`): 643 alumnos y 26 congelados, igual que
+la de antes. **La comparación de la sección 3 de `supabase/mora_fotos.sql` dio vacía**: ninguna mora subió, ninguna eximición ni perdón
+cambió, nada se descongeló. Y `mora_cambios` no anotó ninguna escritura de la mora desde la foto de antes (13:30). **Nada pendiente de
+esta versión.**
