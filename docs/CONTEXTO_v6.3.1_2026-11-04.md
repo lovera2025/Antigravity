@@ -63,5 +63,8 @@ Con el OK del usuario ("Sí, publicala").
 3. **La web:** publicada `arguello-events-il5pmk3ph`; la de antes es `arguello-events-n8t71m964` (6.3.0). `version.json` da
    `6.3.1`/`63`; `/`, `?cotizar`, `/lista` y `/op` responden.
 
-**Falta:** que el usuario instale las tres PCs (el operario primero) y avise, y la foto de la mora "después" (la de "antes de 6.3.0"
-sirve: esta versión no toca la mora).
+**La PC de la casa ya la tiene** (lo dijo el usuario el 4-nov): la migración a la v77 corrió a las 13:43, con la 6.3.0, y dejó
+`backups\antes_de_v77.db`.
+
+**Falta:** las dos PCs de la oficina (el operario primero), y después la foto de la mora "después" (se compara con la "antes de
+6.3.0": esta versión no toca la mora).
