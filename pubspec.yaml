@@ -110,6 +110,9 @@ flutter:
   assets:
     - assets/icons/
     - assets/google_fonts/
+    # Las fotos de los tragos de la barra (Unsplash, licencia libre): cada producto
+    # toma la suya por el nombre (`FotoDeLaBarra`).
+    - assets/barra/
 
   # Las letras del plano del salón, dentro de la app (sin internet el día de la
   # fiesta). Las mismas familias se registran en los tests y en tool/ con

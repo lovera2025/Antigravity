@@ -562,10 +562,12 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                 Icon(icono, size: 20),
                 const SizedBox(width: 10),
                 Text(texto, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                const Spacer(),
-                Flexible(
+                const SizedBox(width: 12),
+                // Todo el resto del ancho es del detalle, contra el borde derecho.
+                Expanded(
                   child: Text(
                     detalle,
+                    textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
                   ),

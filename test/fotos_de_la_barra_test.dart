@@ -113,6 +113,5 @@ void main() {
       expect(f.existsSync(), isTrue, reason: 'falta ${f.path}');
       expect(f.lengthSync(), lessThan(120 * 1024), reason: '${f.path}: achicarla');
     }
-    // Se prende cuando el usuario elija las fotos de la hoja (4-nov) y se bajen.
-  }, skip: 'las fotos se suman cuando el usuario las elija');
+  });
 }

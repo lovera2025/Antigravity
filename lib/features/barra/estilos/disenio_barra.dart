@@ -196,6 +196,9 @@ ThemeData temaDeVender(DisenioBarra d, {ThemeData? base}) {
     error: const Color(0xFFFF6B5E),
   );
   final letras = (base ?? ThemeData(brightness: Brightness.dark)).textTheme;
+  // Las de los chips salen de las letras de la app: un TextStyle suelto (solo el
+  // color) dejaba los chips sin la familia de la app.
+  final letraChip = letras.labelLarge ?? const TextStyle();
   final tema = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
@@ -213,8 +216,8 @@ ThemeData temaDeVender(DisenioBarra d, {ThemeData? base}) {
     chipTheme: ChipThemeData(
       backgroundColor: noche ? Colors.transparent : const Color(0xFF26282D),
       selectedColor: acento,
-      labelStyle: TextStyle(color: noche ? const Color(0xFFCBC6B8) : const Color(0xFFE9E9E9)),
-      secondaryLabelStyle: TextStyle(color: esquema.onPrimary, fontWeight: FontWeight.bold),
+      labelStyle: letraChip.copyWith(color: noche ? const Color(0xFFCBC6B8) : const Color(0xFFE9E9E9)),
+      secondaryLabelStyle: letraChip.copyWith(color: esquema.onPrimary, fontWeight: FontWeight.bold),
       side: BorderSide(color: noche ? const Color(0x1AFFFFFF) : Colors.transparent),
       showCheckmark: false,
       shape: const StadiumBorder(),
