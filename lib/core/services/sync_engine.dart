@@ -370,6 +370,7 @@ class SyncEngine {
     'barra_cajas': 'updated_at',
     'barra_ventas': 'updated_at',
     'barra_anulaciones': 'updated_at',
+    'sillas_puerta': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1186,6 +1187,9 @@ class SyncEngine {
     'barra_cajas',
     'barra_ventas',
     'barra_anulaciones',
+    // Las sillas que se suman la noche de la fiesta (v78): con dos notebooks en
+    // el salón, la otra tiene que ver en segundos que esa mesa ya está en el tope.
+    'sillas_puerta',
   ];
 
   /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
@@ -1556,6 +1560,8 @@ class SyncEngine {
       // arriba antes, o la FK de la nube rechaza la fila.
       if (table == 'sillas_reparto' || table == 'entradas_retiro') return 4;
     if (table == 'mora_congelada') return 4;
+      // Cuelga del alumno: el contrato sube antes.
+      if (table == 'sillas_puerta') return 4;
       if (table == 'sorteos_mesas') return 2;
       // Cuelgan del evento, como el registro del sorteo.
       if (table == 'planos_evento' || table == 'mesas_movimientos') return 2;
@@ -1935,6 +1941,7 @@ class SyncEngine {
       _pullTable(db, 'barra_cajas', 'updated_at'),
       _pullTable(db, 'barra_ventas', 'updated_at'),
       _pullTable(db, 'barra_anulaciones', 'updated_at'),
+      _pullTable(db, 'sillas_puerta', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2435,6 +2442,9 @@ class SyncEngine {
     // haber internet para ir a buscarlos.
     'operadores_caja',
     'permisos_operador',
+    // Las sillas que ya se sumaron esa noche (v78): si la notebook se reinicia
+    // sin internet, tiene que saber cuáles mesas ya están en el tope.
+    'sillas_puerta',
   ];
 
   /// Baja ya las [tablasDeLaPuerta], para "Lista para trabajar sin internet"
@@ -2876,6 +2886,23 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v78: las 13 columnas de `SillaPuerta.toMap()`. Una que falte vuelve a
+      // su default en cada pull: una silla quitada volvería a estar vigente.
+      'sillas_puerta': [
+        'id',
+        'evento_id',
+        'contrato_alumno_id',
+        'mesa',
+        'cantidad',
+        'vale',
+        'anotado_por',
+        'nota',
+        'quitada_at',
+        'quitada_por',
+        'quitada_motivo',
+        'created_at',
+        'updated_at',
+      ],
       'permisos_operador': [
         'id',
         'operador_id',
@@ -3131,6 +3158,8 @@ class SyncEngine {
     'barra_cajas': 'cerrarla la actualiza: una caja no se borra',
     'barra_ventas': 'una venta nunca se edita ni se borra: anularla es otra fila',
     'barra_anulaciones': 'solo se agregan filas, una por venta, con id fijo',
+    'sillas_puerta':
+        'solo se agregan filas: quitar una silla le pone quitada_at, la fila no se saca',
   };
 
   /// Para los tests: las tablas que se revisan.
