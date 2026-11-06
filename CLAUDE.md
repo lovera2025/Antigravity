@@ -93,7 +93,7 @@ el reloj de Recepción (`TiemposAMano`, vive en la PC, viaja por `tiempos_totem`
 noche**); **la recepcionista no toca plata**: la barra la cobra como producto y da un vale, y la puerta la anota con el número del vale en
 `sillas_puerta` (v78, filas que solo se agregan; quitar deja la huella con motivo). En la oficina, con la fiesta sorteada, no se suman sillas
 extra al contrato salvo en modo jefe. Ver "Las sillas de la noche" en El tótem. SQL `20261105120000_sillas_puerta.sql` **sin correr**; falta
-la prueba de punta a punta (`tool/central_puerta_prueba.dart`), que hace Claude en un sandbox.
+la prueba de punta a punta quedó hecha en el sandbox el 6-nov (`tool/puerta_sandbox_test.dart`).
 
 **Las pruebas de punta a punta las hace Claude, en un sandbox, y se asegura de que salgan bien** (regla del usuario, 6-nov). Aisladas:
 los arneses `tool/*_prueba.dart` en memoria, sin la base real ni la nube; el navegador de la app con pestañas que hacen de celulares.

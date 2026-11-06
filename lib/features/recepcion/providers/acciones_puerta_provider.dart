@@ -42,6 +42,11 @@ abstract class AccionesPuerta {
   /// ingresó a las 22:41 · Pato" cuando la central no hizo lo que se pidió.
   Stream<String> get avisos;
 
+  /// Lo que la central confirmó después del toque, para decirlo en verde: "Silla
+  /// sumada a la mesa 13 de GÓMEZ, ANA." (en el celular; una silla anotada sin
+  /// conexión se confirma al volver).
+  Stream<String> get hechos;
+
   /// Suma una silla de la noche a la familia de [grupo] (6.4.0): con el vale de
   /// la barra, a la mesa de [datos] o, si se llenó, a otra de la familia. Lo
   /// decide el mismo candado que a los celulares. [puerta] es la lista que se ve.
@@ -71,7 +76,15 @@ class ResultadoSilla {
   final bool hecho;
   final String texto;
 
-  const ResultadoSilla({required this.hecho, required this.texto});
+  /// En el celular sin conexión: quedó guardada y se manda al volver. Se dice
+  /// como aviso, no en verde.
+  final bool porMandar;
+
+  const ResultadoSilla({
+    required this.hecho,
+    required this.texto,
+    this.porMandar = false,
+  });
 
   /// De la respuesta del candado ([ResolvedorDePedidos]).
   factory ResultadoSilla.deRespuesta(
@@ -92,13 +105,14 @@ class ResultadoSilla {
         texto: aviso is String ? aviso : 'No se hizo nada.',
       );
     }
-    final mesa = r['mesa'];
-    final hecho = sumar
-        ? 'Silla sumada a la mesa $mesa de $nombre.'
-        : 'Silla quitada de la mesa $mesa de $nombre.';
     return ResultadoSilla(
       hecho: true,
-      texto: aviso is String ? '$aviso $hecho' : hecho,
+      texto: textoSillaHecha(
+        sumar: sumar,
+        mesa: r['mesa'],
+        nombre: nombre,
+        aviso: aviso is String ? aviso : null,
+      ),
     );
   }
 }
@@ -158,6 +172,9 @@ class AccionesDeEstaPc implements AccionesPuerta {
 
   @override
   Stream<String> get avisos => const Stream.empty();
+
+  @override
+  Stream<String> get hechos => const Stream.empty();
 
   @override
   String get quienSoy => _quienOpera();
@@ -234,9 +251,13 @@ class AccionesDelCelular implements AccionesPuerta {
   Stream<String> get avisos => _cliente.avisos;
 
   @override
+  Stream<String> get hechos => _cliente.hechos;
+
+  @override
   String get quienSoy => _cliente.nombre ?? 'Celular';
 
-  /// La central contesta después: si no la pudo sumar, lo dice por [avisos].
+  /// La central contesta después: lo que hizo llega por [hechos] y lo que no
+  /// pudo, por [avisos].
   ResultadoSilla get _mandado => _cliente.estado == EstadoDelPuesto.conectado
       ? const ResultadoSilla(
           hecho: true,
@@ -244,6 +265,7 @@ class AccionesDelCelular implements AccionesPuerta {
         )
       : const ResultadoSilla(
           hecho: true,
+          porMandar: true,
           texto: 'Sin conexión con la central: se manda sola al volver.',
         );
 

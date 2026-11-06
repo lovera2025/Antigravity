@@ -308,14 +308,21 @@ DecisionSilla decidirSilla({
         return DecisionSilla._nada(yaEnElTope(grupo.titular.nombre));
       }
       final pedida = datos.mesa;
+      final String? aviso;
+      if (pedida == null || pedida == mesa.numero) {
+        aviso = null;
+      } else if (familia.mesa(pedida) != null) {
+        aviso = 'La mesa $pedida ya estaba llena: la silla va a la mesa '
+            '${mesa.numero}.';
+      } else {
+        aviso = 'La mesa $pedida no es de la familia: la silla va a la mesa '
+            '${mesa.numero}.';
+      }
       return DecisionSilla._(
         QueHaceLaCentral.sumarSilla,
         mesa: mesa.numero,
         vale: vale,
-        aviso: pedida != null && pedida != mesa.numero
-            ? 'La mesa $pedida ya estaba llena: la silla va a la mesa '
-                '${mesa.numero}.'
-            : null,
+        aviso: aviso,
       );
     case QuePide.quitarSilla:
       final silla = deLaNoche
@@ -333,6 +340,21 @@ DecisionSilla decidirSilla({
     case QuePide.tiemposTotem:
       return const DecisionSilla._nada('No se entendió el pedido.');
   }
+}
+
+/// Lo que se dice cuando una silla se sumó o se quitó: "Silla sumada a la mesa
+/// 13 de GÓMEZ, ANA.", con el aviso del candado adelante si lo hubo ("La mesa
+/// 12 ya estaba llena: …"). Lo usan la PC y el celular, así dicen lo mismo.
+String textoSillaHecha({
+  required bool sumar,
+  required Object? mesa,
+  required String nombre,
+  String? aviso,
+}) {
+  final hecho = sumar
+      ? 'Silla sumada a la mesa $mesa de $nombre.'
+      : 'Silla quitada de la mesa $mesa de $nombre.';
+  return aviso == null || aviso.isEmpty ? hecho : '$aviso $hecho';
 }
 
 /// "PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa."

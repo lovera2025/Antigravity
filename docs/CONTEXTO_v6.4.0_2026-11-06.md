@@ -43,9 +43,32 @@ silla en Recepción. Quitar una deja la huella: quién, cuándo y por qué. Nada
   asegurarse de que todo está bien**: primero la prueba de punta a punta.
 - La base local pasa a la v78 (`sillas_puerta`), probada sobre la copia de la base real.
 
+## La prueba de punta a punta, hecha (6-nov, en el sandbox)
+
+Con `tool/puerta_sandbox_test.dart`: la central de verdad escuchando solo en esta PC, la base en memoria (sin la base real ni la
+nube), la página del celular armada (`build/puesto`) y dos pestañas del navegador como dos celulares ("Juli" en `127.0.0.1`, "Pato"
+en `localhost`: cada una guarda su nombre), más la PC sumando por el mismo candado (órdenes por archivo).
+
+| Qué | Salió |
+|---|---|
+| Dos celulares suman a la vez a una familia con un lugar | Entra una; el otro, con la hoja vieja todavía abierta ("Le queda 1"), recibe "PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa." Una sola fila en la base. |
+| El mismo vale dos veces, escrito distinto ("2 0040", "2-0040", "Caja-3-N°-101") | "El vale 2-40 ya se usó para PÉREZ, JULIANA." Desde la PC, igual. |
+| Quitar desde el otro celular | QUITAR apagado sin motivo; con motivo, la línea queda tachada con "quitada por Pato 12:58: devolvieron el vale" y la familia recupera el lugar. |
+| El conteo de la noche | Se actualiza al instante en los dos celulares ("4 sillas sumadas · vales … · 1 quitada"). |
+| La PC suma con los celulares conectados | Les llega al instante ("vale 3-101 · PC"); en el tope, "ya no puede agregar". |
+| El reloj desde el celular | La PC recibe los segundos (6 s + 8 s). |
+| La central se corta | El celular dice "Sin conexión con la PC · 1 por mandar"; al volver la manda sola y dice "Conectado · se mandó 1". |
+
+**Lo que encontró y se arregló:** (1) después de mandar una silla anotada sin conexión, seguía diciendo "se manda sola al volver",
+y en verde: ahora eso va en ámbar y, al confirmarlo la central, dice en verde "Silla sumada a la mesa 15 de ACOSTA, LUCÍA."
+(`ClienteCentral.hechos`, `AccionesPuerta.hechos`); (2) una mesa que no es de la familia se decía "ya estaba llena"; (3) la pista
+del vale no entraba en el celular ("Caja y número: 2 0017"). Probado de nuevo en el sandbox después del arreglo.
+
 ## Lo que falta
 
-- **La prueba de punta a punta** (punto 4 de la verificación del plan). **La hace Claude, en un sandbox, hasta que salga bien**
+- **Lo que pasa con el vale** (pregunta del usuario, 6-nov): quién lo imprime, quién se lo queda y qué pasa si la barra anula esa
+  venta. Ver "Pregunta abierta: el vale de la silla", abajo.
+- ~~**La prueba de punta a punta**~~ (hecha, arriba). Lo que decía: **La hace Claude, en un sandbox, hasta que salga bien**
   (regla del usuario del 6-nov: "las pruebas las haces vos en un sandbox y te aseguras que sale bien"; no se le pide a él que pruebe).
   Aislada: `flutter run -d windows -t tool/central_puerta_prueba.dart` (Recepción en memoria, sin la base real ni la nube), la página
   del celular armada en `build/puesto`, y pestañas del navegador como celulares. Sumar desde dos celulares a la vez a una familia con
@@ -55,3 +78,16 @@ silla en Recepción. Quitar una deja la huella: quién, cuándo y por qué. Nada
 - **Para la barra (sus etapas, no acá):** "Silla extra" en el catálogo y en el cierre, quién ve esas ventas (la encargada), y la
   comparación sillas vendidas contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
 - Después, la etapa 5 de la barra: `docs/CONTEXTO_BARRA_2026-11-02.md`, "Para retomar en otro chat".
+
+## Pregunta abierta: el vale de la silla (6-nov)
+
+Lo que está decidido (jefe, 5-nov): la familia paga la silla en **cualquier caja de la barra** (la cajera que cobra; la encargada
+también cobra), que la vende como el producto "Silla extra" e imprime su vale como cualquier otro ("Caja 2 · Marta · N° 0017"). La
+familia lleva ese vale a la recepcionista de adentro, que suma la silla con ese número.
+
+Lo que **no** está decidido ni programado:
+- **Quién se queda el papel.** Con los tragos, el barman se queda el vale y ese es el control. Para la silla, lo lógico es que se lo
+  quede la recepcionista.
+- **Si la barra anula esa venta**, hoy la silla sigue sumada en la puerta: las dos cosas no se conocen (son dos notebooks, y el vale
+  es solo un número). Hoy lo único es que la recepcionista la quite con el motivo, si alguien le avisa, y la comparación de la
+  oficina (`docs/pendientes/sillas-barra-vs-puerta.md`) lo mostraría al otro día.

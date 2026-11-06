@@ -187,7 +187,7 @@ class _HojaSumarSillaState extends State<HojaSumarSilla> {
                 decoration: _campo(
                   context,
                   etiqueta: 'Número del vale',
-                  pista: 'Caja y número, como dice el vale: 2 0017',
+                  pista: 'Caja y número: 2 0017',
                   ayuda:
                       'La silla se cobra en la caja de la barra: pedí el vale.',
                 ),

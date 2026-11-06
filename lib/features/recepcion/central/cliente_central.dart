@@ -97,6 +97,13 @@ class ClienteCentral extends ChangeNotifier {
   /// ingresó a las 22:41 · Pato.".
   Stream<String> get avisos => _avisos.stream;
 
+  final _hechos = StreamController<String>.broadcast();
+
+  /// Lo que la central confirmó de una silla: "Silla sumada a la mesa 13 de
+  /// GÓMEZ, ANA.". Una anotada sin conexión se confirma al volver, y así no
+  /// queda dicho "se manda al volver" cuando ya se mandó.
+  Stream<String> get hechos => _hechos.stream;
+
   WebSocketChannel? _canal;
   StreamSubscription<dynamic>? _escucha;
   Timer? _reintento;
@@ -244,6 +251,7 @@ class ClienteCentral extends ChangeNotifier {
     unawaited(_escucha?.cancel());
     unawaited(_canal?.sink.close());
     unawaited(_avisos.close());
+    unawaited(_hechos.close());
     super.dispose();
   }
 
@@ -451,7 +459,24 @@ class ClienteCentral extends ChangeNotifier {
     _sucia = true;
     await _guardarPendientes();
     final aviso = m['aviso'];
-    if (aviso is String && aviso.isNotEmpty && !_avisos.isClosed) {
+    final esSilla = hecho.pedido.que == QuePide.sumarSilla ||
+        hecho.pedido.que == QuePide.quitarSilla;
+    if (esSilla && m['hizo'] != 'nada') {
+      final nombre = puerta?.grupos
+              .where((g) => g.titular.id == hecho.pedido.personaId)
+              .firstOrNull
+              ?.titular
+              .nombre ??
+          'la familia';
+      if (!_hechos.isClosed) {
+        _hechos.add(textoSillaHecha(
+          sumar: hecho.pedido.que == QuePide.sumarSilla,
+          mesa: m['mesa'],
+          nombre: nombre,
+          aviso: aviso is String ? aviso : null,
+        ));
+      }
+    } else if (aviso is String && aviso.isNotEmpty && !_avisos.isClosed) {
       _avisos.add(aviso);
     }
     if (_alVolverHay > 0 && _pendientes.isEmpty) {

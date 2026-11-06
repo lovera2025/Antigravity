@@ -457,8 +457,12 @@ void main() {
       await central.cerrar();
       await _hasta(() => c.estado == EstadoDelPuesto.sinConexion, 'el corte');
 
+      final hechos = <String>[];
+      final sub = c.hechos.listen(hechos.add);
+      addTearDown(sub.cancel);
       await c.sumarSilla(familia(c), const DatosSilla(mesa: 12, vale: '1 0012'));
       expect(c.sillasPorMandar, 1);
+      expect(hechos, isEmpty, reason: 'todavía no se mandó');
       expect(navegador.datos['puesto_pendientes'], contains('sumarSilla'));
       // Una silla no es un ingreso: el titular no figura "por mandar".
       expect(c.marca(familia(c).titular.id), isNull);
@@ -473,6 +477,28 @@ void main() {
         'la lista con la silla',
       );
       expect(c.sillasPorMandar, 0);
+      // Al volver se dice que se sumó: si no, quedaba "se manda sola al volver"
+      // (lo encontró la prueba en el sandbox, 6-nov).
+      await _hasta(() => hechos.isNotEmpty, 'la confirmación');
+      expect(hechos.single, 'Silla sumada a la mesa 12 de PÉREZ, JULIANA.');
+    });
+
+    test('quitar se confirma por los hechos, con la mesa', () async {
+      final c = await conMasivo(_NavegadorEnMemoria());
+      final hechos = <String>[];
+      final sub = c.hechos.listen(hechos.add);
+      addTearDown(sub.cancel);
+      await c.sumarSilla(familia(c), const DatosSilla(vale: '1 0012'));
+      await _hasta(() => familia(c).movimientos.isNotEmpty, 'la silla');
+      await c.quitarSilla(
+        familia(c),
+        DatosSilla(
+          sillaId: familia(c).movimientos.single.id,
+          motivo: 'devolvieron el vale',
+        ),
+      );
+      await _hasta(() => hechos.length == 2, 'las dos confirmaciones');
+      expect(hechos.last, 'Silla quitada de la mesa 12 de PÉREZ, JULIANA.');
     });
 
     test('si no entra, la central lo dice por los avisos', () async {

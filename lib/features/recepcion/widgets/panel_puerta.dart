@@ -70,6 +70,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   _Aviso? _aviso;
   final _ocupados = <String>{};
   StreamSubscription<String>? _avisosDeLaCentral;
+  StreamSubscription<String>? _hechosDeLaCentral;
 
   @override
   void initState() {
@@ -79,11 +80,17 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     _avisosDeLaCentral = ref.read(accionesPuertaProvider).avisos.listen((t) {
       if (mounted) setState(() => _aviso = _Aviso(t));
     });
+    // Lo que la central confirmó después (una silla anotada sin conexión, que se
+    // mandó al volver).
+    _hechosDeLaCentral = ref.read(accionesPuertaProvider).hechos.listen((t) {
+      if (mounted) setState(() => _aviso = _Aviso(t, bien: true));
+    });
   }
 
   @override
   void dispose() {
     unawaited(_avisosDeLaCentral?.cancel());
+    unawaited(_hechosDeLaCentral?.cancel());
     _busqueda.dispose();
     _foco.dispose();
     super.dispose();
@@ -949,7 +956,9 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     setState(() => _ocupados.add(clave));
     try {
       final r = await acciones.sumarSilla(widget.eventoId, p, g, datos);
-      if (mounted) setState(() => _aviso = _Aviso(r.texto, bien: r.hecho));
+      if (mounted) {
+        setState(() => _aviso = _Aviso(r.texto, bien: r.hecho && !r.porMandar));
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _aviso = const _Aviso(
@@ -981,7 +990,9 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
             g,
             DatosSilla(sillaId: s.id, motivo: motivo),
           );
-      if (mounted) setState(() => _aviso = _Aviso(r.texto, bien: r.hecho));
+      if (mounted) {
+        setState(() => _aviso = _Aviso(r.texto, bien: r.hecho && !r.porMandar));
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _aviso = const _Aviso(

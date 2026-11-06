@@ -47,6 +47,7 @@ class ClienteDePrueba extends ClienteCentral {
   final datos = <(String, String?)>[];
   var reconexiones = 0;
   final avisosDePrueba = StreamController<String>.broadcast();
+  final hechosDePrueba = StreamController<String>.broadcast();
 
   void cambio() => notifyListeners();
 
@@ -68,6 +69,8 @@ class ClienteDePrueba extends ClienteCentral {
   int get seMandaron => mandados;
   @override
   Stream<String> get avisos => avisosDePrueba.stream;
+  @override
+  Stream<String> get hechos => hechosDePrueba.stream;
   @override
   String? marca(String personaId) => marcas[personaId];
 

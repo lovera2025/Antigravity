@@ -289,6 +289,35 @@ void main() {
       expect(d.aviso, 'La mesa 12 ya estaba llena: la silla va a la mesa 13.');
     });
 
+    test('una mesa que no es de la familia no se dice "llena"', () {
+      // Lo encontró la prueba en el sandbox (6-nov): pedir la 101 decía "ya
+      // estaba llena".
+      final d = decidir(sumar(gomez, mesa: 101), const []);
+      expect(d.mesa, 14);
+      expect(d.aviso, 'La mesa 101 no es de la familia: la silla va a la mesa 14.');
+    });
+
+    test('lo hecho se dice igual en la PC y en el celular', () {
+      expect(
+        textoSillaHecha(sumar: true, mesa: 13, nombre: 'GÓMEZ, ANA'),
+        'Silla sumada a la mesa 13 de GÓMEZ, ANA.',
+      );
+      expect(
+        textoSillaHecha(
+          sumar: true,
+          mesa: 13,
+          nombre: 'PÉREZ, JULIANA',
+          aviso: 'La mesa 12 ya estaba llena: la silla va a la mesa 13.',
+        ),
+        'La mesa 12 ya estaba llena: la silla va a la mesa 13. '
+        'Silla sumada a la mesa 13 de PÉREZ, JULIANA.',
+      );
+      expect(
+        textoSillaHecha(sumar: false, mesa: 14, nombre: 'GÓMEZ, ANA'),
+        'Silla quitada de la mesa 14 de GÓMEZ, ANA.',
+      );
+    });
+
     test('dos pedidos seguidos con la base del momento: el segundo no suma', () {
       // Le queda un lugar: una ya sumada en la 13.
       final base = [silla(juli, 13, '1-5')];

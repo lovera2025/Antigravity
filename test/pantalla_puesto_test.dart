@@ -296,9 +296,23 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
       await tester.pumpAndSettle();
       expect(cliente.sillasPedidas, hasLength(1));
+      final porMandar = tester.widget<Text>(
+          find.text('Sin conexión con la central: se manda sola al volver.'));
+      expect(porMandar.style!.color, const Color(0xFFFBBF24),
+          reason: 'es un aviso, no algo hecho: en ámbar, no en verde');
+
+      // Al volver la conexión, la central la confirma y eso es lo que queda.
+      cliente.hechosDePrueba
+          .add('Silla sumada a la mesa 14 de ACOSTA, LUCÍA.');
+      // El aviso llega por un stream: se dibuja en el cuadro siguiente.
+      await tester.pump();
+      await tester.pump();
+      final hecho =
+          tester.widget<Text>(find.text('Silla sumada a la mesa 14 de ACOSTA, LUCÍA.'));
+      expect(hecho.style!.color, const Color(0xFF4ADE80));
       expect(
         find.text('Sin conexión con la central: se manda sola al volver.'),
-        findsOneWidget,
+        findsNothing,
       );
     });
 
