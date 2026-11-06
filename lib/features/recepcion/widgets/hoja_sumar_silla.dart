@@ -48,7 +48,9 @@ InputDecoration _campo(
       hintStyle: _letra(context, size: 14, color: _suave(context)),
       helperText: ayuda,
       helperStyle: _letra(context, size: 12, color: _suave(context)),
-      helperMaxLines: 2,
+      // Tres: con el contador al lado, en el celular la ayuda de quitar se cortaba
+      // ("con quién y por qu…", visto en el sandbox el 6-nov).
+      helperMaxLines: 3,
       counterStyle: _letra(context, size: 11, color: _suave(context)),
       border: const OutlineInputBorder(),
     );

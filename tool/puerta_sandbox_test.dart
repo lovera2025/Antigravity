@@ -19,6 +19,10 @@
 //                   segundos del tótem.
 //   pc_sumar      → adentro, "contrato vale [mesa]": la PC suma una silla, por
 //                   el mismo candado que los celulares. Contesta en pc.txt.
+//   vender        → adentro, "<caja>": la barra de la fiesta vende una silla en esa caja
+//                   y escribe el vale en vale.txt (el texto que sale en el papel).
+//   anular        → adentro, "<caja> <número>": la barra anula esa venta, y le llega a
+//                   la puerta como si hubiera bajado.
 //   apagar        → apaga la central (los celulares quedan sin conexión).
 //   prender       → la vuelve a prender, con el mismo código.
 //   parar         → termina.
@@ -40,6 +44,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/barra/cuentas/vales_de_barra.dart';
+import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
+import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
+import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/recepcion/central/central_provider.dart';
@@ -92,6 +101,7 @@ void main() {
     );
     puerta.invitados.hora = () => DateTime.now().toUtc();
     puerta.sillasPuerta.hora = () => DateTime.now().toUtc();
+    puerta.barra.reloj = () => DateTime.now().toUtc();
 
     final container = ProviderContainer(overrides: [
       eventosActivosProvider.overrideWith(
@@ -101,6 +111,7 @@ void main() {
       contratosRepositoryProvider.overrideWithValue(puerta.contratos),
       sillasRepartoRepositoryProvider.overrideWithValue(puerta.sillas),
       sillasPuertaRepositoryProvider.overrideWithValue(puerta.sillasPuerta),
+      barraDelJefeProvider.overrideWithValue(puerta.barra),
       syncEngineProvider.overrideWithValue(puerta.motor),
       connectivityServiceProvider.overrideWithValue(puerta.conexion),
       totemConfigProvider(eventoMasivo).overrideWith(
@@ -144,7 +155,8 @@ void main() {
         }
         for (final s in g.movimientos) {
           b.writeln('    ${textoSillaSumada(s)}'
-              '${s.vigente ? '' : ' — ${textoSillaQuitada(s)}'}');
+              '${s.vigente ? '' : ' — ${textoSillaQuitada(s)}'}'
+              '${g.valeAnulado(s) ? ' [VALE ANULADO EN LA BARRA]' : ''}');
         }
       }
       b
@@ -187,6 +199,60 @@ void main() {
             final linea = '${r.hecho ? 'HECHO' : 'NO'}: ${r.texto}';
             print('PC: $linea');
             File('${ordenes.path}/pc.txt').writeAsStringSync(linea);
+          case 'vender':
+            final numeroCaja = int.parse(contenido);
+            final caja = await puerta.barra.abrirCaja(
+              eventoId: eventoMasivo,
+              operadorId: 'cajera-$numeroCaja',
+              operadorNombre: numeroCaja == 1 ? 'Encargada' : 'Marta',
+              numeroCaja: numeroCaja,
+            );
+            final venta = await puerta.barra.vender(
+              caja: caja,
+              renglones: const [
+                RenglonVenta(
+                  productoId: 'silla',
+                  nombre: 'Silla extra',
+                  precio: 8000,
+                  cantidad: 1,
+                ),
+              ],
+              medio: MedioBarra.efectivo,
+              efectivo: 8000,
+              quien: caja.operadorNombre ?? 'Barra',
+            );
+            puerta.motor.bajo.add({'barra_ventas'});
+            final papel = [
+              for (final l in ModeloTicket.deVale(
+                Vale.deUnaSilla(venta.renglones.single),
+                venta: venta,
+                caja: caja,
+                fiesta: 'PROMOCIÓN DE PRUEBA',
+              ))
+                switch (l) {
+                  GrandeTicket() => '[GRANDE] ${l.texto}',
+                  TextoTicket() => l.texto,
+                  _ => '',
+                },
+            ].join('\n');
+            print('VALE:\n$papel');
+            File('${ordenes.path}/vale.txt').writeAsStringSync(papel);
+          case 'anular':
+            final partes = contenido.split(RegExp(r'\s+'));
+            final numeroCaja = int.parse(partes[0]);
+            final numero = int.parse(partes[1]);
+            final caja = puerta.barra.cajasGuardadas
+                .firstWhere((c) => c.numeroCaja == numeroCaja);
+            final venta = puerta.barra.ventasGuardadas.firstWhere(
+              (v) => v.cajaBarraId == caja.id && v.numero == numero,
+            );
+            await puerta.barra.anular(
+              venta,
+              motivo: 'se arrepintió',
+              quien: 'Encargada',
+            );
+            puerta.motor.bajo.add({'barra_anulaciones'});
+            print('BARRA: anulada la venta $numeroCaja-$numero');
           case 'apagar':
             await central.apagar();
             print('CENTRAL: apagada');
