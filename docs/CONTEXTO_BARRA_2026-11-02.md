@@ -39,6 +39,10 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 **Lo que le toca al usuario:** imprimir un plano antes del primer sorteo; comprar la tablet de la barra; hasta la próxima versión, nadie
 con Entradas y nadie sin Cobros. (Las tres PCs ya tienen la 6.3.1, y la foto de la mora "después" dio vacía.)
 
+**La impresora (6-nov):** las pruebas las hace Claude en el sandbox, pero el papel impreso de verdad necesita la TP-POS58 del usuario.
+**Cuando haga falta imprimir, avisarle** ("después me avisás si necesitás usar la impresora y vemos lo impreso"). Pendiente de eso: la
+foto del vale de la silla (`tool/barra_prueba.dart` ya trae "Silla extra"), junto con los papeles de la etapa 5.
+
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto
 > de la etapa 5 antes de programar."
 
