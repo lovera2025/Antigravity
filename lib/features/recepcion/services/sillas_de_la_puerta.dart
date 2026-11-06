@@ -238,13 +238,21 @@ class ConteoDeLaNoche {
   final List<String> vales;
   final int quitadas;
 
+  /// Las vigentes cuyo vale anuló la barra (`ValesAnulados`): hay que revisarlas.
+  final int conValeAnulado;
+
   const ConteoDeLaNoche({
     required this.sumadas,
     required this.vales,
     required this.quitadas,
+    this.conValeAnulado = 0,
   });
 
-  factory ConteoDeLaNoche.de(Iterable<SillaPuerta> todas) {
+  /// [anulado] dice si el vale de una silla es de una venta que anuló la barra.
+  factory ConteoDeLaNoche.de(
+    Iterable<SillaPuerta> todas, {
+    bool Function(String vale)? anulado,
+  }) {
     final ordenadas = [...todas]
       ..sort((x, y) => x.createdAt.compareTo(y.createdAt));
     final vigentes = ordenadas.where((s) => s.vigente);
@@ -252,6 +260,8 @@ class ConteoDeLaNoche {
       sumadas: vigentes.fold(0, (s, x) => s + x.cantidad),
       vales: [for (final s in vigentes) s.vale],
       quitadas: ordenadas.where((s) => !s.vigente).length,
+      conValeAnulado:
+          anulado == null ? 0 : vigentes.where((s) => anulado(s.vale)).length,
     );
   }
 
@@ -269,14 +279,19 @@ class ConteoDeLaNoche {
       },
       if (vales.length == 1) 'vale ${vales.single}',
       if (vales.length > 1) 'vales ${vales.join(', ')}',
+      if (conValeAnulado > 0) '$conValeAnulado con el vale anulado',
       if (quitadas == 1) '1 quitada',
       if (quitadas > 1) '$quitadas quitadas',
     ];
     return 'Esta noche: ${partes.join(' · ')}';
   }
 
-  Map<String, Object?> toJson() =>
-      {'sumadas': sumadas, 'vales': vales, 'quitadas': quitadas};
+  Map<String, Object?> toJson() => {
+        'sumadas': sumadas,
+        'vales': vales,
+        'quitadas': quitadas,
+        if (conValeAnulado > 0) 'anulados': conValeAnulado,
+      };
 
   static ConteoDeLaNoche? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -285,6 +300,7 @@ class ConteoDeLaNoche {
       sumadas: json['sumadas'] is int ? json['sumadas'] as int : 0,
       vales: vales is List ? [for (final v in vales) '$v'] : const [],
       quitadas: json['quitadas'] is int ? json['quitadas'] as int : 0,
+      conValeAnulado: json['anulados'] is int ? json['anulados'] as int : 0,
     );
   }
 }

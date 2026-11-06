@@ -8,6 +8,7 @@ import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import 'lista_puerta.dart';
 import 'sillas_de_la_puerta.dart';
+import 'vales_anulados.dart';
 
 /// Lo que se ve en Recepción de un evento: quiénes son, dónde se sientan y
 /// quién ya entró.
@@ -39,12 +40,17 @@ class PuertaDelEvento {
   /// Lo que se sumó esa noche en la puerta, en todo el evento (6.4.0).
   final ConteoDeLaNoche conteoDeLaNoche;
 
+  /// Los vales de las ventas que anuló la barra (6.4.0): con esto el candado no deja
+  /// sumar una silla con un vale anulado.
+  final ValesAnulados valesAnulados;
+
   const PuertaDelEvento._({
     required this.masivo,
     required this.sorteado,
     required this.bajas,
     required this.grupos,
     this.conteoDeLaNoche = _sinSillas,
+    this.valesAnulados = ValesAnulados.ninguno,
   });
 
   static const _sinSillas =
@@ -77,11 +83,13 @@ class PuertaDelEvento {
   ///
   /// [sillasPuerta] son las sillas que se sumaron esa noche en la puerta, vigentes
   /// y quitadas, de todo el evento: cada familia muestra las suyas por mesa.
+  /// [valesAnulados], los de las ventas que anuló la barra: esas sillas se marcan.
   factory PuertaDelEvento.masivo({
     required List<ContratoAlumno> alumnos,
     Map<String, SillasReparto> repartos = const {},
     required List<Invitado> invitados,
     List<SillaPuerta> sillasPuerta = const [],
+    ValesAnulados valesAnulados = ValesAnulados.ninguno,
   }) {
     final filaPorId = {for (final i in invitados) i.id: i};
     final activos = alumnos.where((a) => !a.esBajaTemporal).toList();
@@ -114,6 +122,10 @@ class PuertaDelEvento {
             suyas.where((s) => s.vigente),
           ),
           movimientos: suyas,
+          conValeAnulado: {
+            for (final s in suyas)
+              if (s.vigente && valesAnulados.estaAnulado(s.vale)) s.id,
+          },
           // Sin sortear nadie tiene mesa, así que tampoco sillas: no hace
           // falta preguntar si se sorteó para esconderlas.
           titular: PersonaPuerta._deAlumno(titular, filaPorId[titular.id]),
@@ -159,7 +171,9 @@ class PuertaDelEvento {
       sorteado: sorteado,
       bajas: alumnos.length - activos.length,
       grupos: [...grupos, ...aMano],
-      conteoDeLaNoche: ConteoDeLaNoche.de(sillasPuerta),
+      conteoDeLaNoche:
+          ConteoDeLaNoche.de(sillasPuerta, anulado: valesAnulados.estaAnulado),
+      valesAnulados: valesAnulados,
     );
   }
 
@@ -177,6 +191,7 @@ class PuertaDelEvento {
         'bajas': bajas,
         'grupos': [for (final g in grupos) g._toJson()],
         if (!conteoDeLaNoche.vacio) 'conteo': conteoDeLaNoche.toJson(),
+        if (!valesAnulados.vacio) 'valesAnulados': valesAnulados.toJson(),
       };
 
   /// La que mandó la central ([toJson]). [eventoId] es el de la fiesta: las
@@ -198,6 +213,7 @@ class PuertaDelEvento {
         ],
         conteoDeLaNoche:
             ConteoDeLaNoche.fromJson(json['conteo']) ?? _sinSillas,
+        valesAnulados: ValesAnulados.fromJson(json['valesAnulados']),
       );
 
   Iterable<PersonaPuerta> get personas => grupos.expand((g) => g.personas);
@@ -327,6 +343,10 @@ class GrupoPuerta {
   /// quién y por qué), en el orden en que se anotaron. Nada desaparece.
   final List<SillaPuerta> movimientos;
 
+  /// Los ids de sus sillas vigentes cuyo vale anuló la barra: van en rojo, para
+  /// revisar y quitar con motivo.
+  final Set<String> conValeAnulado;
+
   const GrupoPuerta._({
     required this.titular,
     this.acompanantes = const [],
@@ -340,7 +360,11 @@ class GrupoPuerta {
     this.contratoId,
     this.sillasPorMesa = SillasDeLaFamilia.nada,
     this.movimientos = const [],
+    this.conValeAnulado = const {},
   });
+
+  /// Si [silla] tiene el vale anulado en la barra.
+  bool valeAnulado(SillaPuerta silla) => conValeAnulado.contains(silla.id);
 
   List<PersonaPuerta> get personas => [titular, ...acompanantes];
 
@@ -363,11 +387,13 @@ class GrupoPuerta {
           'sillasPorMesa': [for (final m in sillasPorMesa.mesas) m.toJson()],
         if (movimientos.isNotEmpty)
           'movimientos': [for (final s in movimientos) s.toMap()],
+        if (conValeAnulado.isNotEmpty) 'anuladas': [...conValeAnulado],
       };
 
   factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
     final mesas = json['sillasPorMesa'];
     final movimientos = json['movimientos'];
+    final anuladas = json['anuladas'];
     return GrupoPuerta._(
       titular: PersonaPuerta._fromJson(
         json['titular'] as Map<String, dynamic>,
@@ -394,6 +420,11 @@ class GrupoPuerta {
           for (final m in movimientos)
             if (m is Map) SillaPuerta.fromMap(Map<String, dynamic>.from(m)),
       ],
+      conValeAnulado: {
+        if (anuladas is List)
+          for (final a in anuladas)
+            if (a is String) a,
+      },
     );
   }
 }

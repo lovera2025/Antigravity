@@ -3,6 +3,7 @@ import '../../../models/silla_puerta.dart';
 import '../../totem/services/tiempos_a_mano.dart';
 import '../services/puerta_del_evento.dart';
 import '../services/sillas_de_la_puerta.dart';
+import '../services/vales_anulados.dart';
 
 /// Qué hace la central de la puerta con lo que le piden los celulares.
 ///
@@ -272,6 +273,7 @@ DecisionSilla decidirSilla({
   required GrupoPuerta? grupo,
   required List<SillaPuerta> deLaNoche,
   String? Function(String contratoId)? nombreDe,
+  ValesAnulados valesAnulados = ValesAnulados.ninguno,
 }) {
   final contratoId = grupo?.contratoId;
   if (grupo == null) {
@@ -294,6 +296,9 @@ DecisionSilla decidirSilla({
       if (vale == null) {
         return const DecisionSilla._nada(
             'Hace falta el número del vale de la barra.');
+      }
+      if (valesAnulados.estaAnulado(vale)) {
+        return DecisionSilla._nada('El vale $vale está anulado en la barra.');
       }
       final usada =
           vigentes.where((s) => valeNormalizado(s.vale) == vale).firstOrNull;

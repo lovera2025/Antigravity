@@ -71,12 +71,18 @@ void main() {
   });
 
   test('sigue emitiendo la lista cuando cambia algo', () async {
-    final listas = <int>[];
-    final sub = repo.watchByEvento(ev).listen((l) => listas.add(l.length));
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Se espera la primera lista y después la que trae al invitado, con tope: con
+    // 50 ms fijos fallaba cuando la PC estaba cargada (la suite entera), porque abrir
+    // la base de prueba tardaba más.
+    final primera = Completer<void>();
+    final conUno = Completer<void>();
+    final sub = repo.watchByEvento(ev).listen((l) {
+      if (!primera.isCompleted) primera.complete();
+      if (l.length == 1 && !conUno.isCompleted) conUno.complete();
+    });
+    await primera.future.timeout(const Duration(seconds: 20));
     await repo.agregar(eventoId: ev, nombreCompleto: 'TEST INVITADO', numeroMesa: '3');
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(listas.last, 1);
+    await conUno.future.timeout(const Duration(seconds: 20));
     await sub.cancel();
   });
 }

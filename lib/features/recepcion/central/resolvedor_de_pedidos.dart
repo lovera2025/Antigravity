@@ -214,6 +214,7 @@ class ResolvedorDePedidos {
             .firstOrNull
             ?.titular
             .nombre,
+        valesAnulados: lista.valesAnulados,
       );
       final datos = pedido.silla;
       switch (decision.hace) {
