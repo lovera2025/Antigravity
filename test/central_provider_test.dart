@@ -9,6 +9,7 @@ import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.
 import 'package:arguello_events/features/recepcion/providers/acciones_puerta_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
+import 'package:arguello_events/features/recepcion/repositories/sillas_puerta_repository.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +47,7 @@ void main() {
         invitadosRepositoryProvider.overrideWithValue(puerta.invitados),
         contratosRepositoryProvider.overrideWithValue(puerta.contratos),
         sillasRepartoRepositoryProvider.overrideWithValue(puerta.sillas),
+        sillasPuertaRepositoryProvider.overrideWithValue(puerta.sillasPuerta),
         syncEngineProvider.overrideWithValue(puerta.motor),
         connectivityServiceProvider.overrideWithValue(puerta.conexion),
         escuchaCentralProvider

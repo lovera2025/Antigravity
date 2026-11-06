@@ -24,6 +24,7 @@ import 'package:arguello_events/features/recepcion/central/central_provider.dart
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
 import 'package:arguello_events/features/recepcion/providers/sin_internet_provider.dart';
 import 'package:arguello_events/features/recepcion/repositories/invitados_repository.dart';
+import 'package:arguello_events/features/recepcion/repositories/sillas_puerta_repository.dart';
 import 'package:arguello_events/features/recepcion/services/lista_sin_internet.dart';
 import 'package:arguello_events/features/recepcion/widgets/panel_puerta.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
@@ -31,6 +32,7 @@ import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/plano_evento.dart';
+import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -256,6 +258,72 @@ class SillasEnMemoria extends SillasRepartoRepository {
       repartos;
 }
 
+/// Las sillas que se suman la noche de la fiesta, en memoria: nunca se borra
+/// nada, igual que en la base.
+class SillasPuertaEnMemoria extends SillasPuertaRepository {
+  SillasPuertaEnMemoria([List<SillaPuerta> filas = const []])
+      : filas = [...filas];
+
+  final List<SillaPuerta> filas;
+  final _avisos = StreamController<String>.broadcast();
+  var _siguiente = 0;
+
+  /// La hora con que se anota: la fija de las pruebas, o la de verdad.
+  DateTime Function() hora = () => horaDeIngreso;
+
+  @override
+  Stream<String> get cambios => _avisos.stream;
+
+  @override
+  Future<List<SillaPuerta>> delEvento(String eventoId) async =>
+      [for (final s in filas) if (s.eventoId == eventoId) s];
+
+  @override
+  Future<List<SillaPuerta>> vigentesDe(String contratoAlumnoId) async => [
+        for (final s in filas)
+          if (s.contratoAlumnoId == contratoAlumnoId && s.vigente) s,
+      ];
+
+  @override
+  Future<SillaPuerta> anotar({
+    required String eventoId,
+    required String contratoAlumnoId,
+    required int mesa,
+    required String vale,
+    String? anotadoPor,
+    String? nota,
+  }) async {
+    _siguiente++;
+    final fila = SillaPuerta(
+      id: 'silla-$_siguiente',
+      eventoId: eventoId,
+      contratoAlumnoId: contratoAlumnoId,
+      mesa: mesa,
+      vale: vale.trim(),
+      anotadoPor: anotadoPor,
+      nota: nota,
+      createdAt: hora().add(Duration(seconds: _siguiente)),
+      updatedAt: hora().add(Duration(seconds: _siguiente)),
+    );
+    filas.add(fila);
+    _avisos.add(eventoId);
+    return fila;
+  }
+
+  @override
+  Future<SillaPuerta?> quitar(
+    String id, {
+    required String por,
+    required String motivo,
+  }) async {
+    final i = filas.indexWhere((s) => s.id == id);
+    if (i < 0 || !filas[i].vigente) return null;
+    filas[i] = filas[i].quitada(por: por, motivo: motivo, ahora: hora());
+    _avisos.add(filas[i].eventoId);
+    return filas[i];
+  }
+}
+
 /// El plano de la fiesta masiva en esta PC: su salón ([armado]), o ninguno.
 class PlanosEnMemoria implements PlanosEventoRepository {
   PlanosEnMemoria([this.armado]);
@@ -300,15 +368,20 @@ class PuertaEnMemoria {
     required List<ContratoAlumno> alumnos,
     List<Invitado>? filas,
     Map<String, SillasReparto> repartos = const {},
+    List<SillaPuerta> sillasDeLaNoche = const [],
     ArmadoSalon? plano,
   })  : contratos = ContratosEnMemoria(supabase, alumnos),
         invitados = InvitadosEnMemoria(supabase, filas ?? []),
         sillas = SillasEnMemoria(repartos),
+        sillasPuerta = SillasPuertaEnMemoria(sillasDeLaNoche),
         planos = PlanosEnMemoria(plano);
 
   final ContratosEnMemoria contratos;
   final InvitadosEnMemoria invitados;
   final SillasEnMemoria sillas;
+
+  /// Las sillas sumadas esa noche en la puerta.
+  final SillasPuertaEnMemoria sillasPuerta;
 
   /// El plano de la fiesta masiva: siempre puesto, así nadie lee la base real.
   final PlanosEnMemoria planos;
@@ -381,6 +454,7 @@ class PuertaEnMemoria {
           invitadosRepositoryProvider.overrideWithValue(invitados),
           contratosRepositoryProvider.overrideWithValue(contratos),
           sillasRepartoRepositoryProvider.overrideWithValue(sillas),
+          sillasPuertaRepositoryProvider.overrideWithValue(sillasPuerta),
           planosEventoRepositoryProvider.overrideWithValue(planos),
           syncEngineProvider.overrideWithValue(motor),
           connectivityServiceProvider.overrideWithValue(conexion),

@@ -1,11 +1,13 @@
 import '../../../models/contrato_alumno.dart';
 import '../../../models/evento.dart';
 import '../../../models/invitado.dart';
+import '../../../models/silla_puerta.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import 'lista_puerta.dart';
+import 'sillas_de_la_puerta.dart';
 
 /// Lo que se ve en Recepción de un evento: quiénes son, dónde se sientan y
 /// quién ya entró.
@@ -34,12 +36,19 @@ class PuertaDelEvento {
 
   final List<GrupoPuerta> grupos;
 
+  /// Lo que se sumó esa noche en la puerta, en todo el evento (6.4.0).
+  final ConteoDeLaNoche conteoDeLaNoche;
+
   const PuertaDelEvento._({
     required this.masivo,
     required this.sorteado,
     required this.bajas,
     required this.grupos,
+    this.conteoDeLaNoche = _sinSillas,
   });
+
+  static const _sinSillas =
+      ConteoDeLaNoche(sumadas: 0, vales: [], quitadas: 0);
 
   /// Un evento particular: una persona por fila de la lista de la puerta.
   factory PuertaDelEvento.particular(List<Invitado> invitados) {
@@ -65,14 +74,23 @@ class PuertaDelEvento {
   /// baja, un acompañante que se sacó) no se muestran. Las que se cargaron a
   /// mano en esa lista van al final, como en un particular: no se esconde a
   /// nadie que alguien haya agregado.
+  ///
+  /// [sillasPuerta] son las sillas que se sumaron esa noche en la puerta, vigentes
+  /// y quitadas, de todo el evento: cada familia muestra las suyas por mesa.
   factory PuertaDelEvento.masivo({
     required List<ContratoAlumno> alumnos,
     Map<String, SillasReparto> repartos = const {},
     required List<Invitado> invitados,
+    List<SillaPuerta> sillasPuerta = const [],
   }) {
     final filaPorId = {for (final i in invitados) i.id: i};
     final activos = alumnos.where((a) => !a.esBajaTemporal).toList();
     final sorteado = hayMesasSorteadas(activos);
+    final sillasPorAlumno = <String, List<SillaPuerta>>{};
+    for (final s in [...sillasPuerta]
+      ..sort((x, y) => x.createdAt.compareTo(y.createdAt))) {
+      sillasPorAlumno.putIfAbsent(s.contratoAlumnoId, () => []).add(s);
+    }
 
     final filasPorAlumno = <String, List<FilaPuerta>>{};
     for (final f in filasPuertaDesdeAlumnos(activos)) {
@@ -86,8 +104,16 @@ class PuertaDelEvento {
       final titular = filas.firstWhere((f) => f.esAlumno);
       final conNombre = filas.where((f) => !f.esAlumno).length;
       final musica = a.musicaElegida?.trim() ?? '';
+      final suyas = sillasPorAlumno[a.id] ?? const <SillaPuerta>[];
       grupos.add(
         GrupoPuerta._(
+          contratoId: a.id,
+          sillasPorMesa: SillasDeLaFamilia.de(
+            a,
+            repartos[a.id],
+            suyas.where((s) => s.vigente),
+          ),
+          movimientos: suyas,
           // Sin sortear nadie tiene mesa, así que tampoco sillas: no hace
           // falta preguntar si se sorteó para esconderlas.
           titular: PersonaPuerta._deAlumno(titular, filaPorId[titular.id]),
@@ -133,6 +159,7 @@ class PuertaDelEvento {
       sorteado: sorteado,
       bajas: alumnos.length - activos.length,
       grupos: [...grupos, ...aMano],
+      conteoDeLaNoche: ConteoDeLaNoche.de(sillasPuerta),
     );
   }
 
@@ -149,10 +176,14 @@ class PuertaDelEvento {
         'sorteado': sorteado,
         'bajas': bajas,
         'grupos': [for (final g in grupos) g._toJson()],
+        if (!conteoDeLaNoche.vacio) 'conteo': conteoDeLaNoche.toJson(),
       };
 
   /// La que mandó la central ([toJson]). [eventoId] es el de la fiesta: las
   /// filas de la puerta lo llevan.
+  ///
+  /// Lo de las sillas de la noche (6.4.0) se lee si viene: una central más vieja
+  /// no lo manda, y entonces no hay líneas de sillas.
   factory PuertaDelEvento.fromJson(
     Map<String, dynamic> json, {
     required String eventoId,
@@ -165,6 +196,8 @@ class PuertaDelEvento {
           for (final g in json['grupos'] as List)
             GrupoPuerta._fromJson(g as Map<String, dynamic>, eventoId),
         ],
+        conteoDeLaNoche:
+            ConteoDeLaNoche.fromJson(json['conteo']) ?? _sinSillas,
       );
 
   Iterable<PersonaPuerta> get personas => grupos.expand((g) => g.personas);
@@ -282,6 +315,18 @@ class GrupoPuerta {
   /// eliminar desde Recepción.
   final bool cargadoAMano;
 
+  /// En un masivo, el contrato del alumno: a quién se le suma una silla. Null en
+  /// un particular y en lo cargado a mano.
+  final String? contratoId;
+
+  /// Sus mesas esa noche: las extra del contrato y las sumadas en la puerta.
+  /// Vacía sin mesa.
+  final SillasDeLaFamilia sillasPorMesa;
+
+  /// Las sillas que se le sumaron esa noche, también las quitadas (tachadas, con
+  /// quién y por qué), en el orden en que se anotaron. Nada desaparece.
+  final List<SillaPuerta> movimientos;
+
   const GrupoPuerta._({
     required this.titular,
     this.acompanantes = const [],
@@ -292,9 +337,16 @@ class GrupoPuerta {
     this.musica,
     this.acompanantesSinNombre = 0,
     this.cargadoAMano = false,
+    this.contratoId,
+    this.sillasPorMesa = SillasDeLaFamilia.nada,
+    this.movimientos = const [],
   });
 
   List<PersonaPuerta> get personas => [titular, ...acompanantes];
+
+  /// Si se le puede sumar una silla esa noche: un alumno con mesa y lugar.
+  bool get puedeSumarSilla =>
+      contratoId != null && sillasPorMesa.puedeAgregar;
 
   Map<String, Object?> _toJson() => {
         'titular': titular._toJson(),
@@ -306,26 +358,44 @@ class GrupoPuerta {
         'musica': musica,
         'acompanantesSinNombre': acompanantesSinNombre,
         'cargadoAMano': cargadoAMano,
+        if (contratoId != null) 'contrato': contratoId,
+        if (!sillasPorMesa.vacia)
+          'sillasPorMesa': [for (final m in sillasPorMesa.mesas) m.toJson()],
+        if (movimientos.isNotEmpty)
+          'movimientos': [for (final s in movimientos) s.toMap()],
       };
 
-  factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) =>
-      GrupoPuerta._(
-        titular: PersonaPuerta._fromJson(
-          json['titular'] as Map<String, dynamic>,
-          eventoId,
-        ),
-        acompanantes: [
-          for (final a in json['acompanantes'] as List)
-            PersonaPuerta._fromJson(a as Map<String, dynamic>, eventoId),
-        ],
-        division: json['division'] as String?,
-        sinMesa: json['sinMesa'] as bool,
-        sillas: json['sillas'] as String?,
-        sillasAConfirmar: json['sillasAConfirmar'] as bool,
-        musica: json['musica'] as String?,
-        acompanantesSinNombre: json['acompanantesSinNombre'] as int,
-        cargadoAMano: json['cargadoAMano'] as bool,
-      );
+  factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
+    final mesas = json['sillasPorMesa'];
+    final movimientos = json['movimientos'];
+    return GrupoPuerta._(
+      titular: PersonaPuerta._fromJson(
+        json['titular'] as Map<String, dynamic>,
+        eventoId,
+      ),
+      acompanantes: [
+        for (final a in json['acompanantes'] as List)
+          PersonaPuerta._fromJson(a as Map<String, dynamic>, eventoId),
+      ],
+      division: json['division'] as String?,
+      sinMesa: json['sinMesa'] as bool,
+      sillas: json['sillas'] as String?,
+      sillasAConfirmar: json['sillasAConfirmar'] as bool,
+      musica: json['musica'] as String?,
+      acompanantesSinNombre: json['acompanantesSinNombre'] as int,
+      cargadoAMano: json['cargadoAMano'] as bool,
+      contratoId: json['contrato'] as String?,
+      sillasPorMesa: SillasDeLaFamilia([
+        if (mesas is List)
+          for (final m in mesas) ?SillasDeUnaMesa.fromJson(m),
+      ]),
+      movimientos: [
+        if (movimientos is List)
+          for (final m in movimientos)
+            if (m is Map) SillaPuerta.fromMap(Map<String, dynamic>.from(m)),
+      ],
+    );
+  }
 }
 
 /// Una persona que puede entrar.

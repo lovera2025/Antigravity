@@ -10,6 +10,7 @@ import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 
 const _ev = 'e0000000-0000-4000-8000-000000000001';
@@ -413,6 +414,88 @@ void main() {
       expect(p.total, 0);
       expect(p.adentro, 0);
       expect(p.sorteado, isFalse);
+    });
+  });
+
+  group('las sillas de la noche', () {
+    SillaPuerta silla(String contrato, int mesa, String vale,
+            {bool quitada = false}) {
+      final s = SillaPuerta(
+        id: 's-$vale',
+        eventoId: _ev,
+        contratoAlumnoId: contrato,
+        mesa: mesa,
+        vale: vale,
+        anotadoPor: 'Pato',
+        createdAt: _hora,
+        updatedAt: _hora,
+      );
+      return quitada ? s.quitada(por: 'Pato', motivo: 'x', ahora: _hora) : s;
+    }
+
+    test('con una silla sumada, la línea de esa mesa cambia', () {
+      final antes = PuertaDelEvento.masivo(alumnos: _sorteada(), invitados: const []);
+      final despues = PuertaDelEvento.masivo(
+        alumnos: _sorteada(),
+        invitados: const [],
+        sillasPuerta: [silla('benitez', 13, '0012')],
+      );
+      GrupoPuerta benitez(PuertaDelEvento p) =>
+          p.grupos.firstWhere((g) => g.contratoId == 'benitez');
+      expect(benitez(antes).sillasPorMesa.mesas.single.texto,
+          'Mesa 13: 8 sillas · puede agregar hasta 2 · se cobran en la barra');
+      expect(benitez(despues).sillasPorMesa.mesas.single.texto,
+          'Mesa 13: 8 sillas + 1 extra (1 esta noche) · puede agregar 1 más · '
+          'se cobran en la barra');
+      expect(benitez(despues).movimientos.single.vale, '0012');
+      expect(despues.conteoDeLaNoche.texto, 'Esta noche: 1 silla sumada · vale 0012');
+    });
+
+    test('la quitada queda en los movimientos pero no ocupa lugar', () {
+      final p = PuertaDelEvento.masivo(
+        alumnos: _sorteada(),
+        invitados: const [],
+        sillasPuerta: [silla('benitez', 13, '0012', quitada: true)],
+      );
+      final g = p.grupos.firstWhere((g) => g.contratoId == 'benitez');
+      expect(g.movimientos.single.vigente, isFalse);
+      expect(g.sillasPorMesa.lugar, 2);
+    });
+
+    test('las sumadas no cambian el texto de sillas del tótem', () {
+      final p = PuertaDelEvento.masivo(
+        alumnos: _sorteada(),
+        invitados: const [],
+        sillasPuerta: [silla('benitez', 13, '0012')],
+      );
+      expect(p.grupos.firstWhere((g) => g.contratoId == 'benitez').sillas,
+          '8 sillas');
+    });
+
+    test('antes del sorteo no hay líneas', () {
+      final p = PuertaDelEvento.masivo(
+        alumnos: [_alumno('benitez', 'BENÍTEZ, TOMÁS')],
+        invitados: const [],
+      );
+      expect(p.grupos.single.sillasPorMesa.vacia, isTrue);
+      expect(p.grupos.single.puedeSumarSilla, isFalse);
+    });
+
+    test('lo cargado a mano no tiene líneas ni se le suman sillas', () {
+      final p = PuertaDelEvento.masivo(
+        alumnos: _sorteada(),
+        invitados: [_fila('mano', 'RUIZ, MARTA', mesa: '40')],
+      );
+      final g = p.grupos.firstWhere((g) => g.cargadoAMano);
+      expect(g.contratoId, isNull);
+      expect(g.sillasPorMesa.vacia, isTrue);
+      expect(g.puedeSumarSilla, isFalse);
+    });
+
+    test('un particular tampoco', () {
+      final p = PuertaDelEvento.particular([_fila('p1', 'LÓPEZ, ROSA', mesa: '3')]);
+      expect(p.grupos.single.puedeSumarSilla, isFalse);
+      expect(p.conteoDeLaNoche.texto, isNull);
     });
   });
 

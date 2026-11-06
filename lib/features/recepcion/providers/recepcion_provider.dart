@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/invitado.dart';
 import '../../../models/evento.dart';
+import '../../../models/silla_puerta.dart';
 import '../../../models/sillas_reparto.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/kiosk_launcher.dart';
@@ -12,6 +14,7 @@ import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../../eventos/repositories/sillas_reparto_repository.dart';
 import '../repositories/invitados_repository.dart';
+import '../repositories/sillas_puerta_repository.dart';
 import '../repositories/supabase_invitados_repository.dart';
 import '../services/puerta_del_evento.dart';
 import '../../../main.dart';
@@ -152,6 +155,51 @@ final alumnosDeLaPuertaProvider = StreamProvider.autoDispose
   return controller.stream;
 });
 
+/// Las sillas que se sumaron esa noche en la puerta de un evento masivo (vigentes
+/// y quitadas), de la base de esta PC. Se vuelven a leer cuando esta PC anota o
+/// quita una ([SillasPuertaRepository.cambios]) y cuando baja una de la otra
+/// notebook. Mismo molde que [alumnosDeLaPuertaProvider].
+final sillasPuertaDelEventoProvider = StreamProvider.autoDispose
+    .family<List<SillaPuerta>, String>((ref, eventoId) {
+  final repo = ref.watch(sillasPuertaRepositoryProvider);
+  final motor = ref.watch(syncEngineProvider);
+
+  late final StreamController<List<SillaPuerta>> controller;
+  StreamSubscription<Set<String>>? bajadas;
+  StreamSubscription<String>? propias;
+  var cadena = Future<void>.value();
+
+  void leer() {
+    cadena = cadena.then((_) async {
+      if (controller.isClosed) return;
+      try {
+        final leidas = await repo.delEvento(eventoId);
+        if (!controller.isClosed) controller.add(leidas);
+      } catch (e, st) {
+        if (!controller.isClosed) controller.addError(e, st);
+      }
+    });
+  }
+
+  controller = StreamController<List<SillaPuerta>>(
+    onListen: () {
+      bajadas = motor.cambiosBajadosStream.listen((tablas) {
+        if (tablas.contains('sillas_puerta')) leer();
+      });
+      propias = repo.cambios.listen((evento) {
+        if (evento == eventoId) leer();
+      });
+      leer();
+    },
+    onCancel: () async {
+      await bajadas?.cancel();
+      await propias?.cancel();
+    },
+  );
+  ref.onDispose(() => controller.close());
+  return controller.stream;
+});
+
 /// Lo que se ve en Recepción del evento elegido: un particular desde su lista
 /// de la puerta; un masivo desde sus alumnos, cruzados con quién entró.
 final puertaDelEventoProvider = Provider.autoDispose
@@ -170,14 +218,26 @@ final puertaDelEventoProvider = Provider.autoDispose
   if (invitados.hasError) {
     return AsyncValue.error(invitados.error!, invitados.stackTrace!);
   }
+  final sillas = ref.watch(sillasPuertaDelEventoProvider(eventoId));
   final a = alumnos.value;
   final i = invitados.value;
   if (a == null || i == null) return const AsyncValue.loading();
+  if (sillas.isLoading && !sillas.hasValue && !sillas.hasError) {
+    return const AsyncValue.loading();
+  }
+  // Si no se pudieron leer las sillas de la noche, la puerta sigue andando sin
+  // sus líneas: dejar a la recepcionista sin la lista entera sería peor. Sumar
+  // una lee la base en el momento, así que no se pasa del tope por esto.
+  if (sillas.hasError) {
+    debugPrint('Recepción: no se pudieron leer las sillas de la noche: '
+        '${sillas.error}');
+  }
   return AsyncValue.data(
     PuertaDelEvento.masivo(
       alumnos: a.alumnos,
       repartos: a.repartos,
       invitados: i,
+      sillasPuerta: sillas.value ?? const [],
     ),
   );
 });
