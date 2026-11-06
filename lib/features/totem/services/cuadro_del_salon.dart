@@ -24,6 +24,7 @@ enum LugarDelCuadro {
 /// Se guarda en `totem_config.llegada_lugar`: vacío es automático.
 enum LugarElegido {
   automatico,
+  pista,
   arriba,
   abajo,
   izquierda,
@@ -40,6 +41,7 @@ enum LugarElegido {
 
   String get etiqueta => switch (this) {
         automatico => 'Automático',
+        pista => 'En la pista',
         arriba => 'Arriba',
         abajo => 'Abajo',
         izquierda => 'Izquierda',
@@ -55,10 +57,15 @@ enum LugarElegido {
 /// la espera y en la llegada: la tarjeta cae donde estaban las frases y el salón
 /// no se mueve.
 ///
-/// Automático, en orden: la pista de baile si entra; si no, lo mejor entre el
-/// hueco más grande sin mesas y la franja que el salón deja libre; si nada
-/// alcanza, una franja arriba (o a la izquierda en una tele apaisada) y el salón
-/// se achica a lo que queda. Un lado elegido es la franja de ese lado.
+/// Automático: donde mejor se lee, entre la pista de baile, el hueco más grande
+/// sin mesas y la franja que el salón deja libre (arriba o a la izquierda); la
+/// pista, si se lee casi igual (el jefe la nombró). Si nada alcanza, una franja
+/// arriba (o a la izquierda en una tele apaisada) y el salón se achica a lo que
+/// queda. Un lado elegido es la franja de ese lado; "En la pista", la pista
+/// aunque quede chica (sin pista, automático).
+///
+/// En la Normal, en una tele vertical va arriba; en una apaisada, a la
+/// izquierda: ahí la pista se lee la mitad de grande.
 ///
 /// Sin pantalla ni base: solo cuentas, en píxeles de la pantalla del tótem.
 class CuadroDelSalon {
@@ -121,6 +128,25 @@ class CuadroDelSalon {
   static const franjaArribaMinima = 0.25;
   static const franjaCostadoMinima = 0.3;
 
+  /// Lo que mide lo de adentro del cuadro (una llegada, la espera) para verse
+  /// en su tamaño de siempre, en `u`. Más chico, se achica entero.
+  static const contenidoAnchoEnU = 22.0;
+  static const contenidoAltoEnU = 24.0;
+
+  /// La pista gana en automático si se lee al menos esto de bien comparada con
+  /// el mejor lugar.
+  static const pistaSiSeLee = 0.85;
+
+  /// Cuánto se achica lo de adentro de un cuadro de [tam]: 1 si entra en su
+  /// tamaño de siempre.
+  static double escalaDelContenido(Size tam, double u) => math.min(
+        1.0,
+        math.min(
+          tam.width / (contenidoAnchoEnU * u),
+          tam.height / (contenidoAltoEnU * u),
+        ),
+      );
+
   /// Null sin plano, sin mesas o sin lugar en la pantalla.
   static CuadroDelSalon? para(
     ArmadoSalon? armado, {
@@ -157,15 +183,19 @@ class CuadroDelSalon {
       separacion: u * separacionEnU,
     );
 
-    if (elegido != LugarElegido.automatico) {
+    if (elegido == LugarElegido.pista) {
+      final pista = calculo.enLaPista(minimoAlcanza: false);
+      if (pista != null) return pista;
+    } else if (elegido != LugarElegido.automatico) {
       return calculo.franja(elegido, forzada: false, minimoAlcanza: true) ??
           calculo.franja(elegido, forzada: true, minimoAlcanza: false);
     }
 
-    final pista = calculo.enLaPista();
-    if (pista != null) return pista;
-    // Lo que mejor entra: el hueco entre las mesas o una franja libre.
+    // Donde mejor se lee; la pista, si se lee casi igual.
+    double legible(CuadroDelSalon c) => escalaDelContenido(c.cuadro.size, u);
+    final pista = calculo.enLaPista(minimoAlcanza: true);
     final opciones = [
+      ?pista,
       ?calculo.enElHueco(),
       ?calculo.franja(LugarElegido.arriba, forzada: false, minimoAlcanza: true),
       ?calculo.franja(
@@ -175,10 +205,14 @@ class CuadroDelSalon {
       ),
     ];
     if (opciones.isNotEmpty) {
-      opciones.sort(
-        (a, b) => calculo.puntaje(b.cuadro).compareTo(calculo.puntaje(a.cuadro)),
-      );
-      return opciones.first;
+      var mejor = opciones.first;
+      for (final o in opciones.skip(1)) {
+        if (legible(o) > legible(mejor)) mejor = o;
+      }
+      if (pista != null && legible(pista) >= pistaSiSeLee * legible(mejor)) {
+        return pista;
+      }
+      return mejor;
     }
     final apaisada = pantalla.width > pantalla.height * 1.2;
     return calculo.franja(
@@ -402,8 +436,8 @@ class _Calculo {
       );
 
   /// Adentro de la pista más grande de la hoja, con el salón al medio. Null si
-  /// no hay pista o no entra lo mínimo.
-  CuadroDelSalon? enLaPista() {
+  /// no hay pista o, con [minimoAlcanza], si no entra lo mínimo.
+  CuadroDelSalon? enLaPista({required bool minimoAlcanza}) {
     final pistas = [
       for (final s in armado.sectoresDeHoja(hoja))
         if (s.tipo == TipoSector.pista) s.caja,
@@ -412,7 +446,8 @@ class _Calculo {
     pistas.sort((a, b) => (b.ancho * b.alto).compareTo(a.ancho * a.alto));
     final salon = encajar(area);
     final cuadro = aPantalla(pistas.first, salon).deflate(holgura);
-    if (puntaje(cuadro) < 1) return null;
+    if (cuadro.width <= 0 || cuadro.height <= 0) return null;
+    if (minimoAlcanza && puntaje(cuadro) < 1) return null;
     return _armar(salon, cuadro, LugarDelCuadro.pista);
   }
 

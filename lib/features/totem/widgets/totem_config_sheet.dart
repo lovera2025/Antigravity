@@ -1369,7 +1369,7 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
                 key: ValueKey('llegada_lugar_${l.name}'),
                 label: Text(
                   l == LugarElegido.automatico
-                      ? 'Automático · la pista'
+                      ? 'Automático · donde mejor se lea'
                       : l.etiqueta,
                 ),
                 selected: elegido == l,

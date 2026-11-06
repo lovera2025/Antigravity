@@ -81,6 +81,10 @@ class EscenaTotem extends StatefulWidget {
   /// dibuja. Null: acomodada.
   final FaseLlegada? faseFija;
 
+  /// Para las muestras, quieta: cuánto se acomodó, de 0 (en grande) a 1. Manda
+  /// sobre [faseFija].
+  final double? acomodoFijo;
+
   /// Qué llegada es: si cambia, la animación de entrada vuelve a empezar.
   final Object? claveLlegada;
 
@@ -115,6 +119,7 @@ class EscenaTotem extends StatefulWidget {
     this.llegada,
     this.plano,
     this.faseFija,
+    this.acomodoFijo,
     this.claveLlegada,
     this.saliendo = false,
     this.enCamino = 0,
@@ -184,7 +189,8 @@ class _EscenaTotemState extends State<EscenaTotem>
   void _programarAcomodo({required bool deNuevo}) {
     _alAcomodar?.cancel();
     if (widget.quieta) {
-      _acomodo.value = widget.faseFija == FaseLlegada.grande ? 0 : 1;
+      _acomodo.value = widget.acomodoFijo?.clamp(0.0, 1.0) ??
+          (widget.faseFija == FaseLlegada.grande ? 0 : 1);
       return;
     }
     if (widget.llegada == null || widget.plano == null) {
@@ -243,7 +249,8 @@ class _EscenaTotemState extends State<EscenaTotem>
         (old.llegada == null) != (widget.llegada == null) ||
         old.empezo != widget.empezo ||
         (old.plano == null) != (widget.plano == null) ||
-        old.faseFija != widget.faseFija;
+        old.faseFija != widget.faseFija ||
+        old.acomodoFijo != widget.acomodoFijo;
     if (widget.quieta || otraLlegada) {
       _programarAcomodo(deNuevo: true);
     } else if (old.cfg.llegadaNombreSeg != widget.cfg.llegadaNombreSeg) {
@@ -539,9 +546,10 @@ class _EscenaTotemState extends State<EscenaTotem>
 
     final enElSalon = cuadro.lugar == LugarDelCuadro.pista ||
         cuadro.lugar == LugarDelCuadro.hueco;
+    // Opaco: que no se transparente el nombre del sector de abajo.
     final cartel = receta != null && receta.textoOscuro
-        ? const Color(0xEBFFFFFF)
-        : const Color(0xE6121218);
+        ? const Color(0xFFF7F5F0)
+        : const Color(0xFF121218);
     Widget sobreCartel(Widget hijo, double cuanto) => cuanto <= 0
         ? hijo
         : DecoratedBox(
@@ -556,9 +564,25 @@ class _EscenaTotemState extends State<EscenaTotem>
             child: hijo,
           );
 
-    final enCuadro = d.conPlanoEn(cuadro.cuadro.size, alCostado: cuadro.alCostado);
-    final grande = _enGrande(cuadro.cuadro, Size(d.ancho, d.alto), d.u);
-    final donde = Rect.lerp(grande, cuadro.cuadro, a)!;
+    // Lo de adentro se arma en su tamaño de siempre, con la forma del cuadro,
+    // y se achica entero: así nada se parte en renglones ni cambia de lugar.
+    final escala =
+        CuadroDelSalon.escalaDelContenido(cuadro.cuadro.size, d.u);
+    final aMedida = cuadro.cuadro.size / escala;
+    final enCuadro = d.conPlanoEn(aMedida, alCostado: cuadro.alCostado);
+    Widget achicado(Widget hijo) => FittedBox(
+          fit: BoxFit.fill,
+          child: SizedBox.fromSize(size: aMedida, child: hijo),
+        );
+    // En grande: casi toda la pantalla, con su propia forma; al acomodarse se
+    // achica hacia el cuadro mientras aparece la tarjeta acomodada.
+    final grande = _enGrande(Size(d.ancho, d.alto), d.u);
+    final enGrande = d.conPlanoEn(grande.size, alCostado: false);
+    final hacia = Rect.lerp(grande, _conLaForma(grande.size, cuadro.cuadro), a)!;
+    // Que no se vean las dos a la vez: la grande se va en la primera parte
+    // del acomodo, mientras se achica; la acomodada llega en la segunda.
+    final sale = llegada == null ? 0.0 : (1 - a / 0.55).clamp(0.0, 1.0);
+    final entra = llegada == null ? 0.0 : ((a - 0.45) / 0.55).clamp(0.0, 1.0);
 
     return [
       Positioned.fromRect(
@@ -587,49 +611,66 @@ class _EscenaTotemState extends State<EscenaTotem>
           rect: cuadro.cuadro,
           child: Opacity(
             opacity: (1 - e * 1.6).clamp(0.0, 1.0),
-            child: sobreCartel(escena.espera(enCuadro), enElSalon ? 1 : 0),
+            child: sobreCartel(
+              achicado(escena.espera(enCuadro)),
+              enElSalon ? 1 : 0,
+            ),
           ),
         ),
-      if (llegada != null && e > 0)
+      // El nombre en grande, sobre el salón apagado, con cartel. Se va
+      // achicando hacia el cuadro mientras aparece el acomodado.
+      if (llegada != null && e > 0 && sale > 0)
         Positioned.fromRect(
-          rect: donde,
+          rect: hacia,
           child: Opacity(
-            opacity: (e * 1.8).clamp(0.0, 1.0),
-            child: FittedBox(
-              fit: BoxFit.fill,
-              child: SizedBox.fromSize(
-                size: cuadro.cuadro.size,
-                // En grande va sobre el salón: siempre con cartel. Acomodada
-                // en una franja, sobre el fondo de la apariencia, sin.
-                child: sobreCartel(
-                  escena.llegada(enCuadro, llegada),
-                  enElSalon ? 1 : 1 - a,
+            opacity: ((e * 1.8).clamp(0.0, 1.0) * sale).clamp(0.0, 1.0),
+            child: sobreCartel(
+              FittedBox(
+                fit: BoxFit.fill,
+                child: SizedBox.fromSize(
+                  size: grande.size,
+                  child: escena.llegada(enGrande, llegada),
                 ),
               ),
+              // Apenas transparente: detrás se adivinan el salón y el fondo.
+              0.8,
+            ),
+          ),
+        ),
+      // Acomodado en el cuadro: sobre el salón (la pista, un hueco) con
+      // cartel; en una franja, sobre el fondo de la apariencia, sin.
+      if (llegada != null && e > 0 && entra > 0)
+        Positioned.fromRect(
+          rect: cuadro.cuadro,
+          child: Opacity(
+            opacity: ((e * 1.8).clamp(0.0, 1.0) * entra).clamp(0.0, 1.0),
+            child: sobreCartel(
+              achicado(escena.llegada(enCuadro, llegada)),
+              enElSalon ? 1 : 0,
             ),
           ),
         ),
     ];
   }
 
-  /// Dónde va el nombre en grande: lo más grande que entra en la pantalla con
-  /// la forma del cuadro, al medio. Nunca más chico que el cuadro.
-  static Rect _enGrande(Rect cuadro, Size pantalla, double u) {
-    final area = Rect.fromLTRB(
-      u * CuadroDelSalon.margenEnU,
-      u * CuadroDelSalon.margenEnU,
-      pantalla.width - u * CuadroDelSalon.margenEnU,
-      pantalla.height - u * CuadroDelSalon.abajoEnU,
-    );
-    if (cuadro.width <= 0 || cuadro.height <= 0) return cuadro;
-    final s = math.max(
-      1.0,
-      math.min(area.width / cuadro.width, area.height / cuadro.height),
-    );
+  /// Dónde va el nombre en grande: casi toda la pantalla, sin pisar "N más en
+  /// camino".
+  static Rect _enGrande(Size pantalla, double u) => Rect.fromLTRB(
+        u * CuadroDelSalon.margenEnU * 2,
+        u * CuadroDelSalon.margenEnU * 2,
+        pantalla.width - u * CuadroDelSalon.margenEnU * 2,
+        pantalla.height - u * CuadroDelSalon.abajoEnU,
+      );
+
+  /// Un rectángulo con la forma de [forma], lo más grande que entra en
+  /// [adentro], al medio: hacia donde se achica el nombre en grande.
+  static Rect _conLaForma(Size forma, Rect adentro) {
+    if (forma.width <= 0 || forma.height <= 0) return adentro;
+    final s = math.min(adentro.width / forma.width, adentro.height / forma.height);
     return Rect.fromCenter(
-      center: area.center,
-      width: cuadro.width * s,
-      height: cuadro.height * s,
+      center: adentro.center,
+      width: forma.width * s,
+      height: forma.height * s,
     );
   }
 

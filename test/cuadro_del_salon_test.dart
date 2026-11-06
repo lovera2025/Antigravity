@@ -60,8 +60,25 @@ void main() {
   final normal = ArmadosPredefinidos.normal2aPagina3();
 
   group('automático', () {
-    test('en la Normal apaisada, el cuadro va en la pista de baile', () {
+    test('en la Normal apaisada, la pista se lee la mitad: va a la izquierda',
+        () {
       final c = cuadro(normal, apaisada);
+      expect(c.lugar, LugarDelCuadro.franjaLibre);
+      expect(c.alCostado, isTrue);
+      expect(c.cuadro.right, lessThanOrEqualTo(c.panel.left));
+      final u = uDe(apaisada);
+      final enLaPista = cuadro(normal, apaisada, elegido: LugarElegido.pista);
+      expect(
+        CuadroDelSalon.escalaDelContenido(c.cuadro.size, u),
+        greaterThan(
+          CuadroDelSalon.escalaDelContenido(enLaPista.cuadro.size, u) /
+              CuadroDelSalon.pistaSiSeLee,
+        ),
+      );
+    });
+
+    test('elegida, la pista: adentro de la pista, aunque quede chica', () {
+      final c = cuadro(normal, apaisada, elegido: LugarElegido.pista);
       expect(c.lugar, LugarDelCuadro.pista);
       final pista = normal.sectores.firstWhere((s) => s.tipo == TipoSector.pista).caja;
       final s = c.salon.width / normal.hoja('A')!.caja.ancho;
@@ -74,6 +91,36 @@ void main() {
       expect(enPantalla.contains(c.cuadro.topLeft), isTrue);
       expect(enPantalla.contains(c.cuadro.bottomRight), isTrue);
       expect(c.alCostado, isFalse);
+      // Sin pista, elegirla es automático.
+      final sinPista = dosBloques();
+      expect(
+        cuadro(sinPista, const Size(1500, 900), elegido: LugarElegido.pista),
+        cuadro(sinPista, const Size(1500, 900)),
+      );
+    });
+
+    test('con una pista grande, automático la elige', () {
+      final conPista = ArmadoSalon(
+        clave: 'pista@1',
+        nombre: 'Con pista grande',
+        hojas: const [HojaPlano(id: 'A', titulo: 'A', caja: RectPlano(0, 0, 1600, 1000))],
+        mesas: [
+          for (var i = 0; i < 12; i++) ...[
+            MesaPlano(numero: i + 1, hoja: 'A', x: 80 + i * 130, y: 80),
+            MesaPlano(numero: i + 13, hoja: 'A', x: 80 + i * 130, y: 920),
+          ],
+        ],
+        sectores: const [
+          SectorPlano(
+            tipo: TipoSector.pista,
+            texto: 'Pista',
+            hoja: 'A',
+            caja: RectPlano(300, 200, 1000, 600),
+          ),
+        ],
+      );
+      final c = cuadro(conPista, apaisada);
+      expect(c.lugar, LugarDelCuadro.pista);
     });
 
     test('en la Normal vertical, la pista no alcanza: el cuadro va arriba, '
@@ -153,6 +200,7 @@ void main() {
               expect(c.cuadro.left, greaterThanOrEqualTo(c.panel.right), reason: razon);
               expect(c.alCostado, isTrue, reason: razon);
             case LugarElegido.automatico:
+            case LugarElegido.pista:
           }
           expect(c.cuadro.width, greaterThan(0), reason: razon);
           expect(c.cuadro.height, greaterThan(0), reason: razon);

@@ -58,6 +58,7 @@ import 'package:arguello_events/features/totem/estilos/tu_fondo.dart';
 import 'package:arguello_events/features/totem/services/lectura_del_fondo.dart';
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/contenido_bienvenida.dart';
+import 'package:arguello_events/features/totem/services/cuadro_del_salon.dart';
 import 'package:arguello_events/features/totem/services/ficha_totem.dart';
 import 'package:arguello_events/features/totem/services/plano_de_la_llegada.dart';
 import 'package:arguello_events/features/totem/widgets/aviso_sin_internet.dart';
@@ -576,46 +577,176 @@ void main() {
     );
   });
 
-  group('la llegada con el plano', () {
+  // 6.4.0 (pedido del jefe, 4-nov): el salón entero en la espera, y la llegada
+  // que salta y se acomoda en la pista con la mesa encendida y el camino.
+  group('el salón en el tótem', () {
     final salon = ArmadosPredefinidos.normal2aPagina3();
 
-    testWidgets('vertical', (tester) async {
+    for (final (nombre, pantalla, porFila, archivo) in [
+      ('vertical', _vertical, 4, 'Totem_salon'),
+      ('horizontal', _apaisada, 2, 'Totem_salon_horizontal'),
+    ]) {
+      final lienzo = porFila == 4
+          ? _lienzo(pantalla)
+          : _lienzo(pantalla, columnas: 2, filas: 2);
+
+      testWidgets('la espera, $nombre', (tester) async {
+        await _sacar(
+          tester,
+          lienzo,
+          _cuatro(
+            pantalla,
+            (e) => EscenaTotem(
+              estilo: e,
+              cfg: _masivo,
+              quieta: true,
+              tiempoFijo: 6,
+              plano: salon,
+            ),
+            porFila: porFila,
+          ),
+          '${archivo}_1_espera.png',
+        );
+      });
+
+      testWidgets('el nombre en grande, $nombre', (tester) async {
+        await _sacar(
+          tester,
+          lienzo,
+          _cuatro(
+            pantalla,
+            (e) => EscenaTotem(
+              estilo: e,
+              cfg: _masivo,
+              quieta: true,
+              tiempoFijo: 6,
+              faseFija: FaseLlegada.grande,
+              llegada: familia,
+              enCamino: 2,
+              plano: salon,
+            ),
+            porFila: porFila,
+          ),
+          '${archivo}_2_nombre_en_grande.png',
+        );
+      });
+
+      testWidgets('acomodada, con la mesa y el camino, $nombre', (tester) async {
+        await _sacar(
+          tester,
+          lienzo,
+          _cuatro(
+            pantalla,
+            (e) => EscenaTotem(
+              estilo: e,
+              cfg: _masivo,
+              quieta: true,
+              tiempoFijo: 6,
+              llegada: familia,
+              enCamino: 2,
+              plano: salon,
+            ),
+            porFila: porFila,
+          ),
+          '${archivo}_3_acomodada.png',
+        );
+      });
+    }
+
+    // Cómo se acomoda la tarjeta (pregunta del usuario, 5-nov): el nombre en
+    // grande se achica hacia su lugar mientras aparece el acomodado, la mesa se
+    // enciende y se dibuja el camino. Dura 0,8 s.
+    for (final (nombre, pantalla, archivo) in [
+      ('horizontal', _apaisada, 'Totem_salon_6_se_acomoda_horizontal.png'),
+      ('vertical', _vertical, 'Totem_salon_6_se_acomoda_vertical.png'),
+    ]) {
+      testWidgets('se acomoda, paso a paso, $nombre', (tester) async {
+        const pasos = [0.0, 0.25, 0.5, 0.75, 1.0];
+        final porFila = nombre == 'horizontal' ? 3 : 5;
+        final filas = (pasos.length / porFila).ceil();
+        await _sacar(
+          tester,
+          Size(
+            2 * _hueco + porFila * (pantalla.width + _hueco),
+            2 * _hueco + filas * (pantalla.height + 48 + _hueco),
+          ),
+          _grilla(pantalla, [
+            for (final (i, p) in pasos.indexed)
+              (
+                '${i + 1}. ${switch (p) {
+                  0.0 => 'en grande',
+                  1.0 => 'acomodada',
+                  _ => '${(p * 100).round()} %',
+                }}',
+                EscenaTotem(
+                  estilo: EstiloTotem.gala,
+                  cfg: _masivo,
+                  quieta: true,
+                  tiempoFijo: 6,
+                  acomodoFijo: p,
+                  llegada: familia,
+                  enCamino: 1,
+                  plano: salon,
+                ),
+              ),
+          ], porFila: porFila),
+          archivo,
+        );
+      });
+    }
+
+    testWidgets('dónde va el nombre, en una tele horizontal', (tester) async {
       await _sacar(
         tester,
-        _lienzo(_vertical),
-        _cuatro(
-          _vertical,
-          (e) => EscenaTotem(
-            estilo: e,
-            cfg: _masivo,
-            quieta: true,
-            tiempoFijo: 6,
-            llegada: familia,
-            enCamino: 2,
-            plano: salon,
-          ),
-        ),
-        'Totem_llegada_plano.png',
+        Size(2 * _hueco + 3 * (_apaisada.width + _hueco),
+            2 * (_hueco + 48 + _apaisada.height) + _hueco),
+        _grilla(_apaisada, [
+          for (final l in LugarElegido.values)
+            (
+              l == LugarElegido.automatico ? 'Automático' : l.etiqueta,
+              EscenaTotem(
+                estilo: EstiloTotem.gala,
+                cfg: _masivo.copyWith(llegadaLugar: l.clave),
+                quieta: true,
+                tiempoFijo: 6,
+                llegada: familia,
+                plano: salon,
+              ),
+            ),
+        ], porFila: 3),
+        'Totem_salon_4_donde_va_el_nombre.png',
       );
     });
 
-    testWidgets('horizontal', (tester) async {
+    testWidgets('el salón claro, o como antes', (tester) async {
+      const panel = Size(620, 440);
+      final guia = PlanoDeLaLlegada.para(salon, mesa: '12', nombre: 'PÉREZ')!;
       await _sacar(
         tester,
-        _lienzo(_apaisada, columnas: 2, filas: 2),
-        _cuatro(
-          _apaisada,
-          (e) => EscenaTotem(
-            estilo: e,
-            cfg: _masivo,
-            quieta: true,
-            tiempoFijo: 6,
-            llegada: familia,
-            plano: salon,
-          ),
-          porFila: 2,
-        ),
-        'Totem_llegada_plano_horizontal.png',
+        Size(2 * _hueco + 2 * (panel.width + _hueco),
+            2 * (_hueco + 48 + panel.height) + _hueco),
+        _grilla(panel, [
+          for (final e in [EstiloTotem.neon, EstiloTotem.gala])
+            for (final claro in [true, false])
+              (
+                '${e.nombre} · ${claro ? 'claro (el nuevo)' : 'como antes'}',
+                ColoredBox(
+                  color: const Color(0xFF14101E),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: PanelPlano.deLaLlegada(
+                      guia,
+                      tema: temaPlanoDelTotem(e, _masivo.colorAcento, claro: claro),
+                      borde: _masivo.colorAcento,
+                      u: 20,
+                      relleno: 7,
+                      animar: false,
+                    ),
+                  ),
+                ),
+              ),
+        ], porFila: 2),
+        'Totem_salon_5_claro_o_como_antes.png',
       );
     });
   });
