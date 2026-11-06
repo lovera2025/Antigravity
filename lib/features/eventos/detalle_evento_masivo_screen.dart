@@ -13,6 +13,7 @@ import '../caja_sesiones/services/caja_auto_sync_service.dart';
 import '../../models/evento.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/nota_operativa_contrato.dart';
+import '../../models/silla_puerta.dart';
 import '../../models/sillas_reparto.dart';
 import '../../models/sorteo_mesas_registro.dart';
 import '../../models/plano_evento.dart';
@@ -61,6 +62,7 @@ import 'services/sorteo_mesas_motor.dart';
 import 'services/ultimos_sorteados.dart';
 import '../../core/services/connectivity_service.dart';
 import '../recepcion/repositories/invitados_repository.dart';
+import '../recepcion/repositories/sillas_puerta_repository.dart';
 import '../recepcion/services/lista_puerta.dart';
 import '../recepcion/services/puerta_al_dia.dart';
 import 'services/planilla_delegado_archivos.dart';
@@ -124,6 +126,11 @@ class _DetalleEventoMasivoScreenState
 
   /// Dónde eligió cada familia sus sillas extra (`sillas_reparto`).
   Map<String, SillasReparto> _repartosPorContrato = {};
+
+  /// Las sillas que se sumaron la noche de la fiesta, en la puerta
+  /// (`sillas_puerta`, 6.4.0), vigentes y quitadas. Solo se muestran: no
+  /// cambian la cuenta, el sorteo ni la planilla.
+  Map<String, List<SillaPuerta>> _sillasPuertaPorContrato = {};
 
   /// Filtro "Sillas a confirmar": solo los que tienen que elegir.
   bool _soloSillasAConfirmar = false;
@@ -214,6 +221,7 @@ class _DetalleEventoMasivoScreenState
       tablas,
     ) {
       if (tablas.contains('sillas_reparto')) unawaited(_cargarRepartosSillas());
+      if (tablas.contains('sillas_puerta')) unawaited(_cargarSillasDeLaPuerta());
       if (tablas.contains('planos_evento')) unawaited(_cargarSiHayPlano());
       // Un cobro que bajó de la otra PC cambia qué está pagado.
       if (tablas.contains('pagos_contrato_alumno')) {
@@ -421,9 +429,34 @@ class _DetalleEventoMasivoScreenState
     if (!mounted) return;
     setState(() => _notasOperativasPorContrato = map);
     await _cargarRepartosSillas();
+    await _cargarSillasDeLaPuerta();
     await _cargarPagosExtras();
     await _cargarSiHayPlano();
   }
+
+  /// Las sillas de la puerta de esta fiesta, de la base de esta PC. Si no se
+  /// pueden leer, la grilla queda sin esa línea.
+  Future<void> _cargarSillasDeLaPuerta() async {
+    if (!mounted) return;
+    try {
+      final todas = await ref
+          .read(sillasPuertaRepositoryProvider)
+          .delEvento(widget.evento.id);
+      final porContrato = <String, List<SillaPuerta>>{};
+      for (final s in todas) {
+        porContrato.putIfAbsent(s.contratoAlumnoId, () => []).add(s);
+      }
+      if (mounted) setState(() => _sillasPuertaPorContrato = porContrato);
+    } catch (e) {
+      debugPrint('Las sillas de la puerta no se pudieron leer: $e');
+    }
+  }
+
+  /// Las vigentes de [contratoId] que se sumaron en la puerta.
+  int _sumadasEnLaPuerta(String contratoId) =>
+      (_sillasPuertaPorContrato[contratoId] ?? const <SillaPuerta>[])
+          .where((s) => s.vigente)
+          .fold(0, (n, s) => n + s.cantidad);
 
   /// Si la fiesta tiene plano, según la base de esta PC. Si no se puede leer,
   /// la grilla queda como siempre, sin el salto al plano.
@@ -2197,6 +2230,9 @@ class _DetalleEventoMasivoScreenState
                                     ocultarMontos: _ocultarMontos,
                                     avisos:
                                         _avisosPorContrato[a.id] ?? const [],
+                                    sillasDeLaPuerta:
+                                        _sillasPuertaPorContrato[a.id] ??
+                                            const [],
                                   ),
                                 ),
                               ),
@@ -4809,6 +4845,8 @@ class _DetalleEventoMasivoScreenState
       builder: (context) => ModalAlumnoPremium(
         evento: widget.evento,
         precios: PreciosHabituales.de(_alumnos),
+        // Desde el sorteo, las sillas extra se piden la noche de la fiesta.
+        fiestaSorteada: hayMesasSorteadas(_alumnos),
       ),
     );
     if (mounted && result == true) {
@@ -4824,6 +4862,8 @@ class _DetalleEventoMasivoScreenState
         evento: widget.evento,
         alumno: alumno,
         precios: PreciosHabituales.de(_alumnos),
+        fiestaSorteada: hayMesasSorteadas(_alumnos),
+        sumadasEnLaPuerta: _sumadasEnLaPuerta(alumno.id),
       ),
     );
     if (mounted && result == true) await _refreshAlumnos();

@@ -139,6 +139,36 @@ String musicaParaGuardar({
 }) =>
     esJefe ? escrita : (antes ?? '');
 
+/// Si en la oficina se pueden sumar sillas extra al contrato (6.4.0).
+///
+/// Desde que la fiesta tiene mesas sorteadas, una silla más se pide solo la
+/// noche de la fiesta: la cobra la barra y la anota la puerta (`SillaPuerta`).
+/// Lo decidió el jefe el 5-nov, y el usuario el 6-nov eligió trabarlo **por
+/// fiesta ya sorteada** (no por fecha) y que el jefe lo pueda saltear **en modo
+/// jefe** para un caso puntual. Bajar sigue permitido, y lo ya cargado no se
+/// toca.
+bool puedeSumarSillasAlContrato({
+  required bool fiestaSorteada,
+  required bool esJefe,
+}) =>
+    !fiestaSorteada || esJefe;
+
+/// La segunda llave, al guardar: si se quedó escrita alguna silla de más sin
+/// poder sumarla ([puedeSumarSillasAlContrato]), no se guarda.
+bool sillasExtraTrabadas({
+  required bool fiestaSorteada,
+  required bool esJefe,
+  required int antes,
+  required int escritas,
+}) =>
+    !puedeSumarSillasAlContrato(fiestaSorteada: fiestaSorteada, esJefe: esJefe) &&
+    escritas > antes;
+
+/// Por qué no se pueden sumar sillas al contrato, debajo del contador.
+const kSillasSoloEnLaFiesta =
+    'Desde el sorteo, las sillas extra se piden la noche de la fiesta: se '
+    'cobran en la barra y las anota la puerta. Acá, solo en modo jefe.';
+
 /// El casillero del número de mesa de Editar alumno.
 ///
 /// Sin modo jefe se ve y no se escribe, con el motivo debajo: la mesa de una
@@ -208,11 +238,21 @@ class ModalAlumnoPremium extends ConsumerStatefulWidget {
   /// carga uno distinto. Solo avisa; null = no avisar.
   final PreciosHabituales? precios;
 
+  /// Si la fiesta ya tiene mesas sorteadas: desde ahí las sillas extra se piden
+  /// la noche de la fiesta ([puedeSumarSillasAlContrato]).
+  final bool fiestaSorteada;
+
+  /// Las sillas que se le sumaron la noche de la fiesta, en la puerta,
+  /// vigentes. No cambian la cuenta.
+  final int sumadasEnLaPuerta;
+
   const ModalAlumnoPremium({
     super.key,
     required this.evento,
     this.alumno,
     this.precios,
+    this.fiestaSorteada = false,
+    this.sumadasEnLaPuerta = 0,
   });
 
   @override
@@ -385,6 +425,12 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
   /// Cada mesa admite hasta 2 sillas extra.
   int get _maxSillas => SalonMesas.maxSillasExtraPara(_mesasTotales);
 
+  /// Desde el sorteo, sumar sillas extra al contrato solo en modo jefe.
+  bool get _puedeSumarSillas => puedeSumarSillasAlContrato(
+        fiestaSorteada: widget.fiestaSorteada,
+        esJefe: ref.watch(esRolJefeProvider),
+      );
+
   /// Personas y lugares con lo cargado ahora. Las sillas sin precio no cuentan,
   /// igual que en su estado de cuenta.
   OcupacionAsientos get _ocupacion => OcupacionAsientos(
@@ -458,6 +504,21 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('El monto base es requerido'),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    if (sillasExtraTrabadas(
+      fiestaSorteada: widget.fiestaSorteada,
+      esJefe: ref.read(esRolJefeProvider),
+      antes: widget.alumno?.sillasExtraCantidad ?? 0,
+      escritas: _sillasExtraCant,
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(kSillasSoloEnLaFiesta),
           backgroundColor: Colors.orangeAccent,
         ),
       );
@@ -1210,6 +1271,7 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                                 gold,
                                 _sillasExtraCant,
                                 () => setState(() => _sillasExtraCant--),
+                                sumarTrabado: !_puedeSumarSillas,
                                 () {
                                   if (_sillasExtraCant >= _maxSillas) {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1275,6 +1337,49 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
                               ),
                             ),
                           ),
+                          if (!_puedeSumarSillas)
+                            Padding(
+                              key: const Key('sillas_solo_en_la_fiesta'),
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.lock_outline,
+                                    size: 14,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      kSillasSoloEnLaFiesta,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (widget.sumadasEnLaPuerta > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                widget.sumadasEnLaPuerta == 1
+                                    ? 'La noche de la fiesta se le sumó 1 en '
+                                        'la puerta (la cobró la barra: no '
+                                        'cambia la cuenta).'
+                                    : 'La noche de la fiesta se le sumaron '
+                                        '${widget.sumadasEnLaPuerta} en la '
+                                        'puerta (las cobró la barra: no '
+                                        'cambian la cuenta).',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
                           if (_sillasExtraCant > 0) ...[
                             const SizedBox(height: 16),
                             Container(
@@ -1431,8 +1536,9 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
     Color gold,
     int value,
     VoidCallback onDecrement,
-    VoidCallback onIncrement,
-  ) {
+    VoidCallback onIncrement, {
+    bool sumarTrabado = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? Colors.black26 : Colors.white,
@@ -1475,15 +1581,15 @@ class _ModalAlumnoPremiumState extends ConsumerState<ModalAlumnoPremium> {
               borderRadius: const BorderRadius.horizontal(
                 right: Radius.circular(11),
               ),
-              onTap: value < 100 ? onIncrement : null,
+              onTap: value < 100 && !sumarTrabado ? onIncrement : null,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
                 ),
                 child: Icon(
-                  Icons.add_rounded,
-                  color: value < 100 ? gold : Colors.grey,
+                  sumarTrabado ? Icons.lock_outline : Icons.add_rounded,
+                  color: value < 100 && !sumarTrabado ? gold : Colors.grey,
                 ),
               ),
             ),

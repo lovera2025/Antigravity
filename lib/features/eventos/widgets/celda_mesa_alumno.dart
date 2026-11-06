@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/contrato_alumno.dart';
+import '../../../models/silla_puerta.dart';
 import '../../../models/sillas_reparto.dart';
+import '../../recepcion/services/sillas_de_la_puerta.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../services/pago_para_sorteo.dart';
 import '../services/reparto_de_sillas.dart';
@@ -48,6 +50,10 @@ class CeldaMesaAlumno extends StatelessWidget {
   /// Lo que `SalonMesas.avisos` marcó de este alumno.
   final List<String> avisos;
 
+  /// Las sillas que se le sumaron la noche de la fiesta, en la puerta (6.4.0),
+  /// vigentes y quitadas. No cambian la cuenta: las cobra la barra.
+  final List<SillaPuerta> sillasDeLaPuerta;
+
   const CeldaMesaAlumno({
     super.key,
     required this.alumno,
@@ -59,6 +65,7 @@ class CeldaMesaAlumno extends StatelessWidget {
     this.marcarPago = false,
     this.ocultarMontos = false,
     this.avisos = const [],
+    this.sillasDeLaPuerta = const [],
   });
 
   static String _plural(int n, String uno, String varios) =>
@@ -146,7 +153,18 @@ class CeldaMesaAlumno extends StatelessWidget {
       if (estado == EstadoRepartoSillas.revisar)
         'Tiene más sillas de las que entran (2 por mesa): revisá la cuenta.',
       for (final a in avisos) '⚠ $a',
+      if (sillasDeLaPuerta.isNotEmpty) ...[
+        'Sumadas la noche de la fiesta, en la puerta (no cambian la cuenta: '
+            'las cobra la barra):',
+        for (final s in sillasDeLaPuerta)
+          s.vigente
+              ? '  ${textoSillaSumada(s)}'
+              : '  ${textoSillaSumada(s)} — ${textoSillaQuitada(s)}',
+      ],
     ].join('\n');
+    final enLaPuerta = sillasDeLaPuerta
+        .where((s) => s.vigente)
+        .fold(0, (n, s) => n + s.cantidad);
 
     final cuantas = '+$sillas ${_plural(sillas, 'silla', 'sillas')}';
     final String? textoSillas;
@@ -264,6 +282,18 @@ class CeldaMesaAlumno extends StatelessWidget {
               maxLines: 1,
             ),
           ?renglonSillas,
+          if (enLaPuerta > 0)
+            Text(
+              '+$enLaPuerta en la puerta',
+              key: const Key('sillas_en_la_puerta'),
+              style: TextStyle(
+                fontSize: chico,
+                fontWeight: FontWeight.w700,
+                color: Colors.blueGrey.shade600,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
         ],
       ),
     );
