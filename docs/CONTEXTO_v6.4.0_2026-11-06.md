@@ -39,6 +39,8 @@ silla en Recepción. Quitar una deja la huella: quién, cuándo y por qué. Nada
   `sillas_puerta` está en `tablasDeLaPuerta`, y si no baja, la puesta al día dice que falta.
 - **La traba de la oficina rige recién con la versión instalada.** Los sorteos empiezan el 10-nov y esta versión espera a la barra:
   hasta instalarla, no sumar sillas extra al contrato en una fiesta ya sorteada es una regla que la oficina respeta a mano.
+  **Decidido por el usuario el 6-nov:** "mientras respetaremos a mano". Capaz se publica antes que la barra, pero **no antes de
+  asegurarse de que todo está bien**: primero la prueba con celulares de verdad.
 - La base local pasa a la v78 (`sillas_puerta`), probada sobre la copia de la base real.
 
 ## Lo que falta
