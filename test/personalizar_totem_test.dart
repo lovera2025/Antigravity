@@ -10,6 +10,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_propio.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
@@ -39,6 +42,7 @@ Future<RepoTotemEnMemoria> _abrir(
   Size tamano = _pc,
   String eventoId = eventoMasivo,
   TotemConfig? guardada,
+  ArmadoSalon? plano,
 }) async {
   tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
@@ -53,6 +57,7 @@ Future<RepoTotemEnMemoria> _abrir(
       guardada: guardada ??
           TotemConfig(eventoId: eventoId, titulo: 'PROMOCIÓN 2026'),
       repo: repo,
+      plano: plano,
     ),
   );
   await tester.pump();
@@ -389,6 +394,107 @@ void main() {
       expect(particular.mesa, '4');
       expect(particular.musica, isNull);
       expect(particular.conQuien, isNull);
+    });
+  });
+
+  // 6.4.0: con el salón, cuánto dura el nombre en grande y el camino, y
+  // dónde va el nombre (pedido del jefe, 4-nov).
+  group('la llegada con el salón', () {
+    final salon = ArmadosPredefinidos.normal2aPagina3();
+
+    testWidgets('solo en un masivo', (tester) async {
+      await _abrir(tester);
+      expect(find.text('LA LLEGADA'), findsOneWidget);
+      await _abrir(tester, eventoId: eventoParticular);
+      expect(find.text('LA LLEGADA'), findsNothing);
+    });
+
+    testWidgets('con el plano, la vista muestra el salón y "Ver una llegada" '
+        'enciende una mesa que existe', (tester) async {
+      await _abrir(tester, plano: salon);
+      expect(_enLaVista(find.byType(PanelPlano)), findsOneWidget);
+      final mesa = int.parse(LlegadaDeEjemplo.mesaDe(salon));
+      expect(salon.existe(mesa), isTrue);
+      await tester.tap(find.byKey(const ValueKey('ver_una_llegada')));
+      await tester.pump();
+      await tester.pump(EscenaTotem.entrada);
+      // En grande, sin encender; pasados sus segundos, acomodada y encendida.
+      expect(tester.widget<VistaPlano>(find.byType(VistaPlano)).resaltadas,
+          isEmpty);
+      await tester.pump(
+        const Duration(seconds: TotemConfig.llegadaNombrePorDefecto),
+      );
+      await tester.pump(EscenaTotem.acomodo);
+      expect(tester.widget<VistaPlano>(find.byType(VistaPlano)).resaltadas,
+          {mesa});
+      // Dura los 4 + 8 s de siempre, y vuelve la espera.
+      await tester.pump(const Duration(seconds: 8));
+      await tester.pump(EscenaTotem.salida);
+      await tester.pump();
+      expect(_escenaDeLaVista(tester).llegada, isNull);
+    });
+
+    testWidgets('los segundos y el lugar se guardan', (tester) async {
+      final repo = await _abrir(tester, plano: salon);
+      await tester.ensureVisible(find.byKey(const ValueKey('agrandar_llegada_nombre')));
+      await tester.tap(find.byKey(const ValueKey('agrandar_llegada_nombre')));
+      await tester.pump();
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byKey(const ValueKey('achicar_llegada_camino')));
+        await tester.pump();
+      }
+      await tester.ensureVisible(find.byKey(const ValueKey('llegada_lugar_derecha')));
+      await tester.tap(find.byKey(const ValueKey('llegada_lugar_derecha')));
+      await tester.pump();
+      // El nombre subió de 4 a 5 y el camino bajó de 8 a 5.
+      expect(find.text('5 s'), findsNWidgets(2));
+      expect(_escenaDeLaVista(tester).cfg.llegadaLugar, 'derecha');
+      await _guardar(tester);
+      final g = repo.guardadas.single;
+      expect(g.llegadaNombreSeg, 5);
+      expect(g.llegadaCaminoSeg, 5);
+      expect(g.llegadaLugar, 'derecha');
+    });
+
+    testWidgets('sin tocarlos, se guardan como estaban', (tester) async {
+      final repo = await _abrir(
+        tester,
+        guardada: const TotemConfig(
+          eventoId: eventoMasivo,
+          titulo: 'PROMOCIÓN 2026',
+          llegadaNombreSeg: 7,
+          llegadaCaminoSeg: 20,
+          llegadaLugar: 'arriba',
+        ),
+      );
+      await tester.tap(_tarjeta(EstiloTotem.gala));
+      await tester.pump();
+      await _guardar(tester);
+      final g = repo.guardadas.single;
+      expect(g.llegadaNombreSeg, 7);
+      expect(g.llegadaCaminoSeg, 20);
+      expect(g.llegadaLugar, 'arriba');
+    });
+
+    test('la mesa de ejemplo: una del salón, o la 12 sin salón', () {
+      expect(LlegadaDeEjemplo.mesaDe(null), '12');
+      expect(salon.existe(int.parse(LlegadaDeEjemplo.mesaDe(salon))), isTrue);
+      final familia = LlegadaDeEjemplo.para(
+        masivo: true,
+        cfg: const TotemConfig(eventoId: eventoMasivo),
+        plano: salon,
+      );
+      expect(familia.mesa, LlegadaDeEjemplo.mesaDe(salon));
+      expect(
+        LlegadaDeEjemplo.dura(const TotemConfig(eventoId: eventoMasivo),
+            conSalon: true),
+        const Duration(seconds: 12),
+      );
+      expect(
+        LlegadaDeEjemplo.dura(const TotemConfig(eventoId: eventoMasivo),
+            conSalon: false),
+        const Duration(seconds: 7),
+      );
     });
   });
 

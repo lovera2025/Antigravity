@@ -9,7 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/recepcion/providers/recepcion_provider.dart';
+import 'package:arguello_events/features/totem/widgets/totem_local.dart'
+    show planoDelEventoProvider;
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/features/totem/providers/clave_totem_provider.dart';
 import 'package:arguello_events/features/totem/providers/totem_config_provider.dart';
@@ -94,9 +97,13 @@ Widget anfitrionPersonalizar({
   required TotemConfig guardada,
   required RepoTotemEnMemoria repo,
   ThemeData? tema,
+  ArmadoSalon? plano,
 }) =>
     ProviderScope(
       overrides: [
+        // El salón de la fiesta, sin abrir la base.
+        planoDelEventoProvider(eventoId)
+            .overrideWith((ref) => Stream.value(plano)),
         eventosActivosProvider.overrideWith(
           (ref) async => [
             eventoDePrueba(eventoMasivo, 'masivo'),

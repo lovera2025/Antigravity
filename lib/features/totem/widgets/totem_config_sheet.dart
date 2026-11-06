@@ -11,6 +11,7 @@ import '../../../main.dart' show kWebBaseUrl;
 import '../../../models/invitado.dart';
 import '../../../models/totem_config.dart';
 import '../../common/utils/cortes_pantalla.dart';
+import '../../plano/modelo/armado_salon.dart';
 import '../../recepcion/providers/recepcion_provider.dart'
     show eventosActivosProvider;
 import '../estilos/escena_totem.dart';
@@ -23,12 +24,14 @@ import '../providers/totem_config_provider.dart';
 import '../repositories/totem_config_repository.dart';
 import '../services/bienvenidas_totem.dart';
 import '../services/contenido_bienvenida.dart';
+import '../services/cuadro_del_salon.dart';
 import '../services/ficha_totem.dart';
 import '../services/foto_guardada.dart';
 import '../services/lectura_del_fondo.dart';
 import '../totem_orientation.dart';
 import 'foto_en_personalizar.dart';
 import 'link_totem_navegador.dart';
+import 'totem_local.dart' show planoDelEventoProvider;
 
 const _gold = TotemConfig.acentoPorDefecto;
 const _colorDelPanel = Color(0xFF141414);
@@ -84,14 +87,27 @@ Future<void> showTotemConfigSheet({
 /// lo mismo que arma la del salón ([ContenidoBienvenida.armar]), así que dice
 /// el saludo, la mesa y la música como las diría el tótem.
 abstract final class LlegadaDeEjemplo {
-  /// Lo que dura en la vista: lo de una bienvenida sin cola.
-  static const dura = kBienvenidaSola;
+  /// Lo que dura en la vista: lo de una bienvenida sin cola. Con el salón, los
+  /// segundos del nombre y del camino que se están eligiendo.
+  static Duration dura(TotemConfig cfg, {required bool conSalon}) =>
+      TiemposDeBienvenida.de(cfg, conSalon: conSalon).total(hayCola: false);
+
+  /// La mesa de la familia de ejemplo: con el salón, una del medio de la hoja
+  /// que se ve (la '12' puede no existir); sin él, la 12.
+  static String mesaDe(ArmadoSalon? plano) {
+    if (plano == null) return '12';
+    final hoja = CuadroDelSalon.hojaPrincipal(plano);
+    final mesas = hoja == null ? const <MesaPlano>[] : plano.mesasDeHoja(hoja);
+    if (mesas.isEmpty) return '12';
+    return '${mesas[mesas.length ~/ 2].numero}';
+  }
 
   /// En un masivo, una familia (el alumno y dos acompañantes) con su mesa y
   /// la música si está prendida. En un particular, una persona con su mesa.
   static ContenidoBienvenida para({
     required bool masivo,
     required TotemConfig cfg,
+    ArmadoSalon? plano,
   }) {
     Invitado fila(String id, String nombre, String mesa) => Invitado(
           id: id,
@@ -117,13 +133,14 @@ abstract final class LlegadaDeEjemplo {
 
     const alumno = 'ejemplo-alumno';
     const titular = 'PÉREZ, JUAN MARTÍN';
+    final mesa = mesaDe(plano);
     PersonaFicha persona(String id, String nombre, {bool esAlumno = false}) =>
         PersonaFicha(
           id: id,
           nombre: nombre,
           familia: alumno,
           esAlumno: esAlumno,
-          mesa: '12',
+          mesa: mesa,
           musica: esAlumno ? 'Tusa · Karol G' : null,
           titular: esAlumno ? null : titular,
         );
@@ -135,7 +152,7 @@ abstract final class LlegadaDeEjemplo {
     return ContenidoBienvenida.armar(
       BienvenidaTotem(
         familia: alumno,
-        personas: [for (final p in personas) fila(p.id, p.nombre, '12')],
+        personas: [for (final p in personas) fila(p.id, p.nombre, mesa)],
         empezo: empezo,
       ),
       ficha: FichaTotem(
@@ -215,6 +232,15 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   late int _ubicacionX;
   late int _ubicacionY;
 
+  /// La llegada con el salón: los segundos del nombre y del camino, y dónde
+  /// va el nombre (tal como vino; null: automático).
+  late int _llegadaNombre;
+  late int _llegadaCamino;
+  String? _llegadaLugar;
+
+  /// El salón de la fiesta que se ve en la vista (en un masivo con plano).
+  ArmadoSalon? _plano;
+
   /// La apariencia: la guardada, o la que se tocó. Si no se toca ninguna se
   /// conserva tal cual, también vacía: la config se arma campo por campo, y un
   /// campo que falte acá se borra en la nube.
@@ -285,6 +311,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     _textoTamano = cfg.textoTamano;
     _ubicacionX = cfg.ubicacionX;
     _ubicacionY = cfg.ubicacionY;
+    _llegadaNombre = cfg.llegadaNombreSeg;
+    _llegadaCamino = cfg.llegadaCaminoSeg;
+    _llegadaLugar = cfg.llegadaLugar;
     _estilo = cfg.estilo;
     _imagenUrl = cfg.imagenUrl;
     _fondo = cfg;
@@ -329,6 +358,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         ubicacionX: _ubicacionX,
         ubicacionY: _ubicacionY,
         estilo: _estilo,
+        llegadaNombreSeg: _llegadaNombre,
+        llegadaCaminoSeg: _llegadaCamino,
+        llegadaLugar: _llegadaLugar,
       ).conFondoDe(
         _quitarFondo ? _fondo.copyWith(limpiarFondo: true) : _fondo,
       );
@@ -365,14 +397,15 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
   void _verLlegada() {
     _temporizador?.cancel();
     final ahora = DateTime.now();
+    final dura = LlegadaDeEjemplo.dura(_preview, conSalon: _plano != null);
     setState(() {
       _conLlegada = true;
       _llegadaSaliendo = false;
       _claveLlegada = Object();
       _llegadaEmpezo = ahora;
-      _llegadaFin = ahora.add(LlegadaDeEjemplo.dura);
+      _llegadaFin = ahora.add(dura);
     });
-    _temporizador = Timer(LlegadaDeEjemplo.dura, () {
+    _temporizador = Timer(dura, () {
       if (!mounted) return;
       setState(() => _llegadaSaliendo = true);
       _temporizador = Timer(EscenaTotem.salida, () {
@@ -596,6 +629,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         ubicacionX: _ubicacionX,
         ubicacionY: _ubicacionY,
         estilo: _estilo,
+        llegadaNombreSeg: _llegadaNombre,
+        llegadaCaminoSeg: _llegadaCamino,
+        llegadaLugar: _llegadaLugar,
       ).conFondoDe(
         fondoUrl == null
             ? _fondo.copyWith(limpiarFondo: true)
@@ -639,6 +675,10 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
             ?.modalidad ==
         'masivo';
     final estilo = _estiloQueSeVe(masivo);
+    // El salón de la fiesta, para verlo como en la tele: solo en un masivo.
+    _plano = masivo
+        ? ref.watch(planoDelEventoProvider(widget.eventoId)).value
+        : null;
     return widget.enVentana
         ? _ventana(cfg, estilo, masivo)
         : _hoja(cfg, estilo, masivo);
@@ -887,8 +927,9 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
                   child: bloque,
                 ),
         llegada: _conLlegada
-            ? LlegadaDeEjemplo.para(masivo: masivo, cfg: cfg)
+            ? LlegadaDeEjemplo.para(masivo: masivo, cfg: cfg, plano: _plano)
             : null,
+        plano: _plano,
         claveLlegada: _claveLlegada,
         saliendo: _llegadaSaliendo,
         empezo: _llegadaEmpezo,
@@ -982,6 +1023,10 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         _seccionFoto(cfg, estilo),
         const SizedBox(height: 24),
         _seccionFrases(estilo),
+        if (masivo) ...[
+          const SizedBox(height: 24),
+          _seccionLlegada(),
+        ],
         const SizedBox(height: 24),
         _seccionFondo(),
         const SizedBox(height: 20),
@@ -1250,6 +1295,97 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
                 : null,
           ),
         ],
+      ],
+    );
+  }
+
+  /// La llegada con el salón (6.4.0, pedido del jefe): cuánto queda el nombre
+  /// en grande, cuánto el salón con el camino, y dónde va el nombre. Solo en un
+  /// masivo: un particular no tiene salón.
+  Widget _seccionLlegada() {
+    final libre = !_guardando;
+    final elegido = LugarElegido.deClave(_llegadaLugar);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('LA LLEGADA', style: _estiloRotulo),
+        const SizedBox(height: 4),
+        Text(
+          _plano == null
+              ? 'Con la fiesta sorteada, la tele muestra el salón entero. Al '
+                  'llegar una familia, primero su nombre en grande; después se '
+                  'acomoda y el salón muestra el camino a su mesa. Cada familia '
+                  'dura esto, aunque haya gente esperando.'
+              : 'Primero el nombre en grande; después la tarjeta se acomoda y '
+                  'el salón muestra el camino a la mesa. Cada familia dura '
+                  'esto, aunque haya gente esperando. Esa noche se cambia a '
+                  'mano desde Recepción.',
+          style: const TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'El nombre en grande',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        BarraDeTamano(
+          clave: 'llegada_nombre',
+          valor: _llegadaNombre,
+          minimo: TotemConfig.llegadaNombreMinimo,
+          maximo: TotemConfig.llegadaNombreMaximo,
+          paso: 1,
+          unidad: 's',
+          onChanged: libre ? (v) => setState(() => _llegadaNombre = v) : null,
+        ),
+        const Text(
+          'El salón con el camino',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        BarraDeTamano(
+          clave: 'llegada_camino',
+          valor: _llegadaCamino,
+          minimo: TotemConfig.llegadaCaminoMinimo,
+          maximo: TotemConfig.llegadaCaminoMaximo,
+          paso: 1,
+          unidad: 's',
+          onChanged: libre ? (v) => setState(() => _llegadaCamino = v) : null,
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Dónde va el nombre, junto al salón',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final l in LugarElegido.values)
+              ChoiceChip(
+                key: ValueKey('llegada_lugar_${l.name}'),
+                label: Text(
+                  l == LugarElegido.automatico
+                      ? 'Automático · la pista'
+                      : l.etiqueta,
+                ),
+                selected: elegido == l,
+                onSelected: libre
+                    ? (_) => setState(() => _llegadaLugar = l.clave)
+                    : null,
+                selectedColor: _gold.withValues(alpha: 0.25),
+                labelStyle: TextStyle(
+                  color: elegido == l ? const Color(0xFFF3DC8A) : Colors.white70,
+                  fontSize: 12,
+                ),
+                side: BorderSide(
+                  color: elegido == l
+                      ? _gold.withValues(alpha: 0.7)
+                      : Colors.white.withValues(alpha: 0.18),
+                ),
+                backgroundColor: Colors.transparent,
+                showCheckmark: false,
+              ),
+          ],
+        ),
       ],
     );
   }

@@ -131,8 +131,9 @@ class _DibujoForma extends CustomPainter {
   bool shouldRepaint(_DibujoForma old) => old.forma != forma || old.color != color;
 }
 
-/// Un tamaño en %: − y + de a [paso], o la barra. [clave] nombra los botones
-/// (`achicar_<clave>`, `tamano_<clave>`, `agrandar_<clave>`).
+/// Un tamaño en % (o lo que diga [unidad], como los segundos de la llegada): −
+/// y + de a [paso], o la barra. [clave] nombra los botones (`achicar_<clave>`,
+/// `tamano_<clave>`, `agrandar_<clave>`).
 class BarraDeTamano extends StatelessWidget {
   final String clave;
   final int valor;
@@ -142,6 +143,12 @@ class BarraDeTamano extends StatelessWidget {
   /// Null mientras se guarda.
   final ValueChanged<int>? onChanged;
 
+  /// De a cuánto cambian − y +, y cada paso de la barra.
+  final int paso;
+
+  /// Lo que va después del número: "%" o "s".
+  final String unidad;
+
   const BarraDeTamano({
     super.key,
     required this.clave,
@@ -149,9 +156,11 @@ class BarraDeTamano extends StatelessWidget {
     required this.minimo,
     required this.maximo,
     required this.onChanged,
+    this.paso = pasoDeSiempre,
+    this.unidad = '%',
   });
 
-  static const paso = 10;
+  static const pasoDeSiempre = 10;
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +203,7 @@ class BarraDeTamano extends StatelessWidget {
         SizedBox(
           width: 52,
           child: Text(
-            '$valor %',
+            '$valor $unidad',
             key: ValueKey('valor_$clave'),
             textAlign: TextAlign.right,
             style: const TextStyle(color: _oroClaro, fontSize: 14),
