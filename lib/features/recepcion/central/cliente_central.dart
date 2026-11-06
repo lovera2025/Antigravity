@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../totem/services/tiempos_a_mano.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
 
@@ -71,6 +72,11 @@ class ClienteCentral extends ChangeNotifier {
   Map<String, dynamic>? _lista;
   var _version = 0;
   Map<String, String> _por = const {};
+
+  /// Los segundos de la llegada de esa noche, como los tiene la PC. Null si la
+  /// central no los mandó (una PC con la versión de antes).
+  TiemposAMano? _tiempos;
+  TiemposAMano? get tiempos => _tiempos;
 
   final _pendientes = <PedidoPendiente>[];
   List<PedidoPendiente> get pendientes => List.unmodifiable(_pendientes);
@@ -175,14 +181,15 @@ class ClienteCentral extends ChangeNotifier {
   /// Lo que se agrega a "ADENTRO · 22:41" de [personaId]: que todavía no se
   /// mandó (sin conexión), o quién lo ingresó.
   String? marca(String personaId) {
-    final esperando = _pendientes.any((p) => p.pedido.personaId == personaId);
+    bool suyo(PedidoPendiente p) =>
+        p.pedido.que.esIngreso && p.pedido.personaId == personaId;
+    final esperando = _pendientes.any(suyo);
     if (esperando && _estado != EstadoDelPuesto.conectado) return kPorMandar;
-    if (esperando ||
-        _confirmados.any((c) => c.$1.pedido.personaId == personaId)) {
+    if (esperando || _confirmados.any((c) => suyo(c.$1))) {
       final ultimo = [
         for (final (c, _) in _confirmados) c,
         ..._pendientes,
-      ].lastWhere((p) => p.pedido.personaId == personaId);
+      ].lastWhere(suyo);
       return ultimo.pedido.que == QuePide.ingresar ? _nombre : null;
     }
     return _por[personaId];
@@ -193,6 +200,33 @@ class ClienteCentral extends ChangeNotifier {
 
   Future<void> deshacer(PersonaPuerta persona) =>
       _pedir(QuePide.deshacer, persona.id);
+
+  /// Suma una silla a la familia de [grupo]. Como un ingreso: sin conexión
+  /// queda guardada y se manda al volver, y la central decide si entra.
+  Future<void> sumarSilla(GrupoPuerta grupo, DatosSilla datos) =>
+      _pedir(QuePide.sumarSilla, grupo.titular.id, silla: datos);
+
+  Future<void> quitarSilla(GrupoPuerta grupo, DatosSilla datos) =>
+      _pedir(QuePide.quitarSilla, grupo.titular.id, silla: datos);
+
+  /// Cuántas sillas se tocaron acá y la central todavía no contestó.
+  int get sillasPorMandar =>
+      _pendientes.where((p) => !p.pedido.que.esIngreso).length;
+
+  /// Cambia los segundos de la llegada de esa noche. Solo con la central: un
+  /// cambio de segundos que llega tarde ya no sirve. Devuelve si se mandó.
+  bool ponerTiempos(TiemposAMano t) {
+    if (_estado != EstadoDelPuesto.conectado || _canal == null) return false;
+    _tiempos = t;
+    _mandar(PedidoPuerta(
+      id: const Uuid().v4(),
+      que: QuePide.tiemposTotem,
+      personaId: '',
+      tiempos: t,
+    ).toJson());
+    if (!_cerrado) notifyListeners();
+    return true;
+  }
 
   /// "Actualizar la lista": se vuelve a conectar ya, sin esperar el reintento.
   void reconectar() {
@@ -221,9 +255,18 @@ class ClienteCentral extends ChangeNotifier {
     if (!_cerrado) notifyListeners();
   }
 
-  Future<void> _pedir(QuePide que, String personaId) async {
+  Future<void> _pedir(
+    QuePide que,
+    String personaId, {
+    DatosSilla? silla,
+  }) async {
     final p = PedidoPendiente(
-      PedidoPuerta(id: const Uuid().v4(), que: que, personaId: personaId),
+      PedidoPuerta(
+        id: const Uuid().v4(),
+        que: que,
+        personaId: personaId,
+        silla: silla,
+      ),
       marcado: _ahora(),
     );
     _pendientes.add(p);
@@ -364,6 +407,7 @@ class ClienteCentral extends ChangeNotifier {
     _por = por is Map
         ? {for (final e in por.entries) '${e.key}': '${e.value}'}
         : const {};
+    _tiempos = TiemposAMano.fromJson(m['tiempos']);
     _confirmados.removeWhere((c) => c.$2 < v || volvio);
     _intentos = 0;
     _poner(EstadoDelPuesto.conectado);
@@ -380,12 +424,9 @@ class ClienteCentral extends ChangeNotifier {
     for (final p in _pendientes) {
       if (!_enCamino.add(p.pedido.id)) continue;
       final hace = ahora.difference(p.marcado);
-      _mandar(PedidoPuerta(
-        id: p.pedido.id,
-        que: p.pedido.que,
-        personaId: p.pedido.personaId,
-        hace: hace.isNegative ? Duration.zero : hace,
-      ).toJson());
+      _mandar(
+        p.pedido.conHace(hace.isNegative ? Duration.zero : hace).toJson(),
+      );
     }
   }
 
@@ -507,6 +548,8 @@ Map<String, dynamic> listaConCambios(
     }
   }
   for (final c in cambios) {
+    // Una silla no cambia quién está adentro: la trae la lista de la central.
+    if (!c.pedido.que.esIngreso) continue;
     final p = personas[c.pedido.personaId];
     if (p == null) continue;
     final adentro = c.pedido.que == QuePide.ingresar;

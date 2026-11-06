@@ -1,7 +1,12 @@
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/recepcion/services/sillas_de_la_puerta.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/puerta_en_memoria.dart' show alumnoDePrueba, eventoMasivo;
 
 /// Qué hace la central de la puerta con lo que le piden los celulares
 /// (`pedidos_de_la_puerta.dart`).
@@ -222,5 +227,236 @@ void main() {
     m.ingreso('a', 'Pato');
     expect(m.quien('a'), 'Pato');
     expect(m.cuantos('Pato'), 2);
+  });
+  group('las sillas de la noche', () {
+    const juli = 'c1000000-0000-4000-8000-000000000001';
+    const gomez = 'c2000000-0000-4000-8000-000000000002';
+    // PÉREZ, JULIANA: mesas 12 y 13, 2 sillas del contrato (las dos en la 12):
+    // le entran 2 más, en la 13. GÓMEZ, ANA: mesa 14, sin extra.
+    final puerta = PuertaDelEvento.masivo(
+      alumnos: [
+        alumnoDePrueba(juli, 'PÉREZ, JULIANA', mesas: [12, 13], extras: 1, sillas: 2),
+        alumnoDePrueba(gomez, 'GÓMEZ, ANA', mesas: [14]),
+      ],
+      invitados: const [],
+    );
+    GrupoPuerta grupo(String contrato) =>
+        puerta.grupos.firstWhere((g) => g.contratoId == contrato);
+
+    var n = 0;
+    SillaPuerta silla(String contrato, int mesa, String vale) {
+      n++;
+      return SillaPuerta(
+        id: 's$n',
+        eventoId: eventoMasivo,
+        contratoAlumnoId: contrato,
+        mesa: mesa,
+        vale: vale,
+        createdAt: _hora,
+        updatedAt: _hora,
+      );
+    }
+
+    PedidoPuerta sumar(String contrato, {int? mesa, String? vale = '2 0017'}) =>
+        PedidoPuerta(
+          id: 'x',
+          que: QuePide.sumarSilla,
+          personaId: grupo(contrato).titular.id,
+          silla: DatosSilla(mesa: mesa, vale: vale),
+        );
+
+    DecisionSilla decidir(PedidoPuerta p, List<SillaPuerta> base) => decidirSilla(
+          pedido: p,
+          grupo: puerta.grupos
+              .where((g) => g.titular.id == p.personaId)
+              .firstOrNull,
+          deLaNoche: base,
+          nombreDe: (c) =>
+              puerta.grupos.where((g) => g.contratoId == c).firstOrNull?.titular.nombre,
+        );
+
+    test('suma a la mesa con lugar, con el vale como se anota', () {
+      final d = decidir(sumar(juli), const []);
+      expect(d.hace, QueHaceLaCentral.sumarSilla);
+      expect(d.mesa, 13);
+      expect(d.vale, '2-17');
+      expect(d.aviso, isNull);
+    });
+
+    test('si la mesa pedida está llena, va a otra de la familia y lo dice', () {
+      final d = decidir(sumar(juli, mesa: 12), const []);
+      expect(d.mesa, 13);
+      expect(d.aviso, 'La mesa 12 ya estaba llena: la silla va a la mesa 13.');
+    });
+
+    test('dos pedidos seguidos con la base del momento: el segundo no suma', () {
+      // Le queda un lugar: una ya sumada en la 13.
+      final base = [silla(juli, 13, '1-5')];
+      final primero = decidir(sumar(juli, vale: '2-17'), base);
+      expect(primero.haceAlgo, isTrue);
+      // La central la anotó: el segundo pedido mira la base con ella.
+      base.add(silla(juli, primero.mesa!, primero.vale!));
+      final segundo = decidir(sumar(juli, vale: '2-18'), base);
+      expect(segundo.haceAlgo, isFalse);
+      expect(segundo.aviso, 'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa.');
+    });
+
+    test('sin vale no suma', () {
+      for (final vale in [null, '', '   ', 'sin número']) {
+        final d = decidir(sumar(gomez, vale: vale), const []);
+        expect(d.haceAlgo, isFalse, reason: '$vale');
+        expect(d.aviso, 'Hace falta el número del vale de la barra.');
+      }
+    });
+
+    test('el mismo vale dos veces no suma, aunque se escriba distinto', () {
+      final d = decidir(sumar(gomez, vale: 'caja 2 n° 0017'), [silla(juli, 13, '2-17')]);
+      expect(d.haceAlgo, isFalse);
+      expect(d.aviso, 'El vale 2-17 ya se usó para PÉREZ, JULIANA.');
+    });
+
+    test('un vale de una silla quitada se puede volver a usar', () {
+      final quitada = silla(juli, 13, '2-17')
+          .quitada(por: 'Pato', motivo: 'se equivocó de familia', ahora: _hora);
+      expect(decidir(sumar(gomez, vale: '2-17'), [quitada]).haceAlgo, isTrue);
+    });
+
+    test('sin mesa (antes del sorteo) no suma', () {
+      final antes = PuertaDelEvento.masivo(
+        alumnos: [alumnoDePrueba(juli, 'PÉREZ, JULIANA')],
+        invitados: const [],
+      );
+      final g = antes.grupos.single;
+      final d = decidirSilla(
+        pedido: PedidoPuerta(
+          id: 'x',
+          que: QuePide.sumarSilla,
+          personaId: g.titular.id,
+          silla: const DatosSilla(vale: '1-1'),
+        ),
+        grupo: g,
+        deLaNoche: const [],
+      );
+      expect(d.aviso, 'Esa familia no tiene mesa todavía.');
+    });
+
+    test('quitar pide el motivo', () {
+      final s = silla(gomez, 14, '1-1');
+      PedidoPuerta quitar(String? motivo) => PedidoPuerta(
+            id: 'q',
+            que: QuePide.quitarSilla,
+            personaId: grupo(gomez).titular.id,
+            silla: DatosSilla(sillaId: s.id, motivo: motivo),
+          );
+      expect(decidir(quitar(null), [s]).aviso, 'Decí por qué se quita.');
+      expect(decidir(quitar('  '), [s]).haceAlgo, isFalse);
+      final bien = decidir(quitar('devolvieron el vale'), [s]);
+      expect(bien.hace, QueHaceLaCentral.quitarSilla);
+      expect(bien.mesa, 14);
+    });
+
+    test('quitar lo que ya se quitó no hace nada', () {
+      final s = silla(gomez, 14, '1-1').quitada(por: 'Pato', motivo: 'x', ahora: _hora);
+      final d = decidir(
+        PedidoPuerta(
+          id: 'q',
+          que: QuePide.quitarSilla,
+          personaId: grupo(gomez).titular.id,
+          silla: DatosSilla(sillaId: s.id, motivo: 'y'),
+        ),
+        [s],
+      );
+      expect(d.aviso, 'Esa silla ya se quitó.');
+    });
+
+    test('quitar la silla de otra familia no hace nada', () {
+      final s = silla(juli, 13, '1-1');
+      final d = decidir(
+        PedidoPuerta(
+          id: 'q',
+          que: QuePide.quitarSilla,
+          personaId: grupo(gomez).titular.id,
+          silla: DatosSilla(sillaId: s.id, motivo: 'y'),
+        ),
+        [s],
+      );
+      expect(d.haceAlgo, isFalse);
+    });
+
+    test('a lo cargado a mano no se le suman sillas', () {
+      final p = PuertaDelEvento.masivo(
+        alumnos: const [],
+        invitados: [_fila('a-mano')],
+      );
+      final g = p.grupos.single;
+      final d = decidirSilla(
+        pedido: PedidoPuerta(
+          id: 'x',
+          que: QuePide.sumarSilla,
+          personaId: g.titular.id,
+          silla: const DatosSilla(vale: '1-1'),
+        ),
+        grupo: g,
+        deLaNoche: const [],
+      );
+      expect(d.haceAlgo, isFalse);
+    });
+  });
+
+  group('el pedido viaja por la red', () {
+    test('una silla, ida y vuelta', () {
+      const p = PedidoPuerta(
+        id: 'a',
+        que: QuePide.sumarSilla,
+        personaId: 'p1',
+        silla: DatosSilla(mesa: 12, vale: '2 0017', nota: 'la abuela'),
+      );
+      final q = PedidoPuerta.fromJson(p.toJson())!;
+      expect(q.que, QuePide.sumarSilla);
+      expect(q.silla!.mesa, 12);
+      expect(q.silla!.vale, '2 0017');
+      expect(q.silla!.nota, 'la abuela');
+    });
+
+    test('los segundos del tótem, sin persona', () {
+      final p = PedidoPuerta(
+        id: 'a',
+        que: QuePide.tiemposTotem,
+        personaId: '',
+        tiempos: TiemposAMano(nombre: 5, camino: 10),
+      );
+      final q = PedidoPuerta.fromJson(p.toJson())!;
+      expect(q.tiempos, TiemposAMano(nombre: 5, camino: 10));
+    });
+
+    test('una silla sin sus datos, o los segundos sin segundos, no se entienden', () {
+      expect(
+        PedidoPuerta.fromJson({'id': 'a', 'que': 'sumarSilla', 'persona': 'p1'}),
+        isNull,
+      );
+      expect(
+        PedidoPuerta.fromJson({'id': 'a', 'que': 'tiemposTotem', 'persona': ''}),
+        isNull,
+      );
+      expect(
+        PedidoPuerta.fromJson({'id': 'a', 'que': 'ingresar', 'persona': ''}),
+        isNull,
+        reason: 'un ingreso sin persona sigue sin entenderse',
+      );
+    });
+
+    test('un texto largo se corta', () {
+      final d = DatosSilla.fromJson({'nota': 'x' * 500})!;
+      expect(d.nota!.length, 120);
+    });
+  });
+
+  test('el vale se anota con sus números, sin ceros adelante', () {
+    expect(valeNormalizado('2 0017'), '2-17');
+    expect(valeNormalizado('Caja 2 · N° 0017-3'), '2-17-3');
+    expect(valeNormalizado('0012'), '12');
+    expect(valeNormalizado('2.0017'), '2-17');
+    expect(valeNormalizado('   '), isNull);
+    expect(valeNormalizado(null), isNull);
   });
 }

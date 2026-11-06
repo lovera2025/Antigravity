@@ -105,6 +105,21 @@ void main() {
     return c;
   }
 
+  /// La lista de Recepción del masivo, cuando cumple [cumple] (o la primera).
+  Future<PuertaDelEvento> leerPuerta({
+    bool Function(PuertaDelEvento)? cumple,
+  }) async {
+    final limite = DateTime.now().add(const Duration(seconds: 5));
+    while (true) {
+      final p = container.read(puertaDelEventoProvider(eventoMasivo)).value;
+      if (p != null && (cumple == null || cumple(p))) return p;
+      if (DateTime.now().isAfter(limite)) {
+        throw StateError('la lista no llegó como se esperaba');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
   PuertaDelEvento lista(Map<String, dynamic> m) => PuertaDelEvento.fromJson(
         m['puerta'] as Map<String, dynamic>,
         eventoId: eventoMasivo,
@@ -291,5 +306,105 @@ void main() {
     await central().prender(eventoMasivo);
     expect(estado().prendida, isFalse);
     expect(estado().error, contains('No se pudo abrir la central'));
+  });
+  group('las sillas de la noche desde la PC', () {
+    /// PÉREZ, JUAN en la mesa 12 con 1 silla del contrato: le entra una más.
+    Future<PuertaDelEvento> masivoSorteado() async {
+      puerta.contratos.alumnos = [
+        alumnoDePrueba(_c1, 'PÉREZ, JUAN', mesas: [12], sillas: 1),
+        alumnoDePrueba(_c2, 'ACOSTA, LUCÍA', mesas: [13]),
+      ];
+      final sub = container.listen(
+        puertaDelEventoProvider(eventoMasivo),
+        (_, _) {},
+      );
+      addTearDown(sub.close);
+      return leerPuerta();
+    }
+
+    test('con la central apagada, sumar escribe en la base de esta PC',
+        () async {
+      final p = await masivoSorteado();
+      expect(estado().prendida, isFalse);
+      final grupo = p.grupos.firstWhere((g) => g.contratoId == _c1);
+
+      final r = await container.read(accionesPuertaProvider).sumarSilla(
+            eventoMasivo,
+            p,
+            grupo,
+            const DatosSilla(mesa: 12, vale: '1 0012'),
+          );
+
+      expect(r.hecho, isTrue);
+      expect(r.texto, 'Silla sumada a la mesa 12 de PÉREZ, JUAN.');
+      final s = puerta.sillasPuerta.filas.single;
+      expect(s.vale, '1-12');
+      expect(s.mesa, 12);
+      expect(s.anotadoPor, 'PC', reason: 'sin caja ni usuario, la PC');
+      // La lista de Recepción se vuelve a leer sola.
+      final despues = await leerPuerta(
+        cumple: (p) => p.conteoDeLaNoche.sumadas == 1,
+      );
+      expect(
+        despues.grupos.firstWhere((g) => g.contratoId == _c1).puedeSumarSilla,
+        isFalse,
+      );
+    });
+
+    test('en el tope, desde la PC tampoco entra', () async {
+      final p = await masivoSorteado();
+      final grupo = p.grupos.firstWhere((g) => g.contratoId == _c1);
+      final acciones = container.read(accionesPuertaProvider);
+      await acciones.sumarSilla(
+          eventoMasivo, p, grupo, const DatosSilla(vale: '1 0012'));
+      final r = await acciones.sumarSilla(
+          eventoMasivo, p, grupo, const DatosSilla(vale: '1 0013'));
+      expect(r.hecho, isFalse);
+      expect(r.texto, 'PÉREZ, JUAN ya no puede agregar: 2 extra por mesa.');
+      expect(puerta.sillasPuerta.filas, hasLength(1));
+    });
+
+    test('quitar desde la PC pide el motivo y deja la huella', () async {
+      final p = await masivoSorteado();
+      final grupo = p.grupos.firstWhere((g) => g.contratoId == _c1);
+      final acciones = container.read(accionesPuertaProvider);
+      await acciones.sumarSilla(
+          eventoMasivo, p, grupo, const DatosSilla(vale: '1 0012'));
+      final id = puerta.sillasPuerta.filas.single.id;
+
+      final sinMotivo = await acciones.quitarSilla(
+          eventoMasivo, p, grupo, DatosSilla(sillaId: id));
+      expect(sinMotivo.hecho, isFalse);
+      final r = await acciones.quitarSilla(eventoMasivo, p, grupo,
+          DatosSilla(sillaId: id, motivo: 'devolvieron el vale'));
+      expect(r.hecho, isTrue);
+      expect(r.texto, 'Silla quitada de la mesa 12 de PÉREZ, JUAN.');
+      final s = puerta.sillasPuerta.filas.single;
+      expect(s.vigente, isFalse);
+      expect(s.quitadaPor, 'PC');
+      expect(s.quitadaMotivo, 'devolvieron el vale');
+    });
+
+    test('un celular y la PC a la vez, a una familia con un lugar: entra una',
+        () async {
+      final p = await masivoSorteado();
+      await central().prender(eventoMasivo);
+      final c = await celular();
+      await c.espera('puerta');
+      final grupo = p.grupos.firstWhere((g) => g.contratoId == _c1);
+
+      c.pedir('s1', QuePide.sumarSilla, grupo.titular.id,
+          silla: const DatosSilla(vale: '2 0040'));
+      final desdeLaPc = container.read(accionesPuertaProvider).sumarSilla(
+          eventoMasivo, p, grupo, const DatosSilla(vale: '1 0012'));
+      final delCelular = await c.espera('respuesta');
+      final pc = await desdeLaPc;
+
+      expect(puerta.sillasPuerta.filas, hasLength(1));
+      expect(
+        [pc.hecho, delCelular['hizo'] == 'sumarSilla'].where((x) => x),
+        hasLength(1),
+      );
+    });
   });
 }

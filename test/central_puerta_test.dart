@@ -4,11 +4,13 @@ import 'dart:io';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/celular_de_prueba.dart';
 import 'helpers/central_en_memoria.dart';
+import 'helpers/puerta_en_memoria.dart' show alumnoDePrueba;
 
 /// La central de la puerta de verdad (`CentralPuerta`), escuchando solo en esta
 /// PC, con celulares de mentira que se conectan por la red como los de
@@ -466,6 +468,114 @@ void main() {
           .then((q) => q.close());
       expect(r.statusCode, 404);
       await r.drain<void>();
+    });
+  });
+  group('las sillas de la noche', () {
+    const juli = 'c1000000-0000-4000-8000-000000000001';
+    late String titular;
+
+    setUp(() {
+      // Un masivo: PÉREZ, JULIANA en la mesa 12 con 1 silla del contrato. Le
+      // entra una sola más.
+      pc.filas.clear();
+      pc.alumnos.add(
+        alumnoDePrueba(juli, 'PÉREZ, JULIANA', mesas: [12], sillas: 1),
+      );
+      central.ponerPuerta(pc.lista());
+      pc.alCambiar = () => central.ponerPuerta(pc.lista());
+      titular = pc.lista().grupos.single.titular.id;
+    });
+
+    test('dos celulares suman a una familia con un lugar: entra una, el otro '
+        'recibe que ya está en el tope', () async {
+      pc.demora = const Duration(milliseconds: 80);
+      final c1 = await celular();
+      final c2 = await celular(id: 'cel-pato', nombre: 'Pato');
+      c1.pedir('s1', QuePide.sumarSilla, titular,
+          silla: const DatosSilla(mesa: 12, vale: '1 0012'));
+      c2.pedir('s2', QuePide.sumarSilla, titular,
+          silla: const DatosSilla(mesa: 12, vale: '2 0040'));
+      final r1 = await c1.espera('respuesta');
+      final r2 = await c2.espera('respuesta');
+      final hechas = [r1, r2].where((r) => r['hizo'] == 'sumarSilla').toList();
+      final nada = [r1, r2].where((r) => r['hizo'] == 'nada').toList();
+      expect(hechas, hasLength(1));
+      expect(nada.single['aviso'],
+          'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa.');
+      expect(pc.sillas, hasLength(1));
+    });
+
+    test('la lista que sale lleva la silla con el vale y quién la anotó',
+        () async {
+      final c = await celular();
+      await c.espera('puerta');
+      final r = await c.pedirYEsperar('s1', QuePide.sumarSilla, titular,
+          silla: const DatosSilla(mesa: 12, vale: '1 0012', nota: 'la abuela'));
+      expect(r['hizo'], 'sumarSilla');
+      expect(r['mesa'], 12);
+      final m = await c.espera('puerta', cumple: (m) {
+        final g = (m['puerta']['grupos'] as List).single as Map;
+        return g['movimientos'] != null;
+      });
+      final lista = PuertaDelEvento.fromJson(
+        m['puerta'] as Map<String, dynamic>,
+        eventoId: _evento,
+      );
+      final s = lista.grupos.single.movimientos.single;
+      expect(s.vale, '1-12');
+      expect(s.anotadoPor, 'Juli');
+      expect(s.nota, 'la abuela');
+      expect(lista.grupos.single.sillasPorMesa.puedeAgregar, isFalse);
+      expect(lista.conteoDeLaNoche.texto, 'Esta noche: 1 silla sumada · vale 1-12');
+    });
+
+    test('quitar con motivo deja la silla tachada, con quién y por qué',
+        () async {
+      final c = await celular(nombre: 'Pato', id: 'cel-pato');
+      await c.pedirYEsperar('s1', QuePide.sumarSilla, titular,
+          silla: const DatosSilla(vale: '1 0012'));
+      final sinMotivo = await c.pedirYEsperar('q1', QuePide.quitarSilla, titular,
+          silla: DatosSilla(sillaId: pc.sillas.single.id));
+      expect(sinMotivo['hizo'], 'nada');
+      expect(sinMotivo['aviso'], 'Decí por qué se quita.');
+      final r = await c.pedirYEsperar('q2', QuePide.quitarSilla, titular,
+          silla: DatosSilla(
+              sillaId: pc.sillas.single.id, motivo: 'devolvieron el vale'));
+      expect(r['hizo'], 'quitarSilla');
+      final s = pc.sillas.single;
+      expect(s.vigente, isFalse);
+      expect(s.quitadaPor, 'Pato');
+      expect(s.quitadaMotivo, 'devolvieron el vale');
+    });
+
+    test('si la base falla, no se anota y el celular puede volver a mandarla',
+        () async {
+      final c = await celular();
+      pc.falla = true;
+      final r = await c.pedirYEsperar('s1', QuePide.sumarSilla, titular,
+          silla: const DatosSilla(vale: '1 0012'));
+      expect(r['ok'], isFalse);
+      pc.falla = false;
+      final otra = await c.pedirYEsperar('s1', QuePide.sumarSilla, titular,
+          silla: const DatosSilla(vale: '1 0012'));
+      expect(otra['hizo'], 'sumarSilla');
+      expect(pc.sillas, hasLength(1));
+    });
+  });
+
+  group('los segundos del tótem', () {
+    test('le llegan al celular con la lista, y el celular los puede cambiar',
+        () async {
+      central.ponerPuerta(pc.lista());
+      central.ponerTiempos(TiemposAMano(nombre: 4, camino: 8));
+      final c = await celular();
+      final m = await c.espera('puerta', cumple: (m) => m['tiempos'] != null);
+      expect(TiemposAMano.fromJson(m['tiempos']), TiemposAMano(nombre: 4, camino: 8));
+
+      final r = await c.pedirYEsperar('t1', QuePide.tiemposTotem, '',
+          tiempos: TiemposAMano(nombre: 6, camino: 12));
+      expect(r['hizo'], 'tiempos');
+      expect(pc.tiempos, [TiemposAMano(nombre: 6, camino: 12)]);
     });
   });
 }

@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 
 class CelularDePrueba {
   CelularDePrueba._(this.ws) {
@@ -62,10 +63,18 @@ class CelularDePrueba {
     QuePide que,
     String persona, {
     Duration hace = Duration.zero,
+    DatosSilla? silla,
+    TiemposAMano? tiempos,
   }) =>
       ws.add(jsonEncode(
-        PedidoPuerta(id: id, que: que, personaId: persona, hace: hace)
-            .toJson(),
+        PedidoPuerta(
+          id: id,
+          que: que,
+          personaId: persona,
+          hace: hace,
+          silla: silla,
+          tiempos: tiempos,
+        ).toJson(),
       ));
 
   Future<Map<String, dynamic>> pedirYEsperar(
@@ -73,8 +82,10 @@ class CelularDePrueba {
     QuePide que,
     String persona, {
     Duration hace = Duration.zero,
+    DatosSilla? silla,
+    TiemposAMano? tiempos,
   }) {
-    pedir(id, que, persona, hace: hace);
+    pedir(id, que, persona, hace: hace, silla: silla, tiempos: tiempos);
     return espera('respuesta', cumple: (m) => m['id'] == id);
   }
 

@@ -4,9 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/invitado.dart';
+import '../../totem/services/tiempos_a_mano.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
+import 'resolvedor_de_pedidos.dart';
+
+export 'resolvedor_de_pedidos.dart' show PuertaDeEstaPc, ResolvedorDePedidos;
 
 /// El puerto de la central. Si está ocupado se prueban los siguientes nueve.
 const kPuertoCentral = 8787;
@@ -15,24 +18,6 @@ const kPuertoCentral = 8787;
 /// frenarlo un minuto.
 const kErroresDeCodigo = 5;
 const kFrenoPorErrores = Duration(minutes: 1);
-
-/// Lo que la central necesita de esta PC: leer una fila y marcar, igual que
-/// Recepción. En la app es la base (`PuertaDeEstaPcConBase`); en las pruebas,
-/// una en memoria.
-abstract class PuertaDeEstaPc {
-  /// La fila de la lista de la puerta, como está ahora en la base.
-  Future<Invitado?> fila(String id);
-
-  /// Ingresa a [persona]; si su fila no existe (un masivo antes del sorteo), la
-  /// crea, como "Ingresar" en Recepción.
-  Future<void> ingresar(
-    String eventoId,
-    PersonaPuerta persona, {
-    required bool saludar,
-  });
-
-  Future<void> deshacer(String id);
-}
 
 /// Un celular que se conectó a la central esta noche.
 class PuestoConectado {
@@ -68,8 +53,9 @@ class PuestoConectado {
 /// - **Lo que le piden lo marca en la base de esta PC** ([PuertaDeEstaPc]),
 ///   como si lo hubieran tocado en su Recepción: la cola de subida y el aviso
 ///   al tótem quedan iguales. Los pedidos se atienden de a uno, mirando la base
-///   en ese momento ([decidirPedido]): si dos celulares ingresan a la misma
-///   persona, el segundo recibe "ya ingresó".
+///   en ese momento ([ResolvedorDePedidos]): si dos celulares ingresan a la misma
+///   persona, el segundo recibe "ya ingresó". Las sillas de la noche y los
+///   segundos del tótem van por la misma fila, que también usa la PC.
 /// - **Solo atiende a quien trae el código** del QR (`CodigoCentral`).
 /// - También sirve la página del celular ([paginaDelCelular]): sin internet,
 ///   el celular no tiene de dónde más bajarla.
@@ -81,14 +67,18 @@ class CentralPuerta {
     required this.eventoId,
     required String codigo,
     required PuertaDeEstaPc pc,
+    ResolvedorDePedidos? resolvedor,
     this.paginaDelCelular,
     DateTime Function()? ahora,
   })  : _codigo = codigo,
-        _pc = pc,
+        _resolvedor =
+            resolvedor ?? ResolvedorDePedidos(eventoId: eventoId, pc: pc),
         _ahora = ahora ?? DateTime.now;
 
   final String eventoId;
-  final PuertaDeEstaPc _pc;
+
+  /// La fila de los pedidos: la misma que usa la PC.
+  final ResolvedorDePedidos _resolvedor;
 
   /// La carpeta con la página que abre el celular, o null si no hay (en las
   /// pruebas).
@@ -100,18 +90,16 @@ class CentralPuerta {
   PuertaDelEvento? _puerta;
   String? _lista;
   var _version = 0;
-  final _marcas = MarcasDeLaNoche();
-  final _respuestas = <String, Map<String, Object?>>{};
+  TiemposAMano? _tiempos;
   final _conexiones = <_Conexion>{};
   final _puestos = <String, PuestoConectado>{};
   final _errores = <String, List<DateTime>>{};
-  var _fila = Future<void>.value();
   final _cambiosDePuestos =
       StreamController<List<PuestoConectado>>.broadcast();
 
   String get codigo => _codigo;
   int? get puerto => _servidor?.port;
-  MarcasDeLaNoche get marcas => _marcas;
+  MarcasDeLaNoche get marcas => _resolvedor.marcas;
 
   /// Los celulares de esta noche: primero los conectados, por nombre.
   List<PuestoConectado> get puestos {
@@ -160,7 +148,16 @@ class CentralPuerta {
   /// les manda a todos los celulares.
   void ponerPuerta(PuertaDelEvento puerta) {
     _puerta = puerta;
+    _resolvedor.puerta = puerta;
     _mandarLista();
+  }
+
+  /// Los segundos de la llegada de esa noche, para que el celular los muestre
+  /// y los pueda cambiar.
+  void ponerTiempos(TiemposAMano? tiempos) {
+    if (tiempos == _tiempos) return;
+    _tiempos = tiempos;
+    if (_puerta != null) _mandarLista();
   }
 
   void ponerTitulo(String? titulo) {
@@ -177,7 +174,8 @@ class CentralPuerta {
       'evento': eventoId,
       'titulo': _titulo,
       'puerta': _puerta!.toJson(),
-      'por': _marcas.todas,
+      'por': _resolvedor.marcas.todas,
+      if (_tiempos != null) 'tiempos': _tiempos!.toJson(),
     });
     for (final c in _conexiones) {
       c.mandar(_lista!);
@@ -310,7 +308,7 @@ class CentralPuerta {
       nombre: c.nombre,
       conectado: conectado,
       ultimaVez: _ahora(),
-      marcados: _marcas.cuantos(c.nombre),
+      marcados: _resolvedor.marcas.cuantos(c.nombre),
     );
     _avisarPuestos();
   }
@@ -323,7 +321,7 @@ class CentralPuerta {
         nombre: p.nombre,
         conectado: p.conectado,
         ultimaVez: p.ultimaVez,
-        marcados: _marcas.cuantos(p.nombre),
+        marcados: _resolvedor.marcas.cuantos(p.nombre),
       );
     }
     if (!_cambiosDePuestos.isClosed) _cambiosDePuestos.add(puestos);
@@ -348,70 +346,16 @@ class CentralPuerta {
       case 'pedido':
         final pedido = PedidoPuerta.fromJson(json);
         if (pedido == null) return;
-        // De a uno: cada pedido mira la base después del anterior.
-        _fila = _fila.then((_) async {
-          final respuesta = await _resolver(pedido, conexion.nombre);
-          conexion.mandar(jsonEncode(respuesta));
-        });
+        // De a uno, con la PC: cada pedido mira la base después del anterior.
+        unawaited(
+          _resolvedor.resolver(pedido, conexion.nombre).then((respuesta) {
+            conexion.mandar(jsonEncode(respuesta));
+            if (respuesta['ok'] == true && respuesta['hizo'] != 'nada') {
+              _avisarPuestos();
+            }
+          }),
+        );
     }
-  }
-
-  Future<Map<String, Object?>> _resolver(
-    PedidoPuerta pedido,
-    String puesto,
-  ) async {
-    final previa = _respuestas[pedido.id];
-    if (previa != null) return previa;
-    final noSePudo = {'t': 'respuesta', 'id': pedido.id, 'ok': false};
-    final puerta = _puerta;
-    if (puerta == null) return noSePudo;
-
-    final persona =
-        puerta.personas.where((p) => p.id == pedido.personaId).firstOrNull;
-    final DecisionPedido decision;
-    // Quién lo había marcado antes, para dejarlo como estaba si la base falla.
-    final antes = _marcas.quien(pedido.personaId);
-    try {
-      final fila = persona == null ? null : await _pc.fila(persona.id);
-      decision = decidirPedido(
-        pedido: pedido,
-        persona: persona,
-        fila: fila,
-        quien: antes,
-      );
-      // Quién lo marcó se anota antes de marcar: la base avisa el cambio y la
-      // lista nueva sale enseguida, y tiene que salir con el nombre.
-      switch (decision.hace) {
-        case QueHaceLaCentral.ingresar:
-          _marcas.ingreso(persona!.id, puesto);
-          await _pc.ingresar(eventoId, persona, saludar: decision.saludar);
-        case QueHaceLaCentral.deshacer:
-          _marcas.deshizo(persona!.id);
-          await _pc.deshacer(persona.id);
-        case QueHaceLaCentral.nada:
-          break;
-      }
-    } catch (e) {
-      if (antes == null) {
-        _marcas.deshizo(pedido.personaId);
-      } else {
-        _marcas.ingreso(pedido.personaId, antes);
-      }
-      // No se guarda: el celular lo vuelve a mandar.
-      debugPrint('Central de la puerta, pedido ${pedido.id}: $e');
-      return noSePudo;
-    }
-
-    final respuesta = {
-      't': 'respuesta',
-      'id': pedido.id,
-      'ok': true,
-      'hizo': decision.hace.name,
-      if (decision.aviso != null) 'aviso': decision.aviso,
-    };
-    _respuestas[pedido.id] = respuesta;
-    if (decision.haceAlgo) _avisarPuestos();
-    return respuesta;
   }
 
   // ── La página del celular ─────────────────────────────────────────────────

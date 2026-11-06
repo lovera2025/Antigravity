@@ -6,10 +6,12 @@ import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/cliente_central.dart';
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'helpers/central_en_memoria.dart';
+import 'helpers/puerta_en_memoria.dart' show alumnoDePrueba;
 
 /// El celular de la puerta (`ClienteCentral`) contra la central de verdad,
 /// escuchando solo en esta PC. Lo único en memoria es la base de la notebook
@@ -428,5 +430,97 @@ void main() {
     );
     expect(con.personas.single.ingresado, isTrue);
     expect(con.personas.single.fila!.estadoIngreso, EstadoIngreso.ingresado);
+  });
+  group('las sillas de la noche', () {
+    const juli = 'c1000000-0000-4000-8000-000000000001';
+
+    /// La central con un masivo: PÉREZ, JULIANA en la mesa 12, sin extra.
+    Future<ClienteCentral> conMasivo(_NavegadorEnMemoria navegador) async {
+      pc.filas.clear();
+      pc.alumnos.add(alumnoDePrueba(juli, 'PÉREZ, JULIANA', mesas: [12]));
+      central.ponerPuerta(pc.lista());
+      final c = await conectado(navegador);
+      await _hasta(
+        () => c.puerta!.grupos.any((g) => g.contratoId == juli),
+        'el masivo',
+      );
+      return c;
+    }
+
+    GrupoPuerta familia(ClienteCentral c) =>
+        c.puerta!.grupos.firstWhere((g) => g.contratoId == juli);
+
+    test('sin conexión, la silla queda guardada y se manda sola al volver',
+        () async {
+      final navegador = _NavegadorEnMemoria();
+      final c = await conMasivo(navegador);
+      await central.cerrar();
+      await _hasta(() => c.estado == EstadoDelPuesto.sinConexion, 'el corte');
+
+      await c.sumarSilla(familia(c), const DatosSilla(mesa: 12, vale: '1 0012'));
+      expect(c.sillasPorMandar, 1);
+      expect(navegador.datos['puesto_pendientes'], contains('sumarSilla'));
+      // Una silla no es un ingreso: el titular no figura "por mandar".
+      expect(c.marca(familia(c).titular.id), isNull);
+      expect(familia(c).titular.ingresado, isFalse);
+
+      central = await abrirCentral(enPuerto: puerto);
+      await _hasta(() => c.pendientes.isEmpty, 'que se mande');
+      expect(pc.sillas.single.vale, '1-12');
+      expect(pc.sillas.single.anotadoPor, 'Juli');
+      await _hasta(
+        () => familia(c).movimientos.isNotEmpty,
+        'la lista con la silla',
+      );
+      expect(c.sillasPorMandar, 0);
+    });
+
+    test('si no entra, la central lo dice por los avisos', () async {
+      final c = await conMasivo(_NavegadorEnMemoria());
+      final avisos = <String>[];
+      final sub = c.avisos.listen(avisos.add);
+      addTearDown(sub.cancel);
+      await c.sumarSilla(familia(c), const DatosSilla(vale: '1 0012'));
+      await c.sumarSilla(familia(c), const DatosSilla(vale: '1 0013'));
+      await c.sumarSilla(familia(c), const DatosSilla(vale: '1 0014'));
+      await _hasta(() => c.pendientes.isEmpty, 'las respuestas');
+      await _hasta(() => avisos.isNotEmpty, 'el aviso');
+      expect(pc.sillas, hasLength(2));
+      expect(avisos.single, 'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa.');
+    });
+
+    test('los segundos del tótem: solo con la central, y le llegan a la PC',
+        () async {
+      central.ponerTiempos(TiemposAMano(nombre: 4, camino: 8));
+      final c = await conectado(_NavegadorEnMemoria());
+      await _hasta(() => c.tiempos != null, 'los segundos');
+      expect(c.tiempos, TiemposAMano(nombre: 4, camino: 8));
+
+      expect(c.ponerTiempos(TiemposAMano(nombre: 5, camino: 8)), isTrue);
+      await _hasta(() => pc.tiempos.isNotEmpty, 'que llegue');
+      expect(pc.tiempos.single, TiemposAMano(nombre: 5, camino: 8));
+
+      await central.cerrar();
+      await _hasta(() => c.estado == EstadoDelPuesto.sinConexion, 'el corte');
+      expect(c.ponerTiempos(TiemposAMano(nombre: 6, camino: 8)), isFalse,
+          reason: 'un cambio de segundos que llega tarde ya no sirve');
+    });
+  });
+
+  test('una silla por mandar no cambia quién está adentro en la lista', () {
+    final lista = PuertaDelEvento.particular([filaDePrueba('p1', 'PÉREZ, JUAN')])
+        .toJson();
+    final cambiada = listaConCambios(lista, [
+      PedidoPendiente(
+        const PedidoPuerta(
+          id: 'x',
+          que: QuePide.sumarSilla,
+          personaId: 'p1',
+          silla: DatosSilla(vale: '1'),
+        ),
+        marcado: DateTime(2026, 12, 12, 22),
+      ),
+    ]);
+    expect(cambiada, lista);
   });
 }

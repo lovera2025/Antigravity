@@ -147,18 +147,34 @@ class SillasDeLaFamilia {
           in SalonMesas.repartoSillas(a, sillasPrincipal: principal))
         mesa: sillas,
     };
+    return _armar(
+      [
+        for (var i = 0; i < numeros.length; i++)
+          (numeros[i], i == 0, delContrato[numeros[i]] ?? 0),
+      ],
+      a.id,
+      sumadasVigentes,
+    );
+  }
+
+  static SillasDeLaFamilia _armar(
+    List<(int numero, bool principal, int delContrato)> propias,
+    String contratoId,
+    Iterable<SillaPuerta> vigentes,
+  ) {
     final sumadas = <int, int>{};
-    for (final s in sumadasVigentes) {
-      if (!s.vigente || s.contratoAlumnoId != a.id) continue;
+    for (final s in vigentes) {
+      if (!s.vigente || s.contratoAlumnoId != contratoId) continue;
       sumadas[s.mesa] = (sumadas[s.mesa] ?? 0) + s.cantidad;
     }
+    final numeros = {for (final p in propias) p.$1};
     return SillasDeLaFamilia([
-      for (var i = 0; i < numeros.length; i++)
+      for (final (numero, principal, delContrato) in propias)
         SillasDeUnaMesa(
-          numero: numeros[i],
-          esPrincipal: i == 0,
-          extraDelContrato: delContrato[numeros[i]] ?? 0,
-          sumadas: sumadas[numeros[i]] ?? 0,
+          numero: numero,
+          esPrincipal: principal,
+          extraDelContrato: delContrato,
+          sumadas: sumadas[numero] ?? 0,
         ),
       for (final e in sumadas.entries)
         if (!numeros.contains(e.key))
@@ -172,7 +188,28 @@ class SillasDeLaFamilia {
     ]);
   }
 
+  /// Las mismas mesas, con lo del contrato como estaba y las sumadas de
+  /// [vigentes] (las de la base en este momento): con esto decide el candado,
+  /// no con la lista que se mandó, que pudo quedar vieja.
+  SillasDeLaFamilia conSumadas(
+    String contratoId,
+    Iterable<SillaPuerta> vigentes,
+  ) =>
+      _armar(
+        [
+          for (final m in mesas)
+            if (!m.fueraDeSusMesas)
+              (m.numero, m.esPrincipal, m.extraDelContrato),
+        ],
+        contratoId,
+        vigentes,
+      );
+
   bool get vacia => mesas.isEmpty;
+
+  /// Si tiene alguna mesa suya (sin contar una sumada a una mesa que ya no es
+  /// de la familia).
+  bool get tieneMesa => mesas.any((m) => !m.fueraDeSusMesas);
 
   /// Si entra alguna silla más en alguna de sus mesas.
   bool get puedeAgregar => mesas.any((m) => m.puedeAgregar);
@@ -250,6 +287,21 @@ class ConteoDeLaNoche {
       quitadas: json['quitadas'] is int ? json['quitadas'] as int : 0,
     );
   }
+}
+
+/// El vale como se anota y se compara: los números que tiene, sin ceros
+/// adelante y separados por guiones. El vale de la barra dice "Caja 2 · Marta ·
+/// N° 0017-3": la caja va porque cada caja numera desde 1, y el "-3" porque una
+/// compra puede dar varios vales. "2 0017", "2-0017" y "caja 2 n 17" dan "2-17".
+/// Null si no tiene ningún número.
+String? valeNormalizado(String? texto) {
+  if (texto == null) return null;
+  final grupos = [
+    for (final m in RegExp(r'\d+').allMatches(texto))
+      if (m.group(0)!.length <= 9) int.parse(m.group(0)!).toString(),
+  ];
+  if (grupos.isEmpty || grupos.length > 4) return null;
+  return grupos.join('-');
 }
 
 /// "+1 silla · mesa 12 · vale 0012 · Pato 23:05".

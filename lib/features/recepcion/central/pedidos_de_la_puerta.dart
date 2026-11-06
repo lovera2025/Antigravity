@@ -1,5 +1,8 @@
 import '../../../models/invitado.dart';
+import '../../../models/silla_puerta.dart';
+import '../../totem/services/tiempos_a_mano.dart';
 import '../services/puerta_del_evento.dart';
+import '../services/sillas_de_la_puerta.dart';
 
 /// Qué hace la central de la puerta con lo que le piden los celulares.
 ///
@@ -18,18 +21,79 @@ import '../services/puerta_del_evento.dart';
 /// atrasado. Se marca igual.
 const kSaludarHasta = Duration(minutes: 1);
 
-enum QuePide { ingresar, deshacer }
+/// Lo que se le puede pedir a la central. Las sillas de la noche y los segundos
+/// del tótem van por el mismo camino que los ingresos (6.4.0): de a uno, con la
+/// base del momento, sea desde un celular o desde la PC.
+enum QuePide {
+  ingresar,
+  deshacer,
+  sumarSilla,
+  quitarSilla,
+  tiemposTotem;
+
+  /// Ingresar o deshacer: lo que cambia si una persona está adentro.
+  bool get esIngreso => this == ingresar || this == deshacer;
+}
 
 /// Lo que dice el celular de un ingreso que todavía no pudo mandarle a la
 /// central (`AccionesPuerta.marca`).
 const kPorMandar = 'por mandar';
 
-/// Un pedido de un celular.
+/// Lo que viaja con un pedido de silla.
+class DatosSilla {
+  /// Sumar: la mesa elegida. Si ya está llena, va a otra de la familia.
+  final int? mesa;
+
+  /// Sumar: el número del vale de la barra, como lo escribió la recepcionista.
+  final String? vale;
+  final String? nota;
+
+  /// Quitar: cuál.
+  final String? sillaId;
+
+  /// Quitar: por qué. Obligatorio.
+  final String? motivo;
+
+  const DatosSilla({this.mesa, this.vale, this.nota, this.sillaId, this.motivo});
+
+  Map<String, Object?> toJson() => {
+        if (mesa != null) 'mesa': mesa,
+        if (vale != null) 'vale': vale,
+        if (nota != null) 'nota': nota,
+        if (sillaId != null) 'silla': sillaId,
+        if (motivo != null) 'motivo': motivo,
+      };
+
+  /// Null si no se entiende.
+  static DatosSilla? fromJson(Object? json) {
+    if (json is! Map) return null;
+    String? texto(String clave, int largo) {
+      final v = json[clave];
+      if (v is! String) return null;
+      final t = v.trim();
+      return t.isEmpty ? null : (t.length > largo ? t.substring(0, largo) : t);
+    }
+
+    final mesa = json['mesa'];
+    return DatosSilla(
+      mesa: mesa is int ? mesa : null,
+      vale: texto('vale', 40),
+      nota: texto('nota', 120),
+      sillaId: texto('silla', 64),
+      motivo: texto('motivo', 120),
+    );
+  }
+}
+
+/// Un pedido de un celular, o de la PC.
 class PedidoPuerta {
   /// Lo pone el celular. Si llega dos veces (se cortó antes de la respuesta y
   /// lo volvió a mandar), es el mismo pedido: no se hace de nuevo.
   final String id;
   final QuePide que;
+
+  /// A quién: la persona que entra o, en una silla, el titular de la familia.
+  /// Vacío en los segundos del tótem.
   final String personaId;
 
   /// Cuánto hacía que se había tocado cuando el celular lo mandó. Se cuenta en
@@ -37,12 +101,30 @@ class PedidoPuerta {
   /// hora.
   final Duration hace;
 
+  /// En [QuePide.sumarSilla] y [QuePide.quitarSilla].
+  final DatosSilla? silla;
+
+  /// En [QuePide.tiemposTotem].
+  final TiemposAMano? tiempos;
+
   const PedidoPuerta({
     required this.id,
     required this.que,
     required this.personaId,
     this.hace = Duration.zero,
+    this.silla,
+    this.tiempos,
   });
+
+  /// El mismo, diciendo cuánto hace que se tocó.
+  PedidoPuerta conHace(Duration hace) => PedidoPuerta(
+        id: id,
+        que: que,
+        personaId: personaId,
+        hace: hace,
+        silla: silla,
+        tiempos: tiempos,
+      );
 
   Map<String, Object?> toJson() => {
         't': 'pedido',
@@ -50,6 +132,8 @@ class PedidoPuerta {
         'que': que.name,
         'persona': personaId,
         'hace': hace.inMilliseconds,
+        if (silla != null) 'silla': silla!.toJson(),
+        if (tiempos != null) 'tiempos': tiempos!.toJson(),
       };
 
   /// Null si no es un pedido que se entienda: de la red puede llegar
@@ -60,21 +144,33 @@ class PedidoPuerta {
     final persona = json['persona'];
     final hace = json['hace'];
     if (id is! String || id.isEmpty || id.length > 64) return null;
-    if (persona is! String || persona.isEmpty || persona.length > 64) {
-      return null;
-    }
     final quePide = QuePide.values.where((q) => q.name == que).firstOrNull;
     if (quePide == null) return null;
+    final sinPersona = quePide == QuePide.tiemposTotem;
+    if (persona is! String ||
+        (persona.isEmpty && !sinPersona) ||
+        persona.length > 64) {
+      return null;
+    }
+    final silla = DatosSilla.fromJson(json['silla']);
+    final tiempos = TiemposAMano.fromJson(json['tiempos']);
+    if ((quePide == QuePide.sumarSilla || quePide == QuePide.quitarSilla) &&
+        silla == null) {
+      return null;
+    }
+    if (sinPersona && tiempos == null) return null;
     return PedidoPuerta(
       id: id,
       que: quePide,
       personaId: persona,
       hace: Duration(milliseconds: hace is int && hace > 0 ? hace : 0),
+      silla: silla,
+      tiempos: tiempos,
     );
   }
 }
 
-enum QueHaceLaCentral { ingresar, deshacer, nada }
+enum QueHaceLaCentral { ingresar, deshacer, sumarSilla, quitarSilla, tiempos, nada }
 
 /// Lo que sale de un pedido.
 class DecisionPedido {
@@ -134,8 +230,114 @@ DecisionPedido decidirPedido({
         );
       }
       return const DecisionPedido._(QueHaceLaCentral.deshacer);
+    case QuePide.sumarSilla:
+    case QuePide.quitarSilla:
+    case QuePide.tiemposTotem:
+      // Van por [decidirSilla] y por los segundos: acá no llegan.
+      return const DecisionPedido._(QueHaceLaCentral.nada);
   }
 }
+
+/// Lo que sale de un pedido de silla.
+class DecisionSilla {
+  final QueHaceLaCentral hace;
+
+  /// Sumar: a qué mesa va (puede no ser la pedida, si esa se llenó).
+  final int? mesa;
+
+  /// Sumar: el vale como se anota ([valeNormalizado]).
+  final String? vale;
+
+  /// Lo que se dice: por qué no se hizo, o que la silla fue a otra mesa.
+  final String? aviso;
+
+  const DecisionSilla._(this.hace, {this.mesa, this.vale, this.aviso});
+
+  const DecisionSilla._nada(String aviso)
+      : this._(QueHaceLaCentral.nada, aviso: aviso);
+
+  bool get haceAlgo => hace != QueHaceLaCentral.nada;
+}
+
+/// Qué hacer con un pedido de silla ([QuePide.sumarSilla] o
+/// [QuePide.quitarSilla]).
+///
+/// [grupo] es la familia de la lista que ve Recepción: de ahí salen sus mesas y
+/// lo del contrato. [deLaNoche] son las sillas del evento **como están ahora en la
+/// base** (vigentes y quitadas): otro celular pudo haber sumado recién, y el tope
+/// se cuenta con eso. [nombreDe] dice de quién es un contrato, para "el vale ya
+/// se usó para GÓMEZ".
+DecisionSilla decidirSilla({
+  required PedidoPuerta pedido,
+  required GrupoPuerta? grupo,
+  required List<SillaPuerta> deLaNoche,
+  String? Function(String contratoId)? nombreDe,
+}) {
+  final contratoId = grupo?.contratoId;
+  if (grupo == null) {
+    return const DecisionSilla._nada(
+        'Esa persona ya no está en la lista de la puerta.');
+  }
+  if (contratoId == null) {
+    return const DecisionSilla._nada(
+        'Las sillas de la noche son de las familias de alumnos.');
+  }
+  final datos = pedido.silla ?? const DatosSilla();
+  final vigentes = deLaNoche.where((s) => s.vigente).toList();
+  switch (pedido.que) {
+    case QuePide.sumarSilla:
+      final familia = grupo.sillasPorMesa.conSumadas(contratoId, vigentes);
+      if (!familia.tieneMesa) {
+        return const DecisionSilla._nada('Esa familia no tiene mesa todavía.');
+      }
+      final vale = valeNormalizado(datos.vale);
+      if (vale == null) {
+        return const DecisionSilla._nada(
+            'Hace falta el número del vale de la barra.');
+      }
+      final usada =
+          vigentes.where((s) => valeNormalizado(s.vale) == vale).firstOrNull;
+      if (usada != null) {
+        final quien = nombreDe?.call(usada.contratoAlumnoId);
+        return DecisionSilla._nada(quien == null
+            ? 'El vale $vale ya se usó para otra silla.'
+            : 'El vale $vale ya se usó para $quien.');
+      }
+      final mesa = familia.mesaConLugar(preferida: datos.mesa);
+      if (mesa == null) {
+        return DecisionSilla._nada(yaEnElTope(grupo.titular.nombre));
+      }
+      final pedida = datos.mesa;
+      return DecisionSilla._(
+        QueHaceLaCentral.sumarSilla,
+        mesa: mesa.numero,
+        vale: vale,
+        aviso: pedida != null && pedida != mesa.numero
+            ? 'La mesa $pedida ya estaba llena: la silla va a la mesa '
+                '${mesa.numero}.'
+            : null,
+      );
+    case QuePide.quitarSilla:
+      final silla = deLaNoche
+          .where((s) => s.id == datos.sillaId && s.contratoAlumnoId == contratoId)
+          .firstOrNull;
+      if (silla == null || !silla.vigente) {
+        return const DecisionSilla._nada('Esa silla ya se quitó.');
+      }
+      if ((datos.motivo ?? '').trim().isEmpty) {
+        return const DecisionSilla._nada('Decí por qué se quita.');
+      }
+      return DecisionSilla._(QueHaceLaCentral.quitarSilla, mesa: silla.mesa);
+    case QuePide.ingresar:
+    case QuePide.deshacer:
+    case QuePide.tiemposTotem:
+      return const DecisionSilla._nada('No se entendió el pedido.');
+  }
+}
+
+/// "PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa."
+String yaEnElTope(String nombre) =>
+    '$nombre ya no puede agregar: ${SillasDeUnaMesa.tope} extra por mesa.';
 
 /// "PÉREZ, JUAN ya ingresó a las 22:41 · Juli".
 String yaIngreso(String nombre, {DateTime? hora, String? quien}) {
