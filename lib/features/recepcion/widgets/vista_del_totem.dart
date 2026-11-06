@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../common/providers/user_role_provider.dart';
 import '../../totem/estilos/fuentes_totem.dart';
+import '../../totem/widgets/segundos_de_la_llegada.dart';
 import '../../totem/widgets/totem_config_sheet.dart';
 import '../../totem/widgets/totem_local.dart';
 
@@ -32,6 +33,8 @@ class VistaDelTotem extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final estilo = ref.watch(estiloDelEventoProvider(eventoId));
     final puede = ref.watch(puedePersonalizarTotemProvider);
+    // Los segundos de la llegada, solo en un masivo (con el salón).
+    final masivo = ref.watch(eventoMasivoProvider(eventoId)) ?? false;
     return ColoredBox(
       color: const Color(0xFF0B0B0D),
       child: Padding(
@@ -64,6 +67,10 @@ class VistaDelTotem extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  if (masivo) ...[
+                    BotonSegundosDeLaLlegada(eventoId: eventoId),
+                    const SizedBox(width: 8),
+                  ],
                   if (puede) BotonPersonalizarTotem(eventoId: eventoId),
                 ],
               ),

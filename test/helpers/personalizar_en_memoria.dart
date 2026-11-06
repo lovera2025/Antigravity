@@ -56,6 +56,21 @@ class RepoTotemEnMemoria extends Fake implements TotemConfigRepository {
 
   @override
   Future<void> borrarFondo(String eventoId) async => fondosBorrados++;
+
+  /// Los segundos de la llegada que se subieron a mano.
+  final tiemposSubidos = <(int, int)>[];
+
+  @override
+  Future<void> guardarTiempos(
+    String eventoId, {
+    required int nombre,
+    required int camino,
+  }) async {
+    if (fallar) {
+      throw Exception('SocketException: Failed host lookup: supabase.co');
+    }
+    tiemposSubidos.add((nombre, camino));
+  }
 }
 
 /// El selector de archivos, que devuelve [bytes] como `story.png`.

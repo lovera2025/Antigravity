@@ -63,6 +63,39 @@ class TotemConfigRepository {
     return guardada;
   }
 
+  /// Los segundos de la llegada cambiados a mano esa noche (`TiemposAMano`):
+  /// solo esas dos columnas, sin tocar lo demás de la config (otra PC pudo
+  /// haber cambiado algo en Personalizar). Si el evento todavía no tiene fila,
+  /// se crea con lo de siempre y estos segundos.
+  ///
+  /// Necesita las columnas de la 6.4.0 en la nube
+  /// (`20261105100000_totem_config_llegada.sql`).
+  Future<void> guardarTiempos(
+    String eventoId, {
+    required int nombre,
+    required int camino,
+  }) async {
+    final filas = await _client
+        .from('totem_config')
+        .update({
+          'llegada_nombre_seg': nombre,
+          'llegada_camino_seg': camino,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+          'updated_by': _client.auth.currentUser?.id,
+        })
+        .eq('evento_id', eventoId)
+        .select('evento_id');
+    if (filas.isEmpty) {
+      await guardar(
+        TotemConfig(
+          eventoId: eventoId,
+          llegadaNombreSeg: nombre,
+          llegadaCaminoSeg: camino,
+        ),
+      );
+    }
+  }
+
   /// Los nombres de las imágenes de un evento en el bucket: la foto del
   /// círculo y el fondo de "Tu fondo".
   static const portada = 'portada';

@@ -25,6 +25,7 @@ import 'features/recepcion/lista_invitados_screen.dart';
 import 'features/recepcion/repositories/invitados_repository.dart';
 import 'features/totem/totem_display.dart';
 import 'features/totem/providers/clave_totem_provider.dart';
+import 'features/totem/providers/tiempos_a_mano_provider.dart';
 import 'features/totem/services/lista_de_la_pc.dart';
 import 'features/totem/services/puente_ficha.dart';
 import 'features/eventos/repositories/contratos_repository.dart';
@@ -555,6 +556,8 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
           ),
           leerPlano: (id) async =>
               (await ref.read(leerPlanoDeLaFiestaProvider)(id))?.armadoONull,
+          // Los segundos de la llegada cambiados a mano esa noche.
+          leerTiempos: (id) => ref.read(tiemposAManoProvider(id)),
         ),
         lista: (eventoId) => armarListaDeLaPc(
           eventoId,

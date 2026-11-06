@@ -26,6 +26,7 @@ import 'services/puente_ficha.dart';
 import 'services/kiosco.dart';
 import 'services/kiosco_navegador.dart';
 import 'services/reproductor_bienvenidas.dart';
+import 'services/tiempos_a_mano.dart';
 import 'totem_orientation.dart';
 import 'widgets/aviso_sin_internet.dart';
 import 'widgets/capa_kiosco.dart';
@@ -81,6 +82,13 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
   /// Config visual del evento. Se refresca sola en cada build desde el stream;
   /// mientras no haya fila en `totem_config` son los valores de siempre.
   late TotemConfig _cfg = TotemConfig.defaults(widget.eventoId);
+
+  /// Los segundos de la llegada cambiados a mano esa noche en la ventana
+  /// principal (`tiempos_totem`, y en la ficha). Null: los de la config.
+  TiemposAMano? _tiemposAMano;
+
+  /// La config con los segundos de esa noche encima: la que se dibuja.
+  TotemConfig get _cfgVista => _tiemposAMano?.aplicarA(_cfg) ?? _cfg;
 
   Color get _gold => _cfg.colorAcento;
 
@@ -253,6 +261,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       // El mismo salón sigue siendo el mismo: si no, se rearma y se redibuja
       // todo lo del plano cada minuto.
       _ficha = ficha.conPlanoDe(_ficha);
+      _tiemposAMano = ficha.tiempos;
       _reproductor.familiaDe = (i) => ficha.familiaDe(i.id);
     });
   }
@@ -418,6 +427,16 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
             _handleConfigUpdated(TotemConfig.fromJson(data));
           }
           return null;
+        case 'tiempos_totem':
+          if (call.arguments is String) {
+            final data = jsonDecode(call.arguments as String);
+            if (data is Map && data['evento'] == _eventoId && mounted) {
+              setState(
+                () => _tiemposAMano = TiemposAMano.fromJson(data['tiempos']),
+              );
+            }
+          }
+          return null;
       }
       return null;
     });
@@ -448,6 +467,7 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       // La ficha es del evento anterior: hasta que llegue la nueva, cada uno
       // es su propia familia y no hay QR.
       _ficha = null;
+      _tiemposAMano = null;
       _reproductor.familiaDe = cadaUnoSuFamilia;
     });
 
@@ -744,10 +764,11 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       fondoUrl: _cfg.fondoUrl,
       ficha: _ficha,
     );
-    // Con el salón, los segundos del jefe; sin él (un particular, antes del
-    // sorteo, la web), los de siempre.
+    // Con el salón, los segundos del jefe (o los de esa noche, a mano); sin él
+    // (un particular, antes del sorteo, la web), los de siempre.
+    final cfg = _cfgVista;
     _reproductor.tiempos = TiemposDeBienvenida.de(
-      _cfg,
+      cfg,
       conSalon: _ficha?.plano != null,
     );
     return AnimatedBuilder(
@@ -757,11 +778,11 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
         return EscenaTotem(
           estilo: estilo,
           respaldo: EstiloTotem.porDefecto(masivo: _ficha?.masivo),
-          cfg: _cfg,
+          cfg: cfg,
           qrUrl: _mostrarQr ? '$kWebBaseUrl/lista?evento=$_eventoId' : null,
           llegada: actual == null
               ? null
-              : ContenidoBienvenida.armar(actual, ficha: _ficha, cfg: _cfg),
+              : ContenidoBienvenida.armar(actual, ficha: _ficha, cfg: cfg),
           plano: _ficha?.plano,
           claveLlegada: actual,
           saliendo: _reproductor.saliendo,

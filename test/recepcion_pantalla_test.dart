@@ -14,10 +14,13 @@ import 'package:arguello_events/features/recepcion/widgets/vista_del_totem.dart'
 import 'package:arguello_events/features/totem/estilos/escena_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/features/totem/repositories/totem_config_repository.dart';
+import 'package:arguello_events/features/totem/widgets/segundos_de_la_llegada.dart';
 import 'package:arguello_events/features/totem/widgets/totem_local.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import 'helpers/ficha_de_prueba.dart';
+import 'helpers/personalizar_en_memoria.dart' show RepoTotemEnMemoria;
 import 'helpers/puerta_en_memoria.dart';
 
 /// Se crea en `setUpAll`: creado adentro de un test deja un reloj suyo andando.
@@ -52,6 +55,8 @@ Future<PuertaEnMemoria> _abrir(
       const RecepcionUnifiedScreen(),
       elegido: elegido,
       puedeTotem: puedeTotem,
+      // Los segundos de la llegada se suben a la nube: acá, en memoria.
+      extra: [totemConfigRepositoryProvider.overrideWithValue(RepoTotemEnMemoria())],
       config: const {
         eventoMasivo: TotemConfig(
           eventoId: eventoMasivo,
@@ -72,6 +77,7 @@ Future<PuertaEnMemoria> _abrir(
 }
 
 final _paleta = find.byTooltip(BotonPersonalizarTotem.ayuda);
+final _reloj = find.byTooltip(BotonSegundosDeLaLlegada.ayuda);
 Finder _enLaBarra(Finder f) =>
     find.descendant(of: find.byType(AppBar), matching: f);
 Finder _enLaVista(Finder f) =>
@@ -167,21 +173,53 @@ void main() {
   });
 
   group('sobre la vista', () {
-    testWidgets('un solo botón, la paleta, y ningún botón flotante',
-        (tester) async {
+    testWidgets('en un masivo, el reloj de la llegada y la paleta; en un '
+        'particular, la paleta sola; ningún botón flotante', (tester) async {
       await _abrir(tester);
-      expect(_enLaVista(_botones), findsOneWidget);
+      expect(_enLaVista(_botones), findsNWidgets(2));
+      expect(_enLaVista(_reloj), findsOneWidget);
       expect(_enLaVista(_paleta), findsOneWidget);
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(_enLaBarra(_paleta), findsNothing);
+      await _abrir(tester, elegido: eventoParticular);
+      expect(_enLaVista(_botones), findsOneWidget);
+      expect(_enLaVista(_reloj), findsNothing);
     });
 
-    testWidgets('sin el permiso del tótem, sin paleta', (tester) async {
+    testWidgets('sin el permiso del tótem, sin paleta (el reloj sí)',
+        (tester) async {
       await _abrir(tester, puedeTotem: false);
       expect(_paleta, findsNothing);
-      expect(_enLaVista(_botones), findsNothing);
+      expect(_enLaVista(_botones), findsOneWidget);
+      expect(_enLaVista(_reloj), findsOneWidget);
       await _abrir(tester, tamano: _celular, puedeTotem: false);
       expect(_paleta, findsNothing);
+    });
+
+    testWidgets('el reloj cambia los segundos de la llegada en el momento',
+        (tester) async {
+      await _abrir(tester);
+      EscenaTotem escena() =>
+          tester.widget<EscenaTotem>(find.byType(EscenaTotem));
+      expect(escena().cfg.llegadaNombreSeg, 4);
+      await tester.tap(_enLaVista(_reloj));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('LA LLEGADA · ESTA NOCHE'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('mas_nombre')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('mas_nombre')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('menos_camino')));
+      await tester.pump();
+      expect(find.text('6 s'), findsOneWidget);
+      expect(find.text('7 s'), findsOneWidget);
+      expect(find.textContaining('dura 13 s'), findsOneWidget);
+      await tester.tap(find.text('LISTO'));
+      await _asentar(tester);
+      expect(escena().cfg.llegadaNombreSeg, 6);
+      expect(escena().cfg.llegadaCaminoSeg, 7);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('la paleta abre Personalizar', (tester) async {

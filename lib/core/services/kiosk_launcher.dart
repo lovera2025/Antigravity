@@ -305,6 +305,18 @@ class KioskLauncher {
   static Future<void> notifyConfigUpdated(Map<String, dynamic> configJson) =>
       _invocar('config_updated', jsonEncode(configJson));
 
+  /// Los segundos de la llegada cambiados a mano esa noche (`TiemposAMano`),
+  /// o null si se volvió a lo de Personalizar. Por si se pierde (la ventana
+  /// recién nace), también viajan en la ficha que el tótem pide cada minuto.
+  static Future<void> notifyTiempos(
+    String eventoId,
+    Map<String, Object?>? tiempos,
+  ) =>
+      _invocar(
+        'tiempos_totem',
+        jsonEncode({'evento': eventoId, 'tiempos': tiempos}),
+      );
+
   static bool get isTotemActive => _totemWindowId != null;
 
   /// Evento que el tótem está proyectando, o `null` si no hay ventana abierta.

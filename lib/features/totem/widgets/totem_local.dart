@@ -13,6 +13,7 @@ import '../estilos/escena_totem.dart';
 import '../estilos/fondo_propio.dart';
 import '../estilos/fondo_totem.dart';
 import '../estilos/totem_estilo.dart';
+import '../providers/tiempos_a_mano_provider.dart';
 import '../providers/totem_config_provider.dart';
 import '../services/bienvenidas_totem.dart';
 import '../services/contenido_bienvenida.dart';
@@ -202,7 +203,8 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
 
   @override
   Widget build(BuildContext context) {
-    final cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
+    // Con los segundos de la llegada cambiados a mano esa noche, si los hay.
+    final cfg = ref.watch(totemConfigDeLaNocheProvider(widget.eventoId));
     final estilo = ref.watch(estiloDelEventoProvider(widget.eventoId));
     final masivo = ref.watch(eventoMasivoProvider(widget.eventoId)) ?? false;
     // Con el salón, los segundos del jefe; sin él, los de siempre.

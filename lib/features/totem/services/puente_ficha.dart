@@ -9,6 +9,7 @@ import '../../recepcion/providers/recepcion_provider.dart'
 import '../../recepcion/services/puerta_del_evento.dart';
 import 'ficha_totem.dart';
 import 'lista_de_la_pc.dart';
+import 'tiempos_a_mano.dart';
 
 /// La ficha del evento ([FichaTotem]) y quién ya entró según esta PC
 /// ([ListaDeLaPc]) van de la ventana principal a la del tótem.
@@ -168,6 +169,7 @@ Future<FichaTotem> armarFichaTotem(
   required Future<Evento?> Function(String eventoId) leerEvento,
   required Future<AlumnosDeLaPuerta> Function(String eventoId) leerAlumnos,
   Future<ArmadoSalon?> Function(String eventoId)? leerPlano,
+  TiemposAMano? Function(String eventoId)? leerTiempos,
 }) async {
   final evento = await leerEvento(eventoId);
   if (evento?.modalidad != 'masivo') return FichaTotem.particular(eventoId);
@@ -186,5 +188,5 @@ Future<FichaTotem> armarFichaTotem(
       invitados: const [],
     ),
     plano: plano,
-  );
+  ).conTiempos(leerTiempos?.call(eventoId));
 }

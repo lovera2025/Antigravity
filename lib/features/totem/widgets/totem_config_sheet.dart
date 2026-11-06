@@ -20,6 +20,7 @@ import '../estilos/fuentes_totem.dart';
 import '../estilos/totem_estilo.dart';
 import '../estilos/tu_fondo.dart';
 import '../providers/clave_totem_provider.dart';
+import '../providers/tiempos_a_mano_provider.dart';
 import '../providers/totem_config_provider.dart';
 import '../repositories/totem_config_repository.dart';
 import '../services/bienvenidas_totem.dart';
@@ -311,8 +312,10 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
     _textoTamano = cfg.textoTamano;
     _ubicacionX = cfg.ubicacionX;
     _ubicacionY = cfg.ubicacionY;
-    _llegadaNombre = cfg.llegadaNombreSeg;
-    _llegadaCamino = cfg.llegadaCaminoSeg;
+    // Si esa noche se cambiaron a mano, se parte de esos: guardar no los pisa.
+    final aMano = ref.read(tiemposAManoProvider(widget.eventoId));
+    _llegadaNombre = aMano?.nombre ?? cfg.llegadaNombreSeg;
+    _llegadaCamino = aMano?.camino ?? cfg.llegadaCaminoSeg;
     _llegadaLugar = cfg.llegadaLugar;
     _estilo = cfg.estilo;
     _imagenUrl = cfg.imagenUrl;
@@ -646,6 +649,8 @@ class _PersonalizarTotemState extends ConsumerState<PersonalizarTotem> {
         KioskLauncher.notifyConfigUpdated(guardada.toJson());
       }
       ref.invalidate(totemConfigProvider(widget.eventoId));
+      // Los segundos a mano de esa noche ya están en lo guardado.
+      await ref.read(tiemposAManoProvider(widget.eventoId).notifier).olvidar();
 
       navigator.pop();
       messenger.showSnackBar(

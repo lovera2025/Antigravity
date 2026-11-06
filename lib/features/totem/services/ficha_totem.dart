@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../plano/modelo/armado_salon.dart';
 import '../../recepcion/services/puerta_del_evento.dart';
+import 'tiempos_a_mano.dart';
 
 /// Lo que el tótem sabe de cada persona de un evento para saludarla completa.
 ///
@@ -30,18 +31,33 @@ class FichaTotem {
   /// mano), para mostrar en la llegada dónde queda la mesa. Null: sin plano.
   final ArmadoSalon? plano;
 
+  /// Los segundos de la llegada cambiados a mano esa noche en esta PC. Null:
+  /// los de Personalizar. Viajan en la ficha por si se perdió el aviso.
+  final TiemposAMano? tiempos;
+
   const FichaTotem({
     required this.eventoId,
     required this.masivo,
     this.personas = const {},
     this.plano,
+    this.tiempos,
   });
 
   /// Un evento particular: el tótem saluda con lo que dice la lista.
   const FichaTotem.particular(this.eventoId)
       : masivo = false,
         personas = const {},
-        plano = null;
+        plano = null,
+        tiempos = null;
+
+  /// La misma, con los segundos de esa noche.
+  FichaTotem conTiempos(TiemposAMano? t) => FichaTotem(
+        eventoId: eventoId,
+        masivo: masivo,
+        personas: personas,
+        plano: plano,
+        tiempos: t,
+      );
 
   /// La ficha de lo que se ve en Recepción.
   ///
@@ -108,6 +124,7 @@ class FichaTotem {
       masivo: masivo,
       personas: personas,
       plano: viejo,
+      tiempos: tiempos,
     );
   }
 
@@ -123,6 +140,7 @@ class FichaTotem {
         'masivo': masivo,
         'personas': [for (final p in personas.values) p.toJson()],
         if (plano != null) 'plano': plano!.toJson(),
+        if (tiempos != null) 'tiempos': tiempos!.toJson(),
       };
 
   /// `null` si no se puede leer: el tótem sigue con la que tenía. Un plano que
@@ -144,6 +162,7 @@ class FichaTotem {
       masivo: json['masivo'] == true,
       personas: personas,
       plano: _leerPlano(json['plano']),
+      tiempos: TiemposAMano.fromJson(json['tiempos']),
     );
   }
 
