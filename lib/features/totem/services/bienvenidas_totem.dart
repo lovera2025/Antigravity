@@ -1,4 +1,5 @@
 import '../../../models/invitado.dart';
+import '../../../models/totem_config.dart';
 
 // A quién saluda el tótem. Sin pantalla ni nube: recibe lo que se leyó y lo
 // que el tótem ya sabe, y contesta qué hacer.
@@ -33,32 +34,88 @@ Duration esperaDeReintento(int intentos) {
   return Duration(seconds: 2 << n);
 }
 
-// La cola que se acorta (pedido del usuario el 14-oct): una bienvenida dura
-// 7 s si nadie espera; si hay gente esperando, 3 s. Con 7 s fijos, una puerta
-// que marca una familia cada 5 s atrasa el tótem sin vuelta.
+// Sin el salón (un particular, o un masivo sin sortear), la cola que se acorta
+// (pedido del usuario el 14-oct): una bienvenida dura 7 s si nadie espera; si
+// hay gente esperando, 3 s. Con 7 s fijos, una puerta que marca una familia
+// cada 5 s atrasa el tótem sin vuelta.
+//
+// Con el salón (6.4.0, pedido del jefe el 4-nov), el nombre en grande y después
+// el salón con el camino a la mesa, los segundos que eligió el jefe, **y no se
+// acorta con cola** (decisión del usuario): "la otra familia que ingresa se
+// vuelve a mostrar y dura lo que los segundos configurados digan".
 
-/// Lo que dura una bienvenida cuando nadie espera.
+/// Lo que dura una bienvenida sin el salón cuando nadie espera.
 const kBienvenidaSola = Duration(seconds: 7);
 
-/// Lo que dura cuando hay gente esperando, también la que ya estaba en
-/// pantalla cuando llegó alguien.
+/// Lo que dura sin el salón cuando hay gente esperando, también la que ya
+/// estaba en pantalla cuando llegó alguien.
 const kBienvenidaConCola = Duration(seconds: 3);
 
 /// Lo que se queda la tarjeta, como mínimo, cuando se le suma alguien de la
 /// familia: que se alcance a leer su nombre.
 const kSumarseALaTarjeta = Duration(seconds: 3);
 
+/// Cuánto dura una bienvenida.
+class TiemposDeBienvenida {
+  /// El nombre en grande. Sin el salón, la bienvenida entera.
+  final Duration nombre;
+
+  /// El salón con el camino a la mesa, después del nombre. Cero sin el salón.
+  final Duration camino;
+
+  /// Si con gente esperando dura [kBienvenidaConCola]: solo sin el salón.
+  final bool acortaConCola;
+
+  const TiemposDeBienvenida({
+    required this.nombre,
+    required this.camino,
+    this.acortaConCola = false,
+  });
+
+  /// Sin el salón: 7 s, y 3 s con cola.
+  static const sinSalon = TiemposDeBienvenida(
+    nombre: kBienvenidaSola,
+    camino: Duration.zero,
+    acortaConCola: true,
+  );
+
+  /// Con el salón, los que eligió el jefe en Personalizar o a mano esa noche;
+  /// sin el salón, [sinSalon].
+  factory TiemposDeBienvenida.de(TotemConfig cfg, {required bool conSalon}) =>
+      conSalon
+          ? TiemposDeBienvenida(
+              nombre: Duration(seconds: cfg.llegadaNombreSeg),
+              camino: Duration(seconds: cfg.llegadaCaminoSeg),
+            )
+          : sinSalon;
+
+  /// Lo que dura entera, con o sin gente esperando.
+  Duration total({required bool hayCola}) =>
+      acortaConCola && hayCola ? kBienvenidaConCola : nombre + camino;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TiemposDeBienvenida &&
+      other.nombre == nombre &&
+      other.camino == camino &&
+      other.acortaConCola == acortaConCola;
+
+  @override
+  int get hashCode => Object.hash(nombre, camino, acortaConCola);
+}
+
 /// Cuándo termina la bienvenida que está en pantalla.
 ///
-/// [empezo] es cuando apareció; [hayCola], si alguien espera la suya ahora;
-/// [seSumo], la última vez que se le sumó alguien de la familia. Si ya pasó,
-/// la pantalla la termina enseguida.
+/// [empezo] es cuando apareció; [hayCola], si alguien espera la suya ahora
+/// (solo cuenta sin el salón); [seSumo], la última vez que se le sumó alguien
+/// de la familia. Si ya pasó, la pantalla la termina enseguida.
 DateTime finDeBienvenida({
   required DateTime empezo,
   required bool hayCola,
   DateTime? seSumo,
+  TiemposDeBienvenida tiempos = TiemposDeBienvenida.sinSalon,
 }) {
-  final fin = empezo.add(hayCola ? kBienvenidaConCola : kBienvenidaSola);
+  final fin = empezo.add(tiempos.total(hayCola: hayCola));
   if (seSumo == null) return fin;
   final minimo = seSumo.add(kSumarseALaTarjeta);
   return minimo.isAfter(fin) ? minimo : fin;
@@ -182,6 +239,9 @@ class IngresosTotem {
   /// la suya.
   BienvenidaTotem? enPantalla;
 
+  /// Cuánto dura cada bienvenida: con el salón, los segundos del jefe.
+  TiemposDeBienvenida tiempos = TiemposDeBienvenida.sinSalon;
+
   /// Cuándo termina la bienvenida en pantalla ([finDeBienvenida]).
   DateTime? get fin {
     final b = enPantalla;
@@ -190,6 +250,7 @@ class IngresosTotem {
       empezo: b.empezo,
       hayCola: cola.isNotEmpty,
       seSumo: b.seSumo,
+      tiempos: tiempos,
     );
   }
 

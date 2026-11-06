@@ -250,7 +250,9 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
     final ficha = await PuenteFichaTotem.pedir(evento);
     if (!mounted || ficha == null || evento != _eventoId) return;
     setState(() {
-      _ficha = ficha;
+      // El mismo salón sigue siendo el mismo: si no, se rearma y se redibuja
+      // todo lo del plano cada minuto.
+      _ficha = ficha.conPlanoDe(_ficha);
       _reproductor.familiaDe = (i) => ficha.familiaDe(i.id);
     });
   }
@@ -741,6 +743,12 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       elegido: _cfg.estilo,
       fondoUrl: _cfg.fondoUrl,
       ficha: _ficha,
+    );
+    // Con el salón, los segundos del jefe; sin él (un particular, antes del
+    // sorteo, la web), los de siempre.
+    _reproductor.tiempos = TiemposDeBienvenida.de(
+      _cfg,
+      conSalon: _ficha?.plano != null,
     );
     return AnimatedBuilder(
       animation: _reproductor,

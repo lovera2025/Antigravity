@@ -286,6 +286,48 @@ void main() {
           .fondoOscurecer, TotemConfig.oscurecerMaximo);
     });
 
+    test('la llegada: vacía es lo de siempre, se acota y conFondoDe la '
+        'conserva', () {
+      final vieja = TotemConfig.fromJson(const {'evento_id': _ev});
+      expect(vieja.llegadaNombreSeg, TotemConfig.llegadaNombrePorDefecto);
+      expect(vieja.llegadaCaminoSeg, TotemConfig.llegadaCaminoPorDefecto);
+      expect(vieja.llegadaLugar, isNull);
+
+      final rara = TotemConfig.fromJson(const {
+        'evento_id': _ev,
+        'llegada_nombre_seg': 99,
+        'llegada_camino_seg': 'basura',
+        'llegada_lugar': '  ',
+      });
+      expect(rara.llegadaNombreSeg, TotemConfig.llegadaNombreMaximo);
+      expect(rara.llegadaCaminoSeg, TotemConfig.llegadaCaminoPorDefecto);
+      expect(rara.llegadaLugar, isNull);
+      expect(
+        TotemConfig.fromJson(const {'evento_id': _ev, 'llegada_nombre_seg': 0})
+            .llegadaNombreSeg,
+        TotemConfig.llegadaNombreMinimo,
+      );
+
+      final elegida = const TotemConfig(eventoId: _ev).copyWith(
+        llegadaNombreSeg: 6,
+        llegadaCaminoSeg: 12,
+        llegadaLugar: 'izquierda',
+      );
+      final ida = TotemConfig.fromJson(elegida.toJson());
+      expect(ida.llegadaNombreSeg, 6);
+      expect(ida.llegadaCaminoSeg, 12);
+      expect(ida.llegadaLugar, 'izquierda');
+      expect(
+        elegida.copyWith(limpiarLlegadaLugar: true).llegadaLugar,
+        isNull,
+      );
+
+      final conFondoDeOtra = elegida.conFondoDe(conFondo);
+      expect(conFondoDeOtra.llegadaNombreSeg, 6);
+      expect(conFondoDeOtra.llegadaCaminoSeg, 12);
+      expect(conFondoDeOtra.llegadaLugar, 'izquierda');
+    });
+
     test('quitar el fondo deja la receta, y conFondoDe la copia entera', () {
       final sin = conFondo.copyWith(limpiarFondo: true);
       expect(sin.fondoUrl, isNull);
@@ -312,6 +354,8 @@ void main() {
           .readAsStringSync(),
       File('supabase/migrations/20261023200000_totem_config_foto.sql')
           .readAsStringSync(),
+      File('supabase/migrations/20261105100000_totem_config_llegada.sql')
+          .readAsStringSync(),
     ].join('\n').toLowerCase();
     // `updated_by` y `updated_at` los pone el repositorio y el disparador.
     for (final clave in const TotemConfig(eventoId: _ev).toJson().keys) {
@@ -329,6 +373,24 @@ void main() {
       'ubicacion_y': 'smallint',
     };
     for (final MapEntry(key: col, value: tipo) in deLaFoto.entries) {
+      expect(sql, contains('add column if not exists $col $tipo;'), reason: col);
+      expect(sql, contains('drop column if exists $col;'), reason: col);
+    }
+    // Las de la llegada (6.4.0), con su tipo y su vuelta atrás escrita arriba.
+    const deLaLlegada = {
+      'llegada_nombre_seg': 'smallint',
+      'llegada_camino_seg': 'smallint',
+      'llegada_lugar': 'text',
+    };
+    expect(
+      const TotemConfig(eventoId: _ev)
+          .toJson()
+          .keys
+          .where((k) => k.startsWith('llegada_'))
+          .toSet(),
+      deLaLlegada.keys.toSet(),
+    );
+    for (final MapEntry(key: col, value: tipo) in deLaLlegada.entries) {
       expect(sql, contains('add column if not exists $col $tipo;'), reason: col);
       expect(sql, contains('drop column if exists $col;'), reason: col);
     }
@@ -362,6 +424,7 @@ void main() {
     for (final archivo in const [
       'supabase/migrations/20261023120000_totem_config_tu_fondo.sql',
       'supabase/migrations/20261023200000_totem_config_foto.sql',
+      'supabase/migrations/20261105100000_totem_config_llegada.sql',
     ]) {
       final sentencias = File(archivo)
           .readAsStringSync()

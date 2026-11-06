@@ -209,6 +209,41 @@ void main() {
       }
     });
 
+    test('antes del sorteo no lleva plano: el tótem espera como siempre', () {
+      final ficha = FichaTotem.desdePuerta(
+        eventoMasivo,
+        PuertaDelEvento.masivo(
+          alumnos: alumnosDeLaFicha(sorteado: false),
+          invitados: const [],
+        ),
+        plano: salon,
+      );
+      expect(ficha.masivo, isTrue);
+      expect(ficha.plano, isNull);
+    });
+
+    test('la ficha de cada minuto conserva el mismo salón; otro, no', () {
+      final primera = FichaTotem.decodificar(
+        FichaTotem.desdePuerta(eventoMasivo, masivo(), plano: salon).codificar(),
+      )!;
+      final segunda = FichaTotem.decodificar(
+        FichaTotem.desdePuerta(eventoMasivo, masivo(), plano: salon).codificar(),
+      )!;
+      expect(identical(primera.plano, segunda.plano), isFalse);
+      final seguida = segunda.conPlanoDe(primera);
+      expect(identical(seguida.plano, primera.plano), isTrue);
+      expect(seguida.personas.length, segunda.personas.length);
+
+      final otroSalon = salon.copyWith(nombre: 'Otro');
+      final cambiada = FichaTotem.desdePuerta(
+        eventoMasivo,
+        masivo(),
+        plano: otroSalon,
+      ).conPlanoDe(primera);
+      expect(cambiada.plano!.nombre, 'Otro');
+      expect(segunda.conPlanoDe(null).plano, same(segunda.plano));
+    });
+
     test('un particular no lleva plano, aunque se lo pasen', () {
       final ficha = FichaTotem.desdePuerta(
         eventoParticular,

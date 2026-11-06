@@ -50,7 +50,10 @@ class FichaTotem {
   /// con su fila, como en un particular. Las sillas van sin el "a confirmar"
   /// de Recepción: eso es para el operador, no para el salón.
   ///
-  /// [plano] va solo en un masivo: un particular no tiene plano.
+  /// [plano] va solo en un masivo **ya sorteado**: un particular no tiene
+  /// plano, y antes del sorteo el tótem espera como siempre, sin el salón (con
+  /// el salón entero en la espera, 6.4.0, mostrarlo sin nadie sentado sería
+  /// anunciar un salón que todavía no es).
   factory FichaTotem.desdePuerta(
     String eventoId,
     PuertaDelEvento puerta, {
@@ -86,7 +89,25 @@ class FichaTotem {
       eventoId: eventoId,
       masivo: true,
       personas: personas,
-      plano: plano,
+      plano: puerta.sorteado ? plano : null,
+    );
+  }
+
+  /// Esta ficha, con el plano de [anterior] si es el mismo salón. La ficha
+  /// llega por el puente cada minuto y trae un plano recién leído: otra
+  /// instancia del mismo salón haría rearmar todo lo que el tótem guarda por
+  /// plano (el lugar del cuadro, la guía de la llegada) y redibujar el salón
+  /// entero.
+  FichaTotem conPlanoDe(FichaTotem? anterior) {
+    final nuevo = plano;
+    final viejo = anterior?.plano;
+    if (nuevo == null || viejo == null || identical(nuevo, viejo)) return this;
+    if (jsonEncode(nuevo.toJson()) != jsonEncode(viejo.toJson())) return this;
+    return FichaTotem(
+      eventoId: eventoId,
+      masivo: masivo,
+      personas: personas,
+      plano: viejo,
     );
   }
 

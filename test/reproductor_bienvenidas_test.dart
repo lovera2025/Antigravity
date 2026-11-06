@@ -3,8 +3,10 @@
 // el reloj de los tests: los temporizadores corren con `tester.pump`.
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/features/totem/services/reproductor_bienvenidas.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/totem_config.dart';
 
 Invitado _inv(String id) => Invitado(
       id: id,
@@ -74,6 +76,53 @@ void main() {
     expect(vistas, ['acosta', 'benitez', 'garcia']);
     // 3 + 1 (se va y la pausa) + 3 + 1 + 7 + 0,7: unos 15,7 s.
     expect(ms, inInclusiveRange(15500, 16100));
+    n.r.dispose();
+  });
+
+  testWidgets('con el salón, con cola cada una dura sus segundos enteros',
+      (tester) async {
+    final n = _Noche();
+    n.r.tiempos = TiemposDeBienvenida.de(
+      const TotemConfig(eventoId: 'e', llegadaNombreSeg: 6, llegadaCaminoSeg: 5),
+      conSalon: true,
+    );
+    for (final id in ['acosta', 'benitez']) {
+      n.r.aviso(_inv(id));
+    }
+    await tester.pump();
+    expect(n.enPantalla, ['acosta']);
+    await n.pasan(tester, 10900);
+    expect(n.r.saliendo, isFalse, reason: 'con cola no se acorta: 11 s');
+    await n.pasan(tester, 200);
+    expect(n.r.saliendo, isTrue);
+    await n.pasan(tester, 1000);
+    expect(n.enPantalla, ['benitez']);
+    n.r.dispose();
+  });
+
+  testWidgets('cambiar los segundos con la tarjeta puesta mueve su fin',
+      (tester) async {
+    final n = _Noche();
+    final de12 = TiemposDeBienvenida.de(
+      const TotemConfig(eventoId: 'e'),
+      conSalon: true,
+    );
+    n.r.tiempos = de12;
+    n.r.aviso(_inv('garcia'));
+    await tester.pump();
+    await n.pasan(tester, 4000);
+    final antes = n.r.fin;
+    n.r.tiempos = TiemposDeBienvenida.de(
+      const TotemConfig(eventoId: 'e', llegadaNombreSeg: 2, llegadaCaminoSeg: 3),
+      conSalon: true,
+    );
+    expect(n.r.fin!.isBefore(antes!), isTrue);
+    await n.pasan(tester, 1100);
+    expect(n.r.saliendo, isTrue, reason: 'a los 5 s, los nuevos');
+    // Los mismos segundos otra vez no cambian nada.
+    n.r.tiempos = n.r.tiempos;
+    await n.pasan(tester, 800);
+    expect(n.r.actual, isNull);
     n.r.dispose();
   });
 

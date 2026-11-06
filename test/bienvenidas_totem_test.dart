@@ -1,5 +1,6 @@
 import 'package:arguello_events/features/totem/services/bienvenidas_totem.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/totem_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A quién saluda el tótem (`bienvenidas_totem.dart`).
@@ -593,6 +594,64 @@ void main() {
       final sala = IngresosTotem()..leyo(const [], ahora: t0);
       expect(sala.fin, isNull);
       expect(sala.siguiente(t0), isNull);
+    });
+  });
+
+  // Con el salón (6.4.0): el nombre en grande y el salón con el camino, los
+  // segundos del jefe, y con cola no se acorta (decisión del usuario, 4-nov).
+  group('cuánto dura con el salón', () {
+    final t0 = DateTime(2026, 12, 12, 22);
+    DateTime en(int ms) => t0.add(Duration(milliseconds: ms));
+    const cfg = TotemConfig(eventoId: 'e');
+
+    test('los de siempre: 4 s el nombre y 8 el camino', () {
+      final t = TiemposDeBienvenida.de(cfg, conSalon: true);
+      expect(t.nombre, const Duration(seconds: 4));
+      expect(t.camino, const Duration(seconds: 8));
+      expect(t.total(hayCola: false), const Duration(seconds: 12));
+    });
+
+    test('con cola dura lo mismo', () {
+      final t = TiemposDeBienvenida.de(cfg, conSalon: true);
+      expect(t.total(hayCola: true), const Duration(seconds: 12));
+      expect(finDeBienvenida(empezo: t0, hayCola: true, tiempos: t), en(12000));
+    });
+
+    test('los que eligió el jefe', () {
+      final t = TiemposDeBienvenida.de(
+        cfg.copyWith(llegadaNombreSeg: 6, llegadaCaminoSeg: 5),
+        conSalon: true,
+      );
+      expect(finDeBienvenida(empezo: t0, hayCola: false, tiempos: t), en(11000));
+    });
+
+    test('sin el salón, como antes: 7 s y 3 con cola', () {
+      final t = TiemposDeBienvenida.de(cfg, conSalon: false);
+      expect(t, TiemposDeBienvenida.sinSalon);
+      expect(finDeBienvenida(empezo: t0, hayCola: false, tiempos: t), en(7000));
+      expect(finDeBienvenida(empezo: t0, hayCola: true, tiempos: t), en(3000));
+    });
+
+    test('el que se suma igual se alcanza a leer', () {
+      final t = TiemposDeBienvenida.de(cfg, conSalon: true);
+      expect(
+        finDeBienvenida(empezo: t0, hayCola: true, seSumo: en(11000), tiempos: t),
+        en(14000),
+      );
+    });
+
+    test('en la sala: la que está no se acorta cuando llega otra', () {
+      final sala = IngresosTotem()
+        ..tiempos = TiemposDeBienvenida.de(cfg, conSalon: true)
+        ..leyo(const [], ahora: t0);
+      sala.aviso(_inv('a'), ahora: en(0));
+      sala.siguiente(en(0));
+      sala.aviso(_inv('b'), ahora: en(2000));
+      expect(sala.fin, en(12000));
+      expect(sala.enCamino, 1);
+      sala.termino();
+      sala.siguiente(en(12500));
+      expect(sala.fin, en(24500), reason: 'la siguiente, entera');
     });
   });
 

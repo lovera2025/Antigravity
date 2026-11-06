@@ -9,7 +9,8 @@ import 'bienvenidas_totem.dart';
 /// cuándo se va su tarjeta y cuándo sigue el próximo.
 ///
 /// A quién se saluda, con quién y cuánto dura lo decide [IngresosTotem] (la
-/// familia junta, 7 s sin cola y 3 s con cola). Esto pone los temporizadores y
+/// familia junta; sin el salón, 7 s sin cola y 3 s con cola; con el salón, los
+/// segundos del jefe, con o sin cola). Esto pone los temporizadores y
 /// avisa a la pantalla. Lo comparten el tótem del salón (`totem_display.dart`)
 /// y el de esta PC en Recepción (`TotemLocal`), así no hay dos copias.
 class ReproductorBienvenidas extends ChangeNotifier {
@@ -57,6 +58,18 @@ class ReproductorBienvenidas extends ChangeNotifier {
   bool get conectado => sala.conectado;
 
   set familiaDe(String Function(Invitado) f) => sala.familiaDe = f;
+
+  /// Cuánto dura cada bienvenida. Cambiarlos con una tarjeta en pantalla
+  /// mueve su fin (salvo mientras se va).
+  ///
+  /// No avisa: la pantalla los pone mientras se dibuja, con la config y la
+  /// ficha de ese momento, y ya lee el fin nuevo.
+  TiemposDeBienvenida get tiempos => sala.tiempos;
+  set tiempos(TiemposDeBienvenida t) {
+    if (t == sala.tiempos) return;
+    sala.tiempos = t;
+    _programarFin();
+  }
 
   int get _cuantos =>
       sala.cola.length + (sala.enPantalla?.personas.length ?? 0);
@@ -167,8 +180,8 @@ class ReproductorBienvenidas extends ChangeNotifier {
     _programarFin();
   }
 
-  /// Vuelve a poner la hora en que se va la tarjeta: con gente esperando se
-  /// acorta, y si ya pasaron los 3 s se va enseguida.
+  /// Vuelve a poner la hora en que se va la tarjeta: sin el salón, con gente
+  /// esperando se acorta, y si ya pasaron los 3 s se va enseguida.
   void _programarFin() {
     // Mientras se va, el temporizador es el de la salida: no se toca, o la
     // tarjeta quedaría trabada a medio irse.

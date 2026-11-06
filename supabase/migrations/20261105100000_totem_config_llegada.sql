@@ -1,0 +1,79 @@
+-- 2026-11-05 — Tres columnas nuevas en `totem_config`: la llegada de un evento
+-- masivo en el tótem. Van con la 6.4.0.
+--
+-- Con el salón entero en la pantalla, el nombre de la familia salta en grande y
+-- después se acomoda junto a su mesa, con el camino. El jefe elige cuánto dura
+-- cada parte y dónde va el nombre; la noche de la fiesta se cambia a mano desde
+-- Recepción.
+--
+--   llegada_nombre_seg  smallint, de 2 a 10: los segundos del nombre en grande.
+--                       Vacía (las filas de antes) = 4.
+--   llegada_camino_seg  smallint, de 3 a 30: los segundos del salón con el
+--                       camino a la mesa. Vacía = 8.
+--   llegada_lugar       text: arriba | abajo | izquierda | derecha. Vacía =
+--                       automático (la pista de baile, si entra).
+--
+-- **Solo agrega columnas vacías a una tabla que ya existe.** No toca ninguna
+-- fila ni ninguna otra tabla, ni la base de las PCs. La 6.3.1 no las conoce: no
+-- las lee y, como su guardado de Personalizar es un upsert que no las nombra,
+-- tampoco las pisa. Se puede correr a cualquier hora.
+--
+-- **Hay que correrlo antes de instalar la 6.4.0 y de publicar su web.** La
+-- 6.4.0 las manda al guardar Personalizar: sin ellas, guardar falla, como pasó
+-- con `mostrar_musica`.
+--
+-- **Sin NOT NULL, sin DEFAULT y sin CHECK, a propósito**, como las de la foto:
+-- vacía quiere decir "lo de siempre", una fila vieja nunca hace fallar un
+-- guardado, y un lugar nuevo no tiene que esperar otro SQL. Los valores
+-- válidos (y los topes) los controla la app.
+--
+-- Correrlo dos veces es inocuo: todo es `if not exists`.
+-- **No se agrega nada a la publicación de Realtime.**
+--
+-- Cómo correrlo (SQL Editor):
+--   1. Correr la consulta "ANTES" de la sección 2 y anotar los números.
+--   2. Correr este archivo entero.
+--   3. Correr las consultas de la sección 2 y comparar.
+
+-- ── 1. Las columnas ─────────────────────────────────────────────────────────
+--
+-- ROLLBACK: alter table public.totem_config drop column if exists llegada_nombre_seg;
+alter table public.totem_config add column if not exists llegada_nombre_seg smallint;
+
+-- ROLLBACK: alter table public.totem_config drop column if exists llegada_camino_seg;
+alter table public.totem_config add column if not exists llegada_camino_seg smallint;
+
+-- ROLLBACK: alter table public.totem_config drop column if exists llegada_lugar;
+alter table public.totem_config add column if not exists llegada_lugar text;
+
+-- ── 2. Verificación ─────────────────────────────────────────────────────────
+--
+-- ANTES y DESPUÉS de correr el archivo: estos conteos tienen que dar igual. Si
+-- cambia uno solo, algo tocó datos que no debía.
+--
+--   select
+--     (select count(*) from public.contratos_alumnos)         as contratos,
+--     (select count(*) from public.pagos_contrato_alumno)     as pagos,
+--     (select count(*) from public.notas_operativas_contrato) as notas,
+--     (select count(*) from public.invitados)                 as invitados,
+--     (select count(*) from public.eventos)                   as eventos,
+--     (select count(*) from public.totem_config)              as totem_config;
+--
+-- DESPUÉS: las tres columnas, vacías en todas las filas. Tiene que devolver
+-- tres filas: `llegada_nombre_seg` y `llegada_camino_seg` smallint, y
+-- `llegada_lugar` text.
+--
+--   select column_name, data_type from information_schema.columns
+--   where table_schema = 'public' and table_name = 'totem_config'
+--     and column_name in ('llegada_nombre_seg', 'llegada_camino_seg',
+--                         'llegada_lugar');
+--
+--   select count(*) filter (where llegada_nombre_seg is not null) as con_nombre,
+--          count(*) filter (where llegada_camino_seg is not null) as con_camino,
+--          count(*) filter (where llegada_lugar is not null)      as con_lugar
+--   from public.totem_config;   -- los tres en 0
+--
+-- Y que `totem_config` sigue fuera de Realtime (tiene que devolver cero filas):
+--
+--   select tablename from pg_publication_tables
+--   where pubname = 'supabase_realtime' and tablename = 'totem_config';

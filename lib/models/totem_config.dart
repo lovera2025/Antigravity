@@ -58,6 +58,27 @@ class TotemConfig {
   /// `gala` o `tu_fondo`, ver `EstiloTotem`). Null: la del tipo de evento.
   final String? estilo;
 
+  // ── La llegada en un evento masivo (6.4.0) ──────────────────────────────────
+  //
+  // Con el salón entero en la pantalla, el nombre de la familia salta en
+  // grande y después se acomoda junto a su mesa, con el camino. Cuánto dura cada
+  // parte y dónde va el nombre lo elige el jefe, y la noche se cambia a mano
+  // desde Recepción. Vacías en la nube (una fila de antes) son lo de siempre.
+
+  /// Los segundos del nombre en grande, de [llegadaNombreMinimo] a
+  /// [llegadaNombreMaximo].
+  final int llegadaNombreSeg;
+
+  /// Los segundos del salón con el camino, de [llegadaCaminoMinimo] a
+  /// [llegadaCaminoMaximo]. Con gente esperando no se acorta: cada familia dura
+  /// lo mismo (decisión del usuario, 4-nov).
+  final int llegadaCaminoSeg;
+
+  /// Dónde va el nombre junto al salón (`arriba`, `abajo`, `izquierda`,
+  /// `derecha`; ver `LugarElegido`), tal como vino. Null: automático (la pista
+  /// de baile si entra).
+  final String? llegadaLugar;
+
   // ── "Tu fondo" ────────────────────────────────────────────────────────────
   //
   // La quinta apariencia: una imagen propia de fondo, con su animación, sus
@@ -130,6 +151,9 @@ class TotemConfig {
     this.ubicacionX = 0,
     this.ubicacionY = 0,
     this.estilo,
+    this.llegadaNombreSeg = llegadaNombrePorDefecto,
+    this.llegadaCaminoSeg = llegadaCaminoPorDefecto,
+    this.llegadaLugar,
     this.fondoUrl,
     this.fondoAutomatico = true,
     this.fondoAnimacion,
@@ -155,6 +179,17 @@ class TotemConfig {
   static const textoTamanoMinimo = 50;
   static const textoTamanoMaximo = 200;
   static const textoTamanoPorDefecto = 100;
+
+  /// El nombre en grande: lo que se tarda en leerlo de lejos, sin que la fila
+  /// espere de más.
+  static const llegadaNombreMinimo = 2;
+  static const llegadaNombreMaximo = 10;
+  static const llegadaNombrePorDefecto = 4;
+
+  /// El salón con el camino a la mesa.
+  static const llegadaCaminoMinimo = 3;
+  static const llegadaCaminoMaximo = 30;
+  static const llegadaCaminoPorDefecto = 8;
 
   static const intensidadPorDefecto = 40;
   static const intensidadEfectosPorDefecto = 50;
@@ -217,6 +252,17 @@ class TotemConfig {
       ubicacionX: _ubicacionDe(json['ubicacion_x']),
       ubicacionY: _ubicacionDe(json['ubicacion_y']),
       estilo: estilo is String && estilo.trim().isNotEmpty ? estilo.trim() : null,
+      llegadaNombreSeg: entero(
+        'llegada_nombre_seg',
+        llegadaNombrePorDefecto,
+        llegadaNombreMaximo,
+      ).clamp(llegadaNombreMinimo, llegadaNombreMaximo),
+      llegadaCaminoSeg: entero(
+        'llegada_camino_seg',
+        llegadaCaminoPorDefecto,
+        llegadaCaminoMaximo,
+      ).clamp(llegadaCaminoMinimo, llegadaCaminoMaximo),
+      llegadaLugar: crudo('llegada_lugar'),
       fondoUrl: crudo('fondo_url'),
       fondoAutomatico: json['fondo_automatico'] != false,
       fondoAnimacion: crudo('fondo_animacion'),
@@ -272,6 +318,14 @@ class TotemConfig {
         'ubicacion_x': ubicacionX.clamp(-100, 100),
         'ubicacion_y': ubicacionY.clamp(-100, 100),
         'estilo': estilo,
+        // Las de la llegada necesitan sus columnas en la nube (SQL de la 6.4.0,
+        // `20261105100000_totem_config_llegada.sql`): sin ellas, guardar
+        // Personalizar falla. Se corre antes de instalar y de publicar la web.
+        'llegada_nombre_seg':
+            llegadaNombreSeg.clamp(llegadaNombreMinimo, llegadaNombreMaximo),
+        'llegada_camino_seg':
+            llegadaCaminoSeg.clamp(llegadaCaminoMinimo, llegadaCaminoMaximo),
+        'llegada_lugar': llegadaLugar,
         // Las de "Tu fondo" necesitan sus columnas en la nube (SQL
         // `20261023120000_totem_config_tu_fondo.sql`): sin ellas, guardar
         // Personalizar falla. Se corre antes de instalar y de publicar la web.
@@ -306,6 +360,10 @@ class TotemConfig {
     int? ubicacionY,
     String? estilo,
     bool limpiarEstilo = false,
+    int? llegadaNombreSeg,
+    int? llegadaCaminoSeg,
+    String? llegadaLugar,
+    bool limpiarLlegadaLugar = false,
     String? fondoUrl,
     bool limpiarFondo = false,
     bool? fondoAutomatico,
@@ -337,6 +395,12 @@ class TotemConfig {
       ubicacionX: (ubicacionX ?? this.ubicacionX).clamp(-100, 100),
       ubicacionY: (ubicacionY ?? this.ubicacionY).clamp(-100, 100),
       estilo: limpiarEstilo ? null : (estilo ?? this.estilo),
+      llegadaNombreSeg: (llegadaNombreSeg ?? this.llegadaNombreSeg)
+          .clamp(llegadaNombreMinimo, llegadaNombreMaximo),
+      llegadaCaminoSeg: (llegadaCaminoSeg ?? this.llegadaCaminoSeg)
+          .clamp(llegadaCaminoMinimo, llegadaCaminoMaximo),
+      llegadaLugar:
+          limpiarLlegadaLugar ? null : (llegadaLugar ?? this.llegadaLugar),
       // Sin la imagen, la receta no se borra: no molesta, y si se vuelve a
       // cargar un fondo se arma otra.
       fondoUrl: limpiarFondo ? null : (fondoUrl ?? this.fondoUrl),
@@ -375,6 +439,9 @@ class TotemConfig {
         ubicacionX: ubicacionX,
         ubicacionY: ubicacionY,
         estilo: estilo,
+        llegadaNombreSeg: llegadaNombreSeg,
+        llegadaCaminoSeg: llegadaCaminoSeg,
+        llegadaLugar: llegadaLugar,
         fondoUrl: otra.fondoUrl,
         fondoAutomatico: otra.fondoAutomatico,
         fondoAnimacion: otra.fondoAnimacion,

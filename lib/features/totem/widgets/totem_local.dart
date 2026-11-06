@@ -14,6 +14,7 @@ import '../estilos/fondo_propio.dart';
 import '../estilos/fondo_totem.dart';
 import '../estilos/totem_estilo.dart';
 import '../providers/totem_config_provider.dart';
+import '../services/bienvenidas_totem.dart';
 import '../services/contenido_bienvenida.dart';
 import '../services/ficha_totem.dart';
 import '../services/reproductor_bienvenidas.dart';
@@ -182,8 +183,8 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
   void _armarFicha() {
     final puerta = _puerta;
     if (puerta == null) return;
-    final ficha =
-        FichaTotem.desdePuerta(widget.eventoId, puerta, plano: _plano);
+    final ficha = FichaTotem.desdePuerta(widget.eventoId, puerta, plano: _plano)
+        .conPlanoDe(_ficha);
     _reproductor.familiaDe = (i) => ficha.familiaDe(i.id);
     // Durante `initState` todavía no se puede pedir que se redibuje.
     if (_iniciado) {
@@ -204,6 +205,11 @@ class _TotemLocalState extends ConsumerState<TotemLocal> {
     final cfg = ref.watch(totemConfigValueProvider(widget.eventoId));
     final estilo = ref.watch(estiloDelEventoProvider(widget.eventoId));
     final masivo = ref.watch(eventoMasivoProvider(widget.eventoId)) ?? false;
+    // Con el salón, los segundos del jefe; sin él, los de siempre.
+    _reproductor.tiempos = TiemposDeBienvenida.de(
+      cfg,
+      conSalon: _ficha?.plano != null,
+    );
 
     // Sin saber el tipo de evento no se sabe la apariencia: negro un instante,
     // antes que mostrar la que no es.
