@@ -35,7 +35,8 @@ ContenidoBienvenida _armar(
 
 void main() {
   group('lo que dice', () {
-    test('la familia: el alumno en grande, con quién viene, mesa y sillas', () {
+    test('la familia: el alumno en grande, con quién viene y la mesa (las '
+        'sillas ya no: las ve la recepcionista)', () {
       final c = _armar([filaDe('perez'), filaDe('perez', 1), filaDe('perez', 2)]);
       expect(c.saludo, '¡Bienvenidos!');
       expect(c.nombres, ['PÉREZ, JUAN MARTÍN']);
@@ -43,7 +44,6 @@ void main() {
       expect(c.acompanaA, isNull);
       expect(c.rotuloMesa, 'Mesa');
       expect(c.mesa, '12');
-      expect(c.sillas, '10 sillas (8 + 2 extra)');
       expect(c.musica, 'Tusa · Karol G');
     });
 
@@ -59,7 +59,6 @@ void main() {
       expect(c.nombres, ['GARCÍA, BRUNO']);
       expect(c.conQuien, isNull);
       expect(c.mesa, '17');
-      expect(c.sillas, '8 sillas');
       expect(c.musica, isNull, reason: 'no tiene música cargada');
     });
 
@@ -68,7 +67,6 @@ void main() {
       expect(c.nombres, ['GÓMEZ, ANA']);
       expect(c.acompanaA, 'acompaña a PÉREZ, JUAN MARTÍN');
       expect(c.mesa, '12');
-      expect(c.sillas, '10 sillas (8 + 2 extra)');
       expect(c.musica, isNull, reason: 'la música es del alumno');
     });
 
@@ -79,22 +77,19 @@ void main() {
       expect(c.saludo, '¡Bienvenidos!');
     });
 
-    test('dos mesas: "Mesas", y las sillas de cada una', () {
+    test('dos mesas: "Mesas"', () {
       final c = _armar([filaDe('acosta')]);
       expect(c.rotuloMesa, 'Mesas');
       expect(c.mesa, '14-15');
-      expect(c.sillas, '14: 10 sillas · 15: 9 sillas');
-      expect(c.sillas, isNot(contains('confirmar')));
     });
 
-    test('sin sortear: el saludo sin mesa ni sillas, con la música', () {
+    test('sin sortear: el saludo sin mesa, con la música', () {
       final ficha = fichaDePrueba(sorteado: false);
       final c = _armar(
         [filaDe('perez', 0, ficha), filaDe('perez', 1, ficha)],
         ficha: ficha,
       );
       expect(c.mesa, isNull);
-      expect(c.sillas, isNull);
       expect(c.musica, 'Tusa · Karol G');
       expect(c.conQuien, 'con GÓMEZ, ANA');
     });
@@ -116,7 +111,6 @@ void main() {
         '"sin mesa"', () {
       final c = _armar([filaDe('sosa')]);
       expect(c.mesa, isNull);
-      expect(c.sillas, isNull);
       for (final texto in [c.saludo, ...c.nombres, c.conQuien, c.acompanaA]) {
         expect(texto ?? '', isNot(contains(RegExp('sin mesa', caseSensitive: false))));
       }
@@ -148,7 +142,6 @@ void main() {
       expect(c.saludo, '¡Bienvenido!');
       expect(c.nombres, ['LÓPEZ, MARTA']);
       expect(c.mesa, '4');
-      expect(c.sillas, isNull);
       expect(c.musica, isNull);
       expect(c.conQuien, isNull);
     });
@@ -163,7 +156,6 @@ void main() {
         );
         expect(c.nombres, ['INVITADO ESPECIAL']);
         expect(c.mesa, '1');
-        expect(c.sillas, isNull);
       }
     });
 

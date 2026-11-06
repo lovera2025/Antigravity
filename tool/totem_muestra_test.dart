@@ -911,8 +911,8 @@ void main() {
         for (final m in mesas)
           (
             'Mesa $m',
-            PanelPlano(
-              guia: PlanoDeLaLlegada.para(armado, mesa: m, nombre: 'X')!,
+            PanelPlano.deLaLlegada(
+              PlanoDeLaLlegada.para(armado, mesa: m, nombre: 'X')!,
               tema: temaPlanoDelTotem(EstiloTotem.neon, color),
               borde: color,
               u: 20,
@@ -962,8 +962,8 @@ void main() {
           for (final m in ['40', '95', '140'])
             (
               'A $metros m · mesa $m',
-              PanelPlano(
-                guia: PlanoDeLaLlegada.para(conIngreso(metros), mesa: m, nombre: 'X')!,
+              PanelPlano.deLaLlegada(
+                PlanoDeLaLlegada.para(conIngreso(metros), mesa: m, nombre: 'X')!,
                 tema: temaPlanoDelTotem(EstiloTotem.neon, color),
                 borde: color,
                 u: 20,

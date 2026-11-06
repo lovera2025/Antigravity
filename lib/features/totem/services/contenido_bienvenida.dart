@@ -8,8 +8,9 @@ import 'ficha_totem.dart';
 /// solo lo dibuja.
 ///
 /// - **Una familia de un masivo:** el alumno en grande y "con GÓMEZ, ANA y
-///   PÉREZ, LUIS" debajo; la mesa y, debajo, sus sillas; la música si está
-///   cargada y prendida en Personalizar.
+///   PÉREZ, LUIS" debajo; la mesa; la música si está cargada y prendida en
+///   Personalizar. **Sin las sillas** (6.4.0, pedido del usuario): en el salón
+///   importa el nombre y la mesa; las sillas las ve la recepcionista.
 /// - **Un acompañante que llega sin el alumno:** su nombre y "acompaña a
 ///   PÉREZ, JUAN MARTÍN".
 /// - **Sin mesa** (un masivo sin sortear, o un alumno que quedó sin mesa): el
@@ -34,9 +35,6 @@ class ContenidoBienvenida {
   /// "Mesa" o "Mesas".
   final String rotuloMesa;
 
-  /// Debajo de la mesa: "10 sillas (8 + 2 extra)".
-  final String? sillas;
-
   /// "Tusa · Karol G".
   final String? musica;
 
@@ -47,7 +45,6 @@ class ContenidoBienvenida {
     this.acompanaA,
     this.mesa,
     this.rotuloMesa = 'Mesa',
-    this.sillas,
     this.musica,
   });
 
@@ -89,22 +86,19 @@ class ContenidoBienvenida {
       }
     }
 
-    // La mesa y las sillas son de la familia. Si la persona está en la ficha,
-    // manda la ficha, también cuando dice que no tiene mesa: la fila puede
-    // traer una mesa de un sorteo que ya se deshizo.
+    // La mesa es de la familia. Si la persona está en la ficha, manda la
+    // ficha, también cuando dice que no tiene mesa: la fila puede traer una
+    // mesa de un sorteo que ya se deshizo.
     final primera = personas.isEmpty ? null : personas.first;
     final p = titular != null
         ? deFicha(titular)
         : (primera == null ? null : deFicha(primera));
     final String? mesa;
-    final String? sillas;
     if (p != null) {
       mesa = p.mesa;
-      sillas = p.mesa == null ? null : p.sillas;
     } else {
       final enLaFila = primera?.numeroMesa?.trim() ?? '';
       mesa = enLaFila.isEmpty ? null : enLaFila;
-      sillas = null;
     }
 
     final musica = (cfg.mostrarMusica && titular != null)
@@ -124,7 +118,6 @@ class ContenidoBienvenida {
       mesa: mesa,
       rotuloMesa:
           MesasExtraUtils.numerosMesaDesdeTexto(mesa).length > 1 ? 'Mesas' : 'Mesa',
-      sillas: sillas,
       musica: musica,
     );
   }

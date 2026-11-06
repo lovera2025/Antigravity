@@ -226,7 +226,7 @@ class EscenaPoster extends EscenaEstilo {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: [sillasYMusica(c, d, familia: FuentesTotem.linea)],
+              children: [musicaDeLaLlegada(c, d, familia: FuentesTotem.linea)],
             ),
           ),
         ],

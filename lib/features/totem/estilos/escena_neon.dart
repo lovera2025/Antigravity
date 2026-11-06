@@ -248,7 +248,7 @@ class EscenaNeon extends EscenaEstilo {
           ],
           Opacity(
             opacity: d.tramo(0.75, 1),
-            child: sillasYMusica(c, d, familia: FuentesTotem.linea),
+            child: musicaDeLaLlegada(c, d, familia: FuentesTotem.linea),
           ),
         ],
       ),

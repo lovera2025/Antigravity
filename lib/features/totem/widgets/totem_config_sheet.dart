@@ -82,14 +82,13 @@ Future<void> showTotemConfigSheet({
 
 /// Lo que se ve al tocar "Ver una llegada": una llegada inventada, armada con
 /// lo mismo que arma la del salón ([ContenidoBienvenida.armar]), así que dice
-/// el saludo, la mesa, las sillas y la música como las diría el tótem.
+/// el saludo, la mesa y la música como las diría el tótem.
 abstract final class LlegadaDeEjemplo {
   /// Lo que dura en la vista: lo de una bienvenida sin cola.
   static const dura = kBienvenidaSola;
 
-  /// En un masivo, una familia (el alumno y dos acompañantes) con su mesa, sus
-  /// sillas y la música si está prendida. En un particular, una persona con
-  /// su mesa.
+  /// En un masivo, una familia (el alumno y dos acompañantes) con su mesa y
+  /// la música si está prendida. En un particular, una persona con su mesa.
   static ContenidoBienvenida para({
     required bool masivo,
     required TotemConfig cfg,
@@ -125,7 +124,6 @@ abstract final class LlegadaDeEjemplo {
           familia: alumno,
           esAlumno: esAlumno,
           mesa: '12',
-          sillas: '10 sillas (8 + 2 extra)',
           musica: esAlumno ? 'Tusa · Karol G' : null,
           titular: esAlumno ? null : titular,
         );

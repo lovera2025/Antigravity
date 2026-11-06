@@ -88,6 +88,10 @@ class TemaPlano {
   /// mesa para que entren las sillas sin tocarse).
   final double escalaMesa;
 
+  /// El número de la mesa, más grande o más chico que el de siempre. El tótem
+  /// lo agranda: se lee de lejos, en la tele.
+  final double escalaNumero;
+
   const TemaPlano({
     required this.estilo,
     required this.fondo,
@@ -118,6 +122,7 @@ class TemaPlano {
     this.sillas = false,
     this.brillo = false,
     this.escalaMesa = 0.92,
+    this.escalaNumero = 1,
   });
 
   Color colorDivision(int? i) =>
@@ -229,6 +234,7 @@ class TemaPlano {
       sillas: sillas,
       brillo: brillo,
       escalaMesa: escalaMesa,
+      escalaNumero: escalaNumero,
     );
   }
 

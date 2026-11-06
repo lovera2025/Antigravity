@@ -308,7 +308,7 @@ void main() {
         _enLaVista(find.text('con GÓMEZ, ANA y PÉREZ, LUIS')),
         findsOneWidget,
       );
-      expect(_enLaVista(find.text('10 sillas (8 + 2 extra)')), findsOneWidget);
+      expect(find.textContaining('sillas'), findsNothing);
       expect(_enLaVista(find.text('Tusa · Karol G')), findsOneWidget);
       // Las tarjetas siguen en la espera.
       expect(
@@ -365,7 +365,6 @@ void main() {
       expect(familia.nombres, ['PÉREZ, JUAN MARTÍN']);
       expect(familia.conQuien, 'con GÓMEZ, ANA y PÉREZ, LUIS');
       expect(familia.mesa, '12');
-      expect(familia.sillas, '10 sillas (8 + 2 extra)');
       expect(familia.musica, 'Tusa · Karol G');
 
       final sinMusica = LlegadaDeEjemplo.para(
@@ -388,7 +387,6 @@ void main() {
       expect(particular.saludo, '¡Bienvenido!');
       expect(particular.nombres, ['GONZÁLEZ, MARÍA']);
       expect(particular.mesa, '4');
-      expect(particular.sillas, isNull);
       expect(particular.musica, isNull);
       expect(particular.conQuien, isNull);
     });

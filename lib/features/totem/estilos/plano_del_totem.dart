@@ -5,23 +5,33 @@ import '../services/plano_de_la_llegada.dart';
 import 'fuentes_totem.dart';
 import 'totem_estilo.dart';
 
-/// El tema del plano en la llegada del tótem: **se viste como la apariencia**,
-/// no con el estilo que la fiesta eligió para el plano impreso. Neón y Gala
-/// salen de sus planos; Cristal va con mesas blancas sobre vidrio, y Póster y
-/// "Tu fondo" con mesas blancas. En todas, la mesa de la familia va en
-/// [acento] (el color del evento, o el brillo de la imagen en "Tu fondo"), y
-/// los colores de las divisiones no van: en la puerta importa una sola mesa.
+/// El tema del salón en el tótem.
 ///
-/// El fondo es apenas transparente: se ve el fondo animado detrás.
+/// **Claro** (6.4.0, pedido del usuario: "colores bien claros, que se vean
+/// bien las mesas y los números"): el salón entero se ve toda la espera, de
+/// lejos y en una tele. Papel blanco hueso, mesas blancas con borde oscuro,
+/// números negros y más grandes, y la mesa de la familia y el camino en
+/// [acento] (el color del evento, o el brillo de la imagen en "Tu fondo"). Es
+/// el mismo en las cinco apariencias: alrededor del salón sigue el fondo
+/// animado de cada una.
+///
+/// [claro] en false da el de antes, vestido como la apariencia (Neón y Gala
+/// de sus planos, Cristal sobre vidrio, Póster y "Tu fondo" con mesas
+/// blancas sobre oscuro): queda para comparar en las muestras.
 ///
 /// **Se arma una vez por apariencia y color.** `TemaPlano` no tiene `==`: uno
 /// nuevo en cada cuadro haría redibujar el salón entero sesenta veces por
 /// segundo.
-TemaPlano temaPlanoDelTotem(EstiloTotem estilo, Color acento) =>
-    _guardados.putIfAbsent((estilo, acento.toARGB32()), () {
+TemaPlano temaPlanoDelTotem(
+  EstiloTotem estilo,
+  Color acento, {
+  bool claro = true,
+}) =>
+    _guardados.putIfAbsent((claro ? null : estilo, acento.toARGB32()), () {
       final numero = acento.computeLuminance() > 0.35
           ? const Color(0xFF1A1406)
           : const Color(0xFFFFFFFF);
+      if (claro) return _claroCon(acento, numeroEnFoco: numero);
       return switch (estilo) {
         EstiloTotem.neon => _con(
             TemaPlano.neon,
@@ -63,7 +73,77 @@ TemaPlano temaPlanoDelTotem(EstiloTotem estilo, Color acento) =>
       };
     });
 
-final _guardados = <(EstiloTotem, int), TemaPlano>{};
+final _guardados = <(EstiloTotem?, int), TemaPlano>{};
+
+/// El salón claro con el color del evento en lo encendido.
+///
+/// Sobre el papel claro un color claro (el dorado de siempre) se pierde como
+/// línea: el camino va en el mismo tono, oscurecido hasta que se lea.
+TemaPlano _claroCon(Color acento, {required Color numeroEnFoco}) {
+  final hsl = HSLColor.fromColor(acento);
+  final camino = hsl.lightness > 0.42
+      ? hsl.withLightness(0.36).toColor()
+      : acento;
+  return TemaPlano(
+    estilo: _claro.estilo,
+    fondo: _claro.fondo,
+    hormigon: _claro.hormigon,
+    hormigonBorde: _claro.hormigonBorde,
+    sectorRelleno: _claro.sectorRelleno,
+    sectorBorde: _claro.sectorBorde,
+    sectorTexto: _claro.sectorTexto,
+    escenario: _claro.escenario,
+    escenarioTexto: _claro.escenarioTexto,
+    mesaRelleno: _claro.mesaRelleno,
+    mesaBorde: _claro.mesaBorde,
+    mesaVacia: _claro.mesaVacia,
+    numero: _claro.numero,
+    numeroVacia: _claro.numeroVacia,
+    divisiones: [acento],
+    resaltado: acento,
+    resaltadoNumero: numeroEnFoco,
+    ruta: camino,
+    pasto: _claro.pasto,
+    conflicto: _claro.conflicto,
+    titulo: _claro.titulo,
+    tituloSuave: _claro.tituloSuave,
+    fuente: _claro.fuente,
+    pesoNumero: _claro.pesoNumero,
+    escalaMesa: _claro.escalaMesa,
+    escalaNumero: _claro.escalaNumero,
+  );
+}
+
+/// El salón claro: el dibujo de Arquitecto (sin sillas ni grilla, que de lejos
+/// ensucian), en blanco hueso.
+const _claro = TemaPlano(
+  estilo: EstiloPlano.arquitecto,
+  fondo: Color(0xF7F6F3EC),
+  hormigon: Color(0xFFFCFBF8),
+  hormigonBorde: Color(0xFF9A9488),
+  sectorRelleno: Color(0xFFE8E4DA),
+  sectorBorde: Color(0xFFB3AC9D),
+  sectorTexto: Color(0xFF524D43),
+  escenario: Color(0xFF3B3833),
+  escenarioTexto: Color(0xFFF6F3EC),
+  mesaRelleno: Color(0xFFFFFFFF),
+  mesaBorde: Color(0xFF4A463F),
+  mesaVacia: Color(0xFF5E594F),
+  numero: Color(0xFF1C1A16),
+  numeroVacia: Color(0xFF1C1A16),
+  divisiones: [Color(0xFF4A463F)],
+  resaltado: Color(0xFF185FA5),
+  resaltadoNumero: Color(0xFFFFFFFF),
+  ruta: Color(0xFF185FA5),
+  pasto: Color(0xFF3B6D11),
+  conflicto: Color(0xFFA32D2D),
+  titulo: Color(0xFF1C1A16),
+  tituloSuave: Color(0xFF5E594F),
+  fuente: FuentesPlano.linea,
+  pesoNumero: FontWeight.w700,
+  escalaMesa: 0.92,
+  escalaNumero: 1.15,
+);
 
 /// [base] con el color del evento en lo encendido y una sola división, la de
 /// la familia ([PlanoDeLaLlegada.division]).

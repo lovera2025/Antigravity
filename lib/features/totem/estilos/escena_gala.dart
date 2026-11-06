@@ -242,7 +242,7 @@ class EscenaGala extends EscenaEstilo {
           ],
           Opacity(
             opacity: d.tramo(0.75, 1),
-            child: sillasYMusica(
+            child: musicaDeLaLlegada(
               c,
               d,
               familia: FuentesTotem.gala,

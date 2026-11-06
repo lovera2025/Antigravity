@@ -234,7 +234,7 @@ class EscenaTuFondo extends EscenaEstilo {
         ] else if (c.musica != null)
           Opacity(
             opacity: d.tramo(0.6, 0.9),
-            child: sillasYMusica(
+            child: musicaDeLaLlegada(
               c,
               d,
               familia: FuentesTotem.linea,
@@ -264,8 +264,8 @@ class EscenaTuFondo extends EscenaEstilo {
     );
   }
 
-  /// La tarjeta de la mesa: el número grande y, al lado, las sillas y la
-  /// música. En el color de la tarjeta de la imagen, con el borde del brillo.
+  /// La tarjeta de la mesa: el número grande y, al lado, la música. En el
+  /// color de la tarjeta de la imagen, con el borde del brillo.
   Widget _tarjeta(
     DatosEscena d,
     ContenidoBienvenida c,
@@ -275,17 +275,7 @@ class EscenaTuFondo extends EscenaEstilo {
     final u = d.u;
     final mesa = c.mesa!;
     final derecha = <Widget>[
-      if (c.sillas != null)
-        Text(
-          c.sillas!,
-          style: TextStyle(
-            fontFamily: FuentesTotem.linea,
-            fontSize: u * 0.85,
-            color: t.suave,
-          ),
-        ),
       if (c.musica != null) ...[
-        if (c.sillas != null) SizedBox(height: u * 0.35),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

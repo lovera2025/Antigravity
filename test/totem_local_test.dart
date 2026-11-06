@@ -128,7 +128,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('un alumno sin fila se saluda con la mesa y las sillas',
+    testWidgets('un alumno sin fila se saluda con la mesa, sin las sillas',
         (tester) async {
       final mundo = await _montar(tester);
       await _ingresar(mundo, 'perez');
@@ -137,7 +137,7 @@ void main() {
       expect(mundo.invitados.filas.single.numeroMesa, isNull);
       expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
       expect(_escena(tester).llegada!.mesa, '12');
-      expect(find.text('10 sillas (8 + 2 extra)'), findsOneWidget);
+      expect(find.textContaining('sillas'), findsNothing);
       expect(find.text('Tusa · Karol G'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -173,17 +173,50 @@ void main() {
       expect(find.text('PÉREZ, JUAN MARTÍN'), findsNothing);
     });
 
-    testWidgets('con el plano en la PC, saluda con la mesa en el salón',
-        (tester) async {
+    testWidgets('con el plano en la PC, el salón entero en la espera y la '
+        'mesa encendida después del nombre', (tester) async {
       final salon = ArmadosPredefinidos.normal2aPagina3();
       final mundo = await _montar(tester, plano: salon);
       expect(mundo.planos.lecturas, greaterThan(0));
+      // Esperando: el salón, sin nadie.
+      expect(
+        tester.widget<VistaPlano>(find.byType(VistaPlano)).resaltadas,
+        isEmpty,
+      );
       await _ingresar(mundo, 'perez');
       await _verLlegada(tester);
       expect(_escena(tester).plano, isNotNull);
-      final vista = tester.widget<VistaPlano>(find.byType(VistaPlano));
-      expect(vista.resaltadas, {12});
+      // El nombre en grande: todavía sin encender.
+      expect(
+        tester.widget<VistaPlano>(find.byType(VistaPlano)).resaltadas,
+        isEmpty,
+      );
+      // Pasados sus segundos, se acomoda y se enciende la mesa.
+      await tester.pump(
+        const Duration(seconds: TotemConfig.llegadaNombrePorDefecto),
+      );
+      await tester.pump(EscenaTotem.acomodo);
+      expect(
+        tester.widget<VistaPlano>(find.byType(VistaPlano)).resaltadas,
+        {12},
+      );
+      expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('con el plano, con gente esperando no se acorta', (tester) async {
+      final mundo = await _montar(tester, plano: ArmadosPredefinidos.normal2aPagina3());
+      await _ingresar(mundo, 'perez');
+      await _verLlegada(tester);
+      await _ingresar(mundo, 'garcia');
+      await tester.pump();
+      expect(find.text('1 más en camino'), findsOneWidget);
+      // Sin el salón se iba a los 3 s; con el salón dura sus 12.
+      for (var i = 0; i < 80; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('PÉREZ, JUAN MARTÍN'), findsOneWidget);
+      expect(find.text('GARCÍA, BRUNO'), findsNothing);
     });
 
     testWidgets('sin plano en la PC, la llegada de siempre', (tester) async {

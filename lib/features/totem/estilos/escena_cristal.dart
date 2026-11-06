@@ -193,7 +193,7 @@ class EscenaCristal extends EscenaEstilo {
                   ),
                 ),
               ],
-              sillasYMusica(c, d, familia: FuentesTotem.linea),
+              musicaDeLaLlegada(c, d, familia: FuentesTotem.linea),
             ],
           ),
         ),

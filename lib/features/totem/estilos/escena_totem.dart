@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,8 +8,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../models/totem_config.dart';
 import '../../plano/estilos/estilo_plano.dart';
 import '../../plano/modelo/armado_salon.dart';
+import '../../plano/modelo/estado_plano.dart';
 import '../../plano/widgets/vista_plano.dart';
+import '../services/bienvenidas_totem.dart';
 import '../services/contenido_bienvenida.dart';
+import '../services/cuadro_del_salon.dart';
 import '../services/foto_guardada.dart';
 import '../services/plano_de_la_llegada.dart';
 import 'escena_cristal.dart';
@@ -66,10 +70,16 @@ class EscenaTotem extends StatefulWidget {
   /// La llegada que se muestra; null en la espera.
   final ContenidoBienvenida? llegada;
 
-  /// El salón de la fiesta: en la llegada de un masivo, abajo (o al costado)
-  /// va el plano con la mesa de la familia encendida. Null: sin plano (un
-  /// particular, el tótem por el navegador).
+  /// El salón de la fiesta (6.4.0): en un masivo sorteado se ve entero toda la
+  /// espera, con las frases en "el cuadro" ([CuadroDelSalon]); al llegar una
+  /// familia, su nombre salta en grande y se acomoda en el cuadro, con su mesa
+  /// encendida y el camino. Null: sin salón (un particular, antes del sorteo,
+  /// el tótem por el navegador): todo como siempre.
   final ArmadoSalon? plano;
+
+  /// Para las pruebas y las muestras, quieta: en qué parte de la llegada se
+  /// dibuja. Null: acomodada.
+  final FaseLlegada? faseFija;
 
   /// Qué llegada es: si cambia, la animación de entrada vuelve a empezar.
   final Object? claveLlegada;
@@ -104,6 +114,7 @@ class EscenaTotem extends StatefulWidget {
     this.alrededorDelTexto,
     this.llegada,
     this.plano,
+    this.faseFija,
     this.claveLlegada,
     this.saliendo = false,
     this.enCamino = 0,
@@ -120,10 +131,16 @@ class EscenaTotem extends StatefulWidget {
   /// Lo que tarda en irse. Quien la usa espera esto antes de la siguiente.
   static const salida = Duration(milliseconds: 700);
 
-  /// El camino en el plano empieza a dibujarse cuando la tarjeta ya casi
-  /// entró, y tarda esto.
-  static const caminoEmpieza = Duration(milliseconds: 900);
+  /// Lo que tarda el nombre en achicarse y acomodarse en el cuadro, después de
+  /// los segundos en grande.
+  static const acomodo = Duration(milliseconds: 800);
+
+  /// El camino en el plano empieza a dibujarse a mitad del acomodo, y tarda
+  /// esto.
   static const caminoDura = Duration(milliseconds: 1600);
+
+  /// Cuánto se ve el salón detrás del nombre en grande.
+  static const salonDetrasDelNombre = 0.22;
 
   /// Cuántas veces se armó el plano de una llegada. Solo los tests: se arma
   /// una vez por llegada, no en cada cuadro.
@@ -149,6 +166,45 @@ class _EscenaTotemState extends State<EscenaTotem>
     duration: const Duration(seconds: 60),
   );
 
+  /// Con el salón: de 0 (el nombre en grande) a 1 (acomodado en el cuadro).
+  late final AnimationController _acomodo = AnimationController(
+    vsync: this,
+    duration: EscenaTotem.acomodo,
+  );
+
+  /// Cuándo el nombre deja de estar en grande.
+  Timer? _alAcomodar;
+
+  /// Lo que dura el nombre en grande, según la config.
+  Duration get _nombreEnGrande =>
+      TiemposDeBienvenida.de(widget.cfg, conSalon: true).nombre;
+
+  /// Pone el acomodo de la llegada que está: quieta, la fase pedida; si no,
+  /// en grande hasta que pasen sus segundos. [deNuevo]: es otra llegada.
+  void _programarAcomodo({required bool deNuevo}) {
+    _alAcomodar?.cancel();
+    if (widget.quieta) {
+      _acomodo.value = widget.faseFija == FaseLlegada.grande ? 0 : 1;
+      return;
+    }
+    if (widget.llegada == null || widget.plano == null) {
+      _acomodo.value = 0;
+      return;
+    }
+    if (!deNuevo && _acomodo.value > 0) return;
+    final empezo = widget.empezo ?? DateTime.now();
+    final falta = empezo.add(_nombreEnGrande).difference(DateTime.now());
+    if (falta <= Duration.zero) {
+      // Ya pasaron (la escena se armó tarde, o achicaron los segundos).
+      if (_acomodo.value == 0) _acomodo.forward(from: 0);
+      return;
+    }
+    _acomodo.value = 0;
+    _alAcomodar = Timer(falta, () {
+      if (mounted) _acomodo.forward(from: 0);
+    });
+  }
+
   /// La imagen de "Tu fondo", si es la apariencia: se carga una vez y se
   /// suelta al cambiar.
   final _fondo = CargaDelFondo();
@@ -164,6 +220,7 @@ class _EscenaTotemState extends State<EscenaTotem>
       _reloj.repeat();
       if (widget.llegada != null) _entrada.forward(from: 0);
     }
+    _programarAcomodo(deNuevo: true);
   }
 
   void _cambioElFondo() {
@@ -182,6 +239,17 @@ class _EscenaTotemState extends State<EscenaTotem>
   void didUpdateWidget(covariant EscenaTotem old) {
     super.didUpdateWidget(old);
     _cargarFondo();
+    final otraLlegada = widget.claveLlegada != old.claveLlegada ||
+        (old.llegada == null) != (widget.llegada == null) ||
+        old.empezo != widget.empezo ||
+        (old.plano == null) != (widget.plano == null) ||
+        old.faseFija != widget.faseFija;
+    if (widget.quieta || otraLlegada) {
+      _programarAcomodo(deNuevo: true);
+    } else if (old.cfg.llegadaNombreSeg != widget.cfg.llegadaNombreSeg) {
+      // Le cambiaron los segundos a mano, con el nombre en grande.
+      _programarAcomodo(deNuevo: false);
+    }
     if (widget.quieta) {
       _entrada.value = widget.llegada == null ? 0 : 1;
       return;
@@ -203,9 +271,49 @@ class _EscenaTotemState extends State<EscenaTotem>
     _fondo
       ..removeListener(_cambioElFondo)
       ..dispose();
+    _alAcomodar?.cancel();
+    _acomodo.dispose();
     _entrada.dispose();
     _reloj.dispose();
     super.dispose();
+  }
+
+  // Dónde van el salón y el cuadro: una vez por plano, pantalla y lugar, no en
+  // cada cuadro.
+  CuadroDelSalon? _cuadro;
+  ArmadoSalon? _cuadroPlano;
+  Size? _cuadroPantalla;
+  String? _cuadroLugar;
+
+  CuadroDelSalon? _cuadroPara(Size pantalla, double u) {
+    final plano = widget.plano;
+    if (plano == null) return null;
+    if (!identical(_cuadroPlano, plano) ||
+        _cuadroPantalla != pantalla ||
+        _cuadroLugar != widget.cfg.llegadaLugar) {
+      _cuadroPlano = plano;
+      _cuadroPantalla = pantalla;
+      _cuadroLugar = widget.cfg.llegadaLugar;
+      _cuadro = CuadroDelSalon.para(
+        plano,
+        pantalla: pantalla,
+        u: u,
+        elegido: LugarElegido.deClave(widget.cfg.llegadaLugar),
+      );
+    }
+    return _cuadro;
+  }
+
+  // El salón sin nadie, para la espera: el mismo mientras no cambie el plano.
+  EstadoPlano? _vacio;
+  ArmadoSalon? _vacioPlano;
+
+  EstadoPlano _salonVacio(ArmadoSalon plano) {
+    if (!identical(_vacioPlano, plano) || _vacio == null) {
+      _vacioPlano = plano;
+      _vacio = EstadoPlano.desde(armado: plano);
+    }
+    return _vacio!;
   }
 
   // El plano de la llegada se arma una vez por llegada (y por plano), no en
@@ -270,15 +378,17 @@ class _EscenaTotemState extends State<EscenaTotem>
     // La guardada en la PC: sin internet se sigue viendo (sección 5).
     final foto = widget.foto ?? fotoDelEvento(widget.cfg);
     final guia = _guiaPara(widget.llegada);
-    final tema = guia == null ? null : temaPlanoDelTotem(estilo, color);
+    final tema =
+        widget.plano == null ? null : temaPlanoDelTotem(estilo, color);
     return LayoutBuilder(
       builder: (context, c) {
         final ancho = c.maxWidth.isFinite ? c.maxWidth : 1080.0;
         final alto = c.maxHeight.isFinite ? c.maxHeight : 1920.0;
         final u = math.min(ancho, alto * 9 / 16) / 27;
+        final cuadro = tema == null ? null : _cuadroPara(Size(ancho, alto), u);
         return ClipRect(
           child: AnimatedBuilder(
-            animation: Listenable.merge([_entrada, _reloj]),
+            animation: Listenable.merge([_entrada, _reloj, _acomodo]),
             builder: (context, _) {
               final e = _entrada.value;
               final reloj = widget.quieta
@@ -328,18 +438,19 @@ class _EscenaTotemState extends State<EscenaTotem>
                       tiempoFijo: widget.quieta ? widget.tiempoFijo : null,
                     ),
                   ...escena.capasDeFondo(datos),
-                  if (e < 1)
-                    Opacity(
-                      opacity: (1 - e * 1.6).clamp(0.0, 1.0),
-                      child: escena.espera(datos),
-                    ),
-                  if (llegada != null && e > 0)
-                    Opacity(
-                      opacity: (e * 1.8).clamp(0.0, 1.0),
-                      child: guia == null || tema == null
-                          ? escena.llegada(datos, llegada)
-                          : _conPlano(escena, datos, llegada, guia, tema),
-                    ),
+                  if (cuadro == null || tema == null) ...[
+                    if (e < 1)
+                      Opacity(
+                        opacity: (1 - e * 1.6).clamp(0.0, 1.0),
+                        child: escena.espera(datos),
+                      ),
+                    if (llegada != null && e > 0)
+                      Opacity(
+                        opacity: (e * 1.8).clamp(0.0, 1.0),
+                        child: escena.llegada(datos, llegada),
+                      ),
+                  ] else
+                    ..._conElSalon(escena, datos, cuadro, tema, guia, receta),
                   if (llegada != null && widget.enCamino > 0)
                     Positioned(
                       left: 0,
@@ -386,69 +497,139 @@ class _EscenaTotemState extends State<EscenaTotem>
     );
   }
 
-  /// Cuánto se dibujó del camino, de 0 a 1: arranca cuando la tarjeta ya
-  /// entró ([EscenaTotem.caminoEmpieza]) y tarda [EscenaTotem.caminoDura].
-  /// Quieta, entero.
+  /// Cuánto se dibujó del camino, de 0 a 1: arranca a mitad del acomodo y
+  /// tarda [EscenaTotem.caminoDura]. Quieta, entero.
   double get _progresoCamino {
     final a = widget.empezo;
     if (widget.quieta || a == null) return 1;
     final ms = DateTime.now().difference(a).inMilliseconds -
-        EscenaTotem.caminoEmpieza.inMilliseconds;
+        _nombreEnGrande.inMilliseconds -
+        EscenaTotem.acomodo.inMilliseconds ~/ 2;
     return (ms / EscenaTotem.caminoDura.inMilliseconds).clamp(0.0, 1.0);
   }
 
-  /// La llegada con el plano: en una pantalla vertical, la llegada arriba y el
-  /// plano abajo; apaisada, la llegada a la izquierda y el plano a la derecha.
-  /// Abajo de todo quedan "N más en camino" y la línea del tiempo.
-  Widget _conPlano(
+  /// Con el salón (6.4.0, pedido del jefe el 4-nov): el salón entero siempre a
+  /// la vista, lo de la espera en el cuadro y, cuando llega una familia, su
+  /// nombre en grande con el salón apagado detrás que después se achica hasta
+  /// el cuadro, mientras su mesa se enciende y se dibuja el camino.
+  ///
+  /// El nombre se arma una sola vez, a la medida del cuadro, y se agranda
+  /// entero: así se achica sin moverse nada adentro. Si el cuadro cae adentro
+  /// del salón (la pista o un hueco), va sobre un cartel oscuro: el salón es
+  /// claro y las letras de las apariencias, no.
+  List<Widget> _conElSalon(
     EscenaEstilo escena,
     DatosEscena d,
-    ContenidoBienvenida c,
-    PlanoDeLaLlegada guia,
+    CuadroDelSalon cuadro,
     TemaPlano tema,
+    PlanoDeLaLlegada? guia,
+    RecetaDibujada? receta,
   ) {
-    final u = d.u;
-    final Rect llegada;
-    final Rect plano;
-    if (d.apaisado) {
-      final mitad = d.ancho * 0.5;
-      llegada = Rect.fromLTWH(0, 0, mitad, d.alto);
-      plano = Rect.fromLTRB(mitad, u * 1.6, d.ancho - u * 1.2, d.alto - u * 3.4);
-    } else {
-      final corte = d.alto * 0.5;
-      llegada = Rect.fromLTWH(0, 0, d.ancho, corte);
-      plano = Rect.fromLTRB(
-        u * 1.2,
-        corte + u * 0.4,
-        d.ancho - u * 1.2,
-        d.alto - u * 3.4,
-      );
-    }
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Positioned.fromRect(
-          rect: llegada,
-          child: escena.llegada(
-            d.conPlanoEn(llegada.size, alCostado: d.apaisado),
-            c,
+    final plano = widget.plano!;
+    final llegada = widget.llegada;
+    final e = d.entrada.clamp(0.0, 1.0);
+    final a = llegada == null
+        ? 0.0
+        : Curves.easeInOutCubic.transform(_acomodo.value.clamp(0.0, 1.0));
+    final encendido = llegada != null && guia != null && _acomodo.value > 0;
+
+    // El salón: entero en la espera; detrás del nombre en grande, apenas.
+    const atras = EscenaTotem.salonDetrasDelNombre;
+    final opacidad = llegada == null ? 1.0 : 1 + (atras + (1 - atras) * a - 1) * e;
+
+    final enElSalon = cuadro.lugar == LugarDelCuadro.pista ||
+        cuadro.lugar == LugarDelCuadro.hueco;
+    final cartel = receta != null && receta.textoOscuro
+        ? const Color(0xEBFFFFFF)
+        : const Color(0xE6121218);
+    Widget sobreCartel(Widget hijo, double cuanto) => cuanto <= 0
+        ? hijo
+        : DecoratedBox(
+            decoration: BoxDecoration(
+              color: cartel.withValues(alpha: cartel.a * cuanto),
+              borderRadius: BorderRadius.circular(d.u * 0.6),
+              border: Border.all(
+                color: d.color.withValues(alpha: 0.45 * cuanto),
+                width: math.max(1, d.u * 0.06),
+              ),
+            ),
+            child: hijo,
+          );
+
+    final enCuadro = d.conPlanoEn(cuadro.cuadro.size, alCostado: cuadro.alCostado);
+    final grande = _enGrande(cuadro.cuadro, Size(d.ancho, d.alto), d.u);
+    final donde = Rect.lerp(grande, cuadro.cuadro, a)!;
+
+    return [
+      Positioned.fromRect(
+        rect: cuadro.panel,
+        child: Opacity(
+          opacity: opacidad.clamp(0.0, 1.0),
+          child: PanelPlano(
+            armado: plano,
+            hoja: encendido ? guia.hoja : cuadro.hoja,
+            estado: encendido ? guia.estado : _salonVacio(plano),
+            resaltadas: encendido ? guia.mesas : const {},
+            ruta: encendido ? guia.ruta : null,
+            tema: tema,
+            borde: d.color,
+            u: d.u,
+            relleno: cuadro.relleno,
+            animar: !widget.quieta,
+            progresoCamino: _progresoCamino,
+            // Mientras el camino marca la mesa, el borde late.
+            pulsar: encendido,
           ),
         ),
+      ),
+      if (e < 1)
         Positioned.fromRect(
-          rect: plano,
+          rect: cuadro.cuadro,
           child: Opacity(
-            opacity: d.tramo(0.35, 0.8),
-            child: PanelPlano(
-              guia: guia,
-              tema: tema,
-              borde: d.color,
-              u: u,
-              animar: !widget.quieta,
-              progresoCamino: _progresoCamino,
+            opacity: (1 - e * 1.6).clamp(0.0, 1.0),
+            child: sobreCartel(escena.espera(enCuadro), enElSalon ? 1 : 0),
+          ),
+        ),
+      if (llegada != null && e > 0)
+        Positioned.fromRect(
+          rect: donde,
+          child: Opacity(
+            opacity: (e * 1.8).clamp(0.0, 1.0),
+            child: FittedBox(
+              fit: BoxFit.fill,
+              child: SizedBox.fromSize(
+                size: cuadro.cuadro.size,
+                // En grande va sobre el salón: siempre con cartel. Acomodada
+                // en una franja, sobre el fondo de la apariencia, sin.
+                child: sobreCartel(
+                  escena.llegada(enCuadro, llegada),
+                  enElSalon ? 1 : 1 - a,
+                ),
+              ),
             ),
           ),
         ),
-      ],
+    ];
+  }
+
+  /// Dónde va el nombre en grande: lo más grande que entra en la pantalla con
+  /// la forma del cuadro, al medio. Nunca más chico que el cuadro.
+  static Rect _enGrande(Rect cuadro, Size pantalla, double u) {
+    final area = Rect.fromLTRB(
+      u * CuadroDelSalon.margenEnU,
+      u * CuadroDelSalon.margenEnU,
+      pantalla.width - u * CuadroDelSalon.margenEnU,
+      pantalla.height - u * CuadroDelSalon.abajoEnU,
+    );
+    if (cuadro.width <= 0 || cuadro.height <= 0) return cuadro;
+    final s = math.max(
+      1.0,
+      math.min(area.width / cuadro.width, area.height / cuadro.height),
+    );
+    return Rect.fromCenter(
+      center: area.center,
+      width: cuadro.width * s,
+      height: cuadro.height * s,
     );
   }
 
@@ -704,16 +885,36 @@ abstract class EscenaEstilo {
 
 // ── Piezas comunes ─────────────────────────────────────────────────────────
 
-/// El plano en la llegada: la hoja de la mesa de la familia, con su mesa
-/// encendida y el camino desde el ingreso, en el tema de la apariencia
-/// ([temaPlanoDelTotem]).
-class PanelPlano extends StatelessWidget {
-  final PlanoDeLaLlegada guia;
+/// En qué parte de la llegada está el nombre, con el salón.
+enum FaseLlegada {
+  /// En grande, con el salón apagado detrás.
+  grande,
+
+  /// En el cuadro, con su mesa encendida y el camino.
+  acomodada,
+}
+
+/// El salón en el tótem: una hoja del plano en el tema del tótem
+/// ([temaPlanoDelTotem]); en la espera, sin nadie; en la llegada, con la mesa
+/// de la familia encendida y el camino desde el ingreso, y con [pulsar] el
+/// borde late en el color del evento (pedido del usuario, 5-nov: "que haga un
+/// efecto pulso los bordes del plano").
+class PanelPlano extends StatefulWidget {
+  final ArmadoSalon armado;
+  final String hoja;
+  final EstadoPlano estado;
+  final Set<int> resaltadas;
+
+  /// El camino desde el ingreso, en coordenadas del plano. Null: sin camino.
+  final List<Offset>? ruta;
   final TemaPlano tema;
 
   /// El color del evento: el borde del panel.
   final Color borde;
   final double u;
+
+  /// Lo que hay entre el borde y el dibujo ([CuadroDelSalon.relleno]).
+  final double relleno;
 
   /// False: quieto (tests y muestras).
   final bool animar;
@@ -721,41 +922,161 @@ class PanelPlano extends StatelessWidget {
   /// Cuánto se dibujó del camino desde el ingreso, de 0 a 1.
   final double progresoCamino;
 
+  /// El borde late: mientras el camino marca la mesa de la familia.
+  final bool pulsar;
+
+  /// Cuánto tarda un latido del borde.
+  static const latido = Duration(milliseconds: 1400);
+
   const PanelPlano({
     super.key,
-    required this.guia,
+    required this.armado,
+    required this.hoja,
+    required this.estado,
+    this.resaltadas = const {},
+    this.ruta,
     required this.tema,
     required this.borde,
     required this.u,
+    this.relleno = 0,
     this.animar = true,
     this.progresoCamino = 1,
+    this.pulsar = false,
   });
+
+  /// El de la llegada de una familia: su mesa encendida y su camino.
+  factory PanelPlano.deLaLlegada(
+    PlanoDeLaLlegada guia, {
+    Key? key,
+    required TemaPlano tema,
+    required Color borde,
+    required double u,
+    double relleno = 0,
+    bool animar = true,
+    double progresoCamino = 1,
+    bool pulsar = true,
+  }) =>
+      PanelPlano(
+        key: key,
+        armado: guia.armado,
+        hoja: guia.hoja,
+        estado: guia.estado,
+        resaltadas: guia.mesas,
+        ruta: guia.ruta,
+        tema: tema,
+        borde: borde,
+        u: u,
+        relleno: relleno,
+        animar: animar,
+        progresoCamino: progresoCamino,
+        pulsar: pulsar,
+      );
+
+  @override
+  State<PanelPlano> createState() => _PanelPlanoState();
+}
+
+class _PanelPlanoState extends State<PanelPlano>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _latido = AnimationController(
+    vsync: this,
+    duration: PanelPlano.latido,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _ajustar();
+  }
+
+  @override
+  void didUpdateWidget(PanelPlano old) {
+    super.didUpdateWidget(old);
+    _ajustar();
+  }
+
+  /// Late solo si hay que pulsar y se anima: quieto, la escena se queda
+  /// quieta (y un `pumpAndSettle` termina).
+  void _ajustar() {
+    final mover = widget.pulsar && widget.animar;
+    if (mover && !_latido.isAnimating) {
+      _latido.repeat();
+    } else if (!mover && _latido.isAnimating) {
+      _latido
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _latido.dispose();
+    super.dispose();
+  }
+
+  /// De 0 a 1 y de vuelta, en cada latido. Quieto y pulsando, a mitad.
+  double get _cuanto {
+    if (!widget.pulsar) return 0;
+    if (!widget.animar) return 0.6;
+    return 0.5 - 0.5 * math.cos(2 * math.pi * _latido.value);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final w = widget;
+    final u = w.u;
     final redondeo = BorderRadius.circular(u * 0.6);
-    return DecoratedBox(
-      position: DecorationPosition.foreground,
-      decoration: BoxDecoration(
-        borderRadius: redondeo,
-        border: Border.all(
-          color: borde.withValues(alpha: 0.35),
-          width: math.max(1, u * 0.05),
+    final dibujo = ClipRRect(
+      borderRadius: redondeo,
+      child: ColoredBox(
+        color: w.tema.fondo,
+        child: Padding(
+          padding: EdgeInsets.all(w.relleno),
+          child: VistaPlano(
+            armado: w.armado,
+            hoja: w.hoja,
+            tema: w.tema,
+            estado: w.estado,
+            resaltadas: w.resaltadas,
+            ruta: w.ruta,
+            progresoRuta: w.progresoCamino,
+            animar: w.animar,
+          ),
         ),
       ),
-      child: ClipRRect(
-        borderRadius: redondeo,
-        child: VistaPlano(
-          armado: guia.armado,
-          hoja: guia.hoja,
-          tema: tema,
-          estado: guia.estado,
-          resaltadas: guia.mesas,
-          ruta: guia.ruta,
-          progresoRuta: progresoCamino,
-          animar: animar,
-        ),
-      ),
+    );
+    return AnimatedBuilder(
+      animation: _latido,
+      child: dibujo,
+      builder: (context, dibujo) {
+        final p = _cuanto;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: redondeo,
+            boxShadow: p <= 0
+                ? null
+                : [
+                    BoxShadow(
+                      color: w.borde.withValues(alpha: 0.6 * p),
+                      blurRadius: u * (0.5 + 1.1 * p),
+                      spreadRadius: u * 0.15 * p,
+                    ),
+                  ],
+          ),
+          position: DecorationPosition.background,
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: redondeo,
+              border: Border.all(
+                color: w.borde.withValues(alpha: 0.55 + 0.45 * p),
+                width: math.max(1, u * (0.06 + 0.12 * p)),
+              ),
+            ),
+            child: dibujo,
+          ),
+        );
+      },
     );
   }
 }
@@ -1071,8 +1392,9 @@ Widget letraPorLetra(String texto, TextStyle estilo, double progreso,
 /// Lo de abajo del nombre: con quién viene o a quién acompaña.
 String? conQuienDe(ContenidoBienvenida c) => c.conQuien ?? c.acompanaA;
 
-/// Las sillas y la música, debajo de la mesa.
-Widget sillasYMusica(
+/// La música, debajo de la mesa. Las sillas ya no van en el salón (6.4.0):
+/// las ve la recepcionista.
+Widget musicaDeLaLlegada(
   ContenidoBienvenida c,
   DatosEscena d, {
   required String familia,
@@ -1083,18 +1405,6 @@ Widget sillasYMusica(
   return Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      if (c.sillas != null) ...[
-        SizedBox(height: u * 0.35),
-        Text(
-          c.sillas!,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontFamily: FuentesTotem.linea,
-            fontSize: u * 0.85,
-            color: Colors.white.withValues(alpha: 0.82),
-          ),
-        ),
-      ],
       if (c.musica != null) ...[
         SizedBox(height: u * 0.4),
         Row(

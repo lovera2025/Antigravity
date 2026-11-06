@@ -882,7 +882,7 @@ class PintorPlano extends CustomPainter {
                     : tema.numero;
     final tres = m.numero >= 100;
     final base = tema.estilo == EstiloPlano.gala ? 0.95 : 0.82;
-    final tam = r * base * (tres ? 0.78 : 1);
+    final tam = r * base * (tres ? 0.78 : 1) * tema.escalaNumero;
     final tp = _texto('${m.numero}', tam, color,
         peso: tema.pesoNumero,
         sombra: tema.estilo == EstiloPlano.neon && llena && !foco);
