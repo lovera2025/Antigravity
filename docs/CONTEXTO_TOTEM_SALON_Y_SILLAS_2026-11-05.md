@@ -8,7 +8,7 @@ demás (o antes), preguntando. Lleva **dos SQL nuevos, sin correr**.
 
 **Estado al 6-nov: las dos partes están hechas en la rama.** La Parte 1 (el tótem), el 5-nov (6 commits, de `3f4b821` a
 `8ddfd6e`); la Parte 2 (las sillas de la noche) y el reloj de los segundos en el celular, el 6-nov (5 commits, de `c2836fe`
-a `e0c8de3`), contada en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**. Falta probarla con celulares de verdad, y los dos SQL
+a `e0c8de3`), contada en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**. Falta la prueba de punta a punta (la hace Claude, en un sandbox), y los dos SQL
 siguen sin correr. Lo de abajo ("Lo que falta, en orden") quedó como registro: los puntos 1 a 7 están hechos.
 
 > Lo que sigue es la barra, etapa 5: "Seguimos con la barra: leé 'Para retomar en otro chat' de

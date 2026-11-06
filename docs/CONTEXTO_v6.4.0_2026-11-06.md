@@ -40,15 +40,18 @@ silla en Recepción. Quitar una deja la huella: quién, cuándo y por qué. Nada
 - **La traba de la oficina rige recién con la versión instalada.** Los sorteos empiezan el 10-nov y esta versión espera a la barra:
   hasta instalarla, no sumar sillas extra al contrato en una fiesta ya sorteada es una regla que la oficina respeta a mano.
   **Decidido por el usuario el 6-nov:** "mientras respetaremos a mano". Capaz se publica antes que la barra, pero **no antes de
-  asegurarse de que todo está bien**: primero la prueba con celulares de verdad.
+  asegurarse de que todo está bien**: primero la prueba de punta a punta.
 - La base local pasa a la v78 (`sillas_puerta`), probada sobre la copia de la base real.
 
 ## Lo que falta
 
-- **Probarlo con celulares de verdad** (punto 4 de la verificación del plan): `flutter run -d windows -t tool/central_puerta_prueba.dart`,
-  con la página del celular armada en `build/puesto`. Sumar desde dos celulares a la vez a una familia con un lugar, el mismo vale dos
-  veces, quitar con motivo, el conteo de la noche y el reloj desde el celular. En el arnés las familias pares ya están en el tope y las
-  impares tienen lugar para 2.
+- **La prueba de punta a punta** (punto 4 de la verificación del plan). **La hace Claude, en un sandbox, hasta que salga bien**
+  (regla del usuario del 6-nov: "las pruebas las haces vos en un sandbox y te aseguras que sale bien"; no se le pide a él que pruebe).
+  Aislada: `flutter run -d windows -t tool/central_puerta_prueba.dart` (Recepción en memoria, sin la base real ni la nube), la página
+  del celular armada en `build/puesto`, y pestañas del navegador como celulares. Sumar desde dos celulares a la vez a una familia con
+  un lugar, el mismo vale dos veces, quitar con motivo, el conteo de la noche y el reloj desde el celular; también con la central
+  cortada (la silla queda guardada y se manda al volver). En el arnés las familias pares ya están en el tope y las impares tienen lugar
+  para 2. Se le cuenta qué se probó, cómo y qué apareció, con capturas.
 - **Para la barra (sus etapas, no acá):** "Silla extra" en el catálogo y en el cierre, quién ve esas ventas (la encargada), y la
   comparación sillas vendidas contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
 - Después, la etapa 5 de la barra: `docs/CONTEXTO_BARRA_2026-11-02.md`, "Para retomar en otro chat".

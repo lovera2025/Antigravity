@@ -74,8 +74,9 @@ con Entradas y nadie sin Cobros. (Las tres PCs ya tienen la 6.3.1, y la foto de 
   ninguna foto suelta). Muestras: `tool/barra_muestra_test.dart`.
 
 **Para mirarlo con el mouse:** `flutter run -d windows -t tool/barra_prueba.dart` (sin base ni nube; PIN Marta 1111, Tati 5555; botón para
-cortar el internet; los vales salen por la TP-POS58 de verdad; los productos ya salen con sus fotos). **Falta:** que el usuario la recorra y
-mande la foto de los vales.
+cortar el internet; los vales salen por la TP-POS58 de verdad; los productos ya salen con sus fotos). **Falta:** recorrerla de punta a punta,
+que lo hace Claude en el arnés (regla del 6-nov: las pruebas las hace Claude, en un sandbox), y la foto de los vales impresos, que
+necesita la impresora de verdad.
 
 **El aviso de papel, pedido el 3-nov:** hoy la app solo le escribe a la impresora. Si la TP-POS58 contesta el pedido de estado (`DLE EOT 4`)
 por Bluetooth, VENDER avisa "sin papel" antes de cobrar; si no, queda como está.
