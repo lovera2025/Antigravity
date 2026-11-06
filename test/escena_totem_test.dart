@@ -362,9 +362,15 @@ void main() {
           }
           final c = cuadroDe(tamano);
           expect(tester.getRect(find.byType(PanelPlano)), c.panel);
-          for (final frase in ['2026', 'PROMOCIÓN']) {
+          // Adentro del salón (la pista) va resumido: el título entero.
+          final enElSalon = c.lugar == LugarDelCuadro.pista ||
+              c.lugar == LugarDelCuadro.hueco;
+          for (final frase
+              in enElSalon ? ['PROMOCIÓN 2026'] : ['2026', 'PROMOCIÓN']) {
             adentro(tester.getRect(find.text(frase)), c.cuadro, frase);
           }
+          expect(find.byType(ResumenEnElSalon),
+              enElSalon ? findsOneWidget : findsNothing);
         });
 
         testWidgets('${estilo.nombre}, pantalla $nombre: la llegada acomodada, '

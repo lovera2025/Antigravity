@@ -60,21 +60,15 @@ void main() {
   final normal = ArmadosPredefinidos.normal2aPagina3();
 
   group('automático', () {
-    test('en la Normal apaisada, la pista se lee la mitad: va a la izquierda',
-        () {
+    test('en la Normal apaisada, el cuadro va en la pista de baile', () {
       final c = cuadro(normal, apaisada);
-      expect(c.lugar, LugarDelCuadro.franjaLibre);
-      expect(c.alCostado, isTrue);
-      expect(c.cuadro.right, lessThanOrEqualTo(c.panel.left));
+      expect(c.lugar, LugarDelCuadro.pista);
+      expect(c, cuadro(normal, apaisada, elegido: LugarElegido.pista));
       final u = uDe(apaisada);
-      final enLaPista = cuadro(normal, apaisada, elegido: LugarElegido.pista);
-      expect(
-        CuadroDelSalon.escalaDelContenido(c.cuadro.size, u),
-        greaterThan(
-          CuadroDelSalon.escalaDelContenido(enLaPista.cuadro.size, u) /
-              CuadroDelSalon.pistaSiSeLee,
-        ),
-      );
+      expect(c.cuadro.width,
+          greaterThanOrEqualTo(u * CuadroDelSalon.resumenAnchoEnU));
+      expect(c.cuadro.height,
+          greaterThanOrEqualTo(u * CuadroDelSalon.resumenAltoEnU));
     });
 
     test('elegida, la pista: adentro de la pista, aunque quede chica', () {

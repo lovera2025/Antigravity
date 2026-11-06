@@ -547,9 +547,9 @@ class _EscenaTotemState extends State<EscenaTotem>
     final enElSalon = cuadro.lugar == LugarDelCuadro.pista ||
         cuadro.lugar == LugarDelCuadro.hueco;
     // Opaco: que no se transparente el nombre del sector de abajo.
-    final cartel = receta != null && receta.textoOscuro
-        ? const Color(0xFFF7F5F0)
-        : const Color(0xFF121218);
+    final cartelClaro = receta != null && receta.textoOscuro;
+    final cartel =
+        cartelClaro ? const Color(0xFFF7F5F0) : const Color(0xFF121218);
     Widget sobreCartel(Widget hijo, double cuanto) => cuanto <= 0
         ? hijo
         : DecoratedBox(
@@ -611,10 +611,13 @@ class _EscenaTotemState extends State<EscenaTotem>
           rect: cuadro.cuadro,
           child: Opacity(
             opacity: (1 - e * 1.6).clamp(0.0, 1.0),
-            child: sobreCartel(
-              achicado(escena.espera(enCuadro)),
-              enElSalon ? 1 : 0,
-            ),
+            // Adentro del salón, resumido: se lee de lejos en un lugar chico.
+            child: enElSalon
+                ? sobreCartel(
+                    ResumenEnElSalon.deLaEspera(d, oscuro: cartelClaro),
+                    1,
+                  )
+                : achicado(escena.espera(enCuadro)),
           ),
         ),
       // El nombre en grande, sobre el salón apagado, con cartel. Se va
@@ -644,10 +647,14 @@ class _EscenaTotemState extends State<EscenaTotem>
           rect: cuadro.cuadro,
           child: Opacity(
             opacity: ((e * 1.8).clamp(0.0, 1.0) * entra).clamp(0.0, 1.0),
-            child: sobreCartel(
-              achicado(escena.llegada(enCuadro, llegada)),
-              enElSalon ? 1 : 0,
-            ),
+            // En la pista, el nombre y la mesa, en grande: el detalle ya se vio
+            // con el nombre en grande.
+            child: enElSalon
+                ? sobreCartel(
+                    ResumenEnElSalon.deLaLlegada(d, llegada, oscuro: cartelClaro),
+                    1,
+                  )
+                : achicado(escena.llegada(enCuadro, llegada)),
           ),
         ),
     ];
@@ -925,6 +932,130 @@ abstract class EscenaEstilo {
 }
 
 // ── Piezas comunes ─────────────────────────────────────────────────────────
+
+/// Lo que va adentro del salón (la pista de baile, un hueco entre las mesas):
+/// resumido, para que se lea de lejos en un lugar chico. En la espera, el
+/// título, el subtítulo y el saludo; en la llegada, el nombre y la mesa, en
+/// grande (pedido del usuario, 5-nov: la tarjeta en la pista). En la letra de
+/// la apariencia y el color del evento.
+class ResumenEnElSalon extends StatelessWidget {
+  final DatosEscena d;
+  final String grande;
+  final String? acento;
+  final double tamanoAcento;
+  final String? chico;
+
+  /// Sobre un cartel claro ("Tu fondo" con texto oscuro): letras oscuras.
+  final bool oscuro;
+
+  const ResumenEnElSalon._({
+    required this.d,
+    required this.grande,
+    this.acento,
+    this.tamanoAcento = 2.8,
+    this.chico,
+    this.oscuro = false,
+  });
+
+  /// El título, el subtítulo y el saludo.
+  factory ResumenEnElSalon.deLaEspera(DatosEscena d, {bool oscuro = false}) {
+    final sub = d.cfg.subtitulo.trim();
+    return ResumenEnElSalon._(
+      d: d,
+      grande: d.cfg.titulo,
+      acento: sub.isEmpty ? null : sub,
+      tamanoAcento: 1.3,
+      chico: d.cfg.mensajeBienvenida,
+      oscuro: oscuro,
+    );
+  }
+
+  /// El nombre y la mesa.
+  factory ResumenEnElSalon.deLaLlegada(
+    DatosEscena d,
+    ContenidoBienvenida c, {
+    bool oscuro = false,
+  }) =>
+      ResumenEnElSalon._(
+        d: d,
+        grande: c.nombres.length <= 1
+            ? c.nombres.join()
+            : '${c.nombres.first} y ${c.nombres.length - 1} más',
+        acento: c.mesa == null ? null : '${c.rotuloMesa.toUpperCase()} ${c.mesa}',
+        oscuro: oscuro,
+      );
+
+  String get _familia => switch (d.estilo) {
+        EstiloTotem.neon => FuentesTotem.tubo,
+        EstiloTotem.gala => FuentesTotem.gala,
+        _ => FuentesTotem.cartelera,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final u = d.u;
+    final texto = oscuro ? const Color(0xFF1C1A16) : Colors.white;
+    const cifras = [FontFeature.liningFigures()];
+    return Padding(
+      padding: EdgeInsets.all(u * 0.5),
+      child: LayoutBuilder(
+        builder: (context, c) => Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: ConstrainedBox(
+              // Un nombre largo va en dos renglones antes que achicarse tanto.
+              constraints: BoxConstraints(maxWidth: math.max(c.maxWidth, u * 16)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    grande,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: _familia,
+                      fontWeight: FontWeight.w700,
+                      fontSize: u * 2.2,
+                      height: 1.05,
+                      color: texto,
+                      fontFeatures: cifras,
+                    ),
+                  ),
+                  if (acento != null) ...[
+                    SizedBox(height: u * 0.3),
+                    Text(
+                      acento!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: _familia,
+                        fontWeight: FontWeight.w700,
+                        fontSize: u * tamanoAcento,
+                        letterSpacing: u * 0.06,
+                        color: d.color,
+                        fontFeatures: cifras,
+                      ),
+                    ),
+                  ],
+                  if (chico != null && chico!.trim().isNotEmpty) ...[
+                    SizedBox(height: u * 0.3),
+                    Text(
+                      chico!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: FuentesTotem.linea,
+                        fontSize: u * 1.0,
+                        color: texto.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// En qué parte de la llegada está el nombre, con el salón.
 enum FaseLlegada {
