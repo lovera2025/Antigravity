@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
+import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
 import 'package:arguello_events/features/common/providers/user_role_provider.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
@@ -35,6 +36,8 @@ import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/totem_config.dart';
+
+import 'barra_en_memoria.dart';
 
 const eventoMasivo = 'e0000000-0000-4000-8000-00000000000a';
 const eventoParticular = 'e0000000-0000-4000-8000-00000000000b';
@@ -383,6 +386,9 @@ class PuertaEnMemoria {
   /// Las sillas sumadas esa noche en la puerta.
   final SillasPuertaEnMemoria sillasPuerta;
 
+  /// La barra de la fiesta como la ve esta PC: de ahí salen los vales anulados.
+  final barra = BarraEnMemoria();
+
   /// El plano de la fiesta masiva: siempre puesto, así nadie lee la base real.
   final PlanosEnMemoria planos;
   final motor = MotorDePrueba();
@@ -455,6 +461,7 @@ class PuertaEnMemoria {
           contratosRepositoryProvider.overrideWithValue(contratos),
           sillasRepartoRepositoryProvider.overrideWithValue(sillas),
           sillasPuertaRepositoryProvider.overrideWithValue(sillasPuerta),
+          barraDelJefeProvider.overrideWithValue(barra),
           planosEventoRepositoryProvider.overrideWithValue(planos),
           syncEngineProvider.overrideWithValue(motor),
           connectivityServiceProvider.overrideWithValue(conexion),

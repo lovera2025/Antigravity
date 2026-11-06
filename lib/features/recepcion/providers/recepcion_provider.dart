@@ -13,6 +13,8 @@ import '../../../core/services/sync_engine.dart';
 import '../../eventos/repositories/contratos_repository.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../../eventos/repositories/sillas_reparto_repository.dart';
+import '../../barra/providers/barra_del_jefe_provider.dart';
+import '../services/vales_anulados.dart';
 import '../repositories/invitados_repository.dart';
 import '../repositories/sillas_puerta_repository.dart';
 import '../repositories/supabase_invitados_repository.dart';
@@ -200,6 +202,58 @@ final sillasPuertaDelEventoProvider = StreamProvider.autoDispose
   return controller.stream;
 });
 
+/// Lo que bajó y cambia qué vales anuló la barra.
+const _tablasDeLaBarra = {'barra_cajas', 'barra_ventas', 'barra_anulaciones'};
+
+/// Los vales de las ventas que anuló la barra en esa fiesta ([ValesAnulados]), de la
+/// base de esta PC. Se vuelven a leer cuando baja algo de la barra.
+///
+/// **Solo se entera cuando la PC tiene lo de la barra:** con internet, a los pocos
+/// segundos de que la tablet sube la anulación; sin internet entre la barra y la puerta,
+/// al volver. Si no se puede leer (la web, una base sin las tablas), ninguno: la puerta
+/// sigue igual.
+final valesAnuladosDelEventoProvider = StreamProvider.autoDispose
+    .family<ValesAnulados, String>((ref, eventoId) {
+  final barra = ref.watch(barraDelJefeProvider);
+  final motor = ref.watch(syncEngineProvider);
+
+  late final StreamController<ValesAnulados> controller;
+  StreamSubscription<Set<String>>? bajadas;
+  var cadena = Future<void>.value();
+
+  void leer() {
+    cadena = cadena.then((_) async {
+      if (controller.isClosed) return;
+      ValesAnulados anulados;
+      try {
+        anulados = ValesAnulados.de(
+          cajas: await barra.cajas(eventoId),
+          ventas: await barra.ventas(eventoId),
+          anulaciones: await barra.anulaciones(eventoId),
+        );
+      } catch (e) {
+        debugPrint('Recepción: no se pudo leer la barra de esta PC: $e');
+        anulados = ValesAnulados.ninguno;
+      }
+      if (!controller.isClosed) controller.add(anulados);
+    });
+  }
+
+  controller = StreamController<ValesAnulados>(
+    onListen: () {
+      bajadas = motor.cambiosBajadosStream.listen((tablas) {
+        if (tablas.any(_tablasDeLaBarra.contains)) leer();
+      });
+      leer();
+    },
+    onCancel: () async {
+      await bajadas?.cancel();
+    },
+  );
+  ref.onDispose(() => controller.close());
+  return controller.stream;
+});
+
 /// Lo que se ve en Recepción del evento elegido: un particular desde su lista
 /// de la puerta; un masivo desde sus alumnos, cruzados con quién entró.
 final puertaDelEventoProvider = Provider.autoDispose
@@ -219,6 +273,10 @@ final puertaDelEventoProvider = Provider.autoDispose
     return AsyncValue.error(invitados.error!, invitados.stackTrace!);
   }
   final sillas = ref.watch(sillasPuertaDelEventoProvider(eventoId));
+  // Lo de la barra no frena la lista: mientras se lee, ninguno anulado.
+  final anulados =
+      ref.watch(valesAnuladosDelEventoProvider(eventoId)).value ??
+          ValesAnulados.ninguno;
   final a = alumnos.value;
   final i = invitados.value;
   if (a == null || i == null) return const AsyncValue.loading();
@@ -238,6 +296,7 @@ final puertaDelEventoProvider = Provider.autoDispose
       repartos: a.repartos,
       invitados: i,
       sillasPuerta: sillas.value ?? const [],
+      valesAnulados: anulados,
     ),
   );
 });

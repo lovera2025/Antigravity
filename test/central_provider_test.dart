@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
+import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/eventos/repositories/contratos_repository.dart';
 import 'package:arguello_events/features/eventos/repositories/sillas_reparto_repository.dart';
 import 'package:arguello_events/features/recepcion/central/central_provider.dart';
@@ -48,6 +50,7 @@ void main() {
         contratosRepositoryProvider.overrideWithValue(puerta.contratos),
         sillasRepartoRepositoryProvider.overrideWithValue(puerta.sillas),
         sillasPuertaRepositoryProvider.overrideWithValue(puerta.sillasPuerta),
+        barraDelJefeProvider.overrideWithValue(puerta.barra),
         syncEngineProvider.overrideWithValue(puerta.motor),
         connectivityServiceProvider.overrideWithValue(puerta.conexion),
         escuchaCentralProvider
@@ -406,5 +409,58 @@ void main() {
         hasLength(1),
       );
     });
+  });
+  test('si la barra anula el vale de una silla, a los celulares les llega en rojo',
+      () async {
+    puerta.contratos.alumnos = [
+      alumnoDePrueba(_c1, 'PÉREZ, JUAN', mesas: [12]),
+    ];
+    final sub = container.listen(puertaDelEventoProvider(eventoMasivo), (_, _) {});
+    addTearDown(sub.close);
+    final p = await leerPuerta();
+    await container.read(accionesPuertaProvider).sumarSilla(
+          eventoMasivo,
+          p,
+          p.grupos.single,
+          const DatosSilla(vale: '1 0012'),
+        );
+    final silla = puerta.sillasPuerta.filas.single;
+
+    await central().prender(eventoMasivo);
+    final c = await celular();
+    await c.espera('puerta');
+
+    // La barra de la fiesta, como la tiene esta PC: la caja 1 vendió la silla (venta
+    // 12) y después la anuló. Baja, y la puerta se entera.
+    final caja = await puerta.barra.abrirCaja(
+      eventoId: eventoMasivo,
+      operadorId: 'o1',
+      operadorNombre: 'Marta',
+      numeroCaja: 1,
+    );
+    VentaBarra? doce;
+    for (var i = 0; i < 12; i++) {
+      doce = await puerta.barra.vender(
+        caja: caja,
+        renglones: const [
+          RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 1),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 8000,
+        quien: 'Marta',
+      );
+    }
+    await puerta.barra.anular(doce!, motivo: 'se arrepintió', quien: 'Encargada');
+    puerta.motor.bajo.add({'barra_anulaciones'});
+
+    final m = await c.espera('puerta', cumple: (m) {
+      final grupos = m['puerta']['grupos'] as List;
+      return grupos.any((g) => (g as Map)['anuladas'] != null);
+    });
+    final l = lista(m);
+    final g = l.grupos.firstWhere((g) => g.contratoId == _c1);
+    expect(g.valeAnulado(g.movimientos.single), isTrue);
+    expect(g.movimientos.single.id, silla.id);
+    expect(l.conteoDeLaNoche.texto, contains('1 con el vale anulado'));
   });
 }

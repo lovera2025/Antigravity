@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/invitado.dart';
@@ -55,6 +56,7 @@ Future<PuertaEnMemoria> _abrir(
   List<Invitado>? filas,
   List<SillaPuerta> sillasDeLaNoche = const [],
   Size tamano = const Size(1366, 900),
+  void Function(PuertaEnMemoria mundo)? preparar,
 }) async {
   final mundo = PuertaEnMemoria(
     _supabase,
@@ -62,6 +64,7 @@ Future<PuertaEnMemoria> _abrir(
     filas: filas,
     sillasDeLaNoche: sillasDeLaNoche,
   );
+  preparar?.call(mundo);
   tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -464,6 +467,142 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('Esta noche: 2 sillas sumadas · vales 1-12, 2-30 · 1 quitada'),
           findsOneWidget);
+    });
+  });
+  group('el vale anulado en la barra', () {
+    SillaPuerta sumada(String vale) => SillaPuerta(
+          id: 'previa-$vale',
+          eventoId: _masivo,
+          contratoAlumnoId: 'benitez',
+          mesa: 13,
+          vale: vale,
+          anotadoPor: 'Pato',
+          createdAt: horaDeIngreso,
+          updatedAt: horaDeIngreso,
+        );
+
+    /// La caja 2 de la barra vendió dos sillas (ventas 17 y 18).
+    Future<List<VentaBarra>> venderSillas(PuertaEnMemoria mundo) async {
+      final caja = await mundo.barra.abrirCaja(
+        eventoId: _masivo,
+        operadorId: 'o1',
+        operadorNombre: 'Marta',
+        numeroCaja: 2,
+      );
+      final ventas = <VentaBarra>[];
+      for (var i = 0; i < 18; i++) {
+        ventas.add(await mundo.barra.vender(
+          caja: caja,
+          renglones: const [
+            RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 1),
+          ],
+          medio: MedioBarra.efectivo,
+          efectivo: 8000,
+          quien: 'Marta',
+        ));
+      }
+      return ventas;
+    }
+
+    testWidgets('la silla con la venta anulada va en rojo, para revisar', (tester) async {
+      late List<VentaBarra> ventas;
+      final mundo = await _abrir(
+        tester,
+        sillasDeLaNoche: [sumada('2-17'), sumada('2-18')],
+        preparar: (m) {
+          // Se arma antes de dibujar, en memoria.
+          final caja = CajaBarra.abrir(
+            eventoId: _masivo,
+            operadorNombre: 'Marta',
+            numeroCaja: 2,
+            ahora: horaDeIngreso,
+          );
+          m.barra.cajasGuardadas.add(caja);
+          ventas = [
+            for (final n in [17, 18])
+              VentaBarra.nueva(
+                cajaBarraId: caja.id,
+                eventoId: _masivo,
+                numero: n,
+                renglones: const [
+                  RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 1),
+                ],
+                medio: MedioBarra.efectivo,
+                efectivo: 8000,
+                ahora: horaDeIngreso,
+              ),
+          ];
+          m.barra.ventasGuardadas.addAll(ventas);
+          m.barra.anulacionesGuardadas
+              .add(AnulacionBarra.de(ventas.first, motivo: 'se arrepintió', ahora: horaDeIngreso));
+        },
+      );
+      expect(mundo.barra.ventasGuardadas, hasLength(2));
+      final rojo = tester.widget<Text>(find.byKey(const ValueKey('vale_anulado_previa-2-17')));
+      expect(rojo.data, 'vale anulado en la barra: revisar');
+      expect(rojo.style!.color, Colors.redAccent);
+      expect(find.byKey(const ValueKey('vale_anulado_previa-2-18')), findsNothing);
+      expect(
+        find.text('Esta noche: 2 sillas sumadas · vales 2-17, 2-18 · 1 con el vale anulado'),
+        findsOneWidget,
+      );
+      // No se saca sola: QUITAR sigue ahí.
+      expect(find.byKey(const ValueKey('quitar_previa-2-17')), findsOneWidget);
+    });
+
+    testWidgets('si la barra la anula con el panel abierto, se pone en rojo al bajar',
+        (tester) async {
+      final mundo = await _abrir(tester, sillasDeLaNoche: [sumada('2-17')]);
+      late List<VentaBarra> ventas;
+      await tester.runAsync(() async => ventas = await venderSillas(mundo));
+      mundo.motor.bajo.add({'barra_ventas'});
+      await _asentar(tester);
+      expect(find.byKey(const ValueKey('vale_anulado_previa-2-17')), findsNothing);
+
+      await tester.runAsync(() => mundo.barra.anular(ventas[16], motivo: 'se arrepintió', quien: 'Jefe'));
+      mundo.motor.bajo.add({'barra_anulaciones'});
+      await _asentar(tester);
+      expect(find.byKey(const ValueKey('vale_anulado_previa-2-17')), findsOneWidget);
+    });
+
+    testWidgets('al quitarla con motivo, deja de estar en rojo', (tester) async {
+      final mundo = await _abrir(
+        tester,
+        sillasDeLaNoche: [sumada('2-17')],
+        preparar: (m) {
+          final caja = CajaBarra.abrir(
+            eventoId: _masivo,
+            operadorNombre: 'Marta',
+            numeroCaja: 2,
+            ahora: horaDeIngreso,
+          );
+          m.barra.cajasGuardadas.add(caja);
+          final v = VentaBarra.nueva(
+            cajaBarraId: caja.id,
+            eventoId: _masivo,
+            numero: 17,
+            renglones: const [
+              RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 1),
+            ],
+            medio: MedioBarra.efectivo,
+            efectivo: 8000,
+            ahora: horaDeIngreso,
+          );
+          m.barra.ventasGuardadas.add(v);
+          m.barra.anulacionesGuardadas
+              .add(AnulacionBarra.de(v, motivo: 'se arrepintió', ahora: horaDeIngreso));
+        },
+      );
+      expect(find.byKey(const ValueKey('vale_anulado_previa-2-17')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('quitar_previa-2-17')));
+      await _asentar(tester);
+      await tester.enterText(find.byKey(const ValueKey('motivo')), 'vale anulado en la barra');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_quitar')));
+      await _asentar(tester);
+      expect(mundo.sillasPuerta.filas.single.vigente, isFalse);
+      expect(find.byKey(const ValueKey('vale_anulado_previa-2-17')), findsNothing);
+      expect(find.textContaining(': vale anulado en la barra'), findsOneWidget);
     });
   });
 }

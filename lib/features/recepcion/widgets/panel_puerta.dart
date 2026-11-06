@@ -643,6 +643,9 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   Widget _movimiento(GrupoPuerta g, PuertaDelEvento p, SillaPuerta s) {
     final quitada = textoSillaQuitada(s);
     final ocupado = _ocupados.contains(s.id);
+    // La barra anuló la venta de este vale: la silla quedó sin pagar. No se saca
+    // sola: la recepcionista la revisa y la quita con motivo.
+    final anulada = quitada == null && g.valeAnulado(s);
     return Padding(
       padding: const EdgeInsets.only(top: 3),
       child: Row(
@@ -650,7 +653,11 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           Icon(
             Icons.event_seat_outlined,
             size: 14,
-            color: quitada == null ? _verde : _suave,
+            color: anulada
+                ? Colors.redAccent
+                : quitada == null
+                    ? _verde
+                    : _suave,
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -668,6 +675,16 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
                 ),
                 if (quitada != null)
                   Text(quitada, style: _letra(size: 11, color: _suave)),
+                if (anulada)
+                  Text(
+                    'vale anulado en la barra: revisar',
+                    key: ValueKey('vale_anulado_${s.id}'),
+                    style: _letra(
+                      size: 12,
+                      negrita: true,
+                      color: Colors.redAccent,
+                    ),
+                  ),
               ],
             ),
           ),

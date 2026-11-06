@@ -13,8 +13,9 @@ import 'package:arguello_events/features/barra/services/papel_de_la_barra.dart';
 import 'package:arguello_events/models/evento.dart';
 
 /// La barra de un equipo, en memoria: lo que hace `BarraLocal` sin base. Para montar
-/// las pantallas de la cajera de verdad.
-class BarraEnMemoria implements BarraDeLaCaja {
+/// las pantallas de la cajera de verdad, y para que Recepción vea qué vales de silla
+/// anuló la barra (`BarraDelJefe`).
+class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
   final productosGuardados = <ProductoBarra>[];
   final preciosGuardados = <PrecioBarra>[];
   final cajasGuardadas = <CajaBarra>[];
@@ -161,6 +162,41 @@ class BarraEnMemoria implements BarraDeLaCaja {
     return _reemplazar(enLaBase
         .cerrada(efectivoContado: efectivoContado, diferencia: diferencia, nota: nota, ahora: reloj())
         .sellada(hechoPor: quien, deviceId: equipo, ahora: reloj()));
+  }
+
+  // ── Lo del jefe (`BarraDelJefe`) ─────────────────────────────────────────
+
+  @override
+  Future<List<CajaBarra>> cajas(String eventoId) async =>
+      [for (final c in cajasGuardadas) if (c.eventoId == eventoId) c];
+
+  @override
+  Future<ProductoBarra> guardarProducto(ProductoBarra producto, {required String quien}) async {
+    productosGuardados
+      ..removeWhere((p) => p.id == producto.id)
+      ..add(producto);
+    return producto;
+  }
+
+  @override
+  Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien}) async {
+    preciosGuardados
+      ..removeWhere((p) => p.id == precio.id)
+      ..add(precio);
+    return precio;
+  }
+
+  @override
+  Future<AnulacionBarra> anular(
+    VentaBarra venta, {
+    required String motivo,
+    required String quien,
+  }) async {
+    final ya = anulacionesGuardadas.where((a) => a.ventaId == venta.id).firstOrNull;
+    if (ya != null) return ya;
+    final anulacion = AnulacionBarra.de(venta, motivo: motivo, hechoPor: quien, ahora: reloj());
+    anulacionesGuardadas.add(anulacion);
+    return anulacion;
   }
 
   // ── Para armar los datos de la prueba ─────────────────────────────────────
