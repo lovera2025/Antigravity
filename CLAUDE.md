@@ -82,6 +82,17 @@ equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro
 `docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
 **Después de la barra, Entradas 4 a 6, y se publica todo en una.**
 
+**Antes de la barra 5 (5-nov): el tótem con el salón y las sillas de la noche** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`; estado en
+`docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`, que empieza con **"Para retomar en otro chat"**). **El tótem está hecho en la rama:** en
+un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
+se acomoda **en la pista, resumido** (`ResumenEnElSalon`), con la mesa encendida, el camino y el borde que late (`PanelPlano.pulsar`); **con
+cola no se acorta** (`TiemposDeBienvenida`); los segundos y el lugar se eligen en Personalizar ("LA LLEGADA") y se cambian a mano esa noche con
+el reloj de Recepción (`TiemposAMano`, vive en la PC, viaja por `tiempos_totem` y en la ficha). SQL `20261105100000_totem_config_llegada.sql`
+**sin correr**. **Las sillas de la noche, empezadas:** desde los sorteos, una silla más se pide solo esa noche; **la recepcionista no toca
+plata**: la barra la cobra como producto y da un vale, y la puerta la anota con el número del vale en `sillas_puerta` (v78, filas que solo se
+agregan; quitar deja la huella con motivo). Hechos el modelo, la tabla v78, su SQL (**sin correr**) y el repositorio; **falta enchufarla al
+sync** (las siete listas) y todo lo de arriba (tope por mesa, candado, panel).
+
 ## Documentación del proyecto
 
 Hay convenciones propias, y conviene respetarlas antes de inventar otras:
@@ -101,7 +112,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 77) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 78 en la rama, con `sillas_puerta`; las PCs tienen la 77) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
@@ -555,6 +566,9 @@ tapa las frases.
 
 **El plano en la llegada** (v6.0.0, sección 4). Cuando llega una familia de un masivo sorteado, la llegada va arriba
 (a la izquierda en una tele horizontal) y abajo el salón con su mesa encendida y el camino desde el Ingreso.
+**Desde el 5-nov, en la rama (sin publicar), cambió:** el salón se ve entero toda la espera y la llegada salta y se acomoda
+en el cuadro (`CuadroDelSalon`, `EscenaTotem._conElSalon`); `_conPlano` ya no existe. Ver
+`docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`. Lo de abajo sigue valiendo para la guía (`PlanoDeLaLlegada`, el camino).
 - **Datos:** el armado viaja en la ficha (`FichaTotem.plano`). `armarFichaTotem` lo lee con `leerPlano`, y
   `TotemLocal` con `planoDelEventoProvider`.
 - **Lo que decide**, sin pantalla:

@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 77;
+  static const int _version = 78;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -121,6 +121,11 @@ class LocalDatabase {
       await crearTablasV77(db);
     } catch (e) {
       debugPrint('⚠️ Tablas v77 sin crear: $e');
+    }
+    try {
+      await crearTablasV78(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v78 sin crear: $e');
     }
     return db;
   }
@@ -707,6 +712,7 @@ class LocalDatabase {
     await crearTablasV75(db);
     await crearTablasV76(db);
     await crearTablasV77(db);
+    await crearTablasV78(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1022,6 +1028,39 @@ class LocalDatabase {
         updated_at TEXT NOT NULL
       )
     ''');
+  }
+
+  /// La tabla de la v78 (6.4.0): las sillas que se suman la noche de la fiesta,
+  /// en la puerta, con el vale de la barra (`SillaPuerta`).
+  ///
+  /// Mismo criterio que las de antes: **nueva y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar `contratos_alumnos`. Las filas solo se agregan:
+  /// quitar una silla le pone `quitada_at` (con quién y el motivo) y la fila
+  /// queda.
+  static Future<void> crearTablasV78(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sillas_puerta (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        contrato_alumno_id TEXT NOT NULL,
+        mesa INTEGER NOT NULL,
+        cantidad INTEGER NOT NULL DEFAULT 1,
+        vale TEXT NOT NULL,
+        anotado_por TEXT,
+        nota TEXT,
+        quitada_at TEXT,
+        quitada_por TEXT,
+        quitada_motivo TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sillas_puerta_evento ON sillas_puerta(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sillas_puerta_contrato ON sillas_puerta(contrato_alumno_id)',
+    );
   }
 
   static Future<void> _onUpgrade(
@@ -3285,6 +3324,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v77 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v77: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 77, la tabla de la v78 no aparece.
+    if (oldVersion < 78 && newVersion >= 78) {
+      debugPrint('  🔧 v78: las sillas de la noche');
+      try {
+        await crearTablasV78(db);
+        debugPrint('✅ Migración v78 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v78: $e');
       }
     }
   }
