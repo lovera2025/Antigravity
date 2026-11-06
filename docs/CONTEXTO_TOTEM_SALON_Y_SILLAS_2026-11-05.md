@@ -6,14 +6,13 @@ demás (o antes), preguntando. Lleva **dos SQL nuevos, sin correr**.
 
 ## Para retomar en otro chat
 
-**Estado al 5-nov, tarde:** la **Parte 1 (el tótem) está hecha**, con muestras que el usuario vio y aprobó sobre la
-marcha, y subida a la rama (6 commits, de `3f4b821` a `8ddfd6e`). La **Parte 2 (las sillas de la noche) está
-empezada**: solo los datos (2.1), **sin enchufar al sync** (ver "Lo que falta", punto 1). Falta también el reloj de
-los segundos **en el celular** de la puerta (va con el protocolo de la Parte 2).
+**Estado al 6-nov: las dos partes están hechas en la rama.** La Parte 1 (el tótem), el 5-nov (6 commits, de `3f4b821` a
+`8ddfd6e`); la Parte 2 (las sillas de la noche) y el reloj de los segundos en el celular, el 6-nov (5 commits, de `c2836fe`
+a `e0c8de3`), contada en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**. Falta probarla con celulares de verdad, y los dos SQL
+siguen sin correr. Lo de abajo ("Lo que falta, en orden") quedó como registro: los puntos 1 a 7 están hechos.
 
-> Frase para Claude Code: "Seguimos con las sillas de la noche: leé 'Para retomar en otro chat' de
-> docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md y docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md (Parte 2) y seguí
-> desde el punto 1 de 'Lo que falta'."
+> Lo que sigue es la barra, etapa 5: "Seguimos con la barra: leé 'Para retomar en otro chat' de
+> docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto de la etapa 5 antes de programar."
 
 **Antes de seguir:** `git pull`, `flutter analyze` y `flutter test` en verde.
 

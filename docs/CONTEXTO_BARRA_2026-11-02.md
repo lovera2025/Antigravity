@@ -14,7 +14,12 @@ a sus tablas va en tablas nuevas, como siempre. Ninguna PC tiene un producto ni 
 74 fotos de tragos y marcas adentro de la app (el detalle, abajo).
 
 **Regla del usuario (4-nov): se sigue sin publicar hasta completar todas las etapas que quedan**, y se publica todo en una sola versión
-antes del 4-dic, preguntándole. Commit y push a la rama sí. Cada etapa empieza con su plan corto y su OK.
+**cuando esté, sin apuro de fecha** (6-nov: "cuando salga nomás, ahora hay más tiempo"), preguntándole. Commit y push a la rama
+sí. Cada etapa empieza con su plan corto y su OK.
+
+**6-nov: antes de esta etapa 5 quedaron hechas las sillas de la noche** (`docs/CONTEXTO_v6.4.0_2026-11-06.md`): la puerta anota cada
+silla con el número del vale de la barra, normalizado como "caja-número" ("2-17"). "Silla extra" en el catálogo y en el cierre va en
+las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 
 **Lo que queda, con lo que ya tiene hecho por dentro** (casi todo lo que falta son pantallas):
 

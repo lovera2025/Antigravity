@@ -8,6 +8,11 @@ volver la fibra, aparecieron en la nube. El 4-nov a la tarde se lo muestra a la 
 Roboto de Google antes de dibujar. Arreglado en la 6.2.1 (la app trae su Roboto; ver
 `docs/CONTEXTO_v6.2.1_2026-10-23.md`).
 
+**6-nov (6.4.0, en la rama):** las sillas de la noche siguen la regla. `sillas_puerta` está en `tablasDeLaPuerta` (baja al
+abrir el evento con internet), se anotan en la base de la PC y suben por la cola, y el candado (`ResolvedorDePedidos`) decide con la
+base de la PC: anda sin internet, desde la PC y desde los celulares por la notebook central. Ojo: sin su SQL en la nube, "Lista
+para trabajar sin internet" no queda lista (`docs/CONTEXTO_v6.4.0_2026-11-06.md`).
+
 **Estado:** hecho, probado con su celular (15-oct) y ensayado con el router de verdad (antes del 4-nov). **Va en la 6.0.0**
 (decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra
 forma** (15-oct, sección 7): los puestos van a ser celulares (o tablets), así que **una notebook del salón hace de

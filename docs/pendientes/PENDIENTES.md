@@ -104,6 +104,12 @@ priorizó el sorteo de noviembre. El contexto está en
   número del evento se puede hacer aparecer un saludo falso en la pantalla.
   Solo pantalla, no datos; quedó afuera de la sección 8.
 
+### La barra y la puerta (decidido el 5 y el 6-nov-2026)
+
+- [Comparar las sillas vendidas en la barra con las sumadas en la puerta](sillas-barra-vs-puerta.md)
+  — la puerta ya anota cada silla con el vale (6.4.0); falta el lado de la
+  barra ("Silla extra" en el catálogo y en el cierre por sector).
+
 ## Hechos
 
 - [Que el tótem no se desconecte ni salude tarde](totem-comunicacion.md) — hecho

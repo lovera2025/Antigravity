@@ -80,19 +80,20 @@ Kotlin (espera el Android Gradle Plugin 9). El `applicationId` de Android es `ar
 equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro de la app** (`assets/barra/`, 74): cada producto toma la suya por el nombre
 (`FotoDeLaBarra.para`: primero lo que se toma, después la cerveza sin marca, al final lo sin alcohol). **Una foto nueva lleva su renglón en
 `docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
-**Después de la barra, Entradas 4 a 6, y se publica todo en una.**
+**Después de la barra, Entradas 4 a 6, y se publica todo en una**, **sin apuro de fecha** (6-nov: "cuando salga nomás, ahora hay más
+tiempo"), preguntando.
 
-**Antes de la barra 5 (5-nov): el tótem con el salón y las sillas de la noche** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`; estado en
-`docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`, que empieza con **"Para retomar en otro chat"**). **El tótem está hecho en la rama:** en
+**Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
+lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
 se acomoda **en la pista, resumido** (`ResumenEnElSalon`), con la mesa encendida, el camino y el borde que late (`PanelPlano.pulsar`); **con
 cola no se acorta** (`TiemposDeBienvenida`); los segundos y el lugar se eligen en Personalizar ("LA LLEGADA") y se cambian a mano esa noche con
 el reloj de Recepción (`TiemposAMano`, vive en la PC, viaja por `tiempos_totem` y en la ficha). SQL `20261105100000_totem_config_llegada.sql`
-**sin correr**. **Las sillas de la noche, empezadas:** desde los sorteos (10-nov) una silla más se pide solo esa noche (**mesas, nunca esa
-noche**) y en la oficina se traba cargar sillas extra al contrato (decidido, sin programar); **la recepcionista no toca
-plata**: la barra la cobra como producto y da un vale, y la puerta la anota con el número del vale en `sillas_puerta` (v78, filas que solo se
-agregan; quitar deja la huella con motivo). Hechos el modelo, la tabla v78, su SQL (**sin correr**) y el repositorio; **falta enchufarla al
-sync** (las siete listas) y todo lo de arriba (tope por mesa, candado, panel).
+**sin correr**. **Las sillas de la noche (6-nov):** desde los sorteos (10-nov) una silla más se pide solo esa noche (**mesas, nunca esa
+noche**); **la recepcionista no toca plata**: la barra la cobra como producto y da un vale, y la puerta la anota con el número del vale en
+`sillas_puerta` (v78, filas que solo se agregan; quitar deja la huella con motivo). En la oficina, con la fiesta sorteada, no se suman sillas
+extra al contrato salvo en modo jefe. Ver "Las sillas de la noche" en El tótem. SQL `20261105120000_sillas_puerta.sql` **sin correr**; falta
+probarlo con celulares de verdad (`tool/central_puerta_prueba.dart`).
 
 ## Documentación del proyecto
 
@@ -408,6 +409,19 @@ oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados
   (`EntradasDeAlumno.alCincuenta`). El precio de la entrada todavía no se sabe: nada lleva un precio fijo. Cobrarlas es la venta de
   entradas (sección 8 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), sin programar. Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
 
+**Las sillas de la noche** (6.4.0, en la rama; `docs/CONTEXTO_v6.4.0_2026-11-06.md`). La noche de la fiesta, Recepción suma sillas a una
+familia de un masivo sorteado, con el número del vale de la barra (`SillaPuerta`, tabla `sillas_puerta`).
+- **Un solo candado para la PC y los celulares** (`ResolvedorDePedidos`, `central/resolvedor_de_pedidos.dart`): todo lo que se pide en la
+  puerta de un evento pasa por esa fila, de a uno, y `decidirSilla` decide con la base del momento. La PC la usa aunque la central esté
+  apagada (`CentralDeLaPuerta.resolverDeEstaPc`). **Un camino nuevo que sume o quite sillas pasa por ahí**, no escribe el repositorio al lado.
+- **El tope es 2 extra por mesa, contando las del contrato y las sumadas** (`SillasDeLaFamilia`, `services/sillas_de_la_puerta.dart`). Las
+  sumadas **no entran en `SalonMesas.sillasExtra` ni en `RepartoDeSillas`**: el sorteo, la planilla, lo pagado, el retiro de entradas y el
+  plano no las conocen (`test/sillas_puerta_no_toca_test.dart`).
+- **El vale se compara normalizado** (`valeNormalizado`: "2 0017" → "2-17"): cada caja de la barra numera desde 1, así que va la caja.
+- **`sillas_puerta` está en `tablasDeLaPuerta`**: sin su SQL en la nube, "Lista para trabajar sin internet" no queda lista.
+- **En la oficina, con la fiesta ya sorteada, no se suman sillas extra al contrato** (`puedeSumarSillasAlContrato`; segunda llave
+  `sillasExtraTrabadas` al guardar en Editar alumno); en modo jefe sí. Lo eligió el usuario el 6-nov: por fiesta sorteada, no por fecha.
+
 **Escondido, el tótem se pausa.** `KioskLauncher.close()` manda `pausar` antes de esconder la ventana: suelta
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
 nube tiene que cortarse en `_pausar()`.
@@ -565,7 +579,7 @@ tapa las frases.
 - **`Escalado` agranda ocupando lo que mide** (`Transform.scale` no: lo de abajo se pisaría).
 - Póster no usa forma, tamaños ni lugar: la foto es su fondo.
 
-**El plano en la llegada** (v6.0.0, sección 4). Cuando llega una familia de un masivo sorteado, la llegada va arriba
+**El salón en el tótem** (antes "El plano en la llegada"; v6.0.0, sección 4). Cuando llega una familia de un masivo sorteado, la llegada va arriba
 (a la izquierda en una tele horizontal) y abajo el salón con su mesa encendida y el camino desde el Ingreso.
 **Desde el 5-nov, en la rama (sin publicar), cambió:** el salón se ve entero toda la espera y la llegada salta y se acomoda
 en el cuadro (`CuadroDelSalon`, `EscenaTotem._conElSalon`); `_conPlano` ya no existe. Ver
