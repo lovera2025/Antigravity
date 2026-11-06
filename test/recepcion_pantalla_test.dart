@@ -269,4 +269,26 @@ void main() {
       }
     });
   }
+  testWidgets('de punta a punta: sumar una silla en la puerta, sin tocar el tótem',
+      (tester) async {
+    final mundo = await _abrir(tester);
+    await tester.enterText(find.byType(TextField), 'bruno');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('sumar_silla_garcia')));
+    await _asentar(tester);
+    await tester.enterText(find.byKey(const ValueKey('vale')), '3 0101');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
+    await _asentar(tester);
+
+    final s = mundo.sillasPuerta.filas.single;
+    expect(s.contratoAlumnoId, 'garcia');
+    expect(s.mesa, 17);
+    expect(s.vale, '3-101');
+    expect(find.text('Esta noche: 1 silla sumada · vale 3-101'), findsOneWidget);
+    // Nadie entró: sumar una silla no es un ingreso, y la tele no saluda.
+    expect(mundo.invitados.creados, isEmpty);
+    expect(mundo.invitados.marcados, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 }

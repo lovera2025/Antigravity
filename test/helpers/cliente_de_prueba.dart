@@ -4,7 +4,9 @@
 import 'dart:async';
 
 import 'package:arguello_events/features/recepcion/central/cliente_central.dart';
+import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 
 import 'puerta_en_memoria.dart';
 
@@ -32,6 +34,13 @@ class ClienteDePrueba extends ClienteCentral {
   List<PedidoPendiente> pend = [];
   int mandados = 0;
   Map<String, String> marcas = {};
+
+  /// Los segundos de la llegada que manda la PC, y los que se pidieron.
+  TiemposAMano? tie;
+  final tiemposPedidos = <TiemposAMano>[];
+
+  /// Las sillas que se pidieron sumar o quitar.
+  final sillasPedidas = <(QuePide, String, DatosSilla)>[];
 
   final ingresados = <String>[];
   final deshechos = <String>[];
@@ -73,4 +82,22 @@ class ClienteDePrueba extends ClienteCentral {
       datos.add((nombre, codigo));
   @override
   void reconectar() => reconexiones++;
+
+  @override
+  TiemposAMano? get tiempos => tie;
+  @override
+  bool ponerTiempos(TiemposAMano t) {
+    if (e != EstadoDelPuesto.conectado) return false;
+    tiemposPedidos.add(t);
+    tie = t;
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<void> sumarSilla(GrupoPuerta grupo, DatosSilla datos) async =>
+      sillasPedidas.add((QuePide.sumarSilla, grupo.titular.id, datos));
+  @override
+  Future<void> quitarSilla(GrupoPuerta grupo, DatosSilla datos) async =>
+      sillasPedidas.add((QuePide.quitarSilla, grupo.titular.id, datos));
 }

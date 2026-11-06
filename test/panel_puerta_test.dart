@@ -13,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/silla_puerta.dart';
 
 import 'helpers/puerta_en_memoria.dart';
 
@@ -52,12 +53,14 @@ Future<PuertaEnMemoria> _abrir(
   String eventoId = _masivo,
   List<ContratoAlumno>? alumnos,
   List<Invitado>? filas,
+  List<SillaPuerta> sillasDeLaNoche = const [],
   Size tamano = const Size(1366, 900),
 }) async {
   final mundo = PuertaEnMemoria(
     _supabase,
     alumnos: alumnos ?? _sorteada(),
     filas: filas,
+    sillasDeLaNoche: sillasDeLaNoche,
   );
   tester.view.physicalSize = tamano;
   tester.view.devicePixelRatio = 1;
@@ -124,10 +127,21 @@ void main() {
 
       expect(find.textContaining('Todavía no se sorteó'), findsNothing);
       expect(find.text('Mesa 12'), findsOneWidget);
-      expect(find.text('10 sillas (8 + 2 extra)'), findsOneWidget);
-      expect(find.text('Mesa 14-15'), findsOneWidget);
-      expect(find.text('14: 10 sillas · 15: 9 sillas · reparto a confirmar'),
+      // Debajo, una línea por mesa: cuántas sillas tiene y si puede agregar.
+      expect(find.text('Mesa 12: 8 sillas + 2 extra · ya no puede agregar'),
           findsOneWidget);
+      expect(find.text('Mesa 14-15'), findsOneWidget);
+      expect(find.text('Mesa 14: 8 sillas + 2 extra · ya no puede agregar'),
+          findsOneWidget);
+      expect(
+        find.text('Mesa adicional 15: 8 sillas + 1 extra · puede agregar 1 más '
+            '· se cobran en la barra'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('El reparto de las sillas del contrato está a confirmar.'),
+        findsOneWidget,
+      );
       expect(find.text('acompañante'), findsNWidgets(3));
       // En un masivo la lista sale de los alumnos: no se agrega a mano.
       expect(find.text('AGREGAR'), findsNothing);
@@ -303,5 +317,153 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+  });
+  group('las sillas de la noche', () {
+    SillaPuerta sumada(String contrato, int mesa, String vale, {int min = 0}) =>
+        SillaPuerta(
+          id: 'previa-$vale',
+          eventoId: _masivo,
+          contratoAlumnoId: contrato,
+          mesa: mesa,
+          vale: vale,
+          anotadoPor: 'Pato',
+          createdAt: horaDeIngreso.add(Duration(minutes: min)),
+          updatedAt: horaDeIngreso.add(Duration(minutes: min)),
+        );
+
+    testWidgets('SUMAR SILLA anota con el vale y quién, y la lista lo dice',
+        (tester) async {
+      final mundo = await _abrir(tester);
+      expect(
+        find.text('Mesa 13: 8 sillas · puede agregar hasta 2 · se cobran en la '
+            'barra'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('conteo_de_la_noche')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('sumar_silla_benitez')));
+      await _asentar(tester);
+      expect(find.text('Sumar una silla a BENÍTEZ, TOMÁS'), findsOneWidget);
+      expect(find.text('Le quedan 2 en esa mesa.'), findsOneWidget);
+      expect(find.text('Queda anotada a nombre de PC.'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('vale')), '2 0017');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
+      await _asentar(tester);
+
+      final s = mundo.sillasPuerta.filas.single;
+      expect(s.mesa, 13);
+      expect(s.vale, '2-17');
+      expect(s.anotadoPor, 'PC');
+      expect(find.text('Silla sumada a la mesa 13 de BENÍTEZ, TOMÁS.'),
+          findsOneWidget);
+      expect(find.textContaining('+1 silla · mesa 13 · vale 2-17 · PC'),
+          findsOneWidget);
+      expect(
+        find.text('Mesa 13: 8 sillas + 1 extra (1 esta noche) · puede agregar 1 '
+            'más · se cobran en la barra'),
+        findsOneWidget,
+      );
+      expect(find.text('Esta noche: 1 silla sumada · vale 2-17'), findsOneWidget);
+    });
+
+    testWidgets('sin el número del vale no se puede confirmar', (tester) async {
+      final mundo = await _abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('sumar_silla_benitez')));
+      await _asentar(tester);
+      FilledButton confirmar() => tester
+          .widget<FilledButton>(find.byKey(const ValueKey('confirmar_silla')));
+      expect(confirmar().onPressed, isNull);
+      await tester.enterText(find.byKey(const ValueKey('vale')), 'sin número');
+      await tester.pump();
+      expect(confirmar().onPressed, isNull);
+      await tester.enterText(find.byKey(const ValueKey('vale')), '17');
+      await tester.pump();
+      expect(confirmar().onPressed, isNotNull);
+      await tester.tap(find.text('CANCELAR'));
+      await _asentar(tester);
+      expect(mundo.sillasPuerta.filas, isEmpty);
+    });
+
+    testWidgets('en el tope, SUMAR SILLA está apagado y dice por qué',
+        (tester) async {
+      await _abrir(tester);
+      final boton = tester.widget<OutlinedButton>(
+          find.byKey(const ValueKey('sumar_silla_perez')));
+      expect(boton.onPressed, isNull);
+      expect(
+        find.byTooltip('Ya no puede agregar: 2 extra por mesa'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a una mesa adicional con lugar, aunque la principal esté llena',
+        (tester) async {
+      final mundo = await _abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('sumar_silla_acosta')));
+      await _asentar(tester);
+      // Solo se ofrece la que tiene lugar.
+      expect(find.byKey(const ValueKey('mesa_14')), findsNothing);
+      expect(find.byKey(const ValueKey('mesa_15')), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('vale')), '1 0040');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
+      await _asentar(tester);
+      expect(mundo.sillasPuerta.filas.single.mesa, 15);
+    });
+
+    testWidgets('QUITAR pide el motivo y la línea queda tachada, con quién',
+        (tester) async {
+      final mundo = await _abrir(
+        tester,
+        sillasDeLaNoche: [sumada('benitez', 13, '1-12')],
+      );
+      expect(find.textContaining('+1 silla · mesa 13 · vale 1-12 · Pato'),
+          findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('quitar_previa-1-12')));
+      await _asentar(tester);
+      FilledButton quitar() => tester
+          .widget<FilledButton>(find.byKey(const ValueKey('confirmar_quitar')));
+      expect(quitar().onPressed, isNull, reason: 'sin motivo no se quita');
+      await tester.enterText(
+          find.byKey(const ValueKey('motivo')), 'devolvieron el vale');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_quitar')));
+      await _asentar(tester);
+
+      final s = mundo.sillasPuerta.filas.single;
+      expect(s.vigente, isFalse);
+      expect(s.quitadaPor, 'PC');
+      expect(find.text('Silla quitada de la mesa 13 de BENÍTEZ, TOMÁS.'),
+          findsOneWidget);
+      // La línea sigue, tachada, y abajo quién y por qué.
+      final linea = tester.widget<Text>(find.byKey(const ValueKey('silla_previa-1-12')));
+      expect(linea.style!.decoration, TextDecoration.lineThrough);
+      expect(find.textContaining('quitada por PC'), findsOneWidget);
+      expect(find.textContaining(': devolvieron el vale'), findsOneWidget);
+      expect(find.byKey(const ValueKey('quitar_previa-1-12')), findsNothing);
+      expect(find.text('Esta noche: ninguna silla sumada · 1 quitada'),
+          findsOneWidget);
+    });
+
+    testWidgets('sin desbordes en un celular, con dos sumadas y una quitada',
+        (tester) async {
+      await _abrir(
+        tester,
+        tamano: const Size(360, 780),
+        sillasDeLaNoche: [
+          sumada('acosta', 15, '1-12', min: 1),
+          sumada('benitez', 13, '2-30', min: 2),
+          sumada('benitez', 13, '2-31', min: 3).quitada(
+            por: 'Juli',
+            motivo: 'la familia se arrepintió y devolvieron el vale en la barra',
+            ahora: horaDeIngreso.add(const Duration(minutes: 9)),
+          ),
+        ],
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Esta noche: 2 sillas sumadas · vales 1-12, 2-30 · 1 quitada'),
+          findsOneWidget);
+    });
   });
 }

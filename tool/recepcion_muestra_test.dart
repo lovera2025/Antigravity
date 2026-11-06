@@ -14,7 +14,7 @@
 // - Recepcion_PC.png: la pantalla entera en la PC, la lista y la vista del
 //   tótem con una familia llegando.
 // - Recepcion_tablet_totem.png: en la tablet, la pestaña TÓTEM saludando.
-// - Recepcion_celular.png: en el celular, la lista sola con la paleta arriba.
+/// - Recepcion_celular.png: en el celular, la lista sola con la paleta arriba./n// - Recepcion_5_sillas_de_la_noche.png, _6_sumar_silla.png y _7_sillas_celular.png:/n//   las sillas que se suman la noche de la fiesta (6.4.0), en la PC, la hoja de/n//   sumar una y en el celular.
 //
 // Es el panel de la app (`PanelPuerta`) y la pantalla de Recepción, con los
 // reemplazos en memoria de `test/helpers/puerta_en_memoria.dart`. Las tres
@@ -37,6 +37,7 @@ import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:arguello_events/models/sillas_reparto.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
@@ -312,6 +313,69 @@ void main() {
       final clave = await abrirPantalla(tester, mundo, const Size(390, 844));
       await asentarLlegada(tester);
       await _guardar(tester, clave, 'Recepcion_celular.png', carpeta);
+    });
+  });
+  group('las sillas de la noche', () {
+    SillaPuerta silla(String contrato, int mesa, String vale, String quien,
+            int minutos) =>
+        SillaPuerta(
+          id: 's-$vale',
+          eventoId: eventoMasivo,
+          contratoAlumnoId: contrato,
+          mesa: mesa,
+          vale: vale,
+          anotadoPor: quien,
+          createdAt: horaDeIngreso.add(Duration(minutes: minutos)),
+          updatedAt: horaDeIngreso.add(Duration(minutes: minutos)),
+        );
+
+    /// Una noche ya empezada: a ACOSTA se le sumó una en la adicional (queda en
+    /// el tope), a FERNÁNDEZ una y otra que se quitó.
+    PuertaEnMemoria noche() => PuertaEnMemoria(
+          _supabase,
+          alumnos: _institucion(sorteada: true).cast(),
+          sillasDeLaNoche: [
+            silla('acosta', 15, '2-17', 'Pato', 24),
+            silla('fernandez', 16, '1-40', 'Juli', 31),
+            silla('fernandez', 16, '1-41', 'Juli', 33).quitada(
+              por: 'Juli',
+              motivo: 'devolvieron el vale',
+              ahora: horaDeIngreso.add(const Duration(minutes: 39)),
+            ),
+          ],
+        );
+
+    testWidgets('en la PC', (tester) async {
+      final clave = await abrir(tester, noche(), eventoMasivo);
+      expect(find.textContaining('Esta noche: 2 sillas sumadas'), findsOneWidget);
+      await _guardar(tester, clave, 'Recepcion_5_sillas_de_la_noche.png', carpeta);
+    });
+
+    testWidgets('la hoja de sumar una silla', (tester) async {
+      final clave = await abrir(tester, noche(), eventoMasivo);
+      await tester.tap(find.byKey(const ValueKey('sumar_silla_benitez')));
+      await _asentar(tester);
+      await tester.enterText(find.byKey(const ValueKey('vale')), '2 0017');
+      await _asentar(tester);
+      await _guardar(tester, clave, 'Recepcion_6_sumar_silla.png', carpeta);
+    });
+
+    testWidgets('en el celular', (tester) async {
+      final mundo = noche();
+      const tam = Size(390, 844);
+      final clave = GlobalKey();
+      tester.view.physicalSize = tam;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      addTearDown(mundo.motor.bajo.close);
+      await tester.pumpWidget(
+        RepaintBoundary(key: clave, child: mundo.panel(eventoMasivo)),
+      );
+      await _asentar(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, -260));
+      await _asentar(tester);
+      expect(tester.takeException(), isNull);
+      await _guardar(tester, clave, 'Recepcion_7_sillas_celular.png', carpeta);
     });
   });
 }

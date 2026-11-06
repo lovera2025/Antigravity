@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../central/pedidos_de_la_puerta.dart' show kPorMandar;
+import '../../../models/silla_puerta.dart';
+import '../central/pedidos_de_la_puerta.dart' show DatosSilla, kPorMandar;
 import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
 import '../services/puerta_del_evento.dart';
+import '../services/sillas_de_la_puerta.dart';
+import 'hoja_sumar_silla.dart';
 import 'linea_sin_internet.dart';
 
 /// El panel de Recepción de un evento: el progreso, la búsqueda, los filtros y
@@ -91,12 +94,14 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     bool negrita = false,
     Color? color,
     double? espaciado,
+    bool tachado = false,
   }) =>
       GoogleFonts.outfit(
         fontSize: size,
         fontWeight: negrita ? FontWeight.w700 : FontWeight.w400,
         color: color,
         letterSpacing: espaciado,
+        decoration: tachado ? TextDecoration.lineThrough : null,
       );
 
   @override
@@ -135,6 +140,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
         _barra(p),
         if (_aviso != null) _lineaAviso(_aviso!),
         _filtros(p),
+        if (p.conteoDeLaNoche.texto != null) _conteoDeLaNoche(p),
         Expanded(
           child: visibles.isEmpty
               ? _vacio(p)
@@ -416,6 +422,25 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
         ),
       );
 
+  /// "Esta noche: 4 sillas sumadas · vales …": lo que se compara con las "Silla
+  /// extra" vendidas en la barra.
+  Widget _conteoDeLaNoche(PuertaDelEvento p) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+        child: Row(
+          children: [
+            Icon(Icons.event_seat_outlined, size: 15, color: _suave),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                p.conteoDeLaNoche.texto!,
+                key: const ValueKey('conteo_de_la_noche'),
+                style: _letra(size: 12, color: _suave),
+              ),
+            ),
+          ],
+        ),
+      );
+
   // ── La lista ──────────────────────────────────────────────────────────────
 
   Widget _vacio(PuertaDelEvento p) {
@@ -513,19 +538,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           ],
         ],
       ),
-      if (g.sillas != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text(
-            g.sillasAConfirmar
-                ? '${g.sillas} · reparto a confirmar'
-                : g.sillas!,
-            style: _letra(
-              size: 12,
-              color: g.sillasAConfirmar ? _ambar : _suave,
-            ),
-          ),
-        ),
+      ..._sillas(g, p),
       if (g.musica != null)
         Padding(
           padding: const EdgeInsets.only(top: 2),
@@ -557,6 +570,138 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   }
 
   Widget _punto() => Text('·', style: _letra(size: 12, color: _suave));
+
+  // ── Las sillas de la noche ────────────────────────────────────────────────
+
+  /// Una línea por mesa ("Mesa 12: 8 sillas + 1 extra · puede agregar 1 más ·
+  /// se cobran en la barra"), cada silla sumada o quitada esa noche, y SUMAR
+  /// SILLA.
+  List<Widget> _sillas(GrupoPuerta g, PuertaDelEvento p) {
+    final mesas = g.sillasPorMesa.mesas;
+    if (mesas.isEmpty) {
+      // Sin mesa, o una central de antes que manda solo el texto.
+      if (g.sillas == null) return const [];
+      return [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            g.sillasAConfirmar
+                ? '${g.sillas} · reparto a confirmar'
+                : g.sillas!,
+            style: _letra(
+              size: 12,
+              color: g.sillasAConfirmar ? _ambar : _suave,
+            ),
+          ),
+        ),
+      ];
+    }
+    return [
+      for (final m in mesas)
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            m.texto,
+            key: ValueKey('mesa_${g.contratoId}_${m.numero}'),
+            style: _letra(
+              size: 12,
+              negrita: m.estado == EstadoMesaPuerta.revisar,
+              color: switch (m.estado) {
+                EstadoMesaPuerta.conLugar => _suave,
+                EstadoMesaPuerta.llena => _ambar,
+                EstadoMesaPuerta.revisar => Colors.redAccent,
+              },
+            ),
+          ),
+        ),
+      if (g.sillasAConfirmar)
+        Text(
+          'El reparto de las sillas del contrato está a confirmar.',
+          style: _letra(size: 12, color: _ambar),
+        ),
+      for (final s in g.movimientos) _movimiento(g, p, s),
+      if (g.contratoId != null && g.sillasPorMesa.tieneMesa)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _botonSumar(g, p),
+          ),
+        ),
+    ];
+  }
+
+  /// "+1 silla · mesa 12 · vale 2-17 · Pato 23:05" con QUITAR. Una quitada queda
+  /// tachada, con quién y por qué: nada desaparece.
+  Widget _movimiento(GrupoPuerta g, PuertaDelEvento p, SillaPuerta s) {
+    final quitada = textoSillaQuitada(s);
+    final ocupado = _ocupados.contains(s.id);
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          Icon(
+            Icons.event_seat_outlined,
+            size: 14,
+            color: quitada == null ? _verde : _suave,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  textoSillaSumada(s),
+                  key: ValueKey('silla_${s.id}'),
+                  style: _letra(
+                    size: 12,
+                    color: quitada == null ? _texto : _suave,
+                    tachado: quitada != null,
+                  ),
+                ),
+                if (quitada != null)
+                  Text(quitada, style: _letra(size: 11, color: _suave)),
+              ],
+            ),
+          ),
+          if (quitada == null)
+            TextButton(
+              key: ValueKey('quitar_${s.id}'),
+              onPressed: ocupado ? null : () => _quitarSilla(g, p, s),
+              style: TextButton.styleFrom(
+                foregroundColor: _suave,
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: Text('QUITAR', style: _letra(size: 11, negrita: true)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _botonSumar(GrupoPuerta g, PuertaDelEvento p) {
+    final puede = g.puedeSumarSilla;
+    final ocupado = _ocupados.contains(g.contratoId);
+    final boton = OutlinedButton.icon(
+      key: ValueKey('sumar_silla_${g.contratoId}'),
+      onPressed: puede && !ocupado ? () => _sumarSilla(g, p) : null,
+      icon: const Icon(Icons.event_seat_outlined, size: 16),
+      label: Text('SUMAR SILLA', style: _letra(size: 12, negrita: true)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _texto,
+        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        side: BorderSide(color: _borde),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+    if (puede) return boton;
+    return Tooltip(
+      message: 'Ya no puede agregar: ${SillasDeUnaMesa.tope} extra por mesa',
+      child: boton,
+    );
+  }
 
   Widget _renglon(
     PersonaPuerta persona, {
@@ -787,6 +932,65 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
       }
     } finally {
       if (mounted) setState(() => _ocupados.remove(persona.id));
+    }
+  }
+
+  /// SUMAR SILLA: la hoja (mesa, vale, nota) y el candado. La recepcionista no
+  /// cobra: la silla ya se pagó en la barra.
+  Future<void> _sumarSilla(GrupoPuerta g, PuertaDelEvento p) async {
+    final acciones = ref.read(accionesPuertaProvider);
+    final datos = await HojaSumarSilla.abrir(
+      context,
+      grupo: g,
+      quienSoy: acciones.quienSoy,
+    );
+    if (datos == null || !mounted) return;
+    final clave = g.contratoId!;
+    setState(() => _ocupados.add(clave));
+    try {
+      final r = await acciones.sumarSilla(widget.eventoId, p, g, datos);
+      if (mounted) setState(() => _aviso = _Aviso(r.texto, bien: r.hecho));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _aviso = const _Aviso(
+              'No se pudo sumar la silla. Probá de nuevo.',
+              error: true,
+            ));
+      }
+    } finally {
+      if (mounted) setState(() => _ocupados.remove(clave));
+    }
+  }
+
+  Future<void> _quitarSilla(
+    GrupoPuerta g,
+    PuertaDelEvento p,
+    SillaPuerta s,
+  ) async {
+    final motivo = await HojaQuitarSilla.abrir(
+      context,
+      silla: s,
+      nombre: g.titular.nombre,
+    );
+    if (motivo == null || !mounted) return;
+    setState(() => _ocupados.add(s.id));
+    try {
+      final r = await ref.read(accionesPuertaProvider).quitarSilla(
+            widget.eventoId,
+            p,
+            g,
+            DatosSilla(sillaId: s.id, motivo: motivo),
+          );
+      if (mounted) setState(() => _aviso = _Aviso(r.texto, bien: r.hecho));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _aviso = const _Aviso(
+              'No se pudo quitar la silla. Probá de nuevo.',
+              error: true,
+            ));
+      }
+    } finally {
+      if (mounted) setState(() => _ocupados.remove(s.id));
     }
   }
 

@@ -14,6 +14,12 @@
 //
 // CELULARES (arriba a la derecha) abre la ventana con el QR. El celular tiene
 // que estar en el mismo wifi que la PC.
+//
+// Las sillas de la noche (6.4.0): las familias de número par tienen sus 2 extra
+// del contrato (ya en el tope); las impares, lugar para 2. Para probar el
+// candado: sumar desde dos celulares a la vez a una familia con un lugar, el
+// mismo vale dos veces, quitar con motivo, y el reloj de los segundos desde el
+// celular. Las sillas quedan en memoria: al cerrar se pierden.
 
 import 'dart:io';
 
@@ -82,6 +88,7 @@ Future<void> main() async {
     ..leerDirecciones = direccionesDeEstaPc
     ..paginaDelCelular = Directory('build${Platform.pathSeparator}puesto');
   mundo.invitados.hora = () => DateTime.now().toUtc();
+  mundo.sillasPuerta.hora = () => DateTime.now().toUtc();
 
   runApp(mundo.recepcion(
     const RecepcionUnifiedScreen(),

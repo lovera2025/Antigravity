@@ -10,6 +10,7 @@ import 'package:arguello_events/features/recepcion/central/pantalla_puesto.dart'
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/invitado.dart';
 
 import 'helpers/cliente_de_prueba.dart';
@@ -256,6 +257,87 @@ void main() {
       cliente.e = EstadoDelPuesto.frenado;
       await abrir(tester);
       expect(find.text('Demasiados códigos equivocados.'), findsOneWidget);
+    });
+  });
+  group('las sillas y los segundos desde el celular', () {
+    testWidgets('SUMAR SILLA se lo pide a la central, con el vale y la mesa',
+        (tester) async {
+      cliente.p = _lista();
+      await abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('sumar_silla_$_lucia')));
+      await tester.pumpAndSettle();
+      expect(find.text('Queda anotada a nombre de Juli.'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('vale')), '2 0017');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
+      await tester.pumpAndSettle();
+
+      final (que, persona, datos) = cliente.sillasPedidas.single;
+      expect(que, QuePide.sumarSilla);
+      expect(persona, idInvitadoPuerta(_lucia, 0));
+      expect(datos.mesa, 14);
+      expect(datos.vale, '2 0017');
+      expect(
+        find.text('Se mandó a la central: aparece en la lista en un momento.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sin conexión, la silla queda para mandar y lo dice',
+        (tester) async {
+      cliente
+        ..p = _lista()
+        ..e = EstadoDelPuesto.sinConexion;
+      await abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('sumar_silla_$_lucia')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('vale')), '2 0017');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
+      await tester.pumpAndSettle();
+      expect(cliente.sillasPedidas, hasLength(1));
+      expect(
+        find.text('Sin conexión con la central: se manda sola al volver.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('el reloj cambia los segundos de la tele por la central',
+        (tester) async {
+      cliente
+        ..p = _lista()
+        ..tie = TiemposAMano(nombre: 4, camino: 8);
+      await abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('reloj_del_celular')));
+      await tester.pumpAndSettle();
+      expect(find.text('LA LLEGADA · ESTA NOCHE'), findsOneWidget);
+      expect(find.text('4 s'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('mas_nombre')));
+      await tester.pump();
+      expect(cliente.tiemposPedidos, [TiemposAMano(nombre: 5, camino: 8)]);
+      expect(find.text('5 s'), findsOneWidget);
+    });
+
+    testWidgets('sin conexión, el reloj no deja cambiar y dice por qué',
+        (tester) async {
+      cliente
+        ..p = _lista()
+        ..tie = TiemposAMano(nombre: 4, camino: 8)
+        ..e = EstadoDelPuesto.sinConexion;
+      await abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('reloj_del_celular')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Sin conexión con la PC: los segundos'),
+          findsOneWidget);
+      final mas = tester.widget<IconButton>(find.byKey(const ValueKey('mas_nombre')));
+      expect(mas.onPressed, isNull);
+    });
+
+    testWidgets('sin los segundos de la PC (una PC de antes), no hay reloj',
+        (tester) async {
+      cliente.p = _lista();
+      await abrir(tester);
+      expect(find.byKey(const ValueKey('reloj_del_celular')), findsNothing);
     });
   });
 }

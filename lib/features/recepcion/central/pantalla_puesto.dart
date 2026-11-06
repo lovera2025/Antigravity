@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../totem/widgets/segundos_de_la_llegada.dart';
 import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
 import '../services/puerta_del_evento.dart';
@@ -86,6 +87,15 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
                   style: _titulo(),
                 ),
               ),
+              // Los segundos de la llegada en la tele, como el reloj de la PC:
+              // solo en un masivo, y si la PC los manda.
+              if (conLista && _c.puerta!.masivo && _c.tiempos != null)
+                IconButton(
+                  key: const ValueKey('reloj_del_celular'),
+                  tooltip: BotonSegundosDeLaLlegada.ayuda,
+                  onPressed: _abrirSegundos,
+                  icon: const Icon(Icons.timer_outlined, color: _perla),
+                ),
             ],
           ),
           if (_c.titulo != null) ...[
@@ -105,6 +115,66 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
       ),
     );
   }
+
+  /// "LA LLEGADA · ESTA NOCHE" en el celular: cambia la tele en el momento, por
+  /// la central. Sin conexión no se puede: un cambio de segundos que llega tarde
+  /// ya no sirve.
+  Future<void> _abrirSegundos() => showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+          backgroundColor: const Color(0xFF16161A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: _ambar.withValues(alpha: 0.35)),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
+              child: ListenableBuilder(
+                listenable: _c,
+                builder: (context, _) {
+                  final tiempos = _c.tiempos;
+                  final conectado = _c.estado == EstadoDelPuesto.conectado;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('LA LLEGADA · ESTA NOCHE',
+                          style: _titulo(size: 14, color: _ambar)),
+                      const SizedBox(height: 4),
+                      Text(
+                        conectado
+                            ? 'Cuánto queda en la tele cada familia que entra. '
+                                'Cambia en el momento.'
+                            : 'Sin conexión con la PC: los segundos se cambian '
+                                'cuando vuelva.',
+                        style: _letra(
+                          size: 12,
+                          color: conectado ? Colors.white54 : _ambar,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (tiempos != null)
+                        SegundosDeLaLlegada(
+                          tiempos: tiempos,
+                          onCambio: conectado ? (t) => _c.ponerTiempos(t) : null,
+                        ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('LISTO'),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
 
   /// Si está conectado a la PC y, si no, cuántos le faltan mandar.
   Widget _pastilla() {
