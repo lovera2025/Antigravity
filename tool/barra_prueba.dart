@@ -68,6 +68,8 @@ Future<void> main() async {
     ('Agua sin gas', 'Sin alcohol', 1000.0, 3),
     ('Gaseosa', 'Sin alcohol', 2000.0, null),
     ('Champán Chandon Extra Brut', 'Vinos', 45000.0, null),
+    // La silla de la noche (6.4.0): sale en su propio vale, que va a la recepcionista.
+    ('Silla extra', 'Sillas', 8000.0, null),
   ]) {
     final p = b.producto(nombre, categoria: categoria);
     b.precio(puertoViejo.id, p, precio, orden: orden, stock: stock, aviso: stock == null ? null : 2);

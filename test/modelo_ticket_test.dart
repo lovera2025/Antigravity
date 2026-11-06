@@ -201,6 +201,33 @@ void main() {
       ]);
     });
 
+    test('el de una silla de la noche: va a la recepcionista, no al barman', () {
+      final v = VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 17,
+        renglones: const [
+          RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 2),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 16000,
+        ahora: vendida,
+      );
+      final vale = Vale.deUnaSilla(v.renglones.single, numero: 2);
+      expect(vale.esDeSilla, isTrue);
+      expect(_papel(ModeloTicket.deVale(vale, venta: v, caja: caja, fiesta: 'Puerto Viejo')), [
+        'PUERTO VIEJO',
+        'Vie 04/12/2026 - 23:41',
+        'Caja 2 · Marta · N° 0017-2',
+        '[GRANDE] VALE POR 1',
+        '[GRANDE] SILLA EXTRA',
+        'Llevá este vale a la',
+        'recepcionista',
+        'Ella suma la silla y se queda el',
+        'vale',
+      ]);
+    });
+
     test('una copia lo dice en grande arriba y abajo, con quién, cuándo y por qué', () {
       final v = venta();
       final papel = _papel(ModeloTicket.deVale(

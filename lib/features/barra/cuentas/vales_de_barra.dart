@@ -1,4 +1,5 @@
 import '../datos/barra_repositorio.dart';
+import 'silla_de_la_puerta.dart';
 
 /// Una bebida de un vale: cuántas y cuál, con el nombre de la venta.
 class BebidaDelVale {
@@ -60,6 +61,24 @@ class Vale {
       numero: numero,
     );
   }
+
+  /// El vale de **una** silla de la noche ([esSillaDeLaPuerta]): cada silla sale en su
+  /// propio papel, así cada una tiene un número distinto para la puerta. [numero] null:
+  /// es el único vale de la venta ("N° 0017").
+  factory Vale.deUnaSilla(RenglonVenta renglon, {int? numero}) {
+    if (numero != null && numero < 1) {
+      throw ArgumentError.value(numero, 'numero', 'va de 1 en adelante');
+    }
+    return Vale(
+      bebidas: [BebidaDelVale(1, renglon.nombre)],
+      porSeparado: true,
+      numero: numero,
+    );
+  }
+
+  /// Si es el vale de una silla: lo que dice abajo cambia (va a la recepcionista).
+  bool get esDeSilla =>
+      bebidas.isNotEmpty && bebidas.every((b) => esSillaDeLaPuerta(b.nombre));
 }
 
 /// Si "vale por [valePor]" sirve cuando de una bebida [quedan] sin vale: vacío (un vale

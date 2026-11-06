@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../cuentas/pesos.dart';
+import '../cuentas/silla_de_la_puerta.dart';
 import '../cuentas/vales_de_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/modelo_ticket.dart';
@@ -31,6 +32,17 @@ class _Bebida {
   bool get terminada => quedan == 0;
 }
 
+/// Una silla de la noche de la venta: sale de a una, cada una en su vale (6.4.0).
+class _Silla {
+  final RenglonVenta renglon;
+  var impresas = 0;
+
+  _Silla(this.renglon);
+
+  int get quedan => renglon.cantidad - impresas;
+  bool get terminada => quedan <= 0;
+}
+
 /// Después de cobrar, cómo salen los vales de la venta (pedido del jefe, 3-nov). Se pasa
 /// de una forma a la otra cuando se quiere:
 /// - **TODO JUNTO**: un vale con todo lo que queda (al principio, toda la compra);
@@ -40,6 +52,10 @@ class _Bebida {
 ///
 /// **Un vale por papel:** cada IMPRIMIR saca uno solo, nunca una tira. Lo que ya salió en
 /// un vale no vuelve a salir: TODO JUNTO lleva solo lo que queda.
+///
+/// **Las sillas de la noche ([esSillaDeLaPuerta]) salen aparte, una por vale** (6.4.0): no
+/// van en TODO JUNTO ni en POR SEPARADO, cada una lleva su número, y su vale dice que se
+/// lleva a la recepcionista. Así la puerta anota cada silla con un número distinto.
 class ElegirVales extends StatefulWidget {
   final VentaBarra venta;
   final CajaBarra caja;
@@ -64,14 +80,22 @@ class ElegirVales extends StatefulWidget {
 
 class _ElegirValesState extends State<ElegirVales> {
   _Forma? _forma;
-  late final _bebidas = [for (final r in widget.venta.renglones) _Bebida(r)];
+  late final _bebidas = [
+    for (final r in widget.venta.renglones)
+      if (!esSillaDeLaPuerta(r.nombre)) _Bebida(r),
+  ];
+  late final _sillas = [
+    for (final r in widget.venta.renglones)
+      if (esSillaDeLaPuerta(r.nombre)) _Silla(r),
+  ];
 
   /// Cuántos vales salieron de la venta: el próximo lleva el siguiente número.
   int _valesImpresos = 0;
   bool _imprimiendo = false;
   String? _aviso;
 
-  bool get _todoImpreso => _bebidas.every((b) => b.terminada);
+  bool get _bebidasImpresas => _bebidas.every((b) => b.terminada);
+  bool get _todoImpreso => _bebidasImpresas && _sillas.every((s) => s.terminada);
 
   @override
   void dispose() {
@@ -114,10 +138,11 @@ class _ElegirValesState extends State<ElegirVales> {
     return salio;
   }
 
-  /// Un vale con todo lo que queda. Si es el primero de la venta, es el único: sin número.
+  /// Un vale con todo lo que queda. Si es el primero de la venta y no hay sillas, es el
+  /// único: sin número.
   Future<void> _imprimirTodoJunto() async {
-    if (_todoImpreso) return;
-    final vale = _valesImpresos == 0
+    if (_bebidasImpresas) return;
+    final vale = _valesImpresos == 0 && _sillas.isEmpty
         ? Vale.todoJunto(widget.venta)
         : Vale.conLoQueQueda(
             [for (final b in _bebidas) BebidaDelVale(b.quedan, b.renglon.nombre)],
@@ -148,6 +173,17 @@ class _ElegirValesState extends State<ElegirVales> {
     }
   }
 
+  /// El vale de una silla. Si es lo único de la venta (una sola silla, sin bebidas), sin
+  /// número.
+  Future<void> _imprimirSilla(_Silla s) async {
+    if (s.terminada) return;
+    final unico = _bebidas.isEmpty && _sillas.length == 1 && s.renglon.cantidad == 1;
+    final vale = Vale.deUnaSilla(s.renglon, numero: unico ? null : _valesImpresos + 1);
+    if (await _mandar(vale) && mounted) {
+      setState(() => s.impresas++);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
@@ -165,26 +201,31 @@ class _ElegirValesState extends State<ElegirVales> {
           ],
         ),
         const SizedBox(height: 12),
-        Text('¿Cómo se imprime?', style: tema.textTheme.labelLarge),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _botonForma(
-                _Forma.todoJunto,
-                'TODO JUNTO',
-                _valesImpresos == 0 ? 'Un vale con todo' : 'Un vale con lo que queda',
+        for (var i = 0; i < _sillas.length; i++) _tarjetaSilla(tema, i),
+        if (_bebidas.isNotEmpty) ...[
+          Text('¿Cómo se imprime?', style: tema.textTheme.labelLarge),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _botonForma(
+                  _Forma.todoJunto,
+                  'TODO JUNTO',
+                  _valesImpresos == 0 && _sillas.isEmpty
+                      ? 'Un vale con todo'
+                      : 'Un vale con lo que queda',
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: _botonForma(_Forma.porSeparado, 'POR SEPARADO', 'Para ir retirando de a poco')),
-          ],
-        ),
-        const SizedBox(height: 12),
+              const SizedBox(width: 8),
+              Expanded(child: _botonForma(_Forma.porSeparado, 'POR SEPARADO', 'Para ir retirando de a poco')),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
         if (_forma == _Forma.todoJunto) _todoJunto(tema),
         if (_forma == _Forma.porSeparado)
           for (var i = 0; i < _bebidas.length; i++) _sector(tema, i),
-        if (_forma != null) ...[
+        if (_forma != null || _bebidas.isEmpty) ...[
           const SizedBox(height: 4),
           Text(_queFalta(), key: const Key('falta-imprimir'), style: tema.textTheme.bodySmall),
         ],
@@ -226,11 +267,11 @@ class _ElegirValesState extends State<ElegirVales> {
         if (b.quedan > 0) '${b.quedan} ${b.renglon.nombre.toLowerCase()}',
     ].join(', ');
     return Card(
-      color: _todoImpreso ? tema.colorScheme.secondaryContainer : null,
+      color: _bebidasImpresas ? tema.colorScheme.secondaryContainer : null,
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: _todoImpreso
-            ? const _Listo('Todo impreso')
+        child: _bebidasImpresas
+            ? _Listo(_sillas.isEmpty ? 'Todo impreso' : 'Las bebidas, impresas')
             : Wrap(
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -238,7 +279,9 @@ class _ElegirValesState extends State<ElegirVales> {
                 runSpacing: 8,
                 children: [
                   Text(
-                    _valesImpresos == 0 ? 'Un solo vale: $queda' : 'Un vale con lo que queda: $queda',
+                    _valesImpresos == 0 && _sillas.isEmpty
+                        ? 'Un solo vale: $queda'
+                        : 'Un vale con lo que queda: $queda',
                     key: const Key('lo-que-queda'),
                   ),
                   FilledButton.icon(
@@ -324,8 +367,63 @@ class _ElegirValesState extends State<ElegirVales> {
     );
   }
 
+  /// Una silla de la venta: un vale por silla, que la familia lleva a la recepcionista.
+  Widget _tarjetaSilla(ThemeData tema, int i) {
+    final s = _sillas[i];
+    final r = s.renglon;
+    return Card(
+      key: Key('silla-$i'),
+      color: s.terminada ? tema.colorScheme.secondaryContainer : null,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${r.cantidad} ${r.nombre.toUpperCase()}',
+              style: tema.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Un vale por silla: la familia lo lleva a la recepcionista.',
+              style: tema.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            if (s.terminada)
+              _Listo(r.cantidad == 1 ? 'Vale impreso' : 'Los ${r.cantidad} vales impresos')
+            else
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Text(
+                    r.cantidad == 1
+                        ? 'Falta el vale'
+                        : 'Salieron ${s.impresas} de ${r.cantidad}',
+                    key: Key('detalle-silla-$i'),
+                  ),
+                  FilledButton.icon(
+                    key: Key('imprimir-silla-$i'),
+                    onPressed: _imprimiendo ? null : () => _imprimirSilla(s),
+                    icon: const Icon(Icons.print),
+                    label: Text(r.cantidad == 1
+                        ? 'IMPRIMIR EL VALE'
+                        : 'IMPRIMIR VALE ${s.impresas + 1} DE ${r.cantidad}'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _queFalta() {
     final faltan = [
+      for (final s in _sillas)
+        if (!s.terminada) s.renglon.nombre.toLowerCase(),
       for (final b in _bebidas)
         if (!b.terminada) b.renglon.nombre.toLowerCase(),
     ];

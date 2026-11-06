@@ -144,6 +144,11 @@ abstract final class ModeloTicket {
         ..._centrado('Motivo: ${copia.motivo}'),
         const TextoTicket('Se entrega solo con el jefe'),
         const GrandeTicket('*** COPIA ***'),
+      ] else if (vale.esDeSilla) ...[
+        // La silla no la entrega el barman: la familia lleva el vale a la
+        // recepcionista, que la suma y se queda el papel (decisión del 6-nov).
+        ..._centrado('Llevá este vale a la recepcionista', negrita: true),
+        ..._centrado('Ella suma la silla y se queda el vale'),
       ] else ...[
         const TextoTicket('Vale solo hoy · una sola vez'),
         const TextoTicket('El barman se queda el vale'),

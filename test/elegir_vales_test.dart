@@ -50,18 +50,38 @@ void main() {
     ahora: DateTime.utc(2026, 12, 5, 2, 41),
   );
 
-  Future<_Impresora> abrir(WidgetTester tester, {Size tamano = const Size(1024, 900)}) async {
+  Future<_Impresora> abrir(
+    WidgetTester tester, {
+    Size tamano = const Size(1024, 900),
+    VentaBarra? otra,
+  }) async {
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final impresora = _Impresora();
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: ElegirVales(venta: venta, caja: caja, fiesta: 'Puerto Viejo', imprimir: impresora.imprimir),
+        body: ElegirVales(
+          venta: otra ?? venta,
+          caja: caja,
+          fiesta: 'Puerto Viejo',
+          imprimir: impresora.imprimir,
+        ),
       ),
     ));
     return impresora;
   }
+
+  VentaBarra conSillas(List<RenglonVenta> renglones) => VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 17,
+        renglones: renglones,
+        medio: MedioBarra.efectivo,
+        efectivo: renglones.fold(0.0, (s, r) => s + r.subtotal),
+        ahora: DateTime.utc(2026, 12, 5, 2, 41),
+      );
+
 
   Future<void> tocar(WidgetTester tester, String key) async {
     await tester.ensureVisible(find.byKey(Key(key)));
@@ -214,5 +234,59 @@ void main() {
     await tocar(tester, 'imprimir-0');
     expect(tester.takeException(), isNull);
     expect(find.text('Quedan 7 · Salió 1 vale: 3'), findsOneWidget);
+  });
+
+  group('las sillas de la noche (6.4.0)', () {
+    const fernet =
+        RenglonVenta(productoId: 'b', nombre: 'Fernet con coca', precio: 6000, cantidad: 1);
+    const sillas =
+        RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 2);
+
+    testWidgets('cada silla sale en su vale, numerado, aparte de las bebidas', (tester) async {
+      final impresora = await abrir(tester, otra: conSillas(const [fernet, sillas]));
+      expect(find.text('2 SILLA EXTRA'), findsOneWidget);
+      expect(find.text('Falta imprimir: silla extra, fernet con coca'), findsNothing,
+          reason: 'sin elegir la forma de las bebidas todavía no se dice');
+
+      await tocar(tester, 'imprimir-silla-0');
+      await tocar(tester, 'imprimir-silla-0');
+      expect(impresora.papeles, hasLength(2));
+      expect(impresora.papeles[0],
+          containsAllInOrder(['Caja 2 · Marta · N° 0017-1', 'VALE POR 1', 'SILLA EXTRA']));
+      expect(impresora.papeles[1], contains('Caja 2 · Marta · N° 0017-2'));
+      expect(impresora.papeles[0], contains('Llevá este vale a la'),
+          reason: 'el vale de la silla va a la recepcionista');
+      expect(find.text('Los 2 vales impresos'), findsOneWidget);
+
+      // TODO JUNTO lleva solo las bebidas, con el número que sigue.
+      await tocar(tester, 'forma-todo-junto');
+      expect(find.text('Un vale con lo que queda: 1 fernet con coca'), findsOneWidget);
+      await tocar(tester, 'imprimir-todo-junto');
+      expect(impresora.papeles[2],
+          containsAllInOrder(['Caja 2 · Marta · N° 0017-3', '1 FERNET CON COCA']));
+      expect(impresora.papeles[2], isNot(contains('SILLA EXTRA')));
+      expect(impresora.papeles[2], contains('El barman se queda el vale'));
+      expect(find.text('Todo impreso'), findsOneWidget);
+    });
+
+    testWidgets('una sola silla, sin bebidas: un vale sin número, sin elegir la forma',
+        (tester) async {
+      const una =
+          RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 1);
+      final impresora = await abrir(tester, otra: conSillas(const [una]));
+      expect(find.text('¿Cómo se imprime?'), findsNothing);
+      expect(find.text('Falta imprimir: silla extra'), findsOneWidget);
+      await tocar(tester, 'imprimir-silla-0');
+      expect(impresora.papeles.single, contains('Caja 2 · Marta · N° 0017'));
+      expect(find.text('Vale impreso'), findsOneWidget);
+      expect(find.text('Todo impreso'), findsOneWidget);
+    });
+
+    testWidgets('en un celular entra sin desbordar', (tester) async {
+      await abrir(tester, tamano: const Size(360, 740), otra: conSillas(const [fernet, sillas]));
+      await tocar(tester, 'imprimir-silla-0');
+      expect(tester.takeException(), isNull);
+      expect(find.text('Salieron 1 de 2'), findsOneWidget);
+    });
   });
 }
