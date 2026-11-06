@@ -1,7 +1,11 @@
 # Comparar las sillas vendidas en la barra con las sumadas en la puerta
 
-**Estado:** pendiente.
+**Estado:** pendiente (la parte en vivo, hecha el 6-nov: ver abajo).
 **Postergado el:** 2026-11-06.
+
+**Lo que ya se hizo en vivo (6-nov):** si la barra **anula** la venta de una silla, Recepción la marca en rojo ("vale anulado en la
+barra: revisar") y no deja sumar otra con ese vale (`ValesAnulados`, `docs/CONTEXTO_v6.4.0_2026-11-06.md`). Lo que sigue pendiente
+es la comparación entera de la oficina: los vales vendidos que nadie anotó y las sillas anotadas con un vale que la barra no tiene.
 
 ## Qué es
 

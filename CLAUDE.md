@@ -65,7 +65,9 @@ es todo lo de Mercado Pago, sin comprobante que tildar; el recargo por transfere
 (`recargo`: `efectivo + transferencia = total + recargo`). **Las cuentas van en centavos enteros** (`centavos`), y **una venta
 anulada no cuenta, tampoco en el efectivo esperado del cierre**. **El papel de cada compra es un vale, no el ticket** (pedido del jefe, 3-nov,
 el "3b"): sin logo, sin precios y sin QR, TODO JUNTO o POR SEPARADO (cada vale armado a mano con su "vale por" hasta que no quede nada: `widgets/elegir_vales.dart`), uno por papel, en letras
-grandes (`GrandeTicket`), y **el barman se lo queda**: ese es el control, junto con la fiesta y el día impresos y la COPIA marcada. La app ya imprime
+grandes (`GrandeTicket`), y **el barman se lo queda**: ese es el control, junto con la fiesta y el día impresos y la COPIA marcada. **La silla de la
+noche es otra cosa** (6-nov): un producto con "silla" en el nombre (`esSillaDeLaPuerta`) sale aparte, **un vale por silla** con su número, y su pie dice
+"Llevá este vale a la recepcionista · Ella suma la silla y se queda el vale" (ver "Las sillas de la noche" en El tótem). La app ya imprime
 por Bluetooth desde la PC y desde un celular Android (`lib/features/barra/impresion/`, `flutter run -d windows -t tool/impresora_prueba.dart`), pero todavía no tiene pantallas de barra.
 **Los datos** son cinco tablas de la v77 (`barra_productos`, `barra_precios`, `barra_cajas`, `barra_ventas`, `barra_anulaciones`), con su SQL
 `supabase/migrations/20261103140000_barra.sql` **sin correr**, y viven en `lib/features/barra/datos/`: `BarraDelJefe` (PC y web) y `BarraDeLaCaja`
@@ -414,8 +416,12 @@ oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados
   (`EntradasDeAlumno.alCincuenta`). El precio de la entrada todavía no se sabe: nada lleva un precio fijo. Cobrarlas es la venta de
   entradas (sección 8 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), sin programar. Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
 
-**Las sillas de la noche** (6.4.0, en la rama; `docs/CONTEXTO_v6.4.0_2026-11-06.md`). La noche de la fiesta, Recepción suma sillas a una
-familia de un masivo sorteado, con el número del vale de la barra (`SillaPuerta`, tabla `sillas_puerta`).
+**Las sillas de la noche** (6.4.0, en la rama; `docs/CONTEXTO_v6.4.0_2026-11-06.md`). La noche de la fiesta, la familia paga la silla en la
+caja de la Encargada de barra, lleva el vale a la recepcionista, y Recepción suma la silla a esa familia de un masivo sorteado con el número
+del vale (`SillaPuerta`, tabla `sillas_puerta`). La recepcionista se queda el papel.
+- **Si la barra anula esa venta, la silla va en rojo** ("vale anulado en la barra: revisar", `ValesAnulados`, `valesAnuladosDelEventoProvider`
+  por `barraDelJefeProvider`) y no se saca sola: la recepcionista la quita con motivo. Depende de que la notebook de la puerta tenga lo de la
+  barra (con internet, en segundos). Un vale anulado no sirve para sumar.
 - **Un solo candado para la PC y los celulares** (`ResolvedorDePedidos`, `central/resolvedor_de_pedidos.dart`): todo lo que se pide en la
   puerta de un evento pasa por esa fila, de a uno, y `decidirSilla` decide con la base del momento. La PC la usa aunque la central esté
   apagada (`CentralDeLaPuerta.resolverDeEstaPc`). **Un camino nuevo que sume o quite sillas pasa por ahí**, no escribe el repositorio al lado.

@@ -64,30 +64,50 @@ y en verde: ahora eso va en ámbar y, al confirmarlo la central, dice en verde "
 (`ClienteCentral.hechos`, `AccionesPuerta.hechos`); (2) una mesa que no es de la familia se decía "ya estaba llena"; (3) la pista
 del vale no entraba en el celular ("Caja y número: 2 0017"). Probado de nuevo en el sandbox después del arreglo.
 
+## El vale de la silla y la silla en rojo (6-nov, cuatro commits más)
+
+Lo que el usuario decidió el 6-nov, ya hecho y probado:
+
+- **Cobra la caja de la Encargada de barra** (la que ve todas las cajas; la tilde todavía no existe, va en las etapas de la barra).
+  La vende como el producto "Silla extra" e imprime el vale. **La familia lleva el vale a la recepcionista**, que suma la silla con
+  ese número y **se queda el papel**.
+- **Qué producto es una silla, por el nombre** (`esSillaDeLaPuerta`, `barra/cuentas/silla_de_la_puerta.dart`): "Silla extra",
+  "SILLA", "Sillas extra"; sin columna nueva en el catálogo.
+- **Una silla, un vale** (`ElegirVales`, `Vale.deUnaSilla`): las sillas salen aparte de las bebidas, de a una y cada una con su
+  número ("N° 0017-1", "N° 0017-2"), aunque la cajera elija TODO JUNTO. Así la puerta anota cada silla con un número distinto.
+- **El pie del vale de la silla** (`ModeloTicket.deVale`): "Llevá este vale a la recepcionista · Ella suma la silla y se queda el
+  vale", en vez de "El barman se queda el vale".
+- **Si la barra anula esa venta, la silla va en rojo** en Recepción, en la PC y en los celulares: "vale anulado en la barra:
+  revisar" (`ValesAnulados`, `recepcion/services/vales_anulados.dart`; `valesAnuladosDelEventoProvider`, que lee la barra de la
+  PC por `barraDelJefeProvider` y relee cuando baja algo de la barra). El conteo de la noche dice "1 con el vale anulado". **No se
+  saca sola**: sigue ocupando lugar hasta que la recepcionista la quite con motivo. Sumar otra silla con un vale anulado no entra.
+  Si dos cajas comparten número y una no está anulada, no se marca (nunca acusar por error); un vale sin la caja ("17") nunca.
+- **De qué depende el rojo:** de que la notebook de la puerta tenga lo de la barra. Con internet, a los pocos segundos de que la
+  tablet sube la anulación. Sin internet entre las dos notebooks, al volver (o, más adelante, por la central de la barra). Si no, lo
+  ve la oficina al otro día (`docs/pendientes/sillas-barra-vs-puerta.md`).
+
+**Probado en el sandbox** (`tool/puerta_sandbox_test.dart`, que ahora también vende y anula en la barra): la caja 1 vendió dos sillas
+y salió el vale (abajo); Juli sumó una con el vale 1-1; la barra la anuló y en los dos celulares se puso en rojo con el conteo; sumar
+otra con el 1-1 se rechazó ("El vale 1-1 está anulado en la barra"); Pato la quitó con motivo y dejó de estar en rojo; el 1-2, que no
+se anuló, entró. Encontró que la ayuda de la hoja de quitar se cortaba en el celular: arreglado.
+
+```
+PROMOCIÓN DE PRUEBA
+Vie 06/11/2026 - 14:08
+Caja 1 · Encargada · N° 0001
+VALE POR 1            (grande)
+SILLA EXTRA           (grande)
+Llevá este vale a la
+recepcionista
+Ella suma la silla y se queda el
+vale
+```
+
+La foto del papel impreso de verdad necesita la impresora (la TP-POS58): queda para cuando el usuario quiera.
+
 ## Lo que falta
 
-- **Lo que pasa con el vale** (pregunta del usuario, 6-nov): quién lo imprime, quién se lo queda y qué pasa si la barra anula esa
-  venta. Ver "Pregunta abierta: el vale de la silla", abajo.
-- ~~**La prueba de punta a punta**~~ (hecha, arriba). Lo que decía: **La hace Claude, en un sandbox, hasta que salga bien**
-  (regla del usuario del 6-nov: "las pruebas las haces vos en un sandbox y te aseguras que sale bien"; no se le pide a él que pruebe).
-  Aislada: `flutter run -d windows -t tool/central_puerta_prueba.dart` (Recepción en memoria, sin la base real ni la nube), la página
-  del celular armada en `build/puesto`, y pestañas del navegador como celulares. Sumar desde dos celulares a la vez a una familia con
-  un lugar, el mismo vale dos veces, quitar con motivo, el conteo de la noche y el reloj desde el celular; también con la central
-  cortada (la silla queda guardada y se manda al volver). En el arnés las familias pares ya están en el tope y las impares tienen lugar
-  para 2. Se le cuenta qué se probó, cómo y qué apareció, con capturas.
-- **Para la barra (sus etapas, no acá):** "Silla extra" en el catálogo y en el cierre, quién ve esas ventas (la encargada), y la
-  comparación sillas vendidas contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
+- **Para la barra (sus etapas, no acá):** cargar "Silla extra" en el catálogo con su precio por fiesta (etapa 7: hoy no hay
+  pantalla), la tilde "Encargada de barra", "Silla extra: N vendidas" en el cierre, y la comparación de la oficina sillas vendidas
+  contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
 - Después, la etapa 5 de la barra: `docs/CONTEXTO_BARRA_2026-11-02.md`, "Para retomar en otro chat".
-
-## Pregunta abierta: el vale de la silla (6-nov)
-
-Lo que está decidido (jefe, 5-nov): la familia paga la silla en **cualquier caja de la barra** (la cajera que cobra; la encargada
-también cobra), que la vende como el producto "Silla extra" e imprime su vale como cualquier otro ("Caja 2 · Marta · N° 0017"). La
-familia lleva ese vale a la recepcionista de adentro, que suma la silla con ese número.
-
-Lo que **no** está decidido ni programado:
-- **Quién se queda el papel.** Con los tragos, el barman se queda el vale y ese es el control. Para la silla, lo lógico es que se lo
-  quede la recepcionista.
-- **Si la barra anula esa venta**, hoy la silla sigue sumada en la puerta: las dos cosas no se conocen (son dos notebooks, y el vale
-  es solo un número). Hoy lo único es que la recepcionista la quite con el motivo, si alguien le avisa, y la comparación de la
-  oficina (`docs/pendientes/sillas-barra-vs-puerta.md`) lo mostraría al otro día.
