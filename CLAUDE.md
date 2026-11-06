@@ -88,7 +88,8 @@ un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `
 se acomoda **en la pista, resumido** (`ResumenEnElSalon`), con la mesa encendida, el camino y el borde que late (`PanelPlano.pulsar`); **con
 cola no se acorta** (`TiemposDeBienvenida`); los segundos y el lugar se eligen en Personalizar ("LA LLEGADA") y se cambian a mano esa noche con
 el reloj de Recepción (`TiemposAMano`, vive en la PC, viaja por `tiempos_totem` y en la ficha). SQL `20261105100000_totem_config_llegada.sql`
-**sin correr**. **Las sillas de la noche, empezadas:** desde los sorteos, una silla más se pide solo esa noche; **la recepcionista no toca
+**sin correr**. **Las sillas de la noche, empezadas:** desde los sorteos (10-nov) una silla más se pide solo esa noche (**mesas, nunca esa
+noche**) y en la oficina se traba cargar sillas extra al contrato (decidido, sin programar); **la recepcionista no toca
 plata**: la barra la cobra como producto y da un vale, y la puerta la anota con el número del vale en `sillas_puerta` (v78, filas que solo se
 agregan; quitar deja la huella con motivo). Hechos el modelo, la tabla v78, su SQL (**sin correr**) y el repositorio; **falta enchufarla al
 sync** (las siete listas) y todo lo de arriba (tope por mesa, candado, panel).

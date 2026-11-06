@@ -81,7 +81,13 @@ tarjeta acomodándose paso a paso. El usuario las vio el 5-nov.
    los segundos también en `PantallaPuesto`.
 5. **2.5:** la oficina (grilla "· +1 puerta", Editar alumno una línea), `test/sillas_puerta_no_toca_test.dart`, la
    verificación de la migración sobre copia.
-6. **Docs:** CONTEXTO de la versión (propuesta 6.4.0) y CLAUDE.md ("El plano en la llegada" → "El salón en el
+6. **Trabar las sillas extra en la oficina desde el 10-nov** (decisión del usuario, 5-nov: "a partir del día 10 se
+   trabaría, es buena idea"). Desde que empiezan los sorteos, Editar alumno no deja sumar sillas extra al contrato: se
+   piden solo la noche de la fiesta. Al programarlo, decidir con el usuario si la traba es por fecha (10-nov, igual
+   para todas) o por fiesta ya sorteada, y si el jefe la puede saltear en modo jefe para un caso puntual. Lo que ya está
+   cargado no se toca. **Ojo:** para que el programa la haga cumplir desde el 10-nov, tiene que estar instalada antes;
+   si no, hasta la versión siguiente es una regla que la oficina respeta a mano.
+7. **Docs:** CONTEXTO de la versión (propuesta 6.4.0) y CLAUDE.md ("El plano en la llegada" → "El salón en el
    tótem"; Recepción suma las sillas de la noche).
 
 ## Decisiones del usuario y del jefe (4 y 5-nov)
@@ -91,8 +97,9 @@ tarjeta acomodándose paso a paso. El usuario las vio el 5-nov.
   ("la otra familia que ingresa se vuelve a mostrar y dura lo que los segundos configurados digan"); **la tarjeta en
   la pista** ("debería mostrarse la pista"); el borde del salón late cuando el camino marca la mesa; sin las sillas en
   la tele.
-- **Las sillas de la noche (jefe, 5-nov):** hasta el 10-nov las sillas extra se venden en la oficina; desde que
-  empiezan los sorteos, **solo la noche de la fiesta, ya sentados**, a la recepcionista de adentro (una da la
+- **Las sillas de la noche (jefe, 5-nov):** hasta el 10-nov las sillas extra se venden en la oficina (y desde ahí se
+  traba cargarlas al contrato); esa noche **no se piden mesas, solo sillas**; desde que empiezan los sorteos, las sillas
+  **solo la noche de la fiesta, ya sentados**, a la recepcionista de adentro (una da la
   bienvenida en la puerta, otra guía adentro). **La recepcionista no toca plata:** ve si puede agregar, los manda a
   **la caja de la barra**, que cobra "Silla extra" como un producto (precio por fiesta en el catálogo) y da un vale; la
   recepcionista suma la silla **con el número del vale**. Sumar y quitar dejan huella (quién, hora, motivo).
@@ -106,9 +113,13 @@ tarjeta acomodándose paso a paso. El usuario las vio el 5-nov.
 
 - ¿La recepcionista puede quitar una silla sumada (con motivo y huella) o solo el jefe? El plan deja que pueda.
 - ¿Quién ve en la barra las ventas de "Silla extra"? Dijo la encargada: va con la etapa de la encargada de barra.
-- ¿Desde el 10-nov se traba cargar sillas extra al contrato en la oficina? Hoy no se traba.
-- Si una familia quiere otra mesa la noche de la fiesta, ¿cómo se divide? Fuera de este plan.
 - ¿Quién toca los segundos del tótem desde el celular? El plan deja que cualquiera.
+
+**Resuelto por el usuario (5-nov):**
+- **Esa noche no se piden mesas, solo sillas.** Una mesa adicional se compra en la oficina antes; la puerta nunca
+  suma mesas. Por eso SUMAR SILLA va siempre a una mesa que la familia ya tiene.
+- **Desde el 10-nov se traba cargar sillas extra al contrato en la oficina** ("es buena idea"): punto 6 de "Lo que
+  falta".
 
 ## Lo que no se tocó
 
