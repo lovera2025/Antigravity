@@ -22,6 +22,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
+import 'package:arguello_events/features/eventos/repositories/mora_congelada_repository.dart';
+import 'package:arguello_events/features/eventos/services/mora_congelada.dart';
 import 'package:arguello_events/features/eventos/services/mora_cuota_calculator.dart';
 import 'package:arguello_events/features/eventos/services/mora_tracked_recovery.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -116,6 +118,9 @@ void main() {
     final hoy = DateTime(ahora.year, ahora.month, ahora.day, 12);
     try {
       final db = await LocalDatabase.instance;
+      // Como la app antes de revisar (6.3.2): sin la mora congelada cargada, los
+      // congelados daban otra mora y el simulacro los acusaba de más.
+      await MoraCongeladaRepository.cargarRegistroEn(db);
       final antes = await _foto(hoy);
       // 6.1.0: las fichas que no se explican cuota por cuota, antes y después.
       final sinExplicarAntes = await MoraTrackedRecovery.fichasSinExplicar(db);
@@ -211,6 +216,7 @@ void main() {
       }
       expect(perdonesTocados, isEmpty, reason: 'Un perdón no se toca.');
     } finally {
+      MoraCongelada.vaciar();
       await LocalDatabase.close();
       try {
         docs.deleteSync(recursive: true);

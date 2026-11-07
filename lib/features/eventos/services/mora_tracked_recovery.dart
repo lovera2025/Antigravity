@@ -10,6 +10,29 @@ import 'cobro_abono_acumulado.dart';
 import 'mora_cuota_calculator.dart';
 import 'mora_tracked_origen.dart';
 
+/// La cuenta del cobro con la que se repasa el historial: la firma de
+/// [MoraCuotaCalculator.postCobroTrackedOffset].
+///
+/// La app usa siempre esa. Solo una herramienta la cambia, para comparar una
+/// regla vieja con la vigente sobre una copia de la base
+/// (`tool/simulacro_mora_adelantada_test.dart`, 6-nov-2026): así se ve a quién
+/// le cambia la mora por un arreglo, y no los desvíos viejos de cada ficha.
+typedef CuentaPostCobro = EstadoMoraPostCobro Function({
+  required double moraPendienteTrackedActual,
+  required double moraCobradaOffsetActual,
+  required double moraEsteCobro,
+  required int cuotasBaseLiquidadasEnCobro,
+  required int cuotasBasePagadasPostCobro,
+  required List<MoraCuotaDetalle> moraDesglosePreCobro,
+  required List<MoraCuotaDetalle> moraDesgloseNetoPreCobro,
+  required double moraDesgloseNetoTotal,
+  required double saldoDeudorPost,
+  required DateTime? fechaCobroAr,
+  required DateTime? exencionActual,
+  required bool reiniciaActual,
+  double? moraCobradaHistorialPreCobro,
+});
+
 /// Recalcula [mora_pendiente_tracked] y [mora_cobrada_offset] desde el
 /// historial de pagos (reglas post-fix v50). No borra pagos ni cuotas.
 class MoraTrackedRecovery {
@@ -127,9 +150,12 @@ class MoraTrackedRecovery {
   }
 
   /// Simula tracked/offset aplicando las reglas actuales sobre el historial.
+  ///
+  /// [cuenta]: ver [CuentaPostCobro]. La app no lo pasa nunca.
   static ({double tracked, double offset}) recomputarDesdeHistorial({
     required ContratoAlumno contratoBase,
     required List<Map<String, dynamic>> pagos,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
   }) {
     var tracked = 0.0;
     var offset = 0.0;
@@ -178,7 +204,7 @@ class MoraTrackedRecovery {
       final moraDesgloseNetoTotal =
           moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
 
-      final post = MoraCuotaCalculator.postCobroTrackedOffset(
+      final post = cuenta(
         moraPendienteTrackedActual: tracked,
         moraCobradaOffsetActual: offset,
         moraEsteCobro: moraEsteCobro,
@@ -227,6 +253,7 @@ class MoraTrackedRecovery {
   static ({double tracked, double offset}) objetivoDesdeHistorial({
     required ContratoAlumno contrato,
     required List<Map<String, dynamic>> pagos,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
   }) {
     return recomputarDesdeHistorial(
       contratoBase: contrato.copyWith(
@@ -234,6 +261,7 @@ class MoraTrackedRecovery {
         moraCobradaOffset: 0,
       ),
       pagos: pagos,
+      cuenta: cuenta,
     );
   }
 
@@ -386,10 +414,12 @@ class MoraTrackedRecovery {
   static ({DateTime hasta, bool reinicia})? calcularExencionDesdeHistorial({
     required ContratoAlumno contratoBase,
     required List<Map<String, dynamic>> pagos,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
   }) =>
       _calcularExencionDesdeHistorial(
         contratoBase: contratoBase,
         pagos: pagos,
+        cuenta: cuenta,
       );
 
   /// La exención que dejó un cobro **que después se anuló**, y la que
@@ -411,6 +441,7 @@ class MoraTrackedRecovery {
   static ({DateTime? hasta, bool reinicia})? exencionDeCobroAnulado({
     required ContratoAlumno contrato,
     required List<Map<String, dynamic>> pagos,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
   }) {
     final local = contrato.moraExentaHasta;
     if (local == null) return null;
@@ -429,12 +460,14 @@ class MoraTrackedRecovery {
       pagos: [
         for (final p in pagos) {...p, 'anulado': 0},
       ],
+      cuenta: cuenta,
     );
     if (!esLaLocal(conAnuladas)) return null;
 
     final sinAnuladas = _calcularExencionDesdeHistorial(
       contratoBase: contrato,
       pagos: pagos,
+      cuenta: cuenta,
     );
     if (esLaLocal(sinAnuladas)) return null;
     return (hasta: sinAnuladas?.hasta, reinicia: sinAnuladas?.reinicia ?? true);
@@ -459,8 +492,10 @@ class MoraTrackedRecovery {
   static ({DateTime? hasta, bool reinicia, bool escribir}) resolverExencion({
     required ContratoAlumno contrato,
     required List<Map<String, dynamic>> pagos,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
   }) {
-    final deAnulado = exencionDeCobroAnulado(contrato: contrato, pagos: pagos);
+    final deAnulado =
+        exencionDeCobroAnulado(contrato: contrato, pagos: pagos, cuenta: cuenta);
     if (deAnulado != null) {
       return (
         hasta: deAnulado.hasta,
@@ -473,6 +508,7 @@ class MoraTrackedRecovery {
       contratoBase: contrato,
       pagos: pagos,
       otorgadas: otorgadas,
+      cuenta: cuenta,
     );
     final local = contrato.moraExentaHasta;
     final localDeCobro = local != null &&
@@ -519,6 +555,7 @@ class MoraTrackedRecovery {
 
     /// Si viene, se llena con cada exención que dio un cobro, en orden.
     List<({DateTime hasta, bool reinicia})>? otorgadas,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
   }) {
     var tracked = 0.0;
     var offset = 0.0;
@@ -567,7 +604,7 @@ class MoraTrackedRecovery {
       final moraDesgloseNetoTotal =
           moraDesgloseNeto.fold<double>(0, (s, d) => s + d.interesBruto);
 
-      final post = MoraCuotaCalculator.postCobroTrackedOffset(
+      final post = cuenta(
         moraPendienteTrackedActual: tracked,
         moraCobradaOffsetActual: offset,
         moraEsteCobro: moraEsteCobro,
