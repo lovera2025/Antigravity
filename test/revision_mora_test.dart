@@ -810,9 +810,34 @@ void main() {
         'lib/features/eventos/services/mora_tracked_origen.dart',
       ]) {
         final s = leer(ruta);
-        final llamadas = 'MoraCuotaCalculator.postCobroTrackedOffset('.allMatches(s).length;
+        // En el repaso del historial la cuenta llega por la costura `cuenta`
+        // (6.3.2: para comparar una regla vieja con la vigente en una
+        // herramienta). Cada llamada, directa o por la costura, lleva el
+        // historial.
+        final llamadas = 'MoraCuotaCalculator.postCobroTrackedOffset('.allMatches(s).length +
+            RegExp(r'= cuenta\(').allMatches(s).length;
         final conHistorial = 'moraCobradaHistorialPreCobro:'.allMatches(s).length;
+        expect(llamadas, greaterThan(0), reason: '$ruta: no encontré la cuenta del cobro');
         expect(conHistorial, llamadas, reason: '$ruta: cada cuenta del cobro necesita el historial');
+      }
+    });
+
+    test('la app repasa el historial siempre con la cuenta de la calculadora', () {
+      final s = leer('lib/features/eventos/services/mora_tracked_recovery.dart');
+      final costuras = 'CuentaPostCobro cuenta'.allMatches(s).length;
+      final conLaDeSiempre = 'CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,'
+          .allMatches(s)
+          .length;
+      expect(costuras, greaterThan(0));
+      expect(conLaDeSiempre, costuras,
+          reason: 'cada costura tiene que traer por defecto la cuenta de la calculadora');
+      // reconciliarTodos y repararExencionDesdeHistorial no la pasan: usan la de siempre.
+      for (final f in ['reconciliarTodos(', 'repararExencionDesdeHistorial(']) {
+        final i = s.indexOf('static Future<int> $f');
+        expect(i, greaterThanOrEqualTo(0), reason: 'no encontré $f');
+        final fin = RegExp(r'\r?\n  \}\r?\n').firstMatch(s.substring(i))!.start;
+        final cuerpo = s.substring(i, i + fin);
+        expect(cuerpo, isNot(contains('cuenta:')), reason: '$f no elige la cuenta');
       }
     });
   });

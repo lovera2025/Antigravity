@@ -386,11 +386,27 @@ class MoraCuotaCalculator {
   /// - Cuota liquidada **sin** mora → tracked = remanente previo **+** mora neta
   ///   de las cuotas liquidadas en **este** cobro. La mora que el operador no
   ///   cobró no desaparece: queda acumulada en ficha.
-  /// - Cuota + mora parcial → tracked = resto neto; offset += mora cobrada.
+  /// - Cuota + mora → tracked = resto neto de lo que se cierra. El offset ("ya
+  ///   usado") suma solo la mora que se gastó en lo que se cierra:
+  ///   (a) el crédito FIFO que ya cubría las cuotas que se liquidan,
+  ///   (b) lo cobrado que va al arrastre y a esas cuotas,
+  ///   (c) y lo que sobra solo si cubre todas las cuotas que siguen abiertas.
+  ///   Si no las cubre, ese sobrante es un adelanto y queda como crédito FIFO
+  ///   de la cuota abierta más vieja.
   /// - Solo mora → FIFO sobre desglose; resto reduce tracked.
   ///   Si liquida el desglose completo, offset += esa parte (exención permanente /
   ///   evita que FIFO futuro absorba cuotas nuevas). Si liquida tracked,
   ///   offset += mora aplicada a tracked.
+  ///
+  /// La regla que cumple después de cualquier cobro: `historial − offset` (el
+  /// crédito FIFO) es exactamente la mora pagada por adelantado de cuotas que
+  /// **siguen abiertas**. El caso: LOPEZ, MORENA AILEN pagó el 6/11/2026
+  /// $130.900 de mora de las cuotas 2, 3 y 4 completando solo la 2 y la 3
+  /// ($98.000). El offset se quedaba con los $130.900, los $32.900 de la 4
+  /// dejaban de ser crédito y la app se los volvía a pedir: $268.100 en vez de
+  /// $235.200. Y al revés: $15.000 de mora pagados sobre una cuota que después
+  /// se completaba sin mora seguían como crédito y se descontaban de la
+  /// siguiente (término (a)).
   ///
   /// Devuelve los **cuatro** campos que definen la mora post-cobro, no dos.
   /// Cuando el cobro salda toda la mora pendiente, quien la borra del calendario
@@ -438,15 +454,28 @@ class MoraCuotaCalculator {
     var offset = moraCobradaOffsetActual;
 
     if (cuotasBaseLiquidadasEnCobro > 0) {
+      // El término (a) de abajo lee el bruto: sin él, el crédito que se gastó
+      // en las cuotas que se cierran no pasaría a "ya usado", y en silencio.
+      assert(
+        moraDesglosePreCobro.length >= moraDesgloseNetoPreCobro.length,
+        'el desglose bruto no puede ser más corto que el neto',
+      );
       final cuotasPreCobro =
           cuotasBasePagadasPostCobro - cuotasBaseLiquidadasEnCobro;
+      bool seCierra(MoraCuotaDetalle d) =>
+          d.numeroCuota > cuotasPreCobro &&
+          d.numeroCuota <= cuotasBasePagadasPostCobro;
       final moraLiquidadasNeto = moraDesgloseNetoPreCobro
-          .where(
-            (d) =>
-                d.numeroCuota > cuotasPreCobro &&
-                d.numeroCuota <= cuotasBasePagadasPostCobro,
-          )
+          .where(seCierra)
           .fold<double>(0, (s, d) => s + d.interesBruto);
+      final moraLiquidadasBruto = moraDesglosePreCobro
+          .where(seCierra)
+          .fold<double>(0, (s, d) => s + d.interesBruto);
+      // (a) El crédito FIFO que ya se gastó en las cuotas que se cierran: esa
+      // mora se pagó antes, por adelantado, y ahora su cuota sale del
+      // calendario. Pasa a "ya usado"; si no, se descontaría de la siguiente.
+      final creditoUsadoEnCerradas = (moraLiquidadasBruto - moraLiquidadasNeto)
+          .clamp(0.0, double.infinity);
       // [remanente] y [moraLiquidadasNeto] son disjuntos por construcción:
       // calcularDesglose arranca en n = cuotasPagadas + 1 (solo cuotas impagas)
       // y el tracked guarda mora de cuotas ya liquidadas en cobros previos, así
@@ -459,11 +488,27 @@ class MoraCuotaCalculator {
       // (remanente >= moraLiquidadasNeto) no discrimina, porque un carry-over
       // legítimo de una cuota vieja puede superar la mora de la que se liquida.
       final remanenteCarry = cuotasPreCobro > 0 ? remanente : 0.0;
-      tracked = (remanenteCarry + moraLiquidadasNeto - moraEsteCobro)
-          .clamp(0.0, double.infinity);
-      if (moraEsteCobro > 0.01) {
-        offset = moraCobradaOffsetActual + moraEsteCobro;
-      }
+      final aCerrar = remanenteCarry + moraLiquidadasNeto;
+      tracked = (aCerrar - moraEsteCobro).clamp(0.0, double.infinity);
+
+      // (b) Lo cobrado va primero a lo que se cierra (el arrastre y las cuotas
+      // que se liquidan)…
+      final aplicadoACerradas = math.min(moraEsteCobro, aCerrar);
+      // (c) …y lo que sobra es un adelanto de cuotas que siguen abiertas. Si
+      // las cubre a todas, entra al offset (como la rama "solo mora" cuando
+      // liquida el desglose completo); si no, queda afuera y el FIFO lo
+      // descuenta de la cuota abierta más vieja.
+      final excedente = moraEsteCobro - aplicadoACerradas;
+      final netoAbiertas = moraDesgloseNetoPreCobro
+          .where((d) => d.numeroCuota > cuotasBasePagadasPostCobro)
+          .fold<double>(0, (s, d) => s + d.interesBruto);
+      final excedenteCubreTodo =
+          excedente > 0.01 && excedente >= netoAbiertas - 0.01;
+
+      offset = moraCobradaOffsetActual +
+          creditoUsadoEnCerradas +
+          aplicadoACerradas +
+          (excedenteCubreTodo ? excedente : 0.0);
     } else if (moraEsteCobro > 0.01) {
       // De la más vieja a la más nueva, siempre. El arrastre viene de cuotas ya
       // liquidadas y `calcularDesglose` arranca en cuotasPagadas + 1, así que el
