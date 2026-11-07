@@ -12,6 +12,7 @@ import 'borrados_de_otra_pc.dart';
 import 'connectivity_service.dart';
 import 'contrato_al_bajar.dart';
 import 'instalacion_id.dart';
+import 'reloj_del_motor.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
 import '../../features/eventos/repositories/contratos_repository.dart';
 import '../../features/eventos/repositories/mora_congelada_repository.dart';
@@ -150,6 +151,61 @@ dynamic valorParaSqlite(dynamic value) {
 
 /// Con cuántos intentos fallidos una entrada de la cola se considera trabada.
 const int intentosParaTrabado = 10;
+
+/// Cuánto esperar antes de volver a intentar algo que no salió contra la nube:
+/// una subida, o ver si la nube volvió (6.3.3).
+///
+/// [intento] cuenta desde 0. Crece hasta 5 minutos y se queda ahí **para
+/// siempre**: lo que no subió no se abandona nunca, pero una nube caída tampoco
+/// se martilla. Lo que reinicia la cuenta es que algo salga bien o que vuelva
+/// la red.
+Duration esperaCreciente(int intento) {
+  const pasos = [
+    Duration(seconds: 30),
+    Duration(minutes: 1),
+    Duration(minutes: 2),
+    Duration(minutes: 5),
+  ];
+  if (intento <= 0) return pasos.first;
+  return intento < pasos.length ? pasos[intento] : pasos.last;
+}
+
+/// Si un error quiere decir que **la nube no está**, y no que rechazó lo que
+/// se le mandó (6.3.3).
+///
+/// Es lo que separa "no hay a quién preguntarle" —esperar y volver a probar—
+/// de "la fila tiene un problema" —que se queda en la cola, contada—. Por el
+/// texto y no por el tipo: el motor también se arma en la web, donde los
+/// errores de red no son los de `dart:io`.
+///
+/// Cuenta como caída: sin red o sin respuesta (`SocketException`,
+/// `ClientException`, una espera vencida), un 5xx de la puerta de entrada (el
+/// 504/522/524 del 6-nov), y los errores de Postgres que dicen que la base no
+/// atiende (no se pudo conectar, se está apagando, una consulta que se cortó
+/// por tiempo con la base trabada).
+bool esCaidaDeLaNube(Object e) {
+  if (e is TimeoutException) return true;
+  if (e is PostgrestException) {
+    final codigo = e.code ?? '';
+    if (RegExp(r'^5\d\d$').hasMatch(codigo)) return true;
+    if (codigo.startsWith('PGRST00')) return true;
+    return const {'57014', '57P01', '57P02', '57P03', '08000', '08001', '08006'}
+        .contains(codigo);
+  }
+  final texto = '${e.runtimeType} $e';
+  const seniales = [
+    'SocketException',
+    'ClientException',
+    'HandshakeException',
+    'Failed host lookup',
+    'Connection refused',
+    'Connection reset',
+    'Connection closed',
+    'Network is unreachable',
+    'timed out',
+  ];
+  return seniales.any(texto.contains);
+}
 
 /// Qué entradas de la cola se intentan en esta pasada: las frescas siempre, y
 /// las trabadas solo cuando les toca el reintento, **todas juntas**.
@@ -328,6 +384,9 @@ class SyncEngine {
   final ConnectivityService _connectivity;
   final SupabaseClient _supabase;
 
+  /// Con qué reloj programa lo que hace solo (ver [RelojDelMotor]).
+  final RelojDelMotor _reloj;
+
   /// Mapa que define qué columna usar para el filtro incremental en cada tabla.
   /// Todas las tablas usan updated_at para detectar creaciones Y ediciones.
   static const Map<String, String> _incrementalColumns = {
@@ -453,7 +512,8 @@ class SyncEngine {
   void _anotarCambioBajado(String tabla) {
     _tablasConCambios.add(tabla);
     _timerAvisoCambios?.cancel();
-    _timerAvisoCambios = Timer(_esperaAvisoCambios, _avisarCambiosBajados);
+    _timerAvisoCambios =
+        _reloj.programar(_esperaAvisoCambios, _avisarCambiosBajados);
   }
 
   void _avisarCambiosBajados() {
@@ -465,11 +525,43 @@ class SyncEngine {
 
   StreamSubscription<AppConnectivity>? _connectivitySub;
 
+  /// [conCanalDelPulso] en `false` no abre el socket del pulso ni manda el
+  /// aviso: lo usan las pruebas, que no tienen a quién conectarse (lo que se
+  /// iba a mandar queda en [ultimoPulsoArmado]).
   SyncEngine({
     required ConnectivityService connectivity,
     SupabaseClient? supabase,
+    RelojDelMotor reloj = const RelojDelMotor.real(),
+    bool conCanalDelPulso = true,
   }) : _connectivity = connectivity,
-       _supabase = supabase ?? Supabase.instance.client;
+       _supabase = supabase ?? Supabase.instance.client,
+       _reloj = reloj,
+       _conCanalDelPulso = conCanalDelPulso;
+
+  final bool _conCanalDelPulso;
+
+  /// Para las pruebas: lo último que esta PC armó para avisarle a la otra.
+  @visibleForTesting
+  Map<String, dynamic>? ultimoPulsoArmado;
+
+  /// Lo que el motor arrancó solo (un reloj, un aviso) y todavía no terminó.
+  final Set<Future<void>> _enCurso = {};
+
+  /// Arranca [trabajo] sin esperarlo, pero anotado: así una prueba puede
+  /// esperar a que el motor termine lo que empezó ([aquietar]).
+  void _seguir(Future<void> trabajo) {
+    _enCurso.add(trabajo);
+    unawaited(trabajo.whenComplete(() => _enCurso.remove(trabajo)));
+  }
+
+  /// Para las pruebas: espera a que termine todo lo que el motor arrancó solo,
+  /// también lo que eso arranque mientras tanto.
+  @visibleForTesting
+  Future<void> aquietar() async {
+    while (_enCurso.isNotEmpty) {
+      await Future.wait(_enCurso.toList());
+    }
+  }
 
   /// Inicia el motor: el pulso entre PCs y la revisión de borrados. La subida
   /// (a los 2 s de guardar) y el ciclo de bajada de 10 s viven en
@@ -515,6 +607,7 @@ class SyncEngine {
   /// y no tiene sentido pagarlos seguido.
   static const _cadaCuantoSeReconcilia = Duration(minutes: 10);
   Timer? _timerReconciliacion;
+  Timer? _primeraReconciliacion;
 
   Timer? _reintentoReconciliacion;
 
@@ -532,9 +625,9 @@ class SyncEngine {
       if (_connectivity.currentStatus == AppConnectivity.offline) return;
       if (_isBusy) {
         _reintentoReconciliacion?.cancel();
-        _reintentoReconciliacion = Timer(
+        _reintentoReconciliacion = _reloj.programar(
           const Duration(seconds: 30),
-          () => unawaited(correr()),
+          () => _seguir(correr()),
         );
         return;
       }
@@ -548,10 +641,13 @@ class SyncEngine {
     // La primera, apenas arranca: es justo el momento en que esta PC puede venir
     // de estar apagada mientras la otra borraba cosas. Con una espera corta para
     // no pelearse con el pull inicial.
-    Timer(const Duration(seconds: 20), () => unawaited(correr()));
-    _timerReconciliacion = Timer.periodic(
+    _primeraReconciliacion = _reloj.programar(
+      const Duration(seconds: 20),
+      () => _seguir(correr()),
+    );
+    _timerReconciliacion = _reloj.periodico(
       _cadaCuantoSeReconcilia,
-      (_) => unawaited(correr()),
+      () => _seguir(correr()),
     );
   }
 
@@ -574,13 +670,18 @@ class SyncEngine {
   /// sale solo y el ciclo de siempre lo reintenta.
   void _programarSubida() {
     _timerSubida?.cancel();
-    _timerSubida = Timer(_esperaAntesDeSubir, () async {
-      if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
-        return;
-      }
-      if (!await hayTrabajoDeSubida) return;
-      await flushPending();
-    });
+    _timerSubida = _reloj.programar(
+      _esperaAntesDeSubir,
+      () => _seguir(_subirSiHayQue()),
+    );
+  }
+
+  Future<void> _subirSiHayQue() async {
+    if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
+      return;
+    }
+    if (!await hayTrabajoDeSubida) return;
+    await flushPending();
   }
 
   bool get _isBusy =>
@@ -623,7 +724,7 @@ class SyncEngine {
         rounds++;
       }
 
-      _lastUploadTime = DateTime.now();
+      _lastUploadTime = _reloj.ahora();
       _updateStatus(SyncStatus.idle);
       debugPrint('✅ Subida completada ($_pendingCount pendientes restantes)');
 
@@ -664,7 +765,7 @@ class SyncEngine {
       await _pullFromCloud();
 
       FinanzasRepository.invalidateProyeccionCache();
-      _lastPullTime = DateTime.now();
+      _lastPullTime = _reloj.ahora();
       _updateStatus(SyncStatus.idle);
       debugPrint('✅ Bajada completada');
 
@@ -774,12 +875,17 @@ class SyncEngine {
     _tablasSubidas.clear();
     _borradosSubidos.clear();
 
+    final payload = <String, dynamic>{
+      'origen': origen,
+      'tablas': tablas,
+      'borrados': borrados,
+    };
+    ultimoPulsoArmado = payload;
+    if (!_conCanalDelPulso) return;
+
     try {
       final canal = _canalPulso ??= _supabase.channel(_nombreCanalPulso);
-      await canal.sendBroadcastMessage(
-        event: _eventoPulso,
-        payload: {'origen': origen, 'tablas': tablas, 'borrados': borrados},
-      );
+      await canal.sendBroadcastMessage(event: _eventoPulso, payload: payload);
       debugPrint('  📣 Pulso: ${tablas.join(", ")}');
     } catch (e) {
       // Que no llegue el aviso no rompe nada: el ciclo de siempre lo cubre.
@@ -791,7 +897,7 @@ class SyncEngine {
     // En web no: no hay base local que actualizar —esa rama va directo a
     // Supabase— y suscribir un canal por cada visitante del catálogo o del tótem
     // sería pagar sockets para no hacer nada con ellos.
-    if (kIsWeb) return;
+    if (kIsWeb || !_conCanalDelPulso) return;
 
     _canalPulso ??= _supabase.channel(_nombreCanalPulso);
     _canalPulso!
@@ -813,7 +919,10 @@ class SyncEngine {
     }
 
     _debouncePulso?.cancel();
-    _debouncePulso = Timer(_esperaTrasPulso, () => unawaited(_atenderElPulso()));
+    _debouncePulso = _reloj.programar(
+      _esperaTrasPulso,
+      () => _seguir(_atenderElPulso()),
+    );
   }
 
   /// Cuánto se espera para volver a intentar los borrados de un pulso que llegó
@@ -831,9 +940,9 @@ class SyncEngine {
       // esperar a que la PC se desocupe no cuesta nada.
       if (_borradosDelPulso.isNotEmpty) {
         _reintentoBorradosDelPulso?.cancel();
-        _reintentoBorradosDelPulso = Timer(
+        _reintentoBorradosDelPulso = _reloj.programar(
           _esperaBorradosDelPulso,
-          () => unawaited(_atenderElPulso()),
+          () => _seguir(_atenderElPulso()),
         );
       }
       return;
@@ -863,7 +972,7 @@ class SyncEngine {
         await Future.wait([
           for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
         ]);
-        _lastPullTime = DateTime.now();
+        _lastPullTime = _reloj.ahora();
         debugPrint('  ⚡ Pulso atendido: ${tablas.join(", ")}');
       }
     } catch (e) {
@@ -1126,7 +1235,7 @@ class SyncEngine {
   }) async {
     if (kIsWeb || contratoId.length != 36) return 0;
     if (_connectivity.currentStatus == AppConnectivity.offline) return 0;
-    final ahora = DateTime.now();
+    final ahora = _reloj.ahora();
     final antes = _revisionDelAlumno[contratoId];
     if (antes != null && ahora.difference(antes) < _cadaCuantoSeRevisaUnAlumno) {
       return 0;
@@ -1342,7 +1451,7 @@ class SyncEngine {
         for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
       ]);
       FinanzasRepository.invalidateProyeccionCache();
-      _lastPullTime = DateTime.now();
+      _lastPullTime = _reloj.ahora();
       // Una vez por sesión, con los cobros recién bajados: la revisión de la
       // mora. Antes corría solo si alguien apretaba "Bajar" en el menú, así
       // que lo que corregía podía no correr nunca. Ahora corre sola al abrir
@@ -1395,7 +1504,7 @@ class SyncEngine {
       if (!awake) {
         _remoteProbe = RemoteProbeInfo(
           remoteChangeCount: _remoteProbe.remoteChangeCount,
-          lastProbeAt: DateTime.now(),
+          lastProbeAt: _reloj.ahora(),
           probeSucceeded: false,
           probeError: 'Nube no disponible',
         );
@@ -1412,7 +1521,7 @@ class SyncEngine {
 
       _remoteProbe = RemoteProbeInfo(
         remoteChangeCount: total,
-        lastProbeAt: DateTime.now(),
+        lastProbeAt: _reloj.ahora(),
         probeSucceeded: true,
       );
       _remoteProbeController.add(_remoteProbe);
@@ -1423,7 +1532,7 @@ class SyncEngine {
       debugPrint('❌ Error probeRemoteChanges: $e');
       _remoteProbe = RemoteProbeInfo(
         remoteChangeCount: _remoteProbe.remoteChangeCount,
-        lastProbeAt: DateTime.now(),
+        lastProbeAt: _reloj.ahora(),
         probeSucceeded: false,
         probeError: e.toString(),
       );
@@ -1508,7 +1617,7 @@ class SyncEngine {
   bool get _tocaReintentarTrabados {
     final ultimo = _ultimoReintentoTrabados;
     return ultimo == null ||
-        DateTime.now().difference(ultimo) >= _esperaEntreReintentosTrabados;
+        _reloj.ahora().difference(ultimo) >= _esperaEntreReintentosTrabados;
   }
 
   /// `true` si hay algo que subir ahora: pendientes frescos, o trabados a los
@@ -1634,7 +1743,7 @@ class SyncEngine {
       tocaReintentarTrabados: _tocaReintentarTrabados,
     );
     if (aProcesar.any((e) => e.intentos >= intentosParaTrabado)) {
-      _ultimoReintentoTrabados = DateTime.now();
+      _ultimoReintentoTrabados = _reloj.ahora();
     }
 
     for (final entry in aProcesar) {
@@ -3395,6 +3504,7 @@ class SyncEngine {
     SyncQueue.onChanged = null;
     _timerSubida?.cancel();
     _timerReconciliacion?.cancel();
+    _primeraReconciliacion?.cancel();
     _reintentoReconciliacion?.cancel();
     _debouncePulso?.cancel();
     _reintentoBorradosDelPulso?.cancel();
