@@ -5,6 +5,10 @@ de Entradas: **se publica cuando esté, sin apuro de fecha** (lo dijo el usuario
 preguntándole. El plan aprobado es `docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`; lo del tótem (Parte 1, 5-nov) está contado en
 `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`. Acá, la Parte 2: las sillas de la noche, hechas el 6-nov.
 
+> **6-nov (noche): antes de la 6.4.0 salen la 6.3.2 y la 6.3.3**, cada una sola desde la rama `release/6.3.x`: la mora adelantada
+> (`docs/CONTEXTO_v6.3.2_2026-11-09.md`, meta lunes 9-nov) y el sync en reposo (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`). La barra
+> y Entradas esperan a que salgan. Esta versión lleva también esos dos arreglos (sus commits están en esta rama).
+
 ## Qué es
 
 Desde que empiezan los sorteos (10-nov), **una silla extra se pide solo la noche de la fiesta, ya sentados** (decisión del jefe, 5-nov).
@@ -110,4 +114,5 @@ La foto del papel impreso de verdad necesita la impresora (la TP-POS58): queda p
 - **Para la barra (sus etapas, no acá):** cargar "Silla extra" en el catálogo con su precio por fiesta (etapa 7: hoy no hay
   pantalla), la tilde "Encargada de barra", "Silla extra: N vendidas" en el cierre, y la comparación de la oficina sillas vendidas
   contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
-- Después, la etapa 5 de la barra: `docs/CONTEXTO_BARRA_2026-11-02.md`, "Para retomar en otro chat".
+- Después, la etapa 5 de la barra: `docs/CONTEXTO_BARRA_2026-11-02.md`, "Para retomar en otro chat". **Antes, la 6.3.2 y la
+  6.3.3** (ver arriba).
