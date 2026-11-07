@@ -73,14 +73,14 @@ void main() {
   });
 
   group('el reloj de prueba', () {
-    test('corre lo programado a su hora, y lo periódico una vez por vuelta', () {
+    test('corre lo programado a su hora, y lo periódico una vez por vuelta', () async {
       final reloj = RelojDePrueba();
       final corridas = <String>[];
       reloj.programar(const Duration(seconds: 2), () => corridas.add('a los 2 s'));
       final cada5 = reloj.periodico(const Duration(minutes: 5), () => corridas.add('red'));
-      reloj.avanzar(const Duration(seconds: 1));
+      await reloj.avanzar(const Duration(seconds: 1));
       expect(corridas, isEmpty);
-      reloj.avanzar(const Duration(minutes: 11));
+      await reloj.avanzar(const Duration(minutes: 11));
       expect(corridas, ['a los 2 s', 'red', 'red']);
       expect(reloj.pendientes, [const Duration(minutes: 3, seconds: 59)]);
       cada5.cancel();
@@ -122,6 +122,7 @@ void main() {
         reloj: reloj,
         conCanalDelPulso: false,
       );
+      reloj.esperarAlMotor = m.aquietar;
       m.start();
       addTearDown(m.dispose);
       return m;
@@ -135,15 +136,105 @@ void main() {
         registroId: 'aaaaaaaa-0000-4000-8000-000000000001',
         payload: _pago('aaaaaaaa-0000-4000-8000-000000000001'),
       );
-      reloj.avanzar(const Duration(seconds: 1));
+      await reloj.avanzar(const Duration(seconds: 1));
       await m.aquietar();
       expect(nube.pedidas, isEmpty, reason: 'todavía no pasaron los 2 s');
 
-      reloj.avanzar(const Duration(seconds: 1));
+      await reloj.avanzar(const Duration(seconds: 1));
       await m.aquietar();
       expect(nube.pedidas, contains('POST pagos_contrato_alumno'));
       expect(await SyncQueue.pendingCount, 0);
       expect(m.ultimoPulsoArmado?['tablas'], ['pagos_contrato_alumno']);
+    });
+
+    /// Lo que pide la red del cobro en una vuelta: cada tabla del cobro y la
+    /// cuenta de pagos, alumnos y egresos.
+    List<String> unaVueltaDelCobro() => [
+          for (final t in SyncEngine.tablasDelCobro) 'GET $t',
+          for (final t in SyncEngine.tablasQueSeCuentan) 'HEAD $t',
+        ]..sort();
+
+    List<String> ordenadas(List<String> l) => [...l]..sort();
+
+    test('1. en reposo no le pide nada a la nube; a los 5 minutos, una vuelta '
+        'de lo del cobro; a los 30, lo demás', () async {
+      final m = motor();
+      // El arranque: todo, la revisión de borrados y la de la mora.
+      expect(await m.pullOperationalUpdates(), isTrue);
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+
+      // Ni la revisión de borrados de los 20 s (la hizo el arranque) ni nada.
+      await reloj.avanzar(const Duration(minutes: 4, seconds: 30));
+      await m.aquietar();
+      expect(nube.desde(marca), isEmpty, reason: 'en reposo, silencio');
+
+      await reloj.avanzar(const Duration(minutes: 1));
+      await m.aquietar();
+      expect(ordenadas(nube.desde(marca)), unaVueltaDelCobro());
+
+      final marca2 = nube.pedidas.length;
+      // De los 5:30 a los 29:30: tres vueltas más del cobro (10, 15, 20, 25 min
+      // son cuatro) y las revisiones de borrados de los 10 y los 20 minutos.
+      await reloj.avanzar(const Duration(minutes: 24));
+      await m.aquietar();
+      final hasta29 = nube.desde(marca2);
+      // `mora_congelada` la baja solo la red (la revisión de borrados no la
+      // mira): una por vuelta, a los 10, 15, 20 y 25 minutos.
+      expect(hasta29.where((p) => p == 'GET mora_congelada').length, 4);
+      expect(
+        // `planos_evento` es de carga y la revisión de borrados no la mira.
+        hasta29.where((p) => p == 'GET planos_evento'),
+        isEmpty,
+        reason: 'lo de carga baja recién a los 30 minutos',
+      );
+
+      final marca3 = nube.pedidas.length;
+      await reloj.avanzar(const Duration(minutes: 1));
+      await m.aquietar();
+      final a30 = nube.desde(marca3);
+      for (final t in SyncEngine.tablasDeCarga) {
+        expect(a30, contains('GET $t'), reason: '$t baja a los 30 minutos');
+      }
+    });
+
+    test('vuelve la red: sube lo que esperaba y baja lo del cobro', () async {
+      final m = motor();
+      expect(await m.pullOperationalUpdates(), isTrue);
+      await m.aquietar();
+      red.poner(AppConnectivity.offline);
+      await SyncQueue.enqueue(
+        tabla: 'pagos_contrato_alumno',
+        operacion: SyncOperation.insert,
+        registroId: 'aaaaaaaa-0000-4000-8000-000000000003',
+        payload: _pago('aaaaaaaa-0000-4000-8000-000000000003'),
+      );
+      await reloj.avanzar(const Duration(seconds: 3));
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+      expect(await SyncQueue.pendingCount, 1);
+
+      red.poner(AppConnectivity.online);
+      await Future<void>.delayed(Duration.zero);
+      await m.aquietar();
+      final despues = nube.desde(marca);
+      expect(despues.first, 'POST pagos_contrato_alumno', reason: 'primero sube');
+      expect(despues, containsAll(unaVueltaDelCobro()));
+      expect(await SyncQueue.pendingCount, 0);
+    });
+
+    test('la vuelta de la red no sale si alguien acaba de bajar todo', () async {
+      final m = motor();
+      await reloj.avanzar(const Duration(minutes: 4, seconds: 30));
+      await m.aquietar();
+      // Antes de cobrar se baja todo (refreshBeforePayment).
+      expect(await m.pullOperationalUpdates(), isTrue);
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+      await reloj.avanzar(const Duration(seconds: 40));
+      await m.aquietar();
+      expect(nube.desde(marca), isEmpty,
+          reason: 'la de los 5 minutos se saltea: bajó todo hace 10 s');
     });
 
     test('sin internet no sale a la nube, y el cobro queda en la cola', () async {
@@ -155,7 +246,7 @@ void main() {
         registroId: 'aaaaaaaa-0000-4000-8000-000000000002',
         payload: _pago('aaaaaaaa-0000-4000-8000-000000000002'),
       );
-      reloj.avanzar(const Duration(seconds: 3));
+      await reloj.avanzar(const Duration(seconds: 3));
       await m.aquietar();
       expect(nube.pedidas, isEmpty);
       expect(await SyncQueue.pendingCount, 1);
