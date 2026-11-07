@@ -39,9 +39,15 @@ class RelojDePrueba implements RelojDelMotor {
     return p;
   }
 
-  /// Corre todo lo que vence hasta `ahora + d`, en orden. Lo periódico corre
-  /// una vez por cada vuelta que entre en el tramo.
-  void avanzar(Duration d) {
+  /// Lo que se espera después de cada disparo, antes del siguiente: el trabajo
+  /// que arrancó (`motor.aquietar`). Sin esto, todo lo de media hora correría
+  /// de un tirón sin que el motor terminara nada, y lo vería siempre ocupado.
+  Future<void> Function()? esperarAlMotor;
+
+  /// Corre todo lo que vence hasta `ahora + d`, en orden, esperando al motor
+  /// después de cada cosa. Lo periódico corre una vez por cada vuelta que
+  /// entre en el tramo.
+  Future<void> avanzar(Duration d) async {
     final fin = _ahora.add(d);
     while (true) {
       final vencidos = _programados
@@ -55,6 +61,9 @@ class RelojDePrueba implements RelojDelMotor {
       final p = vencidos.first;
       _ahora = p.vence;
       p.disparar();
+      await Future<void>.delayed(Duration.zero);
+      final esperar = esperarAlMotor;
+      if (esperar != null) await esperar();
     }
     _programados.removeWhere((p) => !p.isActive);
     _ahora = fin;

@@ -574,11 +574,17 @@ class SyncEngine {
       _programarSubida();
     };
 
+    _ultimaConectividad = _connectivity.currentStatus;
     _connectivitySub = _connectivity.stream.listen((status) {
       if (status == AppConnectivity.offline) {
         _updateStatus(SyncStatus.offline);
       } else if (_status == SyncStatus.offline) {
         _updateStatus(SyncStatus.idle);
+      }
+      final antes = _ultimaConectividad;
+      _ultimaConectividad = status;
+      if (status == AppConnectivity.online && antes != AppConnectivity.online) {
+        _seguir(_alVolverLaRed());
       }
     });
 
@@ -596,6 +602,93 @@ class SyncEngine {
     // enterarse igual.
     _escucharElPulso();
     _arrancarReconciliacion();
+    _arrancarRedDeSeguridad();
+  }
+
+  // ── La red de seguridad (6.3.3) ───────────────────────────────────────────
+  //
+  // Lo que baja aunque nadie avise. Hasta la 6.3.2 eso era un ciclo de 10 s
+  // que bajaba 16 tablas haya o no novedades: unas 120 consultas por minuto
+  // por PC, el 95 % de lo que la app le pedía a la nube. Ahora lo nuevo llega
+  // por el pulso, al arrancar, al volver la red y antes de cobrar; esto cubre
+  // lo que ninguno de esos puede garantizar —que el socket estuviera conectado
+  // cuando salió el aviso, que el mensaje haya llegado, que esta PC no
+  // estuviera apagada— con una vuelta cada 5 minutos para lo del cobro y cada
+  // 30 para lo demás. Vive en el motor y no en una pantalla: una pantalla
+  // montada dos veces no puede duplicarla.
+
+  static const cadaCuantoLaRedDelCobro = Duration(minutes: 5);
+  static const cadaCuantoLaRedDeCarga = Duration(minutes: 30);
+
+  /// Si alguien bajó todo hace menos que esto (antes de cobrar, al mirar la
+  /// pantalla, un pulso grande), la vuelta de la red se saltea.
+  static const _bajadaReciente = Duration(minutes: 1);
+
+  /// Si la vuelta encuentra al motor ocupado, prueba de nuevo a los 30 s.
+  static const _esperaSiEstaOcupado = Duration(seconds: 30);
+
+  Timer? _redDelCobro;
+  Timer? _redDeCarga;
+  Timer? _reintentoRedDelCobro;
+  Timer? _reintentoRedDeCarga;
+
+  /// Cuándo se bajaron enteras las tablas del cobro y las de carga, con el
+  /// reloj de esta PC. Solo deciden si hace falta salir a la nube: nunca
+  /// entran en un marcador (ver `marcaDeLoBajado`).
+  DateTime? _ultimaBajadaDelCobro;
+  DateTime? _ultimaBajadaDeCarga;
+
+  AppConnectivity? _ultimaConectividad;
+
+  void _arrancarRedDeSeguridad() {
+    if (kIsWeb) return;
+    _redDelCobro = _reloj.periodico(
+      cadaCuantoLaRedDelCobro,
+      () => _seguir(_vueltaDeLaRed(deCarga: false)),
+    );
+    _redDeCarga = _reloj.periodico(
+      cadaCuantoLaRedDeCarga,
+      () => _seguir(_vueltaDeLaRed(deCarga: true)),
+    );
+  }
+
+  Future<void> _vueltaDeLaRed({required bool deCarga}) async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return;
+    final ultima = deCarga ? _ultimaBajadaDeCarga : _ultimaBajadaDelCobro;
+    if (ultima != null &&
+        _reloj.ahora().difference(ultima) < _bajadaReciente) {
+      return;
+    }
+    if (_isBusy) {
+      // Una sola espera viva por red: se cancela antes de volver a armarla.
+      final reintento = _reloj.programar(
+        _esperaSiEstaOcupado,
+        () => _seguir(_vueltaDeLaRed(deCarga: deCarga)),
+      );
+      if (deCarga) {
+        _reintentoRedDeCarga?.cancel();
+        _reintentoRedDeCarga = reintento;
+      } else {
+        _reintentoRedDelCobro?.cancel();
+        _reintentoRedDelCobro = reintento;
+      }
+      return;
+    }
+    await _bajar(
+      tablas: deCarga ? _tablasDeCarga : _tablasDelCobro,
+      // La cuenta de pagos, alumnos y egresos va con la red del cobro: si en la
+      // nube hay menos que acá, algo se borró en otra PC y el aviso no llegó.
+      contarBorrados: !deCarga,
+    );
+  }
+
+  /// Volvió la red (o la nube): primero sube lo que esperaba y después baja lo
+  /// del cobro. Es el caso del campo: se cobró todo el día sin internet y al
+  /// llegar a la oficina sube solo.
+  Future<void> _alVolverLaRed() async {
+    debugPrint('🌐 Volvió la red: se sube lo que esperaba y se baja lo del cobro');
+    await _subirSiHayQue();
+    await _bajar(tablas: _tablasDelCobro, contarBorrados: true);
   }
 
   /// Cada cuánto se revisa si en la nube desapareció algo.
@@ -608,6 +701,11 @@ class SyncEngine {
   static const _cadaCuantoSeReconcilia = Duration(minutes: 10);
   Timer? _timerReconciliacion;
   Timer? _primeraReconciliacion;
+
+  /// Cuándo empezó la última revisión de borrados, y cuánto tiene que pasar
+  /// para que la del reloj la vuelva a hacer.
+  DateTime? _ultimaRevisionDeBorrados;
+  static const _revisionReciente = Duration(minutes: 5);
 
   Timer? _reintentoReconciliacion;
 
@@ -623,6 +721,13 @@ class SyncEngine {
     // Reintentar a los 30 s cuesta nada y le da al turno una ventana libre.
     Future<void> correr() async {
       if (_connectivity.currentStatus == AppConnectivity.offline) return;
+      // La del arranque la hace la primera bajada (antes de la mora): la de los
+      // 20 s no la repite. Son unas 40 consultas que no cambian nada.
+      final ultima = _ultimaRevisionDeBorrados;
+      if (ultima != null &&
+          _reloj.ahora().difference(ultima) < _revisionReciente) {
+        return;
+      }
       if (_isBusy) {
         _reintentoReconciliacion?.cancel();
         _reintentoReconciliacion = _reloj.programar(
@@ -1418,9 +1523,35 @@ class SyncEngine {
   /// local: el jefe conserva sus pendientes manuales.
   ///
   /// Con [incluirTablasDeCarga] en false baja solo las de [_tablasDelCobro].
-  /// El llamador lleva la cuenta de los ciclos; ver `OperationalSyncCoordinator`.
+  /// Lo usan el arranque, antes de cobrar y de abrir caja
+  /// (`CajaAutoSyncService`), y el coordinador.
+  ///
+  /// `eventos` y `clientes` viven en las tablas de carga, pero son las que
+  /// sostienen el desplegable de Cobros masivos (`eventos LEFT JOIN
+  /// clientes`). Hasta septiembre de 2026 `eventos` no bajaba sola nunca: sus
+  /// contratos y cobros sí, pero colgados de un evento_id que localmente no
+  /// existía. Por eso las de carga no se saltean: tienen su propia red.
   Future<bool> pullOperationalUpdates({
     bool incluirTablasDeCarga = true,
+  }) =>
+      _bajar(
+        tablas: [
+          ..._tablasDelCobro,
+          if (incluirTablasDeCarga) ..._tablasDeCarga,
+        ],
+      );
+
+  /// Baja [tablas] y, una vez por sesión, revisa los borrados y la mora.
+  ///
+  /// Una sola bajada a la vez: si el motor está ocupado, devuelve `false` sin
+  /// hacer nada y quien la pidió decide si vuelve a probar. Devuelve `true` si
+  /// corrió, aunque alguna tabla no haya bajado (eso queda en el estado).
+  ///
+  /// [contarBorrados]: después de bajar, cuenta pagos, alumnos y egresos en la
+  /// nube (la red del cobro, ver `_contarParaVerBorrados`).
+  Future<bool> _bajar({
+    required List<String> tablas,
+    bool contarBorrados = false,
   }) async {
     if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
       return false;
@@ -1437,25 +1568,24 @@ class SyncEngine {
       final db = await LocalDatabase.instance;
       _tablasConFalloPull.clear();
 
-      // `eventos` y `clientes` viven en las tablas de carga, pero son las que
-      // sostienen el desplegable de Cobros masivos (`eventos LEFT JOIN
-      // clientes`). Hasta septiembre de 2026 `eventos` no bajaba sola nunca: sus
-      // contratos y cobros sí, pero colgados de un evento_id que localmente no
-      // existía. Por eso el ciclo lento no puede saltearse — es red de
-      // seguridad, no un extra.
-      final tablas = [
-        ..._tablasDelCobro,
-        if (incluirTablasDeCarga) ..._tablasDeCarga,
-      ];
       await Future.wait([
         for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
       ]);
       FinanzasRepository.invalidateProyeccionCache();
-      _lastPullTime = _reloj.ahora();
+      final ahora = _reloj.ahora();
+      _lastPullTime = ahora;
+      if (tablas.toSet().containsAll(_tablasDelCobro)) {
+        _ultimaBajadaDelCobro = ahora;
+      }
+      if (tablas.toSet().containsAll(_tablasDeCarga)) {
+        _ultimaBajadaDeCarga = ahora;
+      }
       // Una vez por sesión, con los cobros recién bajados: la revisión de la
       // mora. Antes corría solo si alguien apretaba "Bajar" en el menú, así
       // que lo que corregía podía no correr nunca. Ahora corre sola al abrir
       // el programa (también la primera vez, al instalar una versión nueva).
+      // Si la primera bajada no pudo (sin internet al abrir), la hace la
+      // primera que salga bien, venga de donde venga.
       if (!_moraRevisadaEnEstaSesion && _tablasConFalloPull.isEmpty) {
         _moraRevisadaEnEstaSesion = true;
         // Antes, lo que se borró en otra PC mientras esta estaba cerrada: la
@@ -1463,9 +1593,9 @@ class SyncEngine {
         // mal y subiría.
         await _reconcileDeletes();
         await revisarMora();
-      } else {
-        // En cada ciclo: si en la nube hay menos que acá, algo se borró en otra
-        // PC y el aviso no llegó.
+      } else if (contarBorrados) {
+        // Si en la nube hay menos que acá, algo se borró en otra PC y el aviso
+        // no llegó.
         await _contarParaVerBorrados(db);
       }
       // Lo que sí bajó tiene que refrescar igual la pantalla, así que esto
@@ -3284,6 +3414,16 @@ class SyncEngine {
   @visibleForTesting
   static Set<String> get tablasQueSeBajan => _incrementalColumns.keys.toSet();
 
+  /// Para los tests: las del cobro (la red de 5 min) y las de carga (la de 30).
+  @visibleForTesting
+  static List<String> get tablasDelCobro => _tablasDelCobro;
+  @visibleForTesting
+  static List<String> get tablasDeCarga => _tablasDeCarga;
+
+  /// Para los tests: las que se cuentan para ver si algo se borró.
+  @visibleForTesting
+  static List<String> get tablasQueSeCuentan => _tablasQueSeCuentan;
+
   /// Para los tests: la revisión de cada 10 minutos.
   @visibleForTesting
   Future<void> revisarLoBorradoEnOtraPc() => _reconcileDeletes();
@@ -3363,6 +3503,7 @@ class SyncEngine {
     CaminoDelBorrado camino = CaminoDelBorrado.revision,
   }) async {
     final db = await LocalDatabase.instance;
+    _ultimaRevisionDeBorrados = _reloj.ahora();
 
     debugPrint('🔄 Reconciliación de borrados remotos...');
 
@@ -3506,6 +3647,10 @@ class SyncEngine {
     _timerReconciliacion?.cancel();
     _primeraReconciliacion?.cancel();
     _reintentoReconciliacion?.cancel();
+    _redDelCobro?.cancel();
+    _redDeCarga?.cancel();
+    _reintentoRedDelCobro?.cancel();
+    _reintentoRedDeCarga?.cancel();
     _debouncePulso?.cancel();
     _reintentoBorradosDelPulso?.cancel();
     _timerAvisoCambios?.cancel();
