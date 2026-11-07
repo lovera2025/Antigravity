@@ -689,6 +689,8 @@ class SyncEngine {
     debugPrint('🌐 Volvió la red: se sube lo que esperaba y se baja lo del cobro');
     _intentoSubida = 0;
     await _subirSiHayQue();
+    // Lo que avisó la otra PC mientras esta no tenía red (o justo antes).
+    await _atenderElPulso();
     await _bajar(
       // Si la app abrió sin internet, todavía no bajó nunca lo de carga.
       tablas: [
@@ -1103,8 +1105,58 @@ class SyncEngine {
     _canalPulso ??= _supabase.channel(_nombreCanalPulso);
     _canalPulso!
       ..onBroadcast(event: _eventoPulso, callback: _alRecibirPulso)
-      ..subscribe();
+      ..subscribe((estado, _) => _estadoDelCanal(estado));
   }
+
+  // ── Ponerse al día si el canal se cortó (6.3.3) ──────────────────────────
+  //
+  // Los avisos que salieron mientras el canal estaba caído no llegan nunca:
+  // el canal no guarda nada. `supabase_flutter` vuelve a conectar solo; acá
+  // se anota cuándo se cortó y, si estuvo caído más de 20 s, al volver se baja
+  // lo del cobro. Si estuvo menos, se perdieron segundos, no datos: lo cubre
+  // la red de seguridad. Se mide con el reloj de esta PC y no entra en ningún
+  // marcador.
+
+  static const _huecoQueMereceBajar = Duration(seconds: 20);
+  DateTime? _canalCaidoDesde;
+  Timer? _reintentoTrasElCanal;
+  var _cerrado = false;
+
+  void _estadoDelCanal(RealtimeSubscribeStatus estado) {
+    if (_cerrado) return;
+    switch (estado) {
+      case RealtimeSubscribeStatus.subscribed:
+        final desde = _canalCaidoDesde;
+        _canalCaidoDesde = null;
+        if (desde != null &&
+            _reloj.ahora().difference(desde) > _huecoQueMereceBajar) {
+          debugPrint('  🔌 El canal del aviso volvió: se baja lo del cobro');
+          _seguir(_bajarTrasElCanal());
+        }
+      case RealtimeSubscribeStatus.closed:
+      case RealtimeSubscribeStatus.channelError:
+      case RealtimeSubscribeStatus.timedOut:
+        _canalCaidoDesde ??= _reloj.ahora();
+    }
+  }
+
+  Future<void> _bajarTrasElCanal() async {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return;
+    if (_isBusy) {
+      _reintentoTrasElCanal?.cancel();
+      _reintentoTrasElCanal = _reloj.programar(
+        _esperaReintentoDelPulso,
+        () => _seguir(_bajarTrasElCanal()),
+      );
+      return;
+    }
+    await _bajar(tablas: _tablasDelCobro, contarBorrados: true);
+  }
+
+  /// Para las pruebas: el canal del aviso cambió de estado.
+  @visibleForTesting
+  void recibirEstadoDelCanal(RealtimeSubscribeStatus estado) =>
+      _estadoDelCanal(estado);
 
   void _alRecibirPulso(Map<String, dynamic> mensaje) {
     final trabajo = trabajoDelPulso(
@@ -1126,26 +1178,28 @@ class SyncEngine {
     );
   }
 
-  /// Cuánto se espera para volver a intentar los borrados de un pulso que llegó
-  /// con la PC ocupada.
-  static const _esperaBorradosDelPulso = Duration(seconds: 3);
-  Timer? _reintentoBorradosDelPulso;
+  /// Cuánto se espera para volver a intentar un aviso que llegó con la PC
+  /// ocupada.
+  static const _esperaReintentoDelPulso = Duration(seconds: 3);
+  Timer? _reintentoDelPulso;
 
   Future<void> _atenderElPulso() async {
-    if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
-      // Las tablas se sueltan a propósito: el ciclo de 10 s las baja igual, y
-      // reencolarlas es cómo se arma una tormenta de reintentos.
-      _tablasDelPulso.clear();
-      // Los borrados no: no tienen otro camino al instante (ver arriba). Son una
-      // lista con nombre y apellido y aplicarlos dos veces no hace nada, así que
-      // esperar a que la PC se desocupe no cuesta nada.
-      if (_borradosDelPulso.isNotEmpty) {
-        _reintentoBorradosDelPulso?.cancel();
-        _reintentoBorradosDelPulso = _reloj.programar(
-          _esperaBorradosDelPulso,
-          () => _seguir(_atenderElPulso()),
-        );
-      }
+    if (_tablasDelPulso.isEmpty && _borradosDelPulso.isEmpty) return;
+    if (_connectivity.currentStatus == AppConnectivity.offline) {
+      // Queda guardado: lo atiende la vuelta de la red (`_alVolverLaRed`).
+      return;
+    }
+    if (_isBusy) {
+      // Hasta la 6.3.2 las tablas se tiraban acá ("el ciclo de 10 s las baja
+      // igual"). Ese ciclo ya no existe (6.3.3): se guardan, como los borrados,
+      // y se vuelve a probar a los 3 s. Una sola espera viva: se cancela antes
+      // de volver a armarla, así no se arma una tormenta de reintentos. Un
+      // aviso que llega mientras tanto se suma a lo guardado.
+      _reintentoDelPulso?.cancel();
+      _reintentoDelPulso = _reloj.programar(
+        _esperaReintentoDelPulso,
+        () => _seguir(_atenderElPulso()),
+      );
       return;
     }
 
@@ -1154,6 +1208,9 @@ class SyncEngine {
     _tablasDelPulso.clear();
     _borradosDelPulso.clear();
 
+    // Una sola bajada a la vez: mientras se atiende el aviso, el motor está
+    // ocupado y la red de seguridad, la subida o antes de cobrar esperan.
+    _updateStatus(SyncStatus.syncing);
     try {
       final db = await LocalDatabase.instance;
 
@@ -1168,8 +1225,8 @@ class SyncEngine {
         );
       }
 
+      _tablasConFalloPull.clear();
       if (tablas.isNotEmpty) {
-        _tablasConFalloPull.clear();
         await Future.wait([
           for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
         ]);
@@ -1178,6 +1235,9 @@ class SyncEngine {
       }
     } catch (e) {
       debugPrint('  ⚠️ Error atendiendo el pulso: $e');
+    } finally {
+      // Vuelve a "libre" (o a "no bajaron: …" si alguna tabla falló).
+      _reportarFallosDePull();
     }
   }
 
@@ -3726,11 +3786,14 @@ class SyncEngine {
 
   Future<void> refreshPendingCount() async {
     _pendingCount = await SyncQueue.pendingCount;
+    // Algo que el motor arrancó solo puede terminar después de cerrarlo.
+    if (_pendingController.isClosed) return;
     _pendingController.add(_pendingCount);
   }
 
   void _updateStatus(SyncStatus newStatus) {
     _status = newStatus;
+    if (_statusController.isClosed) return;
     _statusController.add(newStatus);
   }
 
@@ -3748,7 +3811,9 @@ class SyncEngine {
     _reintentoTrabados?.cancel();
     _reintentoArranque?.cancel();
     _debouncePulso?.cancel();
-    _reintentoBorradosDelPulso?.cancel();
+    _reintentoDelPulso?.cancel();
+    _reintentoTrasElCanal?.cancel();
+    _cerrado = true;
     _timerAvisoCambios?.cancel();
     unawaited(_canalPulso?.unsubscribe() ?? Future.value());
     _connectivitySub?.cancel();
