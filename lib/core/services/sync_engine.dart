@@ -444,6 +444,7 @@ class SyncEngine {
     'barra_anulaciones': 'updated_at',
     'sillas_puerta': 'updated_at',
     'barra_vales': 'updated_at',
+    'barra_recargos': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1658,6 +1659,8 @@ class SyncEngine {
     // La tablet los baja al prepararse ([bajarParaLaBarra]).
     'barra_productos',
     'barra_precios',
+    // El recargo de cada fiesta (v78): lo pone el jefe con los precios.
+    'barra_recargos',
   ];
 
   /// Si ya corrió [revisarMora] en esta sesión del programa.
@@ -2044,6 +2047,8 @@ class SyncEngine {
       if (table == 'barra_anulaciones') return 5;
       // Cuelga de la venta, como la anulación.
       if (table == 'barra_vales') return 5;
+      // Cuelga de la fiesta, como el precio.
+      if (table == 'barra_recargos') return 2;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -2401,6 +2406,7 @@ class SyncEngine {
       _pullTable(db, 'barra_anulaciones', 'updated_at'),
       _pullTable(db, 'sillas_puerta', 'updated_at'),
       _pullTable(db, 'barra_vales', 'updated_at'),
+      _pullTable(db, 'barra_recargos', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -2937,7 +2943,8 @@ class SyncEngine {
   }
 
   /// Lo que una caja de barra necesita para vender sin internet (v77): la fiesta, los
-  /// operadores con sus permisos (el PIN anda sin el jefe), el catálogo y los precios.
+  /// operadores con sus permisos (el PIN anda sin el jefe), el catálogo, los precios y
+  /// el recargo de cada fiesta (v78; sin su SQL en la nube, la tablet no queda lista).
   /// Las cajas y las ventas no: cada equipo tiene las suyas, y las de las otras cajas
   /// llegan por el pulso y la red de seguridad cuando hay internet.
   static const tablasDeLaBarra = [
@@ -2946,6 +2953,7 @@ class SyncEngine {
     'permisos_operador',
     'barra_productos',
     'barra_precios',
+    'barra_recargos',
   ];
 
   /// Baja ya las [tablasDeLaBarra], para preparar la tablet en la oficina. Devuelve
@@ -3482,6 +3490,16 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v78: las 7 columnas de `RecargoBarra.toMap()`.
+      'barra_recargos': [
+        'id',
+        'evento_id',
+        'recargo_pct',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -3645,6 +3663,8 @@ class SyncEngine {
     'sillas_puerta':
         'solo se agregan filas: quitar una silla le pone quitada_at, la fila no se saca',
     'barra_vales': 'solo se agregan filas: cada papel que salió, y cada copia, es otra',
+    'barra_recargos':
+        'una fila por fiesta, con id fijo: cambiar el recargo la actualiza, no se borra',
   };
 
   /// Para los tests: las tablas que se revisan.

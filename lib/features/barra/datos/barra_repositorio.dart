@@ -2,6 +2,7 @@ import 'anulacion_barra.dart';
 import 'caja_barra.dart';
 import 'precio_barra.dart';
 import 'producto_barra.dart';
+import 'recargo_barra.dart';
 import 'vale_barra.dart';
 import 'venta_barra.dart';
 
@@ -9,6 +10,7 @@ export 'anulacion_barra.dart';
 export 'caja_barra.dart';
 export 'precio_barra.dart';
 export 'producto_barra.dart';
+export 'recargo_barra.dart';
 export 'vale_barra.dart';
 export 'venta_barra.dart';
 
@@ -28,6 +30,11 @@ abstract interface class BarraDelJefe {
   Future<List<PrecioBarra>> precios(String eventoId, {bool conBajas = false});
 
   Future<PrecioBarra> guardarPrecio(PrecioBarra precio, {required String quien});
+
+  /// El recargo por transferencia de la fiesta. Null si el jefe todavía no lo puso.
+  Future<RecargoBarra?> recargo(String eventoId);
+
+  Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien});
 
   Future<List<CajaBarra>> cajas(String eventoId);
 
@@ -60,6 +67,10 @@ abstract interface class BarraDeLaCaja {
   /// Las fiestas con al menos un precio activo en este equipo: las únicas que la
   /// cajera puede elegir.
   Future<Set<String>> fiestasConPrecio();
+
+  /// El recargo que puso el jefe para la fiesta: cada cobro arranca con ese. Null si
+  /// no lo puso (arranca con el último que usó el equipo).
+  Future<RecargoBarra?> recargo(String eventoId);
 
   /// Las cajas abiertas de la fiesta que conoce este equipo, de cualquier operador:
   /// para avisar si el número elegido ya lo tiene otra.

@@ -22,6 +22,7 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
   final ventasGuardadas = <VentaBarra>[];
   final anulacionesGuardadas = <AnulacionBarra>[];
   final valesGuardados = <ValeBarra>[];
+  final recargosGuardados = <RecargoBarra>[];
   String equipo = 'tablet-1';
   DateTime Function() reloj = () => DateTime.utc(2026, 12, 5, 2);
 
@@ -44,6 +45,19 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
   @override
   Future<Set<String>> fiestasConPrecio() async =>
       {for (final p in preciosGuardados) if (p.activo) p.eventoId};
+
+  @override
+  Future<RecargoBarra?> recargo(String eventoId) async =>
+      recargosGuardados.where((r) => r.eventoId == eventoId).firstOrNull;
+
+  @override
+  Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async {
+    final sellado = recargo.sellado(hechoPor: quien, deviceId: equipo, ahora: reloj());
+    recargosGuardados
+      ..removeWhere((r) => r.id == recargo.id)
+      ..add(sellado);
+    return sellado;
+  }
 
   @override
   Future<List<CajaBarra>> cajasAbiertas(String eventoId) async =>

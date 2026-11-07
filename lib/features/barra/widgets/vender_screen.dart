@@ -185,13 +185,15 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     setState(() => _cobrando = true);
     try {
       final recordado = await ref.read(recargoRecordadoProvider).leer();
+      final deLaFiesta = await ref.read(barraDeLaCajaProvider).recargo(_caja.eventoId);
       if (!mounted) return;
+      final arranque = recargoDeArranque(deLaFiesta, recordado);
       final cobro = await pedirCobro(
         context,
         total: _cuenta.total,
         medio: medio,
-        recargoPrendido: recordado.prendido,
-        recargoPct: recordado.pct,
+        recargoPrendido: arranque.prendido,
+        recargoPct: arranque.pct,
       );
       if (cobro == null || !mounted) return;
       if (medio != MedioBarra.efectivo) {

@@ -5,6 +5,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/core/utils/uuid_utils.dart';
+import 'package:arguello_events/features/barra/datos/recargo_barra.dart';
 import 'package:arguello_events/features/barra/datos/vale_barra.dart';
 import 'package:arguello_events/models/silla_puerta.dart';
 
@@ -247,6 +249,93 @@ void main() {
       expect(m['por_separado'], 1);
       expect(m['bebidas'], isA<String>());
       expect(ValeBarra.fromMap(m).bebidas, vale.bebidas);
+    });
+  });
+
+  // ── barra_recargos: el recargo por transferencia de cada fiesta ──────────────
+
+  final sqlRecargos = leer('supabase/migrations/20261107140000_barra_recargos.sql');
+  final recargo = RecargoBarra.para(
+    eventoId: 'e0000000-0000-4000-8000-000000000001',
+    pct: 7.5,
+    ahora: DateTime.utc(2026, 11, 20, 15),
+  ).sellado(hechoPor: 'Jefe', deviceId: 'pc-oficina', ahora: DateTime.utc(2026, 11, 20, 15));
+
+  group('barra_recargos en las listas del motor', () {
+    test('sube y baja todas sus columnas: las del modelo y las de la base', () async {
+      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      await LocalDatabase.crearTablasV78(db);
+      final enLaBase = {
+        for (final c in await db.rawQuery('PRAGMA table_info(barra_recargos)'))
+          c['name'] as String,
+      };
+      await db.close();
+      expect(columnasDelMotor('barra_recargos'), enLaBase, reason: 'motor y base');
+      expect(columnasDelMotor('barra_recargos'), recargo.toMap().keys.toSet(),
+          reason: 'motor y modelo');
+    });
+
+    test('baja con lo de carga (lo pone el jefe en la oficina) y en la bajada general', () {
+      expect(declaracion('_incrementalColumns', '}'),
+          contains("'barra_recargos': 'updated_at'"));
+      expect(declaracion('_tablasDeCarga', ']'), contains("'barra_recargos'"));
+      expect(declaracion('_tablasDelCobro', ']'), isNot(contains("'barra_recargos'")));
+      expect(motor, contains("_pullTable(db, 'barra_recargos', 'updated_at')"));
+    });
+
+    test('la tablet lo baja al prepararse, para cobrar sin internet', () {
+      expect(SyncEngine.tablasDeLaBarra, contains('barra_recargos'));
+    });
+
+    test('sube después de la fiesta', () {
+      expect(motor, contains("if (table == 'barra_recargos') return 2;"));
+    });
+
+    test('no está en la limpieza de la cola ni en ninguna lista que borre filas locales', () {
+      expect(cola, isNot(contains("'barra_recargos'")));
+      expect(declaracion('_tablasAReconciliar', ']'), isNot(contains("'barra_recargos'")));
+      expect(declaracion('_hijasEnCascada', '}'), isNot(contains("'barra_recargos'")));
+      expect(SyncEngine.tablasSinRevisarBorrados.keys, contains('barra_recargos'));
+    });
+  });
+
+  group('el SQL del recargo', () {
+    test('tiene cada columna que manda la app', () {
+      final crear = RegExp(
+        r'create table if not exists public\.barra_recargos \(([\s\S]*?)\n\);',
+      ).firstMatch(sqlRecargos);
+      expect(crear, isNotNull);
+      final columnas = {
+        for (final l in crear!.group(1)!.split('\n'))
+          if (l.trim().isNotEmpty) l.trim().split(' ').first,
+      };
+      expect(columnas, recargo.toMap().keys.toSet());
+    });
+
+    test('sin CHECK, sin clave foránea, sin índice único y fuera de Realtime', () {
+      final codigo = [
+        for (final l in sqlRecargos.split('\n'))
+          if (!l.trimLeft().startsWith('--')) l,
+      ].join('\n').toLowerCase();
+      expect(codigo, isNot(matches(RegExp(r'(?<!with )\bcheck\s*\('))));
+      expect(codigo, isNot(contains('references')));
+      expect(codigo, isNot(contains('unique')));
+      expect(codigo, isNot(contains('supabase_realtime')));
+    });
+
+    test('con la policy de los usuarios logueados y los dos disparadores', () {
+      expect(sqlRecargos, contains("array['barra_recargos']"));
+      expect(sqlRecargos, contains("t || '_all_authenticated'"));
+      expect(sqlRecargos, contains('set_updated_at_ins_'));
+      expect(sqlRecargos, contains('set_updated_at_upd_'));
+      expect(sqlRecargos, contains('update_updated_at_column()'));
+    });
+
+    test('lo que manda la app vuelve igual', () {
+      final leido = RecargoBarra.fromMap(recargo.toMap());
+      expect(leido.pct, 7.5);
+      expect(leido.id, UuidUtils.barraRecargoId(recargo.eventoId));
+      expect(leido.toMap(), recargo.toMap());
     });
   });
 }

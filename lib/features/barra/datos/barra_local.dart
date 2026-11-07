@@ -4,6 +4,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/instalacion_id.dart';
+import '../../../core/utils/uuid_utils.dart';
 import 'barra_repositorio.dart';
 
 /// La barra en este equipo — la base de la PC o de la tablet, y la cola de subida.
@@ -146,6 +147,32 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
         ahora: _reloj(),
       );
       await _guardar(txn, 'barra_precios', sellado.id, sellado.toMap());
+      return sellado;
+    });
+  }
+
+  @override
+  Future<RecargoBarra?> recargo(String eventoId) async {
+    final filas = await _leer(
+      'barra_recargos',
+      where: 'id = ?',
+      whereArgs: [UuidUtils.barraRecargoId(eventoId)],
+    );
+    return filas.isEmpty ? null : RecargoBarra.fromMap(filas.first);
+  }
+
+  @override
+  Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final sellado = recargo.sellado(
+        hechoPor: quien,
+        deviceId: equipo,
+        createdAt: await _nacio(txn, 'barra_recargos', recargo.id),
+        ahora: _reloj(),
+      );
+      await _guardar(txn, 'barra_recargos', sellado.id, sellado.toMap());
       return sellado;
     });
   }

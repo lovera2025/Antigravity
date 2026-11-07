@@ -135,8 +135,21 @@ final puestaAlDiaBarraProvider = Provider.autoDispose<PuestaAlDiaBarra>((ref) {
   return puesta;
 });
 
+/// Con qué arranca el recargo de un cobro: **el que puso el jefe para la fiesta**
+/// (decidido el 3-nov; en 0, apagado) y, si no lo puso, el último que usó el equipo.
+/// La cajera lo puede cambiar en ese cobro; el siguiente vuelve a arrancar acá.
+({bool prendido, double pct}) recargoDeArranque(
+  RecargoBarra? deLaFiesta,
+  ({bool prendido, double pct}) recordado,
+) {
+  if (deLaFiesta == null) return recordado;
+  if (deLaFiesta.prendido) return (prendido: true, pct: deLaFiesta.pct);
+  return (prendido: false, pct: recordado.pct);
+}
+
 /// El recargo por transferencia como lo dejó este equipo la última vez: prendido o no,
-/// y el porcentaje. Hasta que el jefe lo ponga por fiesta (etapa 7), arranca en 5 %.
+/// y el porcentaje. Vale cuando el jefe no puso el de la fiesta ([recargoDeArranque]);
+/// la primera vez, 5 %.
 class RecargoRecordado {
   static const _prendido = 'barra.recargo.prendido';
   static const _pct = 'barra.recargo.pct';

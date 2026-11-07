@@ -7,8 +7,8 @@
 // copia, en una carpeta temporal, que se borra al terminar.
 //
 // Las PCs están en la v77 (la 6.3.1): la copia salta de 77 a 78, como va a pasar
-// al instalar. Tienen que aparecer dos tablas, `sillas_puerta` y `barra_vales`,
-// vacías.
+// al instalar. Tienen que aparecer tres tablas, `sillas_puerta`, `barra_vales` y
+// `barra_recargos`, vacías.
 //
 // Además comprueba:
 //   • que la base real quedó idéntica: mismo tamaño, misma fecha y mismo
@@ -42,7 +42,7 @@ String _baseReal() {
   return '$perfil\\Documents\\Junior Eventos\\data.db';
 }
 
-const _deLaV78 = {'sillas_puerta', 'barra_vales'};
+const _deLaV78 = {'sillas_puerta', 'barra_vales', 'barra_recargos'};
 
 class _Foto {
   final Map<String, int> filas;

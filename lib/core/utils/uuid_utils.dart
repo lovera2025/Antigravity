@@ -110,6 +110,11 @@ class UuidUtils {
   static String barraAnulacionId(String ventaId) =>
       _uuidDe('barra_anulaciones_v1|$ventaId');
 
+  /// PK estable para `barra_recargos` (v78): una por fiesta. Si el jefe lo cambia
+  /// desde la PC y desde la web, escriben la misma fila (gana la última).
+  static String barraRecargoId(String eventoId) =>
+      _uuidDe('barra_recargos_v1|$eventoId');
+
   static String _uuidDe(String semilla) {
     final h = sha256.convert(utf8.encode(semilla));
     final u = List<int>.from(h.bytes.sublist(0, 16));

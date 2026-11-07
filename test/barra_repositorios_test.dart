@@ -173,6 +173,42 @@ void main() {
     });
   });
 
+  group('el recargo de cada fiesta', () {
+    test('sin guardar, no hay', () async {
+      expect(await barra.recargo(_evento), isNull);
+    });
+
+    test('una fila por fiesta, con id fijo: guardarlo de nuevo la pisa y no le cambia cuándo nació',
+        () async {
+      final primero = await barra.guardarRecargo(
+        RecargoBarra.para(eventoId: _evento, pct: 5, ahora: reloj),
+        quien: 'Jefe',
+      );
+      reloj = reloj.add(const Duration(hours: 2));
+      final segundo = await barra.guardarRecargo(
+        RecargoBarra.para(eventoId: _evento, pct: 10, ahora: reloj),
+        quien: 'Jefe en la otra PC',
+      );
+      final filas = await db.query('barra_recargos');
+      expect(filas, hasLength(1));
+      expect(filas.single['id'], UuidUtils.barraRecargoId(_evento));
+      expect(segundo.createdAt, primero.createdAt);
+      expect((await barra.recargo(_evento))!.pct, 10);
+      expect((await barra.recargo(_evento))!.hechoPor, 'Jefe en la otra PC');
+      expect(await barra.recargo(_otraFiesta), isNull);
+      final cola = await encolado('barra_recargos');
+      expect(cola, hasLength(1), reason: 'la cola tiene una entrada por fila');
+      expect(jsonDecode(cola.single['payload'] as String)['recargo_pct'], 10);
+    });
+
+    test('en 0 arranca apagado; negativo o de más de 100 no se arma', () {
+      expect(RecargoBarra.para(eventoId: _evento, pct: 0, ahora: reloj).prendido, isFalse);
+      expect(RecargoBarra.para(eventoId: _evento, pct: 5, ahora: reloj).prendido, isTrue);
+      expect(() => RecargoBarra.para(eventoId: _evento, pct: -1, ahora: reloj), throwsArgumentError);
+      expect(() => RecargoBarra.para(eventoId: _evento, pct: 101, ahora: reloj), throwsArgumentError);
+    });
+  });
+
   group('la caja', () {
     test('abrirla la guarda con quién la abrió y en qué equipo, y la encola', () async {
       final caja = await abrirLaDeMarta();

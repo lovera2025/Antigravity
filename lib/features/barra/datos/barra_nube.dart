@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/instalacion_id.dart';
+import '../../../core/utils/uuid_utils.dart';
 import 'barra_repositorio.dart';
 
 /// La barra del jefe en la web del iPhone: lee y escribe **directo en la nube**, sin
@@ -83,6 +84,27 @@ class BarraNube implements BarraDelJefe {
       ahora: _reloj(),
     );
     await _supabase.from('barra_precios').upsert(sellado.toMap());
+    return sellado;
+  }
+
+  @override
+  Future<RecargoBarra?> recargo(String eventoId) async {
+    final fila = await _supabase
+        .from('barra_recargos')
+        .select()
+        .eq('id', UuidUtils.barraRecargoId(eventoId))
+        .maybeSingle();
+    return fila == null ? null : RecargoBarra.fromMap(fila);
+  }
+
+  @override
+  Future<RecargoBarra> guardarRecargo(RecargoBarra recargo, {required String quien}) async {
+    final sellado = recargo.sellado(
+      hechoPor: quien,
+      deviceId: await _equipo(),
+      ahora: _reloj(),
+    );
+    await _supabase.from('barra_recargos').upsert(sellado.toMap());
     return sellado;
   }
 

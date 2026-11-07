@@ -1038,10 +1038,13 @@ class LocalDatabase {
   ///   el original y cada copia (`ValeBarra`). Así una copia saca el mismo vale
   ///   que salió, y la cajera reimprime una sola vez. La venta no se toca: nunca
   ///   se edita.
+  /// - `barra_recargos`: el recargo por transferencia que pone el jefe en cada
+  ///   fiesta (`RecargoBarra`), una fila por fiesta con id fijo. Cambiarlo la
+  ///   actualiza; no se borra.
   ///
   /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF
   /// NOT EXISTS`, sin tocar `contratos_alumnos` ni las tablas de la v77. Las
-  /// filas solo se agregan.
+  /// filas no se borran.
   static Future<void> crearTablasV78(DatabaseExecutor db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sillas_puerta (
@@ -1089,6 +1092,17 @@ class LocalDatabase {
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_barra_vales_caja ON barra_vales(caja_barra_id)',
     );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_recargos (
+        id TEXT PRIMARY KEY,
+        evento_id TEXT NOT NULL,
+        recargo_pct REAL NOT NULL DEFAULT 0,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _onUpgrade(

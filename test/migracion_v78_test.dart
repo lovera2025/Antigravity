@@ -19,7 +19,7 @@ void main() {
   late Directory tmp;
   late String path;
 
-  const tablasV78 = ['sillas_puerta', 'barra_vales'];
+  const tablasV78 = ['sillas_puerta', 'barra_vales', 'barra_recargos'];
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('migracion_v78_');
@@ -206,6 +206,10 @@ void main() {
       'por_separado', 'copia_numero', 'motivo', 'hecho_por', 'device_id',
       'created_at', 'updated_at',
     });
+    expect(await columnas('barra_recargos'), {
+      'id', 'evento_id', 'recargo_pct', 'hecho_por', 'device_id', 'created_at',
+      'updated_at',
+    });
     for (final t in tablasV78) {
       for (final i in await db.rawQuery('PRAGMA index_list($t)')) {
         if (i['origin'] == 'pk') continue;
@@ -263,6 +267,7 @@ void main() {
     }
     expect(crear, contains('CREATE TABLE IF NOT EXISTS sillas_puerta ('));
     expect(crear, contains('CREATE TABLE IF NOT EXISTS barra_vales ('));
+    expect(crear, contains('CREATE TABLE IF NOT EXISTS barra_recargos ('));
     expect(
       RegExp('CREATE (UNIQUE )?(TABLE|INDEX) (?!IF NOT EXISTS)').hasMatch(crear),
       isFalse,

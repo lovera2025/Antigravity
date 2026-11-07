@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/providers/barra_providers.dart';
 import 'package:arguello_events/features/barra/widgets/vender_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
@@ -313,6 +314,45 @@ void main() {
     expect(v.recargo, 0);
     expect(v.transferencia, 50000);
     expect(prueba.recargo.prendido, isFalse);
+  });
+
+  group('el recargo que pone el jefe para la fiesta', () {
+    Future<void> ponerRecargo(double pct) => prueba.barra.guardarRecargo(
+          RecargoBarra.para(eventoId: fiesta.id, pct: pct, ahora: DateTime.utc(2026, 12, 1)),
+          quien: 'Jefe',
+        );
+
+    testWidgets('el cobro arranca con el de la fiesta, no con el último del equipo, '
+        'y la cajera lo puede cambiar', (tester) async {
+      await ponerRecargo(10);
+      prueba.recargo.pct = 7;
+      await abrir(tester);
+      await armarLaCuenta(tester);
+      await tocar(tester, find.byKey(const Key('pagar_transferencia')));
+      expect(textoDe(tester, 'cobro_recargo_cuenta'), r'$ 50.000 + 10 % = $ 55.000');
+      await escribir(tester, 'cobro_recargo_pct', '8');
+      await tocar(tester, find.byKey(const Key('cobro_confirmar')));
+      final v = prueba.barra.ventasGuardadas.single;
+      expect(v.recargoPct, 8, reason: 'en ese cobro manda lo que puso la cajera');
+      expect(v.recargo, 4000);
+    });
+
+    testWidgets('en 0, el cobro arranca sin recargo', (tester) async {
+      await ponerRecargo(0);
+      await abrir(tester);
+      await armarLaCuenta(tester);
+      await tocar(tester, find.byKey(const Key('pagar_transferencia')));
+      expect(textoDe(tester, 'cobro_transfiere'), r'$ 50.000');
+    });
+
+    test('el siguiente cobro vuelve al de la fiesta; sin el de la fiesta, el del equipo', () {
+      const recordado = (prendido: false, pct: 8.0);
+      final diez = RecargoBarra.para(eventoId: BarraEnPrueba.id(1), pct: 10, ahora: DateTime.utc(2026));
+      final cero = diez.conPct(0);
+      expect(recargoDeArranque(diez, recordado), (prendido: true, pct: 10.0));
+      expect(recargoDeArranque(cero, recordado), (prendido: false, pct: 8.0));
+      expect(recargoDeArranque(null, recordado), recordado);
+    });
   });
 
   testWidgets('MIXTO: el efectivo completa la transferencia, ya con el recargo', (tester) async {
