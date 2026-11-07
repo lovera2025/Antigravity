@@ -12,10 +12,13 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 > **Etapa 7, al 7-nov (mañana): el plan corto pasado y la maqueta publicada, esperando su OK** (Claude Design, privada:
 > https://claude.ai/artifact/YBhdWQsf4C7HKJeKFoaDxQ). Tarjeta BARRA en el Centro de Comando (solo modo jefe), con CATÁLOGO (uno solo,
 > fotos de la biblioteca, dar de baja), PRECIOS por fiesta (va, precio, stock, avisar desde, COPIAR DE OTRA FIESTA sin el stock, la lista
-> en PDF de 58 mm) y CAJAS (por caja, totales, stock con lo agotado y en aviso arriba, ventas con ANULAR con motivo y REIMPRIMIR). **Falta
-> que elija:** CAJAS opción A (una tarjeta por caja) u opción B (una tabla), y si el **% de recargo por transferencia lo fija el jefe por
-> fiesta** (propuesta: necesita una tabla nueva y su SQL, que va con los otros tres) o sigue en cada tablet. Todo en 58 mm, nunca A4. La
-> foto propia de un producto (subirla) queda para otro paso: necesita el depósito de Storage y su SQL.
+> en PDF de 58 mm) y CAJAS (por caja, totales, stock con lo agotado y en aviso arriba, ventas con ANULAR con motivo y REIMPRIMIR).
+> **Elegido el 7-nov:** CAJAS con **una tarjeta por caja** (la opción A: se ve bien en el iPhone de la etapa 8; la tabla se descartó), y
+> **la fiesta primero**: BARRA abre en la próxima, con CAMBIAR DE FIESTA; **la primera con barra es TÉCNICA PINAROLI, el viernes 4 de
+> diciembre**. **El recargo ya estaba decidido el 3-nov** (abajo, "Recargo por transferencia"): lo pone el jefe por fiesta, cada caja
+> arranca con ese y la cajera lo puede cambiar en un cobro; va en una tabla aparte, una fila por fiesta con id fijo, con su SQL (el
+> cuarto de la 6.4.0). Todo en 58 mm, nunca A4. La foto propia de un producto (subirla) queda para otro paso: necesita el depósito de
+> Storage y su SQL. **Falta su OK a la maqueta para programar.**
 
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
