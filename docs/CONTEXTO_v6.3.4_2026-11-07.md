@@ -5,9 +5,9 @@
 
 ## Para retomar en otro chat
 
-**Falta que el usuario decida:** si sale ya, sola, como **6.3.4** desde `release/6.3.x` (con el procedimiento de siempre: versión
-`6.3.4+66` en `pubspec.yaml` y en `installer/junior_eventos_setup.iss` en las dos ramas, tag, foto de la mora antes, instalador, release,
-web, instalar las tres PCs, foto después), o si espera a la próxima versión. Dijo "capaz se le suma a la otra versión" y "ahora más vemos".
+**Decidido el 7-nov a la noche: no sale sola.** Va con todo junto en la 6.4.0, desde `feature/v4.6-cierre-por-sesiones`, con el
+arreglo del aviso entre PCs (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`, sin programar), la barra y Entradas. Lo dijo así: "sumalo al
+plan en general, entonces después sacamos todo junto". `release/6.3.x` queda como está.
 
 **El pago de ENRIQUE, MAXIMO sigue en la caja del modo jefe del 7-nov** (abajo, "Qué pasó"). Dos maneras de sacarlo:
 - con la versión nueva instalada, volver a ponerle la fecha 23/10 en Corregir medio de pago: sale solo;
@@ -15,8 +15,8 @@ web, instalar las tres PCs, foto después), o si espera a la próxima versión. 
   con el antes y el después a la vista y su OK** (`correcciones-de-datos-acotadas`). Las PCs lo bajan en 5 minutos como mucho; ninguna
   conserva la caja vieja al bajarlo (el pull reescribe la fila; revisado el 7-nov).
 
-> Frase para retomar: "Seguimos con la 6.3.4: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.3.4_2026-11-07.md y preguntame si la
-> publico o espera."
+> Frase para retomar: "Seguimos con lo de la fecha de un cobro: leé 'Para retomar en otro chat' de
+> docs/CONTEXTO_v6.3.4_2026-11-07.md."
 
 ## Qué pasó
 

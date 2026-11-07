@@ -17,8 +17,10 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 > etapa). **La primera fiesta con barra es TÉCNICA PINAROLI, el viernes 4 de diciembre.**
 >
 > La 6.3.3 (la mora adelantada y el sync en reposo) se publicó e instaló el 7-nov, desde `release/6.3.x`. **Aparte de la barra, el
-> 7-nov quedó programado sin publicar el arreglo de la fecha de un cobro** (`docs/CONTEXTO_v6.3.4_2026-11-07.md`): espera que el
-> usuario diga si sale ya como 6.3.4 o con la próxima.
+> 7-nov quedó programado sin publicar el arreglo de la fecha de un cobro** (`docs/CONTEXTO_v6.3.4_2026-11-07.md`). **Y se sumó al
+> plan, sin programar, el arreglo del aviso entre PCs** (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`): hoy la otra PC no se pone al
+> día sola, solo al volver a la ventana, antes de cobrar o a los 5 minutos. Ninguno de los dos sale solo: **va todo junto en la 6.4.0**
+> (decidido el 7-nov a la noche). El plan general pasó a 26 partes: 60 %.
 
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,

@@ -61,9 +61,11 @@ PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en repo
 - **Programado el 7-nov, sin publicar, en `release/6.3.x` y acá: cambiar la fecha de un cobro a otro día lo saca de su caja**
   (Mi Empresa → lápiz → Corregir medio de pago; `cajaTrasCambioDeFecha`, `cierre_caja/services/fecha_y_caja.dart`). Regla del usuario:
   esa plata no entró ese día. Una caja cerrada no se toca. Cambia todo el cobro junto (`lineasDelMismoCobro`), sin fechas futuras, y al
-  cambiar la fecha o anular se revisa la mora del alumno en el momento. Sale con la próxima versión que se publique (6.3.4 sola o
-  dentro de la 6.4.0): **falta que el usuario lo decida.** Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta
-  entonces. Entrada: `docs/CONTEXTO_v6.3.4_2026-11-07.md`, que empieza con "Para retomar en otro chat".
+  cambiar la fecha o anular se revisa la mora del alumno en el momento. **No sale como 6.3.4 sola: va con todo junto en la 6.4.0**
+  (decidido el 7-nov a la noche). Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta entonces. Entrada:
+  `docs/CONTEXTO_v6.3.4_2026-11-07.md`, que empieza con "Para retomar en otro chat".
+- **Sin programar, en el plan general: el aviso entre PCs que llega por el socket se tira** (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`).
+  Ver "El sync en reposo", en Arquitectura. Se programa en esta rama y sale con todo junto en la 6.4.0.
 - **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
   por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
   repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.
@@ -187,6 +189,12 @@ le pedía a la nube (plan Free, instancia Nano). Ahora:
   (el motor hace I/O real). `test/sync_en_reposo_test.dart` cuenta, con `NubeDePrueba`, qué pide el motor en cada momento.
 - **Un comentario que diga "el ciclo de 10 s lo cubre" está viejo.** El tope de un borrado o un cambio cuyo aviso se perdió pasa de
   10 s a 5 minutos (antes de cobrar se baja todo igual).
+- **Hoy el pulso solo funciona cuando sale por REST** (7-nov, sin arreglar; `docs/SPEC_pulso_por_el_socket_2026-11-07.md`). Por el
+  socket, la librería manda los datos sueltos (`{origen, tablas, …, type, event}`); por REST, el servidor los envuelve en `payload`.
+  `_alRecibirPulso` lee `mensaje['payload']`: lo del socket, que es casi todo, se tira sin error. Lo tapaba el ciclo de 10 s. Hoy lo
+  nuevo de la otra PC llega al volver a la ventana (`bajarAlMirar`), antes de cobrar o con la red de 5 minutos. El tótem de la web
+  (`totem_display.dart`, `payload['payload']`) tiene lo mismo. **Las pruebas del pulso arman el aviso con la forma del REST:** la del
+  socket no la probó nadie.
 
 **Rutas por URL en web** (`lib/main.dart:80-130`): se detectan con `contains()`
 sobre `Uri.base`, no con path parsing.
