@@ -242,6 +242,9 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
 /// La impresora, en memoria: anota cada papel como texto (las líneas grandes y chicas).
 class PapelEnMemoria implements PapelDeLaBarra {
   final papeles = <List<String>>[];
+
+  /// Los mismos papeles, con todas sus líneas (el logo, los precios, el QR).
+  final enCrudo = <List<LineaTicket>>[];
   EstadoImpresora estado = EstadoImpresora.lista;
   bool anda = true;
   var preparadas = 0;
@@ -255,6 +258,7 @@ class PapelEnMemoria implements PapelDeLaBarra {
   @override
   Future<bool> imprimir(List<LineaTicket> lineas) async {
     if (!anda) return false;
+    enCrudo.add(lineas);
     papeles.add([
       for (final l in lineas)
         switch (l) {
@@ -327,6 +331,9 @@ class BarraEnPrueba {
   ImageProvider? Function(ProductoBarra) imagen = (_) => null;
   final eventos = <Evento>[];
   final subidas = <String>[];
+
+  /// Lo que no es una venta y se mandó a subir ya: "tabla id".
+  final subidasDeLaBarra = <String>[];
   var bajadas = 0;
   bool bajaBien = true;
   DateTime? alDia;
@@ -339,6 +346,9 @@ class BarraEnPrueba {
         imagenDelProductoProvider.overrideWithValue((p) => imagen(p)),
         eventosDeLaBarraProvider.overrideWith((ref) async => eventos),
         subirVentaProvider.overrideWithValue((v) async => subidas.add(v.id)),
+        subirDeLaBarraProvider.overrideWithValue(
+          (tabla, id) async => subidasDeLaBarra.add('$tabla $id'),
+        ),
         accesosBarraProvider.overrideWithValue(AccesosBarra(
           bajar: () async {
             bajadas++;

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,6 +12,9 @@ import '../impresion/ticket_esc_pos.dart';
 
 /// Manda un papel a la impresora. True si salió.
 typedef ImprimirPapel = Future<bool> Function(List<LineaTicket> lineas);
+
+/// Anota un vale que salió (`barra_vales`), para poder reimprimir el mismo.
+typedef AnotarVale = Future<void> Function(Vale vale);
 
 enum _Forma { todoJunto, porSeparado }
 
@@ -56,6 +61,10 @@ class _Silla {
 /// **Las sillas de la noche ([esSillaDeLaPuerta]) salen aparte, una por vale** (6.4.0): no
 /// van en TODO JUNTO ni en POR SEPARADO, cada una lleva su número, y su vale dice que se
 /// lleva a la recepcionista. Así la puerta anota cada silla con un número distinto.
+///
+/// **Cada vale que sale se anota** ([anotar]): así una copia saca el mismo vale. Con
+/// [yaSalieron] retoma una venta que quedó a la mitad (sin impresora, o se salió antes):
+/// lo que ya salió no vuelve a salir, y el próximo vale sigue la numeración.
 class ElegirVales extends StatefulWidget {
   final VentaBarra venta;
   final CajaBarra caja;
@@ -65,6 +74,13 @@ class ElegirVales extends StatefulWidget {
   /// Cada vez que sale un vale: si ya no queda nada sin vale.
   final ValueChanged<bool>? alImprimir;
 
+  /// Cada vale que salió, antes de dejar mandar otro. Si no se puede anotar, el vale
+  /// igual salió: no se frena.
+  final AnotarVale? anotar;
+
+  /// Los vales originales de esta venta que ya salieron antes.
+  final List<ValeBarra> yaSalieron;
+
   const ElegirVales({
     super.key,
     required this.venta,
@@ -72,6 +88,8 @@ class ElegirVales extends StatefulWidget {
     required this.fiesta,
     required this.imprimir,
     this.alImprimir,
+    this.anotar,
+    this.yaSalieron = const [],
   });
 
   @override
@@ -93,6 +111,41 @@ class _ElegirValesState extends State<ElegirVales> {
   int _valesImpresos = 0;
   bool _imprimiendo = false;
   String? _aviso;
+
+  @override
+  void initState() {
+    super.initState();
+    _retomar();
+  }
+
+  /// Lo que ya salió antes se descuenta, bebida por bebida, por el nombre: la venta se
+  /// guardó con el nombre de ese momento, y el vale también.
+  void _retomar() {
+    final originales = [for (final v in widget.yaSalieron) if (!v.esCopia) v];
+    if (originales.isEmpty) return;
+    // El próximo vale sigue al número más alto que salió.
+    final mayor = originales.map((v) => v.numeroVale ?? 0).fold<int>(0, math.max);
+    _valesImpresos = math.max(mayor, originales.length);
+    for (final v in originales) {
+      for (final b in v.bebidas) {
+        var falta = b.cantidad;
+        for (final s in _sillas) {
+          if (falta == 0) break;
+          if (s.renglon.nombre != b.nombre || s.terminada) continue;
+          final va = falta < s.quedan ? falta : s.quedan;
+          s.impresas += va;
+          falta -= va;
+        }
+        for (final x in _bebidas) {
+          if (falta == 0) break;
+          if (x.renglon.nombre != b.nombre || x.terminada) continue;
+          final va = falta < x.quedan ? falta : x.quedan;
+          x.impresos.add(va);
+          falta -= va;
+        }
+      }
+    }
+  }
 
   bool get _bebidasImpresas => _bebidas.every((b) => b.terminada);
   bool get _todoImpreso => _bebidasImpresas && _sillas.every((s) => s.terminada);
@@ -121,6 +174,13 @@ class _ElegirValesState extends State<ElegirVales> {
       ));
     } catch (_) {
       salio = false;
+    }
+    if (salio && widget.anotar != null) {
+      try {
+        await widget.anotar!(vale);
+      } catch (e) {
+        debugPrint('⚠️ Barra: el vale salió pero no se pudo anotar: $e');
+      }
     }
     if (!mounted) return salio;
     setState(() {

@@ -63,6 +63,13 @@ class Vale {
     );
   }
 
+  /// El vale tal como salió y quedó anotado: para la copia, que tiene que decir lo mismo.
+  factory Vale.comoSalio(ValeBarra salio) => Vale(
+        bebidas: salio.bebidas,
+        porSeparado: salio.porSeparado,
+        numero: salio.numeroVale,
+      );
+
   /// Si es el vale de una silla: lo que dice abajo cambia (va a la recepcionista).
   bool get esDeSilla =>
       bebidas.isNotEmpty && bebidas.every((b) => esSillaDeLaPuerta(b.nombre));

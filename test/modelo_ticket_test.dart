@@ -250,6 +250,21 @@ void main() {
       expect(papel, isNot(contains('Vale solo hoy · una sola vez')));
     });
 
+    test('la copia ahorra papel igual que el vale: sin logo, sin QR, sin precios, en grande', () {
+      final v = venta();
+      final lineas = ModeloTicket.deVale(
+        Vale.todoJunto(v),
+        venta: v,
+        caja: caja,
+        fiesta: 'Puerto Viejo',
+        copia: const CopiaDeVale(numero: 1, createdAt: '2026-12-05T04:30:00.000Z', motivo: 'x'),
+      );
+      expect(lineas.whereType<LogoTicket>(), isEmpty);
+      expect(lineas.whereType<QrTicket>(), isEmpty);
+      expect(lineas.whereType<RenglonTicket>(), isEmpty, reason: 'sin precios');
+      expect(lineas.whereType<GrandeTicket>(), isNotEmpty);
+    });
+
     test('sin cajera anotada, la caja y el número igual', () {
       final sinNombre = CajaBarra.abrir(eventoId: _evento, numeroCaja: 3, ahora: vendida);
       final v = venta();

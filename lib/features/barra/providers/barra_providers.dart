@@ -62,6 +62,23 @@ final subirVentaProvider = Provider<Future<void> Function(VentaBarra venta)>((re
   };
 });
 
+/// Sube ya una fila de la barra que no es una venta (una anulación, un vale que salió),
+/// si hay internet: así el jefe la ve enseguida, y una anulación llega a la puerta. Sin
+/// internet queda en la cola. Los tests lo reemplazan.
+final subirDeLaBarraProvider =
+    Provider<Future<void> Function(String tabla, String registroId)>((ref) {
+  return (tabla, registroId) async {
+    if (ref.read(connectivityServiceProvider).currentStatus == AppConnectivity.offline) return;
+    try {
+      await ref.read(subidaInmediataProvider).subir(
+            tabla: tabla,
+            registroId: registroId,
+            desde: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+          );
+    } catch (_) {}
+  };
+});
+
 /// Con qué se pone al día la barra en este equipo. Los tests lo reemplazan.
 final accesosBarraProvider = Provider<AccesosBarra>((ref) {
   final barra = ref.watch(barraDeLaCajaProvider);

@@ -21,9 +21,10 @@ import '../services/productos_para_vender.dart';
 import 'cobrar_hoja.dart';
 import 'elegir_disenio.dart';
 import 'elegir_impresora_screen.dart';
-import 'elegir_vales.dart';
 import 'pesos_enteros_formatter.dart';
 import 'tarjeta_producto.dart';
+import 'vales_de_la_venta_screen.dart';
+import 'ventas_de_la_caja_screen.dart';
 
 /// VENDER: se tocan los productos y se arma la cuenta; debajo del total, **EFECTIVO,
 /// TRANSFERENCIA y MIXTO** abren su cobro (pedido del 3-nov: sin un COBRAR que después
@@ -233,7 +234,20 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     await Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => Theme(
         data: tema,
-        child: _ValesDeLaVenta(venta: venta, caja: _caja, fiesta: _fiesta),
+        child: ValesDeLaVentaScreen(venta: venta, caja: _caja, fiesta: _fiesta),
+      ),
+    ));
+    if (mounted) unawaited(_cargar());
+  }
+
+  /// VENTAS: las ventas de esta caja, para reimprimir, imprimir lo que faltó, sacar el
+  /// ticket o anular. Al volver, "Quedan" se pone al día (una anulada devuelve stock).
+  Future<void> _verVentas() async {
+    final tema = Theme.of(context);
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => Theme(
+        data: tema,
+        child: VentasDeLaCajaScreen(caja: _caja, fiesta: _fiesta),
       ),
     ));
     if (mounted) unawaited(_cargar());
@@ -292,6 +306,12 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
           ],
         ),
         actions: [
+          IconButton(
+            key: const Key('vender_ventas'),
+            tooltip: 'Ventas de esta caja: reimprimir, ticket, anular',
+            onPressed: _verVentas,
+            icon: const Icon(Icons.receipt_long_outlined),
+          ),
           IconButton(
             key: const Key('vender_disenio'),
             tooltip: 'Cómo se ve',
@@ -791,106 +811,4 @@ class _CambioDialogState extends State<_CambioDialog> {
           ),
         ],
       );
-}
-
-/// Después de cobrar: la venta guardada, el vuelto, y los vales (`ElegirVales`).
-class _ValesDeLaVenta extends ConsumerStatefulWidget {
-  final VentaBarra venta;
-  final CajaBarra caja;
-  final String fiesta;
-
-  const _ValesDeLaVenta({required this.venta, required this.caja, required this.fiesta});
-
-  @override
-  ConsumerState<_ValesDeLaVenta> createState() => _ValesDeLaVentaState();
-}
-
-class _ValesDeLaVentaState extends ConsumerState<_ValesDeLaVenta> {
-  bool _todoImpreso = false;
-
-  Future<void> _listo() async {
-    if (!_todoImpreso) {
-      final seguir = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          content: const Text('Quedan bebidas sin vale. ¿Volver a vender igual?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('NO, IMPRIMIR')),
-            FilledButton(
-              key: const Key('vales_salir_igual'),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('SÍ, VOLVER'),
-            ),
-          ],
-        ),
-      );
-      if (seguir != true) return;
-    }
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final v = widget.venta;
-    final papel = ref.read(papelDeLaBarraProvider);
-    final numero = v.numero.toString().padLeft(4, '0');
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (hecho, _) {
-        if (!hecho) unawaited(_listo());
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Vales · N° $numero'),
-          actions: [
-            TextButton(
-              key: const Key('vales_listo'),
-              onPressed: _listo,
-              child: const Text('LISTO, OTRA VENTA'),
-            ),
-          ],
-        ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Column(
-              children: [
-                Card(
-                  key: const Key('vales_venta_guardada'),
-                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  // Sobre el fondo oscuro del diseño: verde tenue, no el claro de antes.
-                  color: Colors.green.withValues(alpha: 0.16),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green.shade400),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text('Venta guardada: ${pesos(v.cobrado)}')),
-                        if (v.vuelto > 0)
-                          Text(
-                            'Vuelto ${pesos(v.vuelto)}',
-                            key: const Key('vales_vuelto'),
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ElegirVales(
-                    venta: v,
-                    caja: widget.caja,
-                    fiesta: widget.fiesta,
-                    imprimir: papel.imprimir,
-                    alImprimir: (todo) => setState(() => _todoImpreso = todo),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

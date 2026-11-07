@@ -8,6 +8,11 @@
 // No corre `main.dart`: no abre la base ni inicia sesión. Los PIN inventados están en la
 // barra de arriba, con el botón para cortar y volver el internet. Para verla como en un
 // celular o una tablet, achicar la ventana.
+//
+// Sin gastar papel: `--dart-define=papel=pantalla`. Los papeles no salen por la
+// impresora: PAPEL, arriba, muestra el último como texto (las líneas grandes, con >>).
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +26,7 @@ import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_recordada.dart';
+import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 
 import '../test/helpers/barra_en_memoria.dart';
 import '../test/helpers/operadores_en_memoria.dart';
@@ -83,10 +89,13 @@ Future<void> main() async {
     overrides: [
       ...operadores.reemplazos,
       barraDeLaCajaProvider.overrideWithValue(b),
+      if (_papelEnPantalla) papelDeLaBarraProvider.overrideWithValue(prueba.papel),
       eventosDeLaBarraProvider.overrideWith((ref) async => prueba.eventos),
       subirVentaProvider.overrideWithValue((v) async {
         if (conexion.currentStatus == AppConnectivity.online) b.sinSubir.remove(v.id);
       }),
+      // Las anulaciones y los vales que salieron: en la prueba no suben a ningún lado.
+      subirDeLaBarraProvider.overrideWithValue((tabla, id) async {}),
       accesosBarraProvider.overrideWithValue(AccesosBarra(
         bajar: () async {
           await Future<void>.delayed(const Duration(milliseconds: 600));
@@ -100,21 +109,83 @@ Future<void> main() async {
     ],
     child: MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: _Arriba(conexion: conexion),
+      home: _Arriba(conexion: conexion, papel: _papelEnPantalla ? prueba.papel : null),
     ),
   ));
 }
 
+const _papelEnPantalla = String.fromEnvironment('papel') == 'pantalla';
+
 class _Arriba extends ConsumerStatefulWidget {
   final ConexionFija conexion;
 
-  const _Arriba({required this.conexion});
+  /// Con `papel=pantalla`: los papeles que "salieron", para mirarlos.
+  final PapelEnMemoria? papel;
+
+  const _Arriba({required this.conexion, this.papel});
 
   @override
   ConsumerState<_Arriba> createState() => _ArribaState();
 }
 
 class _ArribaState extends ConsumerState<_Arriba> {
+  /// El último papel, como texto: lo grande con >>, los renglones con su precio, y
+  /// [LOGO] o [QR] si los lleva.
+  void _verPapel(PapelEnMemoria papel) {
+    final ultimo = papel.enCrudo.lastOrNull;
+    final lineas = [
+      for (final l in ultimo ?? const <LineaTicket>[])
+        switch (l) {
+          GrandeTicket() => '>> ${l.texto}',
+          TituloTicket() => '## ${l.texto}',
+          TextoTicket() => l.texto,
+          RenglonTicket() => '${l.izquierda}  ·  ${l.derecha}',
+          SeparadorTicket() => '--------------------------------',
+          QrTicket() => '[QR]',
+          LogoTicket() => '[LOGO]',
+        },
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Papel ${papel.papeles.length}'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              ultimo == null ? 'Todavía no salió ningún papel.' : lineas.join('\n'),
+              key: const Key('prueba_papel_texto'),
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CERRAR'))],
+      ),
+    );
+  }
+
+  Timer? _reloj;
+  var _vistos = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // El contador de PAPEL se pone al día solo, cuando sale uno nuevo.
+    if (widget.papel case final papel?) {
+      _reloj = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted && papel.papeles.length != _vistos) {
+          setState(() => _vistos = papel.papeles.length);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _reloj?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = ref.watch(appRoleProvider);
@@ -133,6 +204,12 @@ class _ArribaState extends ConsumerState<_Arriba> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (widget.papel case final papel?)
+                  TextButton(
+                    key: const Key('prueba_papel'),
+                    onPressed: () => _verPapel(papel),
+                    child: Text('PAPEL (${papel.papeles.length})'),
+                  ),
                 TextButton(
                   onPressed: () {
                     setState(() => widget.conexion.estado =

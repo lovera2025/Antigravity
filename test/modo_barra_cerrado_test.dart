@@ -14,6 +14,8 @@ void main() {
     'lib/features/barra/widgets/cobrar_hoja.dart',
     'lib/features/barra/widgets/elegir_vales.dart',
     'lib/features/barra/widgets/abrir_caja_barra_dialog.dart',
+    'lib/features/barra/widgets/vales_de_la_venta_screen.dart',
+    'lib/features/barra/widgets/ventas_de_la_caja_screen.dart',
   ];
 
   test('las pantallas de la barra no llevan al panel, a la fiesta ni a cobrar cuotas', () {
@@ -65,7 +67,14 @@ void main() {
     final v = leer('lib/features/barra/widgets/vender_screen.dart');
     final guardar = v.indexOf('Future<void> _guardar(CobroBarra cobro)');
     final cuerpo = v.substring(guardar, v.indexOf('\n  }\n', guardar));
-    expect(cuerpo.indexOf('.vender('), lessThan(cuerpo.indexOf('_ValesDeLaVenta(')));
+    expect(cuerpo.indexOf('.vender('), lessThan(cuerpo.indexOf('ValesDeLaVentaScreen(')));
     expect(cuerpo, isNot(contains('imprimir')), reason: 'los vales se imprimen después, en su pantalla');
+  });
+
+  test('VENTAS ve solo las ventas de su caja, y anula desde la caja (no con lo del jefe)', () {
+    final v = leer('lib/features/barra/widgets/ventas_de_la_caja_screen.dart');
+    expect(v, contains('ventasDeLaCaja(widget.caja.id)'));
+    expect(v, isNot(contains('.ventas(')), reason: 'las de la fiesta son de todas las cajas');
+    expect(v, isNot(contains('barraDelJefeProvider')));
   });
 }
