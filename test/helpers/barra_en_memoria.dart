@@ -341,6 +341,9 @@ class BarraEnPrueba {
 
   /// Lo que no es una venta y se mandó a subir ya: "tabla id".
   final subidasDeLaBarra = <String>[];
+
+  /// Los PDF que se guardaron: el nombre del archivo y sus renglones.
+  final pdfs = <({String nombre, String titulo, List<LineaTicket> lineas})>[];
   var bajadas = 0;
   bool bajaBien = true;
   DateTime? alDia;
@@ -355,6 +358,10 @@ class BarraEnPrueba {
         subirVentaProvider.overrideWithValue((v) async => subidas.add(v.id)),
         subirDeLaBarraProvider.overrideWithValue(
           (tabla, id) async => subidasDeLaBarra.add('$tabla $id'),
+        ),
+        guardarPdfDeLaBarraProvider.overrideWithValue(
+          (lineas, {required titulo, required nombre, context}) async =>
+              pdfs.add((nombre: nombre, titulo: titulo, lineas: lineas)),
         ),
         accesosBarraProvider.overrideWithValue(AccesosBarra(
           bajar: () async {

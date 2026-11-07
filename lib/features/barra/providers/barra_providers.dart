@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart' show BuildContext;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/sync_engine.dart';
 import '../../../models/evento.dart';
+import '../../common/services/pdf_service.dart';
 import '../../common/utils/subir_ya.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/repositories/eventos_repository.dart';
@@ -13,6 +15,8 @@ import '../datos/barra_local.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/canal_universal_ble.dart';
 import '../impresion/impresora_bluetooth.dart';
+import '../impresion/papel_pdf.dart';
+import '../impresion/ticket_esc_pos.dart';
 import '../services/barra_sin_internet.dart';
 import '../services/fiestas_de_la_barra.dart';
 import '../services/papel_de_la_barra.dart';
@@ -76,6 +80,28 @@ final subirDeLaBarraProvider =
             desde: DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
           );
     } catch (_) {}
+  };
+});
+
+/// Guarda un papel de la barra como PDF de 58 mm (`PapelPdf`, con las letras de la app)
+/// y lo entrega: en Windows con el menú de ver o guardar, en Android para compartir. Los
+/// tests lo reemplazan.
+typedef GuardarPdfDeLaBarra = Future<void> Function(
+  List<LineaTicket> lineas, {
+  required String titulo,
+  required String nombre,
+  BuildContext? context,
+});
+
+final guardarPdfDeLaBarraProvider = Provider<GuardarPdfDeLaBarra>((ref) {
+  return (lineas, {required titulo, required nombre, context}) async {
+    final bytes = await PapelPdf.armar(
+      lineas,
+      titulo: titulo,
+      fuentes: await PdfService.fuentesOutfit(),
+    );
+    if (context != null && !context.mounted) return;
+    await PdfService.entregarPdf(bytes, nombre, context: context);
   };
 });
 

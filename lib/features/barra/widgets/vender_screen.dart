@@ -18,6 +18,7 @@ import '../impresion/impresora_bluetooth.dart';
 import '../providers/barra_providers.dart';
 import '../services/imagen_de_producto.dart';
 import '../services/productos_para_vender.dart';
+import 'cerrar_caja_barra_screen.dart';
 import 'cobrar_hoja.dart';
 import 'elegir_disenio.dart';
 import 'elegir_impresora_screen.dart';
@@ -240,6 +241,19 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     if (mounted) unawaited(_cargar());
   }
 
+  /// Cerrar la caja: contar a ciegas y ver el cierre. Si quedó cerrada, VENDER se va y
+  /// vuelve al inicio de la barra: con la caja cerrada no se vende.
+  Future<void> _cerrarCaja() async {
+    final tema = Theme.of(context);
+    final cerrada = await Navigator.of(context).push<bool>(MaterialPageRoute<bool>(
+      builder: (_) => Theme(
+        data: tema,
+        child: CerrarCajaBarraScreen(caja: _caja, fiesta: _fiesta),
+      ),
+    ));
+    if (cerrada == true && mounted) Navigator.of(context).pop();
+  }
+
   /// VENTAS: las ventas de esta caja, para reimprimir, imprimir lo que faltó, sacar el
   /// ticket o anular. Al volver, "Quedan" se pone al día (una anulada devuelve stock).
   Future<void> _verVentas() async {
@@ -338,6 +352,12 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
               impresoraLista ? Icons.print : Icons.print_disabled_outlined,
               color: impresoraLista ? Colors.green.shade600 : Colors.grey,
             ),
+          ),
+          IconButton(
+            key: const Key('vender_cerrar'),
+            tooltip: 'Cerrar la caja',
+            onPressed: _cerrarCaja,
+            icon: const Icon(Icons.lock_outline),
           ),
           const SizedBox(width: 4),
         ],

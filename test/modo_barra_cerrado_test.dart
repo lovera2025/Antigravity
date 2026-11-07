@@ -16,6 +16,7 @@ void main() {
     'lib/features/barra/widgets/abrir_caja_barra_dialog.dart',
     'lib/features/barra/widgets/vales_de_la_venta_screen.dart',
     'lib/features/barra/widgets/ventas_de_la_caja_screen.dart',
+    'lib/features/barra/widgets/cerrar_caja_barra_screen.dart',
   ];
 
   test('las pantallas de la barra no llevan al panel, a la fiesta ni a cobrar cuotas', () {
@@ -69,6 +70,15 @@ void main() {
     final cuerpo = v.substring(guardar, v.indexOf('\n  }\n', guardar));
     expect(cuerpo.indexOf('.vender('), lessThan(cuerpo.indexOf('ValesDeLaVentaScreen(')));
     expect(cuerpo, isNot(contains('imprimir')), reason: 'los vales se imprimen después, en su pantalla');
+  });
+
+  test('contar a ciegas: antes de cerrar, la pantalla no muestra ninguna plata de la caja', () {
+    final c = leer('lib/features/barra/widgets/cerrar_caja_barra_screen.dart');
+    final i = c.indexOf('Widget _contar() {');
+    final contar = c.substring(i, c.indexOf('\n  }\n', i));
+    for (final prohibido in ['efectivoEsperado', '_cuentas', 'pesos(', '_ventas', 'PapelEnPantalla']) {
+      expect(contar, isNot(contains(prohibido)), reason: 'el paso de contar muestra $prohibido');
+    }
   });
 
   test('VENTAS ve solo las ventas de su caja, y anula desde la caja (no con lo del jefe)', () {
