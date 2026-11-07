@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../cierre_caja/providers/cierre_caja_provider.dart';
+import '../../cierre_caja/services/fecha_y_caja.dart';
 import '../providers/finanzas_provider.dart';
 import '../repositories/finanzas_repository.dart';
 import 'selector_cobros.dart';
@@ -23,6 +27,10 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
   String _nuevoMedio = 'efectivo';
   DateTime? _nuevaFecha;
 
+  /// Si lo tildado es un solo cobro: una línea, o todas las de un mismo cobro
+  /// ("Tildar todo el cobro"). Solo así se le puede cambiar la fecha.
+  bool _unSoloCobro = false;
+
   static String _medioNorm(dynamic raw) =>
       raw == null ? '' : raw.toString().toLowerCase().trim();
 
@@ -36,7 +44,33 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
         final mp = _medioNorm(lista.first['medio_pago']);
         _nuevoMedio = (mp == 'transferencia' || mp == 'efectivo') ? mp : 'efectivo';
       }
-      if (lista.length != 1) _nuevaFecha = null;
+      _unSoloCobro = lista.length == 1;
+      if (lista.isEmpty) _nuevaFecha = null;
+    });
+    unawaited(_verSiEsUnSoloCobro(lista));
+  }
+
+  /// Varias líneas tildadas pueden ser un solo cobro (la cuota, la mesa y la mora):
+  /// entonces también se le cambia la fecha, a todas juntas.
+  Future<void> _verSiEsUnSoloCobro(List<Map<String, dynamic>> lista) async {
+    if (lista.length <= 1) return;
+    var mismo = false;
+    final primero = lista.first;
+    if (primero['tabla'] == 'pagos_contrato_alumno') {
+      try {
+        final hermanas = await ref
+            .read(finanzasRepositoryProvider)
+            .lineasDelMismoCobro(primero['id'].toString());
+        final ids = {for (final h in hermanas) h['id'].toString()};
+        mismo = lista.skip(1).every(
+              (r) => r['tabla'] == 'pagos_contrato_alumno' && ids.contains(r['id'].toString()),
+            );
+      } catch (_) {}
+    }
+    if (!mounted || !identical(lista, _seleccion)) return;
+    setState(() {
+      _unSoloCobro = mismo;
+      if (!mismo) _nuevaFecha = null;
     });
   }
 
@@ -73,13 +107,23 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
         );
       }
       final fecha = _nuevaFecha;
-      if (fecha != null && _seleccion.length == 1) {
+      CajaTrasCambioDeFecha? caja;
+      var lineas = 0;
+      if (fecha != null && _unSoloCobro) {
         final r = _seleccion.first;
-        await repo.actualizarFechaPagoRegistro(
+        final hecho = await repo.actualizarFechaPagoRegistro(
           tabla: r['tabla'].toString(),
           id: r['id'].toString(),
           nuevaFecha: fecha,
         );
+        caja = hecho.caja;
+        lineas = hecho.lineas;
+        // La mora se calcula con la fecha de los pagos: se le revisa ya, y no al
+        // abrir el programa la próxima vez (en cualquier PC, sin que nadie lo vea).
+        final contrato = hecho.contratoId;
+        if (contrato != null && contrato.isNotEmpty) {
+          await ref.read(syncEngineProvider).revisarMora(soloContratos: {contrato});
+        }
       }
 
       await ref.read(finanzasProvider.notifier).recargar();
@@ -89,12 +133,24 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
 
       if (!mounted) return;
       final n = _seleccion.length;
+      final cuantas = lineas > 1 ? ' (las $lineas líneas del cobro)' : '';
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            n == 1 ? 'Registro actualizado correctamente.' : '$n registros actualizados correctamente.',
-          ),
+          duration: caja == null || caja == CajaTrasCambioDeFecha.igual
+              ? const Duration(seconds: 4)
+              : const Duration(seconds: 8),
+          content: Text(switch (caja) {
+            CajaTrasCambioDeFecha.salioDeLaCaja =>
+              'Pasó al ${ArTime.formatFechaCorta(fecha!)}$cuantas y salió de la caja en la que se '
+                  'cargó: ya no cuenta en ese cierre.',
+            CajaTrasCambioDeFecha.quedaEnCajaCerrada =>
+              'Pasó al ${ArTime.formatFechaCorta(fecha!)}$cuantas. Sigue en la caja en la que se '
+                  'cobró, porque esa caja ya se cerró con esta plata contada.',
+            CajaTrasCambioDeFecha.igual when lineas > 1 =>
+              'Pasó al ${ArTime.formatFechaCorta(fecha!)}$cuantas.',
+            _ => n == 1 ? 'Registro actualizado correctamente.' : '$n registros actualizados correctamente.',
+          }),
         ),
       );
     } catch (e) {
@@ -114,11 +170,15 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
     // quedaba corrido tres horas.
     final baseAr = ArTime.toAr(base);
     final inicialAr = _nuevaFecha != null ? ArTime.toAr(_nuevaFecha!) : baseAr;
+    // Un cobro no puede ser de mañana: hasta hoy (antes dejaba un año adelante).
+    final hoyAr = ArTime.nowAr();
+    final hoy = DateTime(hoyAr.year, hoyAr.month, hoyAr.day);
+    final inicial = DateTime(inicialAr.year, inicialAr.month, inicialAr.day);
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(inicialAr.year, inicialAr.month, inicialAr.day),
+      initialDate: inicial.isAfter(hoy) ? hoy : inicial,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: hoy,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -166,7 +226,7 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
               Text(
                 'Buscá por nombre de cliente/alumno o por texto del concepto y '
                 'tildá uno o varios. Podés cambiar el medio de pago (y la fecha, '
-                'si es uno solo); no borra registros.',
+                'si es un solo cobro); no borra registros.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.35),
               ),
               const SizedBox(height: 14),
@@ -213,11 +273,19 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
                     style: TextStyle(fontSize: 12, color: grey),
                   ),
                 ],
-                if (n == 1) ...[
+                if (_unSoloCobro) ...[
                   const SizedBox(height: 16),
                   Text(
-                    'Nueva fecha de pago (opcional):',
+                    n == 1
+                        ? 'Nueva fecha de pago (opcional):'
+                        : 'Nueva fecha del cobro, para sus $n líneas (opcional):',
                     style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: grey),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Cambia todo el cobro junto. Si va a otro día, sale de la caja abierta '
+                    'en la que se cargó.',
+                    style: TextStyle(fontSize: 11.5, color: grey),
                   ),
                   const SizedBox(height: 8),
                   Row(

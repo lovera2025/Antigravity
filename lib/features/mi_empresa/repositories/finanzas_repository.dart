@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common/sqlite_api.dart' show DatabaseExecutor;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../main.dart';
 import '../../../core/database/local_database.dart';
@@ -12,6 +13,7 @@ import '../../../models/contrato_alumno.dart';
 import '../../../models/transaccion.dart';
 import '../../eventos/services/mora_tracked_recovery.dart';
 import '../../cierre_caja/services/cobro_agrupado.dart';
+import '../../cierre_caja/services/fecha_y_caja.dart';
 import '../models/ingreso_detallado.dart';
 
 class FinanzasRepository {
@@ -786,11 +788,22 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     return {for (final c in cobros) '${c.tabla}|${c.id}': c}.values.toList();
   }
 
-  /// Actualiza solo [fecha_pago] en SQLite y encola sync.
-  Future<void> actualizarFechaPagoRegistro({
+  /// Cambia la fecha de un cobro y encola sync. Dos reglas (7-nov-2026):
+  /// - **Todo el cobro junto:** en un masivo, las otras líneas del mismo cobro
+  ///   ([lineasDelMismoCobro]: la cuota, la mesa, el interés de mora) cambian con
+  ///   [id]. Antes cambiaba solo la tildada y el cobro quedaba partido en dos días.
+  /// - **Si el día nuevo no es el de su caja y la caja sigue abierta, el cobro sale
+  ///   de ella** (`sesion_caja_id` en null): esa plata no entró ese día
+  ///   ([cajaTrasCambioDeFecha]). Una caja cerrada no se toca.
+  ///
+  /// Devuelve qué pasó con la caja, cuántas líneas cambiaron y el alumno (para
+  /// revisarle la mora en el momento: se calcula con la fecha de los pagos).
+  Future<({CajaTrasCambioDeFecha caja, int lineas, String? contratoId})>
+      actualizarFechaPagoRegistro({
     required String tabla,
     required String id,
     required DateTime nuevaFecha,
+    DateTime Function()? reloj,
   }) async {
     if (!_tablasMedioPagoCorregible.contains(tabla)) {
       throw ArgumentError('Tabla no permitida: $tabla');
@@ -808,21 +821,76 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     if (((rows.first['anulado'] as num?)?.toInt() ?? 0) != 0) {
       throw StateError('El cobro está anulado; no se puede cambiar la fecha.');
     }
+    final esMasivo = tabla == 'pagos_contrato_alumno';
+    // Antes de cambiar nada: después la tildada ya no está a la misma hora.
+    final hermanas = esMasivo ? await lineasDelMismoCobro(id) : const <Map<String, dynamic>>[];
+    final ahora = (reloj ?? DateTime.now)();
 
+    var resultado = CajaTrasCambioDeFecha.igual;
+    await db.transaction((txn) async {
+      resultado = await _cambiarFechaDeUnaLinea(txn, tabla, rows.first, nuevaFecha, ahora);
+      for (final h in hermanas) {
+        final fila = await txn.query(tabla, where: 'id = ?', whereArgs: [h['id']], limit: 1);
+        if (fila.isEmpty || ((fila.first['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
+        await _cambiarFechaDeUnaLinea(txn, tabla, fila.first, nuevaFecha, ahora);
+      }
+    });
+    return (
+      caja: resultado,
+      lineas: 1 + hermanas.length,
+      contratoId: esMasivo ? rows.first['contrato_alumno_id']?.toString() : null,
+    );
+  }
+
+  /// Una línea: la fecha nueva y, si va a otro día con su caja abierta, sin caja.
+  Future<CajaTrasCambioDeFecha> _cambiarFechaDeUnaLinea(
+    DatabaseExecutor db,
+    String tabla,
+    Map<String, Object?> fila,
+    DateTime nuevaFecha,
+    DateTime ahora,
+  ) async {
+    final id = fila['id'].toString();
     final isoDate = nuevaFecha.toUtc().toIso8601String();
+
+    // La caja de la línea (si tiene), para saber si el día nuevo es el suyo.
+    final sesionId = fila['sesion_caja_id']?.toString().trim() ?? '';
+    ({DateTime abiertaAt, DateTime? cerradaAt})? caja;
+    if (sesionId.isNotEmpty) {
+      final sesiones = await db.query(
+        'sesiones_caja',
+        columns: ['abierta_at', 'cerrada_at'],
+        where: 'id = ?',
+        whereArgs: [sesionId],
+        limit: 1,
+      );
+      final abierta = sesiones.isEmpty
+          ? null
+          : DateTime.tryParse(sesiones.first['abierta_at']?.toString() ?? '');
+      if (abierta != null) {
+        caja = (
+          abiertaAt: abierta,
+          cerradaAt: DateTime.tryParse(sesiones.first['cerrada_at']?.toString() ?? ''),
+        );
+      }
+    }
+    final resultado = cajaTrasCambioDeFecha(nuevaFecha: nuevaFecha, caja: caja, ahora: ahora);
+    final sale = resultado == CajaTrasCambioDeFecha.salioDeLaCaja;
 
     await db.update(
       tabla,
-      {'fecha_pago': isoDate},
+      {'fecha_pago': isoDate, if (sale) 'sesion_caja_id': null},
       where: 'id = ?',
       whereArgs: [id],
     );
     await SyncQueue.enqueue(
+      executor: db,
       tabla: tabla,
       operacion: SyncOperation.update,
       registroId: id,
-      payload: {'id': id, 'fecha_pago': isoDate},
+      payload: {'id': id, 'fecha_pago': isoDate, if (sale) 'sesion_caja_id': null},
     );
+    return resultado;
   }
 
   /// Marca el cobro como anulado (no borra la fila). Excluye el monto de saldos y reportes.
