@@ -10,7 +10,8 @@ feature**, que es la de la carpeta del proyecto. El plan: `docs/PLAN_MORA_ADELAN
 la 6.3.3). No hubo instalador de la 6.3.2: el tag `v6.3.2` marca el commit `2789053`. **El simulacro, repetido el 7-nov** sobre una
 copia de la base de las 07:26 (igual a la nube: último pago el 6-nov 19:59): los mismos 4 alumnos, a los 4 les baja (-$65.500 a la
 fecha), nadie en el grupo B, ningún perdón cambiado, la revisión de verdad los deja como dice la regla. Foto "antes de 6.3.3" sacada
-(7-nov 07:47). **Falta: que el usuario instale las tres PCs y la foto "después"** (pasos 6 y 7 de abajo).
+(7-nov 07:47). **Instalada en las tres PCs el 7-nov** (la casa 07:53, la oficina 08:18) y la foto "después" (08:26): cambian solo los
+4 del simulacro, con sus números, y nadie más. Cerrada.
 
 Lo de abajo es el estado al 6-nov: el arreglo, las pruebas y el simulacro están hechos y en las dos
 ramas. Lo que queda, en orden, está en "Lo que falta" (abajo). **Ningún instalador de la 6.3.x sale de la rama feature**: esa tiene la
