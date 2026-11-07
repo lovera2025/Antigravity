@@ -1030,13 +1030,18 @@ class LocalDatabase {
     ''');
   }
 
-  /// La tabla de la v78 (6.4.0): las sillas que se suman la noche de la fiesta,
-  /// en la puerta, con el vale de la barra (`SillaPuerta`).
+  /// Las tablas de la v78 (6.4.0):
+  /// - `sillas_puerta`: las sillas que se suman la noche de la fiesta, en la
+  ///   puerta, con el vale de la barra (`SillaPuerta`). Quitar una silla le pone
+  ///   `quitada_at` (con quién y el motivo) y la fila queda.
+  /// - `barra_vales`: cada papel de vale que **salió** de una venta de la barra,
+  ///   el original y cada copia (`ValeBarra`). Así una copia saca el mismo vale
+  ///   que salió, y la cajera reimprime una sola vez. La venta no se toca: nunca
+  ///   se edita.
   ///
-  /// Mismo criterio que las de antes: **nueva y aparte**, solo `CREATE ... IF
-  /// NOT EXISTS`, sin tocar `contratos_alumnos`. Las filas solo se agregan:
-  /// quitar una silla le pone `quitada_at` (con quién y el motivo) y la fila
-  /// queda.
+  /// Mismo criterio que las de antes: **nuevas y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar `contratos_alumnos` ni las tablas de la v77. Las
+  /// filas solo se agregan.
   static Future<void> crearTablasV78(DatabaseExecutor db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sillas_puerta (
@@ -1060,6 +1065,29 @@ class LocalDatabase {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sillas_puerta_contrato ON sillas_puerta(contrato_alumno_id)',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_vales (
+        id TEXT PRIMARY KEY,
+        venta_id TEXT NOT NULL,
+        caja_barra_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        numero_vale INTEGER,
+        bebidas TEXT NOT NULL,
+        por_separado INTEGER NOT NULL DEFAULT 0,
+        copia_numero INTEGER NOT NULL DEFAULT 0,
+        motivo TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_vales_venta ON barra_vales(venta_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_vales_caja ON barra_vales(caja_barra_id)',
     );
   }
 
@@ -3329,7 +3357,7 @@ class LocalDatabase {
 
     // La misma guarda: pidiendo la 77, la tabla de la v78 no aparece.
     if (oldVersion < 78 && newVersion >= 78) {
-      debugPrint('  🔧 v78: las sillas de la noche');
+      debugPrint('  🔧 v78: las sillas de la noche y los vales de la barra');
       try {
         await crearTablasV78(db);
         debugPrint('✅ Migración v78 completada');

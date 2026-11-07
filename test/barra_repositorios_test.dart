@@ -39,6 +39,7 @@ void main() {
       )
     ''');
     await LocalDatabase.crearTablasV77(db);
+    await LocalDatabase.crearTablasV78(db);
     reloj = DateTime.utc(2026, 12, 4, 22);
     equipo = 'tablet-1';
     barra = BarraLocal(
@@ -456,6 +457,115 @@ void main() {
       expect(() => barra.anular(venta, motivo: '  ', quien: 'Jefe'), throwsArgumentError);
       expect(await db.query('barra_anulaciones'), isEmpty);
     });
+
+    test('la cajera también anula, desde su caja: la misma fila, con quién y el equipo', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      final BarraDeLaCaja caja = barra;
+      final a = await caja.anular(venta, motivo: 'se equivocó de bebida', quien: 'Marta');
+      expect(a.id, UuidUtils.barraAnulacionId(venta.id));
+      expect(a.hechoPor, 'Marta');
+      expect(a.deviceId, 'tablet-1');
+      expect((await encolado('barra_anulaciones')).single['registro_id'], a.id);
+      expect(await caja.anulacionesDeLaCaja(venta.cajaBarraId), hasLength(1));
+    });
+  });
+
+  group('los vales que salieron', () {
+    test('cada papel se anota y se encola, con el equipo; la venta no se toca', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      final ventaAntes = (await db.query('barra_ventas')).single;
+      final anotado = await barra.anotarVale(ValeBarra.salio(
+        venta: venta,
+        bebidas: const [BebidaDelVale(2, 'Cerveza lata')],
+        porSeparado: false,
+        hechoPor: 'Marta',
+        ahora: reloj,
+      ));
+      expect(anotado.deviceId, 'tablet-1');
+      expect(anotado.ventaId, venta.id);
+      expect(anotado.cajaBarraId, venta.cajaBarraId);
+      expect(anotado.eventoId, _evento);
+      expect(anotado.copiaNumero, 0);
+      final leido = ValeBarra.fromMap((await db.query('barra_vales')).single);
+      expect(leido.bebidas, const [BebidaDelVale(2, 'Cerveza lata')]);
+      expect(leido.porSeparado, isFalse);
+      expect(leido.numeroVale, isNull);
+      expect(leido.deviceId, 'tablet-1');
+      expect((await encolado('barra_vales')).single['registro_id'], anotado.id);
+      expect((await db.query('barra_ventas')).single, ventaAntes, reason: 'la venta no se toca');
+    });
+
+    test('la copia es otra fila: el original queda como salió', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      await barra.anotarVale(ValeBarra.salio(
+        venta: venta,
+        bebidas: const [BebidaDelVale(1, 'Cerveza lata')],
+        porSeparado: true,
+        numeroVale: 1,
+        ahora: reloj,
+      ));
+      reloj = reloj.add(const Duration(minutes: 5));
+      await barra.anotarVale(ValeBarra.salio(
+        venta: venta,
+        bebidas: const [BebidaDelVale(1, 'Cerveza lata')],
+        porSeparado: true,
+        numeroVale: 1,
+        copiaNumero: 1,
+        motivo: 'se le mojó',
+        hechoPor: 'Marta',
+        ahora: reloj,
+      ));
+      final vales = await barra.valesDeLaCaja(venta.cajaBarraId);
+      expect([for (final v in vales) v.copiaNumero], [0, 1]);
+      expect(vales.last.motivo, 'se le mojó');
+      expect(vales.first.motivo, isNull);
+      expect(await barra.vales(_evento), hasLength(2));
+      expect(await barra.vales(_otraFiesta), isEmpty);
+    });
+
+    test('un vale que no cierra no se arma', () async {
+      final venta = await venderUnaCerveza(await abrirLaDeMarta());
+      ValeBarra armar({
+        List<BebidaDelVale> bebidas = const [BebidaDelVale(1, 'Agua')],
+        int? numeroVale,
+        int copiaNumero = 0,
+        String? motivo,
+      }) =>
+          ValeBarra.salio(
+            venta: venta,
+            bebidas: bebidas,
+            porSeparado: false,
+            numeroVale: numeroVale,
+            copiaNumero: copiaNumero,
+            motivo: motivo,
+            ahora: reloj,
+          );
+      expect(() => armar(bebidas: const []), throwsArgumentError);
+      expect(() => armar(bebidas: const [BebidaDelVale(0, 'Agua')]), throwsArgumentError);
+      expect(() => armar(numeroVale: 0), throwsArgumentError);
+      expect(() => armar(copiaNumero: 1), throwsArgumentError, reason: 'una copia lleva motivo');
+      expect(() => armar(copiaNumero: 1, motivo: '  '), throwsArgumentError);
+      expect(armar(motivo: 'no va').motivo, isNull, reason: 'el original no lleva motivo');
+      expect(armar(copiaNumero: 2, motivo: ' perdió el papel ').motivo, 'perdió el papel');
+    });
+
+    test('unas bebidas ilegibles no frenan la lista', () {
+      final v = ValeBarra.fromMap({
+        'id': 'x',
+        'venta_id': 'v',
+        'caja_barra_id': 'c',
+        'evento_id': _evento,
+        'bebidas': '{roto',
+        'por_separado': 1,
+        'copia_numero': '1',
+        'created_at': '',
+        'updated_at': '',
+      });
+      expect(v.bebidas, isEmpty);
+      expect(v.porSeparado, isTrue);
+      expect(v.copiaNumero, 1);
+      expect(v.esCopia, isTrue);
+    });
   });
 
   test('lo de la fiesta: todas las cajas y todas las ventas, también las de otro equipo', () async {
@@ -478,6 +588,7 @@ void main() {
     expect(await vieja.cajas(_evento), isEmpty);
     expect(await vieja.ventas(_evento), isEmpty);
     expect(await vieja.anulaciones(_evento), isEmpty);
+    expect(await vieja.vales(_evento), isEmpty);
     expect(await vieja.cajaAbierta(eventoId: _evento, operadorId: _marta), isNull);
     await sinTablas.close();
     await tmp.delete(recursive: true);

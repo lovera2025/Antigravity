@@ -415,4 +415,36 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
       return nueva;
     });
   }
+
+  // ── Los vales que salieron ─────────────────────────────────────────────────
+
+  @override
+  Future<ValeBarra> anotarVale(ValeBarra vale) async {
+    final db = await _abrir();
+    final fila = vale.toMap()..['device_id'] = await _equipo();
+    await db.transaction((txn) => _guardar(txn, 'barra_vales', vale.id, fila));
+    return ValeBarra.fromMap(fila);
+  }
+
+  @override
+  Future<List<ValeBarra>> valesDeLaCaja(String cajaId) async => [
+        for (final f in await _leer(
+          'barra_vales',
+          where: 'caja_barra_id = ?',
+          whereArgs: [cajaId],
+          orderBy: 'created_at',
+        ))
+          ValeBarra.fromMap(f),
+      ];
+
+  @override
+  Future<List<ValeBarra>> vales(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_vales',
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'created_at',
+        ))
+          ValeBarra.fromMap(f),
+      ];
 }

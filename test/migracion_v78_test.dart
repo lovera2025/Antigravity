@@ -6,8 +6,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 
-/// La migración v78 (las sillas de la noche) tiene que agregar su tabla y **nada
-/// más**: ni una fila de lo que ya existe puede cambiar, se tiene que poder
+/// La migración v78 (las sillas de la noche y los vales de la barra) tiene que
+/// agregar sus tablas y **nada más**: ni una fila de lo que ya existe puede cambiar, se tiene que poder
 /// correr dos veces, y si alguien reinstala la 6.3.1 la base tiene que seguir
 /// abriendo. Mismo modelo que `migracion_v77_test.dart`.
 ///
@@ -19,7 +19,7 @@ void main() {
   late Directory tmp;
   late String path;
 
-  const tablasV78 = ['sillas_puerta'];
+  const tablasV78 = ['sillas_puerta', 'barra_vales'];
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('migracion_v78_');
@@ -153,14 +153,16 @@ void main() {
   Map<String, String> sin(Map<String, String> f, List<String> tablas) =>
       Map.of(f)..removeWhere((k, _) => tablas.contains(k));
 
-  test('de 77 a 78: aparece la tabla de las sillas de la noche y lo demás igual',
+  test('de 77 a 78: aparecen las sillas de la noche y los vales, y lo demás igual',
       () async {
     await crearBaseV77();
     final antes = await factory.openDatabase(path);
     final fotoAntes = await foto(antes);
     final esquemaAntes = await esquemaSin(antes, tablasV78);
     await antes.close();
-    expect(fotoAntes.containsKey('sillas_puerta'), isFalse);
+    for (final t in tablasV78) {
+      expect(fotoAntes.containsKey(t), isFalse, reason: t);
+    }
 
     final db = await abrirEnVersion(78);
     expect(await db.getVersion(), 78);
@@ -169,34 +171,46 @@ void main() {
         reason: 'la migración no toca el esquema de lo que ya existía');
     await db.close();
 
-    expect(fotoDespues['sillas_puerta'], '[]', reason: 'nace vacía');
+    for (final t in tablasV78) {
+      expect(fotoDespues[t], '[]', reason: '$t nace vacía');
+    }
     expect(sin(fotoDespues, tablasV78), fotoAntes);
   });
 
-  test('pidiendo la 77, la tabla de la v78 no aparece', () async {
+  test('pidiendo la 77, las tablas de la v78 no aparecen', () async {
     await crearBaseV77();
     final db = await abrirEnVersion(77);
     await LocalDatabase.onUpgradeParaTest(db, 76, 77);
-    expect((await foto(db)).containsKey('sillas_puerta'), isFalse);
+    final f = await foto(db);
+    for (final t in tablasV78) {
+      expect(f.containsKey(t), isFalse, reason: t);
+    }
     await db.close();
   });
 
-  test('la tabla tiene las columnas que usa el sync, sin únicos fuera del id',
+  test('las tablas tienen las columnas que usa el sync, sin únicos fuera del id',
       () async {
     await crearBaseV77();
     final db = await abrirEnVersion(78);
-    final columnas = {
-      for (final c in await db.rawQuery('PRAGMA table_info(sillas_puerta)'))
-        c['name'] as String,
-    };
-    expect(columnas, {
+    Future<Set<String>> columnas(String tabla) async => {
+          for (final c in await db.rawQuery('PRAGMA table_info($tabla)'))
+            c['name'] as String,
+        };
+    expect(await columnas('sillas_puerta'), {
       'id', 'evento_id', 'contrato_alumno_id', 'mesa', 'cantidad', 'vale',
       'anotado_por', 'nota', 'quitada_at', 'quitada_por', 'quitada_motivo',
       'created_at', 'updated_at',
     });
-    for (final i in await db.rawQuery('PRAGMA index_list(sillas_puerta)')) {
-      if (i['origin'] == 'pk') continue;
-      expect(i['unique'], 0, reason: 'índice único ${i['name']}');
+    expect(await columnas('barra_vales'), {
+      'id', 'venta_id', 'caja_barra_id', 'evento_id', 'numero_vale', 'bebidas',
+      'por_separado', 'copia_numero', 'motivo', 'hecho_por', 'device_id',
+      'created_at', 'updated_at',
+    });
+    for (final t in tablasV78) {
+      for (final i in await db.rawQuery('PRAGMA index_list($t)')) {
+        if (i['origin'] == 'pk') continue;
+        expect(i['unique'], 0, reason: 'índice único ${i['name']}');
+      }
     }
     await db.close();
   });
@@ -248,6 +262,7 @@ void main() {
       expect(prohibido.allMatches(codigo), isEmpty, reason: nombre);
     }
     expect(crear, contains('CREATE TABLE IF NOT EXISTS sillas_puerta ('));
+    expect(crear, contains('CREATE TABLE IF NOT EXISTS barra_vales ('));
     expect(
       RegExp('CREATE (UNIQUE )?(TABLE|INDEX) (?!IF NOT EXISTS)').hasMatch(crear),
       isFalse,

@@ -1,20 +1,7 @@
 import '../datos/barra_repositorio.dart';
 import 'silla_de_la_puerta.dart';
 
-/// Una bebida de un vale: cuántas y cuál, con el nombre de la venta.
-class BebidaDelVale {
-  final int cantidad;
-  final String nombre;
-
-  const BebidaDelVale(this.cantidad, this.nombre);
-
-  @override
-  bool operator ==(Object other) =>
-      other is BebidaDelVale && other.cantidad == cantidad && other.nombre == nombre;
-
-  @override
-  int get hashCode => Object.hash(cantidad, nombre);
-}
+export '../datos/vale_barra.dart' show BebidaDelVale;
 
 /// Un vale de la barra: el papel que el barman entrega y **se queda**. Sale uno solo
 /// por papel, sin precios: lo cobrado está en la venta.

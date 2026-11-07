@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/barra/datos/vale_barra.dart';
 import 'package:arguello_events/models/silla_puerta.dart';
 
 /// La tabla de la v78 (las sillas que se suman la noche de la fiesta) en el motor
@@ -143,5 +144,109 @@ void main() {
   test('el repositorio no borra nunca', () {
     expect(repositorio, isNot(contains('.delete(')));
     expect(repositorio, isNot(contains('SyncOperation.delete')));
+  });
+
+  // ── barra_vales: los vales que salieron de cada venta, y sus copias ─────────
+
+  final sqlVales = leer('supabase/migrations/20261107100000_barra_vales.sql');
+  final barraLocal = leer('lib/features/barra/datos/barra_local.dart');
+  final vale = ValeBarra(
+    id: 'f0000000-0000-4000-8000-000000000001',
+    ventaId: 'd0000000-0000-4000-8000-000000000001',
+    cajaBarraId: 'b0000000-0000-4000-8000-000000000001',
+    eventoId: 'e0000000-0000-4000-8000-000000000001',
+    numeroVale: 2,
+    bebidas: const [BebidaDelVale(3, 'Cerveza lata')],
+    porSeparado: true,
+    copiaNumero: 1,
+    motivo: 'se le mojó',
+    hechoPor: 'Marta',
+    deviceId: 'tablet-1',
+    createdAt: '2026-12-01T23:05:00.000Z',
+    updatedAt: '2026-12-01T23:05:00.000Z',
+  );
+
+  group('barra_vales en las listas del motor', () {
+    test('sube y baja todas sus columnas: las del modelo y las de la base',
+        () async {
+      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      await LocalDatabase.crearTablasV78(db);
+      final enLaBase = {
+        for (final c in await db.rawQuery('PRAGMA table_info(barra_vales)'))
+          c['name'] as String,
+      };
+      await db.close();
+      expect(columnasDelMotor('barra_vales'), enLaBase, reason: 'motor y base');
+      expect(columnasDelMotor('barra_vales'), vale.toMap().keys.toSet(),
+          reason: 'motor y modelo');
+    });
+
+    test('baja con lo del cobro (el jefe mira las cajas en vivo) y en la bajada general', () {
+      expect(declaracion('_incrementalColumns', '}'),
+          contains("'barra_vales': 'updated_at'"));
+      expect(declaracion('_tablasDelCobro', ']'), contains("'barra_vales'"));
+      expect(declaracion('_tablasDeCarga', ']'), isNot(contains("'barra_vales'")));
+      expect(motor, contains("_pullTable(db, 'barra_vales', 'updated_at')"));
+    });
+
+    test('sube después de su venta', () {
+      expect(motor, contains("if (table == 'barra_vales') return 5;"));
+    });
+
+    test('un vale encolado no se descarta nunca: no es hija en la limpieza de la cola', () {
+      expect(cola, isNot(contains("'barra_vales'")));
+    });
+
+    test('no está en ninguna lista que borre filas locales', () {
+      expect(declaracion('_tablasAReconciliar', ']'), isNot(contains("'barra_vales'")));
+      expect(declaracion('_hijasEnCascada', '}'), isNot(contains("'barra_vales'")));
+      expect(SyncEngine.tablasSinRevisarBorrados.keys, contains('barra_vales'));
+    });
+
+    test('el repositorio de la barra no borra nunca', () {
+      expect(barraLocal, isNot(contains('.delete(')));
+      expect(barraLocal, isNot(contains('SyncOperation.delete')));
+    });
+  });
+
+  group('el SQL de los vales', () {
+    test('tiene cada columna que manda la app', () {
+      final crear = RegExp(
+        r'create table if not exists public\.barra_vales \(([\s\S]*?)\n\);',
+      ).firstMatch(sqlVales);
+      expect(crear, isNotNull);
+      final columnas = {
+        for (final l in crear!.group(1)!.split('\n'))
+          if (l.trim().isNotEmpty) l.trim().split(' ').first,
+      };
+      expect(columnas, vale.toMap().keys.toSet());
+    });
+
+    test('sin CHECK, sin clave foránea y sin índice único', () {
+      final codigo = [
+        for (final l in sqlVales.split('\n'))
+          if (!l.trimLeft().startsWith('--')) l,
+      ].join('\n').toLowerCase();
+      expect(codigo, isNot(matches(RegExp(r'(?<!with )\bcheck\s*\('))));
+      expect(codigo, isNot(contains('references')));
+      expect(codigo, isNot(contains('unique')));
+      expect(codigo, isNot(contains('supabase_realtime')));
+    });
+
+    test('con la policy de los usuarios logueados y los dos disparadores', () {
+      expect(sqlVales, contains("array['barra_vales']"));
+      expect(sqlVales, contains("t || '_all_authenticated'"));
+      expect(sqlVales, contains('set_updated_at_ins_'));
+      expect(sqlVales, contains('set_updated_at_upd_'));
+      expect(sqlVales, contains('update_updated_at_column()'));
+    });
+
+    test('lo que manda la app pasa por lo que acepta la nube: casillas como 0 y 1, '
+        'las bebidas como texto', () {
+      final m = vale.toMap();
+      expect(m['por_separado'], 1);
+      expect(m['bebidas'], isA<String>());
+      expect(ValeBarra.fromMap(m).bebidas, vale.bebidas);
+    });
   });
 }

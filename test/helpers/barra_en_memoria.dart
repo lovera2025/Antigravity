@@ -21,6 +21,7 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
   final cajasGuardadas = <CajaBarra>[];
   final ventasGuardadas = <VentaBarra>[];
   final anulacionesGuardadas = <AnulacionBarra>[];
+  final valesGuardados = <ValeBarra>[];
   String equipo = 'tablet-1';
   DateTime Function() reloj = () => DateTime.utc(2026, 12, 5, 2);
 
@@ -194,10 +195,26 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
   }) async {
     final ya = anulacionesGuardadas.where((a) => a.ventaId == venta.id).firstOrNull;
     if (ya != null) return ya;
-    final anulacion = AnulacionBarra.de(venta, motivo: motivo, hechoPor: quien, ahora: reloj());
+    final anulacion =
+        AnulacionBarra.de(venta, motivo: motivo, hechoPor: quien, deviceId: equipo, ahora: reloj());
     anulacionesGuardadas.add(anulacion);
     return anulacion;
   }
+
+  @override
+  Future<ValeBarra> anotarVale(ValeBarra vale) async {
+    final conEquipo = ValeBarra.fromMap(vale.toMap()..['device_id'] = equipo);
+    valesGuardados.add(conEquipo);
+    return conEquipo;
+  }
+
+  @override
+  Future<List<ValeBarra>> valesDeLaCaja(String cajaId) async =>
+      [for (final v in valesGuardados) if (v.cajaBarraId == cajaId) v];
+
+  @override
+  Future<List<ValeBarra>> vales(String eventoId) async =>
+      [for (final v in valesGuardados) if (v.eventoId == eventoId) v];
 
   // ── Para armar los datos de la prueba ─────────────────────────────────────
 

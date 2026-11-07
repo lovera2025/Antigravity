@@ -145,4 +145,15 @@ class BarraNube implements BarraDelJefe {
         .upsert(nueva.toMap(), ignoreDuplicates: true);
     return nueva;
   }
+
+  @override
+  Future<List<ValeBarra>> vales(String eventoId) async {
+    final filas = await _todas(() => _supabase
+        .from('barra_vales')
+        .select()
+        .eq('evento_id', eventoId)
+        .order('created_at', ascending: true)
+        .order('id', ascending: true));
+    return [for (final f in filas) ValeBarra.fromMap(f)];
+  }
 }

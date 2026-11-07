@@ -2,12 +2,14 @@ import 'anulacion_barra.dart';
 import 'caja_barra.dart';
 import 'precio_barra.dart';
 import 'producto_barra.dart';
+import 'vale_barra.dart';
 import 'venta_barra.dart';
 
 export 'anulacion_barra.dart';
 export 'caja_barra.dart';
 export 'precio_barra.dart';
 export 'producto_barra.dart';
+export 'vale_barra.dart';
 export 'venta_barra.dart';
 
 /// Lo que hace el jefe con la barra: el catálogo, los precios de cada fiesta, mirar
@@ -42,6 +44,9 @@ abstract interface class BarraDelJefe {
     required String motivo,
     required String quien,
   });
+
+  /// Los papeles de vale que salieron de la fiesta, originales y copias.
+  Future<List<ValeBarra>> vales(String eventoId);
 }
 
 /// Lo que hace la cajera, **solo en su equipo** (la tablet o la PC): abrir su caja,
@@ -109,6 +114,22 @@ abstract interface class BarraDeLaCaja {
   Future<List<VentaBarra>> ventasDeLaCaja(String cajaId);
 
   Future<List<AnulacionBarra>> anulacionesDeLaCaja(String cajaId);
+
+  /// La cajera también anula (decidido el 3-nov), **solo las ventas de su caja** (lo
+  /// cuida la pantalla) y con motivo. La venta no se toca: se agrega su anulación.
+  /// Anular de nuevo devuelve la que ya había.
+  Future<AnulacionBarra> anular(
+    VentaBarra venta, {
+    required String motivo,
+    required String quien,
+  });
+
+  /// Anota un papel de vale que **salió**, con quién y desde qué equipo. Solo se
+  /// agregan filas.
+  Future<ValeBarra> anotarVale(ValeBarra vale);
+
+  /// Los papeles de vale que salieron de la caja, originales y copias, por fecha.
+  Future<List<ValeBarra>> valesDeLaCaja(String cajaId);
 
   /// La cierra con lo que contó la cajera y la diferencia. Una caja ya cerrada queda
   /// como se cerró: no se vuelve a cerrar.

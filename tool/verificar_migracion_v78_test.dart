@@ -1,4 +1,4 @@
-// Prueba la migración a la v78 (las sillas de la noche) sobre una COPIA de la base
+// Prueba la migración a la v78 (las sillas de la noche y los vales de la barra) sobre una COPIA de la base
 // real y compara, tabla por tabla, que no cambió ni un dato de lo que ya existía.
 // Mismo modelo que `verificar_migracion_v77_test.dart`.
 //
@@ -7,7 +7,8 @@
 // copia, en una carpeta temporal, que se borra al terminar.
 //
 // Las PCs están en la v77 (la 6.3.1): la copia salta de 77 a 78, como va a pasar
-// al instalar. Tiene que aparecer una sola tabla, `sillas_puerta`, vacía.
+// al instalar. Tienen que aparecer dos tablas, `sillas_puerta` y `barra_vales`,
+// vacías.
 //
 // Además comprueba:
 //   • que la base real quedó idéntica: mismo tamaño, misma fecha y mismo
@@ -41,7 +42,7 @@ String _baseReal() {
   return '$perfil\\Documents\\Junior Eventos\\data.db';
 }
 
-const _deLaV78 = {'sillas_puerta'};
+const _deLaV78 = {'sillas_puerta', 'barra_vales'};
 
 class _Foto {
   final Map<String, int> filas;
@@ -135,7 +136,7 @@ void main() {
       expect(versionFinal, 78);
       expect(faltan, isEmpty, reason: 'desapareció una tabla');
       expect(distintas, isEmpty, reason: 'cambiaron datos existentes');
-      expect(aparecieron, nuevas, reason: 'tiene que aparecer solo la tabla nueva');
+      expect(aparecieron, nuevas, reason: 'tienen que aparecer solo las tablas nuevas');
       for (final t in nuevas) {
         expect(despues.filas[t], 0, reason: '$t nace vacía');
       }

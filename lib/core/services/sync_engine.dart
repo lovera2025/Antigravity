@@ -443,6 +443,7 @@ class SyncEngine {
     'barra_ventas': 'updated_at',
     'barra_anulaciones': 'updated_at',
     'sillas_puerta': 'updated_at',
+    'barra_vales': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1606,6 +1607,9 @@ class SyncEngine {
     // Las sillas que se suman la noche de la fiesta (v78): con dos notebooks en
     // el salón, la otra tiene que ver en segundos que esa mesa ya está en el tope.
     'sillas_puerta',
+    // Los vales que salieron de cada venta, y sus copias (v78): el jefe mira en
+    // vivo quién reimprimió qué.
+    'barra_vales',
   ];
 
   /// El resto. La red de seguridad lo baja cada 30 minutos (6.3.3).
@@ -2038,6 +2042,8 @@ class SyncEngine {
       if (table == 'barra_precios' || table == 'barra_cajas') return 2;
       if (table == 'barra_ventas') return 4;
       if (table == 'barra_anulaciones') return 5;
+      // Cuelga de la venta, como la anulación.
+      if (table == 'barra_vales') return 5;
       if (table == 'sesiones_caja') {
         return entry.operacion == SyncOperation.delete ? 6 : 2;
       }
@@ -2394,6 +2400,7 @@ class SyncEngine {
       _pullTable(db, 'barra_ventas', 'updated_at'),
       _pullTable(db, 'barra_anulaciones', 'updated_at'),
       _pullTable(db, 'sillas_puerta', 'updated_at'),
+      _pullTable(db, 'barra_vales', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -3459,6 +3466,22 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v78: las 13 columnas de `ValeBarra.toMap()`.
+      'barra_vales': [
+        'id',
+        'venta_id',
+        'caja_barra_id',
+        'evento_id',
+        'numero_vale',
+        'bebidas',
+        'por_separado',
+        'copia_numero',
+        'motivo',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       'entradas_retiro': [
         'id',
         'contrato_alumno_id',
@@ -3621,6 +3644,7 @@ class SyncEngine {
     'barra_anulaciones': 'solo se agregan filas, una por venta, con id fijo',
     'sillas_puerta':
         'solo se agregan filas: quitar una silla le pone quitada_at, la fila no se saca',
+    'barra_vales': 'solo se agregan filas: cada papel que salió, y cada copia, es otra',
   };
 
   /// Para los tests: las tablas que se revisan.
