@@ -687,8 +687,16 @@ class SyncEngine {
   /// llegar a la oficina sube solo.
   Future<void> _alVolverLaRed() async {
     debugPrint('🌐 Volvió la red: se sube lo que esperaba y se baja lo del cobro');
+    _intentoSubida = 0;
     await _subirSiHayQue();
-    await _bajar(tablas: _tablasDelCobro, contarBorrados: true);
+    await _bajar(
+      // Si la app abrió sin internet, todavía no bajó nunca lo de carga.
+      tablas: [
+        ..._tablasDelCobro,
+        if (_ultimaBajadaDeCarga == null) ..._tablasDeCarga,
+      ],
+      contarBorrados: true,
+    );
   }
 
   /// Cada cuánto se revisa si en la nube desapareció algo.
@@ -766,27 +774,114 @@ class SyncEngine {
 
   /// Vacía la cola poco después de que alguien guarde algo.
   ///
-  /// Antes lo único que movía la cola sola era el ciclo de 10 segundos del
-  /// coordinador —y solo con un rol operativo— o el latido de la sesión de
-  /// caja. Un cambio hecho sin caja abierta podía quedarse parado un rato
-  /// largo, o hasta que alguien apretara "Subir pendientes".
-  ///
-  /// No fuerza nada: si no hay red, o el motor está ocupado, `flushPending`
-  /// sale solo y el ciclo de siempre lo reintenta.
-  void _programarSubida() {
+  /// Es lo único que sube solo, para cualquier rol (desde la 6.3.3 el
+  /// coordinador ya no sube nada). Si el motor está ocupado bajando, vuelve a
+  /// probar a los 3 s; si no hay red, la subida la retoma la vuelta de la red;
+  /// si la nube no la toma, la reintenta [_armarReintentosDeSubida].
+  void _programarSubida([Duration espera = _esperaAntesDeSubir]) {
     _timerSubida?.cancel();
     _timerSubida = _reloj.programar(
-      _esperaAntesDeSubir,
+      espera,
       () => _seguir(_subirSiHayQue()),
     );
   }
 
+  /// Si el motor está ocupado cuando toca subir, se vuelve a probar a los 3 s.
+  static const _esperaSiOcupadoParaSubir = Duration(seconds: 3);
+
   Future<void> _subirSiHayQue() async {
-    if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
+    if (_connectivity.currentStatus == AppConnectivity.offline) return;
+    if (_isBusy) {
+      _programarSubida(_esperaSiOcupadoParaSubir);
       return;
     }
-    if (!await hayTrabajoDeSubida) return;
+    if (!await hayTrabajoDeSubida) {
+      await _armarReintentosDeSubida();
+      return;
+    }
     await flushPending();
+  }
+
+  // ── Lo que no subió (6.3.3) ──────────────────────────────────────────────
+  //
+  // Hasta la 6.3.2, lo que no subía lo reintentaba el ciclo de 10 s (y solo
+  // con un rol de caja, jefe, entradas o barra). Ahora lo reintenta el motor,
+  // con espera creciente: 30 s, 1, 2 y 5 minutos, y 5 minutos para siempre,
+  // hasta que la nube lo confirme. **Nada se saca de la cola por fallar**: la
+  // cola vive en la base de la PC y sobrevive a cerrar la app. La cuenta vuelve
+  // a cero cuando la cola queda vacía o vuelve la red. Los trabados (10
+  // intentos) se reintentan aparte, cada 5 minutos, y ese reloj existe solo
+  // mientras haya alguno.
+
+  var _intentoSubida = 0;
+  Timer? _reintentoSubida;
+  Timer? _reintentoTrabados;
+
+  Future<void> _armarReintentosDeSubida() async {
+    final listos = await SyncQueue.readyCount;
+    if (listos > 0) {
+      final espera = esperaCreciente(_intentoSubida++);
+      _reintentoSubida?.cancel();
+      _reintentoSubida = _reloj.programar(
+        espera,
+        () => _seguir(_subirSiHayQue()),
+      );
+      debugPrint('  ⏳ Quedan $listos sin subir: se reintenta en ${espera.inSeconds} s');
+    } else {
+      _intentoSubida = 0;
+      _reintentoSubida?.cancel();
+      _reintentoSubida = null;
+    }
+    final trabados = await SyncQueue.stuckCount;
+    if (trabados > 0) {
+      if (_reintentoTrabados?.isActive != true) {
+        _reintentoTrabados = _reloj.programar(
+          _esperaEntreReintentosTrabados,
+          () => _seguir(_subirSiHayQue()),
+        );
+      }
+    } else {
+      _reintentoTrabados?.cancel();
+      _reintentoTrabados = null;
+    }
+  }
+
+  // ── Bajar cuando alguien mira (6.3.3) ────────────────────────────────────
+
+  /// Al abrir la app: baja todo, revisa lo borrado en otra PC y la mora.
+  ///
+  /// Si el motor estaba ocupado (subiendo lo que quedó de la vez anterior), lo
+  /// vuelve a intentar a los 30 s. Sin internet no: la bajada la hace la
+  /// vuelta de la red.
+  Future<bool> bajarAlArrancar() async {
+    final corrio = await pullOperationalUpdates(incluirTablasDeCarga: true);
+    if (!corrio &&
+        _connectivity.currentStatus != AppConnectivity.offline &&
+        !kIsWeb) {
+      _reintentoArranque?.cancel();
+      _reintentoArranque = _reloj.programar(
+        _esperaSiEstaOcupado,
+        () => _seguir(bajarAlArrancar()),
+      );
+    }
+    return corrio;
+  }
+
+  Timer? _reintentoArranque;
+
+  /// Cuánto tiene que haber pasado desde la última bajada de lo del cobro para
+  /// que mirar la pantalla salga a la nube.
+  static const _bajarAlMirarSiPasaron = Duration(seconds: 60);
+
+  /// Alguien volvió a la ventana: si lo del cobro se bajó hace más de un
+  /// minuto, se baja de nuevo. Es el momento en que alguien va a mirar.
+  Future<bool> bajarAlMirar() async {
+    final ultima = _ultimaBajadaDelCobro;
+    if (ultima != null &&
+        _reloj.ahora().difference(ultima) < _bajarAlMirarSiPasaron) {
+      return false;
+    }
+    return _bajar(tablas: _tablasDelCobro);
   }
 
   bool get _isBusy =>
@@ -841,6 +936,7 @@ class SyncEngine {
       _updateStatus(SyncStatus.error);
     } finally {
       await refreshPendingCount();
+      await _armarReintentosDeSubida();
     }
   }
 
@@ -1454,9 +1550,6 @@ class SyncEngine {
     'barra_productos',
     'barra_precios',
   ];
-
-  /// Cada cuántos ciclos entran las tablas de carga: a 10 s por ciclo, un minuto.
-  static const int ciclosEntrePullsLentos = 6;
 
   /// Si ya corrió [revisarMora] en esta sesión del programa.
   bool _moraRevisadaEnEstaSesion = false;
@@ -3651,6 +3744,9 @@ class SyncEngine {
     _redDeCarga?.cancel();
     _reintentoRedDelCobro?.cancel();
     _reintentoRedDeCarga?.cancel();
+    _reintentoSubida?.cancel();
+    _reintentoTrabados?.cancel();
+    _reintentoArranque?.cancel();
     _debouncePulso?.cancel();
     _reintentoBorradosDelPulso?.cancel();
     _timerAvisoCambios?.cancel();

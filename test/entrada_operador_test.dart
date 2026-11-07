@@ -462,9 +462,28 @@ void main() {
     String leer(String ruta) => File(ruta).readAsStringSync().replaceAll('\r\n', '\n');
 
     test('lo entregado en modo Entradas y lo vendido en la barra suben solos', () {
+      // Desde la 6.3.3 sube solo cualquier rol: la subida la dispara la cola al
+      // guardar (`SyncQueue.onChanged` → `_programarSubida`) y la reintenta el
+      // motor, sin mirar quién está. Antes la reintentaba el coordinador solo
+      // para jefe, caja, entradas y barra (el sync en reposo,
+      // test/sync_en_reposo_test.dart).
+      final motor = leer('lib/core/services/sync_engine.dart');
+      final arranque = motor.substring(
+        motor.indexOf('void start() {'),
+        motor.indexOf('_escucharElPulso();', motor.indexOf('void start() {')),
+      );
+      expect(arranque, contains('SyncQueue.onChanged'));
+      expect(arranque, contains('_programarSubida();'));
+      final subir = motor.substring(
+        motor.indexOf('Future<void> _subirSiHayQue() async {'),
+        motor.indexOf('\n  }\n', motor.indexOf('Future<void> _subirSiHayQue() async {')),
+      );
+      expect(subir, contains('flushPending()'));
+      expect(subir, isNot(contains('role')), reason: 'la subida no mira el rol');
       expect(
         leer('lib/features/common/widgets/operational_sync_coordinator.dart'),
-        contains('role.esJefe || role.esCaja || role.esEntradas || role.esBarra'),
+        isNot(contains('flushPending')),
+        reason: 'el coordinador ya no sube: si volviera, volvería con su lista de roles',
       );
     });
 
