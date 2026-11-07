@@ -196,8 +196,8 @@ class SyncQueue {
   /// Es lo que mira el disparador automático. [pendingCount] cuenta todo
   /// porque es el número honesto para el usuario, pero si se usara para
   /// disparar, una PC con un registro imposible de subir llamaría a la nube
-  /// cada 10 segundos para siempre y el indicador viviría parpadeando. Los
-  /// trabados se reintentan aparte, espaciados, desde el motor.
+  /// a cada rato para siempre y el indicador viviría parpadeando. Los
+  /// trabados se reintentan aparte, cada 5 minutos, desde el motor.
   static Future<int> get readyCount async {
     final db = await LocalDatabase.instance;
     final result = await db.rawQuery(
@@ -240,8 +240,8 @@ class SyncQueue {
   /// nada en la cola para emparejarlas. Pasaba con dos cambios seguidos sobre
   /// el mismo registro (cambiar una mesa y deshacer enseguida).
   ///
-  /// Por eso se saca solo si sigue siendo la que se leyó. Si cambió, queda: el
-  /// próximo ciclo sube lo nuevo.
+  /// Por eso se saca solo si sigue siendo la que se leyó. Si cambió, queda: la
+  /// subida siguiente (a los 2 s del cambio) sube lo nuevo.
   static Future<bool> markCompleted(
     int entryId, {
     DateTime? leidaCon,

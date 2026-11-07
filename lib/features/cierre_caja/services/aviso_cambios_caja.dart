@@ -5,9 +5,10 @@ import 'cobro_agrupado.dart';
 
 /// Tablas cuya novedad cambia lo que muestra el cierre de caja.
 ///
-/// `sesiones_caja` entra aunque la toque el latido de cada minuto: el refresco
-/// es una consulta local y silenciosa, y sin ella el jefe no vería aparecer la
-/// sesión que el operario acaba de abrir o cerrar en la otra PC.
+/// `sesiones_caja` entra aunque la toque el latido (cada 5 minutos desde la
+/// 6.3.3; el aviso del latido solo no refresca nada): el refresco es una
+/// consulta local y silenciosa, y sin ella el jefe no vería aparecer la sesión
+/// que el operario acaba de abrir o cerrar en la otra PC.
 const Set<String> kTablasDelCierre = {
   'pagos_contrato_alumno',
   'sesiones_caja',

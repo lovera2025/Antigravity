@@ -145,7 +145,7 @@ class _DetalleEventoMasivoScreenState
   FiltroExtras _filtroExtras = FiltroExtras.todos;
 
   /// Aviso del motor cuando baja algo de la otra PC: el reparto de sillas que
-  /// eligió la otra PC aparece al instante, sin esperar el ciclo de 10 s.
+  /// eligió la otra PC aparece al instante, en cuanto baja.
   StreamSubscription<Set<String>>? _cambiosSub;
 
   /// Arrastre de mora abierto por cuota, reconstruido del historial de pagos.

@@ -15,7 +15,7 @@ import '../../../core/services/sync_engine.dart';
 /// Si el motor está ocupado, `flushPending` sale sin subir nada: por eso se
 /// espera un poco y se vuelve a probar. Si no está ocupado y el registro sigue
 /// en la cola, es que no hay red o la nube lo rechazó: no tiene sentido insistir
-/// acá, queda en la cola y el ciclo de siempre lo sube cuando pueda.
+/// acá, queda en la cola y el motor lo reintenta solo hasta que suba.
 Future<bool> subirConReintentos({
   required Future<void> Function() subir,
   required Future<bool> Function() pendiente,
@@ -57,13 +57,14 @@ Future<bool> quedaEnCola(Map<String, Iterable<String>> registros) async {
 }
 
 /// Sube ya el registro [registroId] de [tabla] (y lo que se haya encolado desde
-/// [desde]), sin esperar el ciclo de 10 s y sin depender del rol elegido.
+/// [desde]), sin esperar los 2 s de la subida automática.
 ///
 /// Existe para lo que dos PCs pueden tocar a la vez desde el mostrador —una
 /// entrega de entradas, el reparto de sillas—: cuanto antes llega a la nube,
-/// antes le avisa el pulso a la otra PC y antes lo ve. Sin esto, la PC del jefe
-/// tardaba hasta 10 s en subir, y una sesión sin rol elegido (Asesor) no subía
-/// sola si la subida automática caía justo cuando el motor estaba ocupado.
+/// antes le avisa el pulso a la otra PC y antes lo ve. (Hasta la 6.3.2, sin
+/// esto la PC del jefe tardaba hasta 10 s en subir, y una sesión sin rol
+/// elegido no subía sola si la subida automática caía con el motor ocupado;
+/// desde la 6.3.3 el motor vuelve a probar a los 3 s, para cualquier rol.)
 Future<bool> subirYa(
   SyncEngine engine, {
   required String tabla,

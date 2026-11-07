@@ -443,7 +443,7 @@ void main() {
     test('si toca subir con el motor bajando, prueba de nuevo a los 3 s', () async {
       final m = motor();
       nube.frenadas['sesiones_caja'] = Completer<void>();
-      unawaited(m.pullOperationalUpdates());
+      final bajada = m.pullOperationalUpdates();
       await Future<void>.delayed(Duration.zero);
       await SyncQueue.enqueue(
         tabla: 'pagos_contrato_alumno',
@@ -456,8 +456,10 @@ void main() {
       expect(reloj.esperasSueltas, contains(const Duration(seconds: 3)));
 
       nube.frenadas.remove('sesiones_caja')!.complete();
+      // Que termine la bajada de verdad, sin un tiempo fijo: con la PC cargada,
+      // 50 ms no alcanzaban.
+      await bajada;
       await m.aquietar();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
       await reloj.avanzar(const Duration(seconds: 3));
       await m.aquietar();
       expect(nube.pedidas, contains('POST pagos_contrato_alumno'));

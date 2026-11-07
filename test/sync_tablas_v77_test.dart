@@ -120,7 +120,7 @@ void main() {
       await db.close();
     });
 
-    test('las cajas, las ventas y las anulaciones bajan cada 10 s; el catálogo, cada minuto', () {
+    test('las cajas, las ventas y las anulaciones bajan con lo del cobro (5 minutos); el catálogo, con lo de carga (30)', () {
       final columnas = declaracion('_incrementalColumns', '}');
       for (final t in _tablas) {
         expect(columnas, contains("'$t': 'updated_at'"));

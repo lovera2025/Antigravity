@@ -17,7 +17,8 @@ enum CaminoDelBorrado {
   /// pagos en ese momento.
   alumno('al abrir el alumno'),
 
-  /// La cuenta de cada 10 segundos: en la nube había menos filas que acá.
+  /// La cuenta de la red de seguridad, cada 5 minutos (hasta la 6.3.2, cada
+  /// 10 segundos): en la nube había menos filas que acá.
   cuenta('porque en la nube había menos'),
 
   /// La revisión de cada 10 minutos, y la que corre al abrir el programa.
