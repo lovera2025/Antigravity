@@ -5,6 +5,11 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
+> **6-nov (noche): la barra espera.** Antes salen la 6.3.2 (la mora adelantada, `docs/CONTEXTO_v6.3.2_2026-11-09.md`) y la 6.3.3
+> (el sync en reposo, `docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`), cada una sola, desde la rama `release/6.3.x`. Decisión del usuario.
+> La 6.3.3 cambia cómo baja la app lo de la otra PC (sin el ciclo de 10 s): VENDER y la pantalla del jefe se escriben después contra
+> ese modelo.
+
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
 `docs/CONTEXTO_v6.3.1_2026-11-04.md`). **Los SQL de la barra (v77) y de los permisos (v76) ya están corridos en la nube**: lo que le cambie

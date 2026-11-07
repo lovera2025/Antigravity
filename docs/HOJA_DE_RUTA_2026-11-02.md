@@ -27,14 +27,18 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 | 3b. El tótem con el salón y las sillas de la noche (5 y 6-nov, antes de la barra 5) | **Hecho en la rama.** El tótem (5-nov: salón entero y claro, el nombre que salta y se acomoda en la pista, los segundos en Personalizar y a mano en Recepción y en el celular) y **las sillas de la noche** (6-nov: la puerta anota cada silla con el vale de la barra, un solo candado para la PC y los celulares, y la traba en la oficina por fiesta sorteada). Dos SQL nuevos sin correr; falta la prueba de punta a punta, que hace Claude en un sandbox. `docs/CONTEXTO_v6.4.0_2026-11-06.md` |
 | 4. La barra | Etapas 1 a 4 **publicadas apagadas** en la 6.3.0, con su SQL (v77) corrido. **En la rama, sin publicar:** el stock de toda la fiesta, los dos diseños y 74 fotos de tragos y marcas. Sigue la 5 (reimprimir, anular). La tabla de lo que queda, en "Para retomar en otro chat" de `docs/CONTEXTO_BARRA_2026-11-02.md`. **Decisiones del 5-nov para sus etapas:** "Silla extra" como producto (la puerta suma la silla con el vale), la tilde "Encargada de barra", el selector COBROS · BARRA · ENTRADAS en el cierre de caja y una notebook central para la barra (en el CONTEXTO del tótem y las sillas) |
 | 5. Entradas | Pendiente; va después de la barra (etapa 11 del plan de la barra) |
-| Publicar | **Decidido el 4-nov: nada más hasta terminar todas las etapas**, y después una sola versión, preguntando. **6-nov: sin apuro de fecha** ("cuando salga nomás, ahora hay más tiempo") |
+| **0a. La 6.3.2: la mora adelantada** (6-nov, noche) | **Programada y probada; sale el lunes 9-nov**, sola, desde la rama `release/6.3.x` (tag `v6.3.1`). La mora cobrada por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN). Sin SQL. Falta el simulacro con la base al día, la foto, el instalador y las tres PCs. `docs/CONTEXTO_v6.3.2_2026-11-09.md` |
+| **0b. La 6.3.3: el sync en reposo** (6-nov, noche) | **Sin programar; va después de la 6.3.2**, también sola y desde `release/6.3.x`: sin el ciclo de 10 s, el pulso como transporte, red de 5/30 min, latido cada 5 min. Sin SQL. `docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md` |
+| Publicar | **Decidido el 4-nov: nada más hasta terminar todas las etapas**, y después una sola versión, preguntando. **6-nov: sin apuro de fecha** ("cuando salga nomás, ahora hay más tiempo"). **6-nov a la noche: antes salen la 6.3.2 y la 6.3.3**, cada una sola |
 
-**Lo que sigue (6-nov):** las sillas de la noche quedaron hechas (`docs/CONTEXTO_v6.4.0_2026-11-06.md`); sigue
-la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el ticket con precios si lo piden) y probar si la impresora avisa que
-le falta papel. Los SQL de v76 y v77 ya están en la nube: lo nuevo que necesite la nube va en tablas nuevas.
+**Lo que sigue (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
+inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el
+ticket con precios si lo piden) y probar si la impresora avisa que le falta papel. Los SQL de v76 y v77 ya están en la nube: lo nuevo
+que necesite la nube va en tablas nuevas.
 
-> Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto de la
-> etapa 5 antes de programar."
+> Frase para Claude Code: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.3.2_2026-11-09.md y decime en
+> qué paso estamos." (Con la 6.3.2 y la 6.3.3 publicadas: "Seguimos con la barra: leé 'Para retomar en otro chat' de
+> docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto de la etapa 5 antes de programar.")
 
 ## El orden
 

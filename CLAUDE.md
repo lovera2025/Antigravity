@@ -52,6 +52,16 @@ los sorteos son en noviembre (decisión del usuario). Las novedades dicen "El pl
 6.3.1** (`docs/CONTEXTO_v6.3.1_2026-11-04.md`, sin SQL): en ENTRADAS, sin cargo solo las 8 de la mesa del contrato; las de la mesa adicional
 y las sillas extra, al 50 %, aparte. **Instalada en las tres PCs (4-nov)**, y la foto de la mora "después" comparada con la de antes: vacía. Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
 
+**Primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario, 6-nov a la noche: "de inmediato, bien hecho
+y probado en el sandbox"). Las dos salen solas desde la rama **`release/6.3.x`** (creada desde el tag `v6.3.1`, en la carpeta
+`..\arguello_events_6.3.x`), y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama
+feature**: tiene la v78 y dos SQL sin correr.
+- **La 6.3.2, la mora adelantada** (meta: lunes 9-nov; entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en
+  otro chat"). La mora cobrada por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez
+  de $235.200). **Programada y probada el 6-nov**; falta el simulacro con la base al día, la foto, el instalador y las tres PCs. Sin SQL.
+- **La 6.3.3, el sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final): sin el ciclo de 10 s,
+  el pulso como transporte, red de seguridad de 5 y 30 min, latido cada 5 min. **Sin programar.** Sin SQL (la etapa 6 queda aparte).
+
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
 **y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una
 entrega) **ni crear operadores sin Cobros** hasta que las tres PCs tengan la 6.3.0. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`.
@@ -819,6 +829,16 @@ históricos y la pantalla se ve como siempre.
     (`SyncEngine.revisarMora`), con constancia en `revision_mora.txt`;
   - la mora pagada en dos veces dejaba afuera la primera parte;
   - anular un cobro dejaba su eximición.
+
+  **El "ya usado" se queda solo con la mora de lo que se cierra** (6.3.2). Después de cualquier cobro, `historial − offset`
+  (el crédito FIFO) tiene que ser exactamente la mora pagada por adelantado de cuotas que **siguen abiertas**. LOPEZ, MORENA
+  AILEN pagó $130.900 de mora de las cuotas 2, 3 y 4 cerrando la 2 y la 3: el offset se quedaba con todo y los $32.900 de la 4
+  se le volvían a pedir. Y al revés, mora pagada de a partes sobre una cuota que después se completaba sin mora se descontaba
+  también de la siguiente. `postCobroTrackedOffset` ahora lee el desglose bruto (un `assert` frena si llega vacío);
+  `test/mora_adelantada_cuota_abierta_test.dart`. Para comparar una regla vieja con la nueva sobre una copia, el repaso del
+  historial acepta otra cuenta (`CuentaPostCobro cuenta`, que la app nunca pasa) y `tool/simulacro_mora_adelantada_test.dart`
+  lo hace alumno por alumno, con grupos A (baja) y B (sube: lo decide el jefe), y cobro por cobro con `detalle=cambios`.
+  **Los dos simulacros cargan la mora congelada** antes de repasar, como la app; sin eso los congelados salían mal.
 
   **La eximición se resuelve con `resolverExencion`:** la de un cobro anulado se va; la que vino de cobros la
   reemplaza la del último cobro; **la de un perdón (con ajuste de ficha, o que ningún cobro reproduce) no se toca**.
