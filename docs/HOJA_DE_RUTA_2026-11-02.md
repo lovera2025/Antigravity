@@ -31,10 +31,10 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 | **0b. La 6.3.3: el sync en reposo** (6-nov, noche) | **Programada y probada el 6-nov** (7 commits en las dos ramas, suite en verde); se publica después de la 6.3.2, también sola y desde `release/6.3.x`: sin el ciclo de 10 s, el pulso como transporte, red de 5/30 min, latido cada 5 min. Sin SQL. `docs/CONTEXTO_v6.3.3_2026-11-06.md` |
 | Publicar | **Decidido el 4-nov: nada más hasta terminar todas las etapas**, y después una sola versión, preguntando. **6-nov: sin apuro de fecha** ("cuando salga nomás, ahora hay más tiempo"). **6-nov a la noche: antes salen la 6.3.2 y la 6.3.3**, cada una sola |
 
-**7-nov (madrugada): la barra 5 está hecha** (VENTAS: reimprimir con freno, imprimir lo que falta, el ticket con precios y anular, con
-los papeles impresos y mirados en foto; `docs/CONTEXTO_BARRA_2026-11-02.md`). **El usuario decidió seguir completando y publicar al
-final, salvo que diga "publicá"**: la 6.3.2 y la 6.3.3 esperan programadas y probadas en `release/6.3.x`. Sigue la barra 6 (cerrar la
-caja).
+**7-nov: la barra 5 y 6 están hechas** (VENTAS: reimprimir con freno, imprimir lo que falta, el ticket con precios y anular; cerrar la
+caja contando a ciegas, con el cierre como el papel y su PDF de 58 mm; `docs/CONTEXTO_BARRA_2026-11-02.md`). **El usuario decidió seguir
+completando y publicar al final, salvo que diga "publicá"**: la 6.3.2 y la 6.3.3 esperan programadas y probadas en `release/6.3.x`.
+Sigue la barra 7 (el jefe y la encargada en la PC).
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el
@@ -42,7 +42,7 @@ ticket con precios si lo piden) y probar si la impresora avisa que le falta pape
 que necesite la nube va en tablas nuevas.
 
 > Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el
-> plan corto de la etapa 6 antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
+> plan corto de la etapa 7 antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
 > docs/CONTEXTO_v6.3.2_2026-11-09.md y decime en qué paso estamos.")
 
 ## El orden

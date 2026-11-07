@@ -5,9 +5,9 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
-> **7-nov (madrugada): la etapa 5 está hecha** (abajo, "Etapa 5: reimprimir y anular"), con los papeles impresos de verdad y mirados
-> en una foto. **Sigue la etapa 6, cerrar la caja.** La 6.3.2 y la 6.3.3 quedaron programadas y probadas en `release/6.3.x`; el
-> usuario decidió el 7-nov **seguir completando y publicar al final, salvo que diga "publicá"** (la versión y el tag, también al final).
+> **7-nov: las etapas 5 y 6 están hechas** (abajo, "Etapa 5: reimprimir y anular" y "Etapa 6: cerrar la caja"). **Sigue la etapa 7,
+> el jefe (y la encargada) en la PC.** La 6.3.2 y la 6.3.3 quedaron programadas y probadas en `release/6.3.x`; el usuario decidió el
+> 7-nov **seguir completando y publicar al final, salvo que diga "publicá"** (la versión y el tag, también al final).
 
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
@@ -32,7 +32,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | 5. Reimprimir y anular | **Hecha el 7-nov** (VENTAS de la cajera, el freno de la copia, IMPRIMIR LO QUE FALTA, el ticket con precios, ANULAR con motivo, la tabla `barra_vales`) | Lo del jefe (reimprimir cualquiera, anular desde la PC) va en la 7 |
 | La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)") | Una tablet que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet |
 | El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
-| 6. Cerrar la caja | Las cuentas (`CierreDeBarra`), el papel (`ModeloTicket.deCierre`, ya salió bien impreso) y el guardado (`cerrarCaja`) | La pantalla de contar a ciegas y el PDF del cierre |
+| 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
 | 7. El jefe en la PC | Los datos (`BarraDelJefe`: catálogo, precios con stock, cajas, anular), las cuentas (`ResumenDeCajas`, `StockDeLaBarra`) y las 74 fotos. **La silla de la noche (6-nov):** un producto con "silla" en el nombre sale en su propio vale, uno por silla, que dice "Llevá este vale a la recepcionista"; y si se anula, la puerta la marca en rojo | Todas las pantallas: catálogo (elegir la foto de la biblioteca o subir una; **cargar "Silla extra" con su precio en cada fiesta**), precios por fiesta, "copiar de otra fiesta", el % de recargo, CAJAS, anular, PDF 58 mm y A4, la lista de precios, "Silla extra: N vendidas" en el cierre |
 | 8. El jefe en el iPhone | `BarraNube` (lee y anula directo en la nube) | Las pantallas, en la web |
 | 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
@@ -48,7 +48,42 @@ con Entradas y nadie sin Cobros. (Las tres PCs ya tienen la 6.3.1, y la foto de 
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto
-> de la etapa 6 antes de programar."
+> de la etapa 7 antes de programar."
+
+### Etapa 6: cerrar la caja (7-nov, en la rama)
+
+**El candado arriba en VENDER** (`vender_cerrar`) abre `CerrarCajaBarraScreen` (`widgets/cerrar_caja_barra_screen.dart`):
+1. **Contar, a ciegas.** "Contá todo el efectivo del cajón, con el cambio." La pantalla no muestra **ninguna plata de la caja** (ni lo
+   vendido ni lo esperado; `modo_barra_cerrado_test` lee el paso y lo vigila). Confirma viendo el número grande ("¿Contaste todo el
+   efectivo, con el cambio?", VOLVER A CONTAR / SÍ, CERRAR) y **la caja se cierra en ese momento**: lo contado ya no se cambia
+   (decidido el 7-nov, después de pensarlo con el usuario: así la cajera no puede espiar lo esperado). La diferencia se calcula con la
+   caja como está guardada (el cambio pudo ponerse después de abrir) y sube enseguida (`barra_cajas`).
+2. **El cierre.** Recién ahí: "Tenía que haber $ X · Contaste $ Y" y la diferencia en grande (verde justo, rojo faltan, ámbar sobran), y
+   **el cierre entero como el papel** (`PapelEnPantalla`): lo vendido de cada producto (`CierreDeBarra.porProducto`, el que más salió
+   primero, sin anuladas), las sillas extra vendidas, los totales, lo anulado, el esperado, lo contado, la nota y **el historial**, una
+   línea por venta con hora y medio, las anuladas marcadas. IMPRIMIR (por la térmica **sin el historial**, para ahorrar papel; sale solo al
+   cerrar), GUARDAR PDF y AGREGAR UNA NOTA (`anotarCierre`: lo único que cambia después; lo contado no). LISTO (o atrás) vuelve al inicio
+   de la barra, y esa fiesta pide abrir otra caja. En la tablet acostada y la PC, la diferencia y los botones a la izquierda y el papel a
+   la derecha; en el celular, uno debajo del otro.
+
+**El PDF es de 58 mm, una sola hoja tan larga como haga falta** (el usuario: "A4 es muy grande; si tiene que ser largo que sea"):
+`PapelPdf` (`impresion/papel_pdf.dart`) arma la misma lista de líneas que va a la impresora, con las Outfit (`PdfService.fuentesOutfit`,
+que pasó a público junto con `PdfService.entregarPdf`: en Windows el menú de ver, guardar o abrir la carpeta; en Android, compartir).
+`PapelEnPantalla` y `PapelPdf` sirven para cualquier papel de la barra: **los PDF del jefe de la etapa 7 se hacen con esto, nada en A4.**
+
+**El ticket con precios ya no lleva QR** (7-nov: nadie lo lee, 3 cm de papel). `NumeroDeTicket.qr` queda para el arnés de la impresora.
+
+**Lo que dio la prueba:** con el mouse en `tool/barra_prueba.dart` (dos ventas, cerrar con $ 500 de menos, el papel por la TP-POS58, el PDF
+abierto y guardado en `Documentos\Junior Eventos\PDFs` de 58 × 86 mm, volver y que pida otra caja) todo anduvo. **El papel del cierre,
+mirado en la foto del usuario (7-nov):** lo vendido por producto, "Sillas extra vendidas", los totales, lo esperado, lo contado y "Faltan
+$ 500", con los acentos y sin logo. (Abrió y Cerró a la misma hora es del reloj fijo de la ventana de prueba.) Las muestras
+(`tool/barra_cierre_muestra_test.dart`, una noche de 30 ventas) encontraron que **el papel en pantalla perdía la letra de la app**
+(reemplazaba el estilo entero): arreglado con `DefaultTextStyle.merge`.
+
+Tests: `barra_cuentas_test` (lo vendido por producto, las sillas), `modelo_ticket_test` (el cierre con lo vendido, las sillas y el historial;
+el ticket sin QR), `barra_repositorios_test` (`anotarCierre`), `papel_en_pantalla_test`, `papel_pdf_test` (una hoja, 58 mm, más larga con
+más renglones) y `barra_cerrar_test` (de punta a punta desde el inicio, volver a contar, justo, sin impresora, atrás antes y después de
+cerrar, a 360, 800 y 1280 px). Roturas vistas en rojo: lo esperado a la vista antes de contar, cerrar sin confirmar y no subir.
 
 ### Etapa 5: reimprimir y anular (7-nov, en la rama)
 

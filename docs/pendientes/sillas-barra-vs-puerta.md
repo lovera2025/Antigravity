@@ -25,6 +25,7 @@ miraría. Sin eso no hay con qué comparar.
 
 ## Qué habría que hacer
 
-- En el cierre de la barra (etapa 6-7 de `docs/PLAN_BARRA_2026-11-03.md`), "Silla extra: N vendidas" por caja.
+- ~~En el cierre de la barra, "Silla extra: N vendidas" por caja.~~ **Hecho el 7-nov** (etapa 6): el cierre de cada caja dice
+  "Sillas extra vendidas N" (`CierreDeBarra.sillas`), en el papel, en la pantalla y en el PDF.
 - Una línea en la oficina que cruce los vales: vendidos en la barra contra anotados en la puerta, cuando las dos notebooks suben.
   En vivo entre las dos notebooks, un paso más: no por ahora.

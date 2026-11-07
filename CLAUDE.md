@@ -78,8 +78,13 @@ para mirarla, `flutter run -d windows -t tool/barra_prueba.dart`, y con `--dart-
 imprimir). **La 5 se cerró el 7-nov: VENTAS** (`widgets/ventas_de_la_caja_screen.dart`): las ventas de su caja; **REIMPRIMIR con freno**
 (`VentaDeLaCaja`, `cuentas/reimpresion_de_barra.dart`: solo la última, una vez por vale, con motivo, el mismo vale que salió con COPIA),
 IMPRIMIR LO QUE FALTA, el TICKET con precios (sin logo) y **ANULAR, también la cajera**, con motivo (`anular` está en `BarraDeLaCaja`).
-**Cada vale que sale se anota en `barra_vales`** (v78; solo se agregan filas; la venta no se toca). Sigue la 6 (cerrar la caja). **Lo que
-se imprime en la barra ahorra papel: sin logo en vales, copias ni ticket** (pedido del usuario, 7-nov). **Debajo del total, EFECTIVO · TRANSFERENCIA · MIXTO; transferencia
+**Cada vale que sale se anota en `barra_vales`** (v78; solo se agregan filas; la venta no se toca). **La 6 se cerró el 7-nov: cerrar la
+caja** (el candado en VENDER, `widgets/cerrar_caja_barra_screen.dart`): **cuenta a ciegas** (ninguna plata de la caja a la vista;
+`modo_barra_cerrado_test` lo vigila), confirma, se cierra y recién ahí ve lo esperado, la diferencia y el cierre entero como el papel, con
+lo vendido por producto, las sillas y el historial; solo la nota cambia después (`anotarCierre`). Sigue la 7 (el jefe en la PC). **Lo que
+se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los
+PDF de la barra son de 58 mm, una sola hoja larga, nunca A4** (`PapelPdf`; en pantalla, `PapelEnPantalla`: la misma lista de líneas que va
+a la impresora). **Debajo del total, EFECTIVO · TRANSFERENCIA · MIXTO; transferencia
 es todo lo de Mercado Pago, sin comprobante que tildar; el recargo por transferencia va sobre lo transferido** y la venta lo guarda aparte
 (`recargo`: `efectivo + transferencia = total + recargo`). **Las cuentas van en centavos enteros** (`centavos`), y **una venta
 anulada no cuenta, tampoco en el efectivo esperado del cierre**. **El papel de cada compra es un vale, no el ticket** (pedido del jefe, 3-nov,
