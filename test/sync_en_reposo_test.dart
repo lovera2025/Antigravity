@@ -251,5 +251,153 @@ void main() {
       expect(nube.pedidas, isEmpty);
       expect(await SyncQueue.pendingCount, 1);
     });
+
+    test('5. el campo: se abre la app sin internet, se cobra todo el día y al '
+        'llegar a la oficina sube todo solo', () async {
+      red.estado = AppConnectivity.offline;
+      final m = motor();
+      // Al abrir sin internet no baja nada (y no se queda reintentando).
+      expect(await m.bajarAlArrancar(), isFalse);
+      final cobros = [
+        for (var i = 1; i <= 6; i++) 'cccccccc-0000-4000-8000-00000000000$i',
+      ];
+      for (final id in cobros) {
+        await SyncQueue.enqueue(
+          tabla: 'pagos_contrato_alumno',
+          operacion: SyncOperation.insert,
+          registroId: id,
+          payload: _pago(id),
+        );
+        await reloj.avanzar(const Duration(minutes: 40));
+      }
+      await m.aquietar();
+      expect(nube.pedidas, isEmpty, reason: 'sin internet no sale nada');
+      expect(await SyncQueue.pendingCount, cobros.length,
+          reason: 'los seis cobros esperan en la PC');
+
+      // Llega a la oficina.
+      red.poner(AppConnectivity.online);
+      await Future<void>.delayed(Duration.zero);
+      await m.aquietar();
+      expect(
+        nube.pedidas.where((p) => p == 'POST pagos_contrato_alumno').length,
+        cobros.length,
+      );
+      expect(await SyncQueue.pendingCount, 0, reason: 'no queda nada en la cola');
+      // Y como nunca había bajado nada, baja todo: lo del cobro y lo demás.
+      for (final t in [...SyncEngine.tablasDelCobro, ...SyncEngine.tablasDeCarga]) {
+        expect(nube.pedidas, contains('GET $t'));
+      }
+      // Lo único que puede quedar es la mirada de 2 s a la cola, que no sale a
+      // la nube si no hay nada.
+      final marca = nube.pedidas.length;
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      expect(reloj.esperasSueltas, isEmpty, reason: 'nada para reintentar');
+      expect(nube.desde(marca), isEmpty);
+    });
+
+    test('6. lo que la nube no toma se reintenta a los 30 s, 1, 2 y 5 minutos, '
+        'y cada 5 minutos para siempre; al subir, se termina', () async {
+      final m = motor();
+      // Que pase la primera revisión de borrados (a los 20 s de abrir).
+      await reloj.avanzar(const Duration(seconds: 25));
+      await m.aquietar();
+      nube.fallan['POST pagos_contrato_alumno'] = 503;
+      await SyncQueue.enqueue(
+        tabla: 'pagos_contrato_alumno',
+        operacion: SyncOperation.insert,
+        registroId: 'dddddddd-0000-4000-8000-000000000001',
+        payload: _pago('dddddddd-0000-4000-8000-000000000001'),
+      );
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      int intentos() =>
+          nube.pedidas.where((p) => p == 'POST pagos_contrato_alumno').length;
+      expect(intentos(), 1);
+
+      for (final (espera, n) in [
+        (const Duration(seconds: 30), 2),
+        (const Duration(minutes: 1), 3),
+        (const Duration(minutes: 2), 4),
+        (const Duration(minutes: 5), 5),
+        (const Duration(minutes: 5), 6),
+      ]) {
+        expect(reloj.esperasSueltas, [espera]);
+        await reloj.avanzar(espera - const Duration(seconds: 1));
+        await m.aquietar();
+        expect(intentos(), n - 1, reason: 'todavía no');
+        await reloj.avanzar(const Duration(seconds: 1));
+        await m.aquietar();
+        expect(intentos(), n);
+      }
+      expect(await SyncQueue.pendingCount, 1, reason: 'nada se saca por fallar');
+
+      // La nube vuelve a tomarlo.
+      nube.fallan.clear();
+      await reloj.avanzar(const Duration(minutes: 5));
+      await m.aquietar();
+      expect(intentos(), 7);
+      expect(await SyncQueue.pendingCount, 0);
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      expect(reloj.esperasSueltas, isEmpty, reason: 'subió: no queda reintento');
+    });
+
+    test('si toca subir con el motor bajando, prueba de nuevo a los 3 s', () async {
+      final m = motor();
+      nube.frenadas['sesiones_caja'] = Completer<void>();
+      unawaited(m.pullOperationalUpdates());
+      await Future<void>.delayed(Duration.zero);
+      await SyncQueue.enqueue(
+        tabla: 'pagos_contrato_alumno',
+        operacion: SyncOperation.insert,
+        registroId: 'eeeeeeee-0000-4000-8000-000000000001',
+        payload: _pago('eeeeeeee-0000-4000-8000-000000000001'),
+      );
+      await reloj.avanzar(const Duration(seconds: 2));
+      expect(nube.pedidas, isNot(contains('POST pagos_contrato_alumno')));
+      expect(reloj.esperasSueltas, contains(const Duration(seconds: 3)));
+
+      nube.frenadas.remove('sesiones_caja')!.complete();
+      await m.aquietar();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await reloj.avanzar(const Duration(seconds: 3));
+      await m.aquietar();
+      expect(nube.pedidas, contains('POST pagos_contrato_alumno'));
+      expect(await SyncQueue.pendingCount, 0);
+    });
+
+    test('al volver a la ventana baja lo del cobro, si pasó más de un minuto', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+
+      await reloj.avanzar(const Duration(seconds: 30));
+      expect(await m.bajarAlMirar(), isFalse, reason: 'bajó hace 30 s');
+      expect(nube.desde(marca), isEmpty);
+
+      await reloj.avanzar(const Duration(seconds: 40));
+      expect(await m.bajarAlMirar(), isTrue);
+      expect(ordenadas(nube.desde(marca)), [
+        for (final t in SyncEngine.tablasDelCobro) 'GET $t',
+      ]..sort());
+    });
+  });
+
+  group('el coordinador ya no tiene reloj', () {
+    test('no vuelve el ciclo de 10 s ni la subida por rol', () {
+      final s = File('lib/features/common/widgets/operational_sync_coordinator.dart')
+          .readAsStringSync();
+      expect(s, isNot(contains('Timer.periodic')),
+          reason: 'lo que corre solo vive en el motor (6.3.3)');
+      expect(s, isNot(contains('pullOperationalUpdates')));
+      expect(s, isNot(contains('flushPending')));
+      expect(s, contains('cambiosBajadosStream'),
+          reason: 'las pantallas se refrescan cuando bajó algo nuevo');
+      expect(s, contains('bajarAlArrancar'));
+      expect(s, contains('bajarAlMirar'));
+    });
   });
 }
