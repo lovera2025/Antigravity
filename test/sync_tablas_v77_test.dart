@@ -172,13 +172,15 @@ void main() {
       }
     });
 
-    test('la tablet se lleva la fiesta, los PIN, el catálogo y los precios', () {
+    test('la tablet se lleva la fiesta, los PIN, el catálogo, los precios y el recargo', () {
       expect(SyncEngine.tablasDeLaBarra.toSet(), {
         'eventos',
         'operadores_caja',
         'permisos_operador',
         'barra_productos',
         'barra_precios',
+        // v78: el recargo por transferencia de cada fiesta.
+        'barra_recargos',
       });
     });
   });

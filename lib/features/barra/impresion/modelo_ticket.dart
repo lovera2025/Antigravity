@@ -172,6 +172,44 @@ abstract final class ModeloTicket {
         MedioBarra.otro => 'otro',
       };
 
+  /// La lista de precios de una fiesta, para pegar en la barra: por categoría, en el
+  /// orden de PRECIOS, y al final el recargo por transferencia si hay. Sin logo ni
+  /// fotos (en 58 mm no entran, y se ahorra papel).
+  static List<LineaTicket> deListaDePrecios({
+    required String fiesta,
+    String? fecha,
+    required List<({String nombre, String categoria, double precio})> productos,
+    double recargoPct = 0,
+  }) {
+    final categorias = <String>[];
+    for (final p in productos) {
+      final c = p.categoria.trim();
+      if (!categorias.contains(c)) categorias.add(c);
+    }
+    return [
+      const TituloTicket('LISTA DE PRECIOS'),
+      ..._centrado(fiesta, negrita: true),
+      if (fecha != null && fecha.trim().isNotEmpty) TextoTicket(fecha),
+      for (final c in categorias) ...[
+        const SeparadorTicket(),
+        if (c.isNotEmpty) TextoTicket(c.toUpperCase(), negrita: true, centrado: false),
+        for (final p in productos)
+          if (p.categoria.trim() == c) RenglonTicket(p.nombre, pesos(p.precio)),
+      ],
+      if (productos.isEmpty) ...[
+        const SeparadorTicket(),
+        const TextoTicket('Sin precios cargados'),
+      ],
+      if (recargoPct > 0) ...[
+        const SeparadorTicket(),
+        ..._centrado('Pagando por transferencia: + ${_porcentaje(recargoPct)} %'),
+      ],
+    ];
+  }
+
+  static String _porcentaje(double pct) =>
+      pct == pct.roundToDouble() ? pct.toInt().toString() : pct.toString().replaceAll('.', ',');
+
   /// El papel del cierre de una caja: lo vendido por producto, las sillas de la noche,
   /// los totales, el efectivo esperado, lo contado y la diferencia **como se anotó al
   /// cerrar**. Una caja abierta sale sin lo contado.

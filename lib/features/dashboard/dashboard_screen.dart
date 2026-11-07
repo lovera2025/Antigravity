@@ -16,6 +16,7 @@ import '../alquiler/prestamos_alquiler_list_screen.dart';
 import '../cierre_caja/cierre_caja_screen.dart';
 import '../common/providers/user_role_provider.dart';
 import '../recepcion/recepcion_unified_screen.dart';
+import '../barra/jefe/barra_jefe_screen.dart';
 import '../common/widgets/animated_background.dart';
 import '../common/widgets/operational_sync_coordinator.dart';
 import 'providers/dashboard_provider.dart';
@@ -928,6 +929,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const RecepcionUnifiedScreen()),
+        ),
+      ),
+      // La barra del jefe (6.4.0, etapa 7): el catálogo, los precios de cada fiesta y
+      // las cajas. El Centro de Comando solo se ve en modo jefe.
+      _CommandAction(
+        label: 'BARRA',
+        icon: Icons.local_bar_outlined,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BarraJefeScreen()),
         ),
       ),
       _CommandAction(

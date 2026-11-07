@@ -108,6 +108,38 @@ void main() {
       expect(x.faltanVales, isFalse);
     });
 
+    test('el jefe no tiene el freno: cualquier venta, otra copia de cada vale', () {
+      final v = venta(2);
+      final cerveza = salio(v, const [BebidaDelVale(10, 'Cerveza lata')], numero: 1, porSeparado: true);
+      final fernet = salio(v, const [BebidaDelVale(2, 'Fernet con coca')], numero: 2, porSeparado: true);
+      final x = VentaDeLaCaja(
+        venta: v,
+        vales: [cerveza, fernet, salio(v, cerveza.bebidas, numero: 1, porSeparado: true, copia: 1)],
+        esLaUltima: false,
+      );
+      expect(x.sePuedeReimprimir, isFalse, reason: 'la cajera no: no es la última');
+      expect(x.porQueNoReimprimeElJefe, isNull);
+      final copia = x.copiaDelJefe(motivo: 'se le mojó', hechoPor: 'Jefe', ahora: ahora);
+      expect([for (final c in copia) c.vale.numero], [1, 2], reason: 'todos los vales que salieron');
+      expect([for (final c in copia) c.copia.numero], [2, 1], reason: 'cada uno con la copia que le sigue');
+      expect(copia.first.copia.hechoPor, 'Jefe');
+      expect(() => x.copiaDelJefe(motivo: '  ', ahora: ahora), throwsArgumentError);
+    });
+
+    test('el jefe tampoco reimprime una anulada, ni una venta sin vales', () {
+      final v = venta(2);
+      final anulada = VentaDeLaCaja(
+        venta: v,
+        anulacion: AnulacionBarra.de(v, motivo: 'error', ahora: ahora),
+        vales: [todoJunto(v)],
+        esLaUltima: false,
+      );
+      expect(anulada.porQueNoReimprimeElJefe, 'Anulada: no se reimprime');
+      expect(anulada.copiaDelJefe(motivo: 'x', ahora: ahora), isEmpty);
+      final sinVales = VentaDeLaCaja(venta: v, esLaUltima: true);
+      expect(sinVales.porQueNoReimprimeElJefe, 'No salió ningún vale todavía');
+    });
+
     test('sin vales que hayan salido no hay copia: se imprimen los que faltan', () {
       final v = venta(4);
       final x = VentaDeLaCaja(venta: v, esLaUltima: true);

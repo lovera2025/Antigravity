@@ -16,13 +16,15 @@ String quienEnLaBarra(WidgetRef ref, CajaBarra caja) =>
     ref.read(appRoleProvider).operador?.nombre ?? caja.operadorNombre ?? 'Barra';
 
 /// Anota un vale que salió y lo manda a subir. Si no se puede anotar, el vale igual
-/// salió: lo dice el registro de la app, no frena.
+/// salió: lo dice el registro de la app, no frena. [quien] es para el jefe: sin él, la
+/// cajera ([quienEnLaBarra]).
 Future<void> anotarValeQueSalio(
   WidgetRef ref, {
   required VentaBarra venta,
   required CajaBarra caja,
   required Vale vale,
   CopiaDeVale? copia,
+  String? quien,
 }) async {
   final anotado = await ref.read(barraDeLaCajaProvider).anotarVale(ValeBarra.salio(
         venta: venta,
@@ -31,7 +33,7 @@ Future<void> anotarValeQueSalio(
         numeroVale: vale.numero,
         copiaNumero: copia?.numero ?? 0,
         motivo: copia?.motivo,
-        hechoPor: quienEnLaBarra(ref, caja),
+        hechoPor: quien ?? quienEnLaBarra(ref, caja),
         ahora: DateTime.now(),
       ));
   unawaited(ref.read(subirDeLaBarraProvider)('barra_vales', anotado.id));

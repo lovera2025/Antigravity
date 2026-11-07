@@ -114,6 +114,38 @@ class VentaDeLaCaja {
     ];
   }
 
+  /// Null si **el jefe** puede reimprimirla; si no, por qué no. El jefe no tiene el
+  /// freno de la cajera: cualquier venta, las veces que haga falta (etapa 7).
+  String? get porQueNoReimprimeElJefe {
+    if (anulada) return 'Anulada: no se reimprime';
+    if (originales.isEmpty) return 'No salió ningún vale todavía';
+    return null;
+  }
+
+  /// La copia que saca el jefe: **todos** los vales que salieron, cada uno con el número
+  /// de copia que le sigue. Vacía si no se puede. Sin motivo es un error del programa.
+  List<({Vale vale, CopiaDeVale copia})> copiaDelJefe({
+    required String motivo,
+    String? hechoPor,
+    required DateTime ahora,
+  }) {
+    if (porQueNoReimprimeElJefe != null) return const [];
+    final m = motivo.trim();
+    if (m.isEmpty) throw ArgumentError.value(motivo, 'motivo', 'reimprimir lleva motivo');
+    return [
+      for (final o in originales)
+        (
+          vale: Vale.comoSalio(o),
+          copia: CopiaDeVale(
+            numero: copiasDe(o) + 1,
+            createdAt: ahora.toUtc().toIso8601String(),
+            hechoPor: hechoPor,
+            motivo: m,
+          ),
+        ),
+    ];
+  }
+
   /// Null si la cajera puede anularla; si no, por qué no.
   String? get porQueNoSeAnula => anulada ? 'Ya está anulada' : null;
 
