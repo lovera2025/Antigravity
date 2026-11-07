@@ -296,10 +296,20 @@ class FinanzasRepository {
   static DateTime? _lastCacheTime;
 
   /// Invalidar tras sync Pull u otros eventos que cambian datos base de la proyección.
+  ///
+  /// Desde la 6.3.3 la sincronización la llama solo cuando bajó algo nuevo
+  /// (`SyncEngine._avisarCambiosBajados`), no después de cada bajada: con la
+  /// cuenta de cada 10 s, la proyección se volvía a pedir a la nube casi
+  /// siempre que Finanzas estaba abierta.
   static void invalidateProyeccionCache() {
+    vecesInvalidada++;
     _cacheProyeccion = null;
     _lastCacheTime = null;
   }
+
+  /// Para las pruebas: cuántas veces se invalidó.
+  @visibleForTesting
+  static int vecesInvalidada = 0;
 
   /// Obtiene la proyección financiera (Cloud RPC) con caché corta (2 min).
   Future<Map<String, dynamic>?> obtenerProyeccionFinanciera() async {

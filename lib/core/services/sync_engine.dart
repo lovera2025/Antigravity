@@ -532,6 +532,9 @@ class SyncEngine {
     if (_tablasConCambios.isEmpty || _cambiosBajadosController.isClosed) return;
     final tablas = Set<String>.unmodifiable(_tablasConCambios);
     _tablasConCambios.clear();
+    // La proyección de Finanzas se vuelve a pedir solo si bajó algo nuevo
+    // (6.3.3): antes se invalidaba después de cada bajada, cada 10 s.
+    FinanzasRepository.invalidateProyeccionCache();
     _cambiosBajadosController.add(tablas);
   }
 
@@ -869,12 +872,14 @@ class SyncEngine {
   /// vuelta de la red.
   Future<bool> bajarAlArrancar() async {
     final corrio = await pullOperationalUpdates(incluirTablasDeCarga: true);
-    if (!corrio &&
-        _connectivity.currentStatus != AppConnectivity.offline &&
+    if (corrio) {
+      _intentoArranque = 0;
+    } else if (_connectivity.currentStatus != AppConnectivity.offline &&
         !kIsWeb) {
+      // Ocupado o la nube sin contestar: espera creciente, como la subida.
       _reintentoArranque?.cancel();
       _reintentoArranque = _reloj.programar(
-        _esperaSiEstaOcupado,
+        esperaCreciente(_intentoArranque++),
         () => _seguir(bajarAlArrancar()),
       );
     }
@@ -882,6 +887,7 @@ class SyncEngine {
   }
 
   Timer? _reintentoArranque;
+  var _intentoArranque = 0;
 
   /// Cuánto tiene que haber pasado desde la última bajada de lo del cobro para
   /// que mirar la pantalla salga a la nube.
@@ -916,16 +922,11 @@ class SyncEngine {
     }
 
     try {
-      _updateStatus(SyncStatus.wakingUp);
-      final awake = await _connectivity.wakeUpCloud();
-      if (!awake) {
-        _lastError = 'Supabase no disponible';
-        _updateStatus(SyncStatus.error);
-        return;
-      }
-
+      // Sin ping antes (6.3.3): si la nube no está, lo dice el primer envío, y
+      // ese envío no se le cuenta a la fila (ver `_flushQueue`).
       _updateStatus(SyncStatus.syncing);
       _lastError = null;
+      _caidaEnEstaTanda = false;
 
       var rounds = 0;
       const maxRounds = 50;
@@ -934,13 +935,19 @@ class SyncEngine {
           unlimited: true,
           createdSince: createdSince,
         );
-        if (!progress) break;
+        if (!progress || _caidaEnEstaTanda) break;
         rounds++;
       }
 
       _lastUploadTime = _reloj.ahora();
-      _updateStatus(SyncStatus.idle);
-      debugPrint('✅ Subida completada ($_pendingCount pendientes restantes)');
+      if (_caidaEnEstaTanda) {
+        _lastError = 'Nube no disponible';
+        _updateStatus(SyncStatus.error);
+        debugPrint('⏸️ La nube no contesta: lo que falta se reintenta solo');
+      } else {
+        _updateStatus(SyncStatus.idle);
+        debugPrint('✅ Subida completada ($_pendingCount pendientes restantes)');
+      }
 
       // Recién acá, con todo arriba: avisarle a la otra PC qué mirar.
       await _emitirPulso();
@@ -1736,22 +1743,28 @@ class SyncEngine {
     if (_isBusy || _connectivity.currentStatus == AppConnectivity.offline) {
       return false;
     }
+    if (tablas.isEmpty) return true;
     try {
-      _updateStatus(SyncStatus.wakingUp);
-      if (!await _connectivity.wakeUpCloud()) {
-        _lastError = 'Supabase no disponible';
-        _updateStatus(SyncStatus.error);
-        return false;
-      }
+      // Sin ping antes (6.3.3): la primera tabla hace de ping. Hasta la 6.3.2
+      // cada bajada y cada subida empezaban con un pedido de prueba a la nube
+      // (`wakeUpCloud`), uno de cada veinte pedidos de la app.
       _updateStatus(SyncStatus.syncing);
       _lastError = null;
       final db = await LocalDatabase.instance;
       _tablasConFalloPull.clear();
+      _caidaEnEstaTanda = false;
 
+      await _pullTable(db, tablas.first, 'updated_at');
+      if (_caidaEnEstaTanda) {
+        // La nube no está: no se le piden las otras. Lo vuelve a intentar la
+        // próxima vuelta (la red de seguridad, un aviso, antes de cobrar).
+        _lastError = 'Nube no disponible';
+        _updateStatus(SyncStatus.error);
+        return false;
+      }
       await Future.wait([
-        for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
+        for (final tabla in tablas.skip(1)) _pullTable(db, tabla, 'updated_at'),
       ]);
-      FinanzasRepository.invalidateProyeccionCache();
       final ahora = _reloj.ahora();
       _lastPullTime = ahora;
       if (tablas.toSet().containsAll(_tablasDelCobro)) {
@@ -2134,6 +2147,15 @@ class SyncEngine {
         // para que re-intente procesar hijos pausados en esta misma vuelta si es posible.
       } catch (e) {
         debugPrint('  ✗ Error sync ${entry.tabla}/${entry.registroId}: $e');
+
+        // La nube no está (6.3.3): no es culpa de la fila. No se le suma un
+        // intento —si no, un corte largo dejaba cobros "trabados" sin que
+        // tuvieran nada malo— y no se sigue con las demás: se reintenta todo
+        // junto con la espera creciente.
+        if (esCaidaDeLaNube(e)) {
+          _caidaEnEstaTanda = true;
+          break;
+        }
 
         bool isNonRetryable = _isNonRetryableError(e);
 
@@ -2846,10 +2868,15 @@ class SyncEngine {
       // quien llamó pueda decir que el pull quedó incompleto en vez de
       // informar "sincronizado".
       _tablasConFalloPull.add(table);
+      if (esCaidaDeLaNube(e)) _caidaEnEstaTanda = true;
       debugPrint('  ⚠️ Error pull $table: $e');
       return false;
     }
   }
+
+  /// Si en la bajada o la subida en curso la nube no contestó (ver
+  /// [esCaidaDeLaNube]).
+  var _caidaEnEstaTanda = false;
 
   /// Las tablas que Recepción necesita de un evento masivo: el evento, los
   /// alumnos, cómo repartió cada familia sus sillas y el plano.
