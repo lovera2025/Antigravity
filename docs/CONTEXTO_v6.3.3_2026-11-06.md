@@ -11,8 +11,11 @@ dijo "vamos" el 7-nov: en vez de dos instaladores (la 6.3.2 desde `2789053` y de
 `release/6.3.x` (commit de la versión `fb21a96`; en feature, `103398f`). Tags: `v6.3.2` en `2789053` (solo marca; sin release) y
 `v6.3.3`. Antes de publicar: la suite de la 6.3.x en verde (3.446), el simulacro de la mora repetido (ver el CONTEXTO de la 6.3.2) y
 la foto "antes de 6.3.3" (7-nov 07:47, 643 alumnos). Release `v6.3.3` en GitHub (el último, con `Setup.Junior.Eventos.v6.3.3.exe`)
-y la web en Vercel (sirve `version.json` 6.3.3). **Falta: que el usuario instale las tres PCs, la foto "después" con la comparación
-y mirar los logs de reposo (pasos 5 a 7 de abajo).**
+y la web en Vercel (sirve `version.json` 6.3.3). **La PC de la casa, instalada el 7-nov a las 07:53:** al abrir, la revisión de la
+mora corrigió en la nube a los 4 del simulacro y a nadie más, con los mismos números (`mora_cambios`). **Falta: que el usuario instale
+las dos de la oficina, la foto "después" con la comparación y mirar los logs de reposo (pasos 5 a 7 de abajo).** Una PC con la 6.3.1
+que se abra antes de actualizar corre la revisión vieja al arrancar y puede devolverles la mora vieja a esos 4; la 6.3.3 la vuelve a
+corregir al abrir, y `mora_cambios` lo muestra.
 
 > Frase para retomar: "Seguimos con la 6.3.3: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.3.3_2026-11-06.md y decime en
 > qué paso estamos."
