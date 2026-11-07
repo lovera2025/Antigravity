@@ -6,8 +6,16 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 ## Para retomar en otro chat
 
 > **7-nov: las etapas 5 y 6 están hechas** (abajo, "Etapa 5: reimprimir y anular" y "Etapa 6: cerrar la caja"). **Sigue la etapa 7,
-> el jefe (y la encargada) en la PC.** La 6.3.2 y la 6.3.3 quedaron programadas y probadas en `release/6.3.x`; el usuario decidió el
-> 7-nov **seguir completando y publicar al final, salvo que diga "publicá"** (la versión y el tag, también al final).
+> el jefe (y la encargada) en la PC.** La 6.3.3 (la mora adelantada y el sync en reposo) se publicó e instaló el 7-nov a la mañana,
+> desde `release/6.3.x`: la barra y Entradas siguen solo en esta rama, para la 6.4.0.
+>
+> **Etapa 7, al 7-nov (mañana): el plan corto pasado y la maqueta publicada, esperando su OK** (Claude Design, privada:
+> https://claude.ai/artifact/YBhdWQsf4C7HKJeKFoaDxQ). Tarjeta BARRA en el Centro de Comando (solo modo jefe), con CATÁLOGO (uno solo,
+> fotos de la biblioteca, dar de baja), PRECIOS por fiesta (va, precio, stock, avisar desde, COPIAR DE OTRA FIESTA sin el stock, la lista
+> en PDF de 58 mm) y CAJAS (por caja, totales, stock con lo agotado y en aviso arriba, ventas con ANULAR con motivo y REIMPRIMIR). **Falta
+> que elija:** CAJAS opción A (una tarjeta por caja) u opción B (una tabla), y si el **% de recargo por transferencia lo fija el jefe por
+> fiesta** (propuesta: necesita una tabla nueva y su SQL, que va con los otros tres) o sigue en cada tablet. Todo en 58 mm, nunca A4. La
+> foto propia de un producto (subirla) queda para otro paso: necesita el depósito de Storage y su SQL.
 
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
@@ -179,6 +187,9 @@ por Bluetooth, VENDER avisa "sin papel" antes de cobrar; si no, queda como está
   cada caja sigue vendiendo con el último stock que conoce y avisa "Sin conexión desde las 23:40". Con internet, además, sube como siempre.
   **En la app, sea cual sea la conexión, "Quedan" tiene que descontar lo vendido por todas las cajas de la fiesta** (hoy VENDER lee solo
   las ventas de su caja) y actualizarse solo cuando llegan ventas nuevas.
+  **7-nov, confirmado por el usuario:** la barra vende con **la app instalada en cada tablet**, no como las recepcionistas (celular sin
+  app, por QR): el navegador no imprime por Bluetooth y la barra no puede dejar de vender si se cae la red. La central solo comparte el
+  stock y deja al jefe ver las cajas en vivo. Cómo se conecta la tablet (QR como Recepción, o que la encuentre sola) se decide en su etapa.
 - **Sin stock, pregunta antes** (elegido por el usuario): la tarjeta se ve apagada con "Agotado" y, si la tocan, "Según lo cargado no queda.
   ¿Vender igual?". **"Quedan" tiene que bajar con lo que ya está en la cuenta** (hoy en VENDER baja solo con lo vendido: hay que restar
   también la cuenta). Y en la misma tarjeta se suma y se quita (+ / −).

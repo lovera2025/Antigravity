@@ -56,8 +56,8 @@ y las sillas extra, al 50 %, aparte. **Instalada en las tres PCs (4-nov)**, y la
 (el usuario dijo "vamos"). Sale de la rama **`release/6.3.x`** (creada desde el tag `v6.3.1`, en la carpeta `..\arguello_events_6.3.x`),
 y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama feature**: tiene la v78 y tres
 SQL sin correr. Tags `v6.3.2` (el commit de la mora, sin release) y `v6.3.3`; release de GitHub y web publicados, sin SQL. **Instalada en las tres
-PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro. Queda medir 20 minutos de reposo en los logs. La barra y Entradas
-siguen en esta rama para la 6.4.0.
+PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en reposo cada PC le pide a la nube unas 370 cosas por hora
+(antes, miles). Cerrada. La barra y Entradas siguen en esta rama para la 6.4.0.
 - **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
   por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
   repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.

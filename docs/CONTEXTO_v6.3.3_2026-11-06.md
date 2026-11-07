@@ -18,8 +18,12 @@ les devolvió la mora vieja a los 4; a las 08:18, ya con la 6.3.3, los volvió a
 "después de 6.3.3 (las tres PCs)"** (08:26, 643 alumnos): contra la de antes cambian solo los 4 del simulacro, con sus números; la
 comparación marca "ya usado BAJÓ" en LOPEZ y MELGAREJO, que es el arreglo mismo. **Los logs, una primera mirada** (08:19 a 08:24, con
 las PCs recién abiertas): cada PC hace la red del cobro (16 GET) cada 5 minutos y nada más; los minutos del medio, en cero; a las
-08:24 alguien abrió una caja y se bajó todo, como corresponde. **Queda medir una ventana limpia de 20 minutos sin nadie cobrando**
-(paso 7 de abajo); en la víspera, con el ciclo de 10 s, la nube recibía entre 1.000 y 5.000 pedidos por hora con la oficina abierta.
+08:24 alguien abrió una caja y se bajó todo, como corresponde. **Medido el reposo (paso 7), 08:35 a 08:55,
+con una caja abierta y nadie cobrando: 246 pedidos entre las dos PCs de la oficina** (unos 370 por hora por PC, debajo de lo estimado).
+`PATCH sesiones_caja` 4 veces (el latido), cada tabla del cobro unas 4 veces por PC, y cada 10 minutos la revisión de borrados (unos 60
+pedidos con sus `HEAD`). `GET servicios` salió 3 veces, de la red de carga y de esa revisión: el pedido de prueba ya no está. La víspera,
+con el ciclo de 10 s y la oficina abierta, la nube recibía entre 1.000 y 5.000 pedidos por hora; ahora, unos 740 por hora entre las dos.
+**La 6.3.3 queda cerrada.**
 
 > Frase para retomar: "Seguimos con la 6.3.3: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.3.3_2026-11-06.md y decime en
 > qué paso estamos."
