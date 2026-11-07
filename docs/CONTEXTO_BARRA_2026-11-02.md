@@ -5,10 +5,9 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
-> **6-nov (noche): la barra espera.** Antes salen la 6.3.2 (la mora adelantada, `docs/CONTEXTO_v6.3.2_2026-11-09.md`) y la 6.3.3
-> (el sync en reposo, `docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`), cada una sola, desde la rama `release/6.3.x`. Decisión del usuario.
-> La 6.3.3 cambia cómo baja la app lo de la otra PC (sin el ciclo de 10 s): VENDER y la pantalla del jefe se escriben después contra
-> ese modelo.
+> **7-nov (madrugada): la etapa 5 está hecha** (abajo, "Etapa 5: reimprimir y anular"), con los papeles impresos de verdad y mirados
+> en una foto. **Sigue la etapa 6, cerrar la caja.** La 6.3.2 y la 6.3.3 quedaron programadas y probadas en `release/6.3.x`; el
+> usuario decidió el 7-nov **seguir completando y publicar al final, salvo que diga "publicá"** (la versión y el tag, también al final).
 
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
@@ -30,7 +29,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 
 | Etapa | Ya hecho | Falta |
 |---|---|---|
-| 5. Reimprimir y anular | El papel de la COPIA (`CopiaDeVale`) y el de la venta anulada (`ModeloTicket.deVenta`); anular se guarda (`BarraDelJefe.anular`) | Las pantallas y el freno (la cajera solo la última venta, una vez; el jefe cualquiera); ANULAR de la cajera con motivo; el ticket con precios si lo piden; guardar por cuánto salió cada vale (en `renglones`) |
+| 5. Reimprimir y anular | **Hecha el 7-nov** (VENTAS de la cajera, el freno de la copia, IMPRIMIR LO QUE FALTA, el ticket con precios, ANULAR con motivo, la tabla `barra_vales`) | Lo del jefe (reimprimir cualquiera, anular desde la PC) va en la 7 |
 | La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)") | Una tablet que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet |
 | El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
 | 6. Cerrar la caja | Las cuentas (`CierreDeBarra`), el papel (`ModeloTicket.deCierre`, ya salió bien impreso) y el guardado (`cerrarCaja`) | La pantalla de contar a ciegas y el PDF del cierre |
@@ -39,17 +38,57 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
 | 10. De punta a punta | Nada | Con modo avión, sin internet |
 | Entradas 4 a 6 | Las etapas 1 a 3, publicadas apagadas | La entrega según los permisos, "pagó: ya podés entregar", anular solo el jefe (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`) |
-| Publicar | Los SQL de la barra y los permisos, corridos | Foto de la mora antes, versión, release, web, APK firmado, foto después |
+| Publicar | Los SQL de la barra y los permisos, corridos | **Tres SQL sin correr antes de instalar:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql` y `20261107100000_barra_vales.sql`. Foto de la mora antes, versión, release, web, APK firmado, foto después |
 
 **Lo que le toca al usuario:** imprimir un plano antes del primer sorteo; comprar la tablet de la barra; hasta la próxima versión, nadie
 con Entradas y nadie sin Cobros. (Las tres PCs ya tienen la 6.3.1, y la foto de la mora "después" dio vacía.)
 
 **La impresora (6-nov):** las pruebas las hace Claude en el sandbox, pero el papel impreso de verdad necesita la TP-POS58 del usuario.
-**Cuando haga falta imprimir, avisarle** ("después me avisás si necesitás usar la impresora y vemos lo impreso"). Pendiente de eso: la
-foto del vale de la silla (`tool/barra_prueba.dart` ya trae "Silla extra"), junto con los papeles de la etapa 5.
+**Cuando haga falta imprimir, avisarle** ("después me avisás si necesitás usar la impresora y vemos lo impreso"). El vale de la silla y
+los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto
-> de la etapa 5 antes de programar."
+> de la etapa 6 antes de programar."
+
+### Etapa 5: reimprimir y anular (7-nov, en la rama)
+
+**VENTAS** (el ícono de recibo arriba en VENDER, `widgets/ventas_de_la_caja_screen.dart`): las ventas **de su caja**, la última arriba,
+con lo que salió de cada una ("Salió 1 vale · 1 copia", "No salió ningún vale", "faltan 9 sin vale"). Con cada venta:
+- **REIMPRIMIR, con freno** (decidido el 3-nov): solo la **última** venta de la caja, **una vez**, con **motivo** obligatorio. Saca **el
+  mismo vale que salió** (sus bebidas, su número y si era por separado), cada uno con `*** COPIA ***` arriba y abajo, "Copia 1 - Marta",
+  la hora, el motivo y "Se entrega solo con el jefe". **El freno es por vale:** si la impresora se cortó a la mitad, lo que no salió se
+  termina con otro REIMPRIMIR. Lo decide `VentaDeLaCaja` (`cuentas/reimpresion_de_barra.dart`, cuenta pura). Otra copia, o una venta
+  anterior: el jefe, en la etapa 7.
+- **IMPRIMIR LO QUE FALTA**, si quedaron bebidas sin vale (sin impresora, o la cajera salió antes): abre la misma pantalla de los vales
+  (`ValesDeLaVentaScreen`) con lo que ya salió descontado (`ElegirVales.yaSalieron`), y sigue la numeración ("N° 0001-2"). Son originales,
+  sin COPIA: nunca salieron.
+- **TICKET** con precios, si el cliente lo pide (también abajo en la pantalla de después de cobrar, `vales_ticket`). `ModeloTicket.deVenta`
+  **sin logo**, para ahorrar papel (pedido del usuario, 7-nov: "el logo en los vales no van"); lleva el QR y "¡Gracias, salud!".
+- **ANULAR** cualquier venta de su caja, con motivo (decidido el 3-nov: la cajera también anula). `anular` pasó a `BarraDeLaCaja`: es
+  la misma fila de `barra_anulaciones` que la del jefe, con quién y el equipo, y sube enseguida (`subirDeLaBarraProvider`). La venta no se
+  toca; deja de contar en la caja y en el stock, y una silla de esa venta queda en rojo en la puerta (`ValesAnulados`). Una anulada no se
+  reimprime ni saca ticket.
+
+**Cada vale que sale queda anotado** en una tabla nueva, **`barra_vales`** (v78, junto con `sillas_puerta`; SQL
+`supabase/migrations/20261107100000_barra_vales.sql`, **sin correr**): una fila por papel que salió, el original (`copia_numero` 0) y
+cada copia (con su motivo). Se anota recién cuando el papel salió (`ElegirVales.anotar`). **Cambia lo decidido el 3-nov** (los vales
+adentro del JSON `renglones` y una tabla `barra_reimpresiones`): eso editaba la venta, que nunca se edita; una sola tabla que solo agrega
+sirve para las dos cosas. Sube con lo del cobro, nunca se borra (`_tablasSinRevisarBorrados`), y no va en la limpieza padre-hija de la cola.
+**La migración v78 se volvió a probar sobre una copia de la base real** (7-nov): las 42 tablas iguales, las dos nuevas vacías, vuelta a la
+6.3.1, y la base real con la misma huella.
+
+**Lo que dio la prueba con el mouse** (`tool/barra_prueba.dart`, que ahora acepta `--dart-define=papel=pantalla` para ver los papeles
+como texto sin imprimir): todo anduvo, y apareció un error con los tests en verde: **en VENDER el texto tachado no se veía** (la raya salía
+casi negra, del tema claro de la app). Arreglado en el tema (`temaDeVender`, `decorationColor`), con su test.
+
+**Lo que dio el papel** (foto del usuario, 7-nov, con la TP-POS58): el vale de la silla, el de las bebidas, el ticket con precios y las dos
+copias salieron bien, con los acentos y las letras grandes; las copias con COPIA arriba y abajo. Las dos copias salen una detrás de la otra
+con el espacio para cortar entre las dos, como los vales sueltos.
+
+Tests: `test/reimpresion_de_barra_test.dart` (el freno), `test/barra_ventas_test.dart` (la pantalla entera, a 360 y 800 px),
+`barra_repositorios_test` (anotar, anular desde la caja), `migracion_v78_test` y `sync_tablas_v78_test` (las dos tablas),
+`modelo_ticket_test` (la copia sin logo ni QR ni precios), `modo_barra_cerrado_test` (las pantallas nuevas, solo su caja). Roturas vistas en
+rojo: sin "solo la última", sin "una vez", sin anotar el vale, sin la columna `por_separado`, sin la tabla en los borrados, y la raya oscura.
 
 **VENDER, cerrado el 4-nov (`c9fc4c0`):** **el stock es general**: lee las ventas de **todas las cajas de la fiesta**
 (`BarraDeLaCaja.ventas(eventoId)`) y se vuelve a leer cuando baja algo (`ref.listenManual(operationalSyncRevisionProvider, ...)`);
@@ -201,7 +240,8 @@ todo junto unos 6 cm; uno por separado unos 5 cm. La medida justa, de la foto.
 
 **Dónde entra en las etapas:** la 4 (la cajera) lleva abrir sin cambio ni turno, el ícono del cambio y VENDER con los tres botones de
 pago abajo; la 5 (cobrar e imprimir) lleva el cobro de cada medio con el recargo, los vales, reimprimir con freno y ANULAR de la cajera;
-la 6 (el jefe) lleva el % de recargo de cada fiesta. **Datos de la 5, decididos:** por cuánto salió cada vale
+la 6 (el jefe) lleva el % de recargo de cada fiesta. **(Cambió al programarla, 7-nov: una sola tabla `barra_vales`, ver "Etapa 5:
+reimprimir y anular" arriba.)** Lo que se había decidido: por cuánto salió cada vale
 (`[3, 2, 5]`, con su número en la venta) adentro del JSON `renglones` de `barra_ventas` (sin columna), para reimprimir el mismo; una tabla nueva `barra_reimpresiones`, que solo agrega, dentro de la v77 (no se
 publicó): con ella hay que volver a probar la migración sobre una copia de la base real, con la app cerrada.
 

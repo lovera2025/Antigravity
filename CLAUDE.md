@@ -55,10 +55,12 @@ y las sillas extra, al 50 %, aparte. **Instalada en las tres PCs (4-nov)**, y la
 **Primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario, 6-nov a la noche: "de inmediato, bien hecho
 y probado en el sandbox"). Las dos salen solas desde la rama **`release/6.3.x`** (creada desde el tag `v6.3.1`, en la carpeta
 `..\arguello_events_6.3.x`), y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama
-feature**: tiene la v78 y dos SQL sin correr.
+feature**: tiene la v78 y tres SQL sin correr. **7-nov: el usuario decidió seguir completando la barra y publicar al final, salvo que
+diga "publicá"**; la versión y el tag de la 6.3.2 y la 6.3.3 también se ponen recién al publicar.
 - **La 6.3.2, la mora adelantada** (meta: lunes 9-nov; entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en
   otro chat"). La mora cobrada por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez
-  de $235.200). **Programada y probada el 6-nov**; falta el simulacro con la base al día, la foto, el instalador y las tres PCs. Sin SQL.
+  de $235.200). **Programada y probada el 6-nov**, con el simulacro sobre la base al día (a 4 alumnos les baja la mora, a nadie le
+  sube); al publicar se repite el simulacro, y faltan la foto, el instalador y las tres PCs. Sin SQL.
 - **La 6.3.3, el sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final; entrada:
   `docs/CONTEXTO_v6.3.3_2026-11-06.md`): sin el ciclo de 10 s, el pulso como transporte, red de seguridad de 5 y 30 min, latido
   cada 5 min. **Programada y probada el 6-nov** (7 commits en las dos ramas); se publica después de la 6.3.2. Sin SQL (la etapa 6
@@ -72,7 +74,12 @@ entrega) **ni crear operadores sin Cobros** hasta que las tres PCs tengan la 6.3
 que empieza con **"Para retomar en otro chat"**). Las etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas, `lib/features/barra/cuentas/`, y lo que dice cada papel,
 `impresion/modelo_ticket.dart`) se cerraron el 3-nov, y también la 4: **la cajera entra con su PIN (`AppRoleKind.barra`, que nunca arma el
 panel), elige la fiesta, abre su caja sin cambio ni turno y vende** (`widgets/barra_home_screen.dart`, `vender_screen.dart`, `cobrar_hoja.dart`;
-para mirarla, `flutter run -d windows -t tool/barra_prueba.dart`). Sigue la 5. **Debajo del total, EFECTIVO · TRANSFERENCIA · MIXTO; transferencia
+para mirarla, `flutter run -d windows -t tool/barra_prueba.dart`, y con `--dart-define=papel=pantalla` los papeles se ven como texto, sin
+imprimir). **La 5 se cerró el 7-nov: VENTAS** (`widgets/ventas_de_la_caja_screen.dart`): las ventas de su caja; **REIMPRIMIR con freno**
+(`VentaDeLaCaja`, `cuentas/reimpresion_de_barra.dart`: solo la última, una vez por vale, con motivo, el mismo vale que salió con COPIA),
+IMPRIMIR LO QUE FALTA, el TICKET con precios (sin logo) y **ANULAR, también la cajera**, con motivo (`anular` está en `BarraDeLaCaja`).
+**Cada vale que sale se anota en `barra_vales`** (v78; solo se agregan filas; la venta no se toca). Sigue la 6 (cerrar la caja). **Lo que
+se imprime en la barra ahorra papel: sin logo en vales, copias ni ticket** (pedido del usuario, 7-nov). **Debajo del total, EFECTIVO · TRANSFERENCIA · MIXTO; transferencia
 es todo lo de Mercado Pago, sin comprobante que tildar; el recargo por transferencia va sobre lo transferido** y la venta lo guarda aparte
 (`recargo`: `efectivo + transferencia = total + recargo`). **Las cuentas van en centavos enteros** (`centavos`), y **una venta
 anulada no cuenta, tampoco en el efectivo esperado del cierre**. **El papel de cada compra es un vale, no el ticket** (pedido del jefe, 3-nov,
@@ -106,8 +113,8 @@ el reloj de Recepción (`TiemposAMano`, vive en la PC, viaja por `tiempos_totem`
 **sin correr**. **Las sillas de la noche (6-nov):** desde los sorteos (10-nov) una silla más se pide solo esa noche (**mesas, nunca esa
 noche**); **la recepcionista no toca plata**: la barra la cobra como producto y da un vale, y la puerta la anota con el número del vale en
 `sillas_puerta` (v78, filas que solo se agregan; quitar deja la huella con motivo). En la oficina, con la fiesta sorteada, no se suman sillas
-extra al contrato salvo en modo jefe. Ver "Las sillas de la noche" en El tótem. SQL `20261105120000_sillas_puerta.sql` **sin correr**; falta
-la prueba de punta a punta quedó hecha en el sandbox el 6-nov (`tool/puerta_sandbox_test.dart`).
+extra al contrato salvo en modo jefe. Ver "Las sillas de la noche" en El tótem. SQL `20261105120000_sillas_puerta.sql` **sin correr**; la
+prueba de punta a punta quedó hecha en el sandbox el 6-nov (`tool/puerta_sandbox_test.dart`).
 
 **Las pruebas de punta a punta las hace Claude, en un sandbox, y se asegura de que salgan bien** (regla del usuario, 6-nov). Aisladas:
 los arneses `tool/*_prueba.dart` en memoria, sin la base real ni la nube; el navegador de la app con pestañas que hacen de celulares.
@@ -133,7 +140,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 78 en la rama, con `sillas_puerta`; las PCs tienen la 77) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 78 en la rama, con `sillas_puerta` y `barra_vales`; las PCs tienen la 77) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
