@@ -299,6 +299,25 @@ class PdfService {
     }
   }
 
+  /// Las Outfit de la app (regular y negrita), para un PDF armado fuera de este
+  /// servicio (los papeles de la barra). Null si no se pudieron leer.
+  static Future<(pw.Font, pw.Font)?> fuentesOutfit() => _fuentesOutfit();
+
+  /// Entrega un PDF armado fuera de este servicio como los demás: en Windows, el menú
+  /// de ver, guardar o abrir la carpeta; en Android, compartir (WhatsApp, guardar en el
+  /// teléfono, imprimir).
+  static Future<void> entregarPdf(
+    Uint8List bytes,
+    String nombre, {
+    BuildContext? context,
+  }) async {
+    if (!kIsWeb && Platform.isWindows) {
+      await _entregarPdfEnWindows(bytes, nombre, context: context);
+    } else {
+      await Printing.sharePdf(bytes: bytes, filename: nombre);
+    }
+  }
+
   /// Deja las fuentes de los PDF resueltas en memoria, apenas arranca la app.
   ///
   /// No lanza nunca: un problema de assets no debe impedir que arranque la app.
