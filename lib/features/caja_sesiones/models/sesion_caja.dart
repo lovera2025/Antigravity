@@ -1,17 +1,23 @@
 /// Período con que `AppRoleNotifier._startHeartbeat` publica el latido de una
 /// sesión activa. Los umbrales de abajo se derivan de acá: no son números
-/// elegidos a dedo.
-const Duration kLatidoSesionPeriodo = Duration(seconds: 60);
+/// elegidos a dedo, y van juntos (`test/latido_sesion_test.dart`).
+///
+/// Cinco minutos desde la 6.3.3 (el sync en reposo): cada minuto eran 60
+/// subidas por hora por caja abierta. Abrir y cerrar la caja siguen llegando a
+/// la otra PC en segundos, por su propio aviso; el latido solo dice que sigue
+/// viva.
+const Duration kLatidoSesionPeriodo = Duration(minutes: 5);
 
 /// Una caja realmente en uso nunca puede tener un latido más viejo que el
 /// período más un margen. Por debajo de esto se puede **afirmar** que otra
-/// máquina la está usando ahora mismo.
-const Duration kLatidoSesionVivo = Duration(seconds: 90);
+/// máquina la está usando ahora mismo. Dos latidos y un minuto: si se pierde
+/// uno, la otra PC no la pone en duda.
+const Duration kLatidoSesionVivo = Duration(minutes: 11);
 
 /// Por encima de esto la sesión quedó abierta y nadie la está tocando (PC
 /// apagada, o cerrada sin red). Entre ambos umbrales **no se sabe**, y el
 /// programa no debe afirmar nada.
-const Duration kLatidoSesionMuerto = Duration(minutes: 5);
+const Duration kLatidoSesionMuerto = Duration(minutes: 20);
 
 // ── Notas de cierre generadas por el sistema ────────────────────────────────
 // Se declaran como constantes para poder distinguir un cierre automático de uno

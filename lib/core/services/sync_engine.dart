@@ -242,7 +242,15 @@ class TrabajoDelPulso {
   /// Ids a borrar, por tabla. Vienen de un borrado que hizo una persona.
   final Map<String, Set<String>> borrados;
 
-  const TrabajoDelPulso({required this.tablas, required this.borrados});
+  /// Lo único que cambió es el latido de una caja (6.3.3): se baja, pero no
+  /// hace falta refrescar las pantallas.
+  final bool soloLatido;
+
+  const TrabajoDelPulso({
+    required this.tablas,
+    required this.borrados,
+    this.soloLatido = false,
+  });
 
   static const vacio = TrabajoDelPulso(tablas: {}, borrados: {});
 
@@ -295,7 +303,12 @@ TrabajoDelPulso trabajoDelPulso(
     }
   }
 
-  return TrabajoDelPulso(tablas: tablas, borrados: borrados);
+  return TrabajoDelPulso(
+    tablas: tablas,
+    borrados: borrados,
+    // Solo un `true` de verdad; cualquier otra cosa avisa a las pantallas.
+    soloLatido: datos['latido'] == true && borrados.isEmpty,
+  );
 }
 
 /// ¿Es creíble que la nube esté vacía?
@@ -1029,6 +1042,10 @@ class SyncEngine {
   final Set<String> _tablasDelPulso = {};
   final Map<String, Set<String>> _borradosDelPulso = {};
 
+  /// Si entre lo anunciado hay algo más que latidos: entonces lo que baje
+  /// refresca las pantallas.
+  var _avisarLoDelPulso = false;
+
   /// Qué se lleva puesto el borrado de un padre.
   ///
   /// Espeja los `ON DELETE CASCADE` que ya tiene Supabase (verificados sobre el
@@ -1052,13 +1069,20 @@ class SyncEngine {
     'servicios': [('eventos_servicios', 'servicio_id')],
   };
 
+  /// Si en lo que se va a anunciar hay algo más que latidos de caja.
+  var _hayMasQueLatidos = false;
+
   void _anotarParaElPulso(SyncQueueEntry entry) {
     if (!_incrementalColumns.containsKey(entry.tabla)) return;
-    // El latido de la caja sube cada minuto: con pulso, la otra PC bajaba datos
-    // una vez por minuto todo el día. Le llega igual por el ciclo de 10 s, que
-    // es como llegaba antes del pulso y le sobra al margen de 90 s del
-    // indicador "caja abierta en otra PC".
-    if (esSoloLatido(entry.tabla, entry.operacion, entry.payload)) return;
+    // El latido de la caja también avisa (6.3.3). Hasta la 6.3.2 no: subía cada
+    // minuto y con aviso la otra PC bajaba datos una vez por minuto todo el
+    // día; le llegaba por el ciclo de 10 s. Ese ciclo ya no está, y el latido
+    // es cada 5 minutos: sin aviso, la otra PC lo vería recién con la red de
+    // seguridad y pondría la caja en duda sin motivo. Va marcado como "solo
+    // latido" para que la otra PC no refresque las pantallas por eso.
+    if (!esSoloLatido(entry.tabla, entry.operacion, entry.payload)) {
+      _hayMasQueLatidos = true;
+    }
     _tablasSubidas.add(entry.tabla);
     if (entry.operacion == SyncOperation.delete) {
       (_borradosSubidos[entry.tabla] ??= <String>{}).add(entry.registroId);
@@ -1074,13 +1098,16 @@ class SyncEngine {
     final borrados = {
       for (final e in _borradosSubidos.entries) e.key: e.value.toList(),
     };
+    final soloLatido = !_hayMasQueLatidos;
     _tablasSubidas.clear();
     _borradosSubidos.clear();
+    _hayMasQueLatidos = false;
 
     final payload = <String, dynamic>{
       'origen': origen,
       'tablas': tablas,
       'borrados': borrados,
+      if (soloLatido) 'latido': true,
     };
     ultimoPulsoArmado = payload;
     if (!_conCanalDelPulso) return;
@@ -1165,6 +1192,7 @@ class SyncEngine {
     );
     if (trabajo.estaVacio) return;
 
+    if (!trabajo.soloLatido) _avisarLoDelPulso = true;
     _tablasDelPulso.addAll(trabajo.tablas);
     for (final e in trabajo.borrados.entries) {
       (_borradosDelPulso[e.key] ??= <String>{}).addAll(e.value);
@@ -1204,8 +1232,10 @@ class SyncEngine {
 
     final tablas = _tablasDelPulso.toList();
     final borrados = Map<String, Set<String>>.from(_borradosDelPulso);
+    final avisar = _avisarLoDelPulso || borrados.isNotEmpty;
     _tablasDelPulso.clear();
     _borradosDelPulso.clear();
+    _avisarLoDelPulso = false;
 
     // Una sola bajada a la vez: mientras se atiende el aviso, el motor está
     // ocupado y la red de seguridad, la subida o antes de cobrar esperan.
@@ -1227,7 +1257,8 @@ class SyncEngine {
       _tablasConFalloPull.clear();
       if (tablas.isNotEmpty) {
         await Future.wait([
-          for (final tabla in tablas) _pullTable(db, tabla, 'updated_at'),
+          for (final tabla in tablas)
+            _pullTable(db, tabla, 'updated_at', avisar: avisar),
         ]);
         _lastPullTime = _reloj.ahora();
         debugPrint('  ⚡ Pulso atendido: ${tablas.join(", ")}');
@@ -2392,6 +2423,10 @@ class SyncEngine {
     String table,
     String? orderBy, {
     String primaryKey = 'id',
+
+    /// En `false`, lo nuevo que baje no refresca las pantallas: es el latido
+    /// de una caja de la otra PC (6.3.3).
+    bool avisar = true,
   }) async {
     try {
       final String claveMeta = 'last_pull_$table';
@@ -2688,7 +2723,7 @@ class SyncEngine {
         }
       }
       await batch.commit(noResult: true);
-      if (novedades > 0) _anotarCambioBajado(table);
+      if (novedades > 0 && avisar) _anotarCambioBajado(table);
       // La otra PC congeló o descongeló: la cuenta de la mora lo tiene que ver
       // ya, antes de que la grilla se refresque al final del ciclo (6.2.1).
       if (novedades > 0 && table == 'mora_congelada') {

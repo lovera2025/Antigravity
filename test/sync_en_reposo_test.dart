@@ -484,6 +484,155 @@ void main() {
     });
   });
 
+  group('2. el latido de la caja', () {
+    late Directory docs;
+    late NubeDePrueba nube;
+    late RelojDePrueba reloj;
+    late RedDePrueba red;
+    const sesion = 'ffffffff-0000-4000-8000-000000000001';
+
+    setUp(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      docs = Directory.systemTemp.createTempSync('sync_latido');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (call) async => docs.path,
+      );
+      nube = NubeDePrueba();
+      reloj = RelojDePrueba();
+      red = RedDePrueba();
+      await LocalDatabase.instance;
+    });
+
+    tearDown(() async {
+      await LocalDatabase.close();
+      if (docs.existsSync()) docs.deleteSync(recursive: true);
+    });
+
+    SyncEngine motor() {
+      final cliente = nube.clienteSupabase();
+      addTearDown(cliente.dispose);
+      final m = SyncEngine(
+        connectivity: red,
+        supabase: cliente,
+        reloj: reloj,
+        conCanalDelPulso: false,
+      );
+      reloj.esperarAlMotor = m.aquietar;
+      m.start();
+      addTearDown(m.dispose);
+      return m;
+    }
+
+    Future<void> encolarLatido() => SyncQueue.enqueue(
+          tabla: 'sesiones_caja',
+          operacion: SyncOperation.update,
+          registroId: sesion,
+          payload: {
+            'id': sesion,
+            'last_heartbeat': '2026-11-10T15:05:00Z',
+            'updated_at': '2026-11-10T15:05:00Z',
+          },
+        );
+
+    test('el latido sube y avisa a la otra PC, marcado como "solo latido"', () async {
+      final m = motor();
+      await encolarLatido();
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      expect(nube.pedidas, contains('PATCH sesiones_caja'));
+      expect(m.ultimoPulsoArmado?['tablas'], ['sesiones_caja']);
+      expect(m.ultimoPulsoArmado?['latido'], isTrue);
+    });
+
+    test('8. un cobro, una entrega de entradas y una silla de la noche avisan '
+        'normal, aunque suban con un latido', () async {
+      final m = motor();
+      await encolarLatido();
+      for (final (tabla, id) in [
+        ('barra_ventas', 'abababab-0000-4000-8000-000000000001'),
+        ('entradas_retiro', 'abababab-0000-4000-8000-000000000002'),
+        ('sillas_puerta', 'abababab-0000-4000-8000-000000000003'),
+      ]) {
+        await SyncQueue.enqueue(
+          tabla: tabla,
+          operacion: SyncOperation.insert,
+          registroId: id,
+          payload: {'id': id, 'updated_at': '2026-11-10T15:05:00Z'},
+        );
+      }
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      final tablas = (m.ultimoPulsoArmado?['tablas'] as List).toSet();
+      expect(tablas, containsAll(['barra_ventas', 'entradas_retiro', 'sillas_puerta']));
+      expect(m.ultimoPulsoArmado?.containsKey('latido'), isFalse,
+          reason: 'con algo más que el latido, la otra PC refresca las pantallas');
+    }, skip: !SyncEngine.tablasQueSeBajan.contains('sillas_puerta')
+        ? 'esta versión todavía no tiene las sillas de la noche'
+        : false);
+
+    test('la otra PC baja el latido sin refrescar las pantallas; un aviso '
+        'normal sí las refresca', () async {
+      final m = motor();
+      final avisos = <Set<String>>[];
+      final sub = m.cambiosBajadosStream.listen(avisos.add);
+      addTearDown(sub.cancel);
+      Map<String, Object?> fila(String latido) => {
+            'id': sesion,
+            'operador_id': 'bbbbbbbb-0000-4000-8000-000000000001',
+            'abierta_at': '2026-11-10T13:00:00Z',
+            'cambio_inicial': 0,
+            'device_id': 'pc-del-jefe',
+            'last_heartbeat': latido,
+            'created_at': '2026-11-10T13:00:00Z',
+            'updated_at': latido,
+          };
+
+      nube.filas['sesiones_caja'] = [fila('2026-11-10T15:05:00Z')];
+      final marca = nube.pedidas.length;
+      m.recibirPulso({
+        'payload': {
+          'origen': 'pc-del-jefe',
+          'tablas': ['sesiones_caja'],
+          'borrados': <String, List<String>>{},
+          'latido': true,
+        },
+      });
+      await reloj.avanzar(const Duration(seconds: 1));
+      await m.aquietar();
+      expect(nube.desde(marca), ['GET sesiones_caja'], reason: 'baja solo eso');
+      expect(avisos, isEmpty, reason: 'el latido no refresca las pantallas');
+
+      nube.filas['sesiones_caja'] = [fila('2026-11-10T15:10:00Z')];
+      m.recibirPulso({
+        'payload': {
+          'origen': 'pc-del-jefe',
+          'tablas': ['sesiones_caja'],
+          'borrados': <String, List<String>>{},
+        },
+      });
+      await reloj.avanzar(const Duration(seconds: 1));
+      await m.aquietar();
+      expect(avisos, [
+        {'sesiones_caja'},
+      ], reason: 'abrir o cerrar la caja sí');
+    });
+
+    test('un "latido" que no es un true de verdad avisa normal', () {
+      final t = trabajoDelPulso(
+        {
+          'origen': 'otra',
+          'tablas': ['sesiones_caja'],
+          'latido': 'true',
+        },
+        yo: 'esta',
+        tablasConocidas: {'sesiones_caja'},
+      );
+      expect(t.soloLatido, isFalse);
+    });
+  });
+
   group('el coordinador ya no tiene reloj', () {
     test('no vuelve el ciclo de 10 s ni la subida por rol', () {
       final s = File('lib/features/common/widgets/operational_sync_coordinator.dart')

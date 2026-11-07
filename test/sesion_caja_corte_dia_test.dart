@@ -82,12 +82,14 @@ void main() {
       expect(s.sinSenales(ahora: ahora), isFalse);
     });
 
-    test('latido de 3 minutos NO significa "abierta en otra PC"', () {
-      final s = sesion(desde: const Duration(minutes: 57));
+    test('latido de 15 minutos NO significa "abierta en otra PC"', () {
+      // Hasta la 6.3.2 el latido era cada 60 s y esto pasaba a los 3 minutos;
+      // desde la 6.3.3 es cada 5 minutos (test/latido_sesion_test.dart).
+      final s = sesion(desde: const Duration(minutes: 45));
       expect(
         s.enUsoAhora(ahora: ahora),
         isFalse,
-        reason: 'el latido se publica cada 60 s: 3 min es demasiado viejo',
+        reason: 'el latido se publica cada 5 min: 15 min es demasiado viejo',
       );
       expect(
         s.sinSenales(ahora: ahora),
