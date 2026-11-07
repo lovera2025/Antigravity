@@ -542,10 +542,11 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
     // continuo. La cola deduplica el UPDATE de esta sesión.
     //
     // El período es la fuente de la que salen los umbrales de kLatidoSesionVivo
-    // y kLatidoSesionMuerto: si se cambia acá, hay que revisarlos.
+    // y kLatidoSesionMuerto: si se cambia acá, hay que revisarlos (van juntos,
+    // test/latido_sesion_test.dart). Cada 5 minutos desde la 6.3.3.
     _heartbeatTimer = Timer.periodic(kLatidoSesionPeriodo, (_) async {
       try {
-        // Cubre la app que queda prendida de noche: a los ≤60 s de la
+        // Cubre la app que queda prendida de noche: a los ≤5 min de la
         // medianoche la caja se cierra sola y el chip refleja la realidad.
         await autocerrarSesionesVencidas();
         if (state.sesionActiva?.id != sesionId) return;
