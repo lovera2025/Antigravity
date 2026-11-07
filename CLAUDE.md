@@ -58,6 +58,11 @@ y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de
 SQL sin correr. Tags `v6.3.2` (el commit de la mora, sin release) y `v6.3.3`; release de GitHub y web publicados, sin SQL. **Instalada en las tres
 PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en reposo cada PC le pide a la nube unas 370 cosas por hora
 (antes, miles). Cerrada. La barra y Entradas siguen en esta rama para la 6.4.0.
+- **Programado el 7-nov, sin publicar, en `release/6.3.x` y acá: cambiar la fecha de un cobro a otro día lo saca de su caja**
+  (Mi Empresa → lápiz → Corregir medio de pago; `cajaTrasCambioDeFecha`, `cierre_caja/services/fecha_y_caja.dart`). Regla del usuario:
+  esa plata no entró ese día. Una caja cerrada no se toca. Cambia todo el cobro junto (`lineasDelMismoCobro`), sin fechas futuras, y al
+  cambiar la fecha o anular se revisa la mora del alumno en el momento. Sale con la próxima versión que se publique (6.3.4 sola o
+  dentro de la 6.4.0). Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta entonces.
 - **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
   por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
   repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.
