@@ -239,7 +239,13 @@ ThemeData temaDeVender(DisenioBarra d, {ThemeData? base}) {
     dialogTheme: DialogThemeData(backgroundColor: esquema.surface),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: esquema.surface),
     dividerColor: noche ? const Color(0x1AFFFFFF) : const Color(0xFF2C2E33),
-    textTheme: letras.apply(bodyColor: esquema.onSurface, displayColor: esquema.onSurface),
+    // La raya de un texto tachado (una venta anulada) con el color de la letra: si no,
+    // queda la del tema claro de la app, casi negra, y sobre el fondo oscuro no se ve.
+    textTheme: letras.apply(
+      bodyColor: esquema.onSurface,
+      displayColor: esquema.onSurface,
+      decorationColor: esquema.onSurface,
+    ),
     extensions: [barra],
   );
   return tema;

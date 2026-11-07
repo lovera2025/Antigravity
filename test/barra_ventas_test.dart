@@ -233,6 +233,15 @@ void main() {
       expect(a.hechoPor, 'Marta');
       expect(prueba.subidasDeLaBarra, contains('barra_anulaciones ${a.id}'));
       expect(texto(tester, 'anulada_${venta.id}'), 'ANULADA · se cobró dos veces');
+      // Tachada, y la raya se ve: del color de la letra, no la casi negra del tema claro.
+      final bebidas = tester.widget<RichText>(find.descendant(
+        of: porClave('venta_${venta.id}'),
+        matching: find.byWidgetPredicate(
+          (w) => w is RichText && w.text.toPlainText().startsWith('10 cerveza lata'),
+        ),
+      ));
+      expect(bebidas.text.style?.decoration, TextDecoration.lineThrough);
+      expect(bebidas.text.style?.decorationColor, bebidas.text.style?.color);
       expect(porClave('reimprimir_${venta.id}'), findsNothing);
       expect(porClave('ticket_${venta.id}'), findsNothing);
       expect(porClave('anular_${venta.id}'), findsNothing);
