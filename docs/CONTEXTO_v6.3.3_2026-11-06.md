@@ -6,9 +6,13 @@ diseño aprobado al final: `docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`.
 
 ## Para retomar en otro chat
 
-**Estado al 6-nov (noche): programada y probada en el sandbox; falta publicarla.** Siete commits, en las dos ramas, con la suite
-entera en verde en las dos. Se publica **después** de la 6.3.2 (la mora, meta lunes 9-nov), con el procedimiento de siempre. Lo que
-falta, abajo.
+**Estado al 7-nov (mañana): PUBLICADA, junto con la mora adelantada de la 6.3.2, en un solo instalador `6.3.3+65`.** El usuario
+dijo "vamos" el 7-nov: en vez de dos instaladores (la 6.3.2 desde `2789053` y después la 6.3.3), uno solo desde la punta de
+`release/6.3.x` (commit de la versión `fb21a96`; en feature, `103398f`). Tags: `v6.3.2` en `2789053` (solo marca; sin release) y
+`v6.3.3`. Antes de publicar: la suite de la 6.3.x en verde (3.446), el simulacro de la mora repetido (ver el CONTEXTO de la 6.3.2) y
+la foto "antes de 6.3.3" (7-nov 07:47, 643 alumnos). Release `v6.3.3` en GitHub (el último, con `Setup.Junior.Eventos.v6.3.3.exe`)
+y la web en Vercel (sirve `version.json` 6.3.3). **Falta: que el usuario instale las tres PCs, la foto "después" con la comparación
+y mirar los logs de reposo (pasos 5 a 7 de abajo).**
 
 > Frase para retomar: "Seguimos con la 6.3.3: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.3.3_2026-11-06.md y decime en
 > qué paso estamos."

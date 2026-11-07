@@ -52,19 +52,18 @@ los sorteos son en noviembre (decisión del usuario). Las novedades dicen "El pl
 6.3.1** (`docs/CONTEXTO_v6.3.1_2026-11-04.md`, sin SQL): en ENTRADAS, sin cargo solo las 8 de la mesa del contrato; las de la mesa adicional
 y las sillas extra, al 50 %, aparte. **Instalada en las tres PCs (4-nov)**, y la foto de la mora "después" comparada con la de antes: vacía. Entrada: `docs/CONTEXTO_v6.3.0_2026-11-02.md`. Para mirar el plano sin base ni nube: `flutter run -d windows -t tool/plano_prueba.dart`.
 
-**Primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario, 6-nov a la noche: "de inmediato, bien hecho
-y probado en el sandbox"). Las dos salen solas desde la rama **`release/6.3.x`** (creada desde el tag `v6.3.1`, en la carpeta
-`..\arguello_events_6.3.x`), y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama
-feature**: tiene la v78 y tres SQL sin correr. **7-nov: el usuario decidió seguir completando la barra y publicar al final, salvo que
-diga "publicá"**; la versión y el tag de la 6.3.2 y la 6.3.3 también se ponen recién al publicar.
-- **La 6.3.2, la mora adelantada** (meta: lunes 9-nov; entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en
-  otro chat"). La mora cobrada por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez
-  de $235.200). **Programada y probada el 6-nov**, con el simulacro sobre la base al día (a 4 alumnos les baja la mora, a nadie le
-  sube); al publicar se repite el simulacro, y faltan la foto, el instalador y las tres PCs. Sin SQL.
-- **La 6.3.3, el sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final; entrada:
+**La 6.3.3, publicada el 7-nov a la mañana: la mora adelantada (la 6.3.2) y el sync en reposo, en un solo instalador `6.3.3+65`**
+(el usuario dijo "vamos"). Sale de la rama **`release/6.3.x`** (creada desde el tag `v6.3.1`, en la carpeta `..\arguello_events_6.3.x`),
+y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama feature**: tiene la v78 y tres
+SQL sin correr. Tags `v6.3.2` (el commit de la mora, sin release) y `v6.3.3`; release de GitHub y web publicados, sin SQL. **Falta que el
+usuario instale las tres PCs, la foto "después" y mirar los logs de reposo.** La barra y Entradas siguen en esta rama para la 6.4.0.
+- **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
+  por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
+  repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.
+- **El sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final; entrada:
   `docs/CONTEXTO_v6.3.3_2026-11-06.md`): sin el ciclo de 10 s, el pulso como transporte, red de seguridad de 5 y 30 min, latido
-  cada 5 min. **Programada y probada el 6-nov** (7 commits en las dos ramas); se publica después de la 6.3.2. Sin SQL (la etapa 6
-  quedó en `docs/pendientes/sync-novedades-en-una-consulta.md`). Ver "El sync en reposo", en Arquitectura.
+  cada 5 min (7 commits en las dos ramas). La etapa 6 quedó en `docs/pendientes/sync-novedades-en-una-consulta.md`. Ver "El sync en
+  reposo", en Arquitectura.
 
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
 **y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una
