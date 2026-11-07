@@ -94,11 +94,12 @@ abstract final class ModeloTicket {
         RenglonTicket('Vuelto', pesos(venta.vuelto)),
       ],
       const SeparadorTicket(),
+      // Sin QR (7-nov): ninguna pantalla lo lee y son 3 cm de papel. El número alcanza
+      // para buscar la venta.
       TextoTicket(
         NumeroDeTicket.texto(numeroCaja: caja.numeroCaja, numero: venta.numero),
         negrita: true,
       ),
-      QrTicket(NumeroDeTicket.qr(venta.id)),
       if (anulada) ...[
         const TextoTicket('*** ANULADA ***', negrita: true),
         ..._centrado('Motivo: ${anulacion.motivo}'),
@@ -156,15 +157,42 @@ abstract final class ModeloTicket {
     ];
   }
 
-  /// El papel del cierre de una caja: lo vendido, el efectivo esperado, lo contado y la
-  /// diferencia **como se anotó al cerrar**. Una caja abierta sale sin lo contado.
+  /// "23:41", en hora de Argentina.
+  static String _hora(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '';
+    final ar = ArTime.toAr(dt);
+    return '${ar.hour.toString().padLeft(2, '0')}:${ar.minute.toString().padLeft(2, '0')}';
+  }
+
+  static String _medioCorto(MedioBarra m) => switch (m) {
+        MedioBarra.efectivo => 'efect.',
+        MedioBarra.transferencia => 'transf.',
+        MedioBarra.mixto => 'mixto',
+        MedioBarra.otro => 'otro',
+      };
+
+  /// El papel del cierre de una caja: lo vendido por producto, las sillas de la noche,
+  /// los totales, el efectivo esperado, lo contado y la diferencia **como se anotó al
+  /// cerrar**. Una caja abierta sale sin lo contado.
+  ///
+  /// Con [historial] (las ventas de la caja), al final una línea por venta, la primera
+  /// arriba, con las [anulaciones] marcadas: es lo que la cajera lee en la pantalla y
+  /// guarda en el PDF. Por la impresora sale sin historial, para ahorrar papel.
   static List<LineaTicket> deCierre(
     CajaBarra caja,
     CierreDeBarra cuentas, {
     required String fiesta,
     img.Image? logo,
+    List<VentaBarra>? historial,
+    Iterable<AnulacionBarra> anulaciones = const [],
   }) {
     final cerrada = !caja.abierta;
+    final anuladas = ventasAnuladas(anulaciones);
+    final delHistorial = [
+      for (final v in historial ?? const <VentaBarra>[])
+        if (v.cajaBarraId == caja.id) v,
+    ]..sort((a, b) => a.numero.compareTo(b.numero));
     return [
       ..._encabezado(
         fiesta: fiesta,
@@ -175,6 +203,13 @@ abstract final class ModeloTicket {
       ),
       if (cerrada) TextoTicket('Cerró ${fechaYHora(caja.cerradaAt!)}'),
       if (!cerrada) const TextoTicket('*** CAJA ABIERTA ***', negrita: true),
+      if (cuentas.porProducto.isNotEmpty) ...[
+        const SeparadorTicket(),
+        for (final p in cuentas.porProducto)
+          RenglonTicket('${p.unidades} x ${p.nombre}', pesos(p.plata)),
+        if (cuentas.sillas > 0)
+          RenglonTicket('Sillas extra vendidas', '${cuentas.sillas}', negrita: true),
+      ],
       const SeparadorTicket(),
       RenglonTicket('Ventas', '${cuentas.ventas}'),
       if (cuentas.mixtos > 0) RenglonTicket('De ellas, mixtas', '${cuentas.mixtos}'),
@@ -201,6 +236,17 @@ abstract final class ModeloTicket {
         const SeparadorTicket(),
         for (final r in partirPorPalabras('Nota: ${caja.notaCierre}', letrasPorRenglon))
           TextoTicket(r, centrado: false),
+      ],
+      if (historial != null) ...[
+        const SeparadorTicket(),
+        const TextoTicket('HISTORIAL', negrita: true),
+        if (delHistorial.isEmpty) const TextoTicket('Sin ventas'),
+        for (final v in delHistorial)
+          RenglonTicket(
+            '${v.numero.toString().padLeft(4, '0')} ${_hora(v.createdAt)} '
+            '${anuladas.contains(v.id) ? 'ANULADA' : _medioCorto(v.medio)}',
+            pesos(v.cobrado),
+          ),
       ],
     ];
   }

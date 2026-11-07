@@ -397,6 +397,50 @@ void main() {
       expect(ResumenDeCajas.de(cajas: [c], ventas: [conRecargo], anulaciones: const []).recargos, 200);
     });
 
+    test('lo vendido por producto: agrupado, sin las anuladas, el que más salió primero', () {
+      final c = caja(2);
+      final ventas = [
+        vender(c, [cervezas(2), aguas(1)]),
+        vender(c, [aguas(3)]),
+        vender(c, [cervezas(5)]),
+      ];
+      final anulada = vender(c, [cervezas(10)]);
+      final cierre = CierreDeBarra.de(
+        c,
+        [...ventas, anulada, vender(caja(3), [aguas(9)])],
+        [AnulacionBarra.de(anulada, motivo: 'error', ahora: ahora)],
+      );
+      expect([for (final p in cierre.porProducto) '${p.unidades} ${p.nombre} ${p.plata}'], [
+        '7 Cerveza 24500.0',
+        '4 Agua 6000.0',
+      ]);
+      expect(cierre.unidades, 11);
+      expect(cierre.sillas, 0);
+    });
+
+    test('a igual cantidad, por nombre; y el nombre que queda es el de la última venta', () {
+      final c = caja(2);
+      final cierre = CierreDeBarra.de(c, [
+        vender(c, [aguas(2)]),
+        vender(c, [cervezas(2)]),
+        vender(c, [const RenglonVenta(productoId: _agua, nombre: 'Agua sin gas', precio: 1500, cantidad: 1)]),
+        vender(c, [cervezas(1)]),
+      ], const []);
+      expect([for (final p in cierre.porProducto) p.nombre], ['Agua sin gas', 'Cerveza']);
+    });
+
+    test('las sillas de la noche se cuentan aparte', () {
+      final c = caja(2);
+      final cierre = CierreDeBarra.de(c, [
+        vender(c, [
+          cervezas(2),
+          const RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 3),
+        ]),
+      ], const []);
+      expect(cierre.sillas, 3);
+      expect(cierre.unidades, 5);
+    });
+
     test('la diferencia en palabras', () {
       expect(diferenciaEnPalabras(0), 'Justo, sin diferencia');
       expect(diferenciaEnPalabras(500), r'Sobran $ 500');

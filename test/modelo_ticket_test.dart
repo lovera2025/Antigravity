@@ -88,9 +88,10 @@ void main() {
       'Vuelto                   \$ 4.000',
       '-' * 32,
       'Caja 2 · N° 0017',
-      '[QR] je:barra:${v.id}',
       '¡Gracias, salud!',
     ]);
+    expect(ModeloTicket.deVenta(v, caja: caja, fiesta: 'x').whereType<QrTicket>(), isEmpty,
+        reason: 'sin QR: nadie lo lee y son 3 cm de papel');
   });
 
   test('por transferencia no sale efectivo ni vuelto', () {
@@ -351,6 +352,11 @@ void main() {
         'Caja 2 - Marta',
         'Cerró 05/12/2026 - 03:30',
         '-' * 32,
+        // Lo vendido por producto, el que más salió primero; sin la anulada.
+        '6 x Agua                 \$ 6.000',
+        '4 x Cerveza lata        \$ 14.000',
+        '2 x Fernet con coca     \$ 12.000',
+        '-' * 32,
         'Ventas                         2',
         'Efectivo                \$ 16.000',
         'Transferencia           \$ 16.000',
@@ -377,6 +383,78 @@ void main() {
       expect(papel, contains('*** CAJA ABIERTA ***'));
       expect(papel.where((r) => r.startsWith('Efectivo contado')), isEmpty);
       expect(papel.where((r) => r.startsWith('Faltan') || r.startsWith('Sobran')), isEmpty);
+    });
+
+    test('las sillas de la noche se cuentan aparte, debajo de lo vendido', () {
+      final conSillas = VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 18,
+        renglones: const [
+          RenglonVenta(productoId: 's', nombre: 'Silla extra', precio: 8000, cantidad: 3),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 24000,
+        ahora: vendida,
+      );
+      final papel = _papel(ModeloTicket.deCierre(
+        caja,
+        CierreDeBarra.de(caja, [conSillas], const []),
+        fiesta: 'Puerto Viejo',
+      ));
+      expect(papel, containsAllInOrder([
+        '3 x Silla extra         \$ 24.000',
+        'Sillas extra vendidas          3',
+        'Ventas                         1',
+      ]));
+    });
+
+    test('con el historial: una línea por venta, por número, con las anuladas marcadas', () {
+      VentaBarra otra(int numero, int minuto, {MedioBarra medio = MedioBarra.efectivo}) =>
+          VentaBarra.nueva(
+            cajaBarraId: caja.id,
+            eventoId: _evento,
+            numero: numero,
+            renglones: const [
+              RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 2),
+            ],
+            medio: medio,
+            efectivo: medio == MedioBarra.efectivo ? 7000 : 0,
+            transferencia: medio == MedioBarra.transferencia ? 7000 : 0,
+            ahora: vendida.add(Duration(minutes: minuto)),
+          );
+      final dos = otra(2, 11, medio: MedioBarra.transferencia);
+      final uno = otra(1, 0);
+      final tres = otra(3, 30);
+      final otraCaja = VentaBarra.nueva(
+        cajaBarraId: 'otra-caja',
+        eventoId: _evento,
+        numero: 9,
+        renglones: const [RenglonVenta(productoId: 'a', nombre: 'x', precio: 1, cantidad: 1)],
+        medio: MedioBarra.efectivo,
+        efectivo: 1,
+        ahora: vendida,
+      );
+      final anulaciones = [AnulacionBarra.de(tres, motivo: 'error', ahora: vendida)];
+      final papel = _papel(ModeloTicket.deCierre(
+        caja,
+        CierreDeBarra.de(caja, [dos, uno, tres], anulaciones),
+        fiesta: 'Puerto Viejo',
+        historial: [dos, otraCaja, uno, tres],
+        anulaciones: anulaciones,
+      ));
+      final i = papel.indexOf('HISTORIAL');
+      expect(i, greaterThan(0));
+      expect(papel.sublist(i + 1), [
+        '0001 23:41 efect.        \$ 7.000',
+        '0002 23:52 transf.       \$ 7.000',
+        '0003 00:11 ANULADA       \$ 7.000',
+      ]);
+      expect(
+        _papel(ModeloTicket.deCierre(caja, CierreDeBarra.de(caja, [uno], const []), fiesta: 'x')),
+        isNot(contains('HISTORIAL')),
+        reason: 'por la impresora sale sin historial',
+      );
     });
   });
 

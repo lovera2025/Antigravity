@@ -1,9 +1,26 @@
 import '../datos/barra_repositorio.dart';
 import 'pesos.dart';
+import 'silla_de_la_puerta.dart';
 
 /// Los ids de las ventas anuladas: una venta anulada no cuenta.
 Set<String> ventasAnuladas(Iterable<AnulacionBarra> anulaciones) =>
     {for (final a in anulaciones) a.ventaId};
+
+/// Lo vendido de un producto en una caja: cuántas unidades y cuánta plata, con el nombre
+/// de la última venta (si el jefe le cambió el nombre en el medio, sale el último).
+class VendidoDeProducto {
+  final String productoId;
+  final String nombre;
+  final int unidades;
+  final double plata;
+
+  const VendidoDeProducto({
+    required this.productoId,
+    required this.nombre,
+    required this.unidades,
+    required this.plata,
+  });
+}
 
 /// Las cuentas de una caja de barra: qué se vendió, cómo se cobró y cuánto efectivo
 /// tiene que haber. Es lo que ve la cajera después de contar a ciegas, y lo que ve el
@@ -26,6 +43,14 @@ class CierreDeBarra {
   /// De lo cobrado por transferencia, lo que fue recargo: no es de ninguna bebida.
   final double recargos;
 
+  /// Lo vendido que cuenta, por producto: el que más salió primero.
+  final List<VendidoDeProducto> porProducto;
+
+  /// Cuántas unidades salieron, y de ellas cuántas sillas de la noche
+  /// ([esSillaDeLaPuerta]): la puerta tiene que haber anotado esas mismas.
+  final int unidades;
+  final int sillas;
+
   const CierreDeBarra({
     required this.cambioInicial,
     required this.ventas,
@@ -36,6 +61,9 @@ class CierreDeBarra {
     required this.efectivoAnulado,
     required this.transferenciaAnulada,
     this.recargos = 0,
+    this.porProducto = const [],
+    this.unidades = 0,
+    this.sillas = 0,
   });
 
   /// Las de [caja] entre [ventas]; las de otra caja no se cuentan.
@@ -48,7 +76,13 @@ class CierreDeBarra {
     var cuentan = 0, anuladas = 0, mixtos = 0;
     var efectivo = 0, transferencia = 0, efectivoAnulado = 0, transferenciaAnulada = 0;
     var recargos = 0;
-    for (final v in ventas) {
+    var unidades = 0, sillas = 0;
+    // Por producto, en el orden de las ventas: así el nombre que queda es el último.
+    final nombres = <String, String>{};
+    final cantidades = <String, int>{};
+    final plata = <String, int>{};
+    final orden = [...ventas]..sort((a, b) => a.numero.compareTo(b.numero));
+    for (final v in orden) {
       if (v.cajaBarraId != caja.id) continue;
       if (anuladasIds.contains(v.id)) {
         anuladas++;
@@ -61,7 +95,26 @@ class CierreDeBarra {
       efectivo += centavos(v.efectivo);
       transferencia += centavos(v.transferencia);
       recargos += centavos(v.recargo);
+      for (final r in v.renglones) {
+        nombres[r.productoId] = r.nombre;
+        cantidades[r.productoId] = (cantidades[r.productoId] ?? 0) + r.cantidad;
+        plata[r.productoId] = (plata[r.productoId] ?? 0) + centavos(r.subtotal);
+        unidades += r.cantidad;
+        if (esSillaDeLaPuerta(r.nombre)) sillas += r.cantidad;
+      }
     }
+    final porProducto = [
+      for (final id in cantidades.keys)
+        VendidoDeProducto(
+          productoId: id,
+          nombre: nombres[id]!,
+          unidades: cantidades[id]!,
+          plata: deCentavos(plata[id]!),
+        ),
+    ]..sort((a, b) {
+        final n = b.unidades.compareTo(a.unidades);
+        return n != 0 ? n : a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+      });
     return CierreDeBarra(
       cambioInicial: caja.cambioInicial,
       ventas: cuentan,
@@ -72,6 +125,9 @@ class CierreDeBarra {
       efectivoAnulado: deCentavos(efectivoAnulado),
       transferenciaAnulada: deCentavos(transferenciaAnulada),
       recargos: deCentavos(recargos),
+      porProducto: List.unmodifiable(porProducto),
+      unidades: unidades,
+      sillas: sillas,
     );
   }
 
