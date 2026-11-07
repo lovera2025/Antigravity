@@ -59,8 +59,10 @@ feature**: tiene la v78 y dos SQL sin correr.
 - **La 6.3.2, la mora adelantada** (meta: lunes 9-nov; entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en
   otro chat"). La mora cobrada por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez
   de $235.200). **Programada y probada el 6-nov**; falta el simulacro con la base al día, la foto, el instalador y las tres PCs. Sin SQL.
-- **La 6.3.3, el sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final): sin el ciclo de 10 s,
-  el pulso como transporte, red de seguridad de 5 y 30 min, latido cada 5 min. **Sin programar.** Sin SQL (la etapa 6 queda aparte).
+- **La 6.3.3, el sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final; entrada:
+  `docs/CONTEXTO_v6.3.3_2026-11-06.md`): sin el ciclo de 10 s, el pulso como transporte, red de seguridad de 5 y 30 min, latido
+  cada 5 min. **Programada y probada el 6-nov** (7 commits en las dos ramas); se publica después de la 6.3.2. Sin SQL (la etapa 6
+  quedó en `docs/pendientes/sync-novedades-en-una-consulta.md`). Ver "El sync en reposo", en Arquitectura.
 
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
 **y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una
@@ -138,6 +140,30 @@ la versión 78 en la rama, con `sillas_puerta`; las PCs tienen la 77) es la fuen
 - Web sin usuario (la página del QR): `SupabaseInvitadosRepository`, que **no
   lee la tabla**: busca y anota por funciones de la nube (ver "La lista de la
   puerta, cerrada a los anónimos", abajo).
+
+**El sync en reposo** (6.3.3; `docs/CONTEXTO_v6.3.3_2026-11-06.md`). **En reposo, la app no le pide nada a la nube.** Hasta la
+6.3.2 el coordinador bajaba 16 tablas cada 10 s haya o no novedades: unas 7.500 consultas por hora por PC, el 95 % de lo que la app
+le pedía a la nube (plan Free, instancia Nano). Ahora:
+- **Lo que corre solo vive en el motor (`SyncEngine`), no en una pantalla:** la subida a los 2 s de guardar, sus reintentos con
+  espera creciente (`esperaCreciente`: 30 s, 1, 2, 5 min, y 5 para siempre; para cualquier rol), el pulso, y **la red de seguridad**:
+  lo del cobro cada 5 minutos (con la cuenta de borrados), lo de carga cada 30. Si alguien bajó todo hace menos de un minuto, la
+  vuelta se saltea. `OperationalSyncCoordinator` ya no tiene reloj: baja al abrir (`bajarAlArrancar`), al volver a la ventana si
+  pasó más de un minuto (`bajarAlMirar`), y refresca las pantallas **solo cuando bajó algo nuevo** (`cambiosBajadosStream`, que
+  además invalida la proyección de Finanzas). Un test lee el coordinador y falla si vuelve un `Timer.periodic`.
+- **El pulso es el transporte:** un aviso que llega con la PC ocupada se guarda y se atiende a los 3 s (antes se tiraba); si el canal
+  estuvo caído más de 20 s, al volver se baja lo del cobro; sin red, lo atiende la vuelta de la red. **Una sola bajada a la vez**:
+  atender el aviso marca al motor ocupado.
+- **Vuelve la red** (de `offline` a `online`): primero sube lo que esperaba y después baja lo del cobro (y lo de carga, si nunca bajó).
+  Es el caso de cobrar en el campo sin internet.
+- **Sin ping antes de bajar o subir:** la primera tabla hace de ping. **Una nube caída (`esCaidaDeLaNube`) no se le cuenta a la
+  fila**: no suma intentos ni la deja "trabada"; se corta la pasada y se reintenta. El motor no se frena esperando que alguien
+  diga que la nube volvió: la próxima vuelta lo prueba con un solo pedido.
+- **El latido de la caja, cada 5 minutos** (`kLatidoSesionPeriodo`; en uso hasta 11, sin señales después de 20: van juntos,
+  `test/latido_sesion_test.dart`). Avisa a la otra PC marcado `latido: true`, que baja `sesiones_caja` sin refrescar pantallas.
+- **Los relojes del motor pasan por `RelojDelMotor`**; las pruebas le pasan `RelojDePrueba` (`test/helpers/`), nunca `fake_async`
+  (el motor hace I/O real). `test/sync_en_reposo_test.dart` cuenta, con `NubeDePrueba`, qué pide el motor en cada momento.
+- **Un comentario que diga "el ciclo de 10 s lo cubre" está viejo.** El tope de un borrado o un cambio cuyo aviso se perdió pasa de
+  10 s a 5 minutos (antes de cobrar se baja todo igual).
 
 **Rutas por URL en web** (`lib/main.dart:80-130`): se detectan con `contains()`
 sobre `Uri.base`, no con path parsing.
@@ -767,8 +793,8 @@ históricos y la pantalla se ve como siempre.
   a la nube ($176.100 en vez de $236.100). En la PC de la casa había además 23 renglones de presupuesto borrados.
   Ahora un borrado llega por cuatro caminos (`borrados_de_otra_pc.dart` dice cuál en `borrados_en_otra_pc.txt`):
   - **el aviso**, que ya no se tira con la PC ocupada: se reintenta a los 3 s;
-  - **la cuenta de cada ciclo de 10 s** (`_contarParaVerBorrados`): un `count` de pagos, alumnos y egresos; si en la
-    nube hay menos que acá, se revisa esa tabla en el momento;
+  - **la cuenta de la red de seguridad, cada 5 minutos** (`_contarParaVerBorrados`; hasta la 6.3.2, cada 10 s): un
+    `count` de pagos, alumnos y egresos; si en la nube hay menos que acá, se revisa esa tabla en el momento;
   - **al abrir un alumno** (`revisarPagosDelAlumno`, desde `getHistorialPagosAlumno` y antes de
     `recalcularProgresoContrato`): sus pagos contra la nube, una consulta con 3 s de tope y una vez cada 15 s por
     alumno; sin internet no hace nada;

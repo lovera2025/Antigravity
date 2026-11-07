@@ -106,5 +106,8 @@ Cada uno revisado cobro por cobro con `detalle=cambios`: en los cuatro la regla 
 
 ## Después
 
-La **6.3.3, el sync en reposo** (`docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`, con el diseño aprobado al final), desde la misma rama.
-Recién después vuelven la barra 5-10 y Entradas 4-6 (la 6.4.0).
+La **6.3.3, el sync en reposo**, desde la misma rama: **ya programada y probada el 6-nov** (`docs/CONTEXTO_v6.3.3_2026-11-06.md`).
+Ojo: la rama `release/6.3.x` ya tiene los commits de la 6.3.3 encima de los de la 6.3.2. **Para armar el instalador de la 6.3.2
+hay que hacerlo desde el commit de la mora** (con un tag `v6.3.2` puesto en ese commit, `2789053`, más el de la versión), **no desde
+la punta de la rama**; o publicar las dos juntas si el usuario lo prefiere. Recién después vuelven la barra 5-10 y Entradas 4-6
+(la 6.4.0).

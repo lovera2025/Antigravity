@@ -1,7 +1,31 @@
 # Que el pull diga cuántas filas bajó
 
-**Estado:** pendiente
+**Estado:** hecho
 **Postergado el:** 2026-09-02
+**Resuelto el:** 2026-11-06, con el sync en reposo (6.3.3, `docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`)
+
+## Cómo se resolvió
+
+Sin cambiar la firma de `_pullTable`. Para entonces ya existía el aviso de lo que bajó
+(`cambiosBajadosStream`), que `_pullTable` dispara solo cuando una fila trae algo que acá no estaba
+(`filaEsNovedad`; no por el marcador retenido, que vuelve a traer las mismas filas). Alcanzó con
+colgar de ahí lo que antes corría después de cada bajada:
+
+- **La proyección de Finanzas** se invalida en `_avisarCambiosBajados`, solo con novedades; se
+  sacó de `pullOperationalUpdates`. Queda la de `pullRemote` (el "Bajar" del menú, a mano).
+- **Los tres refrescos de pantalla** (`dashboardStatsProvider`, `contratosMutationTickProvider`,
+  `operationalSyncRevisionProvider`) los hace `OperationalSyncCoordinator` cuando escucha ese
+  aviso, venga la bajada del pulso, de la red de seguridad, de antes de cobrar o de volver a la
+  ventana.
+- El punto 4 (el backoff del coordinador) quedó superado: el coordinador ya no tiene reloj.
+
+Lo del "cuidado con" se cumple: una mutación local sigue refrescando por
+`contratosMutationTickProvider`, y el latido de una caja de la otra PC baja sin avisar
+(`_pullTable(avisar: false)`), para no refrescar pantallas por eso.
+
+---
+
+## El planteo original
 
 ## Por qué se postergó
 

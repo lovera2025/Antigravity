@@ -41,9 +41,9 @@ Una sola versión con todo junto, en este orden. El estado de cada parte está e
   — el QR y el tótem leen hasta 1000 invitados por evento. Hoy no llega ni cerca;
   importa si se cargan las familias enteras. Se resuelve subiendo "Max rows" en
   Supabase.
-- [Que el pull diga cuántas filas bajó](pull-devolver-cambios-reales.md) — sin
-  eso, el caché de la proyección financiera se anula cada 10 segundos aunque no
-  haya cambiado nada.
+- [Que el pull diga cuántas filas bajó](pull-devolver-cambios-reales.md) — hecho
+  el 2026-11-06 con el sync en reposo (6.3.3): la proyección y las pantallas se
+  refrescan solo cuando bajó algo nuevo.
 - [Chequeo de salud de saldos](chequeo-salud-saldos.md) — auditar saldos contra
   Supabase en vez de la base local. Incluye cuál es la herramienta buena
   (`tool/recalcular_contrato.dart --dry-run`) y cuál es una trampa.
@@ -118,7 +118,11 @@ priorizó el sorteo de noviembre. El contexto está en
 - [Que los borrados crucen solos](borrados-que-cruzan.md) — hecho el
   2026-09-08.
 - [Cadencia del pull por niveles](pull-cadencia-por-niveles.md) — hecho el
-  2026-09-08, con dos niveles en vez de tres.
+  2026-09-08, con dos niveles en vez de tres. Reemplazada el 2026-11-06 por el
+  sync en reposo (6.3.3): sin ciclo de 10 s, red de seguridad de 5 y 30 minutos.
+- [La red de seguridad en una sola consulta](sync-novedades-en-una-consulta.md)
+  — la etapa 6 del sync en reposo, que quedó afuera de la 6.3.3 por ser la única
+  con SQL.
 - [Watermark del reloj del servidor](watermark-reloj-del-servidor.md) — hecho el
   2026-09-08, por la opción del `updated_at` más alto recibido.
 - [Tablas que quedaron en sync manual](tablas-en-sync-manual.md) — hecho el

@@ -69,3 +69,7 @@ los afecta.
 Que el contador no se reinicie en cada `_tick()` disparado por foco de ventana
 (`onWindowFocus`, `onWindowRestore`), o un alt-tab seguido haría que los niveles
 2 y 3 nunca lleguen a su turno — o que lleguen siempre.
+
+---
+
+**2026-11-06:** la cadencia por niveles se reemplazó por el sync en reposo (6.3.3): sin el ciclo de 10 s del coordinador; lo del cobro baja por el aviso entre PCs y con una red de seguridad cada 5 minutos, lo de carga cada 30. Ver `docs/PLAN_SYNC_EN_REPOSO_2026-11-06.md`.
