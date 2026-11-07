@@ -54,7 +54,7 @@ y las sillas extra, al 50 %, aparte. **Instalada en las tres PCs (4-nov)**, y la
 
 **La 6.3.3, publicada el 7-nov a la mañana: la mora adelantada (la 6.3.2) y el sync en reposo, en un solo instalador `6.3.3+65`**
 (el usuario dijo "vamos"). Sale de la rama **`release/6.3.x`** (creada desde el tag `v6.3.1`, en la carpeta `..\arguello_events_6.3.x`),
-y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama feature**: tiene la v78 y tres
+y cada commit va también a esta rama con `cherry-pick`. **Ningún instalador de la 6.3.x sale de la rama feature**: tiene la v78 y cuatro
 SQL sin correr. Tags `v6.3.2` (el commit de la mora, sin release) y `v6.3.3`; release de GitHub y web publicados, sin SQL. **Instalada en las tres
 PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en reposo cada PC le pide a la nube unas 370 cosas por hora
 (antes, miles). Cerrada. La barra y Entradas siguen en esta rama para la 6.4.0.
@@ -62,7 +62,8 @@ PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en repo
   (Mi Empresa → lápiz → Corregir medio de pago; `cajaTrasCambioDeFecha`, `cierre_caja/services/fecha_y_caja.dart`). Regla del usuario:
   esa plata no entró ese día. Una caja cerrada no se toca. Cambia todo el cobro junto (`lineasDelMismoCobro`), sin fechas futuras, y al
   cambiar la fecha o anular se revisa la mora del alumno en el momento. Sale con la próxima versión que se publique (6.3.4 sola o
-  dentro de la 6.4.0). Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta entonces.
+  dentro de la 6.4.0): **falta que el usuario lo decida.** Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta
+  entonces. Entrada: `docs/CONTEXTO_v6.3.4_2026-11-07.md`, que empieza con "Para retomar en otro chat".
 - **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
   por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
   repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.
@@ -86,7 +87,12 @@ IMPRIMIR LO QUE FALTA, el TICKET con precios (sin logo) y **ANULAR, también la 
 **Cada vale que sale se anota en `barra_vales`** (v78; solo se agregan filas; la venta no se toca). **La 6 se cerró el 7-nov: cerrar la
 caja** (el candado en VENDER, `widgets/cerrar_caja_barra_screen.dart`): **cuenta a ciegas** (ninguna plata de la caja a la vista;
 `modo_barra_cerrado_test` lo vigila), confirma, se cierra y recién ahí ve lo esperado, la diferencia y el cierre entero como el papel, con
-lo vendido por producto, las sillas y el historial; solo la nota cambia después (`anotarCierre`). Sigue la 7 (el jefe en la PC). **Lo que
+lo vendido por producto, las sillas y el historial; solo la nota cambia después (`anotarCierre`). **La 7 se programó el 7-nov: el jefe en la
+PC** (`lib/features/barra/jefe/`): la tarjeta BARRA en el Centro de Comando, **la fiesta primero** (abre en la próxima; la de anoche sigue al
+día siguiente), CATÁLOGO, PRECIOS con el **recargo por fiesta** (`barra_recargos`, v78, cuarto SQL sin correr; cada cobro arranca con ese) y
+la lista en 58 mm, y CAJAS con una tarjeta por caja, el stock de la fiesta, y anular y reimprimir cualquier venta; cada guardado pregunta por
+el modo jefe. Le falta el recorrido con el mouse (un modo jefe en `tool/barra_prueba.dart`). **La barra vende con la app en cada tablet, no
+por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los
 PDF de la barra son de 58 mm, una sola hoja larga, nunca A4** (`PapelPdf`; en pantalla, `PapelEnPantalla`: la misma lista de líneas que va
 a la impresora). **Debajo del total, EFECTIVO · TRANSFERENCIA · MIXTO; transferencia

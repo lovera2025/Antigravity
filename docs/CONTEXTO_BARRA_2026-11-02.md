@@ -5,20 +5,20 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
-> **7-nov: las etapas 5 y 6 están hechas** (abajo, "Etapa 5: reimprimir y anular" y "Etapa 6: cerrar la caja"). **Sigue la etapa 7,
-> el jefe (y la encargada) en la PC.** La 6.3.3 (la mora adelantada y el sync en reposo) se publicó e instaló el 7-nov a la mañana,
-> desde `release/6.3.x`: la barra y Entradas siguen solo en esta rama, para la 6.4.0.
+> **Al 7-nov (tarde): las etapas 1 a 7 están programadas** (la 7, "Etapa 7: el jefe en la PC", abajo). **A la 7 le falta solo el
+> recorrido con el mouse** (sumarle a `tool/barra_prueba.dart` un modo jefe, con la barra en memoria compartida con la cajera, y vender
+> de un lado y mirar CAJAS del otro) **y la foto de la lista de precios impresa en la TP-POS58** (avisarle al usuario cuando haga
+> falta la impresora). Después: la etapa 8 (el jefe en el iPhone, en la web), la central de la barra (etapa propia, antes de la 10), la 9
+> (Android firmado), la 10 (de punta a punta), Entradas 4 a 6 y publicar la 6.4.0. Cada etapa empieza con su plan corto y su OK.
 >
-> **Etapa 7, al 7-nov (mañana): el plan corto pasado y la maqueta publicada, esperando su OK** (Claude Design, privada:
-> https://claude.ai/artifact/YBhdWQsf4C7HKJeKFoaDxQ). Tarjeta BARRA en el Centro de Comando (solo modo jefe), con CATÁLOGO (uno solo,
-> fotos de la biblioteca, dar de baja), PRECIOS por fiesta (va, precio, stock, avisar desde, COPIAR DE OTRA FIESTA sin el stock, la lista
-> en PDF de 58 mm) y CAJAS (por caja, totales, stock con lo agotado y en aviso arriba, ventas con ANULAR con motivo y REIMPRIMIR).
-> **Elegido el 7-nov:** CAJAS con **una tarjeta por caja** (la opción A: se ve bien en el iPhone de la etapa 8; la tabla se descartó), y
-> **la fiesta primero**: BARRA abre en la próxima, con CAMBIAR DE FIESTA; **la primera con barra es TÉCNICA PINAROLI, el viernes 4 de
-> diciembre**. **El recargo ya estaba decidido el 3-nov** (abajo, "Recargo por transferencia"): lo pone el jefe por fiesta, cada caja
-> arranca con ese y la cajera lo puede cambiar en un cobro; va en una tabla aparte, una fila por fiesta con id fijo, con su SQL (el
-> cuarto de la 6.4.0). Todo en 58 mm, nunca A4. La foto propia de un producto (subirla) queda para otro paso: necesita el depósito de
-> Storage y su SQL. **Falta su OK a la maqueta para programar.**
+> **Lo decidido el 7-nov:** la barra vende con **la app instalada en cada tablet**, no como las recepcionistas por QR (el navegador no
+> imprime por Bluetooth y la barra no puede dejar de vender si se cae la red); **la central sigue en pie** (el stock general, en vivo
+> también sin internet; solo comparte el stock y deja al jefe ver las cajas; cómo se conecta la tablet, QR o sola, se decide en su
+> etapa). **La primera fiesta con barra es TÉCNICA PINAROLI, el viernes 4 de diciembre.**
+>
+> La 6.3.3 (la mora adelantada y el sync en reposo) se publicó e instaló el 7-nov, desde `release/6.3.x`. **Aparte de la barra, el
+> 7-nov quedó programado sin publicar el arreglo de la fecha de un cobro** (`docs/CONTEXTO_v6.3.4_2026-11-07.md`): espera que el
+> usuario diga si sale ya como 6.3.4 o con la próxima.
 
 **Estado al 4-nov (noche).** Las etapas 1 a 4 de la barra (la impresora, los datos, las cuentas y la cajera vendiendo con sus tres cobros y
 los vales) **salieron dormidas dentro de la 6.3.0**, que se publicó por el plano (`docs/CONTEXTO_v6.3.0_2026-11-02.md`; después la 6.3.1,
@@ -41,25 +41,68 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | Etapa | Ya hecho | Falta |
 |---|---|---|
 | 5. Reimprimir y anular | **Hecha el 7-nov** (VENTAS de la cajera, el freno de la copia, IMPRIMIR LO QUE FALTA, el ticket con precios, ANULAR con motivo, la tabla `barra_vales`) | Lo del jefe (reimprimir cualquiera, anular desde la PC) va en la 7 |
-| La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)") | Una tablet que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet |
+| La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)"; confirmado el 7-nov) | Un equipo que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet. Las tablets siguen vendiendo con su app aunque no esté. Qué equipo es y cómo se conecta la tablet, en su etapa, antes de la 10 |
 | El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
-| 7. El jefe en la PC | Los datos (`BarraDelJefe`: catálogo, precios con stock, cajas, anular), las cuentas (`ResumenDeCajas`, `StockDeLaBarra`) y las 74 fotos. **La silla de la noche (6-nov):** un producto con "silla" en el nombre sale en su propio vale, uno por silla, que dice "Llevá este vale a la recepcionista"; y si se anula, la puerta la marca en rojo | Todas las pantallas: catálogo (elegir la foto de la biblioteca o subir una; **cargar "Silla extra" con su precio en cada fiesta**), precios por fiesta, "copiar de otra fiesta", el % de recargo, CAJAS, anular, PDF 58 mm y A4, la lista de precios, "Silla extra: N vendidas" en el cierre |
+| 7. El jefe en la PC | **Programada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir; 23 pruebas de pantalla y las muestras | El recorrido con el mouse (modo jefe en `tool/barra_prueba.dart`) y la foto de la lista impresa. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
 | 8. El jefe en el iPhone | `BarraNube` (lee y anula directo en la nube) | Las pantallas, en la web |
 | 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
 | 10. De punta a punta | Nada | Con modo avión, sin internet |
 | Entradas 4 a 6 | Las etapas 1 a 3, publicadas apagadas | La entrega según los permisos, "pagó: ya podés entregar", anular solo el jefe (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`) |
-| Publicar | Los SQL de la barra y los permisos, corridos | **Tres SQL sin correr antes de instalar:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql` y `20261107100000_barra_vales.sql`. Foto de la mora antes, versión, release, web, APK firmado, foto después |
+| Publicar | Los SQL de la barra y los permisos, corridos | **Cuatro SQL sin correr antes de instalar:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql`, `20261107100000_barra_vales.sql` y `20261107140000_barra_recargos.sql`. Foto de la mora antes, versión, release, web, APK firmado, foto después |
 
-**Lo que le toca al usuario:** imprimir un plano antes del primer sorteo; comprar la tablet de la barra; hasta la próxima versión, nadie
-con Entradas y nadie sin Cobros. (Las tres PCs ya tienen la 6.3.1, y la foto de la mora "después" dio vacía.)
+**Lo que le toca al usuario:** comprar la tablet de la barra; hasta la próxima versión, nadie con Entradas y nadie sin Cobros. (Las tres
+PCs tienen la 6.3.3 desde el 7-nov.)
 
 **La impresora (6-nov):** las pruebas las hace Claude en el sandbox, pero el papel impreso de verdad necesita la TP-POS58 del usuario.
 **Cuando haga falta imprimir, avisarle** ("después me avisás si necesitás usar la impresora y vemos lo impreso"). El vale de la silla y
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
-> Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan corto
-> de la etapa 7 antes de programar."
+> Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md, terminá el recorrido
+> con el mouse de la etapa 7 y pasame el plan corto de la etapa 8."
+
+### Etapa 7: el jefe en la PC (7-nov, en la rama)
+
+**Antes de programar:** el plan corto y una maqueta en Claude Design (https://claude.ai/artifact/YBhdWQsf4C7HKJeKFoaDxQ, privada). Eligió
+**CAJAS con una tarjeta por caja** (se ve bien en el iPhone de la etapa 8; la tabla se descartó) y **la fiesta primero**. El recargo ya
+estaba decidido el 3-nov ("Recargo por transferencia", abajo): **se lo pregunté dos veces sin acordarme; antes de preguntar algo de la
+barra, buscarlo acá.**
+
+**El recargo de cada fiesta** (`c93eff5`): tabla nueva **`barra_recargos`** (dentro de la v78, que no está en ninguna PC), una fila por
+fiesta con id fijo (`UuidUtils.barraRecargoId`), `RecargoBarra` (0 a 100; en 0 arranca apagado). Baja con lo de carga y la tablet la
+baja al prepararse (`tablasDeLaBarra`: sin su SQL en la nube, la tablet no queda "Lista para trabajar sin internet"). **Cada cobro arranca
+con el de la fiesta** (`recargoDeArranque`); la cajera lo cambia en ese cobro y el siguiente vuelve al de la fiesta; sin el de la fiesta,
+el último del equipo como antes. SQL `supabase/migrations/20261107140000_barra_recargos.sql`, **sin correr** (el cuarto de la 6.4.0).
+
+**La pantalla** (`lib/features/barra/jefe/`, `c41114b` y `c1ac6bb`): la tarjeta **BARRA** en el Centro de Comando, al lado de RECEPCIÓN
+(el Centro solo se ve en modo jefe). `BarraJefeScreen` con el tema Noche dorada (`temaDeVender`):
+- **La fiesta arriba** (`FiestasDelJefe`, `services/fiestas_del_jefe.dart`): abre en la próxima; **la de anoche sigue abriendo al día
+  siguiente** (para mirar las cajas a la mañana); CAMBIAR DE FIESTA con LAS QUE VIENEN y LAS ÚLTIMAS (8); sin las canceladas. La fecha
+  dice "· hoy", "· anoche" o "· la próxima" (`fechaConCuando`).
+- **CATÁLOGO** (`catalogo_del_jefe.dart`): uno solo para todas las fiestas, los activos primero; en la PC el producto elegido al lado,
+  en tablet y celular en una ventana. Nombre, categoría (con las que ya hay a un toque), **foto elegida de las 74** (`biblioteca:<clave>`)
+  o "según el nombre", dar de baja / volver a dar de alta (nunca se borra).
+- **PRECIOS** (`precios_de_la_fiesta.dart`): cada producto activo con VA, precio (con el "$" y los puntos), stock y desde cuántos avisar;
+  el recargo con − / +; **todo se guarda junto con GUARDAR CAMBIOS** (una barra abajo dice cuántos cambios hay); va sin precio no guarda
+  y dice cuál falta; sacar un producto de la fiesta no borra su fila. **COPIAR DE OTRA FIESTA** trae los que van, sus precios y el
+  recargo, **no el stock**, y espera GUARDAR. **La lista de precios** se ve al lado como sale (`ModeloTicket.deListaDePrecios`, por
+  categoría, con el recargo al pie), se imprime por la térmica o sale en PDF de 58 mm. **Los avisos van arriba de la lista, no en un
+  SnackBar:** tapaba GUARDAR CAMBIOS (lo encontró una prueba).
+- **CAJAS** (`cajas_de_la_fiesta.dart`): los totales (vendido, efectivo, transferencia con su recargo, ventas y anuladas, cajas abiertas y
+  cerradas, la diferencia de las cerradas), **una tarjeta por caja** (a todo el ancho en el celular) con lo contado y la diferencia de las
+  cerradas, y al costado **el stock de toda la fiesta, con lo agotado y en aviso arriba**. Tocar una caja muestra sus ventas: **el jefe
+  anula cualquiera** con motivo, **reimprime cualquiera las veces que haga falta** (`VentaDeLaCaja.copiaDelJefe`: sin el freno de la
+  cajera; cada vale con su copia que sigue, anotada con "Jefe") y ve el cierre como el papel (VER CIERRE, o VER CÓMO VA si sigue abierta),
+  con IMPRIMIR (sin el historial) y PDF de 58 mm. Se pone al día sola cuando bajan ventas.
+- **Sin modo jefe** se ve todo, con el aviso, y lo que guarda queda apagado; **cada guardado vuelve a preguntar** (`_frenaSinModoJefe` en
+  las tres pestañas; `test/solo_modo_jefe_test.dart` lee la carpeta `jefe/` y falla si aparece un guardado sin la llave).
+
+Pruebas: `test/barra_jefe_pantalla_test.dart` (23, la pantalla entera con la barra en memoria, a 390, 800 y 1280 px),
+`barra_repositorios_test` (el recargo), `barra_pantalla_test` (el cobro arranca con el de la fiesta), `reimpresion_de_barra_test` (la copia
+del jefe), `sync_tablas_v78_test`, `migracion_v78_test`, `sync_tablas_v77_test`. La suite entera, en verde. **Las muestras**
+(`tool/barra_jefe_muestra_test.dart`, siete imágenes con una noche inventada en TÉCNICA PINAROLI) encontraron cuatro cosas con las pruebas
+en verde: CAMBIAR DE FIESTA salía con los colores claros de la app (el diálogo usaba el contexto de afuera del tema), las cajas no
+ocupaban el ancho del celular, "Avisar desde" se cortaba en el celular y los botones del producto quedaban debajo del borde en la PC.
 
 ### Etapa 6: cerrar la caja (7-nov, en la rama)
 
