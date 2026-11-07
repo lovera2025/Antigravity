@@ -131,6 +131,11 @@ abstract interface class BarraDeLaCaja {
   /// Los papeles de vale que salieron de la caja, originales y copias, por fecha.
   Future<List<ValeBarra>> valesDeLaCaja(String cajaId);
 
+  /// Pone la nota de una caja **ya cerrada**: lo único que se puede agregar después de
+  /// contar a ciegas. Lo contado y la diferencia no se tocan. Sobre una caja abierta no
+  /// hace nada (la nota va al cerrar).
+  Future<CajaBarra> anotarCierre(CajaBarra caja, {String? nota, required String quien});
+
   /// La cierra con lo que contó la cajera y la diferencia. Una caja ya cerrada queda
   /// como se cerró: no se vuelve a cerrar.
   Future<CajaBarra> cerrarCaja(

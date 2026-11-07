@@ -285,6 +285,29 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
     });
   }
 
+  @override
+  Future<CajaBarra> anotarCierre(CajaBarra caja, {String? nota, required String quien}) async {
+    final db = await _abrir();
+    final equipo = await _equipo();
+    return db.transaction((txn) async {
+      final filas = await txn.query(
+        'barra_cajas',
+        where: 'id = ?',
+        whereArgs: [caja.id],
+        limit: 1,
+      );
+      if (filas.isEmpty) {
+        throw StateError('la caja ${caja.numeroCaja} no está en este equipo');
+      }
+      final enLaBase = CajaBarra.fromMap(filas.first);
+      if (enLaBase.abierta) return enLaBase;
+      final conNota =
+          enLaBase.conNota(nota).sellada(hechoPor: quien, deviceId: equipo, ahora: _reloj());
+      await _guardar(txn, 'barra_cajas', conNota.id, conNota.toMap());
+      return conNota;
+    });
+  }
+
   // ── Las ventas ─────────────────────────────────────────────────────────────
 
   @override

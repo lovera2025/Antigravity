@@ -224,6 +224,35 @@ void main() {
       expect(await barra.cajaAbierta(eventoId: _evento, operadorId: _marta), isNull);
     });
 
+    test('después de cerrar se puede poner la nota, y nada más: lo contado queda', () async {
+      final caja = await abrirLaDeMarta();
+      final cerrada = await barra.cerrarCaja(caja, efectivoContado: 19500, diferencia: -500, quien: 'Marta');
+      reloj = reloj.add(const Duration(minutes: 3));
+      final anotada = await barra.anotarCierre(cerrada, nota: ' faltó un billete de 500 ', quien: 'Marta');
+      expect(anotada.notaCierre, 'faltó un billete de 500');
+      final enLaBase = CajaBarra.fromMap((await db.query('barra_cajas')).single);
+      expect(enLaBase.notaCierre, 'faltó un billete de 500');
+      expect(enLaBase.efectivoContado, 19500);
+      expect(enLaBase.diferencia, -500);
+      expect(enLaBase.cerradaAt, cerrada.cerradaAt);
+      expect(enLaBase.deviceId, 'tablet-1');
+      expect(enLaBase.updatedAt, '2026-12-04T22:03:00.000Z');
+      expect(
+        jsonDecode((await encolado('barra_cajas')).single['payload'] as String)['nota_cierre'],
+        'faltó un billete de 500',
+      );
+      expect((await barra.anotarCierre(anotada, nota: '', quien: 'Marta')).notaCierre, isNull,
+          reason: 'vacía la saca');
+    });
+
+    test('sobre una caja abierta, la nota no hace nada', () async {
+      final caja = await abrirLaDeMarta();
+      final igual = await barra.anotarCierre(caja, nota: 'algo', quien: 'Marta');
+      expect(igual.abierta, isTrue);
+      expect(igual.notaCierre, isNull);
+      expect(CajaBarra.fromMap((await db.query('barra_cajas')).single).notaCierre, isNull);
+    });
+
     test('un número de caja o un cambio inválidos no la abren', () {
       expect(() => CajaBarra.abrir(eventoId: _evento, numeroCaja: 0, ahora: reloj), throwsArgumentError);
       expect(() => CajaBarra.abrir(eventoId: _evento, numeroCaja: 1, cambioInicial: -1, ahora: reloj), throwsArgumentError);

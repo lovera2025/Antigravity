@@ -119,6 +119,27 @@ class CajaBarra {
     );
   }
 
+  /// La misma caja con otra nota de cierre ("faltó un billete de 500"): lo único que se
+  /// puede agregar después de cerrar. Lo contado y la diferencia quedan como se anotaron.
+  CajaBarra conNota(String? nota) => CajaBarra(
+        id: id,
+        eventoId: eventoId,
+        operadorId: operadorId,
+        operadorNombre: operadorNombre,
+        numeroCaja: numeroCaja,
+        sede: sede,
+        cambioInicial: cambioInicial,
+        abiertaAt: abiertaAt,
+        cerradaAt: cerradaAt,
+        efectivoContado: efectivoContado,
+        diferencia: diferencia,
+        notaCierre: comoTextoONull(nota),
+        hechoPor: hechoPor,
+        deviceId: deviceId,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+
   /// La misma caja con el cambio con que arrancó: abrirla no lo pregunta, se pone
   /// después si hay. No puede ser negativo.
   CajaBarra conCambio(double cambio) {

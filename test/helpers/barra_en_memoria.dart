@@ -165,6 +165,13 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe {
         .sellada(hechoPor: quien, deviceId: equipo, ahora: reloj()));
   }
 
+  @override
+  Future<CajaBarra> anotarCierre(CajaBarra caja, {String? nota, required String quien}) async {
+    final enLaBase = cajasGuardadas.firstWhere((c) => c.id == caja.id);
+    if (enLaBase.abierta) return enLaBase;
+    return _reemplazar(enLaBase.conNota(nota).sellada(hechoPor: quien, deviceId: equipo, ahora: reloj()));
+  }
+
   // ── Lo del jefe (`BarraDelJefe`) ─────────────────────────────────────────
 
   @override
