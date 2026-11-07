@@ -6,7 +6,8 @@ feature**, que es la de la carpeta del proyecto. El plan: `docs/PLAN_MORA_ADELAN
 
 ## Para retomar en otro chat
 
-**Estado al 6-nov (noche): programado y probado; falta publicar.** El arreglo, las pruebas y el simulacro están hechos y en las dos
+**Estado al 6-nov (23 h): programado, probado y con el simulacro sobre la base al día (4 alumnos, a los 4 les baja la mora);
+falta publicar.** El arreglo, las pruebas y el simulacro están hechos y en las dos
 ramas. Lo que queda, en orden, está en "Lo que falta" (abajo). **Ningún instalador de la 6.3.x sale de la rama feature**: esa tiene la
 v78 de la base y dos SQL sin correr.
 
@@ -64,22 +65,29 @@ cargaba, y ahora sí.
 flutter test tool/simulacro_mora_adelantada_test.dart --dart-define=copia=<copia.db> --dart-define=salida=<carpeta> --dart-define=detalle=cambios
 ```
 
-**Primera mirada (6-nov, base de la casa de las 15:42, antes del cobro de Morena):** 462 alumnos revisados, 28 con mora congelada.
-**3 cambian y a los 3 les baja la mora; ninguno sube.** La revisión los deja como dice la regla nueva; ningún perdón cambió.
+**El simulacro con la base al día (6-nov, 23 h):** el usuario abrió la app en la casa, bajó todo y la cerró (base de las 22:52, último
+pago 19:59). Corrido **desde la rama del parche**, sobre la copia. 461 alumnos revisados, 28 con mora congelada.
+**Cambian 4 y a los 4 les baja la mora ($65.850 en total); a ninguno le sube** (grupo B vacío: no hay nada que decidir). La
+revisión de verdad los deja como dice la regla nueva, ningún perdón cambió, y en los cuatro la mora que hoy muestra la app es
+exactamente la de la regla vieja.
 
 | Alumno | Institución | Mora de hoy | Por qué |
 |---|---|---|---|
-| MELGAREJO, MAIARA | ROTONDA | $40.400 → $14.800 | El caso de Morena: el 3/11 pagó $63.600 de mora cerrando solo la 4 ($38.000); los $25.600 de la 5 se le volvían a pedir |
+| LOPEZ, MORENA AILEN | GREGORIA MORALES | $67.200 → $34.300 | El caso: el "ya usado" queda en $98.000 y no en $130.900 (la app muestra $235.200, no $268.100) |
+| MELGAREJO, MAIARA | ROTONDA | $40.400 → $14.800 | Lo mismo: el 3/11 pagó $63.600 de mora cerrando solo la 4 ($38.000); los $25.600 de la 5 se le volvían a pedir |
 | PAEZ, MARCELO ARIEL | TECNICA PINAROLI | $22.050 → $16.450 | Los dos errores: el 28/09 pagó $7.700 de más que se perdían, y los $7.000 del 20/10 se descontaban de la 3 y otra vez de la 7 |
 | ROMERO, THIAGO | GUEMEZ DE TEJADA | $26.950 → $25.200 | El 5/10 pagó $1.750 de más sobre la 2; ahora se descuentan de la 3 |
 
-Esa base no tiene el cobro de Morena (18:34, en otra PC) ni nada posterior. **El simulacro que vale es el del paso 1 de abajo.**
+Cada uno revisado cobro por cobro con `detalle=cambios`: en los cuatro la regla nueva da lo correcto. Una primera mirada a las
+15:42, sin el cobro de Morena, había dado los otros tres iguales.
+
+**Hasta instalar, a estos cuatro se les cobra sobre la mora de la regla nueva** (la columna de la derecha).
 
 ## Lo que falta (en orden)
 
-1. **El simulacro con la base al día** (domingo o lunes temprano). Abrir la app en esta PC para que baje todo, cerrarla, y Claude
-   saca la copia y corre el simulacro con `detalle=cambios`. Se le muestra al usuario la lista entera. **Si aparece alguien en el
-   grupo B (la mora sube), lo decide el jefe antes de instalar**: puede perdonar esa diferencia en modo jefe con la 6.3.1.
+1. ~~El simulacro con la base al día~~ **hecho el 6-nov a las 23 h** (arriba): 4 alumnos, a los 4 les baja, nadie en el grupo B.
+   **El lunes, antes de instalar, se repite** igual (abrir la app en la casa, cerrarla, copia, simulacro): son 3 segundos, y cubre
+   lo que se cobre el sábado. Si aparece alguien en el grupo B, lo decide el jefe antes de instalar.
 2. **La versión:** `6.3.2+64` en `pubspec.yaml` y `installer/junior_eventos_setup.iss`, en las dos ramas. Tag `v6.3.2` sobre
    `release/6.3.x`.
 3. **Foto de la mora "antes de 6.3.2"** (`supabase/mora_fotos.sql`, sección 1, por el MCP, con el OK).
