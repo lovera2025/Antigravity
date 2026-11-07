@@ -331,8 +331,8 @@ class FinanzasState {
 class FinanzasNotifier extends AsyncNotifier<FinanzasState> {
   @override
   Future<FinanzasState> build() async {
-    // Sin canal de Realtime: el refresco lo trae OperationalSyncCoordinator,
-    // que baja estas tablas cada 10 s. Ver la nota en FinanzasRepository.
+    // Sin canal de Realtime: el refresco lo trae OperationalSyncCoordinator
+    // cuando bajó algo nuevo (6.3.3). Ver la nota en FinanzasRepository.
     final ar = ArTime.nowAr();
     final mesDefecto = DateTime(ar.year, ar.month, 1);
     return _fetchData(mesDefecto, null);

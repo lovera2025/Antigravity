@@ -344,8 +344,9 @@ class FinanzasRepository {
   // el 89,5% del CPU de la base y el 99,7% de los bloques leídos, agotando el
   // Disk IO Budget del proyecto.
   //
-  // Era redundante: OperationalSyncCoordinator ya baja esas mismas tablas cada
-  // 10 segundos. El refresco ahora llega por ahí.
+  // Era redundante: esas mismas tablas ya bajan por el aviso entre PCs y la
+  // red de seguridad (hasta la 6.3.2, cada 10 segundos). El refresco llega
+  // por OperationalSyncCoordinator cuando bajó algo nuevo.
 
   /// Busca registros vinculados a un nombre en Clientes y Contratos Alumnos (Purga Inteligente).
   Future<Map<String, List<Map<String, dynamic>>>> buscarVinculadosPorNombre(

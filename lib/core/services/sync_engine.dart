@@ -99,8 +99,8 @@ String? marcaDeLoBajado(
 ///
 /// Decide si vale la pena avisarles a las pantallas (ver `cambiosBajadosStream`).
 /// No alcanza con "bajaron filas": con el marcador retenido por un cambio local
-/// sin subir (`marcadorPullSeguro`), cada ciclo vuelve a bajar las mismas filas,
-/// y avisar por eso sería refrescar pantallas cada 10 segundos por nada.
+/// sin subir (`marcadorPullSeguro`), cada bajada vuelve a traer las mismas
+/// filas, y avisar por eso sería refrescar pantallas por nada.
 ///
 /// [existeLocal] en `false` es fila nueva. Las fechas se comparan como instante:
 /// la base local y Postgres no escriben el mismo texto para la misma hora.
@@ -467,7 +467,7 @@ class SyncEngine {
   /// Tablas cuyo `_pullTable` falló en la tanda actual.
   ///
   /// `_pullTable` se traga sus excepciones a propósito: si una tabla falla, su
-  /// watermark no avanza y el próximo ciclo vuelve a pedir el mismo rango, así
+  /// watermark no avanza y la próxima bajada vuelve a pedir el mismo rango, así
   /// que un corte pasajero se cura solo y no se pierde nada. El problema era
   /// que, como nunca lanzaba, el `Future.wait` no veía el fallo y el estado
   /// quedaba en `idle`: la app decía "sincronizado" aunque no hubiera bajado
@@ -511,7 +511,9 @@ class SyncEngine {
   // llegaba a la PC del operario en segundos por el pulso, y la pantalla seguía
   // mostrando la foto vieja hasta el próximo ciclo de 10 s —o, en el diálogo de
   // cerrar caja, hasta volver a abrirlo—. El dato estaba; nadie le avisaba a la
-  // pantalla. Solo avisa: no cambia qué ni cómo se sincroniza.
+  // pantalla. Solo avisa: no cambia qué ni cómo se sincroniza. Desde la 6.3.3
+  // es además lo único que refresca las pantallas tras una bajada (el
+  // coordinador lo escucha), y lo que invalida la proyección de Finanzas.
   final _cambiosBajadosController = StreamController<Set<String>>.broadcast();
   Stream<Set<String>> get cambiosBajadosStream =>
       _cambiosBajadosController.stream;
@@ -579,8 +581,9 @@ class SyncEngine {
     }
   }
 
-  /// Inicia el motor: el pulso entre PCs y la revisión de borrados. La subida
-  /// (a los 2 s de guardar) y el ciclo de bajada de 10 s viven en
+  /// Inicia el motor: la subida a los 2 s de guardar, el pulso entre PCs, la
+  /// revisión de borrados y la red de seguridad (6.3.3). Lo que se hace cuando
+  /// alguien mira la pantalla (al abrir, al volver a la ventana) lo pide
   /// `OperationalSyncCoordinator`.
   void start() {
     debugPrint('⚡ SyncEngine iniciado (local primero, sync automático)');
@@ -719,8 +722,8 @@ class SyncEngine {
 
   /// Cada cuánto se revisa si en la nube desapareció algo.
   ///
-  /// Diez minutos y no diez segundos: en vivo los borrados llegan por el pulso
-  /// y, si se pierde, por la cuenta de cada ciclo (`_contarParaVerBorrados`).
+  /// Diez minutos: en vivo los borrados llegan por el pulso y, si se pierde,
+  /// por la cuenta de la red de 5 minutos (`_contarParaVerBorrados`).
   /// Esto es para lo demás y para la PC que estaba apagada cuando pasaron. Son
   /// unas 25 consultas de ids y otros tantos `count` (los pagos, en 5 tandas),
   /// y no tiene sentido pagarlos seguido.
@@ -1015,10 +1018,13 @@ class SyncEngine {
   // ninguna tabla a la publicación de Realtime** — sigue solo `invitados`, que
   // es el tótem. Ver docs/CONTEXTO_v4.9.4_2026-09-02.md.
   //
-  // Para las tablas, el pulso es un **acelerador, no un transporte**: lo único
-  // que hace es adelantar un pull que igual iba a pasar. Si el socket está
-  // caído, o el mensaje se pierde, o la PC estaba apagada, el ciclo de siempre
-  // lo cubre. Por eso no hay acuses: un aviso perdido cuesta segundos, no datos.
+  // Desde la 6.3.3 (el sync en reposo) el pulso **es el transporte**: ya no
+  // hay un ciclo de 10 s que baje todo por las dudas. Un aviso que llega con la
+  // PC ocupada se guarda y se atiende a los 3 s; si el canal estuvo caído más
+  // de 20 s, al volver se baja lo del cobro; y si igual se pierde (la PC estaba
+  // apagada, el mensaje no llegó), lo cubre la red de seguridad de 5 y 30
+  // minutos. Por eso no hay acuses: un aviso perdido cuesta minutos, no datos,
+  // y antes de cobrar se baja todo igual.
   //
   // **Para los borrados no es así**: el pull trae lo nuevo y lo cambiado, nunca
   // lo que dejó de existir. Un borrado que se pierde lo repone recién la
@@ -1125,7 +1131,7 @@ class SyncEngine {
       await canal.sendBroadcastMessage(event: _eventoPulso, payload: payload);
       debugPrint('  📣 Pulso: ${tablas.join(", ")}');
     } catch (e) {
-      // Que no llegue el aviso no rompe nada: el ciclo de siempre lo cubre.
+      // Que no llegue el aviso no rompe nada: lo cubre la red de seguridad.
       debugPrint('  ⚠️ El pulso no salió: $e');
     }
   }
@@ -1564,11 +1570,13 @@ class SyncEngine {
     }
   }
 
-  /// Lo que se mueve durante un cobro. Baja en cada ciclo.
+  /// Lo que se mueve durante un cobro. Llega por el pulso al instante; la red
+  /// de seguridad lo baja cada 5 minutos y se baja entero antes de cobrar y al
+  /// volver a la ventana (6.3.3; hasta la 6.3.2, cada 10 s).
   ///
   /// Acá llegar tarde se ve: dos personas cobrando a la vez sobre el mismo
   /// evento, un cierre de caja que tiene que cuadrar contra lo que hizo la otra
-  /// PC. Diez segundos es la cadencia que ya tenía y no se toca.
+  /// PC.
   static const List<String> _tablasDelCobro = [
     'operadores_caja',
     'sesiones_caja',
@@ -1600,13 +1608,12 @@ class SyncEngine {
     'sillas_puerta',
   ];
 
-  /// El resto. Baja cada [ciclosEntrePullsLentos] ciclos.
+  /// El resto. La red de seguridad lo baja cada 30 minutos (6.3.3).
   ///
   /// Son datos que cambian cuando alguien se sienta a cargar algo, no en el
   /// mostrador: un presupuesto, un evento, el catálogo de servicios, un
-  /// alquiler. Un minuto de latencia no molesta a nadie — y con el pulso por
-  /// broadcast ni siquiera se espera ese minuto: esto es la red de seguridad
-  /// para cuando el pulso no llegó.
+  /// alquiler. Llegan al instante por el pulso; los 30 minutos son para cuando
+  /// el pulso no llegó, y antes de cobrar o abrir caja se baja todo igual.
   ///
   /// Las últimas ocho cruzaban **solo a mano** hasta ahora: se habían dejado
   /// afuera en septiembre de 2026 porque ninguna estaba en la ruta del cobro y
@@ -1948,8 +1955,8 @@ class SyncEngine {
   }
 
   /// `true` si hay algo que subir ahora: pendientes frescos, o trabados a los
-  /// que ya les toca el reintento. Lo consulta el coordinador automático para
-  /// no despertar la sincronización cada 10 segundos al pedo.
+  /// que ya les toca el reintento. Lo consulta la subida automática para no
+  /// salir a la nube por nada.
   Future<bool> get hayTrabajoDeSubida async {
     if (await SyncQueue.readyCount > 0) return true;
     return _tocaReintentarTrabados && await SyncQueue.stuckCount > 0;
@@ -2609,7 +2616,7 @@ class SyncEngine {
       // Solo retiene este caso. Un id o una FK malformados también saltean, pero
       // arreglarlos en la nube les bumpea el `updated_at` y vuelven a bajar
       // solos; retener por ellos clavaría el marcador para siempre y la tabla se
-      // re-descargaría entera cada 10 segundos. El corte de fecha de cierre es
+      // re-descargaría entera en cada bajada. El corte de fecha de cierre es
       // deliberado y permanente, así que tampoco cuenta.
       DateTime? marcaPendienteMasVieja;
       void retenerMarcador(Map<String, dynamic> row) {
@@ -2870,7 +2877,7 @@ class SyncEngine {
       );
       return true;
     } catch (e) {
-      // No se relanza: el watermark no avanzó, así que el próximo ciclo
+      // No se relanza: el watermark no avanzó, así que la próxima bajada
       // reintenta el mismo rango y nada se pierde. Pero se anota, para que
       // quien llamó pueda decir que el pull quedó incompleto en vez de
       // informar "sincronizado".
@@ -2904,9 +2911,9 @@ class SyncEngine {
   /// Baja ya las [tablasDeLaPuerta], para "Lista para trabajar sin internet"
   /// (sección 5 de la 6.0.0). Devuelve si bajaron todas.
   ///
-  /// No espera al ciclo ni cambia el estado del motor: si el ciclo está
-  /// bajando las mismas tablas a la vez no pasa nada, porque escribir dos
-  /// veces la misma fila deja lo mismo.
+  /// No espera a que el motor se desocupe ni cambia su estado: si otra bajada
+  /// está trayendo las mismas tablas a la vez no pasa nada, porque escribir
+  /// dos veces la misma fila deja lo mismo.
   Future<bool> bajarParaLaPuerta() async {
     if (_connectivity.currentStatus == AppConnectivity.offline) return false;
     try {
@@ -2925,7 +2932,7 @@ class SyncEngine {
   /// Lo que una caja de barra necesita para vender sin internet (v77): la fiesta, los
   /// operadores con sus permisos (el PIN anda sin el jefe), el catálogo y los precios.
   /// Las cajas y las ventas no: cada equipo tiene las suyas, y las de las otras cajas
-  /// llegan con el ciclo de siempre cuando hay internet.
+  /// llegan por el pulso y la red de seguridad cuando hay internet.
   static const tablasDeLaBarra = [
     'eventos',
     'operadores_caja',
@@ -3643,7 +3650,7 @@ class SyncEngine {
   @visibleForTesting
   Future<void> revisarLoBorradoEnOtraPc() => _reconcileDeletes();
 
-  /// Para los tests: la cuenta de cada ciclo de 10 s.
+  /// Para los tests: la cuenta de la red de 5 minutos.
   @visibleForTesting
   Future<void> contarParaVerBorrados() async =>
       _contarParaVerBorrados(await LocalDatabase.instance);
@@ -3792,8 +3799,9 @@ class SyncEngine {
     }
   }
 
-  /// Las tablas que se cuentan en cada ciclo de 10 s, para enterarse de un
-  /// borrado aunque el aviso no llegue: lo que se mueve en el mostrador.
+  /// Las tablas que se cuentan con la red de 5 minutos (hasta la 6.3.2, cada
+  /// 10 s), para enterarse de un borrado aunque el aviso no llegue: lo que se
+  /// mueve en el mostrador.
   static const List<String> _tablasQueSeCuentan = [
     'pagos_contrato_alumno',
     'contratos_alumnos',
@@ -3803,8 +3811,9 @@ class SyncEngine {
   /// Cuenta en la nube las tablas del mostrador y, si en alguna hay menos que
   /// en esta PC, la revisa en ese momento.
   ///
-  /// Es lo que hace que un borrado llegue en 10 segundos como mucho aunque el
-  /// aviso se pierda: un `count` por tabla, sin bajar nada. Corre después de
+  /// Es lo que hace que un borrado llegue en 5 minutos como mucho aunque el
+  /// aviso se pierda (el aviso que llega con la PC ocupada ya no se pierde: se
+  /// reintenta a los 3 s): un `count` por tabla, sin bajar nada. Corre después de
   /// la bajada, cuando esta PC ya tiene todo lo nuevo de la nube: si acá hay
   /// más filas que allá (sin contar lo que espera subir), alguna se borró en
   /// otra PC. Si a la vez entró una fila nueva que todavía no bajó, las cuentas

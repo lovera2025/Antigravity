@@ -1014,7 +1014,8 @@ class ContratosRepository {
   // `subscribeToChanges` se retiró el 2026-09-02. Escuchaba `contratos_alumnos`
   // filtrado por evento y `pagos_contrato_alumno` SIN filtro, o sea que un
   // cobro de cualquier evento despertaba a todos los demás. Las dos tablas ya
-  // bajan cada 10 segundos en el pull incremental, así que era redundante.
+  // bajan por el aviso entre PCs y la red de seguridad (hasta la 6.3.2, cada
+  // 10 segundos), así que era redundante.
 
   Future<void> _pullByEvento(Database db, String eventoId, {bool prune = false}) async {
     try {

@@ -294,7 +294,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
       }
     });
     // Lo que llega de la otra PC —el jefe anuló un cobro, el operario cerró su
-    // sesión— se ve acá en el momento, sin esperar el ciclo de 10 s.
+    // sesión— se ve acá en el momento, en cuanto baja.
     final sub = ref
         .read(syncEngineProvider)
         .cambiosBajadosStream
@@ -427,7 +427,7 @@ class CierreCajaNotifier extends Notifier<CierreCajaState> {
   Future<void> refrescarManual() => _refrescar();
 
   /// Refresco que dispara la sincronización, no una persona: no muestra el
-  /// indicador de carga (la pantalla no parpadea cada 10 s) y avisa si
+  /// indicador de carga (la pantalla no parpadea) y avisa si
   /// desapareció un cobro porque lo anularon.
   Future<void> refrescarEnSilencio() =>
       _refrescar(silencioso: true, detectarAnulados: true);

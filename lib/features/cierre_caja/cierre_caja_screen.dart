@@ -354,8 +354,8 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
         ref.read(cierreCajaProvider.notifier).refrescarManual();
       }
     });
-    // Lo dispara el ciclo de sincronización, no una persona: en silencio, para
-    // que la pantalla no parpadee cada 10 segundos.
+    // Lo dispara la sincronización cuando bajó algo nuevo, no una persona: en
+    // silencio, para que la pantalla no parpadee.
     ref.listen<int>(operationalSyncRevisionProvider, (prev, next) {
       if (prev != next) {
         ref.read(cierreCajaProvider.notifier).refrescarEnSilencio();

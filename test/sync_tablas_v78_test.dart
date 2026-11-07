@@ -66,7 +66,7 @@ void main() {
           reason: 'motor y modelo');
     });
 
-    test('baja con lo del cobro, cada 10 s, y en la bajada general', () {
+    test('baja con lo del cobro (la red de 5 minutos) y en la bajada general', () {
       expect(declaracion('_incrementalColumns', '}'),
           contains("'sillas_puerta': 'updated_at'"));
       expect(declaracion('_tablasDelCobro', ']'), contains("'sillas_puerta'"));
