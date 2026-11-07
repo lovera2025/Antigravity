@@ -384,6 +384,104 @@ void main() {
         for (final t in SyncEngine.tablasDelCobro) 'GET $t',
       ]..sort());
     });
+
+    Map<String, dynamic> aviso(List<String> tablas) => {
+          'payload': {
+            'origen': 'pc-del-jefe',
+            'tablas': tablas,
+            'borrados': <String, List<String>>{},
+          },
+        };
+
+    test('3. un aviso que llega con la PC ocupada no se tira: se baja a los 3 s', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+
+      // La PC está bajando (antes de cobrar) y se queda esperando a la nube.
+      nube.frenadas['sesiones_caja'] = Completer<void>();
+      final bajada = m.pullOperationalUpdates();
+      await Future<void>.delayed(Duration.zero);
+      final antesDelAviso = nube.pedidas.length;
+
+      m.recibirPulso(aviso(['presupuestos']));
+      await reloj.avanzar(const Duration(milliseconds: 400));
+      expect(nube.desde(antesDelAviso), isNot(contains('GET presupuestos')),
+          reason: 'está ocupada: no se pisa con otra bajada');
+      expect(reloj.esperasSueltas, contains(const Duration(seconds: 3)));
+
+      nube.frenadas.remove('sesiones_caja')!.complete();
+      await bajada;
+      final marca = nube.pedidas.length;
+      await reloj.avanzar(const Duration(seconds: 3));
+      await m.aquietar();
+      expect(nube.desde(marca), ['GET presupuestos'],
+          reason: 'hasta la 6.3.2 el aviso se tiraba y lo bajaba el ciclo de 10 s');
+    });
+
+    test('un aviso con la PC libre baja solo lo avisado, enseguida', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+      m.recibirPulso(aviso(['pagos_contrato_alumno', 'contratos_alumnos']));
+      await reloj.avanzar(const Duration(milliseconds: 400));
+      await m.aquietar();
+      expect(ordenadas(nube.desde(marca)),
+          ['GET contratos_alumnos', 'GET pagos_contrato_alumno']);
+      expect(m.status, SyncStatus.idle, reason: 'vuelve a quedar libre');
+    });
+
+    test('un aviso que llega justo antes de quedarse sin red se baja al volver', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      // Que pase la primera revisión de borrados (a los 20 s de abrir).
+      await reloj.avanzar(const Duration(seconds: 25));
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+      m.recibirPulso(aviso(['presupuestos']));
+      red.poner(AppConnectivity.offline);
+      await Future<void>.delayed(Duration.zero);
+      await reloj.avanzar(const Duration(seconds: 10));
+      await m.aquietar();
+      expect(nube.desde(marca), isEmpty);
+      expect(reloj.esperasSueltas, isEmpty,
+          reason: 'sin red no se queda reintentando');
+
+      red.poner(AppConnectivity.online);
+      await Future<void>.delayed(Duration.zero);
+      await m.aquietar();
+      expect(nube.desde(marca), contains('GET presupuestos'));
+    });
+
+    test('4. si el canal del aviso estuvo caído más de 20 s, al volver baja lo '
+        'del cobro; si fueron 10 s, no', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      // La primera conexión no es un corte.
+      m.recibirEstadoDelCanal(RealtimeSubscribeStatus.subscribed);
+      await m.aquietar();
+      var marca = nube.pedidas.length;
+
+      m.recibirEstadoDelCanal(RealtimeSubscribeStatus.channelError);
+      await reloj.avanzar(const Duration(seconds: 10));
+      m.recibirEstadoDelCanal(RealtimeSubscribeStatus.subscribed);
+      await m.aquietar();
+      expect(nube.desde(marca), isEmpty, reason: 'diez segundos no');
+
+      await reloj.avanzar(const Duration(minutes: 2));
+      marca = nube.pedidas.length;
+      m.recibirEstadoDelCanal(RealtimeSubscribeStatus.timedOut);
+      await reloj.avanzar(const Duration(seconds: 25));
+      await m.aquietar();
+      expect(nube.desde(marca), isEmpty);
+      m.recibirEstadoDelCanal(RealtimeSubscribeStatus.subscribed);
+      await m.aquietar();
+      expect(ordenadas(nube.desde(marca)), unaVueltaDelCobro(),
+          reason: 'los avisos de esos 25 s se perdieron');
+    });
   });
 
   group('el coordinador ya no tiene reloj', () {
