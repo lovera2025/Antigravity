@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/sync_engine.dart';
 import '../../../core/utils/ar_time.dart';
 import '../../cierre_caja/providers/cierre_caja_provider.dart';
 import '../../common/services/pdf_service.dart';
@@ -148,6 +149,11 @@ class _AnularCobroCuotaDialogState extends ConsumerState<AnularCobroCuotaDialog>
       final contratosRepo = ref.read(contratosRepositoryProvider);
       for (final cid in contratos) {
         await contratosRepo.recalcularProgresoContrato(cid);
+      }
+      // La mora sale de los pagos que quedan: se les revisa ya, y no al abrir el
+      // programa la próxima vez (en cualquier PC, sin que nadie lo vea).
+      if (contratos.isNotEmpty) {
+        await ref.read(syncEngineProvider).revisarMora(soloContratos: contratos);
       }
       await ref.read(finanzasProvider.notifier).recargar();
       // Si el cierre de caja está abierto en esta PC, que ya no los cuente.
