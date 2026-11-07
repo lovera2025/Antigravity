@@ -562,19 +562,26 @@ class _Tarjetas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [for (final r in resumen.cajas) _TarjetaDeCaja(r: r, onTap: () => onElegir(r))],
-    );
+    return LayoutBuilder(builder: (context, caja) {
+      // En el celular, una tarjeta por renglón, a todo el ancho.
+      final ancho = caja.maxWidth < 600 ? caja.maxWidth : 270.0;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final r in resumen.cajas) _TarjetaDeCaja(r: r, ancho: ancho, onTap: () => onElegir(r)),
+        ],
+      );
+    });
   }
 }
 
 class _TarjetaDeCaja extends StatelessWidget {
   final ResumenDeCaja r;
+  final double ancho;
   final VoidCallback onTap;
 
-  const _TarjetaDeCaja({required this.r, required this.onTap});
+  const _TarjetaDeCaja({required this.r, required this.ancho, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -591,7 +598,7 @@ class _TarjetaDeCaja extends StatelessWidget {
           ],
         );
     return SizedBox(
-      width: 270,
+      width: ancho,
       child: Material(
         color: const Color(0xFF17161A),
         shape: RoundedRectangleBorder(

@@ -485,10 +485,11 @@ class _EditorDeProductoState extends State<_EditorDeProducto> {
           style: const TextStyle(fontSize: 12, letterSpacing: 1.2, fontWeight: FontWeight.w700, color: Color(0xFFA7A29A)),
         ),
         const SizedBox(height: 10),
+        // Baja: más alta, los botones quedaban debajo del borde en la PC.
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: AspectRatio(
-            aspectRatio: 4 / 3,
+          child: SizedBox(
+            height: 170,
             child: FotoDelProductoJefe(nombre: _nombre.text, imagen: widget.imagen(_borrador)),
           ),
         ),

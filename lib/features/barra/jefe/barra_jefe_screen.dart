@@ -36,9 +36,11 @@ class BarraJefeScreen extends ConsumerStatefulWidget {
 class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
   late PestanaBarraJefe _pestana = widget.pestanaInicial;
 
-  Future<void> _cambiarFiesta(FiestasDelJefe fiestas, Evento actual) async {
+  /// [donde] es el contexto de adentro del tema de la barra: con el de la pantalla, la
+  /// ventana salía con los colores claros de la app.
+  Future<void> _cambiarFiesta(FiestasDelJefe fiestas, Evento actual, BuildContext donde) async {
     final id = await showDialog<String>(
-      context: context,
+      context: donde,
       builder: (_) => _ElegirFiesta(
         fiestas: fiestas,
         actual: actual.id,
@@ -120,7 +122,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
                         ref.read(relojDelJefeProvider)(),
                         esLaQueAbre: fiesta.id == datos.laQueAbre?.id,
                       ),
-                      onCambiar: datos.todas.length > 1 ? () => _cambiarFiesta(datos, fiesta) : null,
+                      onCambiar: datos.todas.length > 1 ? () => _cambiarFiesta(datos, fiesta, context) : null,
                     ),
                     const SizedBox(height: 12),
                     _Pestanas(

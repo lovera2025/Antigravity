@@ -623,7 +623,8 @@ class _FilaDePrecio extends StatelessWidget {
         );
     final precio = casilla('jefe_precio', f.precio, 'Precio', plata: true);
     final stock = casilla('jefe_stock', f.stock, 'Stock', pista: 'sin control');
-    final aviso = casilla('jefe_aviso', f.aviso, 'Avisar desde', pista: '—');
+    // "Avisar desde" no entra en la casilla de un celular.
+    final aviso = casilla('jefe_aviso', f.aviso, 'Aviso', pista: '—');
 
     final contenido = angosto
         ? Column(
