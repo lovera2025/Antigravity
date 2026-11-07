@@ -33,7 +33,8 @@ class PapelEnPantalla extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 16, 14, 20),
-            child: DefaultTextStyle(
+            // Merge: conserva la letra de la app y cambia solo el color y el tamaño.
+            child: DefaultTextStyle.merge(
               style: const TextStyle(color: _tinta, fontSize: _chica, height: 1.35),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
