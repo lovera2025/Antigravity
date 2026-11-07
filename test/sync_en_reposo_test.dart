@@ -19,6 +19,7 @@ import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/database/sync_queue.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
+import 'package:arguello_events/features/mi_empresa/repositories/finanzas_repository.dart';
 
 import 'helpers/nube_de_prueba.dart';
 import 'helpers/reloj_de_prueba.dart';
@@ -196,6 +197,101 @@ void main() {
       for (final t in SyncEngine.tablasDeCarga) {
         expect(a30, contains('GET $t'), reason: '$t baja a los 30 minutos');
       }
+      expect(red.despertares, 0,
+          reason: 'sin el pedido de prueba antes de cada bajada (6.3.3)');
+    });
+
+    test('con la nube caída, la vuelta de la red pide una sola tabla y para; '
+        'cuando vuelve, baja todo', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      await reloj.avanzar(const Duration(minutes: 4));
+      await m.aquietar();
+
+      nube.caida = true;
+      final marca = nube.pedidas.length;
+      await reloj.avanzar(const Duration(minutes: 1, seconds: 30));
+      await m.aquietar();
+      expect(nube.desde(marca), hasLength(1), reason: 'la primera tabla hace de ping');
+      expect(m.status, SyncStatus.error);
+      expect(m.lastError, 'Nube no disponible');
+
+      nube.caida = false;
+      final marca2 = nube.pedidas.length;
+      await reloj.avanzar(const Duration(minutes: 5));
+      await m.aquietar();
+      // A los 10 minutos coincide con la revisión de borrados: se mira que
+      // esté la vuelta entera del cobro.
+      expect(nube.desde(marca2), containsAll(unaVueltaDelCobro()));
+      expect(m.status, SyncStatus.idle);
+    });
+
+    test('con la nube caída, un cobro no se marca como fallido: se reintenta '
+        'y sube cuando vuelve', () async {
+      final m = motor();
+      await reloj.avanzar(const Duration(seconds: 25));
+      await m.aquietar();
+      nube.caida = true;
+      await SyncQueue.enqueue(
+        tabla: 'pagos_contrato_alumno',
+        operacion: SyncOperation.insert,
+        registroId: 'acacacac-0000-4000-8000-000000000001',
+        payload: _pago('acacacac-0000-4000-8000-000000000001'),
+      );
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      expect(nube.pedidas.where((p) => p.startsWith('POST')), hasLength(1));
+      final db = await LocalDatabase.instance;
+      final fila = (await db.query('_sync_queue')).single;
+      expect(fila['intentos'], 0,
+          reason: 'no es culpa de la fila: no queda "trabada" por un corte largo');
+      expect(reloj.esperasSueltas, [const Duration(seconds: 30)]);
+
+      nube.caida = false;
+      await reloj.avanzar(const Duration(seconds: 30));
+      await m.aquietar();
+      expect(await SyncQueue.pendingCount, 0);
+      expect(m.status, SyncStatus.idle);
+    });
+
+    test('7. la proyección de Finanzas se invalida solo si bajó algo nuevo', () async {
+      final m = motor();
+      final avisos = <Set<String>>[];
+      final sub = m.cambiosBajadosStream.listen(avisos.add);
+      addTearDown(sub.cancel);
+      expect(await m.bajarAlArrancar(), isTrue);
+      await reloj.avanzar(const Duration(seconds: 1));
+      await m.aquietar();
+      final antes = FinanzasRepository.vecesInvalidada;
+
+      // Una vuelta sin novedades.
+      await reloj.avanzar(const Duration(minutes: 5));
+      await m.aquietar();
+      expect(FinanzasRepository.vecesInvalidada, antes);
+      expect(avisos, isEmpty, reason: 'nada nuevo: las pantallas no se rehacen');
+
+      // Una vuelta con una caja nueva de la otra PC.
+      nube.filas['sesiones_caja'] = [
+        {
+          'id': 'bcbcbcbc-0000-4000-8000-000000000001',
+          'operador_id': 'bbbbbbbb-0000-4000-8000-000000000001',
+          'abierta_at': '2026-11-10T13:00:00Z',
+          'cambio_inicial': 0,
+          'device_id': 'pc-del-jefe',
+          'last_heartbeat': '2026-11-10T13:00:00Z',
+          'created_at': '2026-11-10T13:00:00Z',
+          'updated_at': '2026-11-10T13:00:00Z',
+        },
+      ];
+      await reloj.avanzar(const Duration(minutes: 5));
+      await m.aquietar();
+      await reloj.avanzar(const Duration(seconds: 1));
+      await m.aquietar();
+      expect(FinanzasRepository.vecesInvalidada, antes + 1);
+      expect(avisos, [
+        {'sesiones_caja'},
+      ]);
     });
 
     test('vuelve la red: sube lo que esperaba y baja lo del cobro', () async {
