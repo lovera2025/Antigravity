@@ -36,8 +36,11 @@ caja contando a ciegas, con el cierre como el papel y su PDF de 58 mm; `docs/CON
 completando y publicar al final, salvo que diga "publicá"**: la 6.3.2 y la 6.3.3 esperan programadas y probadas en `release/6.3.x`.
 Sigue la barra 7 (el jefe y la encargada en la PC). **7-nov (noche): la barra 7 cerrada** (con el recorrido con el mouse, la cajera y
 el jefe lado a lado en `tool/barra_prueba.dart`, y la foto de la lista de precios impresa). **La misma noche, la barra 8 cerrada** (el
-jefe en el iPhone: la web por `BarraNube`, CAJAS que se relee sola, sin impresora; recorrida en el navegador a 375 px); sigue la central
-de la barra. Plan general: 17 de 26, 65 %.
+jefe en el iPhone: la web por `BarraNube`, CAJAS que se relee sola, sin impresora; recorrida en el navegador a 375 px). **Y la central de
+la barra cerrada** (la notebook la prende, las tablets la encuentran solas por el wifi del salón y se ven entre ellas sin internet;
+"Todo subido" o cuánto falta en VENDER, en la notebook y en Recepción; tests y el recorrido con el mouse de
+`tool/central_barra_prueba.dart`). Sigue la barra 9 (Android firmado), donde se prueba la central con la tablet y el router de verdad.
+Plan general: 19 de 26, 73 %.
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el
@@ -45,7 +48,7 @@ ticket con precios si lo piden) y probar si la impresora avisa que le falta pape
 que necesite la nube va en tablas nuevas.
 
 > Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el
-> plan corto de la etapa 7 antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
+> plan corto de la etapa 9 (Android firmado) antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
 > docs/CONTEXTO_v6.3.2_2026-11-09.md y decime en qué paso estamos.")
 
 ## El orden

@@ -13,6 +13,12 @@ abrir el evento con internet), se anotan en la base de la PC y suben por la cola
 base de la PC: anda sin internet, desde la PC y desde los celulares por la notebook central. Ojo: sin su SQL en la nube, "Lista
 para trabajar sin internet" no queda lista (`docs/CONTEXTO_v6.4.0_2026-11-06.md`).
 
+**7-nov (6.4.0, en la rama): la barra entra en la regla.** Cada tablet vende sola con su base y sube cuando hay internet; con la
+central de la barra (la notebook de la barra, `lib/features/barra/central/`), las cajas se ven entre ellas y el stock es el de toda la
+fiesta **también sin internet**, por el wifi del salón. VENDER, la notebook y Recepción dicen "Todo subido" o cuánto falta. Falta
+probarla con la tablet y el TP-Link de verdad (etapas 9 y 10 de la barra; "La central de la barra" en
+`docs/CONTEXTO_BARRA_2026-11-02.md`).
+
 **Estado:** hecho, probado con su celular (15-oct) y ensayado con el router de verdad (antes del 4-nov). **Va en la 6.0.0**
 (decisión del usuario del 2026-10-13). **Los pasos 1 y 2 están hechos** (14-oct, sección 5). **El 3 se hizo de otra
 forma** (15-oct, sección 7): los puestos van a ser celulares (o tablets), así que **una notebook del salón hace de

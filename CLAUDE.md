@@ -101,7 +101,20 @@ cerró el 7-nov: el jefe en el iPhone.** En la web BARRA lee y escribe directo e
 `kIsWeb`, y nunca por el singleton de Supabase: `test/barra_en_la_web_test.dart`). CAJAS se relee sola cada 30 s y al deslizar hacia
 abajo (las tablas de la barra no están en Realtime), y sin impresora: quedan los PDF. Para mirarla, `tool/barra_web_prueba.dart` **compilado
 como la web de verdad** (`flutter build web -t … --output build/barra_web_prueba` y un servidor estático, `.claude/launch.json`): el compilador
-de desarrollo de la web (`flutter run -d web-server`) se cae con este proyecto y deja la página en blanco. Sigue la central de la barra.
+de desarrollo de la web (`flutter run -d web-server`) se cae con este proyecto y deja la página en blanco. **La central de la barra se
+cerró el 7-nov a la noche** (`lib/features/barra/central/`; el detalle en "La central de la barra" del CONTEXTO de la barra): **es la
+bajada de la nube, pero por la red del salón.** La notebook de la barra la prende desde BARRA → CAJAS; las tablets la encuentran solas
+(preguntan por UDP al 8777, la notebook contesta; si el router no deja, la dirección se escribe a mano en VENDER) y se conectan por
+WebSocket al 8797-8806 (la puerta usa 8787-8796). Lo que escribe una caja (`barra_cajas`, `barra_ventas`, `barra_anulaciones`,
+`barra_vales`) va a la notebook y de ahí a las demás, que lo guardan **sin encolarlo** con `BarraLocal.guardarDeOtroEquipo`, **el único
+camino para escribir una fila que no es de este equipo** (no pisa lo que está en la cola; `sync_engine.dart` no se tocó). Al conectarse
+o reconectarse, las dos puntas se mandan todo lo de la fiesta: no hay cola de lo no mandado. Cada escritura de la caja pasa por
+`BarraConLaRed`, que avisa por `AvisoALaRed` (`test/barra_con_la_red_test.dart` falla si una no avisa). El catálogo, los precios y el
+recargo no viajan por la red del salón. **VENDER, la notebook y Recepción dicen "Todo subido" o cuánto falta** (pedido del usuario), y la
+cuenta **no corre sola salvo mientras hay internet y algo está subiendo**: se cuenta cuando el equipo escribe (`AvisoALaRed.escrituras`),
+cambia la conexión o baja algo. Probarla: `flutter run -d windows -t tool/central_barra_prueba.dart` (dos tablets y la notebook, con la
+central de verdad en esta PC). Falta, con aparatos de verdad (etapas 9 y 10): la búsqueda por el wifi del TP-Link y el `ws://` desde el
+APK. Sigue la etapa 9 (Android firmado).
 **La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los

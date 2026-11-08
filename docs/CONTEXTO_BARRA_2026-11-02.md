@@ -5,13 +5,16 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
-> **Al 7-nov (noche): las etapas 1 a 8 están cerradas.** La 7 se cerró con el recorrido con el mouse y la foto de la lista de precios
-> impresa en la TP-POS58 ("un lujo"); el recorrido encontró seis cosas, arregladas con su test (abajo, "El recorrido de la etapa 7").
-> **`tool/barra_prueba.dart` tiene ahora a la cajera y al jefe lado a lado**, sobre la misma barra en memoria. **La 8 (el jefe en el
-> iPhone, en la web) se cerró la misma noche**: BARRA lee y escribe directo en la nube por `BarraNube`, CAJAS se relee sola cada 30 s y
-> al deslizar, sin impresora; recorrida en el navegador de la app a 375 px con `tool/barra_web_prueba.dart` (abajo, "Etapa 8"). **Sigue
-> la central de la barra** (etapa propia, antes de la 10): primero su plan corto y el OK. Después, la 9 (Android firmado), la 10 (de
-> punta a punta), Entradas 4 a 6 y publicar la 6.4.0. Plan general: **17 de 26 partes, 65 %**.
+> **Al 7-nov (noche): las etapas 1 a 8 y la central de la barra están cerradas en la rama, sin publicar.** La 7 se cerró con el
+> recorrido con el mouse y la foto de la lista de precios impresa en la TP-POS58 ("un lujo"). La 8 (el jefe en el iPhone, en la web):
+> BARRA lee y escribe directo en la nube por `BarraNube` (abajo, "Etapa 8"). **La central de la barra** (abajo, "La central de la
+> barra"): la notebook de la barra la prende desde BARRA → CAJAS, las tablets la encuentran solas por el wifi del salón, y lo que vende
+> una caja lo ven las demás y la notebook al momento, **con o sin internet**. Cada tablet y la notebook dicen **"Todo subido"** o cuánto
+> falta subir (pedido del usuario, "para quedarnos tranquilos"), y Recepción dice lo mismo con las mismas palabras. Probada entera en el
+> sandbox: 3.900 y pico de tests y el recorrido con el mouse de `tool/central_barra_prueba.dart` (dos tablets y la notebook en una
+> ventana). **Sigue la 9 (Android firmado)**: ahí se prueba con la tablet y el router de verdad lo que el sandbox no puede (que la
+> tablet encuentre la notebook por el wifi real y el `ws://` desde Android). Después la 10 (de punta a punta), Entradas 4 a 6 y
+> publicar la 6.4.0. Plan general: **19 de 26 partes, 73 %**.
 >
 > **Lo decidido el 7-nov:** la barra vende con **la app instalada en cada tablet**, no como las recepcionistas por QR (el navegador no
 > imprime por Bluetooth y la barra no puede dejar de vender si se cae la red); **la central sigue en pie** (el stock general, en vivo
@@ -45,7 +48,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | Etapa | Ya hecho | Falta |
 |---|---|---|
 | 5. Reimprimir y anular | **Hecha el 7-nov** (VENTAS de la cajera, el freno de la copia, IMPRIMIR LO QUE FALTA, el ticket con precios, ANULAR con motivo, la tabla `barra_vales`) | Lo del jefe (reimprimir cualquiera, anular desde la PC) va en la 7 |
-| La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)"; confirmado el 7-nov) | Un equipo que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet. Las tablets siguen vendiendo con su app aunque no esté. Qué equipo es y cómo se conecta la tablet, en su etapa, antes de la 10 |
+| La central de la barra | **Cerrada el 7-nov** (abajo, "La central de la barra"): la notebook la prende desde CAJAS, las tablets la encuentran solas por UDP, lo de cada caja va a todas por la red del salón sin internet, "Todo subido" en VENDER, en la notebook y en Recepción; tests y el recorrido con el mouse de `tool/central_barra_prueba.dart` | Con aparatos de verdad, en la 9 y la 10: que la tablet la encuentre por el wifi del TP-Link y el `ws://` desde el APK |
 | El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
 | 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
@@ -63,7 +66,104 @@ PCs tienen la 6.3.3 desde el 7-nov.)
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
-> corto de la central de la barra."
+> corto de la etapa 9 (Android firmado)."
+
+### La central de la barra (7-nov, noche)
+
+**Decidido por el usuario el 7-nov:** la central es **la notebook de la barra** (Windows, enchufada, como la de la puerta) y **las
+tablets la encuentran solas**. Pedido de la misma noche: **ver lo que falta subir y, con internet, que diga que subió todo**, en la
+tablet y en la central, "para quedarnos tranquilos"; y lo mismo para las recepcionistas, que ya lo tenían con otras palabras.
+
+**La idea: la central es "la bajada de la nube", pero por la red del salón.** Lo que una tablet escribe (su caja, sus ventas, sus
+anulaciones, sus vales) se lo manda a la notebook; la notebook lo guarda **como si lo hubiera bajado de la nube, sin encolarlo para
+subir**, y se lo reparte a las demás tablets, que lo guardan igual. VENDER no cambió: ya leía las ventas de toda la fiesta de su base
+(`StockDeLaBarra`) y se rehace cuando baja algo. Con internet, cada tablet sube lo suyo por su cola, como antes; la central no sube
+nada de otro, así que no hay duplicados. **La central de la puerta no se tocó** (está publicada y ensayada): se copió su forma.
+
+Todo en `lib/features/barra/central/`:
+- **`filas_de_la_red.dart`**: las cuatro tablas que viajan (`tablasDeLaRed`: `barra_cajas`, `barra_ventas`, `barra_anulaciones`,
+  `barra_vales`), la interfaz `BarraDeLaRed` y `PendientesDeLaBarra` ("2 ventas y 1 cambio"). **El catálogo, los precios y el recargo
+  no viajan por la red del salón**: los pone el jefe antes de la fiesta y llegan por la nube. Cambiarlos esa noche sin internet no le
+  llega a las tablets (a propósito).
+- **`BarraLocal.guardarDeOtroEquipo`**: el único camino para escribir una fila que no es de este equipo. Dentro de una transacción:
+  si el id está en `_sync_queue` no lo pisa (lo de este equipo manda), deja solo las columnas que la tabla tiene (`PRAGMA table_info`),
+  compara con `cambiaLaFila` (gana el `updated_at` más nuevo; con la misma hora, solo si el contenido cambió) e inserta **sin encolar**.
+  **`sync_engine.dart` no se tocó**: el plan decía sacar un `guardarFilasBajadas` del pull, y se eligió no tocar el sync que cobra.
+  `filasDeLaFiesta`, `filaDeLaRed` y `pendientesDeLaBarra` (lo de la barra en la cola, por tabla).
+- **`CentralBarra`** (`central_barra.dart`): el servidor, en la notebook. `HttpServer` desde el puerto **8797** (prueba diez, hasta el
+  8806; la puerta usa 8787 a 8796), WebSocket en `/barra?evento=&equipo=&caja=`, una conexión por equipo (la nueva reemplaza a la
+  vieja, cierre 4003; otra fiesta, 4001; faltan datos, 4002). Mensajes `{t:'filas', filas:{tabla:[…]}}` en las dos direcciones y
+  `{t:'hola', ventas, otros}`, el latido de la tablet con lo que tiene sin subir. **Al conectarse o reconectarse, las dos puntas se
+  mandan todo lo de la fiesta**: no hay cola de lo no mandado que pueda perderse, y lo repetido no cambia nada (`cambiaLaFila`).
+- **La búsqueda** (`buscar_central.dart`): la tablet pregunta cada 3 s por UDP al puerto **8777** a toda la red (`255.255.255.255` y
+  la `.255` de su red) `{t:'buscar', evento}`; la notebook contesta a esa tablet `{t:'central', evento, puerto}`. Pregunta la tablet y
+  contesta la notebook porque Android recibe bien una respuesta directa y mal un anuncio a toda la red. **Si el router no deja pasar la
+  pregunta**, en VENDER se toca la parte de la central y se escribe la dirección que muestra la notebook ("192.168.0.10:8797").
+- **`ClienteDeLaCentral`** (en la tablet): busca, conecta, latido cada 5 s, reintenta, y lleva `porMandar` mientras no está conectada.
+- **`BarraConLaRed`** (`barra_con_la_red.dart`): envuelve la barra del equipo; después de cada escritura (abrir caja, cambio, vender,
+  anular, vale, cierre, nota) avisa por `AvisoALaRed`, que en la tablet manda al cliente y en la notebook reparte la central
+  (`difundirDeEstaPc`: el jefe anula desde CAJAS y les llega a las tablets). `barraDeEsteEquipoProvider` la devuelve en la PC y en la
+  tablet; en la web no hay red del salón (`redDeLaBarraHabilitadaProvider`, que los tests de pantalla ponen en `false`).
+- **Los providers** (`central_barra_provider.dart`): `centralDeLaBarraProvider` (prender, reanudar, apagar; queda prendida mientras el
+  programa está abierto y **se vuelve a prender sola** si la notebook se reinició esa noche: se recuerda 18 h) y
+  `clienteDeLaBarraProvider` (lo arranca VENDER; en la notebook con la central prendida no arranca otro). Puertos y direcciones van
+  por providers para que los tests escuchen solo en esta PC.
+
+**Lo que se ve:**
+- **En VENDER, una línea arriba de los filtros** (`LineaDeLaCaja`): "Todo subido" en verde; "2 ventas y 1 cambio subiendo"; "Sin
+  internet · nada por subir"; "Sin internet · 1 venta por subir"; y al lado la central: "Buscando la central…", "Central conectada" o
+  "Central · 3 cajas", o "Sin central desde las 23:36 · 1 por mandar" en ámbar. Si no entra en un renglón, la central baja al segundo
+  (en el recorrido se cortaba con "…"; `test/linea_de_la_caja_test.dart`).
+- **En la notebook, BARRA → CAJAS**, arriba, el panel de la central (`PanelCentralDeLaBarra`): PRENDER LA CENTRAL, la dirección para
+  escribir a mano, cada caja conectada con "al día" o "1 venta por subir", y "Esta notebook: Todo subido". Debajo, las mismas tarjetas
+  y el stock de siempre, que se rehacen con cada venta que llega. El renglón verde dice "Se pone al día con cada venta que llega por la
+  red del salón, haya internet o no" cuando la central de esa fiesta está prendida.
+- **En Recepción**, la línea de la PC suma "· Todo subido" o "· N ingresos subiendo" (`lista_sin_internet.dart`). El celular de la
+  puerta ya decía "Sin conexión con la PC · N por mandar" y quedó igual.
+- **El instalador** abre en el cortafuegos TCP 8797-8806 y UDP 8777 y las saca al desinstalar; **Android** pide `ACCESS_WIFI_STATE` y
+  `ACCESS_NETWORK_STATE` y deja `ws://` a la red local (`usesCleartextTraffic`; la nube sigue por https).
+
+**Las pruebas, en el sandbox:** `test/central_barra_test.dart` (servidor y tablets de verdad por la red de esta PC: la venta de una
+llega a la otra, conectarse tarde trae todo, sin central se vende y al volver se manda **sin duplicar**, el latido, la búsqueda por
+UDP), `central_barra_provider_test.dart`, `barra_con_la_red_test.dart` (lee `BarraLocal` y falla si aparece una escritura que no
+avisa), `android_central_barra_test.dart`, `linea_de_la_caja_test.dart` y lo sumado en `barra_repositorios_test.dart` (lo recibido no
+se encola, lo pendiente no se pisa), `instalador_puesto_test.dart`, `barra_home_test.dart`, `barra_jefe_pantalla_test.dart` y
+`lista_sin_internet_test.dart`. Rotura a propósito: sin el reenvío completo al reconectar, falla "sin central … nada se duplica";
+con la línea cortada con "…", falla la del ancho.
+
+**El recorrido con el mouse (7-nov, noche)**, en `tool/central_barra_prueba.dart` (`flutter run -d windows -t
+tool/central_barra_prueba.dart`): la tablet A (Marta, PIN 1111), la tablet B (Sofía, 2222) y la notebook con CAJAS, cada una con su
+barra en memoria, unidas por la central de verdad en esta PC; la subida a la nube se simula a los 2 s y la barra de la notebook tiene
+CORTAR INTERNET. Lo que dio:
+1. Prendida la central, las dos tablets la encontraron solas ("Central · 2 cajas"); la notebook, "Esta notebook: Todo subido".
+2. La A vendió 3 cervezas y en la B "Quedan" bajó al momento; la notebook vio la caja, la venta y el stock.
+3. APAGAR: las tablets pasaron a "Sin central desde las 23:36"; la B vendió igual ("1 por mandar").
+4. PRENDER otra vez (en otro puerto): las tablets la encontraron solas, la A vio la venta de la B y la notebook sumó $ 26.500; nada
+   repetido.
+5. CORTAR INTERNET: la A vendió un fernet; la A decía "Sin internet · 1 venta por subir", la B "Sin internet · nada por subir", y la
+   notebook "Caja 1 · Marta · 1 venta por subir" con el total en $ 32.500: **sin internet, la venta llegó igual a la notebook.**
+6. VOLVER EL INTERNET: las dos tablets "Todo subido" y la notebook las dos cajas "al día".
+
+Encontró tres cosas, arregladas con su test: la línea de VENDER se cortaba en la tablet ("Sin central desde las 23:36 · 1 …"), el
+renglón verde de CAJAS seguía diciendo "cuando las cajas suben sus ventas" con la central prendida, y "Esta notebook" no se ponía al
+día sola cuando terminaba de subir lo suyo (se quedaba en "subiendo" hasta que llegaba otra cosa).
+
+**La cuenta de lo pendiente no corre sola todo el tiempo** (pregunta del usuario: "¿cada 10 s no era lo que se cambió del sync?",
+"la idea es ahorrar también eso"). No es lo mismo que el ciclo que sacó la 6.3.3 (aquel le pedía 16 tablas a la nube cada 10 s; esto
+cuenta filas en la base de la misma PC), pero igual se ahorra: VENDER (`PuestaAlDiaBarra`) y la notebook (`_EstaNotebook`) cuentan
+al abrir, **cuando el equipo escribe algo** (`AvisoALaRed.escrituras`, que sube con cada escritura de `BarraConLaRed`, también el
+catálogo y los precios), cuando cambia la conexión y cuando baja o llega algo; y **cada 10 s solo mientras hay internet y queda algo
+subiendo**, que es lo único que cambia el número sin que nadie toque nada. Sin internet, o con todo subido, la cuenta queda quieta
+(`test/barra_home_test.dart`, "la cuenta corre sola solo mientras…"). La línea de Recepción (publicada) sigue contando como antes.
+
+**Lo que el sandbox no puede probar y queda para la 9 y la 10, con la tablet y el TP-Link:** que la pregunta por UDP pase por el wifi
+real (algunos routers aíslan a los equipos; para eso está la dirección a mano), el `ws://` desde el APK de Android, y la notebook con
+el cortafuegos del instalador. Qué mirar: en la tablet, "Central · N cajas" al abrir VENDER; vender en una y ver "Quedan" bajar en la
+otra; con el cable de internet del router desenchufado, lo mismo, y al enchufarlo "Todo subido" en todas.
+
+**Lo que no entra:** vender desde la notebook o la web; ver desde el iPhone lo del salón sin internet (afuera nadie lo ve hasta que
+vuelve el internet); un código de 4 cifras como el de la puerta (la llave es el id de la fiesta, y la notebook muestra quién está
+conectado; si el wifi lo comparten los invitados, se agrega después sin cambiar el resto).
 
 ### Etapa 8: el jefe en el iPhone, en la web (7-nov, noche)
 
