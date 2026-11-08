@@ -3,15 +3,13 @@
 2-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Plan: `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, etapas 1 a 3. El orden de todo:
 `docs/HOJA_DE_RUTA_2026-11-02.md`, paso 3.
 
-## Para retomar en otro chat (8-nov, noche): Entradas 4 y 5
+## Para retomar en otro chat (8-nov, noche): Entradas 4 y 5, cerradas
 
-> **Entradas 4 (la entrega según los permisos) está programada y probada en la rama, sin publicar.** El plan aprobado el 8-nov está
-> en `C:\Users\lover\.claude\plans\prosigamos-tingly-thompson.md` (copiado abajo en corto). La barra está completa hasta su etapa 10.
-> Plan general: **22 de 26 partes, 85 %** con la 4; con la 5 cerrada, 23 de 26 (88 %). Después quedan **el aviso de papel**, **el
-> aviso entre PCs** (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`) y **publicar la 6.4.0** (Entradas 6).
->
-> Frase para retomar: "Seguimos con Entradas: leé 'Para retomar en otro chat' de docs/CONTEXTO_OPERADORES_2026-11-02.md y terminá
-> la etapa 5 (las roturas a propósito y el commit si no quedó hecho)."
+> **Entradas 4 y 5 están cerradas en la rama, sin publicar.** La 5 (las roturas a propósito) se hizo el 8-nov a la noche: cada
+> rotura dio rojo y el código volvió a quedar igual (abajo, "Las roturas de la etapa 5"). Plan general: **23 de 26 partes, 88 %**.
+> Quedan **el aviso entre PCs** (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`), **el aviso de papel** y **publicar la 6.4.0**
+> (Entradas 6). Lo que no se puede comprobar en el sandbox queda para el día de la instalación, con el usuario: el sonido del aviso
+> y la entrega en dos PCs de verdad (un operador de prueba solo de Entradas en una PC, la caja en la otra).
 
 **Lo que hace ahora la entrega de entradas** (`RetiroEntradasScreen`):
 - **Dos modos.** Desde la fiesta (la oficina) sigue igual: IR A COBRAR y EDITAR ALUMNO abren lo de siempre. Desde Entradas (el operador
@@ -44,14 +42,20 @@ pagó: ya podés entregar"; entregado (talonario 2001, Madre) → el aviso se fu
 jefe"; CORTAR INTERNET → la línea lo dice. **Encontró una cosa:** los botones del diálogo bloqueado quedaron a la izquierda; arreglado
 (vuelven a ir a la derecha, como antes).
 
-**Lo que falta de la etapa 5:**
-1. **Las roturas a propósito** (el ANULAR prendido sin jefe, el aviso que no salta, IR A COBRAR en el mostrador) y verlas en rojo.
-2. **La suite entera** y el commit, si este chat no llegó a hacerlo (mirar `git status` y `git log`).
-3. **No comprobado:** el sonido del aviso (en Windows es el "tin" del sistema; no se pudo escuchar desde acá), PASAR A CAJA con el mouse
-   (lo cubre el test), y **la prueba en dos PCs de verdad**, que queda para la instalación de la 6.4.0 en la oficina con el usuario (un
-   operador de prueba solo de Entradas en una PC, la caja en la otra).
-4. Al cerrar: `CLAUDE.md` (sacar "hasta la próxima versión, no darle Entradas a nadie": pasa a "hasta que las tres PCs tengan la 6.4.0")
-   y la hoja de ruta con el porcentaje.
+**Las roturas de la etapa 5 (8-nov, noche).** Cada una se metió en el código, se corrieron los tests, y se sacó; `git diff` quedó vacío:
+
+| Rotura | Lo que la agarró |
+|---|---|
+| ANULAR prendido sin modo jefe (`PermisosDeEntrega.oficina`) | `entrega_entradas_dialog_test` y `retiro_entradas_screen_test`: falta el botón apagado |
+| Sin el freno de `_anular` (la segunda llave) | `modo_entradas_cerrado_test`, que lee la pantalla |
+| "Pagó" que no pasa nunca (`EnCaja.conDeudas`) | `en_caja_test` y dos de la pantalla entera: no salta "PÉREZ, JUAN pagó: ya podés entregar" |
+| La entrega que no relee cuando baja el cobro de la otra PC | cuatro de la pantalla entera: el aviso, "pagó una parte", el diálogo que se vuelve a abrir y la entrega desde En caja |
+| IR A COBRAR en el mostrador (`cobrarAca = true`) | nueve: el diálogo, la pantalla entera y `modo_entradas_cerrado_test` |
+
+La suite entera, en verde (3.979 tests).
+
+**No comprobado en el sandbox:** el sonido del aviso (en Windows es el "tin" del sistema), PASAR A CAJA con el mouse (lo cubre el test) y
+**la prueba en dos PCs de verdad**, que queda para la instalación de la 6.4.0 en la oficina con el usuario.
 
 **Estado: etapas 1 a 3 hechas y subidas a la rama. Sin versión, sin release, sin web, y el SQL sin correr. Las PCs siguen con la
 6.2.1. Publicar, solo preguntándole antes al usuario.**
