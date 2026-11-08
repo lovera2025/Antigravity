@@ -185,9 +185,12 @@ class EstadoSinInternet {
     if (d.fondoGuardado == false) {
       return es(TipoSinInternet.falta, '$falta: falta guardar el fondo del tótem.');
     }
+    // Con internet, si no queda nada por subir se dice "Todo subido", con las mismas
+    // palabras que la barra (pedido del 7-nov: "para quedarnos tranquilos").
     return es(
       TipoSinInternet.lista,
-      'Lista para trabajar sin internet · al día ${_cuando(alDia, ahora)}',
+      'Lista para trabajar sin internet · al día ${_cuando(alDia, ahora)} · '
+      '${d.sinSubir == 0 ? 'Todo subido' : '${d.sinSubir == 1 ? '1 ingreso' : '${miles(d.sinSubir)} ingresos'} subiendo'}',
     );
   }
 

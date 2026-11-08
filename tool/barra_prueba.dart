@@ -33,6 +33,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
+import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/canal_universal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
@@ -129,7 +130,7 @@ class LadosDeLaPrueba {
     // La línea sin internet de la cajera se vuelve a armar con la conexión nueva.
     cajera.invalidate(puestaAlDiaBarraProvider);
     if (vuelve) {
-      barra.sinSubir.clear();
+      barra.subioTodo();
       _bajaEn(jefe);
       _bajaEn(cajera);
     }
@@ -197,6 +198,9 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
   late final ProviderContainer jefe;
 
   List<Override> comunes() => [
+        // Sin la red del salón: acá los dos lados ya comparten la barra en memoria. La
+        // central de verdad se prueba en `tool/central_barra_prueba.dart`.
+        redDeLaBarraHabilitadaProvider.overrideWithValue(false),
         ...operadores.reemplazos,
         barraDeLaCajaProvider.overrideWithValue(b),
         eventosDeLaBarraProvider.overrideWith((ref) async => prueba.eventos),

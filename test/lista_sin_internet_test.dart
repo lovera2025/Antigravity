@@ -48,11 +48,20 @@ void main() {
       final e = _estado(DatosSinInternet(
           hayInternet: true, alDia: _alDia, fotoGuardada: true));
       expect(e.tipo, TipoSinInternet.lista);
-      expect(e.texto, 'Lista para trabajar sin internet · al día 21:32');
+      expect(e.texto, 'Lista para trabajar sin internet · al día 21:32 · Todo subido');
       expect(_detalle(e, 'Personas en esta PC'), '1.100');
       expect(_detalle(e, 'Al día'), 'hoy 21:32');
       expect(_detalle(e, 'Foto del tótem'), 'guardada');
       expect(_detalle(e, 'Ingresos sin subir'), 'ninguno');
+    });
+
+    // "Todo subido" o cuánto falta, con las mismas palabras que la barra (7-nov).
+    test('con internet y ingresos que todavía están subiendo, lo dice', () {
+      final e = _estado(DatosSinInternet(
+          hayInternet: true, alDia: _alDia, fotoGuardada: true, sinSubir: 3));
+      expect(e.tipo, TipoSinInternet.lista);
+      expect(e.texto,
+          'Lista para trabajar sin internet · al día 21:32 · 3 ingresos subiendo');
     });
 
     test('un evento sin foto también está listo', () {
@@ -373,7 +382,7 @@ void main() {
 
     testWidgets('con internet: lista, y al tocarla el detalle', (tester) async {
       final mundo = await abrir(tester);
-      expect(find.text('Lista para trabajar sin internet · al día 21:40'),
+      expect(find.text('Lista para trabajar sin internet · al día 21:40 · Todo subido'),
           findsOneWidget);
       expect(mundo.sinInternet.listasBajadas, 1);
       expect(mundo.sinInternet.alumnosBajados, 1, reason: 'es masivo');
@@ -471,7 +480,7 @@ void main() {
         },
         antes: (m) => m.sinInternet.bajaFondo = false,
       );
-      expect(find.text('Lista para trabajar sin internet · al día 21:40'),
+      expect(find.text('Lista para trabajar sin internet · al día 21:40 · Todo subido'),
           findsOneWidget);
       expect(mundo.sinInternet.fondosGuardados, isEmpty);
     });
@@ -484,7 +493,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 30));
       }
       expect(mundo.sinInternet.listasBajadas, 1);
-      expect(find.text('Lista para trabajar sin internet · al día 21:40'),
+      expect(find.text('Lista para trabajar sin internet · al día 21:40 · Todo subido'),
           findsOneWidget);
     });
   });

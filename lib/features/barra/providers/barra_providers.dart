@@ -11,7 +11,6 @@ import '../../common/services/pdf_service.dart';
 import '../../common/utils/subir_ya.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/repositories/eventos_repository.dart';
-import '../datos/barra_local.dart';
 import '../datos/barra_nube.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/canal_universal_ble.dart';
@@ -25,8 +24,9 @@ import 'barra_del_jefe_provider.dart';
 
 export 'barra_del_jefe_provider.dart' show enLaWebProvider;
 
-/// La barra de este equipo: la base y la cola de subida. Los tests la reemplazan.
-final barraDeLaCajaProvider = Provider<BarraDeLaCaja>((ref) => BarraLocal());
+/// La barra de este equipo: la base y la cola de subida, y la red del salón
+/// (`barraDeEsteEquipoProvider`). Los tests la reemplazan.
+final barraDeLaCajaProvider = Provider<BarraDeLaCaja>((ref) => ref.watch(barraDeEsteEquipoProvider));
 
 /// Todos los eventos de este equipo; **en la web, los de la nube** (etapa 8: en la web
 /// no hay base). Los tests lo reemplazan.
@@ -122,6 +122,8 @@ final accesosBarraProvider = Provider<AccesosBarra>((ref) {
     bajar: motor.bajarParaLaBarra,
     contarFiestas: () async => (await barra.fiestasConPrecio()).length,
     contarSinSubir: barra.ventasSinSubir,
+    // Todo lo de la barra en la cola, no solo las ventas: "Todo subido" tiene que ser cierto.
+    contarPendientes: ref.watch(barraDeEsteEquipoProvider).pendientesDeLaBarra,
   );
 });
 
@@ -137,8 +139,13 @@ final puestaAlDiaBarraProvider = Provider.autoDispose<PuestaAlDiaBarra>((ref) {
   final sub = conexion.stream.listen(
     (estado) => puesta.conexion(estado != AppConnectivity.offline),
   );
+  // Lo que escribe este equipo se vuelve a contar enseguida (la cuenta no corre sola).
+  final escrituras = ref.watch(avisoALaRedProvider).escrituras;
+  void escribio() => puesta.escribio();
+  escrituras.addListener(escribio);
   ref.onDispose(() {
     sub.cancel();
+    escrituras.removeListener(escribio);
     puesta.dispose();
   });
   return puesta;

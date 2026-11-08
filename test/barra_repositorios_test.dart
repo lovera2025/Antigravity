@@ -78,6 +78,76 @@ void main() {
         quien: 'Marta',
       );
 
+  // La central de la barra (red del salón): lo que llega de otra caja se guarda sin la
+  // cola de subida, porque lo sube la caja que lo hizo.
+  group('lo que llega de otra caja por la red del salón', () {
+    Future<VentaBarra> ventaDeOtraCaja() async {
+      final otra = BarraLocal(
+        abrir: () async => db,
+        equipo: () async => 'tablet-2',
+        reloj: () => reloj,
+      );
+      final caja = await otra.abrirCaja(
+        eventoId: _evento,
+        operadorId: _juan,
+        operadorNombre: 'Juan',
+        numeroCaja: 3,
+      );
+      final venta = await venderUnaCerveza(caja);
+      // Como si la hubiera hecho otro equipo: acá no queda nada de ella.
+      await db.delete('barra_ventas');
+      await db.delete('barra_cajas');
+      await db.delete('_sync_queue');
+      return venta;
+    }
+
+    test('se guarda sin encolarla, y la misma dos veces no cambia nada', () async {
+      final venta = await ventaDeOtraCaja();
+      expect(await barra.guardarDeOtroEquipo('barra_ventas', venta.toMap()), isTrue);
+      expect((await db.query('barra_ventas')).single['id'], venta.id);
+      expect(await encolado('barra_ventas'), isEmpty, reason: 'la sube la caja que la hizo');
+      expect(await barra.guardarDeOtroEquipo('barra_ventas', venta.toMap()), isFalse);
+      expect((await barra.pendientesDeLaBarra()).vacio, isTrue);
+    });
+
+    test('lo que esta caja tiene sin subir no lo pisa lo que llega', () async {
+      final caja = await abrirLaDeMarta();
+      final cerrada = await barra.cerrarCaja(caja, efectivoContado: 0, diferencia: 0, quien: 'Marta');
+      final vieja = Map<String, Object?>.from(caja.toMap())
+        ..['updated_at'] = DateTime.utc(2027).toIso8601String();
+      expect(await barra.guardarDeOtroEquipo('barra_cajas', vieja), isFalse);
+      expect(CajaBarra.fromMap((await db.query('barra_cajas')).single).abierta, isFalse);
+      expect(cerrada.abierta, isFalse);
+    });
+
+    test('una columna que esta versión no conoce se deja afuera, y otras tablas no se tocan', () async {
+      final venta = await ventaDeOtraCaja();
+      final conDeMas = Map<String, Object?>.from(venta.toMap())..['columna_nueva'] = 'x';
+      expect(await barra.guardarDeOtroEquipo('barra_ventas', conDeMas), isTrue);
+      expect((await db.query('barra_ventas')).single.containsKey('columna_nueva'), isFalse);
+      expect(await barra.guardarDeOtroEquipo('barra_precios', venta.toMap()), isFalse,
+          reason: 'los precios van por la nube');
+    });
+
+    test('cuenta todo lo que espera subir, no solo las ventas', () async {
+      final caja = await abrirLaDeMarta();
+      await venderUnaCerveza(caja);
+      await venderUnaCerveza(caja);
+      final p = await barra.pendientesDeLaBarra();
+      expect(p.ventas, 2);
+      expect(p.otros, 1, reason: 'la caja abierta');
+    });
+
+    test('todo lo de la fiesta, de todas las cajas, para el que se conecta', () async {
+      final caja = await abrirLaDeMarta();
+      await venderUnaCerveza(caja);
+      final todo = await barra.filasDeLaFiesta(_evento);
+      expect(todo['barra_cajas'], hasLength(1));
+      expect(todo['barra_ventas'], hasLength(1));
+      expect((await barra.filasDeLaFiesta(_otraFiesta))['barra_ventas'], isEmpty);
+    });
+  });
+
   group('el catálogo', () {
     test('guardar un producto lo deja en la base, sellado y encolado', () async {
       final p = await barra.guardarProducto(

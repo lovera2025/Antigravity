@@ -4,8 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../recepcion/services/lista_sin_internet.dart';
+import '../central/filas_de_la_red.dart';
 
 export '../../recepcion/services/lista_sin_internet.dart' show TipoSinInternet;
+export '../central/filas_de_la_red.dart' show PendientesDeLaBarra;
 
 // "Lista para trabajar sin internet" de la barra: la línea de la pantalla de la cajera
 // que dice si este equipo tiene lo que hace falta para vender sin internet (las fiestas,
@@ -32,6 +34,10 @@ class DatosSinInternetBarra {
   /// Ventas hechas en este equipo que todavía no subieron.
   final int sinSubir;
 
+  /// Todo lo de la barra que espera subir: las ventas y los demás cambios (cajas,
+  /// anulaciones, vales). Null: solo se contaron las ventas ([sinSubir]).
+  final PendientesDeLaBarra? pendientes;
+
   const DatosSinInternetBarra({
     required this.hayInternet,
     this.alDia,
@@ -39,7 +45,11 @@ class DatosSinInternetBarra {
     this.fallo = false,
     this.fiestas = 0,
     this.sinSubir = 0,
+    this.pendientes,
   });
+
+  /// Lo que espera subir, con lo que se haya contado.
+  PendientesDeLaBarra get porSubir => pendientes ?? PendientesDeLaBarra(ventas: sinSubir);
 
   DatosSinInternetBarra copyWith({
     bool? hayInternet,
@@ -48,6 +58,7 @@ class DatosSinInternetBarra {
     bool? fallo,
     int? fiestas,
     int? sinSubir,
+    PendientesDeLaBarra? pendientes,
   }) =>
       DatosSinInternetBarra(
         hayInternet: hayInternet ?? this.hayInternet,
@@ -56,6 +67,7 @@ class DatosSinInternetBarra {
         fallo: fallo ?? this.fallo,
         fiestas: fiestas ?? this.fiestas,
         sinSubir: sinSubir ?? this.sinSubir,
+        pendientes: pendientes ?? this.pendientes,
       );
 }
 
@@ -67,10 +79,13 @@ class EstadoSinInternetBarra {
 
   const EstadoSinInternetBarra(this.tipo, this.texto);
 
-  static String _ventas(int n) => n == 1 ? '1 venta' : '${EstadoSinInternet.miles(n)} ventas';
+  /// "Todo subido": con internet, cuando no queda nada de la barra por subir (pedido del
+  /// 7-nov, "para quedarnos tranquilos").
+  static const todoSubido = 'Todo subido';
 
   static EstadoSinInternetBarra de(DatosSinInternetBarra d, {required DateTime ahora}) {
     EstadoSinInternetBarra es(TipoSinInternet t, String texto) => EstadoSinInternetBarra(t, texto);
+    final porSubir = d.porSubir;
 
     if (!d.hayInternet) {
       if (d.fiestas == 0) {
@@ -85,7 +100,7 @@ class EstadoSinInternetBarra {
         d.alDia == null
             ? 'se sigue con lo de este equipo'
             : 'se sigue con lo de este equipo (al día ${EstadoSinInternet.cuandoFue(d.alDia!, ahora)})',
-        if (d.sinSubir > 0) '${_ventas(d.sinSubir)} sin subir: se suben solas al volver',
+        porSubir.vacio ? 'nada por subir' : '${porSubir.enPalabras} sin subir: se suben solas al volver',
       ];
       return es(TipoSinInternet.sinInternet, partes.join(' · '));
     }
@@ -109,7 +124,7 @@ class EstadoSinInternetBarra {
       TipoSinInternet.lista,
       [
         'Lista para trabajar sin internet · al día ${EstadoSinInternet.cuandoFue(alDia, ahora, hoy: true)}',
-        if (d.sinSubir > 0) '${_ventas(d.sinSubir)} subiendo',
+        porSubir.vacio ? todoSubido : '${porSubir.enPalabras} subiendo',
       ].join(' · '),
     );
   }
@@ -122,6 +137,9 @@ class AccesosBarra {
   final Future<bool> Function() bajar;
   final Future<int> Function() contarFiestas;
   final Future<int> Function() contarSinSubir;
+
+  /// Todo lo de la barra que espera subir. Null: solo las ventas ([contarSinSubir]).
+  final Future<PendientesDeLaBarra> Function()? contarPendientes;
   final Future<DateTime?> Function() leerAlDia;
   final Future<void> Function(DateTime cuando) anotarAlDia;
   final DateTime Function() ahora;
@@ -130,6 +148,7 @@ class AccesosBarra {
     required this.bajar,
     required this.contarFiestas,
     required this.contarSinSubir,
+    this.contarPendientes,
     this.leerAlDia = AlDiaDeLaBarra.leer,
     this.anotarAlDia = AlDiaDeLaBarra.anotar,
     this.ahora = DateTime.now,
@@ -169,7 +188,9 @@ class AlDiaDeLaBarra {
 /// - Con internet: al abrir, cada [cada] y cuando vuelve internet, baja todo lo de la
 ///   barra. Si bajó, anota la hora.
 /// - Sin internet no intenta nada: dice con qué hora quedó.
-/// - Cada [cadaCuenta], cuántas fiestas tiene y cuántas ventas esperan subir.
+/// - Cuántas fiestas tiene y cuánto espera subir: al abrir, al escribir ([escribio]), al
+///   cambiar la conexión y al bajar; y cada [cadaCuenta] **solo mientras hay internet y
+///   queda algo por subir** (pedido del usuario el 7-nov: ahorrar también eso).
 class PuestaAlDiaBarra extends ChangeNotifier {
   PuestaAlDiaBarra({
     required this.accesos,
@@ -206,7 +227,6 @@ class PuestaAlDiaBarra extends ChangeNotifier {
     _timer = Timer.periodic(cada, (_) {
       if (_datos.hayInternet) unawaited(ponerAlDia());
     });
-    _timerCuenta = Timer.periodic(cadaCuenta, (_) => unawaited(recontar()));
     await Future.wait([recontar(), if (_datos.hayInternet) ponerAlDia()]);
   }
 
@@ -215,7 +235,34 @@ class PuestaAlDiaBarra extends ChangeNotifier {
     if (hay == _datos.hayInternet) return;
     _poner(_datos.copyWith(hayInternet: hay));
     if (hay && _arrancada) unawaited(ponerAlDia());
+    if (!hay) _otraCuenta();
   }
+
+  /// Este equipo escribió algo (una venta, un vale, la caja): hay que volver a contar.
+  void escribio() {
+    if (_arrancada) unawaited(recontar());
+  }
+
+  /// La próxima cuenta: **solo mientras hay internet y queda algo por subir**, que es cuando
+  /// el número cambia solo (la cola sube). Sin nada pendiente no se cuenta de nuevo hasta
+  /// que el equipo escriba, cambie la conexión o baje algo. Es la base de este equipo, nunca
+  /// la nube.
+  void _otraCuenta() {
+    final hace = !_cerrada && _datos.hayInternet && !_datos.porSubir.vacio;
+    if (!hace) {
+      _timerCuenta?.cancel();
+      _timerCuenta = null;
+      return;
+    }
+    _timerCuenta ??= Timer(cadaCuenta, () {
+      _timerCuenta = null;
+      unawaited(recontar());
+    });
+  }
+
+  /// Si la cuenta de lo pendiente está andando (para las pruebas).
+  @visibleForTesting
+  bool get cuentaAndando => _timerCuenta != null;
 
   /// Baja todo. Si ya está bajando, espera a esa.
   Future<void> ponerAlDia() => _enCurso ??= _ponerAlDia().whenComplete(() {
@@ -239,17 +286,20 @@ class PuestaAlDiaBarra extends ChangeNotifier {
     await recontar();
   }
 
-  /// Cuántas fiestas tiene y cuántas ventas esperan subir.
+  /// Cuántas fiestas tiene y cuánto espera subir.
   Future<void> recontar() async {
     try {
       final fiestas = await accesos.contarFiestas();
       final sinSubir = await accesos.contarSinSubir();
-      if (!_cerrada && (fiestas != _datos.fiestas || sinSubir != _datos.sinSubir)) {
-        _poner(_datos.copyWith(fiestas: fiestas, sinSubir: sinSubir));
+      final pendientes = await accesos.contarPendientes?.call();
+      if (!_cerrada &&
+          (fiestas != _datos.fiestas || sinSubir != _datos.sinSubir || pendientes != _datos.pendientes)) {
+        _poner(_datos.copyWith(fiestas: fiestas, sinSubir: sinSubir, pendientes: pendientes));
       }
     } catch (e) {
       debugPrint('No se pudo contar lo de la barra: $e');
     }
+    _otraCuenta();
   }
 
   @override

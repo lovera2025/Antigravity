@@ -5,6 +5,7 @@ import '../../../core/database/local_database.dart';
 import '../../../core/database/sync_queue.dart';
 import '../../../core/services/instalacion_id.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../central/filas_de_la_red.dart';
 import 'barra_repositorio.dart';
 
 /// La barra en este equipo — la base de la PC o de la tablet, y la cola de subida.
@@ -13,8 +14,11 @@ import 'barra_repositorio.dart';
 /// solo cuando hay internet. **Nada se borra:** un producto se da de baja, una caja
 /// se cierra y una venta se anula con otra fila.
 ///
+/// **Lo que llega de otra caja por la red del salón** ([guardarDeOtroEquipo]) se guarda
+/// sin la cola: lo sube el equipo que lo hizo.
+///
 /// Leer sin las tablas (una base que todavía no migró) no tira: da la lista vacía.
-class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
+class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
   BarraLocal({
     Future<Database> Function()? abrir,
     Future<String?> Function()? equipo,
@@ -497,4 +501,84 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja {
         ))
           ValeBarra.fromMap(f),
       ];
+
+  // ── La red del salón (la central de la barra) ─────────────────────────────
+
+  /// Las columnas de cada tabla en esta base: una fila de un equipo con otra versión
+  /// puede traer una de más, y se le saca antes de guardarla.
+  final _columnas = <String, Set<String>>{};
+
+  Future<Set<String>> _columnasDe(DatabaseExecutor db, String tabla) async {
+    final ya = _columnas[tabla];
+    if (ya != null) return ya;
+    final filas = await db.rawQuery('PRAGMA table_info($tabla)');
+    return _columnas[tabla] = {for (final f in filas) f['name'] as String};
+  }
+
+  @override
+  Future<bool> guardarDeOtroEquipo(String tabla, Map<String, Object?> fila) async {
+    if (!tablasDeLaRed.contains(tabla)) return false;
+    final id = fila['id'];
+    if (id is! String || id.length != 36) return false;
+    final db = await _abrir();
+    return db.transaction((txn) async {
+      // Lo de este equipo que todavía no subió manda: es lo último que se hizo acá.
+      final enLaCola = await txn.query(
+        '_sync_queue',
+        columns: ['id'],
+        where: 'tabla = ? AND registro_id = ?',
+        whereArgs: [tabla, id],
+        limit: 1,
+      );
+      if (enLaCola.isNotEmpty) return false;
+      final columnas = await _columnasDe(txn, tabla);
+      final limpia = {
+        for (final e in fila.entries)
+          if (columnas.contains(e.key)) e.key: e.value,
+      };
+      final ya = await txn.query(tabla, where: 'id = ?', whereArgs: [id], limit: 1);
+      if (ya.isNotEmpty && !cambiaLaFila(nueva: limpia, vieja: ya.first)) return false;
+      await txn.insert(tabla, limpia, conflictAlgorithm: ConflictAlgorithm.replace);
+      return true;
+    });
+  }
+
+  @override
+  Future<Map<String, List<Map<String, Object?>>>> filasDeLaFiesta(String eventoId) async => {
+        for (final tabla in tablasDeLaRed)
+          tabla: [
+            for (final f in await _leer(tabla, where: 'evento_id = ?', whereArgs: [eventoId]))
+              Map<String, Object?>.from(f),
+          ],
+      };
+
+  @override
+  Future<Map<String, Object?>?> filaDeLaRed(String tabla, String id) async {
+    if (!tablasDeLaRed.contains(tabla)) return null;
+    final filas = await _leer(tabla, where: 'id = ?', whereArgs: [id]);
+    return filas.isEmpty ? null : Map<String, Object?>.from(filas.first);
+  }
+
+  @override
+  Future<PendientesDeLaBarra> pendientesDeLaBarra() async {
+    try {
+      final db = await _abrir();
+      final filas = await db.rawQuery(
+        "SELECT tabla, COUNT(DISTINCT registro_id) AS n FROM _sync_queue WHERE tabla LIKE 'barra_%' GROUP BY tabla",
+      );
+      var ventas = 0, otros = 0;
+      for (final f in filas) {
+        final n = (f['n'] as num?)?.toInt() ?? 0;
+        if (f['tabla'] == 'barra_ventas') {
+          ventas += n;
+        } else {
+          otros += n;
+        }
+      }
+      return PendientesDeLaBarra(ventas: ventas, otros: otros);
+    } catch (e) {
+      debugPrint('⚠️ Barra: no se pudo contar lo que espera subir: $e');
+      return PendientesDeLaBarra.nada;
+    }
+  }
 }

@@ -5,6 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dart:typed_data';
 
+import 'package:arguello_events/features/barra/central/central_barra.dart' show kPuertoCentralBarra;
+import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
+import 'package:arguello_events/features/barra/central/panel_central_barra.dart' show kRecuentoDeLaNotebook;
+import 'package:arguello_events/core/services/connectivity_service.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
@@ -20,6 +24,24 @@ import 'package:arguello_events/models/evento.dart';
 
 import 'helpers/barra_en_memoria.dart';
 import 'helpers/operadores_en_memoria.dart';
+
+/// La central de la notebook, ya prendida para [eventoId] (sin abrir puertos).
+class _CentralPrendida extends CentralDeLaBarra {
+  final String eventoId;
+
+  _CentralPrendida(this.eventoId);
+
+  @override
+  EstadoCentralBarra build() => EstadoCentralBarra(
+        eventoId: eventoId,
+        puerto: kPuertoCentralBarra,
+        direcciones: ['192.168.0.10'],
+        contestaBusqueda: true,
+      );
+
+  @override
+  Future<void> reanudar(String eventoId) async {}
+}
 
 /// BARRA del jefe de verdad (etapa 7), con la barra y la impresora en memoria: la
 /// fiesta primero (abre en la próxima), CATÁLOGO, PRECIOS con el recargo, y CAJAS con
@@ -55,6 +77,7 @@ void main() {
     bool esJefe = true,
     bool enLaWeb = false,
     PestanaBarraJefe pestana = PestanaBarraJefe.catalogo,
+    String? centralPrendida,
   }) async {
     tester.view.physicalSize = tamano;
     tester.view.devicePixelRatio = 1;
@@ -63,7 +86,7 @@ void main() {
       overrides: [
         ...operadores.reemplazos,
         ...prueba.reemplazos,
-        barraDelJefeProvider.overrideWithValue(prueba.barra),
+        if (centralPrendida != null) centralDeLaBarraProvider.overrideWith(() => _CentralPrendida(centralPrendida)),        barraDelJefeProvider.overrideWithValue(prueba.barra),
         esRolJefeProvider.overrideWithValue(esJefe),
         enLaWebProvider.overrideWithValue(enLaWeb),
         relojDelJefeProvider.overrideWithValue(() => hoy),
@@ -572,6 +595,36 @@ void main() {
       await tester.pump(const Duration(seconds: 31));
       await tester.pumpAndSettle();
       expect(texto(tester, 'jefe_kpi_ventas_valor'), '1');
+    });
+
+    testWidgets('en la PC con la central prendida, dice que se pone al día por la red del salón', (tester) async {
+      await unaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas, centralPrendida: pinaroli.id);
+      expect(find.byKey(const Key('central_barra_apagar')), findsOneWidget, reason: 'la central se ve prendida');
+      expect(texto(tester, 'jefe_en_vivo'), contains('por la red del salón, haya internet o no'));
+      expect(texto(tester, 'jefe_en_vivo'), isNot(contains('cuando las cajas suben sus ventas')));
+    });
+
+    testWidgets('lo de la notebook se recuenta solo: al subir, pasa a "Todo subido"', (tester) async {
+      await unaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas, centralPrendida: pinaroli.id);
+      expect(texto(tester, 'central_barra_esta_notebook'), contains('subiendo'),
+          reason: 'la caja y la venta de la noche todavía no subieron');
+      prueba.barra.subioTodo();
+      await tester.pump(kRecuentoDeLaNotebook);
+      await tester.pump();
+      expect(texto(tester, 'central_barra_esta_notebook'), 'Esta notebook: Todo subido');
+      operadores.conexion.cambiar(AppConnectivity.offline);
+      await tester.pump();
+      await tester.pump();
+      expect(texto(tester, 'central_barra_esta_notebook'), 'Esta notebook: sin internet · nada por subir');
+    });
+
+    testWidgets('con la central prendida para otra fiesta, esta dice lo de siempre', (tester) async {
+      await unaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas, centralPrendida: rotonda.id);
+      expect(find.byKey(const Key('central_barra_prender')), findsOneWidget);
+      expect(texto(tester, 'jefe_en_vivo'), contains('cuando las cajas suben sus ventas'));
     });
   });
 

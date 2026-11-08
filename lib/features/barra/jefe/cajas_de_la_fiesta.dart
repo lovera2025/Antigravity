@@ -19,6 +19,8 @@ import '../impresion/papel_en_pantalla.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../widgets/vales_de_la_venta_screen.dart';
+import '../central/central_barra_provider.dart';
+import '../central/panel_central_barra.dart';
 import '../widgets/ventas_de_la_caja_screen.dart' show pedirMotivo;
 import 'barra_jefe_providers.dart';
 
@@ -273,7 +275,9 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
       data: (datos) {
         if (datos.sinCajas) {
           return _lista(enLaWeb: enLaWeb, [
-            _EnVivo(enLaWeb: enLaWeb),
+            // La central de la barra, en la notebook (no en la web).
+            if (!enLaWeb) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
+            _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
             const SizedBox(height: 24),
             const Center(
               child: Text(
@@ -287,7 +291,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         return LayoutBuilder(builder: (context, caja) {
           final conCostado = caja.maxWidth >= 1000;
           final principal = <Widget>[
-            _EnVivo(enLaWeb: enLaWeb),
+            if (!enLaWeb) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
+            _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
             const SizedBox(height: 12),
             _Totales(resumen: datos.resumen),
             const SizedBox(height: 16),
@@ -508,13 +513,18 @@ String _horario(CajaBarra c) => c.abierta
     ? 'abierta desde las ${_hora(c.abiertaAt)}'
     : 'de ${_hora(c.abiertaAt)} a ${_hora(c.cerradaAt!)}';
 
-class _EnVivo extends StatelessWidget {
+class _EnVivo extends ConsumerWidget {
   final bool enLaWeb;
+  final String eventoId;
 
-  const _EnVivo({required this.enLaWeb});
+  const _EnVivo({required this.enLaWeb, required this.eventoId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Con la central de esta fiesta prendida, lo de las cajas llega por la red del salón al
+    // momento, haya internet o no.
+    final conCentral = !enLaWeb &&
+        ref.watch(centralDeLaBarraProvider.select((e) => e.prendida && e.eventoId == eventoId));
     return Row(
       children: [
         const Icon(Icons.circle, size: 10, color: Color(0xFF59D38A)),
@@ -525,8 +535,11 @@ class _EnVivo extends StatelessWidget {
                 ? 'Se pone al día cada 30 segundos con lo que las cajas subieron; deslizá hacia '
                     'abajo para ponerla al día ahora. Sin internet, cada tablet guarda lo suyo y lo '
                     'sube al volver.'
-                : 'Se pone al día solo cuando las cajas suben sus ventas. Sin internet, cada tablet '
-                    'guarda lo suyo y lo sube al volver.',
+                : conCentral
+                    ? 'Se pone al día con cada venta que llega por la red del salón, haya internet o '
+                        'no. Cada tablet sube lo suyo a la nube cuando hay internet.'
+                    : 'Se pone al día solo cuando las cajas suben sus ventas. Sin internet, cada tablet '
+                        'guarda lo suyo y lo sube al volver.',
             key: const Key('jefe_en_vivo'),
             style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
           ),

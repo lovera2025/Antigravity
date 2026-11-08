@@ -110,6 +110,6 @@ Future<NocheDeBarra> nocheDeBarra({bool fotos = true}) async {
   final efectivo = ventasLucas.fold<double>(0, (s, v) => s + v.efectivo);
   await b.cerrarCaja(lucas, efectivoContado: efectivo - 500, diferencia: -500, quien: 'Lucas');
   // Lo que subió, subió: la web lo ve todo.
-  b.sinSubir.clear();
+  b.subioTodo();
   return NocheDeBarra(prueba: prueba, operadores: operadores, marta: cajas.first, pinaroliId: pinaroli.id);
 }

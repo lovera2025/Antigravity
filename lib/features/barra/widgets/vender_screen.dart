@@ -8,6 +8,8 @@ import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/utils/cortes_pantalla.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/utils/evento_presentacion.dart';
+import '../central/central_barra_provider.dart';
+import '../central/linea_de_la_caja.dart';
 import '../cuentas/cobro_barra.dart';
 import '../cuentas/cuenta_barra.dart';
 import '../cuentas/pesos.dart';
@@ -94,8 +96,15 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     unawaited(_cargar());
     unawaited(_prepararImpresora());
-    // Cuando bajan ventas de las otras cajas, "Quedan" se pone al día solo.
+    // Cuando bajan ventas de las otras cajas (de la nube o de la central de la barra),
+    // "Quedan" se pone al día solo.
     ref.listenManual(operationalSyncRevisionProvider, (_, _) => unawaited(_cargar()));
+    // La central de la barra: esta caja la busca por el wifi del salón.
+    final caja = widget.caja;
+    unawaited(ref.read(clienteDeLaBarraProvider.notifier).arrancar(
+          eventoId: widget.fiesta.id,
+          nombreCaja: 'Caja ${caja.numeroCaja}${caja.operadorNombre == null ? '' : ' · ${caja.operadorNombre}'}',
+        ));
   }
 
   @override
@@ -369,6 +378,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
           : celular
               ? Column(
                   children: [
+                    const LineaDeLaCaja(),
                     _filtros(),
                     Expanded(child: _grilla(2)),
                     _cuentaCelular(),
@@ -379,7 +389,12 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                   children: [
                     Expanded(
                       child: Column(
-                        children: [_filtros(), Expanded(child: _grilla(pc ? 4 : 3))],
+                        children: [
+                          // Lo que espera subir ("Todo subido") y la central de la barra.
+                          const LineaDeLaCaja(),
+                          _filtros(),
+                          Expanded(child: _grilla(pc ? 4 : 3)),
+                        ],
                       ),
                     ),
                     const VerticalDivider(width: 1),

@@ -178,10 +178,11 @@ void main() {
     final ahora = DateTime(2026, 12, 4, 23, 50);
     String texto(DatosSinInternetBarra d) => EstadoSinInternetBarra.de(d, ahora: ahora).texto;
 
-    test('con internet y al día', () {
+    // "Todo subido" cuando no queda nada (pedido del 7-nov: "para quedarnos tranquilos").
+    test('con internet, al día y sin nada por subir: Todo subido', () {
       expect(
         texto(DatosSinInternetBarra(hayInternet: true, alDia: DateTime(2026, 12, 4, 21, 40), fiestas: 2)),
-        'Lista para trabajar sin internet · al día hoy 21:40',
+        'Lista para trabajar sin internet · al día hoy 21:40 · Todo subido',
       );
     });
 
@@ -189,6 +190,35 @@ void main() {
       expect(
         texto(DatosSinInternetBarra(hayInternet: true, alDia: DateTime(2026, 12, 4, 21, 40), fiestas: 2, sinSubir: 3)),
         'Lista para trabajar sin internet · al día hoy 21:40 · 3 ventas subiendo',
+      );
+    });
+
+    test('cuenta también lo que no es una venta: una caja cerrada, una anulación', () {
+      expect(
+        texto(DatosSinInternetBarra(
+          hayInternet: true,
+          alDia: DateTime(2026, 12, 4, 21, 40),
+          fiestas: 2,
+          pendientes: const PendientesDeLaBarra(ventas: 2, otros: 1),
+        )),
+        'Lista para trabajar sin internet · al día hoy 21:40 · 2 ventas y 1 cambio subiendo',
+      );
+      expect(
+        texto(DatosSinInternetBarra(
+          hayInternet: true,
+          alDia: DateTime(2026, 12, 4, 21, 40),
+          fiestas: 2,
+          pendientes: const PendientesDeLaBarra(otros: 1),
+        )),
+        isNot(contains('Todo subido')),
+        reason: 'una caja cerrada sin subir no es "todo subido"',
+      );
+    });
+
+    test('sin internet y sin nada por subir lo dice', () {
+      expect(
+        texto(DatosSinInternetBarra(hayInternet: false, alDia: DateTime(2026, 12, 4, 21, 40), fiestas: 1)),
+        'Sin internet · se sigue con lo de este equipo (al día 21:40) · nada por subir',
       );
     });
 
@@ -267,6 +297,55 @@ void main() {
       expect(puesta.datos.fallo, isTrue);
       expect(puesta.datos.alDia, isNull);
       expect(anoto, isFalse);
+    });
+
+    // Pedido del usuario el 7-nov: ahorrar también la cuenta. Solo corre sola mientras hay
+    // internet y algo está subiendo; si no, se cuenta cuando pasa algo.
+    test('la cuenta corre sola solo mientras hay internet y algo está subiendo', () async {
+      var pendientes = PendientesDeLaBarra.nada;
+      var cuentas = 0;
+      final puesta = PuestaAlDiaBarra(
+        accesos: AccesosBarra(
+          bajar: () async => true,
+          contarFiestas: () async => 1,
+          contarSinSubir: () async => pendientes.ventas,
+          contarPendientes: () async {
+            cuentas++;
+            return pendientes;
+          },
+          leerAlDia: () async => null,
+          anotarAlDia: (_) async {},
+        ),
+        hayInternet: true,
+        cadaCuenta: const Duration(milliseconds: 20),
+      );
+      addTearDown(puesta.dispose);
+      await puesta.arrancar();
+      expect(puesta.cuentaAndando, isFalse, reason: 'sin nada por subir, no se vuelve a contar sola');
+      final antes = cuentas;
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(cuentas, antes, reason: 'quieta');
+
+      // La caja vende: se cuenta enseguida y, mientras sube, cada tanto.
+      pendientes = const PendientesDeLaBarra(ventas: 1);
+      puesta.escribio();
+      await Future<void>.delayed(Duration.zero);
+      expect(puesta.datos.porSubir.ventas, 1);
+      expect(puesta.cuentaAndando, isTrue);
+
+      // Subió: la próxima cuenta lo ve y se queda quieta otra vez.
+      pendientes = PendientesDeLaBarra.nada;
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(puesta.datos.porSubir.vacio, isTrue);
+      expect(puesta.cuentaAndando, isFalse);
+
+      // Sin internet y con algo pendiente, el número no cambia solo: no se cuenta.
+      pendientes = const PendientesDeLaBarra(ventas: 2);
+      puesta.conexion(false);
+      puesta.escribio();
+      await Future<void>.delayed(Duration.zero);
+      expect(puesta.datos.porSubir.ventas, 2);
+      expect(puesta.cuentaAndando, isFalse);
     });
   });
 }

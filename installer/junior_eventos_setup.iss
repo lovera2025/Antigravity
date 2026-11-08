@@ -68,10 +68,18 @@ Name: "{autodesktop}\{#MyShortcutName}"; Filename: "{app}\{#MyAppExeName}"; Work
 ; crearla para no juntar una por cada instalación.
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - celulares de la puerta"""; Flags: runhidden; StatusMsg: "Preparando la puerta para los celulares..."
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Junior Eventos - celulares de la puerta"" dir=in action=allow program=""{app}\{#MyAppExeName}"" protocol=TCP localport=8787-8796 profile=any enable=yes"; Flags: runhidden; StatusMsg: "Preparando la puerta para los celulares..."
+; Las tablets de la barra entran a la notebook de la barra (la central de la barra,
+; CentralBarra, puertos 8797 a 8806) y la buscan solas preguntando por la red (UDP 8777).
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - cajas de la barra"""; Flags: runhidden; StatusMsg: "Preparando la central de la barra..."
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Junior Eventos - cajas de la barra"" dir=in action=allow program=""{app}\{#MyAppExeName}"" protocol=TCP localport=8797-8806 profile=any enable=yes"; Flags: runhidden; StatusMsg: "Preparando la central de la barra..."
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - buscar la central de la barra"""; Flags: runhidden; StatusMsg: "Preparando la central de la barra..."
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Junior Eventos - buscar la central de la barra"" dir=in action=allow program=""{app}\{#MyAppExeName}"" protocol=UDP localport=8777 profile=any enable=yes"; Flags: runhidden; StatusMsg: "Preparando la central de la barra..."
 Filename: "{app}\{#MyAppExeName}"; Description: "Abrir {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - celulares de la puerta"""; Flags: runhidden; RunOnceId: "BorrarReglaCelulares"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - cajas de la barra"""; Flags: runhidden; RunOnceId: "BorrarReglaCajasBarra"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Junior Eventos - buscar la central de la barra"""; Flags: runhidden; RunOnceId: "BorrarReglaBuscarBarra"
 
 [Code]
 procedure InitializeWizard;

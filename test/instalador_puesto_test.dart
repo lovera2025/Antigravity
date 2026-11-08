@@ -4,6 +4,8 @@
 // como `solo_modo_jefe_test.dart`: el instalador no se puede correr acá.
 import 'dart:io';
 
+import 'package:arguello_events/features/barra/central/buscar_central.dart';
+import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -59,5 +61,22 @@ void main() {
     expect(iss.indexOf(borrar), lessThan(iss.indexOf('add rule name=""$regla""')));
     final desinstalar = iss.substring(iss.indexOf('[UninstallRun]'));
     expect(desinstalar, contains(borrar));
+  });
+
+  // La central de la barra (7-nov): las tablets se conectan por TCP y la buscan por UDP.
+  test('abre los puertos de la central de la barra y el de buscarla', () {
+    Match? regla(String nombre) => RegExp(
+          '^Filename: .*add rule name=""$nombre"".*\$',
+          multiLine: true,
+        ).firstMatch(iss);
+    final cajas = regla('Junior Eventos - cajas de la barra')!.group(0)!;
+    expect(cajas, contains('protocol=TCP localport=$kPuertoCentralBarra-${kPuertoCentralBarra + 9}'));
+    expect(cajas, contains('profile=any'));
+    final buscar = regla('Junior Eventos - buscar la central de la barra')!.group(0)!;
+    expect(buscar, contains('protocol=UDP localport=$kPuertoBusquedaBarra'));
+    expect(buscar, contains('profile=any'));
+    final desinstalar = iss.substring(iss.indexOf('[UninstallRun]'));
+    expect(desinstalar, contains('delete rule name=""Junior Eventos - cajas de la barra""'));
+    expect(desinstalar, contains('delete rule name=""Junior Eventos - buscar la central de la barra""'));
   });
 }

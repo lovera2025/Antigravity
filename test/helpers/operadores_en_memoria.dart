@@ -2,6 +2,8 @@
 // `test/operadores_screen_test.dart`, `test/entrada_operador_test.dart` y la ventana
 // de prueba `tool/operadores_prueba.dart`, puestos por los mismos providers que usa
 // la app.
+import 'dart:async';
+
 import 'package:flutter_riverpod/misc.dart' show Override;
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
@@ -194,8 +196,20 @@ class ConexionFija extends ConnectivityService {
 
   ConexionFija([this.estado = AppConnectivity.online]);
 
+  final _cambios = StreamController<AppConnectivity>.broadcast();
+
   @override
   AppConnectivity get currentStatus => estado;
+
+  @override
+  Stream<AppConnectivity> get stream => _cambios.stream;
+
+  /// Cambia y avisa, como la conexión de verdad. Poner [estado] a mano no avisa.
+  void cambiar(AppConnectivity nuevo) {
+    if (nuevo == estado) return;
+    estado = nuevo;
+    _cambios.add(nuevo);
+  }
 }
 
 /// Todo junto, listo para un `ProviderScope`.
