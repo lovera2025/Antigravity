@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +8,9 @@ import '../../common/utils/cortes_pantalla.dart';
 import '../../common/utils/solo_jefe.dart';
 import '../../eventos/utils/evento_presentacion.dart';
 import '../estilos/disenio_barra.dart';
+import '../providers/barra_providers.dart';
 import '../services/fiestas_del_jefe.dart';
+import '../widgets/elegir_impresora_screen.dart';
 import 'barra_jefe_providers.dart';
 import 'cajas_de_la_fiesta.dart';
 import 'catalogo_del_jefe.dart';
@@ -79,6 +82,20 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
             Text('Modo jefe', style: TextStyle(fontSize: 12, color: Color(0xFFA7A29A))),
           ],
         ),
+        // La impresora de esta PC, para la lista de precios, las copias y el cierre: la
+        // misma pantalla que la cajera abre desde VENDER. En la web no hay Bluetooth.
+        actions: [
+          if (!kIsWeb)
+            IconButton(
+              key: const Key('jefe_impresora'),
+              tooltip: 'La impresora de esta PC',
+              icon: const Icon(Icons.print_outlined),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => ElegirImpresoraScreen(impresora: ref.read(impresoraDeLaBarraProvider)),
+              )),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: fiestas.when(
         loading: () => const Center(child: CircularProgressIndicator()),

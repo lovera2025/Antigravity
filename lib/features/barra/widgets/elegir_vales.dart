@@ -256,7 +256,9 @@ class _ElegirValesState extends State<ElegirVales> {
           alignment: WrapAlignment.spaceBetween,
           spacing: 12,
           children: [
-            Text('Cobrado ${pesos(v.total)}', style: tema.textTheme.titleMedium),
+            // Con el recargo, como "Venta guardada" de arriba: decía el total sin el recargo
+            // (recorrido con el mouse del 7-nov).
+            Text('Cobrado ${pesos(v.cobrado)}', key: const Key('vales_cobrado'), style: tema.textTheme.titleMedium),
             Text(numero, style: tema.textTheme.bodySmall),
           ],
         ),

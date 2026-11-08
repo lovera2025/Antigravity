@@ -144,6 +144,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     final subir = ref.read(subirDeLaBarraProvider);
     final quien = quienEsElJefe(ref);
     var guardados = 0;
+    var conRecargo = false;
     try {
       for (final (i, f) in _filas.indexed) {
         if (!f.cambio) continue;
@@ -186,6 +187,7 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
             : viejo.conPct(_recargo);
         final guardado = await barra.guardarRecargo(listo, quien: quien);
         unawaited(subir('barra_recargos', guardado.id));
+        conRecargo = true;
       }
     } catch (_) {
       _decir('No se pudo guardar todo. Revisá y probá de nuevo.', error: true);
@@ -197,10 +199,13 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
     if (!mounted) return;
     setState(() => _guardando = false);
+    // Con precios y recargo juntos, se dicen los dos: decía solo los precios (lo encontró
+    // el recorrido con el mouse del 7-nov).
+    final yRecargo = conRecargo ? ' y el recargo' : '';
     _decir(switch (guardados) {
       0 => 'Guardado el recargo.',
-      1 => 'Guardado: 1 precio.',
-      _ => 'Guardado: $guardados precios.',
+      1 => 'Guardado: 1 precio$yRecargo.',
+      _ => 'Guardado: $guardados precios$yRecargo.',
     });
   }
 
@@ -257,6 +262,11 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
       );
 
   Future<void> _imprimir() async {
+    final falta = await faltaLaImpresora(ref);
+    if (falta != null) {
+      _decir(falta, error: true);
+      return;
+    }
     bool salio;
     try {
       salio = await ref.read(papelDeLaBarraProvider).imprimir(_lista);
@@ -664,7 +674,9 @@ class _FilaDePrecio extends StatelessWidget {
   }
 }
 
-/// COPIAR DE OTRA FIESTA: las demás, con cuántos precios tiene cada una.
+/// COPIAR DE OTRA FIESTA: las demás, con cuántos precios tiene cada una. **Cuenta los
+/// que se van a copiar**: los de productos que siguen en el catálogo. Contaba también los
+/// de un producto dado de baja y decía "10 precios" para copiar 9 (recorrido del 7-nov).
 class _CopiarDeOtraFiesta extends ConsumerWidget {
   final List<Evento> otras;
 
@@ -686,8 +698,12 @@ class _CopiarDeOtraFiesta extends ConsumerWidget {
             const SizedBox(height: 8),
             for (final e in otras)
               Consumer(builder: (context, ref, _) {
-                final precios = ref.watch(preciosDelJefeProvider(e.id));
-                final cuantos = precios.value?.precios.where((p) => p.activo).length;
+                final precios = ref.watch(preciosDelJefeProvider(e.id)).value;
+                final catalogo = ref.watch(catalogoDelJefeProvider).value;
+                final activos = {for (final p in catalogo ?? const <ProductoBarra>[]) if (p.activo) p.id};
+                final cuantos = precios == null || catalogo == null
+                    ? null
+                    : precios.precios.where((p) => p.activo && activos.contains(p.productoId)).length;
                 return ListTile(
                   key: Key('jefe_copiar_de_${e.id}'),
                   enabled: cuantos != null && cuantos > 0,

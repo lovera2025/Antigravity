@@ -3,12 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'dart:typed_data';
+
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
+import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_screen.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
+import 'package:arguello_events/features/barra/providers/barra_providers.dart';
 import 'package:arguello_events/features/barra/services/fiestas_del_jefe.dart';
+import 'package:arguello_events/features/barra/widgets/elegir_impresora_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/models/evento.dart';
 
@@ -59,6 +65,7 @@ void main() {
         barraDelJefeProvider.overrideWithValue(prueba.barra),
         esRolJefeProvider.overrideWithValue(esJefe),
         relojDelJefeProvider.overrideWithValue(() => hoy),
+        impresoraDeLaBarraProvider.overrideWithValue(ImpresoraBluetooth(_CanalSinNada())),
       ],
       child: MaterialApp(home: BarraJefeScreen(pestanaInicial: pestana)),
     ));
@@ -222,6 +229,8 @@ void main() {
       expect(prueba.subidasDeLaBarra, containsAll(['barra_precios ${p.id}']));
       expect(prueba.subidasDeLaBarra.where((s) => s.startsWith('barra_recargos ')), hasLength(1));
       expect(find.byKey(const Key('jefe_precios_cambios')), findsNothing);
+      expect(find.text('Guardado: 1 precio y el recargo.'), findsOneWidget,
+          reason: 'el aviso nombra también el recargo (decía solo los precios)');
     });
 
     testWidgets('si va sin precio no guarda y dice de cuál falta', (tester) async {
@@ -250,8 +259,20 @@ void main() {
         RecargoBarra.para(eventoId: rotonda.id, pct: 8, ahora: DateTime(2026, 11, 1)),
         quien: 'Jefe',
       );
+      // Un producto dado de baja con precio en ROTONDA: no se copia, y no se cuenta.
+      final champan = prueba.barra.producto('Champán', categoria: 'Botellas');
+      await prueba.barra.guardarProducto(champan.conCambios(activo: false), quien: 'Jefe');
+      prueba.barra.precio(rotonda.id, champan, 30000);
       await abrir(tester, pestana: PestanaBarraJefe.precios);
       await tocar(tester, find.byKey(const Key('jefe_copiar')));
+      expect(
+        find.descendant(
+          of: find.byKey(Key('jefe_copiar_de_${rotonda.id}')),
+          matching: find.textContaining('· 2 precios'),
+        ),
+        findsOneWidget,
+        reason: 'dice los que va a copiar, sin el dado de baja',
+      );
       await tocar(tester, find.byKey(Key('jefe_copiar_de_${rotonda.id}')));
       expect(find.textContaining('Se copiaron 2 precios de ROTONDA y su recargo'), findsOneWidget);
       expect(texto(tester, 'jefe_recargo_pct'), '8 %');
@@ -283,6 +304,28 @@ void main() {
       expect(prueba.pdfs.single.nombre, 'Lista de precios - TÉCNICA PINAROLI');
       await tocar(tester, find.byKey(const Key('jefe_lista_imprimir')));
       expect(prueba.papel.papeles.single, contains('LISTA DE PRECIOS'));
+    });
+
+    // Lo encontró el recorrido con el mouse (7-nov): la impresora solo se elegía desde
+    // VENDER, y en la PC del jefe salía "¿está prendida?" con la impresora al lado.
+    testWidgets('si esta PC no tiene impresora elegida, IMPRIMIR LISTA lo dice', (tester) async {
+      prueba.barra.precio(pinaroli.id, fernet, 6000);
+      prueba.papel.estado = EstadoImpresora.sinElegir;
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      await tocar(tester, find.byKey(const Key('jefe_lista_imprimir')));
+      expect(find.text(kSinImpresoraEnEstaPc), findsOneWidget);
+      expect(prueba.papel.papeles, isEmpty);
+    });
+
+    testWidgets('el ícono de la impresora abre la elección de la impresora de esta PC', (tester) async {
+      await abrir(tester, pestana: PestanaBarraJefe.precios);
+      // Mientras busca, la ruedita no para: sin pumpAndSettle.
+      await tester.tap(find.byKey(const Key('jefe_impresora')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ElegirImpresoraScreen), findsOneWidget);
+      // La búsqueda corre 10 s.
+      await tester.pump(const Duration(seconds: 11));
     });
   });
 
@@ -383,6 +426,17 @@ void main() {
       expect(find.text('Salió la copia.'), findsOneWidget);
     });
 
+    testWidgets('sin impresora elegida en esta PC, reimprimir lo dice antes de pedir el motivo', (tester) async {
+      await armarLaNoche();
+      prueba.papel.estado = EstadoImpresora.sinElegir;
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      await tocar(tester, find.byKey(Key('jefe_reimprimir_${primera.id}')));
+      expect(find.byKey(const Key('motivo_texto')), findsNothing);
+      expect(find.text(kSinImpresoraEnEstaPc), findsOneWidget);
+      expect(prueba.papel.papeles, isEmpty);
+    });
+
     testWidgets('VER CIERRE: el cierre como el papel, y el PDF de 58 mm', (tester) async {
       await armarLaNoche();
       await abrir(tester, pestana: PestanaBarraJefe.cajas);
@@ -468,4 +522,37 @@ void main() {
       });
     }
   });
+}
+
+/// Un Bluetooth sin ningún aparato: para abrir la elección de la impresora en un test.
+class _CanalSinNada implements CanalBle {
+  @override
+  Future<void> pedirPermisos() async {}
+
+  @override
+  Future<List<DispositivoBle>> emparejados() async => const [];
+
+  @override
+  Stream<DispositivoBle> buscar() => const Stream.empty();
+
+  @override
+  Future<void> dejarDeBuscar() async {}
+
+  @override
+  Future<void> conectar(String id) async => throw StateError('no hay ninguna');
+
+  @override
+  Future<void> desconectar(String id) async {}
+
+  @override
+  Future<bool> estaConectado(String id) async => false;
+
+  @override
+  Future<List<CaracteristicaBle>> caracteristicas(String id) async => const [];
+
+  @override
+  Future<int> pedirMtu(String id, int mtu) async => 20;
+
+  @override
+  Future<void> escribir(String id, CaracteristicaBle c, Uint8List bytes) async {}
 }

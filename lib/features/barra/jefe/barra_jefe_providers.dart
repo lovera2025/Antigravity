@@ -5,6 +5,7 @@ import '../../common/widgets/operational_sync_coordinator.dart';
 import '../cuentas/cierre_de_barra.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
+import '../impresion/impresora_bluetooth.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/fiestas_del_jefe.dart';
@@ -31,6 +32,22 @@ final fiestaElegidaDelJefeProvider =
 
 /// Quién queda anotado en lo que hace el jefe: su nombre si entró con PIN, o "Jefe".
 String quienEsElJefe(WidgetRef ref) => ref.read(appRoleProvider).operador?.nombre ?? 'Jefe';
+
+/// Lo que se dice cuando esta PC nunca eligió impresora.
+const kSinImpresoraEnEstaPc =
+    'Esta PC no tiene impresora elegida: elegila con el ícono de la impresora, arriba.';
+
+/// Antes de imprimir desde BARRA del jefe: deja la impresora lista, como VENDER al abrir,
+/// y si esta PC nunca eligió una lo dice ([kSinImpresoraEnEstaPc]). Null: se puede
+/// imprimir (si no contesta, lo dice el papel que no sale).
+///
+/// Lo encontró el recorrido con el mouse del 7-nov: la impresora solo se elegía desde
+/// VENDER, y en la PC de la oficina nadie abre una caja. El jefe tocaba IMPRIMIR y le
+/// salía "¿La impresora está prendida?", con la impresora prendida al lado.
+Future<String?> faltaLaImpresora(WidgetRef ref) async {
+  final estado = await ref.read(papelDeLaBarraProvider).preparar();
+  return estado == EstadoImpresora.sinElegir ? kSinImpresoraEnEstaPc : null;
+}
 
 /// El catálogo entero, también los dados de baja: los activos primero.
 final catalogoDelJefeProvider = FutureProvider<List<ProductoBarra>>((ref) async {

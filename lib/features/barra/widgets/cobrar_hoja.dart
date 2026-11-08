@@ -230,7 +230,12 @@ class _CobrarHojaState extends State<CobrarHoja> {
 }
 
 /// Una casilla de plata: el "$" puesto y los puntos al escribir, en pesos enteros.
-class _Plata extends StatelessWidget {
+///
+/// **Al entrar, queda todo marcado**: lo que se escribe reemplaza lo que había. En el
+/// mixto la otra casilla se completa sola, y si la cajera la tocaba para corregirla, lo
+/// que escribía se pegaba al número que había (con $ 5.400, escribir 5000 dejó
+/// $ 55.400.000; lo encontró el recorrido con el mouse del 7-nov).
+class _Plata extends StatefulWidget {
   final String etiqueta;
   final String? ayuda;
   final TextEditingController controller;
@@ -245,20 +250,52 @@ class _Plata extends StatelessWidget {
   });
 
   @override
+  State<_Plata> createState() => _PlataState();
+}
+
+class _PlataState extends State<_Plata> {
+  final _foco = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _foco.addListener(_alEntrar);
+  }
+
+  @override
+  void dispose() {
+    _foco
+      ..removeListener(_alEntrar)
+      ..dispose();
+    super.dispose();
+  }
+
+  /// Después del cuadro: el toque pone el cursor donde cayó, y esto lo pisa.
+  void _alEntrar() {
+    if (!_foco.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_foco.hasFocus) return;
+      final c = widget.controller;
+      c.selection = TextSelection(baseOffset: 0, extentOffset: c.text.length);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) => TextField(
-        controller: controller,
+        controller: widget.controller,
+        focusNode: _foco,
         keyboardType: TextInputType.number,
         inputFormatters: const [PesosEnterosFormatter()],
         textAlign: TextAlign.right,
         style: const TextStyle(fontSize: 18),
         decoration: InputDecoration(
-          labelText: etiqueta,
-          helperText: ayuda,
+          labelText: widget.etiqueta,
+          helperText: widget.ayuda,
           prefixText: r'$ ',
           border: const OutlineInputBorder(),
           isDense: true,
         ),
-        onChanged: (t) => onChanged(PesosEnterosFormatter.leer(t)),
+        onChanged: (t) => widget.onChanged(PesosEnterosFormatter.leer(t)),
       );
 }
 

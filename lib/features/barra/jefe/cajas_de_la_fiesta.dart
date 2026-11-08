@@ -102,6 +102,13 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
       });
 
   Future<void> _reimprimir(VentaDeLaCaja x, CajaBarra caja) => _conFreno(() async {
+        // Antes del motivo: que no lo escriba para nada.
+        final falta = await faltaLaImpresora(ref);
+        if (falta != null) {
+          _decir(x.venta, falta, error: true);
+          return;
+        }
+        if (!mounted) return;
         final cuantos = x.originales.length;
         final motivo = await pedirMotivo(
           context,
@@ -176,17 +183,21 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           OutlinedButton(
             key: const Key('jefe_cierre_imprimir'),
             onPressed: () async {
-              bool salio;
-              try {
-                salio = await ref.read(papelDeLaBarraProvider).imprimir(sinHistorial);
-              } catch (_) {
-                salio = false;
+              final falta = await faltaLaImpresora(ref);
+              bool salio = false;
+              if (falta == null) {
+                try {
+                  salio = await ref.read(papelDeLaBarraProvider).imprimir(sinHistorial);
+                } catch (_) {
+                  salio = false;
+                }
               }
               if (!dialogo.mounted) return;
               ScaffoldMessenger.of(dialogo).showSnackBar(SnackBar(
-                content: Text(salio
-                    ? 'Salió el cierre (sin el historial, para ahorrar papel).'
-                    : 'No salió. ¿La impresora está prendida y cerca de esta PC?'),
+                content: Text(falta ??
+                    (salio
+                        ? 'Salió el cierre (sin el historial, para ahorrar papel).'
+                        : 'No salió. ¿La impresora está prendida y cerca de esta PC?')),
               ));
             },
             child: const Text('IMPRIMIR'),

@@ -298,6 +298,8 @@ void main() {
     expect(v.recargo, 5000);
     expect(v.recargoPct, 10);
     expect(prueba.recargo.pct, 10, reason: 'este equipo recuerda el % de la última vez');
+    expect(textoDe(tester, 'vales_cobrado'), r'Cobrado $ 55.000',
+        reason: r'con el recargo, como "Venta guardada" (decía $ 50.000; recorrido del 7-nov)');
   });
 
   testWidgets('TRANSFERENCIA: el recargo en pesos, y el check lo apaga', (tester) async {
@@ -385,6 +387,24 @@ void main() {
     final v = prueba.barra.ventasGuardadas.single;
     expect(v.efectivo, 20000);
     expect(v.transferencia, 31500);
+  });
+
+  // Lo encontró el recorrido con el mouse (7-nov): la transferencia se completaba sola y,
+  // al tocarla para corregirla, lo escrito se pegaba al final del número.
+  testWidgets('MIXTO: tocar la casilla que se completó sola la deja marcada para reemplazarla',
+      (tester) async {
+    await abrir(tester);
+    await armarLaCuenta(tester);
+    await tocar(tester, find.byKey(const Key('pagar_mixto')));
+    await escribir(tester, 'cobro_mixto_efectivo', '20000');
+    final transferencia =
+        find.descendant(of: find.byKey(const Key('cobro_mixto_transferencia')), matching: find.byType(EditableText));
+    final controller = tester.widget<EditableText>(transferencia).controller;
+    expect(controller.text, '31.500');
+    await tester.tap(transferencia);
+    await tester.pumpAndSettle();
+    expect(controller.selection, const TextSelection(baseOffset: 0, extentOffset: 6),
+        reason: 'lo que se escriba reemplaza los \$ 31.500');
   });
 
   testWidgets('VOLVER no guarda nada y deja la cuenta', (tester) async {
