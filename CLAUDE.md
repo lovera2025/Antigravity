@@ -124,8 +124,9 @@ apagada ("Se proyecta desde la PC", `KioskLauncher.disponible`), y VENDER deja l
 `MainActivity.kt`). **Para saber si algo corre en la tablet se pregunta por `Platform`, no por `defaultTargetPlatform`: en `flutter test`
 dice siempre Android.** Probado en el emulador `Recepcion_Tablet` (sin ventana y con `-gpu host`: con `swiftshader` se cae al abrir la app):
 `tool/tablet_barra_prueba.dart` como APK, la central de verdad en esta PC y la tablet conectada a `10.0.2.2:8797` por `ws://`: la venta
-llegó a la notebook y la anulación volvió; la app de verdad abrió hasta el login. Falta, con
-aparatos de verdad (etapa 10): la búsqueda por UDP en el wifi del TP-Link y la impresora desde la tablet.
+llegó a la notebook y la anulación volvió; la app de verdad abrió hasta el login. **La etapa 10 se cerró el 8-nov con el
+celular Android del usuario y el router de su casa**: conectado a la central de esta PC por el wifi, la TP-POS58 desde Android y sin la
+fibra, "todo ok". Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código. Sigue Entradas 4 a 6.
 **La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los

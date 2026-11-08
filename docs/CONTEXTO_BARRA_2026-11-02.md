@@ -5,6 +5,11 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
+> **Al 8-nov (tarde): la etapa 10 (de punta a punta) está cerrada con el celular y el router de su casa** (abajo, "Etapa 10"): la
+> app de prueba en su Android se conectó a la central de esta PC por el wifi, conectó la TP-POS58 al toque, vendió, imprimió el vale y
+> siguió andando con la fibra desenchufada ("todo ok"). **Falta solo repetirlo con la tablet y el TP-Link del salón** cuando estén (diez
+> minutos, sin código). Sigue **Entradas 4 a 6** y después publicar la 6.4.0. Plan general: **21 de 26 partes, 81 %**.
+>
 > **Al 8-nov: la etapa 9 (Android firmado) está cerrada** (abajo, "Etapa 9"): la app entera compila y anda en Android, firmada con la
 > clave de Junior Eventos, que vive en `Documentos\Junior Eventos\claves` (**el usuario tiene que copiar esa carpeta a un lugar
 > seguro**). El instalador arma también el APK y frena si falta la clave. Probada en el emulador de tablet de esta PC: la cajera se
@@ -61,7 +66,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
 | 8. El jefe en el iPhone | **Cerrada el 7-nov** (abajo, "Etapa 8"): la web lee y escribe por `BarraNube` (también las fiestas), CAJAS se relee cada 30 s y al deslizar, sin impresora; `tool/barra_web_prueba.dart` y su test; recorrida en el navegador a 375 px | Nada. La web se publica con todo en la 6.4.0 |
 | 9. Android firmado | **Cerrada el 8-nov** (abajo, "Etapa 9"): la clave de firma fuera del repo, el APK firmado en el instalador, el ícono, TÓTEM apagado en la tablet, el aviso de versión nueva en el PIN, la pantalla despierta en VENDER; `android_listo_test`, y la tablet del emulador conectada a la central de verdad por `ws://` | Nada |
-| 10. De punta a punta | La tablet del emulador ya vendió por la central y recibió la anulación del jefe | Con la tablet y el TP-Link: que encuentre la notebook sola por el wifi, la impresora desde la tablet, y todo con el cable de internet del router desenchufado |
+| 10. De punta a punta | **Cerrada el 8-nov** (abajo, "Etapa 10"): su celular Android con la app de prueba, conectado a la central de esta PC por el wifi de su casa; la TP-POS58 desde Android; vender e imprimir; sin internet, igual | Repetirlo con la tablet y el TP-Link del salón cuando estén |
 | Entradas 4 a 6 | Las etapas 1 a 3, publicadas apagadas | La entrega según los permisos, "pagó: ya podés entregar", anular solo el jefe (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`) |
 | Publicar | Los SQL de la barra y los permisos, corridos | **Cuatro SQL sin correr antes de instalar:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql`, `20261107100000_barra_vales.sql` y `20261107140000_barra_recargos.sql`. Foto de la mora antes, versión, release, web, APK firmado, foto después |
 
@@ -73,7 +78,30 @@ PCs tienen la 6.3.3 desde el 7-nov.)
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
-> corto de la etapa 10 (de punta a punta)."
+> corto de Entradas 4 a 6 (docs/PLAN_MODO_ENTRADAS_2026-10-30.md)."
+
+### Etapa 10: de punta a punta, con su celular y su router (8-nov, tarde)
+
+**Sin tablet todavía, con lo que había en su casa:** su celular Android hizo de tablet, su router de TP-Link (sacarle la fibra deja el
+wifi sin internet, como el salón) y esta PC de notebook (por cable al mismo router, `192.168.1.38`). Todo sin la nube: la app de prueba
+de la cajera y la ventana de la central llevan la barra en memoria.
+
+**Lo que se preparó:**
+- **El APK de prueba achicado**, de 42 a 26 MB: se le sacaron los logos de `assets/icons` que la barra no usa (quedan `2.png` e
+  `isotipo-ej.png`, los de los papeles), se alineó y se volvió a firmar con la clave de Junior Eventos (el script, en el scratchpad de la
+  sesión: lee la contraseña de `android/key.properties` sin mostrarla). Probado antes en el emulador: entra, vende y deja el vale listo.
+  Se le mandó por el chat; queda en `build\apk_etapa9\Prueba de la barra.apk`.
+- **La notebook:** `flutter run -d windows -t tool/central_barra_prueba.dart --dart-define=red=todas`. **La red de esta PC está marcada
+  como pública**: en el cartel del cortafuegos hay que tildar "Redes públicas" (quedó una regla de Windows para la ventana de prueba,
+  `build\windows\x64\runner\Debug\arguello_events.exe`, entrada permitida en redes públicas).
+
+**Lo que dio (contado por el usuario, "todo ok"):** instaló el APK, entró como Lucía (3333) en la Caja 3, **conectó la TP-POS58 desde
+Android al toque**, vendió e imprimió, y **sacó la fibra y siguió andando**. **Comprobado desde esta PC:** su celular (`192.168.1.37`)
+conectado a la central en el 8797 por el wifi, con la búsqueda escuchando en el 8777. **Sin confirmar todavía:** si la central apareció
+sola (UDP) o escribió la dirección, y la foto del vale impreso desde Android.
+
+**Queda para cuando estén la tablet y el TP-Link del salón:** repetir lo mismo ahí (si el TP-Link aísla a los equipos, la dirección a
+mano o apagarle el "AP isolation"). Sin código.
 
 ### Etapa 9: Android firmado (8-nov)
 
