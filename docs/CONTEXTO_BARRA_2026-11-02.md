@@ -5,6 +5,13 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
+> **Al 8-nov: la etapa 9 (Android firmado) está cerrada** (abajo, "Etapa 9"): la app entera compila y anda en Android, firmada con la
+> clave de Junior Eventos, que vive en `Documentos\Junior Eventos\claves` (**el usuario tiene que copiar esa carpeta a un lugar
+> seguro**). El instalador arma también el APK y frena si falta la clave. Probada en el emulador de tablet de esta PC: la cajera se
+> conectó a la central de verdad por `ws://`, vendió, la venta llegó a la notebook, y la anulación del jefe volvió a la tablet. **Sigue
+> la 10 (de punta a punta)**, con la tablet y el TP-Link: la búsqueda sola por el wifi y la impresora desde la tablet. Después Entradas
+> 4 a 6 y publicar la 6.4.0. Plan general: **20 de 26 partes, 77 %**.
+>
 > **Al 7-nov (noche): las etapas 1 a 8 y la central de la barra están cerradas en la rama, sin publicar.** La 7 se cerró con el
 > recorrido con el mouse y la foto de la lista de precios impresa en la TP-POS58 ("un lujo"). La 8 (el jefe en el iPhone, en la web):
 > BARRA lee y escribe directo en la nube por `BarraNube` (abajo, "Etapa 8"). **La central de la barra** (abajo, "La central de la
@@ -53,8 +60,8 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
 | 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
 | 8. El jefe en el iPhone | **Cerrada el 7-nov** (abajo, "Etapa 8"): la web lee y escribe por `BarraNube` (también las fiestas), CAJAS se relee cada 30 s y al deslizar, sin impresora; `tool/barra_web_prueba.dart` y su test; recorrida en el navegador a 375 px | Nada. La web se publica con todo en la 6.4.0 |
-| 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
-| 10. De punta a punta | Nada | Con modo avión, sin internet |
+| 9. Android firmado | **Cerrada el 8-nov** (abajo, "Etapa 9"): la clave de firma fuera del repo, el APK firmado en el instalador, el ícono, TÓTEM apagado en la tablet, el aviso de versión nueva en el PIN, la pantalla despierta en VENDER; `android_listo_test`, y la tablet del emulador conectada a la central de verdad por `ws://` | Nada |
+| 10. De punta a punta | La tablet del emulador ya vendió por la central y recibió la anulación del jefe | Con la tablet y el TP-Link: que encuentre la notebook sola por el wifi, la impresora desde la tablet, y todo con el cable de internet del router desenchufado |
 | Entradas 4 a 6 | Las etapas 1 a 3, publicadas apagadas | La entrega según los permisos, "pagó: ya podés entregar", anular solo el jefe (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`) |
 | Publicar | Los SQL de la barra y los permisos, corridos | **Cuatro SQL sin correr antes de instalar:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql`, `20261107100000_barra_vales.sql` y `20261107140000_barra_recargos.sql`. Foto de la mora antes, versión, release, web, APK firmado, foto después |
 
@@ -66,7 +73,78 @@ PCs tienen la 6.3.3 desde el 7-nov.)
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
-> corto de la etapa 9 (Android firmado)."
+> corto de la etapa 10 (de punta a punta)."
+
+### Etapa 9: Android firmado (8-nov)
+
+**Hasta acá la app entera nunca había compilado para Android:** lo único que corrió en el celular fue la ventana de prueba de la
+impresora (3-nov), firmada con la clave de prueba de esta PC. Ahora:
+- **La clave de firma** (RSA 2048, 10.000 días, alias `junior_eventos`, "CN=Junior Eventos, O=Junior Eventos, L=Corrientes, C=AR",
+  huella SHA-256 `DB:11:2E:84:…:8B:5E`) está en **`Documentos\Junior Eventos\claves`**: `junior_eventos.jks`, `key.properties` (la
+  contraseña, generada al azar y nunca escrita en el chat) y `LEEME.txt`. Una copia de `key.properties` va en `android/`, fuera de git
+  (`.gitignore` de la raíz y de `android/`). **Android solo actualiza la app si viene con la misma clave**: si se pierde, hay que
+  desinstalar de cada tablet y se pierde lo que no subió. **El usuario tiene que copiar esa carpeta a un pendrive y a una nube suya.**
+- **`build.gradle.kts`** firma `release` con esa clave si `key.properties` existe; si no (otra PC), con la de prueba, para que `flutter
+  run --release` ande igual.
+- **El instalador** (`installer/build_installer.ps1`) frena antes de compilar nada si falta `android\key.properties`, arma el APK
+  (`--split-per-abi`), comprueba con `apksigner` (con el Java de Android Studio) que salió con "CN=Junior Eventos" y deja
+  `installer\dist\Junior Eventos v<versión>.apk` (el de arm64, el de todas las tablets de los últimos años) para subir al release.
+  Probado: la parte nueva corrida sola pasa con el APK bueno, y frena una copia firmada con la clave de prueba ("Android Debug").
+- **El ícono:** el isotipo de Windows (la "e" negra y la "j" magenta) sin el cromado, que en chico se ve mejor; adaptativo, sobre
+  blanco. Las imágenes de origen en `android/icono/` (armadas desde `assets/icons/2.png`), los `mipmap` con `flutter_launcher_icons`
+  (configurado en `pubspec.yaml`; `dart run flutter_launcher_icons` los rearma).
+- **El tótem en la tablet:** `KioskLauncher.disponible` (solo Windows, Linux o macOS); en Android la tarjeta TÓTEM del panel se ve
+  apagada con "Se proyecta desde la PC" y `launch` no hace nada. Antes, tocarla tiraba `MissingPluginException`.
+- **La versión nueva en la tablet:** `AppUpdateChecker` está prendido también en Android; el release trae el APK (`apkAssetUrl`, que
+  busca `Junior.Eventos.v<versión>.apk`, como lo sube GitHub) y, si no lo trae, abre la página del release. **La pantalla del PIN lo dice
+  arriba** ("Hay una versión nueva: 6.4.1 · ACTUALIZAR", `versionNuevaEnLaTabletProvider`, una consulta cada vez que se abre esa
+  pantalla), y ACTUALIZAR muestra las novedades y abre el APK en el navegador: Android ofrece instalarlo (la primera vez pide permitir
+  "instalar apps desconocidas" al navegador). El diálogo pasó del panel a `dashboard/widgets/actualizar_app.dart` para usarlo en los dos
+  lugares. En Android no se muestran las novedades al abrir una versión ya instalada. **Cada versión sube el `+N`**: Android no instala
+  una con número menor.
+- **La pantalla no se apaga mientras VENDER está abierta** (`PantallaDespierta`, `barra/services/pantalla_despierta.dart`): un canal
+  propio, `junior_eventos/pantalla`, en `MainActivity.kt` (`FLAG_KEEP_SCREEN_ON`), sin otro paquete. Se suelta al salir de VENDER.
+- **`Platform` y no `defaultTargetPlatform`** para saber si algo corre en la tablet: en `flutter test` dice siempre Android, y los tests
+  habrían salido a buscar versiones a GitHub. Para probar lo de la tablet hay llaves de prueba (`disponibleEnLaPrueba`,
+  `enAndroidEnLaPrueba`).
+- **Las ventanas de prueba en red:** lo común (el catálogo, la fiesta, un equipo con su barra en memoria y su red) pasó a
+  `tool/salon_de_barra_prueba.dart`. `tool/central_barra_prueba.dart` con `--dart-define=red=todas` escucha por el wifi en los puertos
+  de la app (8797 y 8777; Windows pregunta por el cortafuegos), y **`tool/tablet_barra_prueba.dart`** es la cajera sola (Lucía, PIN
+  3333) con la red de verdad, para armar como APK (`flutter build apk --release --split-per-abi -t tool/tablet_barra_prueba.dart`). No
+  toca la nube ni deja nada guardado en el equipo.
+
+**Pruebas:** `test/android_listo_test.dart` (la firma, el id, la clave fuera de git, los permisos de Bluetooth, el instalador con su
+freno y su control, el ícono, el tótem apagado, el APK del release, el PIN con el aviso, ACTUALIZAR abre el APK, la pantalla despierta y
+su canal) y `test/tablet_barra_prueba_test.dart`. Roturas a propósito vistas en rojo: el gradle firmando siempre con la de prueba, el
+instalador sin freno y VENDER sin soltar la pantalla. La suite entera en verde.
+
+**La prueba en el emulador (8-nov),** en `Recepcion_Tablet` (2560×1600, Android 16) sin ventana, con la tablet de prueba como APK y una
+notebook sin pantalla en esta PC (la central de verdad en `127.0.0.1:8797`, que el emulador ve como `10.0.2.2:8797`):
+1. La tablet abrió en el PIN; Lucía entró con 3333, eligió PUERTO VIEJO y abrió la Caja 2. VENDER se vio entero, con las fotos.
+2. Android pidió el permiso de Bluetooth ("dispositivos cercanos") al abrir VENDER: es el de la impresora, como corresponde.
+3. "Buscando la central…": por UDP no la encuentra (el emulador no deja pasar la pregunta a la red de la PC). Con la dirección a mano,
+   **"Central conectada"**, y la notebook recibió la Caja 2 · Lucía: **el `ws://` sin cifrar desde Android anda.**
+4. Dos cervezas en efectivo ($ 7.000): la notebook recibió la venta N° 1 y la anuló como el jefe; **en la tablet la venta quedó
+   "ANULADA · prueba de la vuelta" y "Quedan" volvió de 22 a 24.**
+5. Con VENDER abierta la ventana tenía `KEEP_SCREEN_ON`; al volver a la lista de fiestas, ya no.
+6. **La app de verdad** (`lib/main.dart`, el APK que va al release) en el mismo emulador: abrió hasta el login, con la base SQLite
+   creada en el equipo y el motor de sincronización andando (sin usuario solo lee; avisó que en la nube faltan `sillas_puerta`,
+   `barra_vales` y `barra_recargos`, que son los SQL sin correr de la 6.4.0). No se entró: eso es con la cuenta del usuario. El
+   ícono, bien en el cajón de apps. Después se desinstaló y el emulador quedó como estaba.
+
+**El emulador, para la próxima:** `emulator -avd Recepcion_Tablet -no-window -no-audio -no-snapshot-save -gpu host` y manejarlo con
+`adb` (tocar, escribir, capturas). **Con `-gpu swiftshader_indirect` el emulador entero se cae (código 139) al abrir la app de verdad**
+(la tablet de prueba sí andaba); con `-gpu host`, no. La PC se ve desde el emulador en `10.0.2.2`, así que una central que escucha en
+`127.0.0.1` sirve sin cartel del cortafuegos; la búsqueda por UDP no pasa del emulador a la PC.
+
+**El APK de prueba de la tablet** quedó en `build\apk_etapa9\Prueba de la barra (tablet).apk` (arm64, 42 MB, firmado con la clave de
+Junior Eventos; `build/` no va a git). Es para la 10: se instala en la tablet o en un celular Android, con la notebook corriendo
+`tool/central_barra_prueba.dart --dart-define=red=todas` en el mismo wifi. **El APK de la app de verdad no se le deja suelto**: sale
+con la 6.4.0, cuando los SQL estén corridos.
+
+**Lo que queda para la 10, con la tablet y el TP-Link:** que la tablet encuentre la notebook sola por UDP en el wifi real (si el router
+aísla a los equipos, queda la dirección a mano), la impresora por Bluetooth desde la tablet (el emulador no tiene Bluetooth), y todo con
+el cable de internet del router desenchufado.
 
 ### La central de la barra (7-nov, noche)
 

@@ -39,8 +39,10 @@ el jefe lado a lado en `tool/barra_prueba.dart`, y la foto de la lista de precio
 jefe en el iPhone: la web por `BarraNube`, CAJAS que se relee sola, sin impresora; recorrida en el navegador a 375 px). **Y la central de
 la barra cerrada** (la notebook la prende, las tablets la encuentran solas por el wifi del salón y se ven entre ellas sin internet;
 "Todo subido" o cuánto falta en VENDER, en la notebook y en Recepción; tests y el recorrido con el mouse de
-`tool/central_barra_prueba.dart`). Sigue la barra 9 (Android firmado), donde se prueba la central con la tablet y el router de verdad.
-Plan general: 19 de 26, 73 %.
+`tool/central_barra_prueba.dart`). **8-nov: la barra 9 cerrada** (la app entera en Android, firmada con la clave de Junior Eventos, que
+vive en `Documentos\Junior Eventos\claves` y el usuario tiene que copiar a un lugar seguro; el APK sale con el instalador; probada en el
+emulador de tablet de esta PC, conectada a la central de verdad por `ws://`). Sigue la barra 10 (de punta a punta), con la tablet y el
+router de verdad. Plan general: 20 de 26, 77 %.
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el
@@ -48,7 +50,7 @@ ticket con precios si lo piden) y probar si la impresora avisa que le falta pape
 que necesite la nube va en tablas nuevas.
 
 > Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el
-> plan corto de la etapa 9 (Android firmado) antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
+> plan corto de la etapa 10 (de punta a punta) antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
 > docs/CONTEXTO_v6.3.2_2026-11-09.md y decime en qué paso estamos.")
 
 ## El orden

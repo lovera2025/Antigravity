@@ -113,8 +113,19 @@ o reconectarse, las dos puntas se mandan todo lo de la fiesta: no hay cola de lo
 recargo no viajan por la red del salón. **VENDER, la notebook y Recepción dicen "Todo subido" o cuánto falta** (pedido del usuario), y la
 cuenta **no corre sola salvo mientras hay internet y algo está subiendo**: se cuenta cuando el equipo escribe (`AvisoALaRed.escrituras`),
 cambia la conexión o baja algo. Probarla: `flutter run -d windows -t tool/central_barra_prueba.dart` (dos tablets y la notebook, con la
-central de verdad en esta PC). Falta, con aparatos de verdad (etapas 9 y 10): la búsqueda por el wifi del TP-Link y el `ws://` desde el
-APK. Sigue la etapa 9 (Android firmado).
+central de verdad en esta PC).
+**La etapa 9 se cerró el 8-nov: la app entera en Android, firmada** (el detalle en "Etapa 9" del CONTEXTO de la barra). **La clave de
+firma vive fuera del repo**, en `Documentos\Junior Eventos\claves` (con su `LEEME.txt`); `android/key.properties` la apunta y no va a git.
+Android solo actualiza la app con la misma clave: perderla obliga a desinstalar de cada tablet. `build.gradle.kts` firma con ella si
+existe; **el instalador frena sin ella y comprueba con `apksigner` que el APK salió con "CN=Junior Eventos"**, y deja
+`installer\dist\Junior Eventos v<versión>.apk` (arm64) para el release. La tablet se entera de una versión nueva en la pantalla del PIN
+(`versionNuevaEnLaTabletProvider`), y DESCARGAR abre el APK en el navegador (`actualizar_app.dart`). En Android la tarjeta TÓTEM se ve
+apagada ("Se proyecta desde la PC", `KioskLauncher.disponible`), y VENDER deja la pantalla prendida (`PantallaDespierta`, un canal propio en
+`MainActivity.kt`). **Para saber si algo corre en la tablet se pregunta por `Platform`, no por `defaultTargetPlatform`: en `flutter test`
+dice siempre Android.** Probado en el emulador `Recepcion_Tablet` (sin ventana y con `-gpu host`: con `swiftshader` se cae al abrir la app):
+`tool/tablet_barra_prueba.dart` como APK, la central de verdad en esta PC y la tablet conectada a `10.0.2.2:8797` por `ws://`: la venta
+llegó a la notebook y la anulación volvió; la app de verdad abrió hasta el login. Falta, con
+aparatos de verdad (etapa 10): la búsqueda por UDP en el wifi del TP-Link y la impresora desde la tablet.
 **La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los
