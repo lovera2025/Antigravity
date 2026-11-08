@@ -9,6 +9,7 @@ import '../cuentas/silla_de_la_puerta.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/modelo_ticket.dart';
 import '../providers/barra_providers.dart';
+import '../services/papel_de_la_barra.dart';
 import 'vales_de_la_venta_screen.dart';
 
 /// VENTAS: las ventas de la caja de la cajera, la última arriba. Con cada una:
@@ -117,7 +118,8 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
           _decir(
             x.venta,
             '${salieron == 0 ? 'No salió la copia' : 'Salieron $salieron de ${copia.length}'}. '
-            '¿La impresora está prendida y cerca? Tocá REIMPRIMIR para terminar.',
+            '${papel.sinPapel ? 'La impresora no tiene papel: cambiá el rollo y' : '¿La impresora está prendida y cerca?'}'
+            '${papel.sinPapel ? ' tocá' : ' Tocá'} REIMPRIMIR para terminar.',
             error: true,
           );
         }
@@ -152,7 +154,10 @@ class _VentasDeLaCajaScreenState extends ConsumerState<VentasDeLaCajaScreen> {
         );
         _decir(
           x.venta,
-          salio ? 'Salió el ticket con precios.' : 'No salió el ticket. ¿La impresora está prendida y cerca?',
+          salio
+              ? 'Salió el ticket con precios.'
+              : siNoSalio(ref.read(papelDeLaBarraProvider),
+                  'No salió el ticket. ¿La impresora está prendida y cerca?'),
           error: !salio,
         );
       });

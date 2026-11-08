@@ -693,4 +693,7 @@ class _CanalSinNada implements CanalBle {
 
   @override
   Future<void> escribir(String id, CaracteristicaBle c, Uint8List bytes) async {}
+
+  @override
+  Stream<Uint8List> escuchar(String id, CaracteristicaBle c) => const Stream.empty();
 }

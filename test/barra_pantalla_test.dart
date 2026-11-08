@@ -453,6 +453,28 @@ void main() {
     expect(find.textContaining('No salió el vale'), findsOneWidget);
   });
 
+  testWidgets('si la impresora dice que no tiene papel, el vale no se anota y lo dice',
+      (tester) async {
+    prueba.papel.sinRollo = true;
+    await abrir(tester);
+    await tocar(tester, producto(cerveza));
+    await tocar(tester, find.byKey(const Key('pagar_efectivo')));
+    await tocar(tester, find.byKey(const Key('cobro_confirmar')));
+    await tocar(tester, find.byKey(const Key('forma-todo-junto')));
+    await tocar(tester, find.byKey(const Key('imprimir-todo-junto')));
+    expect(
+      find.text('La impresora no tiene papel: cambiá el rollo y tocá de nuevo.'),
+      findsOneWidget,
+    );
+    expect(prueba.barra.valesGuardados, isEmpty);
+
+    // Con el rollo nuevo, el mismo botón lo saca.
+    prueba.papel.sinRollo = false;
+    await tocar(tester, find.byKey(const Key('imprimir-todo-junto')));
+    expect(prueba.barra.valesGuardados, hasLength(1));
+    expect(find.textContaining('no tiene papel'), findsNothing);
+  });
+
   testWidgets('si la base no guarda, lo dice y la cuenta queda', (tester) async {
     prueba.barra.venderFalla = true;
     await abrir(tester);

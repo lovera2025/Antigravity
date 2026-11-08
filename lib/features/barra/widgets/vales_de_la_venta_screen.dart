@@ -9,6 +9,7 @@ import '../cuentas/vales_de_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/modelo_ticket.dart';
 import '../providers/barra_providers.dart';
+import '../services/papel_de_la_barra.dart';
 import 'elegir_vales.dart';
 
 /// Quién queda anotado en lo que hace la cajera: su nombre al entrar, o el de la caja.
@@ -127,7 +128,8 @@ class _ValesDeLaVentaScreenState extends ConsumerState<ValesDeLaVentaScreen> {
       _ticketImprimiendo = false;
       _avisoTicket = salio
           ? 'Salió el ticket con precios.'
-          : 'No salió el ticket. ¿La impresora está prendida y cerca?';
+          : siNoSalio(ref.read(papelDeLaBarraProvider),
+              'No salió el ticket. ¿La impresora está prendida y cerca?');
     });
   }
 
@@ -187,6 +189,7 @@ class _ValesDeLaVentaScreenState extends ConsumerState<ValesDeLaVentaScreen> {
                     fiesta: widget.fiesta,
                     imprimir: papel.imprimir,
                     yaSalieron: widget.yaSalieron,
+                    sinPapel: () => papel.sinPapel,
                     anotar: (vale) => anotarValeQueSalio(ref, venta: v, caja: widget.caja, vale: vale),
                     alImprimir: (todo) => setState(() => _todoImpreso = todo),
                   ),

@@ -18,6 +18,7 @@ import '../impresion/modelo_ticket.dart';
 import '../impresion/papel_en_pantalla.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
+import '../services/papel_de_la_barra.dart';
 import '../widgets/vales_de_la_venta_screen.dart';
 import '../central/central_barra_provider.dart';
 import '../central/panel_central_barra.dart';
@@ -181,7 +182,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           _decir(
             x.venta,
             '${salieron == 0 ? 'No salió la copia' : 'Salieron $salieron de ${copia.length}'}. '
-            '¿La impresora está prendida y cerca de esta PC?',
+            '${siNoSalio(papel, '¿La impresora está prendida y cerca de esta PC?')}',
             error: true,
           );
         }
@@ -228,7 +229,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                 content: Text(falta ??
                     (salio
                         ? 'Salió el cierre (sin el historial, para ahorrar papel).'
-                        : 'No salió. ¿La impresora está prendida y cerca de esta PC?')),
+                        : siNoSalio(ref.read(papelDeLaBarraProvider),
+                            'No salió. ¿La impresora está prendida y cerca de esta PC?'))),
               ));
             },
             child: const Text('IMPRIMIR'),

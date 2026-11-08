@@ -60,7 +60,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 |---|---|---|
 | 5. Reimprimir y anular | **Hecha el 7-nov** (VENTAS de la cajera, el freno de la copia, IMPRIMIR LO QUE FALTA, el ticket con precios, ANULAR con motivo, la tabla `barra_vales`) | Lo del jefe (reimprimir cualquiera, anular desde la PC) va en la 7 |
 | La central de la barra | **Cerrada el 7-nov** (abajo, "La central de la barra"): la notebook la prende desde CAJAS, las tablets la encuentran solas por UDP, lo de cada caja va a todas por la red del salón sin internet, "Todo subido" en VENDER, en la notebook y en Recepción; tests y el recorrido con el mouse de `tool/central_barra_prueba.dart` | Con aparatos de verdad, en la 9 y la 10: que la tablet la encuentre por el wifi del TP-Link y el `ws://` desde el APK |
-| El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
+| El aviso de papel | **Programado el 8-nov (noche)** (abajo, "El aviso de papel"): la pregunta `DLE EOT 4`, el botón PAPEL en `tool/impresora_prueba.dart` y, si la impresora contesta, "no tiene papel" en VENDER antes de cada vale | **Probarlo con la TP-POS58 de verdad** (diez minutos, el usuario): PAPEL con el rollo y sin el rollo |
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
 | 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
 | 8. El jefe en el iPhone | **Cerrada el 7-nov** (abajo, "Etapa 8"): la web lee y escribe por `BarraNube` (también las fiestas), CAJAS se relee cada 30 s y al deslizar, sin impresora; `tool/barra_web_prueba.dart` y su test; recorrida en el navegador a 375 px | Nada. La web se publica con todo en la 6.4.0 |
@@ -78,6 +78,30 @@ los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: la barra está completa; lo que sigue es Entradas, en "Para retomar en otro chat" de
 > docs/CONTEXTO_OPERADORES_2026-11-02.md.
+
+### El aviso de papel (8-nov, noche; sin probar con la impresora)
+
+**El problema:** la impresora recibe sin respuesta, así que sin rollo el vale "sale" igual, queda anotado en `barra_vales` como impreso
+y sacarlo de nuevo es una COPIA, con su freno. **Lo que se hizo** (`impresion/impresora_bluetooth.dart`):
+- **La pregunta del papel de ESC/POS, `DLE EOT 4`** (`consultaDelPapel`), y lo que dice el byte que vuelve (`estadoDelPapel`: hay,
+  queda poco, no hay, o no se sabe si no tiene los bits fijos). Vuelve por una característica que avisa (notify): la TP-POS58 tiene
+  la del UART de ISSC (`49535343-1e4d-…`), que hasta hoy no se usaba (`caracteristicasQueContestan`; `CanalBle.escuchar`).
+- **Al abrir VENDER** (`PapelPorBluetooth.preparar`) se le pregunta una vez, sin esperar: si contesta, desde ahí **se le pregunta antes
+  de cada papel**, y sin papel no se manda nada (`ResultadoImpresion.sinPapel`): el vale queda sin salir y sin anotar, y VENDER dice
+  **"La impresora no tiene papel: cambiá el rollo y tocá de nuevo."** (`kSinPapel`, en todas las pantallas que imprimen).
+- **Si no contesta** (muchas térmicas no lo hacen), imprime como siempre, sin esperar nada: solo la primera vez, al abrir, espera
+  hasta 0,8 s. "Queda poco" no frena. Una que contestó y una vez no contesta, imprime igual.
+- **El botón PAPEL** del arnés (`flutter run -d windows -t tool/impresora_prueba.dart`, o en el Android) anota por dónde escucha, el
+  estado y los bytes crudos ("hay (0x12)", "noHay (0x72)" o "no contestó").
+
+**Las pruebas, en el sandbox** (`test/impresora_barra_test.dart`, grupo "el papel"; `barra_pantalla_test`): los bytes, por dónde
+escucha, la que no contesta, la que contesta, sin papel no manda y con el rollo nuevo sale, la pregunta que espera al papel que está
+saliendo, que suelta la suscripción, otra impresora, y VENDER con "no tiene papel" sin anotar el vale. La rotura a propósito (sin
+preguntar antes de imprimir) dio rojo en cuatro.
+
+**Falta, con la impresora (el usuario, diez minutos):** conectarla en el arnés, tocar PAPEL con el rollo puesto (tiene que decir
+"hay") y sin el rollo (tiene que decir "noHay"), y mirar que la pregunta no imprima nada raro. Si dice "no contestó", esta impresora no
+avisa y VENDER sigue como hasta hoy: no hay nada que cambiar.
 
 ### Etapa 10: de punta a punta, con su celular y su router (8-nov, tarde)
 

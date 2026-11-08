@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,7 @@ import 'package:arguello_events/features/barra/impresion/canal_ble.dart';
 import 'package:arguello_events/features/barra/impresion/impresora_bluetooth.dart';
 import 'package:arguello_events/features/barra/impresion/tabla_850.dart';
 import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart';
+import 'package:arguello_events/features/barra/services/papel_de_la_barra.dart';
 
 class _BundleVacio extends CachingAssetBundle {
   @override
@@ -40,6 +43,7 @@ const _tpPos58 = [
   CaracteristicaBle(
     servicio: '49535343-fe7d-4ae5-8fa9-9fafd205e455',
     uuid: '49535343-1e4d-4bd9-ba61-23c647249616',
+    avisa: true,
   ),
 ];
 
@@ -92,6 +96,41 @@ class _CanalEnMemoria implements CanalBle {
       throw StateError('se cortó');
     }
     escrito.add(bytes);
+    // La pregunta por el papel: contesta por lo que se esté escuchando, si sabe.
+    final r = contestaAlPapel;
+    if (_esLaPregunta(bytes) && r != null) {
+      for (final s in _escuchas) {
+        s.add(Uint8List.fromList(r));
+      }
+    }
+  }
+
+  /// Lo que contesta a `DLE EOT 4`. Null: no contesta (como muchas térmicas).
+  List<int>? contestaAlPapel;
+  final _escuchas = <StreamController<Uint8List>>[];
+  var suscripciones = 0;
+
+  bool _esLaPregunta(Uint8List b) =>
+      b.length == 3 && b[0] == 0x10 && b[1] == 0x04 && b[2] == 0x04;
+
+  /// Cuántas suscripciones siguen abiertas.
+  int get escuchando => _escuchas.length;
+
+  /// Cuántas veces se le preguntó por el papel.
+  int get preguntas => escrito.where(_esLaPregunta).length;
+
+  /// Lo escrito que no es la pregunta: los papeles.
+  List<Uint8List> get papeles => [for (final b in escrito) if (!_esLaPregunta(b)) b];
+
+  @override
+  Stream<Uint8List> escuchar(String id, CaracteristicaBle c) {
+    late final StreamController<Uint8List> s;
+    s = StreamController<Uint8List>(
+      onListen: () => suscripciones++,
+      onCancel: () => _escuchas.remove(s),
+    );
+    _escuchas.add(s);
+    return s.stream;
   }
 }
 
@@ -262,6 +301,179 @@ void main() {
       final b = List<int>.filled(400, 2);
       await Future.wait([impresora.imprimir(a), impresora.imprimir(b)]);
       expect(canal.escrito.skip(1).expand((t) => t).toList(), [...a, ...b]);
+    });
+  });
+
+  group('el papel (DLE EOT 4)', () {
+    late _CanalEnMemoria canal;
+    late ImpresoraBluetooth impresora;
+
+    setUp(() {
+      canal = _CanalEnMemoria();
+      impresora = ImpresoraBluetooth(
+        canal,
+        pausa: Duration.zero,
+        esperaDelPapel: const Duration(milliseconds: 100),
+      );
+    });
+
+    test('lo que dice el byte que contesta', () {
+      expect(estadoDelPapel([0x12]), EstadoDelPapel.hay);
+      expect(estadoDelPapel([0x1e]), EstadoDelPapel.poco);
+      expect(estadoDelPapel([0x72]), EstadoDelPapel.noHay);
+      expect(estadoDelPapel([0x7e]), EstadoDelPapel.noHay);
+      // Lo que no tiene los bits fijos no es la respuesta del papel.
+      expect(estadoDelPapel([0x00]), EstadoDelPapel.noSeSabe);
+      expect(estadoDelPapel([0xff]), EstadoDelPapel.noSeSabe);
+      expect(estadoDelPapel([0x13]), EstadoDelPapel.noSeSabe);
+      expect(estadoDelPapel(const []), EstadoDelPapel.noSeSabe);
+    });
+
+    test('la TP-POS58 contesta por el UART de ISSC, nunca por las del sistema', () {
+      final escritura = elegirCaracteristica(_tpPos58)!;
+      final contestan = caracteristicasQueContestan([
+        const CaracteristicaBle(
+          servicio: '0000180f-0000-1000-8000-00805f9b34fb',
+          uuid: '00002a19-0000-1000-8000-00805f9b34fb',
+          avisa: true,
+        ),
+        const CaracteristicaBle(
+          servicio: '0000ff00-0000-1000-8000-00805f9b34fb',
+          uuid: '0000ff01-0000-1000-8000-00805f9b34fb',
+          avisa: true,
+        ),
+        ..._tpPos58,
+      ], escritura: escritura);
+      expect(contestan.map((c) => c.uuid), [
+        '49535343-1e4d-4bd9-ba61-23c647249616',
+        '0000ff01-0000-1000-8000-00805f9b34fb',
+      ]);
+    });
+
+    test('una que no contesta: no se sabe, y después imprime sin preguntar', () async {
+      await impresora.conectar('tp');
+      expect(await impresora.consultarPapel(), EstadoDelPapel.noSeSabe);
+      expect(impresora.contestaElPapel, isFalse);
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+      expect(canal.preguntas, 1, reason: 'una sola vez, al abrir');
+      expect(canal.papeles.expand((t) => t).toList(), [1, 2, 3]);
+    });
+
+    test('una que contesta "hay papel": desde ahí pregunta antes de cada papel', () async {
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      final crudo = <List<int>>[];
+      expect(await impresora.consultarPapel(crudo: crudo.add), EstadoDelPapel.hay);
+      expect(crudo, [
+        [0x12],
+      ]);
+      expect(impresora.contestaElPapel, isTrue);
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+      expect(canal.preguntas, 2);
+      expect(canal.papeles.expand((t) => t).toList(), [1, 2, 3]);
+    });
+
+    test('sin papel no manda nada y lo dice; con el rollo nuevo sale', () async {
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      await impresora.consultarPapel();
+      canal.contestaAlPapel = [0x72];
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.sinPapel);
+      expect(canal.papeles, isEmpty, reason: 'el vale no queda como impreso');
+      canal.contestaAlPapel = [0x12];
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+      expect(canal.papeles.expand((t) => t).toList(), [1, 2, 3]);
+    });
+
+    test('"queda poco" no frena: imprime', () async {
+      canal.contestaAlPapel = [0x1e];
+      await impresora.conectar('tp');
+      expect(await impresora.consultarPapel(), EstadoDelPapel.poco);
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+    });
+
+    test('una que contestó y una vez no contesta: imprime igual', () async {
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      await impresora.consultarPapel();
+      canal.contestaAlPapel = null;
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+      expect(impresora.contestaElPapel, isTrue, reason: 'no se decide nada por una vez');
+    });
+
+    test('una que contesta otra cosa no cuenta como que contesta', () async {
+      canal.contestaAlPapel = [0x00];
+      await impresora.conectar('tp');
+      expect(await impresora.consultarPapel(), EstadoDelPapel.noSeSabe);
+      expect(impresora.contestaElPapel, isFalse);
+      expect(await impresora.imprimir([1, 2, 3]), ResultadoImpresion.impreso);
+      expect(canal.preguntas, 1);
+    });
+
+    test('sin ninguna por dónde contestar no pregunta', () async {
+      canal.lista = _tpPos58.sublist(0, 4);
+      await impresora.conectar('tp');
+      expect(await impresora.consultarPapel(), EstadoDelPapel.noSeSabe);
+      expect(canal.preguntas, 0);
+      expect(canal.suscripciones, 0);
+    });
+
+    test('la pregunta espera al papel que está saliendo: no se mezclan', () async {
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      final a = List<int>.filled(400, 1);
+      await Future.wait([impresora.imprimir(a), impresora.consultarPapel()]);
+      expect(canal.escrito.expand((t) => t).toList(), [...a, 0x10, 0x04, 0x04]);
+    });
+
+    test('suelta lo que escuchó', () async {
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      await impresora.consultarPapel();
+      await Future<void>.delayed(Duration.zero);
+      expect(canal.suscripciones, 1);
+      expect(canal.escuchando, 0);
+      await impresora.imprimir([1]);
+      await Future<void>.delayed(Duration.zero);
+      expect(canal.suscripciones, 2);
+      expect(canal.escuchando, 0);
+
+      // También cuando no contesta.
+      canal.contestaAlPapel = null;
+      await impresora.imprimir([1]);
+      await Future<void>.delayed(Duration.zero);
+      expect(canal.escuchando, 0);
+    });
+
+    test('otra impresora: lo que se sabía del papel era de la anterior', () async {
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      await impresora.consultarPapel();
+      expect(impresora.contestaElPapel, isTrue);
+      await impresora.conectar('otra');
+      expect(impresora.contestaElPapel, isNull);
+    });
+
+    test('PapelPorBluetooth: pregunta una vez al prepararse y dice "sin papel"', () async {
+      SharedPreferences.setMockInitialValues({});
+      canal.contestaAlPapel = [0x12];
+      await impresora.conectar('tp');
+      final papel = PapelPorBluetooth(impresora);
+      expect(await papel.preparar(), EstadoImpresora.lista);
+      await impresora.consultarPapel(); // espera a la que lanzó preparar
+      expect(impresora.contestaElPapel, isTrue);
+      await papel.preparar();
+      expect(canal.preguntas, 2, reason: 'preparar de nuevo no vuelve a preguntar');
+
+      canal.contestaAlPapel = [0x72];
+      expect(await papel.imprimir(const [TextoTicket('hola')]), isFalse);
+      expect(papel.sinPapel, isTrue);
+      expect(siNoSalio(papel, 'otra cosa'), kSinPapel);
+
+      canal.contestaAlPapel = [0x12];
+      expect(await papel.imprimir(const [TextoTicket('hola')]), isTrue);
+      expect(papel.sinPapel, isFalse);
+      expect(siNoSalio(papel, 'otra cosa'), 'otra cosa');
     });
   });
 

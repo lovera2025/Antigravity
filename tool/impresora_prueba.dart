@@ -320,6 +320,28 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
     ]));
   }
 
+  /// Le pregunta por el papel (`DLE EOT 4`) y anota lo que contesta, byte por byte.
+  /// Para probarlo: con el rollo puesto tiene que decir "hay" (0x12) y, sacando el
+  /// rollo, "no hay" (0x72). Si dice "no contestó", esta impresora no avisa y VENDER
+  /// imprime como siempre.
+  Future<void> _papel() async {
+    setState(() => _ocupado = true);
+    final contestan = _impresora.contestan;
+    _anotar(contestan.isEmpty
+        ? 'PAPEL: no tiene ninguna característica que avise'
+        : 'PAPEL: escuchando ${[for (final c in contestan) c.uuid].join(', ')}');
+    final inicio = Stopwatch()..start();
+    List<int>? crudo;
+    final estado = await _impresora.consultarPapel(crudo: (b) => crudo = b);
+    final bytes = crudo;
+    final hex = bytes == null
+        ? 'no contestó'
+        : [for (final b in bytes) '0x${b.toRadixString(16).padLeft(2, '0')}'].join(' ');
+    _anotar('PAPEL: ${estado.name} ($hex) en ${inicio.elapsedMilliseconds} ms · '
+        'contesta: ${_impresora.contestaElPapel}');
+    if (mounted) setState(() => _ocupado = false);
+  }
+
   Future<void> _logo() async {
     final a = await TicketEscPos.cargar();
     final uno = await LogoDelPapel.silueta.cargar(rootBundle);
@@ -365,6 +387,7 @@ class _PruebaDeImpresoraState extends State<PruebaDeImpresora> {
                 boton('QR', _qr),
                 boton('LOGO', _logo),
                 boton('CIERRE', _cierre),
+                boton('PAPEL', _papel),
                 OutlinedButton(
                   onPressed: _elegida == null || _ocupado ? null : _olvidar,
                   child: const Text('OLVIDAR'),

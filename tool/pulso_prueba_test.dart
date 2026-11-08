@@ -90,14 +90,15 @@ void main() {
       // ignore: avoid_print
       print('LLEGÓ: ${jsonEncode(m)}');
     }
-    final trabajos = {
-      for (final m in llegados)
-        cuerpoDelBroadcast(m)?['origen']: trabajoDelPulso(
-          cuerpoDelBroadcast(m),
-          yo: 'esta-pc',
-          tablasConocidas: _tablas,
-        ),
-    };
+    final trabajos = <String, TrabajoDelPulso>{};
+    for (final m in llegados) {
+      final cuerpo = cuerpoDelBroadcast(m);
+      trabajos['${cuerpo?['origen']}'] = trabajoDelPulso(
+        cuerpo,
+        yo: 'esta-pc',
+        tablasConocidas: _tablas,
+      );
+    }
     expect(trabajos.keys, unorderedEquals(['prueba-socket', 'prueba-rest']));
     for (final t in trabajos.values) {
       expect(t.tablas, _tablas);

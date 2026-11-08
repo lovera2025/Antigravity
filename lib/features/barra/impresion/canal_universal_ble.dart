@@ -65,8 +65,59 @@ class CanalUniversalBle implements CanalBle {
             escribeSinRespuesta: c.properties.contains(
               CharacteristicProperty.writeWithoutResponse,
             ),
+            avisa: c.properties.contains(CharacteristicProperty.notify),
+            indica: c.properties.contains(CharacteristicProperty.indicate),
           ),
     ];
+  }
+
+  static const _esperaSuscribir = Duration(seconds: 3);
+
+  @override
+  Stream<Uint8List> escuchar(String id, CaracteristicaBle c) {
+    late final StreamController<Uint8List> salida;
+    StreamSubscription<Uint8List>? sub;
+    salida = StreamController<Uint8List>(
+      onListen: () async {
+        sub = UniversalBle.characteristicValueStream(id, c.uuid).listen(
+          salida.add,
+          onError: salida.addError,
+        );
+        try {
+          if (c.avisa) {
+            await UniversalBle.subscribeNotifications(
+              id,
+              c.servicio,
+              c.uuid,
+              timeout: _esperaSuscribir,
+            );
+          } else {
+            await UniversalBle.subscribeIndications(
+              id,
+              c.servicio,
+              c.uuid,
+              timeout: _esperaSuscribir,
+            );
+          }
+        } catch (e) {
+          if (!salida.isClosed) salida.addError(e);
+        }
+      },
+      onCancel: () async {
+        await sub?.cancel();
+        try {
+          await UniversalBle.unsubscribe(
+            id,
+            c.servicio,
+            c.uuid,
+            timeout: _esperaSuscribir,
+          );
+        } catch (_) {
+          // Ya desconectada, o no llegó a suscribirse: no hay nada que soltar.
+        }
+      },
+    );
+    return salida.stream;
   }
 
   @override

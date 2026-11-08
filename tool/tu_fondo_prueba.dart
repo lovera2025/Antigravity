@@ -69,7 +69,6 @@ class _PruebaState extends State<_Prueba> {
     nombres: ['PÉREZ, JUAN MARTÍN'],
     conQuien: 'con GÓMEZ, ANA y PÉREZ, LUIS',
     mesa: '12',
-    sillas: '10 sillas (8 + 2 extra)',
     musica: 'Tusa · Karol G',
   );
 

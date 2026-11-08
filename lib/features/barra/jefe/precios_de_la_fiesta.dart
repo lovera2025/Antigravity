@@ -15,6 +15,7 @@ import '../impresion/papel_en_pantalla.dart';
 import '../impresion/ticket_esc_pos.dart';
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
+import '../services/papel_de_la_barra.dart';
 import '../services/fiestas_del_jefe.dart';
 import '../services/imagen_de_producto.dart';
 import '../widgets/pesos_enteros_formatter.dart';
@@ -276,7 +277,8 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
     _decir(
       salio
           ? 'Salió la lista de precios.'
-          : 'No salió. ¿La impresora está prendida y cerca de esta PC? Si no, guardala como PDF.',
+          : siNoSalio(ref.read(papelDeLaBarraProvider),
+              'No salió. ¿La impresora está prendida y cerca de esta PC? Si no, guardala como PDF.'),
       error: !salio,
     );
   }

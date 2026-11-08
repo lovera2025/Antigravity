@@ -15,18 +15,27 @@ class DispositivoBle {
   });
 }
 
-/// Por dónde se le puede escribir a un aparato.
+/// Por dónde se le puede escribir a un aparato, o por dónde contesta.
 class CaracteristicaBle {
   final String servicio;
   final String uuid;
   final bool escribe;
   final bool escribeSinRespuesta;
 
+  /// Manda lo que tiene para decir por su cuenta (notify): por ahí contesta la
+  /// impresora cuando se le pregunta por el papel.
+  final bool avisa;
+
+  /// Lo mismo, pero esperando el acuse (indicate).
+  final bool indica;
+
   const CaracteristicaBle({
     required this.servicio,
     required this.uuid,
     this.escribe = false,
     this.escribeSinRespuesta = false,
+    this.avisa = false,
+    this.indica = false,
   });
 }
 
@@ -54,4 +63,9 @@ abstract interface class CanalBle {
   Future<int> pedirMtu(String id, int mtu);
 
   Future<void> escribir(String id, CaracteristicaBle c, Uint8List bytes);
+
+  /// Lo que el aparato manda por [c] (una que [CaracteristicaBle.avisa] o
+  /// [CaracteristicaBle.indica]). Se suscribe al escuchar y se desuscribe al
+  /// cancelar. Si no se puede suscribir, el stream da el error.
+  Stream<Uint8List> escuchar(String id, CaracteristicaBle c);
 }

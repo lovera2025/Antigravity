@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'canal_ble.dart';
@@ -82,6 +83,58 @@ enum ResultadoImpresion {
 
   /// Se cortó mandando, y también al volver a probar.
   fallo,
+
+  /// La impresora dijo que no tiene papel: no se mandó nada.
+  sinPapel,
+}
+
+/// Lo que la impresora dice del rollo.
+enum EstadoDelPapel {
+  hay,
+
+  /// El sensor de "queda poco" (no todas lo tienen).
+  poco,
+  noHay,
+
+  /// No contestó, o contestó algo que no es la respuesta del papel. Se imprime
+  /// igual, como siempre: no saber nunca frena un vale.
+  noSeSabe,
+}
+
+/// La pregunta por el papel de ESC/POS: `DLE EOT 4`. Es de las de tiempo real:
+/// la impresora la contesta aunque esté ocupada y no la imprime.
+const consultaDelPapel = [0x10, 0x04, 0x04];
+
+/// Qué dice el byte que contesta la impresora a [consultaDelPapel]. Los bits 1
+/// y 4 van siempre prendidos y el 0 y el 7 apagados: si no, no es la respuesta
+/// del papel. Los bits 2 y 3 son "queda poco"; el 5 y el 6, "no hay".
+EstadoDelPapel estadoDelPapel(List<int> respuesta) {
+  if (respuesta.isEmpty) return EstadoDelPapel.noSeSabe;
+  final b = respuesta.last;
+  if (b & 0x93 != 0x12) return EstadoDelPapel.noSeSabe;
+  if (b & 0x60 != 0) return EstadoDelPapel.noHay;
+  if (b & 0x0c != 0) return EstadoDelPapel.poco;
+  return EstadoDelPapel.hay;
+}
+
+/// Por dónde puede contestar: las que avisan, fuera de los servicios del sistema.
+/// Primero las del mismo servicio que la de escribir: la TP-POS58 contesta por el
+/// UART de ISSC (`49535343-1e4d-…`).
+List<CaracteristicaBle> caracteristicasQueContestan(
+  Iterable<CaracteristicaBle> todas, {
+  CaracteristicaBle? escritura,
+}) {
+  final utiles = [
+    for (final c in todas)
+      if ((c.avisa || c.indica) && !_deSistema.contains(c.servicio.toLowerCase())) c,
+  ];
+  final mismo = escritura?.servicio.toLowerCase();
+  return [
+    for (final c in utiles)
+      if (c.servicio.toLowerCase() == mismo) c,
+    for (final c in utiles)
+      if (c.servicio.toLowerCase() != mismo) c,
+  ];
 }
 
 /// Cómo quedó la impresora después de [ImpresoraBluetooth.reconectar].
@@ -103,22 +156,39 @@ class ImpresoraBluetooth {
   /// la pantalla está abierta.
   final ImpresoraRecordada? recordada;
 
+  /// Cuánto se espera la respuesta del papel. Una que contesta lo hace en unas
+  /// decenas de milisegundos.
+  final Duration esperaDelPapel;
+
   String? _id;
   CaracteristicaBle? _caracteristica;
+  List<CaracteristicaBle> _contestan = const [];
   int _tamano = tamanoDeTrozo(null);
   Future<void> _ultimo = Future<void>.value();
   ImpresoraElegida? _elegida;
   bool _leyoLaRecordada = false;
 
+  /// Si esta impresora contesta por el papel: null mientras no se le preguntó.
+  /// Solo con `true` se pregunta antes de cada papel; una que no contesta
+  /// imprime como siempre, sin esperar nada.
+  bool? _contestaElPapel;
+
   ImpresoraBluetooth(
     this.canal, {
     this.pausa = const Duration(milliseconds: 20),
     this.recordada,
+    this.esperaDelPapel = const Duration(milliseconds: 800),
   });
 
   String? get conectadaA => _id;
   CaracteristicaBle? get caracteristica => _caracteristica;
   int get tamano => _tamano;
+
+  /// Por dónde puede contestar la impresora conectada.
+  List<CaracteristicaBle> get contestan => _contestan;
+
+  /// Si contestó por el papel alguna vez (null: todavía no se le preguntó).
+  bool? get contestaElPapel => _contestaElPapel;
 
   /// La impresora de este equipo, la conectada o la recordada. Null si nunca se eligió.
   Future<ImpresoraElegida?> elegida() async {
@@ -134,11 +204,15 @@ class ImpresoraBluetooth {
   Future<bool> conectar(String id, {String nombre = ''}) async {
     if (_id != null && _id != id) await desconectar();
     await canal.conectar(id);
-    final elegida = elegirCaracteristica(await canal.caracteristicas(id));
+    final todas = await canal.caracteristicas(id);
+    final elegida = elegirCaracteristica(todas);
     if (elegida == null) {
       await canal.desconectar(id);
       return false;
     }
+    // Otra impresora: lo que se sabía del papel era de la anterior.
+    if (_elegida?.id != id) _contestaElPapel = null;
+    _contestan = caracteristicasQueContestan(todas, escritura: elegida);
     int? mtu;
     try {
       mtu = await canal.pedirMtu(id, 512);
@@ -194,6 +268,7 @@ class ImpresoraBluetooth {
     final id = _id;
     _id = null;
     _caracteristica = null;
+    _contestan = const [];
     if (id == null) return;
     try {
       await canal.desconectar(id);
@@ -203,6 +278,7 @@ class ImpresoraBluetooth {
   /// Este equipo deja de tener impresora: hasta elegir otra, no imprime.
   Future<void> olvidar() async {
     await desconectar();
+    _contestaElPapel = null;
     _elegida = null;
     _leyoLaRecordada = true;
     await recordada?.olvidar();
@@ -216,6 +292,66 @@ class ImpresoraBluetooth {
     return resultado;
   }
 
+  /// Le pregunta a la impresora por el papel. **De a uno, con los papeles**: si
+  /// hay un ticket saliendo, espera a que termine. Nunca tira. Para el arnés y
+  /// para saber, al abrir VENDER, si esta impresora contesta; [crudo] recibe lo
+  /// que volvió, byte por byte.
+  Future<EstadoDelPapel> consultarPapel({void Function(List<int> crudo)? crudo}) {
+    final resultado = _ultimo.then((_) async {
+      if (await reconectar() != EstadoImpresora.lista) return EstadoDelPapel.noSeSabe;
+      return _preguntarPorElPapel(crudo: crudo);
+    });
+    _ultimo = resultado.then<void>((_) {});
+    return resultado;
+  }
+
+  /// Ya conectada: escucha por todas las que contestan, manda la pregunta y
+  /// espera la primera respuesta, hasta [esperaDelPapel]. Nunca tira.
+  Future<EstadoDelPapel> _preguntarPorElPapel({
+    void Function(List<int> crudo)? crudo,
+  }) async {
+    final id = _id;
+    final c = _caracteristica;
+    if (id == null || c == null || _contestan.isEmpty) {
+      _contestaElPapel ??= false;
+      return EstadoDelPapel.noSeSabe;
+    }
+    final respuesta = Completer<List<int>>();
+    final subs = <StreamSubscription<Uint8List>>[];
+    try {
+      for (final cc in _contestan) {
+        subs.add(canal.escuchar(id, cc).listen(
+          (bytes) {
+            if (bytes.isNotEmpty && !respuesta.isCompleted) respuesta.complete(bytes);
+          },
+          onError: (Object _) {},
+        ));
+      }
+      // Que la suscripción llegue antes de preguntar.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await canal.escribir(id, c, Uint8List.fromList(consultaDelPapel));
+      final bytes = await respuesta.future.timeout(esperaDelPapel);
+      crudo?.call(bytes);
+      final estado = estadoDelPapel(bytes);
+      if (estado != EstadoDelPapel.noSeSabe) {
+        _contestaElPapel = true;
+      } else {
+        _contestaElPapel ??= false;
+      }
+      return estado;
+    } on TimeoutException {
+      // Una que ya contestó y ahora no: no se decide nada por una vez.
+      _contestaElPapel ??= false;
+      return EstadoDelPapel.noSeSabe;
+    } catch (_) {
+      return EstadoDelPapel.noSeSabe;
+    } finally {
+      for (final s in subs) {
+        unawaited(s.cancel());
+      }
+    }
+  }
+
   Future<ResultadoImpresion> _mandar(List<int> bytes) async {
     switch (await reconectar()) {
       case EstadoImpresora.sinElegir:
@@ -224,6 +360,12 @@ class ImpresoraBluetooth {
         return ResultadoImpresion.noConectada;
       case EstadoImpresora.lista:
         break;
+    }
+    // Sin papel, el vale "sale" igual (la escritura no tiene respuesta) y queda
+    // anotado como impreso. Si esta impresora contesta, se le pregunta antes.
+    if (_contestaElPapel == true &&
+        await _preguntarPorElPapel() == EstadoDelPapel.noHay) {
+      return ResultadoImpresion.sinPapel;
     }
     if (await _escribir(bytes)) return ResultadoImpresion.impreso;
     // Se cortó a la mitad. La conexión puede haber quedado colgada: se suelta, se

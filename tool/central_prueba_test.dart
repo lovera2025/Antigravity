@@ -13,8 +13,10 @@ import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
@@ -44,10 +46,64 @@ class _PcDePrueba implements PuertaDeEstaPc {
   final filas = <String, Invitado>{};
   void Function()? alCambiar;
 
+  /// Las sillas de la noche que se sumaron desde los celulares.
+  final sillas = <SillaPuerta>[];
+
   PuertaDelEvento lista() => PuertaDelEvento.masivo(
         alumnos: alumnos,
         invitados: filas.values.toList(),
+        sillasPuerta: sillas,
       );
+
+  @override
+  Future<List<SillaPuerta>> sillasDelEvento(String eventoId) async =>
+      [for (final s in sillas) if (s.eventoId == eventoId) s];
+
+  @override
+  Future<void> sumarSilla({
+    required String eventoId,
+    required String contratoId,
+    required int mesa,
+    required String vale,
+    required String anotadoPor,
+    String? nota,
+  }) async {
+    final ahora = DateTime.now().toUtc();
+    sillas.add(SillaPuerta(
+      id: 'silla-${sillas.length + 1}',
+      eventoId: eventoId,
+      contratoAlumnoId: contratoId,
+      mesa: mesa,
+      vale: vale,
+      anotadoPor: anotadoPor,
+      nota: nota,
+      createdAt: ahora,
+      updatedAt: ahora,
+    ));
+    // ignore: avoid_print
+    print('SILLA mesa $mesa, vale $vale ($anotadoPor)');
+    alCambiar?.call();
+  }
+
+  @override
+  Future<void> quitarSilla(
+    String sillaId, {
+    required String por,
+    required String motivo,
+  }) async {
+    final i = sillas.indexWhere((s) => s.id == sillaId);
+    if (i < 0) return;
+    sillas[i] = sillas[i].quitada(por: por, motivo: motivo, ahora: DateTime.now().toUtc());
+    // ignore: avoid_print
+    print('QUITÓ la silla ${sillas[i].vale} ($por: $motivo)');
+    alCambiar?.call();
+  }
+
+  @override
+  Future<void> ponerTiempos(String eventoId, TiemposAMano tiempos) async {
+    // ignore: avoid_print
+    print('TIEMPOS del tótem: $tiempos');
+  }
 
   @override
   Future<Invitado?> fila(String id) async => filas[id];

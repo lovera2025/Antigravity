@@ -168,7 +168,7 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     } else {
       _decir(
         '${alCerrar ? 'Caja cerrada. ' : ''}No salió el papel. '
-        '¿La impresora está prendida y cerca? Tocá IMPRIMIR.',
+        '${ref.read(papelDeLaBarraProvider).sinPapel ? 'La impresora no tiene papel: cambiá el rollo y tocá' : '¿La impresora está prendida y cerca? Tocá'} IMPRIMIR.',
         error: true,
       );
     }
