@@ -11,8 +11,7 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 > minutos, sin código). Sigue **Entradas 4 a 6** y después publicar la 6.4.0. Plan general: **21 de 26 partes, 81 %**.
 >
 > **Al 8-nov: la etapa 9 (Android firmado) está cerrada** (abajo, "Etapa 9"): la app entera compila y anda en Android, firmada con la
-> clave de Junior Eventos, que vive en `Documentos\Junior Eventos\claves` (**el usuario tiene que copiar esa carpeta a un lugar
-> seguro**). El instalador arma también el APK y frena si falta la clave. Probada en el emulador de tablet de esta PC: la cajera se
+> clave de Junior Eventos, que vive en `Documentos\Junior Eventos\claves` (con copia en su Google Drive desde el 8-nov). El instalador arma también el APK y frena si falta la clave. Probada en el emulador de tablet de esta PC: la cajera se
 > conectó a la central de verdad por `ws://`, vendió, la venta llegó a la notebook, y la anulación del jefe volvió a la tablet. **Sigue
 > la 10 (de punta a punta)**, con la tablet y el TP-Link: la búsqueda sola por el wifi y la impresora desde la tablet. Después Entradas
 > 4 a 6 y publicar la 6.4.0. Plan general: **20 de 26 partes, 77 %**.
@@ -105,8 +104,10 @@ PRENDER LA CENTRAL en la PC y "apareció Lucía" (la Caja 3 en la notebook), sin
 por el router de su casa** (el celular por wifi, la PC por cable).
 
 **La clave de firma no va a GitHub** (lo preguntó el 8-nov): el repositorio `lovera2025/Antigravity` es **público**. A GitHub va el APK
-firmado, en cada release, que es lo que baja la tablet para actualizarse; la clave solo hace falta para armar ese APK en esta PC. La
-copia de la clave va en un pendrive y en su Google Drive.
+firmado, en cada release, que es lo que baja la tablet para actualizarse; la clave solo hace falta para armar ese APK en esta PC. Hacer
+el repositorio privado tampoco: las PCs y la tablet buscan las versiones nuevas en GitHub sin usuario y dejarían de verlas. **La copia
+de la clave ya está en su Google Drive** (la subió él el 8-nov, arrastrando la carpeta; por el conector no se sube: habría que leer la
+contraseña).
 
 **Queda para cuando estén la tablet y el TP-Link del salón:** repetir lo mismo ahí (si el TP-Link aísla a los equipos, la dirección a
 mano o apagarle el "AP isolation"). Sin código.
@@ -119,7 +120,7 @@ impresora (3-nov), firmada con la clave de prueba de esta PC. Ahora:
   huella SHA-256 `DB:11:2E:84:…:8B:5E`) está en **`Documentos\Junior Eventos\claves`**: `junior_eventos.jks`, `key.properties` (la
   contraseña, generada al azar y nunca escrita en el chat) y `LEEME.txt`. Una copia de `key.properties` va en `android/`, fuera de git
   (`.gitignore` de la raíz y de `android/`). **Android solo actualiza la app si viene con la misma clave**: si se pierde, hay que
-  desinstalar de cada tablet y se pierde lo que no subió. **El usuario tiene que copiar esa carpeta a un pendrive y a una nube suya.**
+  desinstalar de cada tablet y se pierde lo que no subió. **Copia hecha: la carpeta está en su Google Drive (8-nov).**
 - **`build.gradle.kts`** firma `release` con esa clave si `key.properties` existe; si no (otra PC), con la de prueba, para que `flutter
   run --release` ande igual.
 - **El instalador** (`installer/build_installer.ps1`) frena antes de compilar nada si falta `android\key.properties`, arma el APK

@@ -115,7 +115,8 @@ cuenta **no corre sola salvo mientras hay internet y algo está subiendo**: se c
 cambia la conexión o baja algo. Probarla: `flutter run -d windows -t tool/central_barra_prueba.dart` (dos tablets y la notebook, con la
 central de verdad en esta PC).
 **La etapa 9 se cerró el 8-nov: la app entera en Android, firmada** (el detalle en "Etapa 9" del CONTEXTO de la barra). **La clave de
-firma vive fuera del repo**, en `Documentos\Junior Eventos\claves` (con su `LEEME.txt`); `android/key.properties` la apunta y no va a git.
+firma vive fuera del repo**, en `Documentos\Junior Eventos\claves` (con su `LEEME.txt`; copia en el Google Drive del usuario);
+`android/key.properties` la apunta y no va a git. **Nunca a GitHub: el repositorio es público.**
 Android solo actualiza la app con la misma clave: perderla obliga a desinstalar de cada tablet. `build.gradle.kts` firma con ella si
 existe; **el instalador frena sin ella y comprueba con `apksigner` que el APK salió con "CN=Junior Eventos"**, y deja
 `installer\dist\Junior Eventos v<versión>.apk` (arm64) para el release. La tablet se entera de una versión nueva en la pantalla del PIN
