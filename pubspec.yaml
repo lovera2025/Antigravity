@@ -95,6 +95,17 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   path: ^1.9.0
+  # El ícono de Android (la tablet de la barra): `dart run flutter_launcher_icons`
+  # arma los mipmap desde android/icono (el isotipo de Windows, sin el cromado).
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "android/icono/icono.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "android/icono/icono_frente.png"
+  min_sdk_android: 24
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

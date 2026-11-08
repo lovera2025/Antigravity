@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -18,6 +19,9 @@ class AppUpdateInfo {
   final String latestVersion;
   final String releaseUrl;
   final String? setupDownloadUrl;
+
+  /// El APK de las tablets (Android), si el release lo trae.
+  final String? apkDownloadUrl;
   final bool hayNueva;
   final String notes;
 
@@ -26,21 +30,39 @@ class AppUpdateInfo {
     required this.latestVersion,
     required this.releaseUrl,
     this.setupDownloadUrl,
+    this.apkDownloadUrl,
     required this.hayNueva,
     required this.notes,
   });
+
+  /// Lo que abre DESCARGAR en una tablet: el APK o, si el release no lo trae,
+  /// la página del release.
+  String get descargaEnAndroid => apkDownloadUrl ?? releaseUrl;
 }
 
-/// Aviso de versión nueva en Windows. DESCARGAR baja el Setup y abre el
-/// instalador; no abre el navegador. Si no hay releases o falla la red, no
+/// Aviso de versión nueva en Windows y en Android. En Windows, DESCARGAR baja
+/// el Setup y abre el instalador; en Android abre el APK en el navegador, que lo
+/// baja, y Android ofrece instalarlo. Si no hay releases o falla la red, no
 /// dice nada.
 class AppUpdateChecker {
   AppUpdateChecker({http.Client? httpClient}) : _http = httpClient;
 
   final http.Client? _http;
 
+  /// En Windows (como siempre) y en la tablet. Android se pregunta por
+  /// `Platform`: `defaultTargetPlatform` dice Android en todo `flutter test`, y los
+  /// tests no tienen que salir a buscar versiones a GitHub.
   static bool get habilitado =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows || enAndroid);
+
+  /// La tablet de la barra (6.4.0).
+  static bool get enAndroid =>
+      enAndroidEnLaPrueba ?? (!kIsWeb && Platform.isAndroid);
+
+  /// Para probar lo de la tablet. Solo los tests lo cambian.
+  @visibleForTesting
+  static bool? enAndroidEnLaPrueba;
 
   /// `4.7.4` vs `4.7.3` → positivo si [a] es más nueva.
   static int compareSemver(String a, String b) {
@@ -115,6 +137,28 @@ class AppUpdateChecker {
     return juniorUrl ?? (exeCount == 1 ? onlyExeUrl : null);
   }
 
+  /// El APK del release (`Junior Eventos v6.4.0.apk`, que GitHub sube como
+  /// `Junior.Eventos.v6.4.0.apk`). Con otro `.apk` solo, ese; si no, ninguno: un
+  /// release sin APK (los de antes de la 6.4.0) no tiene qué bajar.
+  static String? apkAssetUrl(List<dynamic>? assets, String latestVersion) {
+    if (assets == null) return null;
+    final needle = normalizeSetupAssetName('junior eventos v$latestVersion');
+    String? onlyApkUrl;
+    var apkCount = 0;
+    for (final raw in assets) {
+      if (raw is! Map) continue;
+      final name = raw['name']?.toString() ?? '';
+      final url = raw['browser_download_url']?.toString();
+      if (url == null || url.isEmpty) continue;
+      if (!name.toLowerCase().endsWith('.apk')) continue;
+      apkCount++;
+      onlyApkUrl = url;
+      final stem = normalizeSetupAssetName(name.substring(0, name.length - 4));
+      if (stem == needle) return url;
+    }
+    return apkCount == 1 ? onlyApkUrl : null;
+  }
+
   /// Notas del Release en texto plano para el aviso breve.
   static String plainNotesFromGithubBody(String? body, String version) {
     final raw = (body ?? '').trim();
@@ -154,6 +198,7 @@ class AppUpdateChecker {
             latest,
           ) ??
           constructedSetupUrl(latest),
+      apkDownloadUrl: apkAssetUrl(assets is List ? assets : null, latest),
       hayNueva: compareSemver(latest, currentVersion) > 0,
       notes: plainNotesFromGithubBody(json['body']?.toString(), latest),
     );

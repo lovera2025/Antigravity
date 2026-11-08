@@ -19,6 +19,15 @@ if (Test-Path $pubspecPath) {
     }
 }
 
+# La app de las tablets (Android) sale con cada versión, firmada con la clave de
+# Documentos\Junior Eventos\claves. Sin android\key.properties el APK saldría con la
+# clave de prueba, y una tablet que lo instale no se puede actualizar después sin
+# desinstalar (y perder lo que no subió): se frena antes de compilar nada.
+$keyProps = Join-Path $root "android\key.properties"
+if (-not (Test-Path $keyProps)) {
+    Write-Error "Falta android\key.properties (la clave de firma de Android). Copiala de Documentos\Junior Eventos\claves: ninguna tablet recibe un APK con la clave de prueba."
+}
+
 Write-Host ">> flutter build windows --release (app $semver)" -ForegroundColor Cyan
 flutter build windows --release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -50,3 +59,31 @@ if (Test-Path $out) {
 } else {
     Write-Warning "Compilación terminó pero no se encontró: $out (revisá #define MyAppVersion en junior_eventos_setup.iss vs pubspec)"
 }
+
+# El APK de las tablets: uno por procesador; al release va el de 64 bits (arm64), el
+# de todas las tablets y celulares de los últimos años. GitHub le pone puntos en vez
+# de espacios al nombre (Junior.Eventos.v6.4.0.apk): así lo busca la app.
+Write-Host ">> flutter build apk --release --split-per-abi" -ForegroundColor Cyan
+flutter build apk --release --split-per-abi
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$apkArmado = Join-Path $root "build\app\outputs\flutter-apk\app-arm64-v8a-release.apk"
+$apkSdk = Join-Path $env:LOCALAPPDATA "Android\sdk\build-tools"
+$apksigner = Get-ChildItem $apkSdk -Directory -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending |
+    ForEach-Object { Join-Path $_.FullName "apksigner.bat" } |
+    Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $apksigner) {
+    Write-Error "No se encontró apksigner (Android SDK build-tools): no se puede comprobar con qué clave salió el APK."
+}
+# apksigner necesita Java; el que usa Flutter para compilar es el de Android Studio.
+$jbr = "${env:ProgramFiles}\Android\Android Studio\jbr"
+if (-not $env:JAVA_HOME -and (Test-Path $jbr)) { $env:JAVA_HOME = $jbr }
+$firma = & $apksigner verify --print-certs "$apkArmado" | Out-String
+if ($LASTEXITCODE -ne 0 -or $firma -notmatch "CN=Junior Eventos") {
+    Write-Error "El APK no salió firmado con la clave de Junior Eventos:`n$firma"
+}
+
+$apk = Join-Path $root "installer\dist\Junior Eventos v$semver.apk"
+Copy-Item $apkArmado $apk -Force
+Write-Host "OK: $apk" -ForegroundColor Green

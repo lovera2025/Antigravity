@@ -19,6 +19,7 @@ import '../estilos/disenio_barra.dart';
 import '../impresion/impresora_bluetooth.dart';
 import '../providers/barra_providers.dart';
 import '../services/imagen_de_producto.dart';
+import '../services/pantalla_despierta.dart';
 import '../services/productos_para_vender.dart';
 import 'cerrar_caja_barra_screen.dart';
 import 'cobrar_hoja.dart';
@@ -94,6 +95,8 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // En la tablet, la pantalla no se apaga mientras se vende.
+    unawaited(PantallaDespierta.mantener(true));
     unawaited(_cargar());
     unawaited(_prepararImpresora());
     // Cuando bajan ventas de las otras cajas (de la nube o de la central de la barra),
@@ -110,6 +113,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(PantallaDespierta.mantener(false));
     _buscador.dispose();
     super.dispose();
   }

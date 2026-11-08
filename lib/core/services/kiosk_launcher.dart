@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
@@ -59,6 +62,21 @@ class _VentanasDeVerdad implements VentanasTotem {
 }
 
 class KioskLauncher {
+  /// Si este equipo puede abrir la ventana del tótem: solo la PC. En una tablet
+  /// o un celular (la barra, 6.4.0) no hay segunda ventana y `desktop_multi_window`
+  /// no existe: abrirlo tiraba `MissingPluginException`. Pregunta por `Platform`
+  /// y no por `defaultTargetPlatform`, que en `flutter test` dice siempre Android.
+  static bool get disponible =>
+      disponibleEnLaPrueba ??
+      (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS));
+
+  /// Para probar el tótem como en una tablet. Solo los tests lo cambian.
+  @visibleForTesting
+  static bool? disponibleEnLaPrueba;
+
+  /// Lo que dice la tarjeta TÓTEM donde no se puede abrir.
+  static const motivoNoDisponible = 'Se proyecta desde la PC';
+
   static int? _totemWindowId;
 
   /// Qué evento está proyectando la ventana ahora mismo. Se necesita porque el
@@ -84,6 +102,7 @@ class KioskLauncher {
     _totemWindowId = null;
     _totemEventoId = null;
     _enCurso = null;
+    disponibleEnLaPrueba = null;
     ventanas = const _VentanasDeVerdad();
     esperaEntreIntentos = const Duration(milliseconds: 600);
   }
@@ -102,6 +121,7 @@ class KioskLauncher {
     String eventoId, {
     TotemOrientation? orientacion,
   }) {
+    if (!disponible) return Future.value();
     return _enCurso ??= _launchInterno(eventoId, orientacion: orientacion)
         .whenComplete(() => _enCurso = null);
   }

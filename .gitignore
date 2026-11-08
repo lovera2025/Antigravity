@@ -50,6 +50,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# La clave de firma de Android y sus contraseñas: nunca a git. Viven en
+# Documentos\Junior Eventos\claves (ver el LEEME.txt de esa carpeta).
+/android/key.properties
+*.jks
+*.keystore
 .vercel
 .env*.local
 

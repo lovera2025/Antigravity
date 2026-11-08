@@ -1,8 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// La clave de firma de las tablets. `android/key.properties` no va a git: la clave y su
+// contraseña viven en Documentos\Junior Eventos\claves (ver su LEEME.txt). Android solo
+// actualiza la app si la versión nueva viene firmada con la misma clave.
+val keyProperties = Properties()
+val keyPropertiesFile = rootProject.file("key.properties")
+val hayClaveDeFirma = keyPropertiesFile.exists()
+if (hayClaveDeFirma) {
+    FileInputStream(keyPropertiesFile).use { keyProperties.load(it) }
 }
 
 android {
@@ -31,11 +44,27 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hayClaveDeFirma) {
+            create("release") {
+                storeFile = file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Con la clave, firma con ella. Sin la clave (otra PC), la de prueba, para que
+            // `flutter run --release` ande igual; el instalador frena antes de armar un APK
+            // así (`installer/build_installer.ps1`): ninguna tablet recibe uno con la de prueba.
+            signingConfig = if (hayClaveDeFirma) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

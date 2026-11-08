@@ -27,8 +27,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/services/kiosk_launcher.dart';
 import '../../core/services/user_role_cache.dart';
 import '../../core/services/app_update_checker.dart';
-import 'widgets/app_update_download_dialog.dart';
-import 'widgets/app_update_whats_new_dialog.dart';
+import 'widgets/actualizar_app.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
@@ -40,67 +39,6 @@ import 'dart:async';
 import 'dart:ui';
 import '../common/widgets/sync_menu_sheet.dart';
 import '../common/widgets/animated_brand_logo.dart';
-
-Future<void> mostrarDialogoActualizacion(
-  BuildContext context,
-  AppUpdateInfo info,
-) async {
-  final quiereDescargar = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AppUpdateWhatsNewDialog(
-      version: info.latestVersion,
-      notes: info.notes,
-      showLater: true,
-    ),
-  );
-  if (quiereDescargar != true || !context.mounted) return;
-  await AppUpdateChecker.markWhatsNewSeen(info.latestVersion);
-  if (!context.mounted) return;
-  final result = await showDialog<AppUpdateDownloadResult>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AppUpdateDownloadDialog(info: info),
-  );
-  if (!context.mounted) return;
-  if (result == AppUpdateDownloadResult.success) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Se abrió el instalador. Seguí los pasos; puede pedir cerrar Junior Eventos.',
-        ),
-      ),
-    );
-  }
-}
-
-/// Primera apertura de una versión que todavía no se acusó. Sin MÁS TARDE.
-Future<void> mostrarNovedadesSiPrimeraApertura(
-  BuildContext context,
-  AppUpdateChecker checker,
-) async {
-  final current = await checker.currentVersion();
-  final seen = await AppUpdateChecker.whatsNewSeenVersion();
-  if (!context.mounted) return;
-  if (seen == current) return;
-  final info = await checker.consultar();
-  if (!context.mounted) return;
-  if (info != null && info.hayNueva) return;
-  final notes = (info != null && info.latestVersion == current)
-      ? info.notes
-      : 'Junior Eventos $current está lista.';
-  final accepted = await showDialog<bool>(
-    context: context,
-    barrierDismissible: false,
-    builder: (ctx) => AppUpdateWhatsNewDialog(
-      version: current,
-      notes: notes,
-      alreadyInstalled: true,
-    ),
-  );
-  if (accepted == true) {
-    await AppUpdateChecker.markWhatsNewSeen(current);
-  }
-}
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -177,6 +115,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       await mostrarDialogoActualizacion(context, info);
       return;
     }
+    // En la tablet, solo el aviso de una versión nueva: las novedades son de la PC.
+    if (AppUpdateChecker.enAndroid) return;
     await mostrarNovedadesSiPrimeraApertura(context, checker);
   }
 
@@ -969,10 +909,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           }
         },
       ),
+      // En una tablet o un celular (la barra, 6.4.0) no hay segunda ventana: se ve
+      // apagada, con el motivo, para que se sepa dónde está.
       _CommandAction(
         label: 'TÓTEM',
         icon: Icons.monitor_rounded,
         onTap: _abrirTotem,
+        apagadaPorque:
+            KioskLauncher.disponible ? null : KioskLauncher.motivoNoDisponible,
       ),
     ];
 
@@ -990,12 +934,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       crossAxisSpacing: spacing,
       childAspectRatio: 0.85,
       children: actions.map((a) {
+        final apagada = a.apagadaPorque != null;
         return GestureDetector(
-          onLongPress: a.onLongPress,
+          onLongPress: apagada ? null : a.onLongPress,
           child: InkWell(
-            onTap: a.onTap,
+            key: Key('comando_${a.label}'),
+            onTap: apagada ? null : a.onTap,
             borderRadius: BorderRadius.circular(24),
-            child: Stack(
+            child: Opacity(
+              opacity: apagada ? 0.45 : 1,
+              child: Stack(
               clipBehavior: Clip.none,
               children: [
                 // Glassmorphic Card
@@ -1059,6 +1007,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (apagada)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+                              child: Text(
+                                a.apagadaPorque!,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 9,
+                                  color: isDark ? Colors.white60 : Colors.black54,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -1093,6 +1055,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
               ],
+              ),
             ),
           ),
         );
@@ -2083,11 +2046,15 @@ class _CommandAction {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final String? badge;
+
+  /// Con texto, la tarjeta se ve apagada, con ese motivo abajo, y no se toca.
+  final String? apagadaPorque;
   const _CommandAction({
     required this.label,
     required this.icon,
     required this.onTap,
     this.onLongPress,
     this.badge,
+    this.apagadaPorque,
   });
 }

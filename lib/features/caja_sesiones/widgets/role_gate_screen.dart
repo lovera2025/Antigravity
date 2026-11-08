@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/app_update_checker.dart';
+import '../../dashboard/widgets/actualizar_app.dart';
 import '../models/permisos_operador.dart';
 import '../providers/app_role_provider.dart';
 import '../services/entrada_de_operador.dart';
@@ -161,6 +163,11 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                if (ref.watch(versionNuevaEnLaTabletProvider).value
+                    case final nueva?) ...[
+                  _VersionNueva(info: nueva),
+                  const SizedBox(height: 24),
+                ],
                 const Icon(Icons.storefront_rounded, size: 48, color: gold),
                 const SizedBox(height: 16),
                 Text(
@@ -289,6 +296,49 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
         child: const Text('VOLVER'),
       ),
     ];
+  }
+}
+
+/// En la tablet (6.4.0), arriba de todo: hay una versión nueva en GitHub.
+/// ACTUALIZAR muestra las novedades y abre la descarga del APK.
+class _VersionNueva extends StatelessWidget {
+  const _VersionNueva({required this.info});
+
+  final AppUpdateInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    const gold = Color(0xFFD4AF37);
+    return Container(
+      key: const Key('entrada_version_nueva'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+      decoration: BoxDecoration(
+        color: gold.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gold.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.system_update_outlined, color: gold, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Hay una versión nueva: ${info.latestVersion}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          TextButton(
+            key: const Key('entrada_actualizar'),
+            onPressed: () => mostrarDialogoActualizacion(context, info),
+            child: const Text(
+              'ACTUALIZAR',
+              style: TextStyle(color: gold, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

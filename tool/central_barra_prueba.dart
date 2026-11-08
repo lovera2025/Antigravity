@@ -12,6 +12,11 @@
 // - CORTAR INTERNET (arriba de la notebook): nada sube a la nube; con internet, cada dos
 //   segundos "sube" todo, y las líneas dicen "Todo subido".
 // Los papeles no salen por la impresora: se guardan en memoria.
+//
+// **Con un celular o una tablet de verdad** (etapa 9): con `--dart-define=red=todas` la
+// central de la notebook escucha por el wifi, en los puertos de la app (8797 y 8777), y el
+// celular con `tool/tablet_barra_prueba.dart` la encuentra solo, como en el salón. Windows
+// pregunta si deja pasar a la ventana de prueba por el cortafuegos: hay que permitirlo.
 
 import 'dart:async';
 import 'dart:io';
@@ -19,26 +24,18 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:arguello_events/core/services/connectivity_service.dart';
-import 'package:arguello_events/features/barra/central/barra_con_la_red.dart';
-import 'package:arguello_events/features/barra/central/buscar_central.dart';
-import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
-import 'package:arguello_events/features/barra/jefe/barra_jefe_providers.dart';
 import 'package:arguello_events/features/barra/jefe/barra_jefe_screen.dart';
-import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/providers/barra_providers.dart';
-import 'package:arguello_events/features/barra/services/barra_sin_internet.dart';
-import 'package:arguello_events/features/barra/widgets/barra_home_screen.dart';
-import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
-import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
-import 'package:arguello_events/features/caja_sesiones/widgets/role_gate_screen.dart';
 
-import '../test/helpers/barra_en_memoria.dart';
-import '../test/helpers/operadores_en_memoria.dart';
+import '../test/helpers/barra_en_memoria.dart' show PapelEnMemoria;
+import 'salon_de_barra_prueba.dart';
+
+/// `--dart-define=red=todas`: la notebook escucha por el wifi de verdad.
+const _redDeVerdad = String.fromEnvironment('red') == 'todas';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,7 +44,7 @@ Future<void> main() async {
   final s = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
   final puertoBusqueda = s.port;
   s.close();
-  runApp(PruebaDeLaCentral(armarSalon(puertoBusqueda: puertoBusqueda)));
+  runApp(PruebaDeLaCentral(armarSalon(puertoBusqueda: puertoBusqueda, redDeVerdad: _redDeVerdad)));
   unawaited(_agrandarCuandoSeVea());
 }
 
@@ -57,39 +54,11 @@ Future<void> _agrandarCuandoSeVea() async {
     for (var i = 0; i < 50 && !await windowManager.isVisible(); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    await windowManager.setTitle('Prueba de la central de la barra · dos tablets y la notebook');
+    await windowManager.setTitle(_redDeVerdad
+        ? 'Prueba de la central de la barra · por el wifi (red=todas)'
+        : 'Prueba de la central de la barra · dos tablets y la notebook');
     await windowManager.maximize();
   } catch (_) {}
-}
-
-final idPuertoViejo = BarraEnPrueba.id(1);
-
-/// Lo guardado en el equipo, en memoria: cada lado tiene el suyo.
-class GuardadoDePrueba extends GuardadoDeLaCentral {
-  String? fiesta;
-  DondeEstaLaCentral? donde;
-
-  @override
-  Future<String?> prendida({DateTime? ahora}) async => fiesta;
-
-  @override
-  Future<void> anotarPrendida(String? eventoId, {DateTime? ahora}) async => fiesta = eventoId;
-
-  @override
-  Future<DondeEstaLaCentral?> aMano() async => donde;
-
-  @override
-  Future<void> anotarAMano(DondeEstaLaCentral? d) async => donde = d;
-}
-
-/// Un equipo de la prueba: sus providers y su barra.
-class EquipoDePrueba {
-  EquipoDePrueba(this.nombre, this.container, this.barra, this.conexion);
-
-  final String nombre;
-  final ProviderContainer container;
-  final BarraEnMemoria barra;
-  final ConexionFija conexion;
 }
 
 class SalonDePrueba {
@@ -131,76 +100,32 @@ class SalonDePrueba {
   }
 }
 
-/// Los tres equipos, con el mismo catálogo y los mismos precios (como si los hubieran
-/// bajado de la nube antes de la fiesta).
-SalonDePrueba armarSalon({required int puertoBusqueda}) {
-  final hoy = DateTime.now();
-  final eventos = [fiestaDePrueba(idPuertoViejo, 'PUERTO VIEJO', hoy)];
-  final catalogo = BarraEnMemoria();
-  var orden = 0;
-  for (final (nombre, categoria, precio, stock) in [
-    ('Cerveza lata', 'Cervezas', 3500.0, 24),
-    ('Fernet con coca', 'Tragos', 6000.0, null),
-    ('Gin tonic', 'Tragos', 7000.0, null),
-    ('Speed con vodka', 'Tragos', 8000.0, 6),
-    ('Agua sin gas', 'Sin alcohol', 1000.0, 4),
-    ('Silla extra', 'Sillas', 8000.0, null),
-  ]) {
-    final p = catalogo.producto(nombre, categoria: categoria, orden: orden);
-    catalogo.precio(idPuertoViejo, p, precio, orden: orden, stock: stock, aviso: stock == null ? null : 2);
-    orden++;
-  }
+/// Los tres equipos, con el mismo catálogo y los mismos precios. Con [redDeVerdad], la
+/// notebook escucha por el wifi y las dos tablets de la ventana la buscan en esta PC.
+SalonDePrueba armarSalon({required int puertoBusqueda, bool redDeVerdad = false}) {
+  final eventos = fiestasDePrueba();
+  final catalogo = catalogoDePrueba();
+  final enEstaPc = RedDePrueba.enEstaPc(puertoBusqueda: puertoBusqueda);
+  final redTablet = redDeVerdad ? RedDePrueba.tabletEnLaPc : enEstaPc;
+  final redNotebook = redDeVerdad ? RedDePrueba.delSalon : enEstaPc;
 
-  EquipoDePrueba equipo(String id, String nombre, {String? cajera, String? pin, bool jefe = false}) {
-    final barra = BarraEnMemoria()
-      ..equipo = id
-      ..reloj = (() => DateTime.now().toUtc());
-    barra.productosGuardados.addAll(catalogo.productosGuardados);
-    barra.preciosGuardados.addAll(catalogo.preciosGuardados);
-    final operadores = OperadoresEnPrueba();
-    if (cajera != null) {
-      final opId = 'a0000000-0000-4000-8000-${(cajera.hashCode & 0xffffff).toString().padLeft(12, '0')}';
-      operadores.operadores.lista.add(operadorDePrueba(opId, cajera, pin!));
-      operadores.permisos.poner(opId, const PermisosEfectivos(barra: true));
-    }
-    final aviso = AvisoALaRed();
-    final conLaRed = BarraConLaRed(caja: barra, jefe: barra, red: barra, aviso: aviso);
-    final papel = PapelEnMemoria();
-    var alDia = DateTime.now();
-    final overrides = <Override>[
-      ...operadores.reemplazos,
-      avisoALaRedProvider.overrideWithValue(aviso),
-      barraDeEsteEquipoProvider.overrideWithValue(conLaRed),
-      barraDeLaRedProvider.overrideWithValue(barra),
-      eventosDeLaBarraProvider.overrideWith((ref) async => eventos),
-      papelDeLaBarraProvider.overrideWithValue(papel),
-      subirVentaProvider.overrideWithValue((v) async {}),
-      subirDeLaBarraProvider.overrideWithValue((tabla, id) async {}),
-      accesosBarraProvider.overrideWithValue(AccesosBarra(
-        bajar: () async => operadores.conexion.currentStatus == AppConnectivity.online,
-        contarFiestas: () async => (await barra.fiestasConPrecio()).length,
-        contarSinSubir: barra.ventasSinSubir,
-        contarPendientes: barra.pendientesDeLaBarra,
-        leerAlDia: () async => alDia,
-        anotarAlDia: (c) async => alDia = c,
-      )),
-      escuchaCentralBarraProvider.overrideWithValue(InternetAddress.loopbackIPv4),
-      puertoCentralBarraProvider.overrideWithValue(0),
-      puertoBusquedaBarraProvider.overrideWithValue(puertoBusqueda),
-      destinosBusquedaBarraProvider.overrideWithValue(() async => [InternetAddress.loopbackIPv4]),
-      direccionesCentralBarraProvider.overrideWithValue(() async => ['127.0.0.1']),
-      equipoDeLaBarraProvider.overrideWithValue(() async => id),
-      guardadoDeLaCentralProvider.overrideWithValue(GuardadoDePrueba()),
-      if (jefe) esRolJefeProvider.overrideWithValue(true),
-      if (jefe) relojDelJefeProvider.overrideWithValue(DateTime.now),
-    ];
-    return EquipoDePrueba(nombre, ProviderContainer(overrides: overrides), barra, operadores.conexion);
-  }
+  EquipoDePrueba equipo(String id, String nombre, RedDePrueba red, {String? cajera, String? pin, bool jefe = false}) =>
+      armarEquipo(
+        id: id,
+        nombre: nombre,
+        catalogo: catalogo,
+        eventos: eventos,
+        red: red,
+        cajera: cajera,
+        pin: pin,
+        jefe: jefe,
+        papel: PapelEnMemoria(),
+      );
 
   return SalonDePrueba(
-    equipo('tablet-a', 'TABLET A', cajera: 'Marta', pin: '1111'),
-    equipo('tablet-b', 'TABLET B', cajera: 'Sofía', pin: '2222'),
-    equipo('notebook', 'NOTEBOOK DE LA BARRA', jefe: true),
+    equipo('tablet-a', 'TABLET A', redTablet, cajera: 'Marta', pin: '1111'),
+    equipo('tablet-b', 'TABLET B', redTablet, cajera: 'Sofía', pin: '2222'),
+    equipo('notebook', 'NOTEBOOK DE LA BARRA', redNotebook, jefe: true),
   );
 }
 
@@ -280,12 +205,12 @@ class _PruebaDeLaCentralState extends State<PruebaDeLaCentral> {
             children: [
               SizedBox(
                 width: tablet,
-                child: _lado(s.tabletA, const _Cajera(), botones: const [Text('PIN Marta 1111')]),
+                child: _lado(s.tabletA, const CajeraDePrueba(), botones: const [Text('PIN Marta 1111')]),
               ),
               const SizedBox(width: 6),
               SizedBox(
                 width: tablet,
-                child: _lado(s.tabletB, const _Cajera(), botones: const [Text('PIN Sofía 2222')]),
+                child: _lado(s.tabletB, const CajeraDePrueba(), botones: const [Text('PIN Sofía 2222')]),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -306,18 +231,5 @@ class _PruebaDeLaCentralState extends State<PruebaDeLaCentral> {
         }),
       ),
     );
-  }
-}
-
-class _Cajera extends ConsumerWidget {
-  const _Cajera();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final app = ref.watch(appRoleProvider);
-    return switch (destinoDeEntrada(app)) {
-      DestinoDeEntrada.barra => const BarraHomeScreen(),
-      _ => const RoleGateScreen(),
-    };
   }
 }
