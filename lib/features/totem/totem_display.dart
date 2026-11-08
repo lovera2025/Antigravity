@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
+import '../../core/services/cuerpo_del_broadcast.dart';
 import '../../core/services/totem_config_cache.dart';
 import 'providers/clave_totem_provider.dart';
 import 'services/lista_del_totem.dart';
@@ -568,17 +569,21 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
       // Usar Supabase Realtime Broadcast para reacción INMEDIATA sin esperar replicación
       if (_broadcastChannel == null) {
         _broadcastChannel = svc.client.channel('totem_$_eventoId');
+        // Por el socket el aviso llega suelto y por REST envuelto en
+        // `payload` (cuerpoDelBroadcast). Hasta la 6.4.0 se leía solo el
+        // envuelto: con Recepción abierta (que manda por el socket) este tótem
+        // no saludaba al instante y esperaba a `totem_lista`.
         _broadcastChannel!.onBroadcast(event: 'checkin', callback: (payload) {
-          final data = payload['payload'];
-          if (data != null && mounted) {
+          final data = cuerpoDelBroadcast(payload);
+          if (data != null && data['id'] != null && mounted) {
             final guest = Invitado.fromJson(data);
             _handleManualIncoming(guest);
           }
         });
         // Borrado instantáneo para tótems que no corren en la PC de Recepción.
         _broadcastChannel!.onBroadcast(event: 'guest_removed', callback: (payload) {
-          final data = payload['payload'];
-          final id = data is Map ? data['id']?.toString() : null;
+          final data = cuerpoDelBroadcast(payload);
+          final id = data?['id']?.toString();
           if (id != null && mounted) _handleGuestRemoved(id);
         });
         // Vaciar lista / deshacer todos los ingresos. Sin esto, un tótem que no

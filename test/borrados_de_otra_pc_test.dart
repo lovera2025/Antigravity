@@ -559,5 +559,26 @@ void main() {
       );
       expect(await _constancia(), contains('por el aviso de la otra PC'));
     });
+
+    test('un borrado que llega por el socket se aplica igual', () async {
+      // Por el socket el aviso llega suelto, sin `payload`; hasta la 6.4.0 se
+      // tiraba (docs/SPEC_pulso_por_el_socket_2026-11-07.md).
+      nube.filas.clear();
+      final m = motor();
+
+      m.recibirPulso({
+        'origen': 'pc-del-jefe',
+        'tablas': <String>[],
+        'borrados': {
+          'pagos_contrato_alumno': [_borrado],
+        },
+        'type': 'broadcast',
+        'event': 'cambios',
+      });
+      await Future<void>.delayed(const Duration(seconds: 1));
+
+      expect(await _pagosEnLaPc(), {_deHoy});
+      expect(await _constancia(), contains('por el aviso de la otra PC'));
+    });
   });
 }

@@ -64,8 +64,9 @@ PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en repo
   cambiar la fecha o anular se revisa la mora del alumno en el momento. **No sale como 6.3.4 sola: va con todo junto en la 6.4.0**
   (decidido el 7-nov a la noche). Caso: ENRIQUE, MAXIMO, que sigue en la caja del modo jefe del 7-nov hasta entonces. Entrada:
   `docs/CONTEXTO_v6.3.4_2026-11-07.md`, que empieza con "Para retomar en otro chat".
-- **Sin programar, en el plan general: el aviso entre PCs que llega por el socket se tira** (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`).
-  Ver "El sync en reposo", en Arquitectura. Se programa en esta rama y sale con todo junto en la 6.4.0.
+- **Programado el 8-nov (noche), sin publicar: el aviso entre PCs que llega por el socket ya no se tira**
+  (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`, `cuerpoDelBroadcast`). Ver "El sync en reposo", en Arquitectura. Sale con todo junto
+  en la 6.4.0.
 - **La mora adelantada** (entrada: `docs/CONTEXTO_v6.3.2_2026-11-09.md`, que empieza con "Para retomar en otro chat"). La mora cobrada
   por adelantado de una cuota que no se completa se volvía a pedir (LOPEZ, MORENA AILEN: $268.100 en vez de $235.200). El simulacro,
   repetido el 7-nov sobre la base del día: a 4 alumnos les baja la mora, a nadie le sube. Foto "antes de 6.3.3" sacada.
@@ -75,8 +76,9 @@ PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en repo
   reposo", en Arquitectura.
 
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
-**y la barra, etapas 1 a 4.** Faltan las etapas 4 a 6 de Entradas: **hasta la próxima versión, no darle Entradas a nadie** (todavía deja anular una
-entrega) **ni crear operadores sin Cobros** hasta que las tres PCs tengan la 6.3.0. Para mirarlo: `flutter run -d windows -t tool/operadores_prueba.dart`.
+**y la barra, etapas 1 a 4.** Entradas 4 y 5 están hechas en la rama (8-nov); **no darle Entradas a nadie ni crear operadores sin Cobros
+hasta que las tres PCs tengan la 6.4.0** (la 6.3.x deja anular una entrega y deja cobrar a quien no tiene Cobros). Para mirarlo:
+`flutter run -d windows -t tool/operadores_prueba.dart`.
 
 **En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`,
 que empieza con **"Para retomar en otro chat"**). Las etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas, `lib/features/barra/cuentas/`, y lo que dice cada papel,
@@ -128,11 +130,11 @@ dice siempre Android.** Probado en el emulador `Recepcion_Tablet` (sin ventana y
 llegó a la notebook y la anulación volvió; la app de verdad abrió hasta el login. **La etapa 10 se cerró el 8-nov con el
 celular Android del usuario y el router de su casa**: conectado a la central de esta PC por el wifi, la TP-POS58 desde Android y sin la
 fibra, "todo ok". Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código.
-**Entradas 4, programada el 8-nov (noche), sin publicar** (detalle y lo que falta en "Para retomar en otro chat" de
+**Entradas 4 y 5, programadas el 8-nov (noche), sin publicar** (detalle, las roturas y lo que no se comprobó en "Para retomar en otro chat" de
 `docs/CONTEXTO_OPERADORES_2026-11-02.md`): la entrega desde Entradas abre `RetiroEntradasScreen.mostrador`, sin cobrar ni editar; los
 botones de cada uno los decide `PermisosDeEntrega`; la familia que debe va a "En caja" (`enCajaProvider`, en memoria) y cuando el pago
 baja salta "pagó: ya podés entregar" con sonido; **anular una entrega es solo del jefe, también en la oficina**. Probar:
-`flutter run -d windows -t tool/entradas_prueba.dart`. De la etapa 5 faltan las roturas a propósito.
+`flutter run -d windows -t tool/entradas_prueba.dart`. Queda para la instalación: el sonido y la entrega en dos PCs de verdad.
 **La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los
@@ -229,12 +231,15 @@ le pedía a la nube (plan Free, instancia Nano). Ahora:
   (el motor hace I/O real). `test/sync_en_reposo_test.dart` cuenta, con `NubeDePrueba`, qué pide el motor en cada momento.
 - **Un comentario que diga "el ciclo de 10 s lo cubre" está viejo.** El tope de un borrado o un cambio cuyo aviso se perdió pasa de
   10 s a 5 minutos (antes de cobrar se baja todo igual).
-- **Hoy el pulso solo funciona cuando sale por REST** (7-nov, sin arreglar; `docs/SPEC_pulso_por_el_socket_2026-11-07.md`). Por el
-  socket, la librería manda los datos sueltos (`{origen, tablas, …, type, event}`); por REST, el servidor los envuelve en `payload`.
-  `_alRecibirPulso` lee `mensaje['payload']`: lo del socket, que es casi todo, se tira sin error. Lo tapaba el ciclo de 10 s. Hoy lo
-  nuevo de la otra PC llega al volver a la ventana (`bajarAlMirar`), antes de cobrar o con la red de 5 minutos. El tótem de la web
-  (`totem_display.dart`, `payload['payload']`) tiene lo mismo. **Las pruebas del pulso arman el aviso con la forma del REST:** la del
-  socket no la probó nadie.
+- **Un broadcast llega con dos formas, y se lee siempre con `cuerpoDelBroadcast`** (`core/services/cuerpo_del_broadcast.dart`; en la
+  rama desde el 8-nov, sale en la 6.4.0; `docs/SPEC_pulso_por_el_socket_2026-11-07.md`). Por el socket, la librería manda los datos
+  sueltos (`{origen, tablas, …, type, event}`); por REST, el servidor los envuelve en `payload`. Hasta la 6.3.3 `_alRecibirPulso` y el
+  tótem de la web leían solo `payload`: lo del socket, que es casi todo, se tiraba sin error (lo tapaba el ciclo de 10 s), y en las PCs
+  lo nuevo de la otra llega al volver a la ventana, antes de cobrar o con la red de 5 minutos hasta instalar la 6.4.0.
+  **Ningún aviso nuestro lleva una clave `payload`**, y **las pruebas del pulso van con las dos formas**
+  (`test/pulso_por_el_socket_test.dart`, que también falla si vuelve `payload['payload']`). La forma cruda que manda la nube no se
+  probó contra Supabase (`tool/pulso_prueba.dart`, sección 7.9 del SPEC, pide el OK del usuario): se comprueba con los registros
+  después de instalar (sección 9).
 
 **Rutas por URL en web** (`lib/main.dart:80-130`): se detectan con `contains()`
 sobre `Uri.base`, no con path parsing.

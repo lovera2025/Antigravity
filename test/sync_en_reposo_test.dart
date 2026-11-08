@@ -13,11 +13,13 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/core/database/local_database.dart';
 import 'package:arguello_events/core/database/sync_queue.dart';
 import 'package:arguello_events/core/services/connectivity_service.dart';
+import 'package:arguello_events/core/services/instalacion_id.dart';
 import 'package:arguello_events/core/services/sync_engine.dart';
 import 'package:arguello_events/features/mi_empresa/repositories/finanzas_repository.dart';
 
@@ -530,6 +532,65 @@ void main() {
       expect(m.status, SyncStatus.idle, reason: 'vuelve a quedar libre');
     });
 
+    // Por el socket (lo normal) el aviso llega suelto, con `type` y `event` de
+    // la librería; por REST, envuelto en `payload`. Hasta la 6.4.0 la PC leía
+    // solo el envuelto y tiraba el del socket sin error
+    // (docs/SPEC_pulso_por_el_socket_2026-11-07.md).
+    Map<String, dynamic> porElSocket(Map<String, dynamic> datos) => {
+          ...datos,
+          'type': 'broadcast',
+          'event': 'cambios',
+        };
+
+    test('un aviso por el socket baja solo lo avisado, enseguida', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      final marca = nube.pedidas.length;
+      m.recibirPulso(porElSocket({
+        'origen': 'pc-del-jefe',
+        'tablas': ['pagos_contrato_alumno', 'contratos_alumnos'],
+        'borrados': <String, List<String>>{},
+      }));
+      await reloj.avanzar(const Duration(milliseconds: 400));
+      await m.aquietar();
+      expect(ordenadas(nube.desde(marca)),
+          ['GET contratos_alumnos', 'GET pagos_contrato_alumno'],
+          reason: 'hasta la 6.4.0 el aviso del socket se tiraba');
+    });
+
+    test('el eco propio por el socket no baja nada', () async {
+      final m = motor();
+      expect(await m.bajarAlArrancar(), isTrue);
+      await m.aquietar();
+      SharedPreferences.setMockInitialValues({'caja_device_id': 'esta-pc'});
+      final yo = await InstalacionId.inicializar();
+      final marca = nube.pedidas.length;
+      m.recibirPulso(porElSocket({
+        'origen': yo,
+        'tablas': ['pagos_contrato_alumno'],
+        'borrados': <String, List<String>>{},
+      }));
+      await reloj.avanzar(const Duration(seconds: 1));
+      await m.aquietar();
+      expect(nube.desde(marca), isEmpty);
+    });
+
+    test('lo que arma el pulso no lleva una clave payload', () async {
+      final m = motor();
+      await SyncQueue.enqueue(
+        tabla: 'pagos_contrato_alumno',
+        operacion: SyncOperation.insert,
+        registroId: 'aaaaaaaa-0000-4000-8000-000000000002',
+        payload: _pago('aaaaaaaa-0000-4000-8000-000000000002'),
+      );
+      await reloj.avanzar(const Duration(seconds: 2));
+      await m.aquietar();
+      expect(m.ultimoPulsoArmado, isNotNull);
+      expect(m.ultimoPulsoArmado!.containsKey('payload'), isFalse,
+          reason: 'cuerpoDelBroadcast lo tomaría por la forma del REST');
+    });
+
     test('un aviso que llega justo antes de quedarse sin red se baja al volver', () async {
       final m = motor();
       expect(await m.bajarAlArrancar(), isTrue);
@@ -715,6 +776,40 @@ void main() {
       expect(avisos, [
         {'sesiones_caja'},
       ], reason: 'abrir o cerrar la caja sí');
+    });
+
+    test('un latido por el socket baja sesiones_caja sin refrescar las pantallas',
+        () async {
+      final m = motor();
+      final avisos = <Set<String>>[];
+      final sub = m.cambiosBajadosStream.listen(avisos.add);
+      addTearDown(sub.cancel);
+      nube.filas['sesiones_caja'] = [
+        {
+          'id': sesion,
+          'operador_id': 'bbbbbbbb-0000-4000-8000-000000000001',
+          'abierta_at': '2026-11-10T13:00:00Z',
+          'cambio_inicial': 0,
+          'device_id': 'pc-del-jefe',
+          'last_heartbeat': '2026-11-10T15:05:00Z',
+          'created_at': '2026-11-10T13:00:00Z',
+          'updated_at': '2026-11-10T15:05:00Z',
+        },
+      ];
+      final marca = nube.pedidas.length;
+      m.recibirPulso({
+        'origen': 'pc-del-jefe',
+        'tablas': ['sesiones_caja'],
+        'borrados': <String, List<String>>{},
+        'latido': true,
+        'type': 'broadcast',
+        'event': 'cambios',
+      });
+      await reloj.avanzar(const Duration(seconds: 1));
+      await m.aquietar();
+      expect(nube.desde(marca), ['GET sesiones_caja'],
+          reason: 'hasta la 6.4.0 el latido del socket se tiraba');
+      expect(avisos, isEmpty);
     });
 
     test('un "latido" que no es un true de verdad avisa normal', () {

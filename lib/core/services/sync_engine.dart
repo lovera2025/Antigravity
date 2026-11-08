@@ -11,6 +11,7 @@ import '../utils/uuid_utils.dart';
 import 'borrados_de_otra_pc.dart';
 import 'connectivity_service.dart';
 import 'contrato_al_bajar.dart';
+import 'cuerpo_del_broadcast.dart';
 import 'instalacion_id.dart';
 import 'reloj_del_motor.dart';
 import '../../features/cierre_caja/cierre_caja_sync_config.dart';
@@ -1201,8 +1202,10 @@ class SyncEngine {
       _estadoDelCanal(estado);
 
   void _alRecibirPulso(Map<String, dynamic> mensaje) {
+    // Por el socket llega suelto y por REST envuelto en `payload`: hasta la
+    // 6.4.0 se leía solo el envuelto y todo lo del socket se tiraba.
     final trabajo = trabajoDelPulso(
-      mensaje['payload'],
+      cuerpoDelBroadcast(mensaje),
       yo: InstalacionId.valor,
       tablasConocidas: _incrementalColumns.keys.toSet(),
     );
