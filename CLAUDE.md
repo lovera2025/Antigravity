@@ -95,8 +95,14 @@ día siguiente), CATÁLOGO, PRECIOS con el **recargo por fiesta** (`barra_recarg
 la lista en 58 mm, y CAJAS con una tarjeta por caja, el stock de la fiesta, y anular y reimprimir cualquier venta; cada guardado pregunta por
 el modo jefe, y arriba está el ícono de la impresora de esa PC (`faltaLaImpresora` avisa si nunca se eligió). **Cerrada el 7-nov con el
 recorrido con el mouse: `tool/barra_prueba.dart` pone a la cajera y al jefe lado a lado sobre la misma barra en memoria**, y lo que hace
-uno le llega al otro como en la app (el detalle y lo que encontró, en "El recorrido de la etapa 7" del CONTEXTO de la barra). Sigue la 8
-(el jefe en el iPhone). **La barra vende con la app en cada tablet, no
+uno le llega al otro como en la app (el detalle y lo que encontró, en "El recorrido de la etapa 7" del CONTEXTO de la barra). **La 8 se
+cerró el 7-nov: el jefe en el iPhone.** En la web BARRA lee y escribe directo en la nube por `BarraNube` (también las fiestas,
+`BarraNube.eventos()`), con la única llave `enLaWebProvider` (`barra_del_jefe_provider.dart`; las pantallas del jefe no preguntan por
+`kIsWeb`, y nunca por el singleton de Supabase: `test/barra_en_la_web_test.dart`). CAJAS se relee sola cada 30 s y al deslizar hacia
+abajo (las tablas de la barra no están en Realtime), y sin impresora: quedan los PDF. Para mirarla, `tool/barra_web_prueba.dart` **compilado
+como la web de verdad** (`flutter build web -t … --output build/barra_web_prueba` y un servidor estático, `.claude/launch.json`): el compilador
+de desarrollo de la web (`flutter run -d web-server`) se cae con este proyecto y deja la página en blanco. Sigue la central de la barra.
+**La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los
 PDF de la barra son de 58 mm, una sola hoja larga, nunca A4** (`PapelPdf`; en pantalla, `PapelEnPantalla`: la misma lista de líneas que va

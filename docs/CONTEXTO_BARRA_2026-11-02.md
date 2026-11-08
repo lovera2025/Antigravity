@@ -5,11 +5,13 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
-> **Al 7-nov (noche): las etapas 1 a 7 están cerradas.** La 7 se cerró con el recorrido con el mouse y la foto de la lista de precios
+> **Al 7-nov (noche): las etapas 1 a 8 están cerradas.** La 7 se cerró con el recorrido con el mouse y la foto de la lista de precios
 > impresa en la TP-POS58 ("un lujo"); el recorrido encontró seis cosas, arregladas con su test (abajo, "El recorrido de la etapa 7").
-> **`tool/barra_prueba.dart` tiene ahora a la cajera y al jefe lado a lado**, sobre la misma barra en memoria. **Sigue la etapa 8** (el
-> jefe en el iPhone, en la web): primero su plan corto y el OK. Después, la central de la barra (etapa propia, antes de la 10), la 9
-> (Android firmado), la 10 (de punta a punta), Entradas 4 a 6 y publicar la 6.4.0. Plan general: **16 de 26 partes, 62 %**.
+> **`tool/barra_prueba.dart` tiene ahora a la cajera y al jefe lado a lado**, sobre la misma barra en memoria. **La 8 (el jefe en el
+> iPhone, en la web) se cerró la misma noche**: BARRA lee y escribe directo en la nube por `BarraNube`, CAJAS se relee sola cada 30 s y
+> al deslizar, sin impresora; recorrida en el navegador de la app a 375 px con `tool/barra_web_prueba.dart` (abajo, "Etapa 8"). **Sigue
+> la central de la barra** (etapa propia, antes de la 10): primero su plan corto y el OK. Después, la 9 (Android firmado), la 10 (de
+> punta a punta), Entradas 4 a 6 y publicar la 6.4.0. Plan general: **17 de 26 partes, 65 %**.
 >
 > **Lo decidido el 7-nov:** la barra vende con **la app instalada en cada tablet**, no como las recepcionistas por QR (el navegador no
 > imprime por Bluetooth y la barra no puede dejar de vender si se cae la red); **la central sigue en pie** (el stock general, en vivo
@@ -47,7 +49,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
 | 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
-| 8. El jefe en el iPhone | `BarraNube` (lee y anula directo en la nube) | Las pantallas, en la web |
+| 8. El jefe en el iPhone | **Cerrada el 7-nov** (abajo, "Etapa 8"): la web lee y escribe por `BarraNube` (también las fiestas), CAJAS se relee cada 30 s y al deslizar, sin impresora; `tool/barra_web_prueba.dart` y su test; recorrida en el navegador a 375 px | Nada. La web se publica con todo en la 6.4.0 |
 | 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
 | 10. De punta a punta | Nada | Con modo avión, sin internet |
 | Entradas 4 a 6 | Las etapas 1 a 3, publicadas apagadas | La entrega según los permisos, "pagó: ya podés entregar", anular solo el jefe (`docs/PLAN_MODO_ENTRADAS_2026-10-30.md`) |
@@ -61,7 +63,42 @@ PCs tienen la 6.3.3 desde el 7-nov.)
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
 > Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
-> corto de la etapa 8."
+> corto de la central de la barra."
+
+### Etapa 8: el jefe en el iPhone, en la web (7-nov, noche)
+
+**Hasta acá BARRA del jefe no andaba en la web:** `barraDelJefeProvider` armaba `BarraLocal` (SQLite, que en la web tira
+`UnsupportedError`), las fiestas salían de la base de la PC y lo guardado iba a la cola de sync, que en la web no existe. Ahora:
+- **`enLaWebProvider`** (`providers/barra_del_jefe_provider.dart`, `kIsWeb`): la única llave de "estoy en la web". Los tests la ponen
+  en `true`; las pantallas del jefe no preguntan por `kIsWeb` (`test/barra_en_la_web_test.dart` lee los archivos y lo vigila, junto con
+  que la nube entre por `supabaseProvider` y nunca por el singleton de Supabase).
+- **Los datos:** en la web, `barraDelJefeProvider` es `BarraNube(ref.watch(supabaseProvider))`; las fiestas vienen de
+  **`BarraNube.eventos()`** (lee `eventos` de la nube, ordenado y de a 1000; `FiestasDelJefe.de` saca las canceladas) por
+  `eventosDeLaBarraProvider`; `subirDeLaBarraProvider` en la web no hace nada (BarraNube ya escribió). Quien firma sigue siendo "Jefe".
+- **CAJAS se relee sola en la web** (`CajasDeLaFiestaVista`): cada 30 s mientras está abierta (`kRelecturaDeCajasEnLaWeb`) y al
+  deslizar hacia abajo (`RefreshIndicator`, `jefe_cajas_releer`); el renglón verde lo dice. En la PC nada de eso: la rehace el sync. Las
+  tablas de la barra no están en Realtime a propósito, así que no hay otro aviso.
+- **Sin impresora en la web:** sin el ícono, sin IMPRIMIR LISTA, sin REIMPRIMIR y sin IMPRIMIR el cierre; quedan los dos PDF de 58 mm
+  (`PdfService.entregarPdf` en la web va por `Printing.sharePdf`, que abre o guarda el archivo).
+- **La noche inventada pasó a `test/helpers/noche_de_barra.dart`** (`nocheDeBarra()`): la usan la muestra del jefe, el arnés de la web
+  y sus tests.
+- **El arnés `tool/barra_web_prueba.dart`:** BARRA del jefe sobre la noche en memoria, con la llave de la web prendida. **Se compila
+  como la web de verdad** (`flutter build web -t tool/barra_web_prueba.dart --no-web-resources-cdn --output build/barra_web_prueba`) y
+  se sirve con `python -I -m http.server 8790 --directory build/barra_web_prueba` (`.claude/launch.json`, para el navegador de la app):
+  **el compilador de desarrollo (`flutter run -d web-server`) se cae con este proyecto y deja la página en blanco** ("The Dart compiler
+  exited unexpectedly", 7-nov). `test/barra_web_prueba_test.dart` lo monta a 390 px.
+- **Pruebas:** `barra_jefe_pantalla_test.dart`, grupo "en la web" (4: sin impresora, la relectura a los 30 s, deslizar, y que en la PC
+  no pasa); `barra_nube_test.dart` (`eventos()`); `barra_en_la_web_test.dart`; `barra_web_prueba_test.dart`. Las cuatro de la web fallan
+  sin el cambio. En el helper `tocar` de la pantalla del jefe hace falta un `pump()` entre `ensureVisible` y el toque: si no, el toque va
+  a donde estaba el botón antes de desplazar (apareció con el texto más largo de la web).
+
+**El recorrido en el navegador de la app a 375 px** (el usuario lo miraba y tocaba a la vez): CATÁLOGO con las fotos; PRECIOS (un precio,
+el recargo, GUARDAR CAMBIOS: "Guardado: 1 precio y el recargo."); CAMBIAR DE FIESTA a ROTONDA (CAJAS vacía), COPIAR DE OTRA FIESTA
+("Se copiaron 11 precios de TÉCNICA PINAROLI y su recargo", sin el Red Bull dado de baja) y guardar; LISTA · PDF; CAJAS con la noche,
+Caja 1, VER CÓMO VA (CERRAR y PDF, sin IMPRIMIR), PDF del cierre; ANULAR con motivo desde la web ("ANULADA · se cobró dos veces ·
+Jefe"); MODO JEFE en NO. **No apareció ningún error.** Lo que no se pudo ver en el panel: el archivo que baja el PDF (las letras Outfit se
+cargaron, así que el PDF se armó; `Printing.sharePdf` es lo mismo que usan los demás PDF de la web) y deslizar para releer con el mouse
+(el navegador de escritorio no desliza con el mouse; en el iPhone es un toque, y el test lo cubre).
 
 ### El recorrido de la etapa 7 (7-nov, noche)
 
