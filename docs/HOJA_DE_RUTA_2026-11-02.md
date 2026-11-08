@@ -34,7 +34,8 @@ Buena Vista el 12-dic), los **sorteos de mesas son antes**, y **la barra debuta 
 **7-nov: la barra 5 y 6 están hechas** (VENTAS: reimprimir con freno, imprimir lo que falta, el ticket con precios y anular; cerrar la
 caja contando a ciegas, con el cierre como el papel y su PDF de 58 mm; `docs/CONTEXTO_BARRA_2026-11-02.md`). **El usuario decidió seguir
 completando y publicar al final, salvo que diga "publicá"**: la 6.3.2 y la 6.3.3 esperan programadas y probadas en `release/6.3.x`.
-Sigue la barra 7 (el jefe y la encargada en la PC).
+Sigue la barra 7 (el jefe y la encargada en la PC). **7-nov (noche): la barra 7 cerrada** (con el recorrido con el mouse, la cajera y
+el jefe lado a lado en `tool/barra_prueba.dart`, y la foto de la lista de precios impresa); sigue la 8. Plan general: 16 de 26, 62 %.
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el

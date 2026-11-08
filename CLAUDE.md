@@ -93,7 +93,10 @@ lo vendido por producto, las sillas y el historial; solo la nota cambia después
 PC** (`lib/features/barra/jefe/`): la tarjeta BARRA en el Centro de Comando, **la fiesta primero** (abre en la próxima; la de anoche sigue al
 día siguiente), CATÁLOGO, PRECIOS con el **recargo por fiesta** (`barra_recargos`, v78, cuarto SQL sin correr; cada cobro arranca con ese) y
 la lista en 58 mm, y CAJAS con una tarjeta por caja, el stock de la fiesta, y anular y reimprimir cualquier venta; cada guardado pregunta por
-el modo jefe. Le falta el recorrido con el mouse (un modo jefe en `tool/barra_prueba.dart`). **La barra vende con la app en cada tablet, no
+el modo jefe, y arriba está el ícono de la impresora de esa PC (`faltaLaImpresora` avisa si nunca se eligió). **Cerrada el 7-nov con el
+recorrido con el mouse: `tool/barra_prueba.dart` pone a la cajera y al jefe lado a lado sobre la misma barra en memoria**, y lo que hace
+uno le llega al otro como en la app (el detalle y lo que encontró, en "El recorrido de la etapa 7" del CONTEXTO de la barra). Sigue la 8
+(el jefe en el iPhone). **La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los
 PDF de la barra son de 58 mm, una sola hoja larga, nunca A4** (`PapelPdf`; en pantalla, `PapelEnPantalla`: la misma lista de líneas que va

@@ -5,11 +5,11 @@ El orden de todo: `docs/HOJA_DE_RUTA_2026-11-02.md`.
 
 ## Para retomar en otro chat
 
-> **Al 7-nov (tarde): las etapas 1 a 7 están programadas** (la 7, "Etapa 7: el jefe en la PC", abajo). **A la 7 le falta solo el
-> recorrido con el mouse** (sumarle a `tool/barra_prueba.dart` un modo jefe, con la barra en memoria compartida con la cajera, y vender
-> de un lado y mirar CAJAS del otro) **y la foto de la lista de precios impresa en la TP-POS58** (avisarle al usuario cuando haga
-> falta la impresora). Después: la etapa 8 (el jefe en el iPhone, en la web), la central de la barra (etapa propia, antes de la 10), la 9
-> (Android firmado), la 10 (de punta a punta), Entradas 4 a 6 y publicar la 6.4.0. Cada etapa empieza con su plan corto y su OK.
+> **Al 7-nov (noche): las etapas 1 a 7 están cerradas.** La 7 se cerró con el recorrido con el mouse y la foto de la lista de precios
+> impresa en la TP-POS58 ("un lujo"); el recorrido encontró seis cosas, arregladas con su test (abajo, "El recorrido de la etapa 7").
+> **`tool/barra_prueba.dart` tiene ahora a la cajera y al jefe lado a lado**, sobre la misma barra en memoria. **Sigue la etapa 8** (el
+> jefe en el iPhone, en la web): primero su plan corto y el OK. Después, la central de la barra (etapa propia, antes de la 10), la 9
+> (Android firmado), la 10 (de punta a punta), Entradas 4 a 6 y publicar la 6.4.0. Plan general: **16 de 26 partes, 62 %**.
 >
 > **Lo decidido el 7-nov:** la barra vende con **la app instalada en cada tablet**, no como las recepcionistas por QR (el navegador no
 > imprime por Bluetooth y la barra no puede dejar de vender si se cae la red); **la central sigue en pie** (el stock general, en vivo
@@ -46,7 +46,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | La central de la barra | Nada: solo decidido (abajo, "Decidido el 3-nov (noche)"; confirmado el 7-nov) | Un equipo que recibe las ventas de todas las cajas por la red del salón y reparte el stock en vivo sin internet. Las tablets siguen vendiendo con su app aunque no esté. Qué equipo es y cómo se conecta la tablet, en su etapa, antes de la 10 |
 | El aviso de papel | Nada | Un botón PAPEL en `tool/impresora_prueba.dart` (`DLE EOT 4`) para ver si la TP-POS58 contesta |
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
-| 7. El jefe en la PC | **Programada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir; 23 pruebas de pantalla y las muestras | El recorrido con el mouse (modo jefe en `tool/barra_prueba.dart`) y la foto de la lista impresa. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
+| 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
 | 8. El jefe en el iPhone | `BarraNube` (lee y anula directo en la nube) | Las pantallas, en la web |
 | 9. Android firmado | La ventana de prueba de la impresora compila y anduvo en su celular | La app entera en Android y la clave de firma |
 | 10. De punta a punta | Nada | Con modo avión, sin internet |
@@ -60,8 +60,50 @@ PCs tienen la 6.3.3 desde el 7-nov.)
 **Cuando haga falta imprimir, avisarle** ("después me avisás si necesitás usar la impresora y vemos lo impreso"). El vale de la silla y
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
-> Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md, terminá el recorrido
-> con el mouse de la etapa 7 y pasame el plan corto de la etapa 8."
+> Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
+> corto de la etapa 8."
+
+### El recorrido de la etapa 7 (7-nov, noche)
+
+**La ventana de prueba, con los dos lados** (`tool/barra_prueba.dart`; `flutter run -d windows -t tool/barra_prueba.dart`, y con
+`--dart-define=papel=pantalla` los papeles se miran con PAPEL en vez de salir por la impresora). La cajera a la izquierda (una tablet,
+o un celular con VER COMO CELULAR) y el jefe a la derecha (la PC). **Cada lado es su propia app** (su `MaterialApp`, sus diálogos y su
+ancho, para que `CortesPantalla` mida el lado) **sobre la misma `BarraEnMemoria`**, y se hablan como en la app: lo que la tablet sube, el
+jefe lo baja (`operationalSyncRevisionProvider` del otro lado), y al revés. CORTAR INTERNET vale para los dos: el jefe no ve las ventas
+que la tablet no subió (`_LoQueSubio`), y al volver suben y le llegan. MODO JEFE: SÍ / NO, arriba del jefe. Una sola impresora para los
+dos. La ventana se agranda cuando ya se ve (el runner de Windows la muestra después del primer cuadro y eso deshacía el `maximize`). El
+test `test/barra_prueba_test.dart` la monta y prueba que los lados se hablan (con la rotura a propósito del filtro de lo no subido).
+
+**Lo que se recorrió:** CATÁLOGO (alta con la foto por el nombre, ELEGIR FOTO, baja), PRECIOS (precio nuevo, producto nuevo, recargo,
+GUARDAR CAMBIOS, COPIAR DE OTRA FIESTA), la cajera con su PIN (la fiesta con precios nuevos le aparece sola), VENDER con el precio
+nuevo, efectivo, transferencia (el cobro arranca con el recargo que puso el jefe: se probó con 8 %), mixto, la silla extra con su
+vale, CAJAS que se pone al día sola, anular desde el jefe (la tablet recupera el stock), reimprimir con COPIA y "Jefe", sin internet y
+de vuelta, cerrar la caja a ciegas (al jefe le llega la diferencia), VER CIERRE, sin modo jefe, y la cajera y el jefe en celular.
+
+**Lo que encontró, arreglado con su test (en rojo sin el arreglo):**
+1. **MIXTO: la casilla que se completa sola no se podía corregir.** Al escribir el efectivo, la transferencia se completa sola; al
+   tocarla para cambiarla, lo escrito se pegaba al número ($ 5.400 y "5000" dejó $ 55.400.000). Ahora cada casilla de plata del cobro
+   queda toda marcada al entrar y lo escrito reemplaza (`_Plata`, `cobrar_hoja.dart`).
+2. **Con recargo, "Cobrado" decía el total sin el recargo** ($ 11.500 debajo de "Venta guardada: $ 12.075"). Ahora dice lo cobrado
+   (`elegir_vales.dart`, `vales_cobrado`).
+3. **En la PC del jefe no había dónde elegir la impresora:** solo desde VENDER, y en la oficina nadie abre una caja. IMPRIMIR LISTA,
+   reimprimir y el cierre decían "¿La impresora está prendida?" con la impresora al lado. Ahora BARRA tiene arriba el ícono de la
+   impresora (la misma pantalla de la cajera; no en la web), y si esta PC nunca eligió una, lo dice (`faltaLaImpresora`,
+   `kSinImpresoraEnEstaPc`), en reimprimir antes de pedir el motivo.
+4. **Guardar precios y recargo juntos decía solo "Guardado: 2 precios."** Ahora "… y el recargo".
+5. **COPIAR DE OTRA FIESTA contaba un producto dado de baja**: decía "10 precios" y copiaba 9. Ahora cuenta los que va a copiar.
+6. En la ventana de prueba: la caja salía "abierta desde las 23:00" (la barra en memoria tiene un reloj fijo; ahora usa la hora real) y
+   la ventana no se agrandaba.
+
+**Visto y dejado como está:** en el celular, el título de VENDER corta el nombre de la cajera ("Caja 2 · …") por los cinco íconos; la
+cajera de la barra va en tablet. Abrir una caja no le llega al jefe hasta la primera venta (en la app la sube el motor a los 2 s). En el
+papel de la lista, cada línea de guiones parece salir como dos rayas juntas (`g.hr()` manda una sola de 32): sin verificar en los
+otros papeles; si se quiere ahorrar ese renglón, se mira con la impresora.
+
+**La foto:** la lista de precios de PUERTO VIEJO salió por la TP-POS58 desde el lado del jefe ("un lujo"): acentos bien, el nombre largo
+en dos renglones con el precio en el primero, sin logo ni QR. **La primera vez no salió**: la PC la tenía recordada, pero no contestó
+al reconectarse sola; después de buscarla y tocar CONECTAR, salió. No se sabe si estaba apagada o dormida en ese momento: si vuelve a
+pasar con la impresora prendida, es para mirar (reconectarse sola en Windows sin buscarla antes).
 
 ### Etapa 7: el jefe en la PC (7-nov, en la rama)
 
