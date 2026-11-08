@@ -3,6 +3,56 @@
 2-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Plan: `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, etapas 1 a 3. El orden de todo:
 `docs/HOJA_DE_RUTA_2026-11-02.md`, paso 3.
 
+## Para retomar en otro chat (8-nov, noche): Entradas 4 y 5
+
+> **Entradas 4 (la entrega según los permisos) está programada y probada en la rama, sin publicar.** El plan aprobado el 8-nov está
+> en `C:\Users\lover\.claude\plans\prosigamos-tingly-thompson.md` (copiado abajo en corto). La barra está completa hasta su etapa 10.
+> Plan general: **22 de 26 partes, 85 %** con la 4; con la 5 cerrada, 23 de 26 (88 %). Después quedan **el aviso de papel**, **el
+> aviso entre PCs** (`docs/SPEC_pulso_por_el_socket_2026-11-07.md`) y **publicar la 6.4.0** (Entradas 6).
+>
+> Frase para retomar: "Seguimos con Entradas: leé 'Para retomar en otro chat' de docs/CONTEXTO_OPERADORES_2026-11-02.md y terminá
+> la etapa 5 (las roturas a propósito y el commit si no quedó hecho)."
+
+**Lo que hace ahora la entrega de entradas** (`RetiroEntradasScreen`):
+- **Dos modos.** Desde la fiesta (la oficina) sigue igual: IR A COBRAR y EDITAR ALUMNO abren lo de siempre. Desde Entradas (el operador
+  que entra con su PIN a entregar) abre **`RetiroEntradasScreen.mostrador`**: sin cobro ni edición.
+- **Qué botones ve cada uno lo decide `PermisosDeEntrega`** (`eventos/services/permisos_de_entrega.dart`): oficina → cobrar y editar;
+  mostrador → ni cobrar ni editar, PASAR A CAJA si tiene Cobros; **anular, solo con modo jefe, en los dos lugares**.
+- **Si la familia debe, en el mostrador:** "Debe $X · cuotas y extras · mora. **Que pase por caja a saldar todo; cuando pague, la entrega
+  se destraba sola.**" ENTENDIDO la deja en **"En caja"**; con Cobros, PASAR A CAJA la deja en "En caja" y lleva a la caja sin el PIN
+  (cierra la entrega y llama a `pasarACaja()`).
+- **"En caja"** (`entradas/services/en_caja.dart`, `enCajaProvider` por fiesta, en memoria, sobrevive a ir a la caja y volver): arriba
+  de la entrega, las familias que deben ("PÉREZ · debe $70.000" o "pagó una parte · faltan $40.000"). **Cuando el pago baja de la otra PC
+  (o de esta), salta en verde "PÉREZ pagó: ya podés entregar" con ENTREGAR y el sonido del sistema** (`SystemSound.alert`), una sola vez.
+  Entregarle la saca de la lista; la ✕ también.
+- **Si el diálogo de esa familia está abierto cuando paga, se cierra y se vuelve a abrir con los datos nuevos** (`VolverAAbrir`, por el
+  `Listenable cuentaCambio`): solo si muestra el bloqueo, nunca con el formulario a medio llenar.
+- **La línea "En vivo con la caja"** (o "Sin internet: lo que se cobre en la caja no llega hasta que vuelva"), solo en el mostrador.
+- **Anular, doble llave:** el botón apagado con "Solo en modo jefe" (`kSoloEnModoJefe`), y `_anular` frena sin el permiso. **Ojo: en la
+  oficina, quien está en la caja ya no anula una entrega: solo el jefe** (decidido el 30-oct).
+- Los otros bloqueos, en el mostrador, dicen "Pedile al jefe que lo revise" y no tienen EDITAR ALUMNO ni "Cambiar acompañantes".
+- `entregado_por` lleva el nombre del operador (ya lo hacía `quienOperaDe`; ahora con su test).
+- La subida después de entregar o anular pasa por `subidaInmediataProvider` (lo mismo que hacía, reemplazable en los tests).
+
+**Las pruebas, en el sandbox:** `test/retiro_entradas_screen_test.dart` (nuevo, la pantalla entera montada con
+`test/helpers/entrega_en_memoria.dart`: tres familias, "la otra PC" que cobra con `cobrar()` y avisa como el pulso), `en_caja_test`,
+`quien_opera_test`, `entrega_entradas_dialog_test` ampliado y `modo_entradas_cerrado_test` al día. **La ventana de prueba
+`tool/entradas_prueba.dart`** (`flutter run -d windows -t tool/entradas_prueba.dart`): Carla (solo Entradas) a la izquierda y la otra
+PC cobrando a la derecha. **El recorrido con el mouse (8-nov):** PÉREZ debe → ENTENDIDO → "En caja"; la otra PC cobra $30.000 → "pagó una
+parte · faltan $40.000"; con su diálogo abierto, COBRAR TODO → el diálogo se volvió a abrir solo con el formulario y arriba "PÉREZ, JUAN
+pagó: ya podés entregar"; entregado (talonario 2001, Madre) → el aviso se fue; GÓMEZ (ya retiró) → ANULAR apagado con "Solo en modo
+jefe"; CORTAR INTERNET → la línea lo dice. **Encontró una cosa:** los botones del diálogo bloqueado quedaron a la izquierda; arreglado
+(vuelven a ir a la derecha, como antes).
+
+**Lo que falta de la etapa 5:**
+1. **Las roturas a propósito** (el ANULAR prendido sin jefe, el aviso que no salta, IR A COBRAR en el mostrador) y verlas en rojo.
+2. **La suite entera** y el commit, si este chat no llegó a hacerlo (mirar `git status` y `git log`).
+3. **No comprobado:** el sonido del aviso (en Windows es el "tin" del sistema; no se pudo escuchar desde acá), PASAR A CAJA con el mouse
+   (lo cubre el test), y **la prueba en dos PCs de verdad**, que queda para la instalación de la 6.4.0 en la oficina con el usuario (un
+   operador de prueba solo de Entradas en una PC, la caja en la otra).
+4. Al cerrar: `CLAUDE.md` (sacar "hasta la próxima versión, no darle Entradas a nadie": pasa a "hasta que las tres PCs tengan la 6.4.0")
+   y la hoja de ruta con el porcentaje.
+
 **Estado: etapas 1 a 3 hechas y subidas a la rama. Sin versión, sin release, sin web, y el SQL sin correr. Las PCs siguen con la
 6.2.1. Publicar, solo preguntándole antes al usuario.**
 

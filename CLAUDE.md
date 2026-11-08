@@ -127,7 +127,12 @@ dice siempre Android.** Probado en el emulador `Recepcion_Tablet` (sin ventana y
 `tool/tablet_barra_prueba.dart` como APK, la central de verdad en esta PC y la tablet conectada a `10.0.2.2:8797` por `ws://`: la venta
 llegó a la notebook y la anulación volvió; la app de verdad abrió hasta el login. **La etapa 10 se cerró el 8-nov con el
 celular Android del usuario y el router de su casa**: conectado a la central de esta PC por el wifi, la TP-POS58 desde Android y sin la
-fibra, "todo ok". Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código. Sigue Entradas 4 a 6.
+fibra, "todo ok". Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código.
+**Entradas 4, programada el 8-nov (noche), sin publicar** (detalle y lo que falta en "Para retomar en otro chat" de
+`docs/CONTEXTO_OPERADORES_2026-11-02.md`): la entrega desde Entradas abre `RetiroEntradasScreen.mostrador`, sin cobrar ni editar; los
+botones de cada uno los decide `PermisosDeEntrega`; la familia que debe va a "En caja" (`enCajaProvider`, en memoria) y cuando el pago
+baja salta "pagó: ya podés entregar" con sonido; **anular una entrega es solo del jefe, también en la oficina**. Probar:
+`flutter run -d windows -t tool/entradas_prueba.dart`. De la etapa 5 faltan las roturas a propósito.
 **La barra vende con la app en cada tablet, no
 por QR como la puerta, y la central de la barra sigue en pie** (decidido el 7-nov). **Lo que
 se imprime en la barra ahorra papel: sin logo en vales, copias, ticket ni cierre, y el ticket sin QR** (pedido del usuario, 7-nov). **Los

@@ -43,15 +43,18 @@ la barra cerrada** (la notebook la prende, las tablets la encuentran solas por e
 vive en `Documentos\Junior Eventos\claves` y el usuario tiene que copiar a un lugar seguro; el APK sale con el instalador; probada en el
 emulador de tablet de esta PC, conectada a la central de verdad por `ws://`). **La misma tarde, la barra 10 cerrada** con su celular
 Android y el router de su casa: se conectó a la central por el wifi, imprimió en la TP-POS58 y siguió andando sin la fibra ("todo ok").
-Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código. Sigue **Entradas 4 a 6**. Plan general: 21 de 26, 81 %.
+Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código. **8-nov, noche: Entradas 4 programada y probada** (la
+entrega según los permisos, "En caja" y el aviso "pagó: ya podés entregar", anular solo el jefe; recorrida con el mouse); de la 5 faltan
+las roturas a propósito. Ver "Para retomar en otro chat" de `docs/CONTEXTO_OPERADORES_2026-11-02.md`. Después: el aviso de papel, el
+aviso entre PCs y publicar la 6.4.0. Plan general: 22 de 26, 85 %.
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el
 ticket con precios si lo piden) y probar si la impresora avisa que le falta papel. Los SQL de v76 y v77 ya están en la nube: lo nuevo
 que necesite la nube va en tablas nuevas.
 
-> Frase para Claude Code: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el
-> plan corto de Entradas 4 a 6 antes de programar." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
+> Frase para Claude Code: "Seguimos con Entradas: leé 'Para retomar en otro chat' de docs/CONTEXTO_OPERADORES_2026-11-02.md y terminá
+> la etapa 5." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
 > docs/CONTEXTO_v6.3.2_2026-11-09.md y decime en qué paso estamos.")
 
 ## El orden

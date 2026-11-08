@@ -76,8 +76,8 @@ PCs tienen la 6.3.3 desde el 7-nov.)
 **Cuando haga falta imprimir, avisarle** ("después me avisás si necesitás usar la impresora y vemos lo impreso"). El vale de la silla y
 los papeles de la etapa 5 ya salieron y se miraron en una foto (7-nov).
 
-> Frase para retomar: "Seguimos con la barra: leé 'Para retomar en otro chat' de docs/CONTEXTO_BARRA_2026-11-02.md y pasame el plan
-> corto de Entradas 4 a 6 (docs/PLAN_MODO_ENTRADAS_2026-10-30.md)."
+> Frase para retomar: la barra está completa; lo que sigue es Entradas, en "Para retomar en otro chat" de
+> docs/CONTEXTO_OPERADORES_2026-11-02.md.
 
 ### Etapa 10: de punta a punta, con su celular y su router (8-nov, tarde)
 
