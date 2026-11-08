@@ -32,14 +32,34 @@ void main() {
       'modal_alumno_premium',
       'mostrarModalPago',
       'contratosRepositoryProvider',
+      // La entrega se abre en modo mostrador: sin el cobro ni la edición.
+      'onCobrar',
+      'onEditarAlumno',
     ]) {
       expect(fuente, isNot(contains(prohibido)), reason: prohibido);
     }
-    final i = fuente.indexOf('onCobrar:');
-    final f = fuente.indexOf('),\n      ),\n    );', i);
-    final callbacks = fuente.substring(i, f);
-    expect(callbacks, contains('_decir(context, _queCobre(ref, a))'));
-    expect(RegExp(r'onEditarAlumno: \(a\) => _decir\(').hasMatch(callbacks), isTrue);
+    expect(fuente, contains('RetiroEntradasScreen.mostrador(evento: evento)'));
+  });
+
+  test('la entrega en modo mostrador no tiene cobro ni edición, y anular frena', () {
+    final fuente = leer('lib/features/eventos/retiro_entradas_screen.dart');
+    final i = fuente.indexOf('const RetiroEntradasScreen.mostrador(');
+    final mostrador = fuente.substring(i, fuente.indexOf(';', i));
+    expect(mostrador, contains('onCobrar = null'));
+    expect(mostrador, contains('onEditarAlumno = null'));
+    expect(mostrador, contains('enElMostrador = true'));
+
+    // Doble llave: el botón apagado, y la función tampoco pasa sin el jefe.
+    final j = fuente.indexOf('Future<void> _anular(');
+    final anular = fuente.substring(j, fuente.indexOf('setState(', j));
+    expect(anular, contains('if (!_permisos.anular) return;'));
+
+    final permisos = leer('lib/features/eventos/services/permisos_de_entrega.dart');
+    final k = permisos.indexOf('const PermisosDeEntrega.mostrador(');
+    final delMostrador = permisos.substring(k, permisos.indexOf(';', k));
+    for (final apagado in ['cobrarAca = false', 'editar = false', 'anular = false']) {
+      expect(delMostrador, contains(apagado), reason: apagado);
+    }
   });
 
   test('cobrar exige caja o jefe: Entradas no entra en ninguno de los dos', () {

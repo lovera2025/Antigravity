@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:arguello_events/features/common/utils/solo_jefe.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/eventos/services/permisos_de_entrega.dart';
 import 'package:arguello_events/features/eventos/services/retiro_entradas.dart';
 import 'package:arguello_events/features/eventos/widgets/entrega_entradas_dialog.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
@@ -32,6 +34,7 @@ Future<void> _abrir(
   BloqueoRetiro bloqueo = BloqueoRetiro.ninguno,
   EntradasRetiro? retiro,
   Map<String, List<TramoTalonario>> deOtros = const {},
+  PermisosDeEntrega permisos = const PermisosDeEntrega.oficina(esJefe: true),
 }) async {
   await tester.binding.setSurfaceSize(const Size(1200, 1600));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -47,6 +50,7 @@ Future<void> _abrir(
                 entradas: RetiroEntradas.entradasDe(_alumno()),
                 deuda: deuda,
                 bloqueo: bloqueo,
+                permisos: permisos,
                 retiro: retiro,
                 deOtros: deOtros,
               ),
@@ -77,6 +81,7 @@ void main() {
                 entradas: RetiroEntradas.entradasDe(_alumno()),
                 deuda: const DeudaAlumno(saldoFicha: 30000, saldoPagos: 30000, mora: 3500),
                 bloqueo: BloqueoRetiro.debe,
+                permisos: const PermisosDeEntrega.oficina(esJefe: true),
               ),
               child: const Text('abrir'),
             ),
@@ -133,6 +138,7 @@ void main() {
                 entradas: RetiroEntradas.entradasDe(_alumno()),
                 deuda: _alDia,
                 bloqueo: BloqueoRetiro.ninguno,
+                permisos: const PermisosDeEntrega.oficina(esJefe: true),
               ),
               child: const Text('abrir'),
             ),
@@ -236,6 +242,7 @@ void main() {
                 entradas: RetiroEntradas.entradasDe(_alumno()),
                 deuda: _alDia,
                 bloqueo: BloqueoRetiro.ninguno,
+                permisos: const PermisosDeEntrega.oficina(esJefe: true),
                 retiro: entregado,
               ),
               child: const Text('abrir'),
@@ -263,5 +270,135 @@ void main() {
     await tester.pumpAndSettle();
     expect(accion, isA<AnularEntrega>());
     expect((accion! as AnularEntrega).motivo, 'Se equivocó de alumno');
+  });
+
+  /// Abre el diálogo con [permisos] y devuelve lo que eligió quien atiende.
+  Future<AccionEntrega? Function()> abrirCon(
+    WidgetTester tester, {
+    required PermisosDeEntrega permisos,
+    DeudaAlumno deuda = const DeudaAlumno(saldoFicha: 70000, saldoPagos: 70000, mora: 0),
+    BloqueoRetiro bloqueo = BloqueoRetiro.debe,
+    EntradasRetiro? retiro,
+    Listenable? cuentaCambio,
+  }) async {
+    AccionEntrega? accion;
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ElevatedButton(
+              onPressed: () async => accion = await mostrarEntregaEntradasDialog(
+                context: context,
+                alumno: _alumno(),
+                entradas: RetiroEntradas.entradasDe(_alumno()),
+                deuda: deuda,
+                bloqueo: bloqueo,
+                permisos: permisos,
+                retiro: retiro,
+                cuentaCambio: cuentaCambio,
+              ),
+              child: const Text('abrir'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+    return () => accion;
+  }
+
+  group('el mostrador de Entradas', () {
+    const sinCobros = PermisosDeEntrega.mostrador(tieneCobros: false);
+    const conCobros = PermisosDeEntrega.mostrador(tieneCobros: true);
+
+    testWidgets('si debe y no tiene Cobros: que pase por caja, con el monto, y ENTENDIDO',
+        (tester) async {
+      final accion = await abrirCon(tester, permisos: sinCobros);
+      expect(find.text('Debe \$ 70.000,00'), findsOneWidget);
+      expect(find.textContaining('Que pase por caja a saldar todo'), findsOneWidget);
+      expect(find.text('IR A COBRAR'), findsNothing);
+      expect(find.text('PASAR A CAJA'), findsNothing);
+      await tester.tap(find.text('ENTENDIDO'));
+      await tester.pumpAndSettle();
+      expect(accion(), isA<MandarACaja>());
+    });
+
+    testWidgets('con Cobros también: PASAR A CAJA', (tester) async {
+      final accion = await abrirCon(tester, permisos: conCobros);
+      expect(find.text('IR A COBRAR'), findsNothing);
+      await tester.tap(find.text('PASAR A CAJA'));
+      await tester.pumpAndSettle();
+      expect(accion(), isA<PasarACaja>());
+    });
+
+    testWidgets('las mesas que no coinciden: sin EDITAR ALUMNO, y que lo revise el jefe',
+        (tester) async {
+      await abrirCon(
+        tester,
+        permisos: sinCobros,
+        deuda: _alDia,
+        bloqueo: BloqueoRetiro.mesasNoCoinciden,
+      );
+      expect(find.text('EDITAR ALUMNO'), findsNothing);
+      expect(find.textContaining('Pedile al jefe que lo revise.'), findsOneWidget);
+    });
+
+    testWidgets('al día: el formulario, sin "Cambiar acompañantes"', (tester) async {
+      await abrirCon(tester, permisos: sinCobros, deuda: _alDia, bloqueo: BloqueoRetiro.ninguno);
+      expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget);
+      expect(find.text('Cambiar acompañantes'), findsNothing);
+    });
+
+    testWidgets('si pagó con el diálogo abierto, se cierra para volver a abrirlo',
+        (tester) async {
+      final cambio = ValueNotifier(0);
+      final accion = await abrirCon(tester, permisos: sinCobros, cuentaCambio: cambio);
+      cambio.value++;
+      await tester.pumpAndSettle();
+      expect(accion(), isA<VolverAAbrir>());
+    });
+
+    testWidgets('con el formulario abierto no se cierra solo', (tester) async {
+      final cambio = ValueNotifier(0);
+      final accion = await abrirCon(
+        tester,
+        permisos: sinCobros,
+        deuda: _alDia,
+        bloqueo: BloqueoRetiro.ninguno,
+        cuentaCambio: cambio,
+      );
+      cambio.value++;
+      await tester.pumpAndSettle();
+      expect(find.text('CONFIRMAR ENTREGA'), findsOneWidget);
+      expect(accion(), isNull);
+    });
+  });
+
+  testWidgets('sin modo jefe, ANULAR ENTREGA se ve apagado con el motivo', (tester) async {
+    final entregado = RetiroEntradas.nuevaEntrega(
+      alumno: _alumno(),
+      entradas: RetiroEntradas.entradasDe(_alumno()),
+      tramos: const [TramoTalonario(1043, 1047)],
+      menores10: 0,
+      parentesco: ParentescoRetiro.madre,
+      nombre: 'Laura Benítez',
+      quien: 'Operador',
+      ahora: DateTime.utc(2026, 11, 12, 21, 40),
+    );
+    await abrirCon(
+      tester,
+      permisos: const PermisosDeEntrega.oficina(esJefe: false),
+      deuda: _alDia,
+      bloqueo: BloqueoRetiro.ninguno,
+      retiro: entregado,
+    );
+    final boton = tester.widget<OutlinedButton>(find.byKey(const Key('entrega_anular_apagado')));
+    expect(boton.onPressed, isNull);
+    expect(find.text(kSoloEnModoJefe), findsOneWidget);
+    expect(find.textContaining('el jefe anula esta entrega'), findsNothing,
+        reason: 'la cuenta no cambió');
   });
 }

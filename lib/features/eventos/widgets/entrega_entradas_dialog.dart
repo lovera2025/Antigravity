@@ -5,6 +5,8 @@ import '../../../core/utils/ar_time.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/entradas_retiro.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../../common/utils/solo_jefe.dart';
+import '../services/permisos_de_entrega.dart';
 import '../services/retiro_entradas.dart';
 import '../services/salon_mesas.dart';
 
@@ -40,6 +42,22 @@ class IrACobrar extends AccionEntrega {
   const IrACobrar();
 }
 
+/// El mostrador, con Cobros: va a la caja a cobrarle (sin volver a poner el PIN).
+class PasarACaja extends AccionEntrega {
+  const PasarACaja();
+}
+
+/// El mostrador, sin Cobros: la familia va a pagar a la caja y queda en "En caja".
+class MandarACaja extends AccionEntrega {
+  const MandarACaja();
+}
+
+/// La cuenta cambió con el diálogo abierto (pagó en la caja): se vuelve a abrir
+/// con los datos nuevos. Lo pide la pantalla, no la persona.
+class VolverAAbrir extends AccionEntrega {
+  const VolverAAbrir();
+}
+
 class EditarAlumno extends AccionEntrega {
   const EditarAlumno();
 }
@@ -49,14 +67,20 @@ class EditarAlumno extends AccionEntrega {
 /// llevó, con la opción de anularlo.
 ///
 /// No guarda nada: devuelve la [AccionEntrega] y la pantalla la aplica.
+///
+/// [permisos] dice qué botones hay (cobrar, pasar a caja, editar, anular).
+/// Cuando [cuentaCambio] avisa con el diálogo mostrando un bloqueo (no el
+/// formulario, que puede tener algo escrito), se cierra con [VolverAAbrir].
 Future<AccionEntrega?> mostrarEntregaEntradasDialog({
   required BuildContext context,
   required ContratoAlumno alumno,
   required EntradasDeAlumno entradas,
   required DeudaAlumno deuda,
   required BloqueoRetiro bloqueo,
+  required PermisosDeEntrega permisos,
   EntradasRetiro? retiro,
   Map<String, List<TramoTalonario>> deOtros = const {},
+  Listenable? cuentaCambio,
 }) =>
     showDialog<AccionEntrega>(
       context: context,
@@ -66,8 +90,10 @@ Future<AccionEntrega?> mostrarEntregaEntradasDialog({
         entradas: entradas,
         deuda: deuda,
         bloqueo: bloqueo,
+        permisos: permisos,
         retiro: retiro,
         deOtros: deOtros,
+        cuentaCambio: cuentaCambio,
       ),
     );
 
@@ -76,16 +102,20 @@ class _EntregaDialog extends StatefulWidget {
   final EntradasDeAlumno entradas;
   final DeudaAlumno deuda;
   final BloqueoRetiro bloqueo;
+  final PermisosDeEntrega permisos;
   final EntradasRetiro? retiro;
   final Map<String, List<TramoTalonario>> deOtros;
+  final Listenable? cuentaCambio;
 
   const _EntregaDialog({
     required this.alumno,
     required this.entradas,
     required this.deuda,
     required this.bloqueo,
+    required this.permisos,
     required this.retiro,
     required this.deOtros,
+    required this.cuentaCambio,
   });
 
   @override
@@ -109,9 +139,20 @@ class _EntregaDialogState extends State<_EntregaDialog> {
   Map<String, String> _errores = const {};
   String? _errorAnular;
 
+  /// Lo que se ve es un bloqueo: no hay nada escrito que perder si se cierra solo.
+  bool get _muestraBloqueo {
+    final r = widget.retiro;
+    return !(r != null && r.entregado) && widget.bloqueo != BloqueoRetiro.ninguno;
+  }
+
+  void _alCambiarLaCuenta() {
+    if (mounted && _muestraBloqueo) Navigator.pop(context, const VolverAAbrir());
+  }
+
   @override
   void initState() {
     super.initState();
+    widget.cuentaCambio?.addListener(_alCambiarLaCuenta);
     // Si tuvo una entrega anulada, se ofrece lo mismo para no volver a
     // tipearlo. El tilde de la planilla no: esa persona tiene que volver a
     // escribir su nombre.
@@ -135,6 +176,7 @@ class _EntregaDialogState extends State<_EntregaDialog> {
 
   @override
   void dispose() {
+    widget.cuentaCambio?.removeListener(_alCambiarLaCuenta);
     for (final c in [_desde1, _hasta1, _desde2, _nombre, _motivo, _motivoAnular]) {
       c.dispose();
     }
@@ -333,13 +375,31 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           'Cambió la cuenta después de entregar',
           'Hoy le corresponden ${hoy.vip} VIP y ${hoy.generales} generales; se '
               'llevó ${r.vip} VIP y ${r.generales} generales. Para darle lo que '
-              'falta, anulá esta entrega (motivo: qué cambió) y volvé a '
-              'entregar con todos los números.',
+              'falta, ${widget.permisos.anular ? 'anulá' : 'el jefe anula'} esta '
+              'entrega (motivo: qué cambió) y se vuelve a entregar con todos los '
+              'números.',
           color: Colors.orange.shade800,
         ),
       ],
       const SizedBox(height: 12),
-      if (!_anulando)
+      // Anular es solo del jefe. Sin modo jefe se ve apagado, con el motivo: así
+      // quien entrega sabe que existe y a quién pedírselo.
+      if (!widget.permisos.anular)
+        Row(
+          children: [
+            const OutlinedButton(
+              key: Key('entrega_anular_apagado'),
+              onPressed: null,
+              child: Text('ANULAR ENTREGA'),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              kSoloEnModoJefe,
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade700),
+            ),
+          ],
+        )
+      else if (!_anulando)
         Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
@@ -381,12 +441,15 @@ class _EntregaDialogState extends State<_EntregaDialog> {
     final a = widget.alumno;
     final d = widget.deuda;
     final e = widget.entradas;
+    final p = widget.permisos;
+    // En el mostrador no se edita al alumno: lo revisa el jefe.
+    final aviseAlJefe = p.editar ? '' : ' Pedile al jefe que lo revise.';
     final Widget cartel;
     var cobrar = false;
     var editar = false;
     switch (widget.bloqueo) {
       case BloqueoRetiro.debe:
-        cobrar = true;
+        cobrar = p.cobrarAca;
         final partes = [
           if (d.saldoPagos > RetiroEntradas.margen ||
               d.saldoFicha > RetiroEntradas.margen)
@@ -395,12 +458,16 @@ class _EntregaDialogState extends State<_EntregaDialog> {
         ];
         cartel = _cartel(
           'Debe ${d.total.toCurrency()}',
-          '${partes.join(' · ')}.\nHasta que pague todo no se entregan las '
-              'entradas. Si trae un comprobante, primero cargá el pago en caja.',
+          p.cobrarAca
+              ? '${partes.join(' · ')}.\nHasta que pague todo no se entregan las '
+                  'entradas. Si trae un comprobante, primero cargá el pago en caja.'
+              : '${partes.join(' · ')}.\nQue pase por caja a saldar todo; cuando '
+                  'pague, la entrega se destraba sola.',
           color: Colors.red.shade700,
         );
       case BloqueoRetiro.cuentaNoCoincide:
-        cobrar = d.saldoPagos > RetiroEntradas.margen || d.mora > RetiroEntradas.margen;
+        cobrar = p.cobrarAca &&
+            (d.saldoPagos > RetiroEntradas.margen || d.mora > RetiroEntradas.margen);
         cartel = _cartel(
           'Revisá la cuenta antes de entregar',
           'La ficha dice que debe ${d.saldoFicha.toCurrency()} y los pagos dan '
@@ -416,19 +483,19 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           color: Colors.orange.shade800,
         );
       case BloqueoRetiro.mesasNoCoinciden:
-        editar = true;
+        editar = p.editar;
         cartel = _cartel(
           'Sus mesas no coinciden con su cuenta',
           '${SalonMesas.avisoMesas(a) ?? ''}. Revisalo antes de entregar: las '
-              'entradas salen de las mesas que tiene.',
+              'entradas salen de las mesas que tiene.$aviseAlJefe',
           color: Colors.orange.shade800,
         );
       case BloqueoRetiro.noEntran:
-        editar = true;
+        editar = p.editar;
         cartel = _cartel(
           'No entran',
           'Tiene ${e.vip} con cena y ${e.lugares} lugares. Revisá los '
-              'acompañantes, o que sume una mesa o sillas extra.',
+              'acompañantes, o que sume una mesa o sillas extra.$aviseAlJefe',
           color: Colors.orange.shade800,
         );
       case BloqueoRetiro.ninguno:
@@ -461,6 +528,28 @@ class _EntregaDialogState extends State<_EntregaDialog> {
               label: const Text('IR A COBRAR'),
             ),
           ],
+          // El mostrador: con Cobros, a la caja sin el PIN; sin Cobros, la familia
+          // va a pagar y queda en "En caja" hasta que el pago llegue.
+          if (widget.bloqueo == BloqueoRetiro.debe && !p.cobrarAca) ...[
+            if (p.pasarACaja) ...[
+              OutlinedButton.icon(
+                key: const Key('entrega_pasar_a_caja'),
+                onPressed: () => Navigator.pop(context, const PasarACaja()),
+                icon: const Icon(Icons.point_of_sale),
+                label: const Text('PASAR A CAJA'),
+              ),
+              const SizedBox(width: 8),
+            ],
+            ElevatedButton(
+              key: const Key('entrega_a_la_caja'),
+              onPressed: () => Navigator.pop(context, const MandarACaja()),
+              child: const Text('ENTENDIDO'),
+            ),
+          ] else if (!editar && !cobrar)
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('ENTENDIDO'),
+            ),
         ],
       ),
     ];
@@ -546,13 +635,14 @@ class _EntregaDialogState extends State<_EntregaDialog> {
           ),
         ),
       ],
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton(
-          onPressed: () => Navigator.pop(context, const EditarAlumno()),
-          child: const Text('Cambiar acompañantes'),
+      if (widget.permisos.editar)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => Navigator.pop(context, const EditarAlumno()),
+            child: const Text('Cambiar acompañantes'),
+          ),
         ),
-      ),
       if (cantidadAcomp > 2)
         Text(
           'Tiene $cantidadAcomp acompañantes con cena (el máximo es 2): '

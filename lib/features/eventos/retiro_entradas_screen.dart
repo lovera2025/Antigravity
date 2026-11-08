@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemSound, SystemSoundType;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,12 +11,15 @@ import '../../core/utils/ar_time.dart';
 import '../../models/contrato_alumno.dart';
 import '../../models/entradas_retiro.dart';
 import '../../models/evento.dart';
+import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/services/pdf_service.dart';
 import '../common/utils/currency_extensions.dart';
 import '../common/utils/quien_opera.dart';
 import '../common/utils/subir_ya.dart';
+import '../entradas/services/en_caja.dart';
 import 'repositories/contratos_repository.dart';
 import 'repositories/entradas_retiro_repository.dart';
+import 'services/permisos_de_entrega.dart';
 import 'services/planilla_sorteo.dart';
 import 'services/retiro_entradas.dart';
 import 'services/salon_mesas.dart';
@@ -30,20 +34,35 @@ import 'widgets/entrega_entradas_dialog.dart';
 /// ([onCobrar], [onEditarAlumno]).
 class RetiroEntradasScreen extends ConsumerStatefulWidget {
   final Evento evento;
-  final Future<void> Function(ContratoAlumno alumno) onCobrar;
-  final Future<void> Function(ContratoAlumno alumno) onEditarAlumno;
+
+  /// En la oficina, el cobro y la edición de siempre. En el mostrador, null.
+  final Future<void> Function(ContratoAlumno alumno)? onCobrar;
+  final Future<void> Function(ContratoAlumno alumno)? onEditarAlumno;
 
   /// Se llegó desde PLANILLAS → "Planilla de entrega": apenas carga, pregunta
   /// si va en color o en blanco y negro.
   final bool imprimirAlAbrir;
 
+  /// El mostrador de Entradas: el operador que entró solo a entregar. No cobra
+  /// ni edita al alumno; la familia que debe va a la caja y queda en "En caja",
+  /// y cuando el pago llega salta "pagó: ya podés entregar" (6.4.0).
+  final bool enElMostrador;
+
+  /// Desde la pantalla de la fiesta (la oficina).
   const RetiroEntradasScreen({
     super.key,
     required this.evento,
-    required this.onCobrar,
-    required this.onEditarAlumno,
+    required Future<void> Function(ContratoAlumno alumno) this.onCobrar,
+    required Future<void> Function(ContratoAlumno alumno) this.onEditarAlumno,
     this.imprimirAlAbrir = false,
-  });
+  }) : enElMostrador = false;
+
+  /// Desde el mostrador de Entradas (`EntradasHomeScreen`).
+  const RetiroEntradasScreen.mostrador({super.key, required this.evento})
+      : onCobrar = null,
+        onEditarAlumno = null,
+        imprimirAlAbrir = false,
+        enElMostrador = true;
 
   @override
   ConsumerState<RetiroEntradasScreen> createState() =>
@@ -62,6 +81,18 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   final _busqueda = TextEditingController();
   Timer? _refresco;
   StreamSubscription<Set<String>>? _cambiosSub;
+
+  /// El diálogo abierto de una familia bloqueada, y lo que debía al abrirlo: si
+  /// la cuenta cambia (pagó en la caja), se cierra y se vuelve a abrir solo.
+  String? _abiertoId;
+  double? _abiertoDebia;
+  final _cuentaCambio = _Aviso();
+
+  PermisosDeEntrega get _permisos => PermisosDeEntrega.de(
+        enElMostrador: widget.enElMostrador,
+        tieneCobros: ref.read(appRoleProvider).permisos.cobros,
+        esJefe: ref.read(esRolJefeProvider),
+      );
 
   /// Lo que, si baja de la otra PC, cambia lo que se ve acá: una entrega, la
   /// cuenta del alumno o un cobro.
@@ -98,6 +129,7 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     _cambiosSub?.cancel();
     _refresco?.cancel();
     _busqueda.dispose();
+    _cuentaCambio.dispose();
     super.dispose();
   }
 
@@ -144,12 +176,31 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         _cargando = false;
         _errorCarga = null;
       });
+      _despuesDeLeer(deudas);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _cargando = false;
         if (!silencioso) _errorCarga = '$e';
       });
+    }
+  }
+
+  /// Con las cuentas recién leídas (de esta PC, o bajadas cuando la otra cobró):
+  /// en el mostrador, quién de "En caja" ya pagó, con un sonido corto la primera
+  /// vez; y si el diálogo abierto es de una familia cuya cuenta cambió, se vuelve
+  /// a abrir con los datos nuevos.
+  void _despuesDeLeer(Map<String, DeudaAlumno> deudas) {
+    if (widget.enElMostrador) {
+      final recien =
+          ref.read(enCajaProvider(widget.evento.id).notifier).conDeudas(deudas);
+      if (recien.isNotEmpty) unawaited(SystemSound.play(SystemSoundType.alert));
+    }
+    final id = _abiertoId;
+    final debia = _abiertoDebia;
+    final d = id == null ? null : deudas[id];
+    if (d != null && debia != null && (d.total - debia).abs() > RetiroEntradas.margen) {
+      _cuentaCambio.avisar();
     }
   }
 
@@ -224,28 +275,64 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   Future<void> _abrir(ContratoAlumno a) async {
     final deuda = _deudas[a.id];
     if (deuda == null || _ocupado) return;
-    final accion = await mostrarEntregaEntradasDialog(
-      context: context,
-      alumno: a,
-      entradas: RetiroEntradas.entradasDe(a),
-      deuda: deuda,
-      bloqueo: RetiroEntradas.bloqueo(a, deuda),
-      retiro: _retiros[a.id],
-      deOtros: RetiroEntradas.tramosDeOtros(_alumnos, _retiros, salvo: a.id),
-    );
+    final bloqueo = RetiroEntradas.bloqueo(a, deuda);
+    final retiro = _retiros[a.id];
+    final bloqueado =
+        !(retiro != null && retiro.entregado) && bloqueo != BloqueoRetiro.ninguno;
+    _abiertoId = bloqueado ? a.id : null;
+    _abiertoDebia = bloqueado ? deuda.total : null;
+    final AccionEntrega? accion;
+    try {
+      accion = await mostrarEntregaEntradasDialog(
+        context: context,
+        alumno: a,
+        entradas: RetiroEntradas.entradasDe(a),
+        deuda: deuda,
+        bloqueo: bloqueo,
+        permisos: _permisos,
+        retiro: retiro,
+        deOtros: RetiroEntradas.tramosDeOtros(_alumnos, _retiros, salvo: a.id),
+        cuentaCambio: _cuentaCambio,
+      );
+    } finally {
+      _abiertoId = null;
+      _abiertoDebia = null;
+    }
     if (accion == null || !mounted) return;
+    final enCaja = ref.read(enCajaProvider(widget.evento.id).notifier);
     switch (accion) {
       case IrACobrar():
-        await widget.onCobrar(a);
+        final cobrar = widget.onCobrar;
+        if (cobrar == null) return;
+        await cobrar(a);
         await _volverAAbrir(a.id);
       case EditarAlumno():
-        await widget.onEditarAlumno(a);
+        final editar = widget.onEditarAlumno;
+        if (editar == null) return;
+        await editar(a);
+        await _volverAAbrir(a.id);
+      case MandarACaja():
+        enCaja.mandar(a, deuda);
+      case PasarACaja():
+        enCaja.mandar(a, deuda);
+        await _pasarACaja();
+      case VolverAAbrir():
         await _volverAAbrir(a.id);
       case AnularEntrega(:final motivo):
         await _anular(a, motivo);
       case final EntregarEntradas datos:
         await _entregar(a, datos);
     }
+  }
+
+  /// PASAR A CAJA desde una entrega: se cierra la entrega (está encima de
+  /// Entradas, y la caja reemplaza a Entradas debajo) y se va a la caja sin el
+  /// PIN. La familia quedó en "En caja": al volver con ENTRADAS, si pagó, salta.
+  Future<void> _pasarACaja() async {
+    if (!_permisos.pasarACaja) return;
+    final rol = ref.read(appRoleProvider.notifier);
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    await rol.pasarACaja();
   }
 
   /// Después de cobrar o de editar al alumno, el diálogo vuelve con los datos
@@ -383,11 +470,13 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
         anterior: actual,
       );
       await repo.guardar(retiro);
+      // Si estaba en "En caja", ya está: se le entregó.
+      ref.read(enCajaProvider(widget.evento.id).notifier).sacar(a.id);
+      final subida = ref.read(subidaInmediataProvider);
       await _cargar();
       // Arriba ya, no en el próximo ciclo: mientras no sube, la otra PC no la ve
       // y podría entregarle de nuevo a la misma familia.
-      final subio = await subirYa(
-        ref.read(syncEngineProvider),
+      final subio = await subida.subir(
         tabla: 'entradas_retiro',
         registroId: retiro.id,
         desde: checkpoint,
@@ -423,6 +512,8 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
   }
 
   Future<void> _anular(ContratoAlumno a, String motivo) async {
+    // Doble llave: el botón está apagado sin modo jefe, y acá tampoco pasa.
+    if (!_permisos.anular) return;
     final r = _retiros[a.id];
     if (r == null || !r.entregado) return;
     setState(() => _ocupado = true);
@@ -436,9 +527,9 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
               ahora: ArTime.nowUtc(),
             ),
           );
+      final subida = ref.read(subidaInmediataProvider);
       await _cargar();
-      final subio = await subirYa(
-        ref.read(syncEngineProvider),
+      final subio = await subida.subir(
         tabla: 'entradas_retiro',
         registroId: r.id,
         desde: checkpoint,
@@ -570,10 +661,125 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
     );
   }
 
+  /// Arriba de todo en el mostrador: si se está en vivo con la caja, las
+  /// familias que ya pagaron (con ENTREGAR) y las que siguen en la caja.
+  Widget _arribaDelMostrador() {
+    final enCaja = ref.watch(enCajaProvider(widget.evento.id));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _LineaEnVivo(conexion: ref.watch(connectivityServiceProvider)),
+          for (final f in enCaja.pagaron) ...[
+            const SizedBox(height: 8),
+            _avisoPago(f),
+          ],
+          if (enCaja.esperando.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _enCaja(enCaja.esperando),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _avisoPago(FamiliaEnCaja f) {
+    final a = _alumnoPorId(f.alumnoId);
+    final deuda = _deudas[f.alumnoId];
+    final libre = a != null &&
+        deuda != null &&
+        RetiroEntradas.bloqueo(a, deuda) == BloqueoRetiro.ninguno;
+    final verde = Colors.green.shade700;
+    return Container(
+      key: Key('entrega_pago_${f.alumnoId}'),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: verde.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: verde.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: verde),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              libre
+                  ? '${f.nombre} pagó: ya podés entregar'
+                  : '${f.nombre} pagó, pero todavía no se puede entregar: abrila '
+                      'para ver por qué',
+              style: TextStyle(fontWeight: FontWeight.w700, color: verde),
+            ),
+          ),
+          if (a != null)
+            FilledButton(
+              key: Key('entrega_entregar_${f.alumnoId}'),
+              style: FilledButton.styleFrom(backgroundColor: verde),
+              onPressed: _ocupado ? null : () => _abrir(a),
+              child: Text(libre ? 'ENTREGAR' : 'ABRIR'),
+            ),
+          IconButton(
+            tooltip: 'Sacar el aviso',
+            onPressed: () => ref
+                .read(enCajaProvider(widget.evento.id).notifier)
+                .sacar(f.alumnoId),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _enCaja(List<FamiliaEnCaja> familias) {
+    final ambar = Colors.orange.shade800;
+    return Container(
+      key: const Key('entrega_en_caja'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: ambar.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'En caja: cuando paguen, avisa acá',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: ambar),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final f in familias)
+                InputChip(
+                  key: Key('entrega_en_caja_${f.alumnoId}'),
+                  label: Text(
+                    f.pagoUnaParte
+                        ? '${f.nombre} · pagó una parte · faltan${_plata(f.debe)}'
+                        : '${f.nombre} · debe${_plata(f.debe)}',
+                  ),
+                  onPressed: () {
+                    final a = _alumnoPorId(f.alumnoId);
+                    if (a != null) _abrir(a);
+                  },
+                  onDeleted: () => ref
+                      .read(enCajaProvider(widget.evento.id).notifier)
+                      .sacar(f.alumnoId),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _cuerpo() {
     final resumen = RetiroEntradas.resumen(_alumnos, _retiros, _deudas);
     return Column(
       children: [
+        if (widget.enElMostrador) _arribaDelMostrador(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
@@ -821,6 +1027,49 @@ class _RetiroEntradasScreenState extends ConsumerState<RetiroEntradasScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Le avisa al diálogo abierto que la cuenta de su familia cambió.
+class _Aviso extends ChangeNotifier {
+  void avisar() => notifyListeners();
+}
+
+/// "En vivo con la caja" o "Sin internet": si lo que cobra la caja llega solo.
+class _LineaEnVivo extends StatelessWidget {
+  final ConnectivityService conexion;
+
+  const _LineaEnVivo({required this.conexion});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AppConnectivity>(
+      stream: conexion.stream,
+      initialData: conexion.currentStatus,
+      builder: (context, snap) {
+        final enVivo = snap.data == AppConnectivity.online;
+        final color = enVivo ? Colors.green.shade700 : Colors.orange.shade800;
+        return Row(
+          key: const Key('entrega_en_vivo'),
+          children: [
+            Icon(
+              enVivo ? Icons.circle : Icons.warning_amber_rounded,
+              size: enVivo ? 10 : 16,
+              color: color,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                enVivo
+                    ? 'En vivo con la caja'
+                    : 'Sin internet: lo que se cobre en la caja no llega hasta que vuelva',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: color),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

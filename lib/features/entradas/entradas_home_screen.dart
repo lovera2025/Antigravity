@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../models/contrato_alumno.dart';
 import '../../models/evento.dart';
 import '../caja_sesiones/providers/app_role_provider.dart';
 import '../common/utils/cortes_pantalla.dart';
@@ -109,6 +108,8 @@ class EntradasHomeScreen extends ConsumerWidget {
     return '${dos(f.day)}/${dos(f.month)}/${f.year}';
   }
 
+  /// La entrega en modo mostrador: sin cobrar ni editar al alumno; la familia que
+  /// debe va a la caja, y cuando paga salta "pagó: ya podés entregar".
   void _abrir(BuildContext context, WidgetRef ref, Evento evento) {
     final abrir = onAbrirFiesta;
     if (abrir != null) {
@@ -117,35 +118,8 @@ class EntradasHomeScreen extends ConsumerWidget {
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => RetiroEntradasScreen(
-          evento: evento,
-          onCobrar: (a) => _decir(context, _queCobre(ref, a)),
-          onEditarAlumno: (a) => _decir(
-            context,
-            'Los datos de ${a.nombreAlumno} los cambia el jefe: pedile que los '
-            'revise.',
-          ),
-        ),
+        builder: (_) => RetiroEntradasScreen.mostrador(evento: evento),
       ),
     );
   }
-
-  String _queCobre(WidgetRef ref, ContratoAlumno a) =>
-      ref.read(appRoleProvider).permisos.cobros
-          ? 'Para cobrarle a ${a.nombreAlumno}, volvé atrás y tocá PASAR A CAJA.'
-          : 'Que ${a.nombreAlumno} pase por caja a saldar todo. Cuando pague, la '
-              'entrega se destraba sola.';
-
-  Future<void> _decir(BuildContext context, String texto) => showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          content: Text(texto),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
 }
