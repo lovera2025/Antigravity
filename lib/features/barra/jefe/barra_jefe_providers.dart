@@ -13,6 +13,11 @@ import '../services/fiestas_del_jefe.dart';
 /// La hora de esta PC, para saber cuál es la próxima fiesta. Los tests la fijan.
 final relojDelJefeProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
+/// Cada cuánto CAJAS vuelve a leer la nube **en la web** (etapa 8): en la PC la rehace el
+/// sync cuando bajan ventas, pero en la web nada avisa y las tablas de la barra no están
+/// en Realtime (a propósito). Deslizar hacia abajo la relee ya.
+const kRelecturaDeCajasEnLaWeb = Duration(seconds: 30);
+
 /// Las fiestas de BARRA: las que vienen y las últimas. Se vuelve a leer cuando baja algo.
 final fiestasDelJefeProvider = FutureProvider<FiestasDelJefe>((ref) async {
   final eventos = await ref.watch(eventosDeLaBarraProvider.future);

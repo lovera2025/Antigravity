@@ -46,7 +46,34 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
   /// Lo último que pasó con una venta, en palabras.
   ({String ventaId, String texto, bool error})? _aviso;
 
+  /// En la web: la relectura cada [kRelecturaDeCajasEnLaWeb] mientras CAJAS está abierta.
+  Timer? _relectura;
+
   String get _titulo => EventoPresentacion.tituloPrincipal(widget.fiesta);
+
+  @override
+  void initState() {
+    super.initState();
+    if (ref.read(enLaWebProvider)) {
+      _relectura = Timer.periodic(kRelecturaDeCajasEnLaWeb, (_) => _releer());
+    }
+  }
+
+  @override
+  void dispose() {
+    _relectura?.cancel();
+    super.dispose();
+  }
+
+  void _releer() => ref.invalidate(cajasDelJefeProvider(widget.fiesta.id));
+
+  /// Deslizar hacia abajo: se relee ya, y la ruedita se va cuando llegó.
+  Future<void> _releerAhora() async {
+    _releer();
+    try {
+      await ref.read(cajasDelJefeProvider(widget.fiesta.id).future);
+    } catch (_) {}
+  }
 
   bool _frenaSinModoJefe() {
     if (ref.read(esRolJefeProvider)) return false;
@@ -180,6 +207,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogo), child: const Text('CERRAR')),
+          // En la web no hay impresora: queda el PDF.
+          if (!ref.read(enLaWebProvider))
           OutlinedButton(
             key: const Key('jefe_cierre_imprimir'),
             onPressed: () async {
@@ -217,33 +246,48 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     );
   }
 
+  /// La lista de CAJAS; en la web, con "deslizar hacia abajo para releer".
+  Widget _lista(List<Widget> hijos, {required bool enLaWeb}) {
+    final lista = ListView(
+      physics: enLaWeb ? const AlwaysScrollableScrollPhysics() : null,
+      children: hijos,
+    );
+    if (!enLaWeb) return lista;
+    return RefreshIndicator(
+      key: const Key('jefe_cajas_releer'),
+      onRefresh: _releerAhora,
+      color: TemaBarra.dorado,
+      child: lista,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cajas = ref.watch(cajasDelJefeProvider(widget.fiesta.id));
     final esJefe = ref.watch(esRolJefeProvider);
+    final enLaWeb = ref.watch(enLaWebProvider);
     return cajas.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const Center(child: Text('No se pudieron leer las cajas.')),
+      skipLoadingOnRefresh: true,
       data: (datos) {
         if (datos.sinCajas) {
-          return ListView(
-            children: const [
-              _EnVivo(),
-              SizedBox(height: 24),
-              Center(
-                child: Text(
-                  'Todavía no se abrió ninguna caja en esta fiesta.',
-                  key: Key('jefe_sin_cajas'),
-                ),
+          return _lista(enLaWeb: enLaWeb, [
+            _EnVivo(enLaWeb: enLaWeb),
+            const SizedBox(height: 24),
+            const Center(
+              child: Text(
+                'Todavía no se abrió ninguna caja en esta fiesta.',
+                key: Key('jefe_sin_cajas'),
               ),
-            ],
-          );
+            ),
+          ]);
         }
         final elegida = datos.resumen.cajas.where((r) => r.caja.id == _cajaElegida).firstOrNull;
         return LayoutBuilder(builder: (context, caja) {
           final conCostado = caja.maxWidth >= 1000;
           final principal = <Widget>[
-            const _EnVivo(),
+            _EnVivo(enLaWeb: enLaWeb),
             const SizedBox(height: 12),
             _Totales(resumen: datos.resumen),
             const SizedBox(height: 16),
@@ -256,18 +300,19 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                 }),
               )
             else
-              _ventasDeLaCaja(elegida, datos, esJefe),
+              _ventasDeLaCaja(elegida, datos, esJefe, enLaWeb: enLaWeb),
           ];
           final stock = _Stock(stock: datos.stock);
           if (!conCostado) {
-            return ListView(
-              children: [...principal, const SizedBox(height: 16), stock, const SizedBox(height: 24)],
+            return _lista(
+              enLaWeb: enLaWeb,
+              [...principal, const SizedBox(height: 16), stock, const SizedBox(height: 24)],
             );
           }
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: ListView(children: [...principal, const SizedBox(height: 24)])),
+              Expanded(child: _lista(enLaWeb: enLaWeb, [...principal, const SizedBox(height: 24)])),
               const SizedBox(width: 20),
               SizedBox(width: 360, child: SingleChildScrollView(child: stock)),
             ],
@@ -277,7 +322,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     );
   }
 
-  Widget _ventasDeLaCaja(ResumenDeCaja r, CajasDeLaFiesta datos, bool esJefe) {
+  Widget _ventasDeLaCaja(ResumenDeCaja r, CajasDeLaFiesta datos, bool esJefe, {required bool enLaWeb}) {
     final caja = r.caja;
     final ventas = VentaDeLaCaja.armar(
       ventas: [for (final v in datos.ventas) if (v.cajaBarraId == caja.id) v],
@@ -338,13 +383,13 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
               padding: EdgeInsets.all(20),
               child: Text('Todavía no hay ventas en esta caja.', key: Key('jefe_caja_sin_ventas')),
             ),
-          for (final x in ventas) _venta(x, caja, esJefe),
+          for (final x in ventas) _venta(x, caja, esJefe, enLaWeb: enLaWeb),
         ],
       ),
     );
   }
 
-  Widget _venta(VentaDeLaCaja x, CajaBarra caja, bool esJefe) {
+  Widget _venta(VentaDeLaCaja x, CajaBarra caja, bool esJefe, {required bool enLaWeb}) {
     final v = x.venta;
     final id = v.id;
     final error = Theme.of(context).colorScheme.error;
@@ -400,6 +445,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  // En la web no hay impresora: reimprimir es de la PC.
+                  if (!enLaWeb)
                   Tooltip(
                     message: !esJefe ? kSoloEnModoJefe : (porQueNo ?? 'Una copia de cada vale, con COPIA'),
                     child: OutlinedButton.icon(
@@ -421,7 +468,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                   ),
                 ],
               ),
-              if (porQueNo != null)
+              if (porQueNo != null && !enLaWeb)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(porQueNo, style: const TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A))),
@@ -462,19 +509,26 @@ String _horario(CajaBarra c) => c.abierta
     : 'de ${_hora(c.abiertaAt)} a ${_hora(c.cerradaAt!)}';
 
 class _EnVivo extends StatelessWidget {
-  const _EnVivo();
+  final bool enLaWeb;
+
+  const _EnVivo({required this.enLaWeb});
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Icon(Icons.circle, size: 10, color: Color(0xFF59D38A)),
-        SizedBox(width: 8),
+        const Icon(Icons.circle, size: 10, color: Color(0xFF59D38A)),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
-            'Se pone al día solo cuando las cajas suben sus ventas. Sin internet, cada tablet '
-            'guarda lo suyo y lo sube al volver.',
-            style: TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
+            enLaWeb
+                ? 'Se pone al día cada 30 segundos con lo que las cajas subieron; deslizá hacia '
+                    'abajo para ponerla al día ahora. Sin internet, cada tablet guarda lo suyo y lo '
+                    'sube al volver.'
+                : 'Se pone al día solo cuando las cajas suben sus ventas. Sin internet, cada tablet '
+                    'guarda lo suyo y lo sube al volver.',
+            key: const Key('jefe_en_vivo'),
+            style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
           ),
         ),
       ],

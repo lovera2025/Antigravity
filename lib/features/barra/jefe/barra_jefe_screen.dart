@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -66,6 +65,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
   Widget _pantalla(BuildContext context) {
     final fiestas = ref.watch(fiestasDelJefeProvider);
     final esJefe = ref.watch(esRolJefeProvider);
+    final enLaWeb = ref.watch(enLaWebProvider);
     final ancho = MediaQuery.sizeOf(context).width;
     final margen = CortesPantalla.esCelular(ancho) ? 12.0 : 24.0;
     return Scaffold(
@@ -85,7 +85,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
         // La impresora de esta PC, para la lista de precios, las copias y el cierre: la
         // misma pantalla que la cajera abre desde VENDER. En la web no hay Bluetooth.
         actions: [
-          if (!kIsWeb)
+          if (!enLaWeb)
             IconButton(
               key: const Key('jefe_impresora'),
               tooltip: 'La impresora de esta PC',

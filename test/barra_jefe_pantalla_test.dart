@@ -53,6 +53,7 @@ void main() {
     WidgetTester tester, {
     Size tamano = const Size(1280, 860),
     bool esJefe = true,
+    bool enLaWeb = false,
     PestanaBarraJefe pestana = PestanaBarraJefe.catalogo,
   }) async {
     tester.view.physicalSize = tamano;
@@ -64,6 +65,7 @@ void main() {
         ...prueba.reemplazos,
         barraDelJefeProvider.overrideWithValue(prueba.barra),
         esRolJefeProvider.overrideWithValue(esJefe),
+        enLaWebProvider.overrideWithValue(enLaWeb),
         relojDelJefeProvider.overrideWithValue(() => hoy),
         impresoraDeLaBarraProvider.overrideWithValue(ImpresoraBluetooth(_CanalSinNada())),
       ],
@@ -78,6 +80,8 @@ void main() {
       await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).last);
     }
     await tester.ensureVisible(f);
+    // Un cuadro antes de tocar: si no, el toque va a donde estaba antes de desplazar.
+    await tester.pump();
     await tester.tap(f);
     await tester.pumpAndSettle();
   }
@@ -487,6 +491,87 @@ void main() {
       await tocar(tester, find.byKey(Key('jefe_caja_${caja.id}')));
       expect(apagado(tester, 'jefe_anular_${v.id}'), isTrue);
       expect(apagado(tester, 'jefe_reimprimir_${v.id}'), isTrue);
+    });
+  });
+
+  /// La web del iPhone (etapa 8): lo mismo, sin impresora, y CAJAS se relee sola.
+  group('en la web', () {
+    late CajaBarra caja;
+    late VentaBarra venta;
+
+    Future<void> unaNoche() async {
+      final b = prueba.barra;
+      b.precio(pinaroli.id, fernet, 6000, stock: 10, aviso: 4);
+      caja = await b.abrirCaja(eventoId: pinaroli.id, operadorId: 'm', operadorNombre: 'Marta', numeroCaja: 1);
+      venta = await b.vender(
+        caja: caja,
+        renglones: [RenglonVenta(productoId: fernet.id, nombre: fernet.nombre, precio: 6000, cantidad: 1)],
+        medio: MedioBarra.efectivo,
+        efectivo: 6000,
+        quien: 'Marta',
+      );
+    }
+
+    Future<void> otraVentaEnLaNube() => prueba.barra.vender(
+          caja: caja,
+          renglones: [RenglonVenta(productoId: fernet.id, nombre: fernet.nombre, precio: 6000, cantidad: 2)],
+          medio: MedioBarra.efectivo,
+          efectivo: 12000,
+          quien: 'Marta',
+        );
+
+    testWidgets('sin impresora: ni el ícono, ni IMPRIMIR LISTA, ni REIMPRIMIR, ni IMPRIMIR el cierre; los PDF sí',
+        (tester) async {
+      await unaNoche();
+      await abrir(tester, enLaWeb: true, pestana: PestanaBarraJefe.precios, tamano: const Size(390, 844));
+      expect(find.byKey(const Key('jefe_impresora')), findsNothing);
+      expect(find.byKey(const Key('jefe_lista_imprimir')), findsNothing);
+      expect(find.byKey(const Key('jefe_lista_pdf')), findsOneWidget);
+
+      await tocar(tester, find.byKey(const Key('jefe_pestana_cajas')));
+      await tocar(tester, find.byKey(Key('jefe_caja_${caja.id}')));
+      expect(find.byKey(Key('jefe_reimprimir_${venta.id}')), findsNothing);
+      expect(find.byKey(Key('jefe_anular_${venta.id}')), findsOneWidget, reason: 'anular desde el iPhone sí');
+      await tocar(tester, find.byKey(const Key('jefe_ver_cierre')));
+      expect(find.byKey(const Key('jefe_cierre_imprimir')), findsNothing);
+      expect(find.byKey(const Key('jefe_cierre_pdf')), findsOneWidget);
+    });
+
+    testWidgets('CAJAS se relee sola cada 30 segundos: una venta que subió aparece sin tocar nada', (tester) async {
+      await unaNoche();
+      await abrir(tester, enLaWeb: true, pestana: PestanaBarraJefe.cajas, tamano: const Size(390, 844));
+      expect(texto(tester, 'jefe_kpi_ventas_valor'), '1');
+      expect(texto(tester, 'jefe_en_vivo'), contains('cada 30 segundos'));
+      await otraVentaEnLaNube();
+      await tester.pump(const Duration(seconds: 29));
+      expect(texto(tester, 'jefe_kpi_ventas_valor'), '1', reason: 'todavía no releyó');
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(texto(tester, 'jefe_kpi_ventas_valor'), '2');
+      expect(texto(tester, 'jefe_kpi_total_valor'), r'$ 18.000');
+    });
+
+    testWidgets('deslizar hacia abajo relee ya', (tester) async {
+      await unaNoche();
+      await abrir(tester, enLaWeb: true, pestana: PestanaBarraJefe.cajas, tamano: const Size(390, 844));
+      await otraVentaEnLaNube();
+      expect(find.byKey(const Key('jefe_cajas_releer')), findsOneWidget);
+      await tester.drag(find.byKey(const Key('jefe_en_vivo')), const Offset(0, 300));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(texto(tester, 'jefe_kpi_ventas_valor'), '2');
+    });
+
+    testWidgets('en la PC no hay relectura cada 30 segundos ni deslizar: la rehace el sync', (tester) async {
+      await unaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      expect(find.byKey(const Key('jefe_cajas_releer')), findsNothing);
+      expect(texto(tester, 'jefe_en_vivo'), contains('cuando las cajas suben sus ventas'));
+      await otraVentaEnLaNube();
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pumpAndSettle();
+      expect(texto(tester, 'jefe_kpi_ventas_valor'), '1');
     });
   });
 

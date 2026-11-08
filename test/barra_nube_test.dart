@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/features/barra/datos/barra_nube.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/models/evento.dart';
 
 /// La barra del jefe en la web: lee y escribe directo en la nube. Con una nube
 /// simulada (como `puesta_al_dia_nube_test.dart`): no sale nada de la PC.
@@ -201,5 +202,31 @@ void main() {
 
   test('la web no vende ni abre cajas: no tiene cómo', () {
     expect(barra, isNot(isA<BarraDeLaCaja>()));
+  });
+
+  test('las fiestas vienen de la nube, en orden y de a páginas (etapa 8: en la web no hay base)', () async {
+    Map<String, Object?> fiesta(int i, String nombre, {String estado = 'Confirmado'}) => {
+          'id': 'e0000000-0000-4000-8000-${i.toString().padLeft(12, '0')}',
+          'cliente_id': 'c0000000-0000-4000-8000-000000000001',
+          'tipo': 'Recepción',
+          'fecha_evento': '2026-12-0${i}T22:00:00',
+          'estado': estado,
+          'modalidad': 'masivo',
+          'encabezado_evento': nombre,
+          'cantidad_cuotas': 1,
+        };
+    nube.filas = (tabla, _) => tabla == 'eventos'
+        ? [fiesta(4, 'TÉCNICA PINAROLI'), fiesta(5, 'LA CANCELADA', estado: 'Cancelado')]
+        : const [];
+    final eventos = await barra.eventos();
+    expect([for (final e in eventos) e.encabezadoEvento], ['TÉCNICA PINAROLI', 'LA CANCELADA'],
+        reason: 'las canceladas las saca FiestasDelJefe, no la nube');
+    expect(eventos.last.estado, EstadoEvento.cancelado);
+    final p = nube.pedidos.single;
+    expect(p.metodo, 'GET');
+    expect(p.tabla, 'eventos');
+    final orden = p.params['order']!.single;
+    expect(orden, startsWith('fecha_evento.asc'));
+    expect(orden, contains('id.asc'));
   });
 }

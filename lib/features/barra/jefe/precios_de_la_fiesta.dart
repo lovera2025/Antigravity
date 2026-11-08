@@ -408,6 +408,8 @@ class _PreciosDeLaFiestaVistaState extends ConsumerState<PreciosDeLaFiestaVista>
             label: const Text('COPIAR DE OTRA FIESTA'),
             style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
           ),
+          // En la web no hay impresora: queda el PDF.
+          if (!ref.watch(enLaWebProvider))
           OutlinedButton.icon(
             key: const Key('jefe_lista_imprimir'),
             onPressed: _imprimir,

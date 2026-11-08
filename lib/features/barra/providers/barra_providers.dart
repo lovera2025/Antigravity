@@ -12,6 +12,7 @@ import '../../common/utils/subir_ya.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../../eventos/repositories/eventos_repository.dart';
 import '../datos/barra_local.dart';
+import '../datos/barra_nube.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/canal_universal_ble.dart';
 import '../impresion/impresora_bluetooth.dart';
@@ -20,13 +21,19 @@ import '../impresion/ticket_esc_pos.dart';
 import '../services/barra_sin_internet.dart';
 import '../services/fiestas_de_la_barra.dart';
 import '../services/papel_de_la_barra.dart';
+import 'barra_del_jefe_provider.dart';
+
+export 'barra_del_jefe_provider.dart' show enLaWebProvider;
 
 /// La barra de este equipo: la base y la cola de subida. Los tests la reemplazan.
 final barraDeLaCajaProvider = Provider<BarraDeLaCaja>((ref) => BarraLocal());
 
-/// Todos los eventos de este equipo. Los tests lo reemplazan.
+/// Todos los eventos de este equipo; **en la web, los de la nube** (etapa 8: en la web
+/// no hay base). Los tests lo reemplazan.
 final eventosDeLaBarraProvider = FutureProvider<List<Evento>>((ref) async {
   ref.watch(operationalSyncRevisionProvider);
+  final barra = ref.watch(barraDelJefeProvider);
+  if (barra is BarraNube) return barra.eventos();
   return ref.read(eventosRepositoryProvider).getAll();
 });
 
@@ -68,9 +75,11 @@ final subirVentaProvider = Provider<Future<void> Function(VentaBarra venta)>((re
 
 /// Sube ya una fila de la barra que no es una venta (una anulación, un vale que salió),
 /// si hay internet: así el jefe la ve enseguida, y una anulación llega a la puerta. Sin
-/// internet queda en la cola. Los tests lo reemplazan.
+/// internet queda en la cola. **En la web no hace nada:** `BarraNube` ya escribió en la
+/// nube, y acá no hay cola. Los tests lo reemplazan.
 final subirDeLaBarraProvider =
     Provider<Future<void> Function(String tabla, String registroId)>((ref) {
+  if (ref.watch(enLaWebProvider)) return (tabla, registroId) async {};
   return (tabla, registroId) async {
     if (ref.read(connectivityServiceProvider).currentStatus == AppConnectivity.offline) return;
     try {

@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/instalacion_id.dart';
 import '../../../core/utils/uuid_utils.dart';
+import '../../../models/evento.dart';
 import 'barra_repositorio.dart';
 
 /// La barra del jefe en la web del iPhone: lee y escribe **directo en la nube**, sin
@@ -37,6 +38,17 @@ class BarraNube implements BarraDelJefe {
       todas.addAll(filas);
       if (filas.length < _pagina) return todas;
     }
+  }
+
+  /// Las fiestas, para elegir cuál mirar: en la web no hay base de dónde leerlas
+  /// (etapa 8). Vienen todas, también las canceladas: `FiestasDelJefe.de` las saca.
+  Future<List<Evento>> eventos() async {
+    final filas = await _todas(() => _supabase
+        .from('eventos')
+        .select()
+        .order('fecha_evento', ascending: true)
+        .order('id', ascending: true));
+    return [for (final f in filas) Evento.fromJson(f)];
   }
 
   @override

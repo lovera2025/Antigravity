@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "barra-web-prueba",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-I", "-m", "http.server", "8790", "--directory", "build/barra_web_prueba"],
+      "port": 8790
+    }
+  ]
+}
