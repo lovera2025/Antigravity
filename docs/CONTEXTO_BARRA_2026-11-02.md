@@ -100,8 +100,13 @@ Android al toque**, vendió e imprimió, y **sacó la fibra y siguió andando**.
 conectado a la central en el 8797 por el wifi, con la búsqueda escuchando en el 8777. **La foto del papel (mandada por él, "gg"):** dos
 de los vales que imprimió desde el celular, "VALE POR 1 / FERNET CON COCA" (POR SEPARADO, N° 0003-1) y "2 AGUA SIN GAS" (TODO JUNTO,
 N° 0005), con PUERTO VIEJO, "Dom 08/11/2026 - 13:04", "Caja 3 · Lucía", el pie "Vale solo hoy · una sola vez / El barman se queda el
-vale", letras grandes, sin logo ni precios: **igual que desde la PC**. Hizo unas cinco ventas. **Sin confirmar:** si la central apareció
-sola (UDP) o escribió la dirección.
+vale", letras grandes, sin logo ni precios: **igual que desde la PC**. Hizo unas cinco ventas. **La central apareció sola**: tocó
+PRENDER LA CENTRAL en la PC y "apareció Lucía" (la Caja 3 en la notebook), sin escribir ninguna dirección. **La búsqueda por UDP pasó
+por el router de su casa** (el celular por wifi, la PC por cable).
+
+**La clave de firma no va a GitHub** (lo preguntó el 8-nov): el repositorio `lovera2025/Antigravity` es **público**. A GitHub va el APK
+firmado, en cada release, que es lo que baja la tablet para actualizarse; la clave solo hace falta para armar ese APK en esta PC. La
+copia de la clave va en un pendrive y en su Google Drive.
 
 **Queda para cuando estén la tablet y el TP-Link del salón:** repetir lo mismo ahí (si el TP-Link aísla a los equipos, la dirección a
 mano o apagarle el "AP isolation"). Sin código.
