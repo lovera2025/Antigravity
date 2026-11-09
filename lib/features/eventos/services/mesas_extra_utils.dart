@@ -13,7 +13,12 @@ enum DistanciaLejos {
   aUnasMesas('A unas mesas', 'a unas mesas'),
 
   /// La más lejana que haya: la otra punta del salón, o de su bloque.
-  bienLejos('Bien lejos', 'bien lejos');
+  bienLejos('Bien lejos', 'bien lejos'),
+
+  /// En las mesas que el jefe marcó en el plano (6.5.0). Si ahí no hay lugar,
+  /// como [bienLejos], y se avisa. Va al final: una versión vieja que lee este
+  /// nombre no lo conoce y lo toma como "sin decir".
+  enLaZona('Donde yo elija', 'en la zona elegida');
 
   /// En el diálogo.
   final String rotulo;
@@ -63,6 +68,10 @@ class SorteoMesasDialogResult {
   /// Con plano, entero: usar de la mesa 1 a esta.
   final int? hastaMesa;
 
+  /// Con plano: alumno → las mesas del plano donde van sus "lejos"
+  /// ([DistanciaLejos.enLaZona], 6.5.0).
+  final Map<String, Set<int>> zonas;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
@@ -74,6 +83,7 @@ class SorteoMesasDialogResult {
     this.ordenDivisiones = const [],
     this.usarPasto = false,
     this.hastaMesa,
+    this.zonas = const {},
   });
 }
 

@@ -8,6 +8,7 @@ import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
 import '../../plano/services/divisiones.dart';
 import '../../plano/services/sorteo_con_plano.dart';
+import '../../plano/widgets/elegir_zona_dialog.dart';
 import '../services/mesas_extra_utils.dart';
 import '../services/pago_para_sorteo.dart';
 import '../services/salon_mesas.dart';
@@ -51,6 +52,11 @@ Future<SorteoMesasDialogResult?> mostrarSorteoMesasDialog({
 }
 
 @visibleForTesting
+/// Cuántas mesas de una familia van juntas sin preguntar: la principal y 2
+/// adicionales (pedido del usuario, 9-nov). De ahí en más, las de más van lejos:
+/// en el cartel del sorteo vienen tildadas.
+const kMesasJuntasEnElSorteo = 3;
+
 class SorteoMesasDialog extends StatefulWidget {
   final String tituloInstitucion;
   final List<ContratoAlumno> alumnos;
@@ -81,6 +87,19 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
 
   /// Qué tan lejos van las separadas de cada alumno. Viene en "cerca".
   late final Map<String, DistanciaLejos> _distancias;
+
+  /// Las mesas del plano donde van las lejos de cada alumno, con "Donde yo
+  /// elija" (6.5.0).
+  late final Map<String, Set<int>> _zonas;
+
+  /// Las zonas que valen: de quien tildó lejos y eligió "Donde yo elija".
+  Map<String, Set<int>> get _zonasElegidas => {
+        for (final e in _zonas.entries)
+          if (_separaciones.containsKey(e.key) &&
+              _distancias[e.key] == DistanciaLejos.enLaZona &&
+              e.value.isNotEmpty)
+            e.key: e.value,
+      };
   late final Set<int> _ocupadas;
   late final CandidatosPorPago _candidatos;
 
@@ -115,6 +134,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
         ordenDivisiones: _orden,
         usarPasto: _usarPasto,
         hastaMesa: int.tryParse(_hastaCtrl.text.trim()),
+        zonas: _zonasElegidas,
       );
 
   /// Lo que va a hacer el sorteo sobre el plano. Se recalcula solo si cambió
@@ -131,6 +151,11 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       (_separaciones.entries.map((e) => '${e.key}=${e.value}').toList()..sort())
           .join(','),
       (_distancias.entries.map((e) => '${e.key}=${e.value.name}').toList()..sort())
+          .join(','),
+      (_zonasElegidas.entries
+              .map((e) => '${e.key}=${(e.value.toList()..sort()).join('.')}')
+              .toList()
+            ..sort())
           .join(','),
     ].join('|');
     if (clave != _claveMemo || _memo == null) {
@@ -185,6 +210,23 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     _soloPagado = widget.inicial?.soloPagado ?? true;
     _incluirBase = {...?widget.inicial?.incluirBase};
     _incluirExtras = {...?widget.inicial?.incluirExtras};
+    _zonas = {
+      for (final e in (widget.inicial?.zonas ?? const <String, Set<int>>{})
+          .entries)
+        e.key: {...e.value},
+    };
+    // Más de 3 mesas (pedido del usuario, 9-nov): la principal y 2 adicionales
+    // van juntas y las de más, lejos. La primera vez vienen tildadas; el jefe
+    // las destilda o elige dónde.
+    // Con todas sus mesas, pagas o no: si después se pasa a "todo lo cargado",
+    // ya viene tildada (y a una que va solo con la base no le cambia nada).
+    if (widget.inicial == null) {
+      for (final p in SorteoMesasMotor.pedidos(widget.alumnos)) {
+        if (!p.esNuevo || p.mesas <= kMesasJuntasEnElSorteo) continue;
+        _separaciones[p.alumnoId] = p.mesas - kMesasJuntasEnElSorteo;
+        _distancias[p.alumnoId] = DistanciaLejos.bienLejos;
+      }
+    }
     final minima = _minima(_pedidos);
     final inicial = widget.inicial?.capacidadSalon ?? minima;
     _capacidadCtrl = TextEditingController(
@@ -262,6 +304,23 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   void _cambiarDistancia(String alumnoId, DistanciaLejos distancia) =>
       _cambiar(() => _distancias[alumnoId] = distancia);
 
+  /// ELEGIR EN EL PLANO: el salón se abre encima del cartel, y al volver queda
+  /// la zona.
+  Future<void> _elegirZona(ContratoAlumno a, int necesita) async {
+    final plano = _plano;
+    if (plano == null) return;
+    final elegidas = await ElegirZonaDialog.abrir(
+      context,
+      plano: plano,
+      alumnos: widget.alumnos,
+      nombre: a.nombreAlumno,
+      necesita: necesita,
+      elegidas: _zonas[a.id] ?? const {},
+    );
+    if (elegidas == null || !mounted) return;
+    _cambiar(() => _zonas[a.id] = elegidas);
+  }
+
   void _alternar(Set<String> conjunto, String id, bool incluir) =>
       _cambiar(() => incluir ? conjunto.add(id) : conjunto.remove(id));
 
@@ -322,6 +381,15 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
       for (final p in pedidos)
         if (p.esNuevo) p.alumnoId,
     };
+    // Los que ya tienen mesa y les falta otra (la compraron después).
+    final faltanDe = {
+      for (final p in pedidos)
+        if (!p.esNuevo && p.faltan > 0) p.alumnoId: p.faltan,
+    };
+    final conMasDeTres = [
+      for (final p in pedidos)
+        if (p.esNuevo && p.mesas > kMesasJuntasEnElSorteo) p.alumnoId,
+    ];
 
     return AlertDialog(
       title: const Text('Sorteo de mesas'),
@@ -494,6 +562,26 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                   'elegí cuántas quedan lejos de su bloque y qué tan lejos.',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                 ),
+                if (conMasDeTres.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    key: const Key('aviso_mas_de_tres'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade300),
+                    ),
+                    child: Text(
+                      '${conMasDeTres.length == 1 ? '1 familia' : '${conMasDeTres.length} familias'} '
+                      'con más de $kMesasJuntasEnElSorteo mesas: la principal y '
+                      '2 adicionales van juntas, y las de más, lejos. Podés '
+                      'destildarlas o elegir dónde.',
+                      style: TextStyle(fontSize: 13, color: Colors.brown.shade800),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 for (final a in conMesasExtra)
                   _FilaMesasExtra(
@@ -503,13 +591,26 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                         ? 'no se sortea: sin nada pagado de la cuota base'
                         : exclusion.soloBase.contains(a.id)
                         ? 'solo mesa base: mesas extra sin pagar'
-                        : nuevosIds.contains(a.id)
+                        : nuevosIds.contains(a.id) || faltanDe.containsKey(a.id)
                         ? null
                         : 'ya tiene ${SalonMesas.textoMesas(a)}',
                     separadas: _separaciones[a.id],
                     distancia: _distancias[a.id] ?? DistanciaLejos.cerca,
                     onCambiar: (v) => _cambiarSeparacion(a.id, v),
                     onDistancia: (v) => _cambiarDistancia(a.id, v),
+                    faltan: faltanDe[a.id] ?? 0,
+                    conPlano: plano != null,
+                    zona: _zonas[a.id] ?? const {},
+                    onElegirZona: plano == null
+                        ? null
+                        : () => _elegirZona(
+                              a,
+                              faltanDe[a.id] ??
+                                  MesasExtraUtils.cantidadAlejadasEfectivas(
+                                    SalonMesas.mesas(a),
+                                    _separaciones[a.id] ?? 1,
+                                  ),
+                            ),
                   ),
               ],
               if (conSillasExtra.isNotEmpty) ...[
@@ -570,6 +671,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                       ordenDivisiones: List<String>.from(_orden),
                       usarPasto: _usarPasto,
                       hastaMesa: plano == null ? null : hastaEscrita,
+                      zonas: plano == null ? const {} : _zonasElegidas,
                     ),
                   )
               : null,
@@ -955,6 +1057,17 @@ class _FilaMesasExtra extends StatelessWidget {
   final ValueChanged<int?> onCambiar;
   final ValueChanged<DistanciaLejos> onDistancia;
 
+  /// Si ya tiene mesa y le faltan (compró otra después del sorteo): cuántas.
+  /// Cero si es una familia nueva.
+  final int faltan;
+
+  /// Con plano se puede elegir la zona ([DistanciaLejos.enLaZona]).
+  final bool conPlano;
+
+  /// Las mesas de la zona elegida.
+  final Set<int> zona;
+  final VoidCallback? onElegirZona;
+
   const _FilaMesasExtra({
     required this.alumno,
     required this.pagoMesas,
@@ -963,7 +1076,13 @@ class _FilaMesasExtra extends StatelessWidget {
     required this.distancia,
     required this.onCambiar,
     required this.onDistancia,
+    this.faltan = 0,
+    this.conPlano = false,
+    this.zona = const {},
+    this.onElegirZona,
   });
+
+  static const _ambar = Color(0xFF8A5A00);
 
   @override
   Widget build(BuildContext context) {
@@ -972,6 +1091,7 @@ class _FilaMesasExtra extends StatelessWidget {
     final sillas = SalonMesas.sillasExtra(alumno);
     final sortea = bloqueo == null;
     final pagadas = pagoMesas >= alumno.mesaExtraPrecio - 0.01;
+    final completa = faltan > 0;
     final detalle = [
       '$extras extra · $mesas en total',
       if (sillas > 0) '$sillas silla(s) extra',
@@ -979,9 +1099,31 @@ class _FilaMesasExtra extends StatelessWidget {
           ? 'pagadas'
           : 'pagó ${pagoMesas.toCurrency()} de '
               '${alumno.mesaExtraPrecio.toCurrency()}',
+      if (completa)
+        'ya tiene ${SalonMesas.textoMesas(alumno)} · le '
+            '${faltan == 1 ? 'falta 1' : 'faltan $faltan'}',
       ?bloqueo,
     ].join(' · ');
     final marcado = separadas != null;
+    final lejos = completa ? faltan : (separadas ?? 0).clamp(1, extras);
+    final masDeTres = !completa && mesas > kMesasJuntasEnElSorteo;
+
+    // Lo que va a pasar, en palabras: la principal y cuántas juntas, cuántas
+    // lejos (6.5.0).
+    String explicacion() {
+      if (completa) {
+        return faltan == 1
+            ? 'La que le falta va lejos de las suyas.'
+            : 'Las $faltan que le faltan van lejos de las suyas.';
+      }
+      final juntas = mesas - lejos;
+      final cuales = juntas == 1
+          ? 'La principal'
+          : 'La principal y ${juntas - 1} '
+              '${juntas == 2 ? 'adicional' : 'adicionales'} juntas';
+      final van = lejos == 1 ? 'la otra va lejos' : 'las otras $lejos van lejos';
+      return '$cuales; $van.';
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
@@ -1012,12 +1154,36 @@ class _FilaMesasExtra extends StatelessWidget {
             ),
             if (sortea && marcado)
               Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 2),
+                child: Text(
+                  explicacion(),
+                  key: Key('explicacion_lejos_${alumno.id}'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: _ambar,
+                  ),
+                ),
+              ),
+            if (sortea && !marcado && masDeTres)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 2),
+                child: Text(
+                  'Más de $kMesasJuntasEnElSorteo mesas, destildada: van todas '
+                  'juntas.',
+                  key: Key('explicacion_lejos_${alumno.id}'),
+                  style: const TextStyle(fontSize: 12, color: _ambar),
+                ),
+              ),
+            if (sortea && marcado && !completa)
+              Padding(
                 padding: const EdgeInsets.only(left: 12),
                 child: Row(
                   children: [
                     const Text('Separadas:'),
                     const SizedBox(width: 12),
                     DropdownButton<int>(
+                      key: Key('separadas_${alumno.id}'),
                       value: separadas!.clamp(1, extras),
                       items: [
                         for (var k = 1; k <= extras; k++)
@@ -1052,7 +1218,8 @@ class _FilaMesasExtra extends StatelessWidget {
                       value: distancia,
                       items: [
                         for (final d in DistanciaLejos.values)
-                          DropdownMenuItem(value: d, child: Text(d.rotulo)),
+                          if (conPlano || d != DistanciaLejos.enLaZona)
+                            DropdownMenuItem(value: d, child: Text(d.rotulo)),
                       ],
                       onChanged: (v) {
                         if (v != null) onDistancia(v);
@@ -1068,12 +1235,39 @@ class _FilaMesasExtra extends StatelessWidget {
                             'Otra zona, a la vista.',
                           DistanciaLejos.bienLejos =>
                             'La otra punta del salón, o de su bloque.',
+                          DistanciaLejos.enLaZona =>
+                            'En las mesas que marques en el plano.',
                         },
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,
                         ),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            if (sortea && marcado && distancia == DistanciaLejos.enLaZona)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, top: 4),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      key: Key('elegir_zona_${alumno.id}'),
+                      onPressed: onElegirZona,
+                      icon: const Icon(Icons.touch_app_outlined, size: 18),
+                      label: const Text('ELEGIR EN EL PLANO'),
+                    ),
+                    Text(
+                      zona.isEmpty
+                          ? 'Ninguna elegida todavía: van bien lejos.'
+                          : '${zona.length == 1 ? '1 mesa elegida' : '${zona.length} mesas elegidas'}: '
+                              '${(zona.toList()..sort()).join(', ')}',
+                      key: Key('zona_elegida_${alumno.id}'),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
                     ),
                   ],
                 ),

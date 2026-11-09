@@ -48,6 +48,10 @@ class SorteoMesasRegistro {
   /// de los que tildaron "lejos". `null` si no hubo ninguno.
   final Map<String, String>? lejos;
 
+  /// En un sorteo: alumno → las mesas de la zona que eligió el jefe para sus
+  /// "lejos" ("45, 46"), 6.5.0. `null` si nadie eligió.
+  final Map<String, String>? zonas;
+
   final String? hechoPor;
   final DateTime createdAt;
 
@@ -59,6 +63,7 @@ class SorteoMesasRegistro {
     this.antes,
     this.quedan,
     this.lejos,
+    this.zonas,
     this.hechoPor,
     required this.createdAt,
   });
@@ -69,6 +74,7 @@ class SorteoMesasRegistro {
   static const claveAntes = '_antes';
   static const claveQuedan = '_quedan';
   static const claveLejos = '_lejos';
+  static const claveZonas = '_zonas';
 
   int get alumnos => resultado.length;
 
@@ -89,6 +95,7 @@ class SorteoMesasRegistro {
     Map<String, String>? antes;
     Map<String, String>? quedan;
     Map<String, String>? lejos;
+    Map<String, String>? zonas;
     try {
       final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
       if (decodificado is Map) {
@@ -100,6 +107,8 @@ class SorteoMesasRegistro {
             quedan = _mapa(e.value);
           } else if (clave == claveLejos) {
             lejos = _mapa(e.value);
+          } else if (clave == claveZonas) {
+            zonas = _mapa(e.value);
           } else if (!clave.startsWith('_')) {
             resultado[clave] = e.value?.toString() ?? '';
           }
@@ -118,6 +127,7 @@ class SorteoMesasRegistro {
       antes: antes,
       quedan: quedan,
       lejos: lejos,
+      zonas: zonas,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -137,6 +147,7 @@ class SorteoMesasRegistro {
         claveAntes: ?antes,
         claveQuedan: ?quedan,
         claveLejos: ?lejos,
+        claveZonas: ?zonas,
       }),
       'alumnos': alumnos,
       'hecho_por': hechoPor,

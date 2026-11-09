@@ -85,6 +85,10 @@ class EntradaSorteoPlano {
   /// Sorteo entero: usar de la mesa 1 a esta. Null: la mínima que alcanza.
   final int? hastaMesa;
 
+  /// Alumno → las mesas del plano donde van sus "lejos"
+  /// ([DistanciaLejos.enLaZona], 6.5.0).
+  final Map<String, Set<int>> zonas;
+
   const EntradaSorteoPlano({
     required this.armado,
     this.config = ConfigPlano.vacia,
@@ -96,6 +100,7 @@ class EntradaSorteoPlano {
     this.ordenDivisiones = const [],
     this.usarPasto = false,
     this.hastaMesa,
+    this.zonas = const {},
   });
 
   EntradaSorteoPlano conPasto(bool usar) => EntradaSorteoPlano(
@@ -109,6 +114,7 @@ class EntradaSorteoPlano {
         ordenDivisiones: ordenDivisiones,
         usarPasto: usar,
         hastaMesa: hastaMesa,
+        zonas: zonas,
       );
 }
 
@@ -325,9 +331,9 @@ class SorteoConPlano {
     }
   }
 
-  /// Alguna familia nueva pidió mesas "lejos".
-  static bool _hayLejos(_Base b) =>
-      b.pedidos.any((p) => p.esNuevo && p.separadas > 0);
+  /// Alguna familia pidió mesas "lejos" (también la que ya tenía y pide lejos
+  /// la que compró después).
+  static bool _hayLejos(_Base b) => b.pedidos.any((p) => p.separadas > 0);
 
   /// Sortea. Tira [StateError] si no entra (el diálogo no lo deja llegar acá).
   ///
@@ -402,6 +408,18 @@ class SorteoConPlano {
     final lugar = _lugar(a);
     return (alumnoId, candidatas, propios, rng) {
       final d = e.distancias[alumnoId];
+      // Donde eligió el jefe (6.5.0): primero las de la zona, y si no hay
+      // lugar, lo de siempre (bien lejos). El control de [lejosEnElSalon]
+      // saltea la que toque a la familia.
+      if (d == DistanciaLejos.enLaZona) {
+        final zona = e.zonas[alumnoId] ?? const <int>{};
+        if (zona.isEmpty) return candidatas;
+        bool enZona(int c) => zona.contains(b.cas.numero(c));
+        return [
+          ...candidatas.where(enZona),
+          ...candidatas.where((c) => !enZona(c)),
+        ];
+      }
       if (d == null || d == DistanciaLejos.bienLejos) return candidatas;
       final suyas = [for (final c in propios) ?b.cas.numero(c)];
       double clave(int casillero) {
@@ -440,6 +458,11 @@ class SorteoConPlano {
     for (final x in e.alumnos) {
       final d = e.distancias[x.id];
       final nums = r.asignaciones[x.id];
+      if (d == DistanciaLejos.enLaZona && nums != null) {
+        final aviso = _avisoDeLaZona(e, x, nums);
+        if (aviso != null) avisos.add(aviso);
+        continue;
+      }
       if (d == null || d == DistanciaLejos.bienLejos || nums == null) continue;
       final quedo = lugaresDeLaSuelta(e.armado, nums);
       if (quedo == null) continue;
@@ -462,6 +485,56 @@ class SorteoConPlano {
       avisos: r.avisos,
       avisosLejos: avisos,
     );
+  }
+
+  /// Si las "lejos" de [x] no cayeron todas en la zona elegida: cuántas no, en
+  /// palabras. Null si cayeron, o si no se eligió zona (van bien lejos).
+  static String? _avisoDeLaZona(
+    EntradaSorteoPlano e,
+    ContratoAlumno x,
+    List<int> nums,
+  ) {
+    final zona = e.zonas[x.id] ?? const <int>{};
+    if (zona.isEmpty) return null;
+    final antes = MesasExtraUtils.numerosMesaDesdeTexto(x.numeroMesa).toSet();
+    final nuevas = [for (final n in nums) if (!antes.contains(n)) n];
+    final esperadas = antes.isEmpty
+        ? MesasExtraUtils.cantidadAlejadasEfectivas(
+            nums.length,
+            e.separaciones[x.id] ?? 0,
+          )
+        : nuevas.length;
+    final enZona = nuevas.where(zona.contains).length;
+    final faltan = esperadas - enZona;
+    if (faltan <= 0) return null;
+    final coma = x.nombreAlumno.indexOf(',');
+    final apellido =
+        (coma < 0 ? x.nombreAlumno : x.nombreAlumno.substring(0, coma)).trim();
+    return faltan == 1
+        ? '$apellido: una adicional no quedó en la zona elegida (estaba '
+            'ocupada o tocaba a la familia); va lo más lejos que se pudo.'
+        : '$apellido: $faltan adicionales no quedaron en la zona elegida '
+            '(estaba ocupada o tocaba a la familia); van lo más lejos que se '
+            'pudo.';
+  }
+
+  /// Si las mesas de [todas] que no están en [antes] (las que dio este sorteo)
+  /// no tocan a ninguna otra de la familia en el salón dibujado: la que se
+  /// compró después y se pidió lejos (6.5.0).
+  static bool nuevasLejosEnElSalon(
+    ArmadoSalon a,
+    Iterable<int> antes,
+    Iterable<int> todas,
+  ) {
+    final previas = antes.toSet();
+    final lista = todas.toSet().toList();
+    for (final n in lista) {
+      if (previas.contains(n)) continue;
+      for (final o in lista) {
+        if (o != n && a.pegadas(n, o)) return false;
+      }
+    }
+    return true;
   }
 
   /// Red final antes de guardar. Null si está todo bien, o el motivo.
@@ -522,7 +595,16 @@ class SorteoConPlano {
       // de verdad en el salón: números seguidos y mesas pegadas. A quien se le
       // completa una mesa comprada después se le da la más cercana que haya,
       // como hace el sorteo sin plano.
-      final nueva = suyas.isEmpty && !e.config.fijadasPorAlumno.containsKey(id);
+      final conFijadas = e.config.fijadasPorAlumno.containsKey(id);
+      // La que se compró después y se pidió lejos (6.5.0): sin tocar ninguna
+      // de las suyas.
+      if (suyas.isNotEmpty &&
+          !conFijadas &&
+          (e.separaciones[id] ?? 0) > 0 &&
+          !nuevasLejosEnElSalon(a, suyas, nums)) {
+        return 'La mesa nueva de una familia quedó tocando las suyas.';
+      }
+      final nueva = suyas.isEmpty && !conFijadas;
       if (!nueva) continue;
       final pedidas = e.separaciones[id] ?? 0;
       if (pedidas == 0 && tramosPegados(a, nums).length > 1) {
@@ -626,11 +708,15 @@ class SorteoConPlano {
               'reservada.');
         }
         conFijada.add(p.alumnoId);
+        final actuales = [...p.actuales, ...usar]..sort();
         pedidosPlano.add(PedidoSorteo(
           alumnoId: p.alumnoId,
           mesas: p.mesas,
-          separadas: p.esNuevo ? 0 : p.separadas,
-          actuales: [...p.actuales, ...usar]..sort(),
+          // Lo que siga faltando después de sus fijadas, lejos si se pidió.
+          separadas: p.esNuevo
+              ? 0
+              : min(p.separadas, max(0, p.mesas - actuales.length)),
+          actuales: actuales,
         ));
       } else {
         pedidosPlano.add(p);
@@ -727,6 +813,40 @@ class SorteoConPlano {
     return _bloques(b, e, rng, familias, mesas, avisos, semillaVista);
   }
 
+  /// El "hasta qué mesa" más chico desde [desde] en el que las mesas "lejos"
+  /// también se cumplen en el salón dibujado (6.5.0). Lo justo para el motor a
+  /// veces no alcanza: con dos familias de más de 3 mesas tildadas solas, las
+  /// lejos quedaban tocando a su familia y el cartel decía que no entraba.
+  /// Busca unas mesas más; si tampoco, queda [desde] y el aviso de "lejos".
+  static int _minimaConLejos(
+    _Base b,
+    EntradaSorteoPlano e,
+    List<PedidoSorteo> pedidos,
+    Set<int> ocupadas,
+    int desde,
+    int total,
+  ) {
+    final separadas = pedidos.fold<int>(0, (s, p) => s + p.separadas);
+    final tope = min(total, desde + 6 + 2 * separadas);
+    for (var c = desde; c <= tope; c++) {
+      if (!SorteoMesasMotor.esFactible(
+        pedidos: pedidos,
+        ocupadas: ocupadas,
+        capacidad: c,
+      )) {
+        continue;
+      }
+      try {
+        // Con una semilla fija: la vista previa y el sorteo dan lo mismo.
+        _sortearEn(b, e, pedidos, ocupadas, c, Random(c), intentos: 40);
+        return c;
+      } on StateError {
+        // Ni así: unas mesas más.
+      }
+    }
+    return desde;
+  }
+
   static int? _minimaCapacidad(
     List<PedidoSorteo> pedidos,
     Set<int> ocupadas,
@@ -783,18 +903,44 @@ class SorteoConPlano {
   /// seguidas pueden tocarse (una detrás de la otra, o a los dos lados del
   /// medio sin pasarela: la 1 y la 132). Si pasa, se vuelve a sortear el
   /// tramo; si después de [_intentosLejos] no se pudo, [_LejosNoEntra].
+  ///
+  /// [deVerdad] es lo ocupado en todo el salón (en un bloque, [ocupadas] tapa
+  /// además lo que no es del bloque): la zona elegida para las "lejos" de una
+  /// familia (6.5.0) se le ofrece aunque quede fuera del tramo, si de verdad
+  /// está libre.
   static Map<String, List<int>> _sortearEn(
     _Base b,
     EntradaSorteoPlano e,
     List<PedidoSorteo> pedidos,
     Set<int> ocupadas,
     int capacidad,
-    Random rng,
-  ) {
+    Random rng, {
+    Set<int>? deVerdad,
+    int intentos = _intentosLejos,
+  }) {
     if (pedidos.isEmpty) return const {};
+    final tomadas = deVerdad ?? ocupadas;
+    final fueraDelRango = <String, Set<int>>{};
+    for (final p in pedidos) {
+      if (p.separadas == 0 ||
+          e.distancias[p.alumnoId] != DistanciaLejos.enLaZona) {
+        continue;
+      }
+      final zona = <int>{};
+      for (final n in e.zonas[p.alumnoId] ?? const <int>{}) {
+        final c = b.cas.casillero(n);
+        if (c != null && !tomadas.contains(c)) zona.add(c);
+      }
+      if (zona.isNotEmpty) fueraDelRango[p.alumnoId] = zona;
+    }
     final conLejos = [
       for (final p in pedidos)
         if (p.esNuevo && p.separadas > 0) p,
+    ];
+    // Los que ya tenían y piden lejos lo que les falta (6.5.0).
+    final lejosDeLasSuyas = [
+      for (final p in pedidos)
+        if (!p.esNuevo && p.separadas > 0) p,
     ];
     final orden = _ordenLejos(b, e);
     for (var intento = 1;; intento++) {
@@ -804,20 +950,30 @@ class SorteoConPlano {
         capacidad: capacidad,
         random: rng,
         ordenLejos: orden,
+        fueraDelRango: fueraDelRango,
       );
       final error = SorteoMesasMotor.validar(
         pedidos: pedidos,
         ocupadas: ocupadas,
         capacidad: capacidad,
         asignaciones: r,
+        fueraDelRango: fueraDelRango,
       );
       if (error != null) throw StateError(error);
       final enElSalon = _aNumeros(b.cas, r);
       final todosLejos = conLejos.every(
-        (p) => lejosEnElSalon(e.armado, enElSalon[p.alumnoId]!, p.separadas),
-      );
+            (p) =>
+                lejosEnElSalon(e.armado, enElSalon[p.alumnoId]!, p.separadas),
+          ) &&
+          lejosDeLasSuyas.every(
+            (p) => nuevasLejosEnElSalon(
+              e.armado,
+              [for (final c in p.actuales) ?b.cas.numero(c)],
+              enElSalon[p.alumnoId]!,
+            ),
+          );
       if (todosLejos) return r;
-      if (intento >= _intentosLejos) throw _LejosNoEntra();
+      if (intento >= intentos) throw _LejosNoEntra();
     }
   }
 
@@ -900,7 +1056,7 @@ class SorteoConPlano {
         ocupadas = {...ocupadas, for (final l in deFijos.values) ...l};
       }
     }
-    final int? minima;
+    int? minima;
     if (!hayLugarParaFijos) {
       minima = null;
     } else if (fijos.isNotEmpty && resto.isEmpty) {
@@ -920,6 +1076,9 @@ class SorteoConPlano {
         max(1, b.masAltoAsignado),
         cas.total,
       );
+      if (minima != null && resto.any((p) => p.separadas > 0)) {
+        minima = _minimaConLejos(b, e, resto, ocupadas, minima, cas.total);
+      }
     }
     int? capacidad = minima;
     if (e.hastaMesa != null && minima != null) {
@@ -1108,7 +1267,7 @@ class SorteoConPlano {
             capacidad: fin,
           )) {
             filas.add(fila(k, ps, bloque: guardados[k]));
-            anotar(_sortearEn(b, e, ps, oc, fin, azar));
+            anotar(_sortearEn(b, e, ps, oc, fin, azar, deVerdad: ocupadas));
             continue;
           }
         }
@@ -1138,7 +1297,7 @@ class SorteoConPlano {
         if (cap == null) {
           entraTodo = false;
         } else {
-          anotar(_sortearEn(b, e, todos, oc, cap, azar));
+          anotar(_sortearEn(b, e, todos, oc, cap, azar, deVerdad: ocupadas));
         }
       }
     } else {
@@ -1172,7 +1331,7 @@ class SorteoConPlano {
             numeros.isEmpty ? null : BloqueDivision.deMesas(k, numeros);
         filas.add(fila(k, ps, bloque: bloque));
         if (bloque != null) bloquesNuevos.add(bloque);
-        anotar(_sortearEn(b, e, ps, oc, fin, azar));
+        anotar(_sortearEn(b, e, ps, oc, fin, azar, deVerdad: ocupadas));
         cursor = fin + 1;
       }
     }

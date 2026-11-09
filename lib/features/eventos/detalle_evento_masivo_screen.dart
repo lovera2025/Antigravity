@@ -3958,6 +3958,7 @@ class _DetalleEventoMasivoScreenState
       ordenDivisiones: config.ordenDivisiones,
       usarPasto: config.usarPasto,
       hastaMesa: config.hastaMesa,
+      zonas: config.zonas,
     );
     final ResultadoSorteoPlano resultado;
     try {
@@ -4009,6 +4010,7 @@ class _DetalleEventoMasivoScreenState
       numeros,
       antes: UltimosSorteados.antesDe(alumnos, numeros),
       lejos: _lejosParaElRegistro(config, numeros),
+      zonas: _zonasParaElRegistro(config, numeros),
     );
     final planoNuevo = plano.copyWith(
       modoSorteo: config.modo,
@@ -4495,6 +4497,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, String>? antes,
     Map<String, String>? quedan,
     Map<String, String>? lejos,
+    Map<String, String>? zonas,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
@@ -4504,6 +4507,7 @@ class _DetalleEventoMasivoScreenState
         antes: antes,
         quedan: quedan,
         lejos: lejos,
+        zonas: zonas,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );
@@ -4519,6 +4523,20 @@ class _DetalleEventoMasivoScreenState
         if (numeros.containsKey(e.key)) e.key: e.value.name,
     };
     return lejos.isEmpty ? null : lejos;
+  }
+
+  /// Dónde eligió el jefe las "lejos" de cada familia de este sorteo (6.5.0):
+  /// queda escrito en el renglón ("45, 46"). Null si nadie eligió.
+  Map<String, String>? _zonasParaElRegistro(
+    SorteoMesasDialogResult config,
+    Map<String, String> numeros,
+  ) {
+    final zonas = {
+      for (final e in config.zonas.entries)
+        if (numeros.containsKey(e.key) && e.value.isNotEmpty)
+          e.key: (e.value.toList()..sort()).join(', '),
+    };
+    return zonas.isEmpty ? null : zonas;
   }
 
   Future<void> _restaurarSorteoAnterior() async {

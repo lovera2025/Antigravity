@@ -112,12 +112,17 @@ class SorteoMesasMotor {
           MesasExtraUtils.numerosMesaDesdeTexto(texto).toList()..sort();
       if (texto.isNotEmpty && actuales.isEmpty) continue;
       if (actuales.length >= mesas) continue;
+      // Quien ya tiene mesa y le falta otra (la compró después del sorteo):
+      // si se pidió lejos (6.5.0), las que faltan van sueltas, lejos de las
+      // suyas; si no, pegadas a su tramo, como siempre.
       final separadas = actuales.isEmpty
           ? MesasExtraUtils.cantidadAlejadasEfectivas(
               mesas,
               separaciones[a.id] ?? 0,
             )
-          : 0;
+          : (separaciones[a.id] ?? 0) > 0
+              ? mesas - actuales.length
+              : 0;
       out.add(
         PedidoSorteo(
           alumnoId: a.id,
@@ -216,12 +221,19 @@ class SorteoMesasMotor {
   /// prueba primero, sin sacar ninguna. Por eso no cambia lo que entra: la que
   /// usa [_Armado.seCompleta] sigue estando en la lista. Null: la más lejana
   /// primero.
+  ///
+  /// [fueraDelRango] (6.5.0): alumno → números que puede usar para sus mesas
+  /// "lejos" aunque estén fuera del tramo (la zona que eligió el jefe). Quien
+  /// llama ya sabe que están libres; acá solo se mira que nadie de este sorteo
+  /// las tome y que no toquen lo del alumno. No se cuentan en la capacidad:
+  /// usar una solo deja más lugar adentro.
   static Map<String, List<int>> sortear({
     required List<PedidoSorteo> pedidos,
     required Set<int> ocupadas,
     required int capacidad,
     Random? random,
     OrdenLejos? ordenLejos,
+    Map<String, Set<int>> fueraDelRango = const {},
   }) {
     final rng = random ?? Random.secure();
     final armado = _Armado.inicial(pedidos, ocupadas, capacidad);
@@ -263,8 +275,16 @@ class SorteoMesasMotor {
       final suelta = piezas.sueltas[j];
       final resto = piezas.sueltas.sublist(j + 1);
       var puesta = false;
-      final candidatas = armado.candidatasLejos(suelta.alumnoId, rng);
       final propios = armado.numeros[suelta.alumnoId]!;
+      final candidatas = [
+        ...armado.candidatasLejos(suelta.alumnoId, rng),
+        for (final n in fueraDelRango[suelta.alumnoId] ?? const <int>{})
+          if (n >= 1 &&
+              !armado.libres.contains(n) &&
+              !armado.tomada(n) &&
+              propios.every((o) => (n - o).abs() > 1))
+            n,
+      ];
       final orden = ordenLejos == null || propios.isEmpty
           ? candidatas
           : ordenLejos(suelta.alumnoId, candidatas, propios, rng);
@@ -300,7 +320,12 @@ class SorteoMesasMotor {
   static OrdenLejos ordenPorNumero(Map<String, DistanciaLejos> distancias) =>
       (alumnoId, candidatas, propios, rng) {
         final d = distancias[alumnoId];
-        if (d == null || d == DistanciaLejos.bienLejos) return candidatas;
+        // Sin plano no hay zona que elegir: como bien lejos.
+        if (d == null ||
+            d == DistanciaLejos.bienLejos ||
+            d == DistanciaLejos.enLaZona) {
+          return candidatas;
+        }
         int dist(int n) =>
             propios.fold<int>(1 << 30, (m, o) => min(m, (n - o).abs()));
         final azar = {for (final n in candidatas) n: rng.nextDouble()};
@@ -322,6 +347,7 @@ class SorteoMesasMotor {
     required Set<int> ocupadas,
     required int capacidad,
     required Map<String, List<int>> asignaciones,
+    Map<String, Set<int>> fueraDelRango = const {},
   }) {
     if (asignaciones.length != pedidos.length) {
       return 'El resultado no coincide con la lista de alumnos a sortear.';
@@ -342,6 +368,12 @@ class SorteoMesasMotor {
       }
       for (final n in nums) {
         if (p.actuales.contains(n)) continue;
+        // Una de la zona elegida, fuera del tramo ([sortear]).
+        if (fueraDelRango[p.alumnoId]?.contains(n) ?? false) {
+          if (usados.containsKey(n)) return 'El número $n salió dos veces.';
+          usados[n] = p.alumnoId;
+          continue;
+        }
         if (n < 1 || n > capacidad) {
           return 'El número $n queda fuera del salón (1 a $capacidad).';
         }
@@ -446,6 +478,15 @@ class _Piezas {
       }
       porAlumno.add(propias);
     }
+    // Los que ya tienen mesa y piden lejos las que les faltan (6.5.0): cada
+    // una, suelta. Por alumno, después de los nuevos.
+    final lejosDeLasSuyas = pedidos
+        .where((p) => !p.esNuevo && p.separadas > 0 && p.faltan > 0)
+        .toList()
+      ..sort((a, b) => a.alumnoId.compareTo(b.alumnoId));
+    for (final p in lejosDeLasSuyas) {
+      porAlumno.add([for (var i = 0; i < p.faltan; i++) _Pieza(p.alumnoId, 1)]);
+    }
     // De mayor a menor; a igual tamaño, por alumno, para que el orden no
     // dependa de cómo vino la lista.
     bloques.sort((a, b) {
@@ -501,7 +542,9 @@ class _Armado {
   /// hay lugar, en la libre más cercana. Siempre en el mismo orden, así la
   /// cuenta de capacidad y el sorteo hacen exactamente lo mismo.
   bool completar(List<PedidoSorteo> pedidos) {
-    final aCompletar = pedidos.where((p) => !p.esNuevo).toList()
+    // Los que piden lejos lo que les falta van como sueltas ([_Piezas.de]).
+    final aCompletar =
+        pedidos.where((p) => !p.esNuevo && p.separadas == 0).toList()
       ..sort((a, b) => a.alumnoId.compareTo(b.alumnoId));
     for (final p in aCompletar) {
       for (var i = 0; i < p.faltan; i++) {
@@ -583,6 +626,9 @@ class _Armado {
     }
     return mejor;
   }
+
+  /// Si algún alumno de este sorteo ya tiene [n].
+  bool tomada(int n) => numeros.values.any((l) => l.contains(n));
 
   /// Inicios donde entra un bloque de [tamano] mesas corridas libres.
   List<int> iniciosPosibles(int tamano) => [
