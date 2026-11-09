@@ -24,9 +24,11 @@ import 'providers/cierre_caja_provider.dart';
 import 'services/aviso_cambios_caja.dart';
 import 'services/cobro_agrupado.dart';
 import 'services/datos_cierre_sesion.dart';
+import 'services/sector_del_cierre.dart';
 import 'widgets/anotacion_pdf_section.dart';
 import 'widgets/guia_cambio_section.dart';
 import 'widgets/registrar_retiro_dialog.dart';
+import 'widgets/sector_barra.dart';
 
 class CierreCajaScreen extends ConsumerStatefulWidget {
   const CierreCajaScreen({super.key});
@@ -46,6 +48,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
   /// dorado de los encabezados.
   static const _mixtoColor = Color(0xFF00A8CC);
   bool _forzoHoyOperativo = false;
+
+  /// COBROS · BARRA · ENTRADAS (6.4.0): la plata de cada sector, cada una en su cierre.
+  /// Siempre abre en COBROS.
+  SectorDelCierre _sector = SectorDelCierre.cobros;
 
   @override
   void initState() {
@@ -342,6 +348,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = isDark ? Colors.white60 : Colors.black54;
     final modoJefe = ref.watch(adminAuthProvider).esModoJefe;
+    // Sin modo jefe, solo Cobros: el operario ve su cierre como siempre.
+    final sectores = sectoresDelCierre(modoJefe: modoJefe);
+    final sector = sectores.contains(_sector) ? _sector : SectorDelCierre.cobros;
+    final esCobros = sector == SectorDelCierre.cobros;
     // Una sola vez: la usan el contador y la lista, y agrupar dos veces por build
     // sería trabajo repetido en cada scroll.
     final movimientos = _movimientosUnificados(state);
@@ -428,6 +438,15 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (sectores.length > 1) ...[
+                        _selectorSector(sectores, sector, isDark),
+                        const SizedBox(height: 14),
+                      ],
+                      if (sector == SectorDelCierre.barra)
+                        SectorBarraDelCierre(isDark: isDark)
+                      else if (sector == SectorDelCierre.entradas)
+                        SectorEntradasDelCierre(isDark: isDark)
+                      else ...[
                       _selectorDia(
                         context,
                         state,
@@ -482,10 +501,13 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       ),
                       const SizedBox(height: 12),
                       _resumenLine(state, muted),
+                      ],
                     ],
                   ),
                 ),
               ),
+              // Los movimientos y la barra de abajo (REGISTRAR RETIRO, PDF) son de Cobros.
+              if (esCobros) ...[
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -532,12 +554,45 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                       .map((m) => _movimientoTile(context, m, isDark, muted))
                       .toList(),
                 ),
+              ],
               const SliverToBoxAdapter(child: SizedBox(height: 110)),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: _bottomBar(context, state, isDark),
+      bottomNavigationBar: esCobros ? _bottomBar(context, state, isDark) : null,
+    );
+  }
+
+  /// COBROS · BARRA · ENTRADAS, arriba del cierre (solo en modo jefe).
+  Widget _selectorSector(List<SectorDelCierre> sectores, SectorDelCierre elegido, bool isDark) {
+    return SegmentedButton<SectorDelCierre>(
+      key: const Key('cierre_sector'),
+      showSelectedIcon: false,
+      segments: [
+        for (final s in sectores)
+          ButtonSegment(
+            value: s,
+            label: Text(
+              s.nombre,
+              key: Key('cierre_sector_${s.name}'),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1),
+            ),
+          ),
+      ],
+      selected: {elegido},
+      onSelectionChanged: (s) => setState(() => _sector = s.first),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith<Color>(
+          (states) => states.contains(WidgetState.selected) ? _gold.withValues(alpha: 0.2) : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith<Color>(
+          (states) => states.contains(WidgetState.selected)
+              ? _gold
+              : (isDark ? Colors.white54 : Colors.black54),
+        ),
+        side: WidgetStatePropertyAll(BorderSide(color: _gold.withValues(alpha: 0.45))),
+      ),
     );
   }
 

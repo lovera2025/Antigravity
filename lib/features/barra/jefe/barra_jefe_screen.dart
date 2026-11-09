@@ -13,6 +13,7 @@ import '../widgets/elegir_impresora_screen.dart';
 import 'barra_jefe_providers.dart';
 import 'cajas_de_la_fiesta.dart';
 import 'catalogo_del_jefe.dart';
+import 'elegir_fiesta.dart';
 import 'precios_de_la_fiesta.dart';
 
 /// Las tres partes de BARRA.
@@ -43,7 +44,7 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
   Future<void> _cambiarFiesta(FiestasDelJefe fiestas, Evento actual, BuildContext donde) async {
     final id = await showDialog<String>(
       context: donde,
-      builder: (_) => _ElegirFiesta(
+      builder: (_) => ElegirFiestaDelJefe(
         fiestas: fiestas,
         actual: actual.id,
         hoy: ref.read(relojDelJefeProvider)(),
@@ -270,58 +271,3 @@ class _Pestanas extends StatelessWidget {
   }
 }
 
-/// CAMBIAR DE FIESTA: las que vienen, la próxima primero, y las últimas.
-class _ElegirFiesta extends StatelessWidget {
-  final FiestasDelJefe fiestas;
-  final String actual;
-  final DateTime hoy;
-
-  const _ElegirFiesta({required this.fiestas, required this.actual, required this.hoy});
-
-  @override
-  Widget build(BuildContext context) {
-    Widget fila(Evento e, {required bool proxima}) {
-      final fecha = fechaConCuando(e.fechaEvento, hoy, esLaQueAbre: proxima);
-      final elegida = e.id == actual;
-      return ListTile(
-        key: Key('jefe_fiesta_${e.id}'),
-        selected: elegida,
-        title: Text(
-          EventoPresentacion.tituloPrincipal(e),
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        subtitle: Text(fecha),
-        trailing: elegida ? const Icon(Icons.check, color: TemaBarra.dorado) : null,
-        onTap: () => Navigator.pop(context, e.id),
-      );
-    }
-
-    Widget titulo(String t) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Text(
-            t,
-            style: const TextStyle(fontSize: 12, letterSpacing: 1.2, fontWeight: FontWeight.w700),
-          ),
-        );
-
-    return AlertDialog(
-      title: const Text('¿En qué fiesta?'),
-      contentPadding: const EdgeInsets.symmetric(vertical: 8),
-      content: SizedBox(
-        width: 460,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            if (fiestas.lasQueVienen.isNotEmpty) titulo('LAS QUE VIENEN'),
-            for (final (i, e) in fiestas.lasQueVienen.indexed) fila(e, proxima: i == 0),
-            if (fiestas.lasUltimas.isNotEmpty) titulo('LAS ÚLTIMAS'),
-            for (final e in fiestas.lasUltimas) fila(e, proxima: false),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('VOLVER')),
-      ],
-    );
-  }
-}

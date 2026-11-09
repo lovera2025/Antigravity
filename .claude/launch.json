@@ -12,6 +12,18 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-I", "-m", "http.server", "8791", "--directory", "build/totem_salon_prueba"],
       "port": 8791
+    },
+    {
+      "name": "cierre-sector-prueba",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-I", "-m", "http.server", "8792", "--directory", "build/cierre_sector_prueba"],
+      "port": 8792
+    },
+    {
+      "name": "barra-prueba-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-I", "-m", "http.server", "8793", "--directory", "build/barra_prueba_web"],
+      "port": 8793
     }
   ]
 }
