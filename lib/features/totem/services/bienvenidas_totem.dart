@@ -398,6 +398,11 @@ class IngresosTotem {
     return true;
   }
 
+  /// Si su ingreso lo avisó esta PC por el puente (y sigue adentro). Sus bajas
+  /// también llegan por el puente, al instante: una que llega por el canal de
+  /// la nube es la copia de una vieja, que viaja más lento.
+  bool vinoPorElPuente(String id) => _delPuente.contains(id);
+
   /// Se borró a alguien o se deshizo su ingreso. Si lo vuelven a marcar, se lo
   /// saluda de nuevo. Si era el único de la tarjeta, la tarjeta se va.
   void baja(String id) {

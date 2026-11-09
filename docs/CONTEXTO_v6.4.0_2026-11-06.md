@@ -1,5 +1,70 @@
 # La 6.4.0 (en curso): el tótem con el salón y las sillas de la noche
 
+## Para retomar en otro chat (8-nov, noche): la 6.4.0 está completa, falta publicarla
+
+> **Todo lo del plan general está programado y probado en la rama: 25 de 26 partes, 96 %.** La parte 26 es publicar, **con el
+> usuario presente** (su regla: el OK es suyo). La suite entera, en verde (unos 4.000 tests); `flutter analyze` sin errores en
+> `lib/` y `test/`. Frase para retomar: "Publicamos la 6.4.0: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.4.0_2026-11-06.md
+> y vamos paso a paso."
+
+**Lo que lleva la 6.4.0** (respecto de la 6.3.3 instalada):
+
+| Qué | Dónde está contado |
+|---|---|
+| El tótem con el salón entero y claro, el nombre que salta y se acomoda, los segundos en Personalizar y a mano | `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md` |
+| Las sillas de la noche (la puerta anota cada silla con el vale de la barra; la traba en la oficina por fiesta sorteada) | Abajo, en este archivo |
+| La barra entera: VENDER, vales, VENTAS, cerrar la caja, el jefe en la PC y en el iPhone, la central, Android firmado, el aviso de papel | `docs/CONTEXTO_BARRA_2026-11-02.md` |
+| Entradas 4 y 5: la entrega según los permisos, "En caja" y "pagó: ya podés entregar", anular solo el jefe | `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
+| Cambiar la fecha de un cobro lo saca de su caja abierta (ENRIQUE, MAXIMO) | `docs/CONTEXTO_v6.3.4_2026-11-07.md` |
+| El aviso entre PCs que llegaba por el socket ya no se tira: la otra PC se pone al día sola, también minimizada; el tótem de la web saluda al instante | `docs/SPEC_pulso_por_el_socket_2026-11-07.md` |
+
+**La revisión de bugs del 8-nov (noche)**, sobre todo lo que cambió desde la 6.3.3 (`git diff v6.3.3 HEAD`), arregló tres cosas, con
+sus tests:
+- **La central de la barra con relojes distintos:** una caja cerrada en una tablet con el reloj atrasado se descartaba en la notebook
+  si la notebook había bajado de la nube la caja abierta (con la hora del servidor). Ahora una caja cerrada gana siempre
+  (`cambiaLaFila`).
+- **El tótem de la PC de Recepción**, ahora que atiende los avisos del canal, recibe todo dos veces (puente y canal) y el canal llega
+  más tarde: una baja vieja podía sacar a alguien que se volvió a marcar. Una baja del canal no saca lo que marcó el puente
+  (`IngresosTotem.vinoPorElPuente`); si lo deshace otra PC, lo trae `totem_lista` en segundos.
+- **Corregir medio de pago:** una fecha elegida para un cobro quedaba puesta si después se tildaba otro, y al guardar se le ponía a ese
+  (y lo sacaba de su caja). Ahora se borra al cambiar de cobro. Y el aviso cuenta las líneas que de verdad cambiaron.
+
+También se arreglaron dos ventanas de prueba de `tool/` que no compilaban, y **el script del release ahora sube también el APK de la
+tablet** (`tool/publish_windows_release.ps1`): sin el APK en el release, la tablet no tiene qué bajar desde la pantalla del PIN.
+
+**Antes de publicar (con el usuario):**
+1. **Repetir la migración v78 sobre una copia de la base real, con la app cerrada**: la última prueba (7-nov) fue antes de que se
+   sumara `barra_recargos`. `flutter test tool/verificar_migracion_v78_test.dart`: tienen que aparecer `sillas_puerta`,
+   `barra_vales` y `barra_recargos`, vacías, todo lo demás igual y la base real con el mismo SHA-256.
+2. **La impresora (diez minutos, opcional antes de publicar):** el botón PAPEL de `tool/impresora_prueba.dart` con la TP-POS58, con y
+   sin rollo. Si no contesta, VENDER imprime como hasta hoy; no hace falta cambiar nada.
+3. **La prueba del aviso entre PCs contra la nube, solo con su OK:** `flutter test tool/pulso_prueba_test.dart --dart-define=nube=si`
+   (un canal aparte, `sync_pulse_prueba`; no toca ninguna tabla). Si no la quiere, se comprueba con los registros de la nube después de
+   instalar (sección 9 del SPEC).
+
+**Publicar, paso a paso (cada paso con su OK):**
+1. Foto de la mora "antes de 6.4.0" (`supabase/mora_fotos.sql`).
+2. **Los cuatro SQL, que solo agregan:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql`,
+   `20261107100000_barra_vales.sql`, `20261107140000_barra_recargos.sql`, con las consultas de verificación de cada uno.
+3. Versión **`6.4.0+66`** en `pubspec.yaml` y `installer/junior_eventos_setup.iss`. Novedades (propuesta, elige el usuario): **"La
+   barra, la entrega de entradas y las sillas de la noche"**, en `build/novedades_6.4.0.md`.
+4. `.\installer\build_installer.ps1` (necesita `android\key.properties`; frena sin la clave y comprueba la firma del APK): deja
+   `installer\dist\Setup Junior Eventos v6.4.0.exe` y `installer\dist\Junior Eventos v6.4.0.apk`.
+5. Release: `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build/novedades_6.4.0.md` (sube los dos). La web a Vercel (ver
+   CLAUDE.md).
+6. Instalar las tres PCs el mismo día (el operario antes de abrir la caja; el jefe después) y abrirlas: la revisión de la mora corre al
+   arrancar. La tablet, con el APK.
+7. Foto "después de 6.4.0" y la comparación: tiene que dar vacía.
+8. Recién ahí: dar Entradas a alguien y crear operadores sin Cobros; la prueba de Entradas en dos PCs; el pulso con los registros de la
+   nube; la tablet con el TP-Link del salón.
+
+**Pendiente fuera del plan, para que el usuario decida:** el rol **"Encargada de barra"** y el **selector COBROS · BARRA · ENTRADAS en
+el cierre de caja**, decididos el 5-nov (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`, sección de la barra), no entraron en el plan de
+la barra ni están en las 26 partes. Hoy el jefe ve todas las cajas en BARRA → CAJAS (PC y iPhone), y cualquier cajera vende "Silla
+extra". También sigue pendiente la comparación de la oficina, sillas vendidas contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
+
+---
+
 6-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. **En la rama, sin publicar.** Va en la misma versión que lo que falta de la barra y
 de Entradas: **se publica cuando esté, sin apuro de fecha** (lo dijo el usuario el 6-nov: "cuando salga nomás, ahora hay más tiempo"),
 preguntándole. El plan aprobado es `docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`; lo del tótem (Parte 1, 5-nov) está contado en

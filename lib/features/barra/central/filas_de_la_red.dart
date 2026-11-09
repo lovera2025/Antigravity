@@ -68,7 +68,18 @@ bool filaDeLaFiesta(String tabla, Object? fila, String eventoId) {
 /// Si [nueva] tiene que reemplazar a [vieja], la que ya está en el equipo: la de
 /// `updated_at` más nuevo gana; con la misma hora, solo si dice otra cosa. Una más vieja
 /// nunca pisa: la caja cerrada no vuelve a abierta porque llegó tarde la versión de antes.
+///
+/// **Una caja cerrada gana siempre a una abierta**, sin mirar la hora: la fila que
+/// bajó de la nube trae la hora del servidor y la que manda la tablet, la de su
+/// reloj. Con la tablet atrasada, el cierre parecía "más viejo" que la caja abierta
+/// bajada de la nube y la notebook la seguía mostrando abierta.
 bool cambiaLaFila({required Map<String, Object?> nueva, required Map<String, Object?> vieja}) {
+  if (nueva.containsKey('cerrada_at')) {
+    final nCerrada = nueva['cerrada_at'] != null;
+    final vCerrada = vieja['cerrada_at'] != null;
+    if (nCerrada && !vCerrada) return true;
+    if (!nCerrada && vCerrada) return false;
+  }
   final n = DateTime.tryParse('${nueva['updated_at']}');
   final v = DateTime.tryParse('${vieja['updated_at']}');
   if (n == null) return false;

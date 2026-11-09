@@ -254,6 +254,17 @@ void main() {
       expect(cambiaLaFila(nueva: vieja, vieja: nueva), isFalse, reason: 'la caja cerrada no vuelve a abierta');
       expect(cambiaLaFila(nueva: nueva, vieja: vieja), isTrue);
       expect(cambiaLaFila(nueva: nueva, vieja: Map.of(nueva)), isFalse);
+
+      // La abierta bajó de la nube con la hora del servidor; la tablet, atrasada,
+      // cierra "antes" según su reloj: el cierre gana igual, y nunca al revés.
+      final deLaNube = {'id': 'x', 'updated_at': '2026-12-05T02:00:05Z', 'cerrada_at': null};
+      final cierreAtrasado = {
+        'id': 'x',
+        'updated_at': '2026-12-05T01:58:00Z',
+        'cerrada_at': '2026-12-05T01:58:00Z',
+      };
+      expect(cambiaLaFila(nueva: cierreAtrasado, vieja: deLaNube), isTrue);
+      expect(cambiaLaFila(nueva: deLaNube, vieja: cierreAtrasado), isFalse);
     });
 
     test('solo las cuatro tablas de las cajas, y solo de su fiesta', () {

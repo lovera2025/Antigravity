@@ -162,7 +162,11 @@ equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro
 (`FotoDeLaBarra.para`: primero lo que se toma, después la cerveza sin marca, al final lo sin alcohol). **Una foto nueva lleva su renglón en
 `docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
 **Después de la barra, Entradas 4 a 6, y se publica todo en una**, **sin apuro de fecha** (6-nov: "cuando salga nomás, ahora hay más
-tiempo"), preguntando.
+tiempo"), preguntando. **Al 8-nov (noche) está todo programado y probado (25 de 26, 96 %): falta solo publicar la 6.4.0, con el
+usuario.** Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de `docs/CONTEXTO_v6.4.0_2026-11-06.md`.
+**Antes, repetir `tool/verificar_migracion_v78_test.dart` con la app cerrada** (la última fue antes de `barra_recargos`). El aviso de
+papel (`DLE EOT 4`, botón PAPEL en `tool/impresora_prueba.dart`) falta probarlo con la TP-POS58: si no contesta, VENDER imprime como
+siempre.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en

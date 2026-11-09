@@ -405,6 +405,20 @@ void main() {
       expect(saludados(sala), ['a']);
     });
 
+    test('se sabe quién vino por el puente, y deja de serlo con su baja', () {
+      final sala = IngresosTotem();
+      sala.aviso(_inv('a'), porElPuente: true);
+      sala.aviso(_inv('b'));
+      expect(sala.vinoPorElPuente('a'), isTrue);
+      expect(sala.vinoPorElPuente('b'), isFalse, reason: 'llegó por el canal');
+      // Marcar, deshacer y volver a marcar: la baja vieja del canal, que llega
+      // tarde, no tiene que sacarlo (el tótem la ignora con esto).
+      sala.baja('a');
+      expect(sala.vinoPorElPuente('a'), isFalse);
+      sala.aviso(_inv('a'), porElPuente: true);
+      expect(sala.vinoPorElPuente('a'), isTrue);
+    });
+
     test('vaciar la lista no deja a nadie protegido', () {
       final sala = IngresosTotem()..leyo(const [], ahora: t0);
       sala.aviso(_inv('a'), porElPuente: true);

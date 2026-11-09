@@ -51,9 +51,17 @@ if (-not $setup) {
     throw "No encontré '$exeName'. Compilá el instalador (installer/junior_eventos_setup.iss) y reintentá."
 }
 
+# El APK de las tablets (desde la 6.4.0), si el instalador lo armó. La tablet lo
+# busca en el release (`AppUpdateChecker.apkAssetUrl`): sin él, DESCARGAR abre la
+# página del release y no baja nada.
+$apk = Join-Path $repoRoot "installer\dist\Junior Eventos v$Version.apk"
+$assets = @($setup)
+if (Test-Path $apk) { $assets += $apk }
+
 Write-Host "Versión: $Version"
 Write-Host "Tag:     $tag"
 Write-Host "Setup:   $setup"
+if (Test-Path $apk) { Write-Host "APK:     $apk" } else { Write-Warning "Sin APK de la tablet ($apk): el release sale solo con el Setup." }
 
 $existente = $false
 try {
@@ -65,7 +73,7 @@ try {
 
 if ($existente) {
     Write-Host "El release $tag ya existe. Subo/actualizo el asset..."
-    gh release upload $tag $setup --repo lovera2025/Antigravity --clobber
+    gh release upload $tag @assets --repo lovera2025/Antigravity --clobber
 } else {
     $texto = $Notes
     if ($NotesFile) {
@@ -90,7 +98,7 @@ if ($existente) {
         # compiló este instalador.
         $rama = (git rev-parse --abbrev-ref HEAD).Trim()
 
-        gh release create $tag $setup `
+        gh release create $tag @assets `
             --repo lovera2025/Antigravity `
             --target $rama `
             --title "Junior Eventos $Version" `

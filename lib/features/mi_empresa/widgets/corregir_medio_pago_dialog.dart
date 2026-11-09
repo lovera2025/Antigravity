@@ -27,6 +27,9 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
   String _nuevoMedio = 'efectivo';
   DateTime? _nuevaFecha;
 
+  /// La línea tildada cuando se eligió [_nuevaFecha] (`tabla|id`).
+  String? _fechaPara;
+
   /// Si lo tildado es un solo cobro: una línea, o todas las de un mismo cobro
   /// ("Tildar todo el cobro"). Solo así se le puede cambiar la fecha.
   bool _unSoloCobro = false;
@@ -45,7 +48,13 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
         _nuevoMedio = (mp == 'transferencia' || mp == 'efectivo') ? mp : 'efectivo';
       }
       _unSoloCobro = lista.length == 1;
-      if (lista.isEmpty) _nuevaFecha = null;
+      // La fecha elegida es del cobro que estaba tildado: si ese ya no está (se
+      // tildó otro), se borra. Si no, al guardar se le ponía al otro.
+      final ids = {for (final r in lista) '${r['tabla']}|${r['id']}'};
+      if (lista.isEmpty || !ids.contains(_fechaPara)) {
+        _nuevaFecha = null;
+        _fechaPara = null;
+      }
     });
     unawaited(_verSiEsUnSoloCobro(lista));
   }
@@ -193,6 +202,8 @@ class _CorregirMedioPagoDialogState extends ConsumerState<CorregirMedioPagoDialo
           baseAr.millisecond,
         ),
       );
+      final r = _seleccion.first;
+      _fechaPara = '${r['tabla']}|${r['id']}';
     });
   }
 

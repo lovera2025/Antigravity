@@ -826,18 +826,24 @@ ORDER BY pay.fecha_pago DESC LIMIT 80
     final hermanas = esMasivo ? await lineasDelMismoCobro(id) : const <Map<String, dynamic>>[];
     final ahora = (reloj ?? DateTime.now)();
 
+    // Las líneas de un mismo cobro comparten la caja (`esDelMismoCobro`): lo que
+    // le pasa a la tildada les pasa a todas.
     var resultado = CajaTrasCambioDeFecha.igual;
+    var lineas = 0;
     await db.transaction((txn) async {
       resultado = await _cambiarFechaDeUnaLinea(txn, tabla, rows.first, nuevaFecha, ahora);
+      lineas = 1;
       for (final h in hermanas) {
         final fila = await txn.query(tabla, where: 'id = ?', whereArgs: [h['id']], limit: 1);
+        // Anulada mientras tanto (bajó de la otra PC): no se toca ni se cuenta.
         if (fila.isEmpty || ((fila.first['anulado'] as num?)?.toInt() ?? 0) != 0) continue;
         await _cambiarFechaDeUnaLinea(txn, tabla, fila.first, nuevaFecha, ahora);
+        lineas++;
       }
     });
     return (
       caja: resultado,
-      lineas: 1 + hermanas.length,
+      lineas: lineas,
       contratoId: esMasivo ? rows.first['contrato_alumno_id']?.toString() : null,
     );
   }

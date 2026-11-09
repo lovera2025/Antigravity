@@ -148,6 +148,11 @@ void main() {
               'Recepción abierta');
       expect(RegExp(r'cuerpoDelBroadcast\(').allMatches(s).length, 2,
           reason: 'checkin y guest_removed');
+      // Ahora que el canal se atiende, al tótem de la PC de Recepción le llega
+      // todo dos veces: una baja vieja del canal no saca lo que marcó el puente.
+      final i = s.indexOf("event: 'guest_removed'");
+      final baja = s.substring(i, s.indexOf('});', i));
+      expect(baja, contains('vinoPorElPuente(id)'));
     });
   });
 

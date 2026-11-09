@@ -581,10 +581,17 @@ class _TotemDisplayState extends ConsumerState<TotemDisplay>
           }
         });
         // Borrado instantáneo para tótems que no corren en la PC de Recepción.
+        // Al de la PC de Recepción le llega dos veces, por el puente y por el
+        // canal, y el canal tarda más: una baja vieja que llega por el canal
+        // después de volver a marcar sacaría a quien está adentro. Lo que marcó
+        // esta PC se da de baja por el puente; si lo deshace otra PC, lo trae
+        // `totem_lista` a los pocos segundos.
         _broadcastChannel!.onBroadcast(event: 'guest_removed', callback: (payload) {
           final data = cuerpoDelBroadcast(payload);
           final id = data?['id']?.toString();
-          if (id != null && mounted) _handleGuestRemoved(id);
+          if (id == null || !mounted) return;
+          if (_reproductor.sala.vinoPorElPuente(id)) return;
+          _handleGuestRemoved(id);
         });
         // Vaciar lista / deshacer todos los ingresos. Sin esto, un tótem que no
         // corre en la PC de Recepción se enteraba solo por la reconciliación.

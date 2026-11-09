@@ -246,6 +246,8 @@ void main() {
     expect(dialogo, contains('revisarMora(soloContratos: {contrato})'));
     expect(dialogo, contains('lastDate: hoy,'));
     expect(dialogo, contains('if (fecha != null && _unSoloCobro)'));
+    // La fecha elegida es de la línea tildada: si se tilda otro cobro, se borra.
+    expect(dialogo, contains('!ids.contains(_fechaPara)'));
     // Anular cobro por error, lo mismo: la mora de los que tocó, en el momento.
     final anular = File('lib/features/mi_empresa/widgets/anular_cobro_cuota_dialog.dart')
         .readAsStringSync()

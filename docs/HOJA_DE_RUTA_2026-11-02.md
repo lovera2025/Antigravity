@@ -46,15 +46,17 @@ Android y el router de su casa: se conectó a la central por el wifi, imprimió 
 Queda repetirlo con la tablet y el TP-Link del salón cuando estén, sin código. **8-nov, noche: Entradas 4 programada y probada** (la
 entrega según los permisos, "En caja" y el aviso "pagó: ya podés entregar", anular solo el jefe; recorrida con el mouse); de la 5 faltan
 las roturas a propósito. Ver "Para retomar en otro chat" de `docs/CONTEXTO_OPERADORES_2026-11-02.md`. Después: el aviso de papel, el
-aviso entre PCs y publicar la 6.4.0. Plan general: 22 de 26, 85 %.
+aviso entre PCs y publicar la 6.4.0. Plan general: 22 de 26, 85 %. **8-nov (más tarde): Entradas 5, el aviso entre PCs y el aviso de
+papel, hechos y probados; y una revisión de bugs de todo lo que trae la 6.4.0 (tres arreglados). Plan general: 25 de 26, 96 %. Falta
+solo publicar, con el usuario:** el paso a paso está en "Para retomar en otro chat" de `docs/CONTEXTO_v6.4.0_2026-11-06.md`.
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el
 ticket con precios si lo piden) y probar si la impresora avisa que le falta papel. Los SQL de v76 y v77 ya están en la nube: lo nuevo
 que necesite la nube va en tablas nuevas.
 
-> Frase para Claude Code: "Seguimos con Entradas: leé 'Para retomar en otro chat' de docs/CONTEXTO_OPERADORES_2026-11-02.md y terminá
-> la etapa 5." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
+> Frase para Claude Code: "Publicamos la 6.4.0: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.4.0_2026-11-06.md y vamos paso
+> a paso." (Para publicar la 6.3.2: "Seguimos con la 6.3.2: leé 'Para retomar en otro chat' de
 > docs/CONTEXTO_v6.3.2_2026-11-09.md y decime en qué paso estamos.")
 
 ## El orden
