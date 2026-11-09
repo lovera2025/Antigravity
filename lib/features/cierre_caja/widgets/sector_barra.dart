@@ -309,6 +309,16 @@ class _Resumen extends StatelessWidget {
               r.sillas == 1 ? '1 vendida' : '${r.sillas} vendidas',
               'para comparar con las que sumó la puerta',
             ),
+            // Las sueltas (6.5.0) no van a una mesa: van aparte, y solo si hubo.
+            if (r.sillasSueltas > 0)
+              dato(
+                'sueltas',
+                'SILLA SUELTA',
+                r.sillasSueltas == 1
+                    ? '1 vendida'
+                    : '${r.sillasSueltas} vendidas',
+                'no van a la mesa',
+              ),
             dato(
               'cajas',
               'CAJAS',

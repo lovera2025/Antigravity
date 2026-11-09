@@ -327,7 +327,7 @@ void main() {
       base.add(silla(juli, primero.mesa!, primero.vale!));
       final segundo = decidir(sumar(juli, vale: '2-18'), base);
       expect(segundo.haceAlgo, isFalse);
-      expect(segundo.aviso, 'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa.');
+      expect(segundo.aviso, 'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa. Una silla suelta, sí.');
     });
 
     test('sin vale no suma', () {

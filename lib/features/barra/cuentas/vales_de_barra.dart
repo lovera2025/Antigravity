@@ -73,6 +73,11 @@ class Vale {
   /// Si es el vale de una silla: lo que dice abajo cambia (va a la recepcionista).
   bool get esDeSilla =>
       bebidas.isNotEmpty && bebidas.every((b) => esSillaDeLaPuerta(b.nombre));
+
+  /// Si es el vale de una silla suelta ([esSillaSuelta]): el papel dice que no va a
+  /// la mesa.
+  bool get esDeSillaSuelta =>
+      bebidas.isNotEmpty && bebidas.every((b) => esSillaSuelta(b.nombre));
 }
 
 /// Si "vale por [valePor]" sirve cuando de una bebida [quedan] sin vale: vacío (un vale

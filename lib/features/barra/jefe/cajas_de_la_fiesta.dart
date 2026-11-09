@@ -751,6 +751,11 @@ class _TarjetaDeCaja extends StatelessWidget {
                     key: Key('jefe_caja_sillas_${c.id}'),
                     child: renglon('Sillas extra', '${cuentas.sillas}'),
                   ),
+                if (cuentas.sillasSueltas > 0)
+                  KeyedSubtree(
+                    key: Key('jefe_caja_sueltas_${c.id}'),
+                    child: renglon('Sillas sueltas', '${cuentas.sillasSueltas}'),
+                  ),
                 const SizedBox(height: 10),
                 if (!c.abierta && c.efectivoContado != null)
                   DecoratedBox(

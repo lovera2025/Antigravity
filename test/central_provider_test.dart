@@ -363,7 +363,7 @@ void main() {
       final r = await acciones.sumarSilla(
           eventoMasivo, p, grupo, const DatosSilla(vale: '1 0013'));
       expect(r.hecho, isFalse);
-      expect(r.texto, 'PÉREZ, JUAN ya no puede agregar: 2 extra por mesa.');
+      expect(r.texto, 'PÉREZ, JUAN ya no puede agregar: 2 extra por mesa. Una silla suelta, sí.');
       expect(puerta.sillasPuerta.filas, hasLength(1));
     });
 

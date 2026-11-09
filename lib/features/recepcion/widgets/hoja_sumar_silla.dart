@@ -40,48 +40,61 @@ InputDecoration _campo(
   required String etiqueta,
   String? pista,
   String? ayuda,
-}) =>
-    InputDecoration(
-      labelText: etiqueta,
-      labelStyle: _letra(context, size: 14, color: _suave(context)),
-      hintText: pista,
-      hintStyle: _letra(context, size: 14, color: _suave(context)),
-      helperText: ayuda,
-      helperStyle: _letra(context, size: 12, color: _suave(context)),
-      // Tres: con el contador al lado, en el celular la ayuda de quitar se cortaba
-      // ("con quién y por qu…", visto en el sandbox el 6-nov).
-      helperMaxLines: 3,
-      counterStyle: _letra(context, size: 11, color: _suave(context)),
-      border: const OutlineInputBorder(),
-    );
+}) => InputDecoration(
+  labelText: etiqueta,
+  labelStyle: _letra(context, size: 14, color: _suave(context)),
+  hintText: pista,
+  hintStyle: _letra(context, size: 14, color: _suave(context)),
+  helperText: ayuda,
+  helperStyle: _letra(context, size: 12, color: _suave(context)),
+  // Tres: con el contador al lado, en el celular la ayuda de quitar se cortaba
+  // ("con quién y por qu…", visto en el sandbox el 6-nov).
+  helperMaxLines: 3,
+  counterStyle: _letra(context, size: 11, color: _suave(context)),
+  border: const OutlineInputBorder(),
+);
 
 Color _suave(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-        ? Colors.white54
-        : Colors.black54;
+    ? Colors.white54
+    : Colors.black54;
 
 /// Sumar una silla de la noche a una familia (6.4.0): a qué mesa, el número del
 /// vale de la barra (obligatorio) y una nota. La recepcionista no cobra: la
 /// silla se paga en la caja de la barra, que da el vale. La misma hoja en la PC
 /// y en el celular de la puerta.
+///
+/// Con [suelta] (6.5.0), una silla que no va a ninguna mesa: sin "¿A qué mesa?"
+/// y sin tope.
 class HojaSumarSilla extends StatefulWidget {
   final GrupoPuerta grupo;
 
   /// A nombre de quién queda: el celular o quien opera la PC.
   final String quienSoy;
+  final bool suelta;
 
-  const HojaSumarSilla({super.key, required this.grupo, required this.quienSoy});
+  const HojaSumarSilla({
+    super.key,
+    required this.grupo,
+    required this.quienSoy,
+    this.suelta = false,
+  });
+
+  static const sinMesa =
+      'No va a una mesa: se sienta al lado o donde haya lugar. No cuenta para '
+      'el tope de 2 extra por mesa.';
 
   /// Abre la hoja. Null si se canceló.
   static Future<DatosSilla?> abrir(
     BuildContext context, {
     required GrupoPuerta grupo,
     required String quienSoy,
-  }) =>
-      showDialog<DatosSilla>(
-        context: context,
-        builder: (_) => HojaSumarSilla(grupo: grupo, quienSoy: quienSoy),
-      );
+    bool suelta = false,
+  }) => showDialog<DatosSilla>(
+    context: context,
+    builder: (_) =>
+        HojaSumarSilla(grupo: grupo, quienSoy: quienSoy, suelta: suelta),
+  );
 
   @override
   State<HojaSumarSilla> createState() => _HojaSumarSillaState();
@@ -109,16 +122,20 @@ class _HojaSumarSillaState extends State<HojaSumarSilla> {
     super.dispose();
   }
 
-  bool get _listo => _mesa != null && valeNormalizado(_vale.text) != null;
+  bool get _listo =>
+      (widget.suelta || _mesa != null) && valeNormalizado(_vale.text) != null;
 
   void _confirmar() {
     if (!_listo) return;
     final nota = _nota.text.trim();
-    Navigator.of(context).pop(DatosSilla(
-      mesa: _mesa,
-      vale: _vale.text.trim(),
-      nota: nota.isEmpty ? null : nota,
-    ));
+    Navigator.of(context).pop(
+      DatosSilla(
+        mesa: widget.suelta ? null : _mesa,
+        vale: _vale.text.trim(),
+        nota: nota.isEmpty ? null : nota,
+        suelta: widget.suelta,
+      ),
+    );
   }
 
   @override
@@ -130,7 +147,9 @@ class _HojaSumarSillaState extends State<HojaSumarSilla> {
     final elegida = mesas.where((m) => m.numero == _mesa).firstOrNull;
     return AlertDialog(
       title: Text(
-        'Sumar una silla a ${widget.grupo.titular.nombre}',
+        widget.suelta
+            ? 'Sumar una silla suelta a ${widget.grupo.titular.nombre}'
+            : 'Sumar una silla a ${widget.grupo.titular.nombre}',
         style: _letra(context, size: 17, negrita: true),
       ),
       content: ConstrainedBox(
@@ -140,39 +159,52 @@ class _HojaSumarSillaState extends State<HojaSumarSilla> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('¿A qué mesa?', style: _letra(context, size: 13, negrita: true)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  for (final m in mesas)
-                    ChoiceChip(
-                      key: ValueKey('mesa_${m.numero}'),
-                      label: Text(m.esPrincipal
-                          ? 'Mesa ${m.numero}'
-                          : 'Mesa ${m.numero} (adicional)'),
-                      labelStyle: _letra(
-                        context,
-                        size: 13,
-                        negrita: m.numero == _mesa,
-                        color: m.numero == _mesa ? Colors.black : null,
-                      ),
-                      selected: m.numero == _mesa,
-                      selectedColor: _perla,
-                      showCheckmark: false,
-                      onSelected: (_) => setState(() => _mesa = m.numero),
-                    ),
-                ],
-              ),
-              if (elegida != null) ...[
-                const SizedBox(height: 6),
+              if (widget.suelta)
                 Text(
-                  elegida.lugar == 1
-                      ? 'Le queda 1 en esa mesa.'
-                      : 'Le quedan ${elegida.lugar} en esa mesa.',
-                  style: _letra(context, size: 12, color: _suave(context)),
+                  HojaSumarSilla.sinMesa,
+                  key: const ValueKey('sin_mesa'),
+                  style: _letra(context, size: 13, color: _suave(context)),
+                )
+              else ...[
+                Text(
+                  '¿A qué mesa?',
+                  style: _letra(context, size: 13, negrita: true),
                 ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final m in mesas)
+                      ChoiceChip(
+                        key: ValueKey('mesa_${m.numero}'),
+                        label: Text(
+                          m.esPrincipal
+                              ? 'Mesa ${m.numero}'
+                              : 'Mesa ${m.numero} (adicional)',
+                        ),
+                        labelStyle: _letra(
+                          context,
+                          size: 13,
+                          negrita: m.numero == _mesa,
+                          color: m.numero == _mesa ? Colors.black : null,
+                        ),
+                        selected: m.numero == _mesa,
+                        selectedColor: _perla,
+                        showCheckmark: false,
+                        onSelected: (_) => setState(() => _mesa = m.numero),
+                      ),
+                  ],
+                ),
+                if (elegida != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    elegida.lugar == 1
+                        ? 'Le queda 1 en esa mesa.'
+                        : 'Le quedan ${elegida.lugar} en esa mesa.',
+                    style: _letra(context, size: 12, color: _suave(context)),
+                  ),
+                ],
               ],
               const SizedBox(height: 16),
               TextField(
@@ -190,8 +222,10 @@ class _HojaSumarSillaState extends State<HojaSumarSilla> {
                   context,
                   etiqueta: 'Número del vale',
                   pista: 'Caja y número: 2 0017',
-                  ayuda:
-                      'La silla se cobra en la caja de la barra: pedí el vale.',
+                  ayuda: widget.suelta
+                      ? 'La silla suelta se cobra en la caja de la barra: pedí '
+                            'el vale.'
+                      : 'La silla se cobra en la caja de la barra: pedí el vale.',
                 ),
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _focoNota.requestFocus(),
@@ -249,11 +283,10 @@ class HojaQuitarSilla extends StatefulWidget {
     BuildContext context, {
     required SillaPuerta silla,
     required String nombre,
-  }) =>
-      showDialog<String>(
-        context: context,
-        builder: (_) => HojaQuitarSilla(silla: silla, nombre: nombre),
-      );
+  }) => showDialog<String>(
+    context: context,
+    builder: (_) => HojaQuitarSilla(silla: silla, nombre: nombre),
+  );
 
   @override
   State<HojaQuitarSilla> createState() => _HojaQuitarSillaState();
@@ -274,55 +307,57 @@ class _HojaQuitarSillaState extends State<HojaQuitarSilla> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: Text(
-          'Quitar una silla de ${widget.nombre}',
-          style: _letra(context, size: 17, negrita: true),
-        ),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                textoSillaSumada(widget.silla),
-                style: _letra(context, size: 13, color: _suave(context)),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('motivo'),
-                controller: _motivo,
-                focusNode: _foco,
-                autofocus: true,
-                maxLength: 120,
-                style: _letra(context, size: 15),
-                decoration: _campo(
-                  context,
-                  etiqueta: '¿Por qué se quita?',
-                  ayuda: 'La silla queda en la lista, tachada, con quién y por '
-                      'qué.',
-                ),
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) {
-                  if (_listo) Navigator.of(context).pop(_motivo.text.trim());
-                },
-                onTapOutside: kIsWeb ? (_) {} : null,
-                onTapUpOutside: kIsWeb ? (_) => _foco.unfocus() : null,
-              ),
-            ],
+    title: Text(
+      'Quitar una silla de ${widget.nombre}',
+      style: _letra(context, size: 17, negrita: true),
+    ),
+    content: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            textoSillaSumada(widget.silla),
+            style: _letra(context, size: 13, color: _suave(context)),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('CANCELAR', style: _boton(context)),
-          ),
-          FilledButton(
-            key: const ValueKey('confirmar_quitar'),
-            onPressed:
-                _listo ? () => Navigator.of(context).pop(_motivo.text.trim()) : null,
-            child: Text('QUITAR', style: _boton(context, color: null)),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('motivo'),
+            controller: _motivo,
+            focusNode: _foco,
+            autofocus: true,
+            maxLength: 120,
+            style: _letra(context, size: 15),
+            decoration: _campo(
+              context,
+              etiqueta: '¿Por qué se quita?',
+              ayuda:
+                  'La silla queda en la lista, tachada, con quién y por '
+                  'qué.',
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (_listo) Navigator.of(context).pop(_motivo.text.trim());
+            },
+            onTapOutside: kIsWeb ? (_) {} : null,
+            onTapUpOutside: kIsWeb ? (_) => _foco.unfocus() : null,
           ),
         ],
-      );
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: Text('CANCELAR', style: _boton(context)),
+      ),
+      FilledButton(
+        key: const ValueKey('confirmar_quitar'),
+        onPressed: _listo
+            ? () => Navigator.of(context).pop(_motivo.text.trim())
+            : null,
+        child: Text('QUITAR', style: _boton(context, color: null)),
+      ),
+    ],
+  );
 }

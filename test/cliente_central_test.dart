@@ -542,7 +542,7 @@ void main() {
       await _hasta(() => c.pendientes.isEmpty, 'las respuestas');
       await _hasta(() => avisos.isNotEmpty, 'el aviso');
       expect(pc.sillas, hasLength(2));
-      expect(avisos.single, 'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa.');
+      expect(avisos.single, 'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa. Una silla suelta, sí.');
     });
 
     test('los segundos del tótem: solo con la central, y le llegan a la PC',

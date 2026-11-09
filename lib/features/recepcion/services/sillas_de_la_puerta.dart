@@ -165,6 +165,8 @@ class SillasDeLaFamilia {
     final sumadas = <int, int>{};
     for (final s in vigentes) {
       if (!s.vigente || s.contratoAlumnoId != contratoId) continue;
+      // Una suelta (6.5.0) no va a ninguna mesa: no ocupa lugar en ellas.
+      if (s.esSuelta) continue;
       sumadas[s.mesa] = (sumadas[s.mesa] ?? 0) + s.cantidad;
     }
     final numeros = {for (final p in propias) p.$1};
@@ -234,6 +236,9 @@ class SillasDeLaFamilia {
 class ConteoDeLaNoche {
   final int sumadas;
 
+  /// De las [sumadas], las sueltas (6.5.0): las que no van a una mesa.
+  final int sueltas;
+
   /// Los vales de las vigentes, en el orden en que se anotaron.
   final List<String> vales;
   final int quitadas;
@@ -243,6 +248,7 @@ class ConteoDeLaNoche {
 
   const ConteoDeLaNoche({
     required this.sumadas,
+    this.sueltas = 0,
     required this.vales,
     required this.quitadas,
     this.conValeAnulado = 0,
@@ -258,6 +264,9 @@ class ConteoDeLaNoche {
     final vigentes = ordenadas.where((s) => s.vigente);
     return ConteoDeLaNoche(
       sumadas: vigentes.fold(0, (s, x) => s + x.cantidad),
+      sueltas: vigentes
+          .where((s) => s.esSuelta)
+          .fold(0, (s, x) => s + x.cantidad),
       vales: [for (final s in vigentes) s.vale],
       quitadas: ordenadas.where((s) => !s.vigente).length,
       conValeAnulado:
@@ -273,10 +282,15 @@ class ConteoDeLaNoche {
     if (vacio) return null;
     final partes = <String>[
       switch (sumadas) {
-        0 => 'ninguna silla sumada',
-        1 => '1 silla sumada',
-        _ => '$sumadas sillas sumadas',
-      },
+            0 => 'ninguna silla sumada',
+            1 => '1 silla sumada',
+            _ => '$sumadas sillas sumadas',
+          } +
+          switch (sueltas) {
+            0 => '',
+            1 => ' (1 suelta)',
+            _ => ' ($sueltas sueltas)',
+          },
       if (vales.length == 1) 'vale ${vales.single}',
       if (vales.length > 1) 'vales ${vales.join(', ')}',
       if (conValeAnulado > 0) '$conValeAnulado con el vale anulado',
@@ -288,6 +302,7 @@ class ConteoDeLaNoche {
 
   Map<String, Object?> toJson() => {
         'sumadas': sumadas,
+        if (sueltas > 0) 'sueltas': sueltas,
         'vales': vales,
         'quitadas': quitadas,
         if (conValeAnulado > 0) 'anulados': conValeAnulado,
@@ -298,6 +313,7 @@ class ConteoDeLaNoche {
     final vales = json['vales'];
     return ConteoDeLaNoche(
       sumadas: json['sumadas'] is int ? json['sumadas'] as int : 0,
+      sueltas: json['sueltas'] is int ? json['sueltas'] as int : 0,
       vales: vales is List ? [for (final v in vales) '$v'] : const [],
       quitadas: json['quitadas'] is int ? json['quitadas'] as int : 0,
       conValeAnulado: json['anulados'] is int ? json['anulados'] as int : 0,
@@ -320,11 +336,16 @@ String? valeNormalizado(String? texto) {
   return grupos.join('-');
 }
 
-/// "+1 silla · mesa 12 · vale 0012 · Pato 23:05".
+/// "+1 silla · mesa 12 · vale 0012 · Pato 23:05"; una suelta, "+1 silla suelta ·
+/// vale 0012 · Pato 23:05".
 String textoSillaSumada(SillaPuerta s) {
   final partes = [
-    s.cantidad == 1 ? '+1 silla' : '+${s.cantidad} sillas',
-    'mesa ${s.mesa}',
+    if (s.esSuelta)
+      s.cantidad == 1 ? '+1 silla suelta' : '+${s.cantidad} sillas sueltas'
+    else ...[
+      s.cantidad == 1 ? '+1 silla' : '+${s.cantidad} sillas',
+      'mesa ${s.mesa}',
+    ],
     'vale ${s.vale}',
     [
       if (s.anotadoPor != null) s.anotadoPor!,

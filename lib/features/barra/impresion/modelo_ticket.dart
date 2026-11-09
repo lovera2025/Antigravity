@@ -174,6 +174,9 @@ abstract final class ModeloTicket {
       ] else if (vale.esDeSilla) ...[
         // La silla no la entrega el barman: la familia lleva el vale a la
         // recepcionista, que la suma y se queda el papel (decisión del 6-nov).
+        // La suelta (6.5.0) no va a una mesa: el papel lo dice.
+        if (vale.esDeSillaSuelta)
+          ..._centrado('Silla suelta: no va a la mesa', negrita: true),
         ..._centrado('Llevá este vale a la recepcionista', negrita: true),
         ..._centrado('Ella suma la silla y se queda el vale'),
       ] else ...[
@@ -273,6 +276,12 @@ abstract final class ModeloTicket {
           RenglonTicket('${p.unidades} x ${p.nombre}', pesos(p.plata)),
         if (cuentas.sillas > 0)
           RenglonTicket('Sillas extra vendidas', '${cuentas.sillas}', negrita: true),
+        if (cuentas.sillasSueltas > 0)
+          RenglonTicket(
+            'Sillas sueltas vendidas',
+            '${cuentas.sillasSueltas}',
+            negrita: true,
+          ),
       ],
       const SeparadorTicket(),
       RenglonTicket('Ventas', '${cuentas.ventas}'),

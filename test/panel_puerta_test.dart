@@ -395,9 +395,44 @@ void main() {
           find.byKey(const ValueKey('sumar_silla_perez')));
       expect(boton.onPressed, isNull);
       expect(
-        find.byTooltip('Ya no puede agregar: 2 extra por mesa'),
+        find.byTooltip('Ya no puede agregar a la mesa: 2 extra por mesa. Una silla suelta, con el botón de al lado'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('en el tope, SILLA SUELTA sí: sin mesa, con el vale',
+        (tester) async {
+      final mundo = await _abrir(tester);
+      await tester.tap(find.byKey(const ValueKey('silla_suelta_perez')));
+      await _asentar(tester);
+      expect(find.text('Sumar una silla suelta a PÉREZ, JUAN MARTÍN'),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('sin_mesa')), findsOneWidget);
+      expect(find.text('¿A qué mesa?'), findsNothing);
+      FilledButton confirmar() => tester
+          .widget<FilledButton>(find.byKey(const ValueKey('confirmar_silla')));
+      expect(confirmar().onPressed, isNull, reason: 'sin vale no se suma');
+      await tester.enterText(find.byKey(const ValueKey('vale')), '2 0051');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('confirmar_silla')));
+      await _asentar(tester);
+
+      final s = mundo.sillasPuerta.filas.single;
+      expect(s.esSuelta, isTrue);
+      expect(s.vale, '2-51');
+      expect(find.text('Silla suelta anotada para PÉREZ, JUAN MARTÍN.'),
+          findsOneWidget);
+      expect(find.textContaining('+1 silla suelta · vale 2-51 · PC'),
+          findsOneWidget);
+      // SUMAR SILLA sigue apagado: la suelta no ocupa lugar en la mesa.
+      final sumar = tester.widget<OutlinedButton>(
+          find.byKey(const ValueKey('sumar_silla_perez')));
+      expect(sumar.onPressed, isNull);
+    });
+
+    testWidgets('sin sortear, no hay SILLA SUELTA', (tester) async {
+      await _abrir(tester, alumnos: _sinSortear());
+      expect(find.text('SILLA SUELTA'), findsNothing);
     });
 
     testWidgets('a una mesa adicional con lugar, aunque la principal esté llena',

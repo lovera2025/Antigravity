@@ -501,7 +501,7 @@ void main() {
       final nada = [r1, r2].where((r) => r['hizo'] == 'nada').toList();
       expect(hechas, hasLength(1));
       expect(nada.single['aviso'],
-          'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa.');
+          'PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa. Una silla suelta, sí.');
       expect(pc.sillas, hasLength(1));
     });
 

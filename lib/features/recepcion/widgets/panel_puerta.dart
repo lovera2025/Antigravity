@@ -663,8 +663,10 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   List<Widget> _botonesDeLaFamilia(GrupoPuerta g, PuertaDelEvento p) {
     final salon = _salon;
     final sumar = g.contratoId != null && g.sillasPorMesa.tieneMesa;
+    // La suelta (6.5.0): para la familia de un alumno, también en el tope.
+    final suelta = g.contratoId != null && p.sorteado;
     final verPlano = salon != null && salon.tieneMesaDe(g);
-    if (!sumar && !verPlano) return const [];
+    if (!sumar && !suelta && !verPlano) return const [];
     return [
       Padding(
         padding: const EdgeInsets.only(top: 6),
@@ -673,12 +675,30 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           runSpacing: 6,
           children: [
             if (sumar) _botonSumar(g, p),
+            if (suelta) _botonSuelta(g, p),
             if (verPlano) _botonPlano(g, p, salon),
           ],
         ),
       ),
     ];
   }
+
+  /// SILLA SUELTA (6.5.0): una silla que no va a ninguna mesa, sin tope.
+  Widget _botonSuelta(GrupoPuerta g, PuertaDelEvento p) => OutlinedButton.icon(
+        key: ValueKey('silla_suelta_${g.contratoId}'),
+        onPressed: _ocupados.contains(g.contratoId)
+            ? null
+            : () => _sumarSilla(g, p, suelta: true),
+        icon: const Icon(Icons.chair_alt_outlined, size: 16),
+        label: Text('SILLA SUELTA', style: _letra(size: 12, negrita: true)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _texto,
+          minimumSize: const Size(0, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          side: BorderSide(color: _borde),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
 
   Widget _botonPlano(GrupoPuerta g, PuertaDelEvento p, SalonParaLaPuerta salon) =>
       OutlinedButton.icon(
@@ -786,7 +806,8 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     );
     if (puede) return boton;
     return Tooltip(
-      message: 'Ya no puede agregar: ${SillasDeUnaMesa.tope} extra por mesa',
+      message: 'Ya no puede agregar a la mesa: ${SillasDeUnaMesa.tope} extra '
+          'por mesa. Una silla suelta, con el botón de al lado',
       child: boton,
     );
   }
@@ -1025,12 +1046,17 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
 
   /// SUMAR SILLA: la hoja (mesa, vale, nota) y el candado. La recepcionista no
   /// cobra: la silla ya se pagó en la barra.
-  Future<void> _sumarSilla(GrupoPuerta g, PuertaDelEvento p) async {
+  Future<void> _sumarSilla(
+    GrupoPuerta g,
+    PuertaDelEvento p, {
+    bool suelta = false,
+  }) async {
     final acciones = ref.read(accionesPuertaProvider);
     final datos = await HojaSumarSilla.abrir(
       context,
       grupo: g,
       quienSoy: acciones.quienSoy,
+      suelta: suelta,
     );
     if (datos == null || !mounted) return;
     final clave = g.contratoId!;

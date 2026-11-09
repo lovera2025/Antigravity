@@ -229,6 +229,34 @@ void main() {
       ]);
     });
 
+    test('el de una silla suelta dice que no va a la mesa (6.5.0)', () {
+      final v = VentaBarra.nueva(
+        cajaBarraId: caja.id,
+        eventoId: _evento,
+        numero: 18,
+        renglones: const [
+          RenglonVenta(productoId: 'su', nombre: 'Silla suelta', precio: 8000, cantidad: 1),
+        ],
+        medio: MedioBarra.efectivo,
+        efectivo: 8000,
+        ahora: vendida,
+      );
+      final vale = Vale.deUnaSilla(v.renglones.single);
+      expect(vale.esDeSillaSuelta, isTrue);
+      expect(_papel(ModeloTicket.deVale(vale, venta: v, caja: caja, fiesta: 'Puerto Viejo')), [
+        'PUERTO VIEJO',
+        'Vie 04/12/2026 - 23:41',
+        'Caja 2 · Marta · N° 0018',
+        '[GRANDE] VALE POR 1',
+        '[GRANDE] SILLA SUELTA',
+        'Silla suelta: no va a la mesa',
+        'Llevá este vale a la',
+        'recepcionista',
+        'Ella suma la silla y se queda el',
+        'vale',
+      ]);
+    });
+
     test('una copia lo dice en grande arriba y abajo, con quién, cuándo y por qué', () {
       final v = venta();
       final papel = _papel(ModeloTicket.deVale(

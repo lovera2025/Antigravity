@@ -48,8 +48,11 @@ class CierreDeBarra {
 
   /// Cuántas unidades salieron, y de ellas cuántas sillas de la noche
   /// ([esSillaDeLaPuerta]): la puerta tiene que haber anotado esas mismas.
+  /// [sillas] son las que van a una mesa; [sillasSueltas] ([esSillaSuelta],
+  /// 6.5.0), las que no.
   final int unidades;
   final int sillas;
+  final int sillasSueltas;
 
   const CierreDeBarra({
     required this.cambioInicial,
@@ -64,6 +67,7 @@ class CierreDeBarra {
     this.porProducto = const [],
     this.unidades = 0,
     this.sillas = 0,
+    this.sillasSueltas = 0,
   });
 
   /// Las de [caja] entre [ventas]; las de otra caja no se cuentan.
@@ -76,7 +80,7 @@ class CierreDeBarra {
     var cuentan = 0, anuladas = 0, mixtos = 0;
     var efectivo = 0, transferencia = 0, efectivoAnulado = 0, transferenciaAnulada = 0;
     var recargos = 0;
-    var unidades = 0, sillas = 0;
+    var unidades = 0, sillas = 0, sueltas = 0;
     // Por producto, en el orden de las ventas: así el nombre que queda es el último.
     final nombres = <String, String>{};
     final cantidades = <String, int>{};
@@ -100,7 +104,11 @@ class CierreDeBarra {
         cantidades[r.productoId] = (cantidades[r.productoId] ?? 0) + r.cantidad;
         plata[r.productoId] = (plata[r.productoId] ?? 0) + centavos(r.subtotal);
         unidades += r.cantidad;
-        if (esSillaDeLaPuerta(r.nombre)) sillas += r.cantidad;
+        if (esSillaSuelta(r.nombre)) {
+          sueltas += r.cantidad;
+        } else if (esSillaDeLaPuerta(r.nombre)) {
+          sillas += r.cantidad;
+        }
       }
     }
     final porProducto = [
@@ -128,6 +136,7 @@ class CierreDeBarra {
       porProducto: List.unmodifiable(porProducto),
       unidades: unidades,
       sillas: sillas,
+      sillasSueltas: sueltas,
     );
   }
 
@@ -178,8 +187,9 @@ class ResumenDeCajas {
   final double diferencia;
 
   /// Las sillas de la noche vendidas en todas las cajas (sin las anuladas): las que la
-  /// puerta tendría que haber anotado.
+  /// puerta tendría que haber anotado. Las de mesa y, aparte, las sueltas (6.5.0).
   final int sillas;
+  final int sillasSueltas;
 
   /// El cambio con que abrieron todas las cajas.
   final double cambio;
@@ -195,6 +205,7 @@ class ResumenDeCajas {
     required this.contado,
     required this.diferencia,
     this.sillas = 0,
+    this.sillasSueltas = 0,
     this.cambio = 0,
   });
 
@@ -214,13 +225,14 @@ class ResumenDeCajas {
       for (final c in ordenadas)
         ResumenDeCaja(c, CierreDeBarra.de(c, listaVentas, listaAnulaciones)),
     ];
-    var v = 0, an = 0, mx = 0, si = 0;
+    var v = 0, an = 0, mx = 0, si = 0, su = 0;
     var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0, cam = 0;
     for (final r in resumenes) {
       v += r.cuentas.ventas;
       an += r.cuentas.anuladas;
       mx += r.cuentas.mixtos;
       si += r.cuentas.sillas;
+      su += r.cuentas.sillasSueltas;
       cam += centavos(r.caja.cambioInicial);
       ef += centavos(r.cuentas.efectivo);
       tr += centavos(r.cuentas.transferencia);
@@ -241,6 +253,7 @@ class ResumenDeCajas {
       contado: deCentavos(cont),
       diferencia: deCentavos(dif),
       sillas: si,
+      sillasSueltas: su,
       cambio: deCentavos(cam),
     );
   }

@@ -11,3 +11,13 @@ import '../services/productos_para_vender.dart' show paraBuscar;
 /// el catálogo. "Silla extra", "SILLA", "Sillas extra" lo son; "Fernet" no.
 bool esSillaDeLaPuerta(String nombre) =>
     RegExp(r'(^|[^a-z])sillas?([^a-z]|$)').hasMatch(paraBuscar(nombre));
+
+/// Si es una **silla suelta** (6.5.0, pedido del usuario el 9-nov): una silla de la
+/// noche que no va a una mesa. La familia que ya tiene las 2 extra en sus mesas, o
+/// que quiere una al lado o en otro lugar, la compra igual. Sale una por vale, como
+/// las otras, y la recepcionista la anota con SILLA SUELTA, sin tope.
+///
+/// "Silla suelta", "SILLAS SUELTAS" lo son; "Silla extra" no.
+bool esSillaSuelta(String nombre) =>
+    esSillaDeLaPuerta(nombre) &&
+    RegExp(r'(^|[^a-z])sueltas?([^a-z]|$)').hasMatch(paraBuscar(nombre));

@@ -55,6 +55,13 @@ class SillaPuerta {
 
   bool get vigente => quitadaAt == null;
 
+  /// La mesa de una **silla suelta** (6.5.0): una que no va a ninguna mesa (la
+  /// familia ya está en el tope, o la quiere al lado o en otro lugar). Ninguna
+  /// mesa de un plano lleva el 0, así no hace falta una columna nueva.
+  static const mesaSuelta = 0;
+
+  bool get esSuelta => mesa == mesaSuelta;
+
   /// La misma silla, quitada: con quién y por qué.
   SillaPuerta quitada({
     required String por,

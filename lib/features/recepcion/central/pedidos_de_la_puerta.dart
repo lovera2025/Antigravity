@@ -55,7 +55,18 @@ class DatosSilla {
   /// Quitar: por qué. Obligatorio.
   final String? motivo;
 
-  const DatosSilla({this.mesa, this.vale, this.nota, this.sillaId, this.motivo});
+  /// Sumar: una **silla suelta** (6.5.0), que no va a ninguna mesa: no pide mesa
+  /// ni lugar, y no cuenta para el tope de 2 extra por mesa.
+  final bool suelta;
+
+  const DatosSilla({
+    this.mesa,
+    this.vale,
+    this.nota,
+    this.sillaId,
+    this.motivo,
+    this.suelta = false,
+  });
 
   Map<String, Object?> toJson() => {
         if (mesa != null) 'mesa': mesa,
@@ -63,6 +74,7 @@ class DatosSilla {
         if (nota != null) 'nota': nota,
         if (sillaId != null) 'silla': sillaId,
         if (motivo != null) 'motivo': motivo,
+        if (suelta) 'suelta': true,
       };
 
   /// Null si no se entiende.
@@ -82,6 +94,7 @@ class DatosSilla {
       nota: texto('nota', 120),
       sillaId: texto('silla', 64),
       motivo: texto('motivo', 120),
+      suelta: json['suelta'] == true,
     );
   }
 }
@@ -289,7 +302,8 @@ DecisionSilla decidirSilla({
   switch (pedido.que) {
     case QuePide.sumarSilla:
       final familia = grupo.sillasPorMesa.conSumadas(contratoId, vigentes);
-      if (!familia.tieneMesa) {
+      // La suelta no va a una mesa: no pide mesa ni lugar.
+      if (!datos.suelta && !familia.tieneMesa) {
         return const DecisionSilla._nada('Esa familia no tiene mesa todavía.');
       }
       final vale = valeNormalizado(datos.vale);
@@ -307,6 +321,13 @@ DecisionSilla decidirSilla({
         return DecisionSilla._nada(quien == null
             ? 'El vale $vale ya se usó para otra silla.'
             : 'El vale $vale ya se usó para $quien.');
+      }
+      if (datos.suelta) {
+        return DecisionSilla._(
+          QueHaceLaCentral.sumarSilla,
+          mesa: SillaPuerta.mesaSuelta,
+          vale: vale,
+        );
       }
       final mesa = familia.mesaConLugar(preferida: datos.mesa);
       if (mesa == null) {
@@ -356,15 +377,22 @@ String textoSillaHecha({
   required String nombre,
   String? aviso,
 }) {
-  final hecho = sumar
-      ? 'Silla sumada a la mesa $mesa de $nombre.'
-      : 'Silla quitada de la mesa $mesa de $nombre.';
+  // La suelta (6.5.0) va con la mesa en 0: no es de ninguna mesa.
+  final suelta = mesa == SillaPuerta.mesaSuelta;
+  final hecho = suelta
+      ? (sumar
+          ? 'Silla suelta anotada para $nombre.'
+          : 'Silla suelta quitada de $nombre.')
+      : sumar
+          ? 'Silla sumada a la mesa $mesa de $nombre.'
+          : 'Silla quitada de la mesa $mesa de $nombre.';
   return aviso == null || aviso.isEmpty ? hecho : '$aviso $hecho';
 }
 
-/// "PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa."
+/// "PÉREZ, JULIANA ya no puede agregar: 2 extra por mesa. Una silla suelta, sí."
 String yaEnElTope(String nombre) =>
-    '$nombre ya no puede agregar: ${SillasDeUnaMesa.tope} extra por mesa.';
+    '$nombre ya no puede agregar: ${SillasDeUnaMesa.tope} extra por mesa. '
+    'Una silla suelta, sí.';
 
 /// "PÉREZ, JUAN ya ingresó a las 22:41 · Juli".
 String yaIngreso(String nombre, {DateTime? hora, String? quien}) {
