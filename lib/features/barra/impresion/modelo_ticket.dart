@@ -29,6 +29,32 @@ abstract final class ModeloTicket {
     return '${_dias[ArTime.toAr(dt).weekday - 1]} ${fechaYHora(iso)}';
   }
 
+  /// El papel de IMPRIMIR UNA PRUEBA (6.4.0): para ver que la impresora anda **sin
+  /// cargar una venta que nadie compró**. Sin logo (ahorra papel). Dice cuál es (su
+  /// nombre en grande y el final de su id, el de la etiqueta), los acentos y una regla
+  /// de 32 cifras, que entra justa en un renglón. No es una venta: no se anota.
+  static List<LineaTicket> dePrueba({
+    required String nombre,
+    required String id,
+    required DateTime ahora,
+  }) =>
+      [
+        const TextoTicket('PRUEBA DE IMPRESORA', negrita: true),
+        if (nombre.trim().isNotEmpty)
+          for (final r in partirPorPalabras(nombre.trim().toUpperCase(), letrasPorRenglon ~/ 2))
+            GrandeTicket(r),
+        // Sin "…" ni "·": la tabla 850 de la impresora no los tiene.
+        TextoTicket('TP-POS58 - ${finDelId(id).replaceFirst('…', '...')}'),
+        TextoTicket(diaFechaYHora(ahora.toUtc().toIso8601String())),
+        const SeparadorTicket(),
+        const TextoTicket(lineaDeAcentos),
+        const TextoTicket(reglaDe32, centrado: false),
+        const SeparadorTicket(),
+        const TextoTicket('Si leés esto, la impresora anda.'),
+        const TextoTicket('No es una venta: no cuenta en'),
+        const TextoTicket('ninguna caja.'),
+      ];
+
   static String _caja(CajaBarra caja) {
     final nombre = caja.operadorNombre;
     return nombre == null ? 'Caja ${caja.numeroCaja}' : 'Caja ${caja.numeroCaja} - $nombre';

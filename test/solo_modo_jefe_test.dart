@@ -196,12 +196,38 @@ void main() {
         final i = fuente.indexOf('bool _frenaSinModoJefe() {');
         expect(i, greaterThanOrEqualTo(0), reason: 'falta la llave en $ruta');
         final cuerpo = fuente.substring(i, fuente.indexOf('\n  }', i));
-        expect(cuerpo, contains('if (ref.read(esRolJefeProvider)) return false;'), reason: ruta);
+        // CAJAS (anular y reimprimir) es también de la Encargada de barra (6.4.0); el
+        // catálogo, los precios y el recargo, solo del jefe.
+        final llave = ruta.endsWith('/cajas_de_la_fiesta.dart')
+            ? 'if (ref.read(mandaEnLaBarraProvider)) return false;'
+            : 'if (ref.read(esRolJefeProvider)) return false;';
+        expect(cuerpo, contains(llave), reason: ruta);
         expect(cuerpo, contains('return true;'), reason: ruta);
       }
     }
     // Si aparece otra función que guarda, que pregunte y se sume acá.
     expect(encontradas, {'_guardarProducto', '_guardar', '_anular', '_reimprimir'});
+  });
+
+  test('quien manda en las cajas de la barra es el jefe en modo jefe o la encargada, '
+      'y nadie más', () {
+    final fuente = leer('lib/features/caja_sesiones/providers/app_role_provider.dart');
+    final i = fuente.indexOf('final mandaEnLaBarraProvider = Provider<bool>((ref) {');
+    expect(i, greaterThanOrEqualTo(0));
+    final cuerpo = fuente.substring(i, fuente.indexOf('\n});', i));
+    expect(cuerpo, contains('if (ref.watch(esRolJefeProvider)) return true;'));
+    expect(cuerpo, contains('return ref.watch(appRoleProvider).esEncargadaDeBarra;'));
+    expect(
+      fuente,
+      contains('bool get esEncargadaDeBarra => esBarra && permisos.encargadaBarra;'),
+    );
+    // El catálogo y los precios no se abren a la encargada.
+    for (final ruta in [
+      'lib/features/barra/jefe/catalogo_del_jefe.dart',
+      'lib/features/barra/jefe/precios_de_la_fiesta.dart',
+    ]) {
+      expect(leer(ruta), isNot(contains('mandaEnLaBarraProvider')), reason: ruta);
+    }
   });
 
   test('la llave pregunta por el modo jefe de verdad', () {

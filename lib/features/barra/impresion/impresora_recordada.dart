@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// La impresora de este equipo: con qué id se la encuentra y cómo se llama.
@@ -19,7 +21,35 @@ class ImpresoraRecordada {
   static const claveId = 'barra.impresora.id';
   static const claveNombre = 'barra.impresora.nombre';
 
+  /// El nombre que se le puso a cada impresora en este equipo ("Impresora caja 1"),
+  /// por id (6.4.0). Las cuatro TP-POS58 se llaman igual: así se sabe cuál es cuál.
+  /// Queda aunque se elija otra: al volver a la misma, vuelve su nombre.
+  static const claveApodos = 'barra.impresora.apodos';
+
   const ImpresoraRecordada();
+
+  Future<Map<String, String>> apodos() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final texto = prefs.getString(claveApodos);
+      if (texto == null || texto.isEmpty) return {};
+      final m = jsonDecode(texto);
+      if (m is! Map) return {};
+      return {
+        for (final e in m.entries)
+          if (e.value is String && (e.value as String).isNotEmpty) e.key.toString(): e.value as String,
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> guardarApodos(Map<String, String> apodos) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(claveApodos, jsonEncode(apodos));
+    } catch (_) {}
+  }
 
   Future<ImpresoraElegida?> leer() async {
     try {

@@ -109,7 +109,10 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
         await notifier.entrarComoCaja(quien.operador, quien.permisos);
       case PermisoOperador.entradas:
         await notifier.entrarComoEntradas(quien.operador, quien.permisos);
+      // La encargada entra por el mismo botón BARRA: la barra sabe que es ella
+      // por sus permisos (`AppRoleState.esEncargadaDeBarra`).
       case PermisoOperador.barra:
+      case PermisoOperador.encargadaBarra:
         await notifier.entrarComoBarra(quien.operador, quien.permisos);
     }
     // Si entró, el router reemplaza esta pantalla; si falta abrir la caja, la
@@ -264,7 +267,7 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
     IconData icono(PermisoOperador p) => switch (p) {
           PermisoOperador.cobros => Icons.point_of_sale_outlined,
           PermisoOperador.entradas => Icons.confirmation_number_outlined,
-          PermisoOperador.barra => Icons.local_bar_outlined,
+          PermisoOperador.barra || PermisoOperador.encargadaBarra => Icons.local_bar_outlined,
         };
     return [
       for (final p in quien.permisos.lista) ...[

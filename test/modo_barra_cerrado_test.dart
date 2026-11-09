@@ -17,6 +17,11 @@ void main() {
     'lib/features/barra/widgets/vales_de_la_venta_screen.dart',
     'lib/features/barra/widgets/ventas_de_la_caja_screen.dart',
     'lib/features/barra/widgets/cerrar_caja_barra_screen.dart',
+    // 6.4.0: LAS CAJAS de la encargada (y la vista del jefe que lleva adentro) y la
+    // impresora, que se abre desde el inicio de la barra.
+    'lib/features/barra/widgets/las_cajas_screen.dart',
+    'lib/features/barra/jefe/cajas_de_la_fiesta.dart',
+    'lib/features/barra/widgets/elegir_impresora_screen.dart',
   ];
 
   test('las pantallas de la barra no llevan al panel, a la fiesta ni a cobrar cuotas', () {

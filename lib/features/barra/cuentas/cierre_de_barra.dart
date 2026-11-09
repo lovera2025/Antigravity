@@ -177,6 +177,13 @@ class ResumenDeCajas {
   final double contado;
   final double diferencia;
 
+  /// Las sillas de la noche vendidas en todas las cajas (sin las anuladas): las que la
+  /// puerta tendría que haber anotado.
+  final int sillas;
+
+  /// El cambio con que abrieron todas las cajas.
+  final double cambio;
+
   const ResumenDeCajas({
     required this.cajas,
     required this.ventas,
@@ -187,6 +194,8 @@ class ResumenDeCajas {
     this.recargos = 0,
     required this.contado,
     required this.diferencia,
+    this.sillas = 0,
+    this.cambio = 0,
   });
 
   factory ResumenDeCajas.de({
@@ -205,12 +214,14 @@ class ResumenDeCajas {
       for (final c in ordenadas)
         ResumenDeCaja(c, CierreDeBarra.de(c, listaVentas, listaAnulaciones)),
     ];
-    var v = 0, an = 0, mx = 0;
-    var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0;
+    var v = 0, an = 0, mx = 0, si = 0;
+    var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0, cam = 0;
     for (final r in resumenes) {
       v += r.cuentas.ventas;
       an += r.cuentas.anuladas;
       mx += r.cuentas.mixtos;
+      si += r.cuentas.sillas;
+      cam += centavos(r.caja.cambioInicial);
       ef += centavos(r.cuentas.efectivo);
       tr += centavos(r.cuentas.transferencia);
       rec += centavos(r.cuentas.recargos);
@@ -229,6 +240,8 @@ class ResumenDeCajas {
       recargos: deCentavos(rec),
       contado: deCentavos(cont),
       diferencia: deCentavos(dif),
+      sillas: si,
+      cambio: deCentavos(cam),
     );
   }
 

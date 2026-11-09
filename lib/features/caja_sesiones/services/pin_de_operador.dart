@@ -28,11 +28,17 @@ String? problemaDelOperador({
 /// Lo que puede hacer un operador, en palabras, para la lista de OPERADORES.
 String textoDePermisos(PermisosEfectivos p) {
   if (p.ninguno) return 'Sin permisos: no puede entrar';
-  return [for (final x in p.lista) nombreDePermiso(x)].join(' · ');
+  return [
+    for (final x in p.lista)
+      x == PermisoOperador.barra && p.encargadaBarra
+          ? nombreDePermiso(PermisoOperador.encargadaBarra)
+          : nombreDePermiso(x),
+  ].join(' · ');
 }
 
 String nombreDePermiso(PermisoOperador p) => switch (p) {
       PermisoOperador.cobros => 'Cobros',
       PermisoOperador.entradas => 'Entradas',
       PermisoOperador.barra => 'Barra',
+      PermisoOperador.encargadaBarra => 'Encargada de barra',
     };

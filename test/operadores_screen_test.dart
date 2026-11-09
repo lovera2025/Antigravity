@@ -52,6 +52,11 @@ void main() {
         'Cobros · Entradas',
       );
       expect(textoDePermisos(const PermisosEfectivos()), 'Sin permisos: no puede entrar');
+      expect(
+        textoDePermisos(const PermisosEfectivos(cobros: true, encargadaBarra: true)),
+        'Cobros · Encargada de barra',
+      );
+      expect(textoDePermisos(const PermisosEfectivos(barra: true)), 'Barra');
     });
   });
 
@@ -141,6 +146,42 @@ void main() {
           const PermisosEfectivos(cobros: true, entradas: true));
       expect(permisos.guardados, ['Jefe']);
       expect(find.text('Cobros · Entradas'), findsOneWidget);
+    });
+
+    testWidgets('Encargada de barra: tildarla tilda Barra, y se guarda con un 2 a nombre '
+        'del jefe', (tester) async {
+      await abrir(tester);
+      await editar(tester, 'Maxi');
+      expect(tildada(tester, 'permiso_encargada_barra'), isFalse);
+      await tester.tap(find.byKey(const Key('permiso_encargada_barra')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_barra'), isTrue, reason: 'ser encargada lleva Barra');
+      await guardar(tester);
+      final guardada = permisos.filas[_maxi]!;
+      expect(guardada.permisos.encargadaBarra, isTrue);
+      expect(guardada.toMap()['barra'], 2);
+      expect(permisos.guardados, ['Jefe']);
+      expect(find.text('Cobros · Encargada de barra'), findsOneWidget);
+      // Al volver a abrirla, las dos tildadas.
+      await editar(tester, 'Maxi');
+      expect(tildada(tester, 'permiso_barra'), isTrue);
+      expect(tildada(tester, 'permiso_encargada_barra'), isTrue);
+    });
+
+    testWidgets('destildar Barra le saca también Encargada', (tester) async {
+      permisos.filas[_juan] = PermisosOperador.para(
+        operadorId: _juan,
+        permisos: const PermisosEfectivos(encargadaBarra: true),
+        ahora: DateTime.utc(2026, 11, 3),
+      );
+      await abrir(tester);
+      await editar(tester, 'Juan');
+      expect(tildada(tester, 'permiso_encargada_barra'), isTrue);
+      await tester.tap(find.byKey(const Key('permiso_barra')));
+      await tester.pump();
+      expect(tildada(tester, 'permiso_encargada_barra'), isFalse);
+      await guardar(tester);
+      expect(permisos.filas[_juan]!.permisos.ninguno, isTrue);
     });
 
     testWidgets('destildar Cobros avisa lo de las PCs viejas, y destildar todo dice que '

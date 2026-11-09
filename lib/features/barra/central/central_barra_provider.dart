@@ -19,6 +19,13 @@ import 'filas_de_la_red.dart';
 /// pruebas de pantalla lo apagan (`BarraEnPrueba`), así no abren conexiones de verdad.
 final redDeLaBarraHabilitadaProvider = Provider<bool>((ref) => !kIsWeb);
 
+/// Si en este equipo se muestra PRENDER LA CENTRAL (6.4.0): en la notebook sí, en la
+/// web y en una tablet Android no. La central es la notebook del salón; la encargada
+/// mira LAS CAJAS desde su tablet, y dos centrales en la misma red se pisarían.
+/// En la tablet se pregunta por `Platform`, no por `defaultTargetPlatform`
+/// (en `flutter test` ese dice siempre Android).
+final centralSePrendeAcaProvider = Provider<bool>((ref) => !kIsWeb && !Platform.isAndroid);
+
 /// Lo que guarda la central y el cliente: la barra de este equipo. Los tests la reemplazan.
 final barraDeLaRedProvider = Provider<BarraDeLaRed>((ref) => ref.watch(barraDeEsteEquipoProvider));
 

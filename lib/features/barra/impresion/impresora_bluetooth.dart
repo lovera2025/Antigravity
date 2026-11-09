@@ -190,6 +190,37 @@ class ImpresoraBluetooth {
   /// Si contestó por el papel alguna vez (null: todavía no se le preguntó).
   bool? get contestaElPapel => _contestaElPapel;
 
+  final _apodos = <String, String>{};
+  bool _leyoApodos = false;
+
+  /// El nombre que se le puso a cada impresora en este equipo, por id (6.4.0).
+  Future<Map<String, String>> apodos() async {
+    if (!_leyoApodos) {
+      _apodos.addAll(await recordada?.apodos() ?? const {});
+      _leyoApodos = true;
+    }
+    return Map.unmodifiable(_apodos);
+  }
+
+  /// Le pone nombre a la impresora [id] ("Impresora caja 1"); vacío se lo saca.
+  Future<void> ponerApodo(String id, String apodo) async {
+    await apodos();
+    final a = apodo.trim();
+    if (a.isEmpty) {
+      _apodos.remove(id);
+    } else {
+      _apodos[id] = a;
+    }
+    await recordada?.guardarApodos(Map.of(_apodos));
+  }
+
+  /// Cómo se la llama: el nombre que le pusieron o, si no, el suyo ("TP-POS58").
+  Future<String> nombreDe(ImpresoraElegida impresora) async {
+    final apodo = (await apodos())[impresora.id];
+    if (apodo != null) return apodo;
+    return impresora.nombre.isEmpty ? 'La impresora de este equipo' : impresora.nombre;
+  }
+
   /// La impresora de este equipo, la conectada o la recordada. Null si nunca se eligió.
   Future<ImpresoraElegida?> elegida() async {
     if (!_leyoLaRecordada) {

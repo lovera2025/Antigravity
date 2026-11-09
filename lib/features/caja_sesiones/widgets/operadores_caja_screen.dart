@@ -279,7 +279,8 @@ class _FichaOperadorState extends State<_FichaOperador> {
   late final _pin = TextEditingController(text: widget.existente?.pin ?? '');
   late bool _cobros = widget.permisos.cobros;
   late bool _entradas = widget.permisos.entradas;
-  late bool _barra = widget.permisos.barra;
+  late bool _barra = widget.permisos.tiene(PermisoOperador.barra);
+  late bool _encargada = widget.permisos.encargadaBarra;
   String? _problema;
   bool _revisando = false;
 
@@ -306,7 +307,12 @@ class _FichaOperadorState extends State<_FichaOperador> {
       _Ficha(
         _nombre.text,
         _pin.text,
-        PermisosEfectivos(cobros: _cobros, entradas: _entradas, barra: _barra),
+        PermisosEfectivos(
+          cobros: _cobros,
+          entradas: _entradas,
+          barra: _barra,
+          encargadaBarra: _barra && _encargada,
+        ),
       ),
     );
   }
@@ -375,9 +381,25 @@ class _FichaOperadorState extends State<_FichaOperador> {
               _casilla(
                 clave: 'permiso_barra',
                 titulo: 'Barra',
-                detalle: 'Queda guardado para cuando esté la barra: todavía no abre nada.',
+                detalle: 'Vende en la barra con su caja.',
                 valor: _barra,
-                cambiar: (v) => _barra = v,
+                // Sin Barra no puede ser encargada.
+                cambiar: (v) {
+                  _barra = v;
+                  if (!v) _encargada = false;
+                },
+              ),
+              _casilla(
+                clave: 'permiso_encargada_barra',
+                titulo: 'Encargada de barra',
+                detalle: 'Ve todas las cajas de la fiesta, con cuánto cambio arrancó cada una '
+                    'y cuánto generó; anula cualquier venta con motivo. También vende.',
+                valor: _encargada,
+                // Ser encargada lleva Barra.
+                cambiar: (v) {
+                  _encargada = v;
+                  if (v) _barra = true;
+                },
               ),
               if (sinNinguno)
                 const Padding(

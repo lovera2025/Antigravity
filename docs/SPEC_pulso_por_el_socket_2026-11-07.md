@@ -156,6 +156,14 @@ En este orden: **primero en rojo con el código de la 6.3.3**, después el arreg
    - El receptor se suscribe. Desde un emisor suscripto (socket) y desde uno sin suscribir (REST) se manda el mismo aviso.
    - Imprime la forma cruda de cada uno y comprueba que `trabajoDelPulso(cuerpoDelBroadcast(m), …)` dé lo mismo en los dos casos.
    - No lee ni escribe ninguna tabla.
+   - **Corrida el 8-nov (noche), con el OK del usuario** (`flutter test tool/pulso_prueba_test.dart --dart-define=nube=si`): pasó en
+     3 s. Lo que mandó la nube, tal cual:
+     ```
+     socket: {"borrados":{…},"event":"cambios","origen":"prueba-socket","tablas":[…],"type":"broadcast"}
+     REST:   {"event":"cambios","payload":{"borrados":{…},"event":"cambios","origen":"prueba-rest","tablas":[…],"type":"broadcast"},"type":"broadcast"}
+     ```
+     Confirma la sección 3: por el socket llega suelto y por REST envuelto en `payload` (que adentro trae otra vez `event` y `type`).
+     `cuerpoDelBroadcast` saca lo mismo de los dos. Queda solo la sección 9, con las PCs instaladas.
 
 ## 8. Publicación
 

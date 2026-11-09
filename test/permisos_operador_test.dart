@@ -55,6 +55,35 @@ void main() {
       expect(fila.toMap()['cobros'], 0);
     });
 
+    test('la Encargada de barra va en la misma columna, con un 2, y entra por BARRA', () {
+      final fila = PermisosOperador.para(
+        operadorId: operador,
+        permisos: const PermisosEfectivos(encargadaBarra: true),
+        ahora: hoy,
+      );
+      expect(fila.toMap()['barra'], 2);
+      final leida = PermisosOperador.fromMap(fila.toMap()).permisos;
+      expect(leida.encargadaBarra, isTrue);
+      expect(leida.barra, isTrue, reason: 'ser encargada lleva Barra');
+      expect(leida.tiene(PermisoOperador.barra), isTrue);
+      expect(leida.lista, [PermisoOperador.barra], reason: 'un solo botón, el de BARRA');
+      expect(leida.ninguno, isFalse);
+      // La cajera sigue siendo un 1, y se lee igual que antes.
+      final cajera = PermisosOperador.fromMap({
+        ...fila.toMap(),
+        'barra': 1,
+      }).permisos;
+      expect(cajera.barra, isTrue);
+      expect(cajera.encargadaBarra, isFalse);
+      expect(PermisosOperador.fromMap({...fila.toMap(), 'barra': true}).permisos.barra, isTrue);
+      expect(cajera, isNot(leida));
+      // Encargada con o sin la casilla de Barra tildada es lo mismo.
+      expect(
+        const PermisosEfectivos(barra: true, encargadaBarra: true),
+        const PermisosEfectivos(encargadaBarra: true),
+      );
+    });
+
     test('el id sale del operador: las dos PCs escriben la misma fila', () {
       final a = PermisosOperador.para(
         operadorId: operador,
@@ -165,6 +194,44 @@ void main() {
         PermisosEfectivos.de(await PermisosOperadorRepository.deEn(db, operador)).ninguno,
         isTrue,
       );
+    });
+
+    test('de cajera a encargada: escribe la fila con un 2 y anota encargada_barra', () async {
+      await guardar(const PermisosEfectivos(barra: true));
+      final cambios = await guardar(
+        const PermisosEfectivos(barra: true, encargadaBarra: true),
+        cuando: hoy.add(const Duration(minutes: 1)),
+      );
+      expect(cambios, hasLength(1), reason: 'Barra ya lo tenía');
+      expect(cambios.single.permiso, PermisoOperador.encargadaBarra);
+      expect(cambios.single.dado, isTrue);
+      expect((await db.query('permisos_operador')).single['barra'], 2);
+      final renglon = (await db.query(
+        'permisos_operador_cambios',
+        where: 'permiso = ?',
+        whereArgs: ['encargada_barra'],
+      ))
+          .single;
+      expect(renglon['dado'], 1);
+      expect(renglon['hecho_por'], 'Jefe');
+      final cola = await db.query('_sync_queue', where: 'tabla = ?', whereArgs: ['permisos_operador']);
+      expect(jsonDecode(cola.single['payload'] as String)['barra'], 2);
+    });
+
+    test('de encargada a nada: dos renglones en cero, Barra y Encargada', () async {
+      await guardar(const PermisosEfectivos(encargadaBarra: true));
+      final cambios = await guardar(
+        const PermisosEfectivos(),
+        cuando: hoy.add(const Duration(minutes: 1)),
+      );
+      expect(
+        {for (final c in cambios) c.permiso: c.dado},
+        {
+          PermisoOperador.barra: false,
+          PermisoOperador.encargadaBarra: false,
+        },
+      );
+      expect((await db.query('permisos_operador')).single['barra'], 0);
     });
 
     test('guardar lo mismo otra vez no agrega renglones', () async {

@@ -3,22 +3,44 @@ import '../../../core/utils/uuid_utils.dart';
 /// Lo que puede hacer un operador con su PIN. Los nombres son los que ve el jefe
 /// en OPERADORES. Nada dice "Caja" a secas: la de cuotas (Cobros) y la de barra
 /// son dos cajas distintas.
-enum PermisoOperador { cobros, entradas, barra }
+///
+/// **Encargada de barra** (6.4.0) no es una puerta más: es Barra con algo más (ve
+/// todas las cajas de la fiesta y anula cualquier venta con motivo). Entra por el
+/// mismo botón BARRA ([deEntrada]); en la fila va como `barra = 2`.
+enum PermisoOperador {
+  cobros('cobros'),
+  entradas('entradas'),
+  barra('barra'),
+  encargadaBarra('encargada_barra');
+
+  const PermisoOperador(this.clave);
+
+  /// Cómo se anota en `permisos_operador_cambios.permiso`.
+  final String clave;
+
+  /// Las puertas de entrada con el PIN: un botón por cada una que tenga.
+  static const deEntrada = [cobros, entradas, barra];
+}
 
 /// Los permisos de un operador, ya resueltos.
 ///
 /// **Sin fila, es de Cobros solo**: así siguen los operadores de antes de la 6.3,
 /// con su mismo PIN y sin volver a darles nada. **Con fila y todo en cero, no
 /// tiene permisos.** Son dos cosas distintas y cada una lleva su test.
+///
+/// [encargadaBarra] lleva Barra adentro: `tiene(barra)` es verdadero también para
+/// la encargada, aunque [barra] haya quedado en false.
 class PermisosEfectivos {
   final bool cobros;
   final bool entradas;
   final bool barra;
+  final bool encargadaBarra;
 
   const PermisosEfectivos({
     this.cobros = false,
     this.entradas = false,
     this.barra = false,
+    this.encargadaBarra = false,
   });
 
   /// El operador sin fila.
@@ -30,24 +52,30 @@ class PermisosEfectivos {
   bool tiene(PermisoOperador p) => switch (p) {
         PermisoOperador.cobros => cobros,
         PermisoOperador.entradas => entradas,
-        PermisoOperador.barra => barra,
+        PermisoOperador.barra => barra || encargadaBarra,
+        PermisoOperador.encargadaBarra => encargadaBarra,
       };
 
-  bool get ninguno => !cobros && !entradas && !barra;
+  bool get ninguno => !cobros && !entradas && !tiene(PermisoOperador.barra);
 
-  /// Los que tiene, siempre en el mismo orden.
+  /// Las puertas que tiene, siempre en el mismo orden: Cobros, Entradas, Barra.
   List<PermisoOperador> get lista =>
-      [for (final p in PermisoOperador.values) if (tiene(p)) p];
+      [for (final p in PermisoOperador.deEntrada) if (tiene(p)) p];
+
+  /// Lo que va en la columna `barra`: 0 nada, 1 cajera, 2 encargada.
+  int get nivelBarra => encargadaBarra ? 2 : (barra ? 1 : 0);
 
   @override
   bool operator ==(Object other) =>
       other is PermisosEfectivos &&
       other.cobros == cobros &&
       other.entradas == entradas &&
-      other.barra == barra;
+      other.tiene(PermisoOperador.barra) == tiene(PermisoOperador.barra) &&
+      other.encargadaBarra == encargadaBarra;
 
   @override
-  int get hashCode => Object.hash(cobros, entradas, barra);
+  int get hashCode =>
+      Object.hash(cobros, entradas, tiene(PermisoOperador.barra), encargadaBarra);
 }
 
 /// La fila de `permisos_operador` (v76): una por operador, con id fijo
@@ -102,7 +130,7 @@ class PermisosOperador {
         'operador_id': operadorId,
         'cobros': permisos.cobros ? 1 : 0,
         'entradas': permisos.entradas ? 1 : 0,
-        'barra': permisos.barra ? 1 : 0,
+        'barra': permisos.nivelBarra,
         'hecho_por': hechoPor,
         'device_id': deviceId,
         'created_at': createdAt,
@@ -111,13 +139,17 @@ class PermisosOperador {
 
   factory PermisosOperador.fromMap(Map<String, dynamic> m) {
     bool prendido(Object? v) => v == 1 || v == true;
+    final barra = m['barra'];
     return PermisosOperador(
       id: m['id'] as String,
       operadorId: m['operador_id'] as String,
       permisos: PermisosEfectivos(
         cobros: prendido(m['cobros']),
         entradas: prendido(m['entradas']),
-        barra: prendido(m['barra']),
+        // 1 cajera, 2 encargada (6.4.0). Una PC con la 6.3 lee el 2 como "sin
+        // Barra": por eso nadie es encargada hasta que las tres tengan la 6.4.0.
+        barra: prendido(barra) || barra == 2,
+        encargadaBarra: barra == 2,
       ),
       hechoPor: m['hecho_por'] as String?,
       deviceId: m['device_id'] as String?,
@@ -148,7 +180,9 @@ class CambioDePermiso {
     required this.createdAt,
   });
 
-  /// Lo que cambió entre [antes] y [despues], un renglón por permiso.
+  /// Lo que cambió entre [antes] y [despues], un renglón por permiso. Pasar de
+  /// cajera a encargada es un renglón de `encargada_barra`; de nada a encargada,
+  /// dos (Barra y Encargada).
   static List<CambioDePermiso> entre({
     required String operadorId,
     required PermisosEfectivos antes,
@@ -162,7 +196,7 @@ class CambioDePermiso {
       for (final p in PermisoOperador.values)
         if (antes.tiene(p) != despues.tiene(p))
           CambioDePermiso(
-            id: UuidUtils.cambioDePermisoId(operadorId, p.name, iso),
+            id: UuidUtils.cambioDePermisoId(operadorId, p.clave, iso),
             operadorId: operadorId,
             permiso: p,
             dado: despues.tiene(p),
@@ -176,7 +210,7 @@ class CambioDePermiso {
   Map<String, dynamic> toMap() => {
         'id': id,
         'operador_id': operadorId,
-        'permiso': permiso.name,
+        'permiso': permiso.clave,
         'dado': dado ? 1 : 0,
         'hecho_por': hechoPor,
         'device_id': deviceId,

@@ -91,7 +91,10 @@ class _BarraJefeScreenState extends ConsumerState<BarraJefeScreen> {
               tooltip: 'La impresora de esta PC',
               icon: const Icon(Icons.print_outlined),
               onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => ElegirImpresoraScreen(impresora: ref.read(impresoraDeLaBarraProvider)),
+                builder: (_) => ElegirImpresoraScreen(
+                  impresora: ref.read(impresoraDeLaBarraProvider),
+                  papel: ref.read(papelDeLaBarraProvider),
+                ),
               )),
             ),
           const SizedBox(width: 8),

@@ -31,6 +31,10 @@ import 'barra_jefe_providers.dart';
 /// **anula cualquiera** con motivo y **reimprime cualquiera** (sin el freno de la cajera),
 /// y ve el cierre como el papel.
 ///
+/// **La Encargada de barra ve lo mismo** (6.4.0, LAS CAJAS desde su inicio): la llave es
+/// [mandaEnLaBarraProvider] (el jefe en modo jefe o la encargada). El catálogo y los
+/// precios siguen siendo solo del jefe.
+///
 /// Se pone al día solo: cuando una caja sube sus ventas, el aviso entre equipos hace que
 /// esto se vuelva a leer. Sin internet, cada tablet guarda lo suyo y lo sube al volver.
 class CajasDeLaFiestaVista extends ConsumerStatefulWidget {
@@ -78,11 +82,12 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     } catch (_) {}
   }
 
+  /// La segunda llave: el jefe en modo jefe o la Encargada de barra.
   bool _frenaSinModoJefe() {
-    if (ref.read(esRolJefeProvider)) return false;
+    if (ref.read(mandaEnLaBarraProvider)) return false;
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('$kSoloEnModoJefe: anular y reimprimir desde la PC es del jefe.')),
+        const SnackBar(content: Text('$kSoloEnModoJefe: anular y reimprimir es del jefe o de la encargada de barra.')),
       );
     }
     return true;
@@ -143,8 +148,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         final motivo = await pedirMotivo(
           context,
           titulo: 'Reimprimir ${cuantos == 1 ? 'el vale' : 'los $cuantos vales'} de la N° ${_numero(x.venta)}',
-          explicacion: 'Sale por la impresora de esta PC, con COPIA arriba y abajo, tu nombre, la '
-              'hora y el motivo.',
+          explicacion: 'Sale por la impresora de este equipo, con COPIA arriba y abajo, tu nombre, '
+              'la hora y el motivo.',
           ayuda: 'Por qué: se le mojó, se cortó el papel…',
           boton: 'REIMPRIMIR',
           claveBoton: 'motivo_reimprimir',
@@ -268,8 +273,10 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
   @override
   Widget build(BuildContext context) {
     final cajas = ref.watch(cajasDelJefeProvider(widget.fiesta.id));
-    final esJefe = ref.watch(esRolJefeProvider);
+    final esJefe = ref.watch(mandaEnLaBarraProvider);
     final enLaWeb = ref.watch(enLaWebProvider);
+    // La central se prende en la notebook, no en la web ni en una tablet.
+    final conPanel = !enLaWeb && ref.watch(centralSePrendeAcaProvider);
     return cajas.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const Center(child: Text('No se pudieron leer las cajas.')),
@@ -277,8 +284,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
       data: (datos) {
         if (datos.sinCajas) {
           return _lista(enLaWeb: enLaWeb, [
-            // La central de la barra, en la notebook (no en la web).
-            if (!enLaWeb) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
+            // La central de la barra, en la notebook (no en la web ni en una tablet).
+            if (conPanel) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
             _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
             const SizedBox(height: 24),
             const Center(
@@ -293,7 +300,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
         return LayoutBuilder(builder: (context, caja) {
           final conCostado = caja.maxWidth >= 1000;
           final principal = <Widget>[
-            if (!enLaWeb) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
+            if (conPanel) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
             _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
             const SizedBox(height: 12),
             _Totales(resumen: datos.resumen),
@@ -728,12 +735,22 @@ class _TarjetaDeCaja extends StatelessWidget {
                   style: const TextStyle(fontSize: 13, color: Color(0xFFA7A29A)),
                 ),
                 const SizedBox(height: 10),
+                // Con cuánto arrancó: lo pidió el jefe para la encargada (5-nov).
+                KeyedSubtree(
+                  key: Key('jefe_caja_cambio_${c.id}'),
+                  child: renglon('Cambio', pesos(c.cambioInicial)),
+                ),
                 renglon(
                   'Ventas',
                   '${cuentas.ventas}${cuentas.anuladas > 0 ? ' · ${cuentas.anuladas} anul.' : ''}',
                 ),
                 renglon('Efectivo', pesos(cuentas.efectivo)),
                 renglon('Transferencia', pesos(cuentas.transferencia)),
+                if (cuentas.sillas > 0)
+                  KeyedSubtree(
+                    key: Key('jefe_caja_sillas_${c.id}'),
+                    child: renglon('Sillas extra', '${cuentas.sillas}'),
+                  ),
                 const SizedBox(height: 10),
                 if (!c.abierta && c.efectivoContado != null)
                   DecoratedBox(

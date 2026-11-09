@@ -339,5 +339,16 @@ List<LineaTicket> ticketDePrueba({img.Image? logo}) => [
 /// La línea de letras para ver cómo salen los acentos con cada tabla.
 const lineaDeAcentos = 'áéíóúñ ÁÉÍÓÚÑ ü ¿¡ N° \$ 1/2';
 
+/// 32 cifras: en un renglón de la TP-POS58 entran justas.
+const reglaDe32 = '12345678901234567890123456789012';
+
+/// El final del id de una impresora, como lo dice su etiqueta: "86:67:7a:6e:ca:9d" →
+/// "…CA:9D". Las cuatro TP-POS58 se llaman igual; por esto se distinguen.
+String finDelId(String id) {
+  final t = id.trim();
+  if (t.length <= 5) return t.toUpperCase();
+  return '…${t.substring(t.length - 5).toUpperCase()}';
+}
+
 /// Para que los tests puedan buscar un texto en los bytes, con los acentos de la tabla 850.
 String bytesComoTexto(List<int> bytes) => tabla850.decode(bytes);

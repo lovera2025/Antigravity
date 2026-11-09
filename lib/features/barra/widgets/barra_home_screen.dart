@@ -8,12 +8,17 @@ import '../../eventos/utils/evento_presentacion.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_providers.dart';
 import 'abrir_caja_barra_dialog.dart';
+import 'elegir_impresora_screen.dart';
+import 'las_cajas_screen.dart';
 import 'linea_sin_internet_barra.dart';
 import 'vender_screen.dart';
 
 /// La pantalla de quien entró a la Barra con su PIN: elegir la fiesta y abrir (o
 /// retomar) su caja de barra. No hay camino al panel ni a la caja de cuotas
 /// (`test/modo_barra_cerrado_test.dart`).
+///
+/// **La Encargada de barra** (6.4.0) ve además LAS CAJAS en cada fiesta. Arriba, el
+/// ícono de la impresora: se prueba antes de abrir la caja.
 class BarraHomeScreen extends ConsumerStatefulWidget {
   /// Para los tests y la ventana de prueba. Sin esto, abre VENDER.
   final void Function(BuildContext context, Evento fiesta, CajaBarra caja)? onCajaLista;
@@ -89,6 +94,17 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          IconButton(
+            key: const Key('barra_impresora'),
+            tooltip: 'La impresora de este equipo: probarla o cambiarla',
+            icon: const Icon(Icons.print_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => ElegirImpresoraScreen(
+                impresora: ref.read(impresoraDeLaBarraProvider),
+                papel: ref.read(papelDeLaBarraProvider),
+              ),
+            )),
+          ),
           TextButton(
             key: const Key('barra_salir'),
             onPressed: () => ref.read(appRoleProvider.notifier).logoutApp(),
@@ -134,7 +150,26 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
                                   style: const TextStyle(fontWeight: FontWeight.w800),
                                 ),
                                 subtitle: Text(_fecha(e.fechaEvento)),
-                                trailing: const Icon(Icons.chevron_right),
+                                // Tocar la fiesta es VENDER (su caja); la encargada
+                                // tiene además LAS CAJAS.
+                                trailing: app.esEncargadaDeBarra
+                                    ? OutlinedButton(
+                                        key: Key('barra_las_cajas_${e.id}'),
+                                        onPressed: () => Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                            builder: (_) => LasCajasScreen(fiesta: e),
+                                          ),
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: gold,
+                                          side: const BorderSide(color: gold),
+                                        ),
+                                        child: const Text(
+                                          'LAS CAJAS',
+                                          style: TextStyle(fontWeight: FontWeight.w800),
+                                        ),
+                                      )
+                                    : const Icon(Icons.chevron_right),
                                 onTap: () => _abrir(e),
                               ),
                             );

@@ -124,6 +124,10 @@ class AppRoleState {
   bool get esCaja => kind == AppRoleKind.caja;
   bool get esEntradas => kind == AppRoleKind.entradas;
   bool get esBarra => kind == AppRoleKind.barra;
+
+  /// Entró a la barra con el permiso de Encargada de barra (6.4.0): vende con su
+  /// caja y además ve LAS CAJAS de la fiesta y anula cualquier venta con motivo.
+  bool get esEncargadaDeBarra => esBarra && permisos.encargadaBarra;
   bool get tieneSesionCaja =>
       esCaja && sesionActiva != null && sesionActiva!.estaAbierta;
 
@@ -590,4 +594,14 @@ final esRolJefeProvider = Provider<bool>((ref) {
   final app = ref.watch(appRoleProvider);
   if (app.esJefe) return true;
   return ref.watch(adminAuthProvider).esModoJefe;
+});
+
+/// Quién manda en las cajas de la barra (6.4.0): el jefe en modo jefe **o la
+/// Encargada de barra**. Es la única llave de LAS CAJAS para ver todas y anular o
+/// reimprimir cualquier venta. El catálogo, los precios y el recargo siguen con
+/// [esRolJefeProvider]: son configuración, solo del jefe
+/// (`test/solo_modo_jefe_test.dart`).
+final mandaEnLaBarraProvider = Provider<bool>((ref) {
+  if (ref.watch(esRolJefeProvider)) return true;
+  return ref.watch(appRoleProvider).esEncargadaDeBarra;
 });

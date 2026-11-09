@@ -306,7 +306,10 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
 
   Future<void> _elegirImpresora() async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => ElegirImpresoraScreen(impresora: ref.read(impresoraDeLaBarraProvider)),
+      builder: (_) => ElegirImpresoraScreen(
+        impresora: ref.read(impresoraDeLaBarraProvider),
+        papel: ref.read(papelDeLaBarraProvider),
+      ),
     ));
     if (mounted) unawaited(_prepararImpresora());
   }
