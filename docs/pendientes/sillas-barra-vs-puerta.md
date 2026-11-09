@@ -27,5 +27,8 @@ miraría. Sin eso no hay con qué comparar.
 
 - ~~En el cierre de la barra, "Silla extra: N vendidas" por caja.~~ **Hecho el 7-nov** (etapa 6): el cierre de cada caja dice
   "Sillas extra vendidas N" (`CierreDeBarra.sillas`), en el papel, en la pantalla y en el PDF.
+- ~~El lugar donde mirarlo.~~ **Hecho el 8-nov (noche):** el cierre de caja por sector (BARRA) dice "Silla extra: N vendidas" de toda la
+  fiesta, y cada tarjeta de CAJAS, las de su caja (`docs/CONTEXTO_BARRA_2026-11-02.md`, "El cierre por sector").
 - Una línea en la oficina que cruce los vales: vendidos en la barra contra anotados en la puerta, cuando las dos notebooks suben.
-  En vivo entre las dos notebooks, un paso más: no por ahora.
+  En vivo entre las dos notebooks, un paso más: no por ahora. **Esto sigue pendiente**: el número total ya está, el cruce vale por vale
+  no.

@@ -49,6 +49,10 @@ las roturas a propósito. Ver "Para retomar en otro chat" de `docs/CONTEXTO_OPER
 aviso entre PCs y publicar la 6.4.0. Plan general: 22 de 26, 85 %. **8-nov (más tarde): Entradas 5, el aviso entre PCs y el aviso de
 papel, hechos y probados; y una revisión de bugs de todo lo que trae la 6.4.0 (tres arreglados). Plan general: 25 de 26, 96 %. Falta
 solo publicar, con el usuario:** el paso a paso está en "Para retomar en otro chat" de `docs/CONTEXTO_v6.4.0_2026-11-06.md`.
+**8-nov (noche, con el usuario en casa): el plan pasa a 28 partes.** Se sumaron la **Encargada de barra** y el **cierre de caja por
+sector** (decididos el 5-nov, habían quedado afuera), más probar la impresora sin vender y el nombre de cada impresora (pedido al ver la
+maqueta); las dos pruebas opcionales, hechas (el aviso entre PCs contra la nube y PAPEL con la TP-POS58: contesta). **27 de 28, 96 %:
+falta solo publicar, con el usuario.**
 
 **Lo que seguía (6-nov, noche): primero la 6.3.2 y la 6.3.3; la barra y Entradas esperan** (decisión del usuario: "esto sería de
 inmediato, bien hecho y probado en el sandbox"). Después, la etapa 5 de la barra (reimprimir con freno, anular también la cajera, el

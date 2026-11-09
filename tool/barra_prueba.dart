@@ -153,13 +153,16 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
   operadores.operadores.lista.addAll([
     operadorDePrueba('a0000000-0000-4000-8000-000000000001', 'Marta (solo Barra)', '1111'),
     operadorDePrueba('a0000000-0000-4000-8000-000000000002', 'Tati (los tres)', '5555'),
+    operadorDePrueba('a0000000-0000-4000-8000-000000000007', 'Romi (Encargada)', '7777'),
   ]);
   operadores.permisos
     ..poner('a0000000-0000-4000-8000-000000000001', const PermisosEfectivos(barra: true))
     ..poner(
       'a0000000-0000-4000-8000-000000000002',
       const PermisosEfectivos(cobros: true, entradas: true, barra: true),
-    );
+    )
+    // 6.4.0: vende con su caja y además ve LAS CAJAS y anula cualquier venta.
+    ..poner('a0000000-0000-4000-8000-000000000007', const PermisosEfectivos(encargadaBarra: true));
 
   final prueba = BarraEnPrueba();
   final hoy = DateTime.now();
@@ -211,6 +214,8 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
   cajera = ProviderContainer(overrides: [
     ...comunes(),
     barraDelJefeProvider.overrideWithValue(b),
+    // La izquierda es una tablet: ahí no se prende la central.
+    centralSePrendeAcaProvider.overrideWithValue(false),
     subirVentaProvider.overrideWithValue((v) async {
       if (!hay()) return;
       b.sinSubir.remove(v.id);
@@ -393,7 +398,7 @@ class _PruebaDeLaBarraState extends State<PruebaDeLaBarra> {
     final celular = _anchoCajera == anchoCelular;
     return _BarraDeArriba(
       color: const Color(0xFFFFF3CD),
-      texto: 'CAJERA · ${celular ? 'celular' : 'tablet'}   PIN: Marta 1111 · Tati 5555',
+      texto: 'CAJERA · ${celular ? 'celular' : 'tablet'}   PIN: Marta 1111 · Tati 5555 · Romi (encargada) 7777',
       botones: [
         TextButton(
           key: const Key('prueba_ancho_cajera'),

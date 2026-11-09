@@ -32,6 +32,8 @@ void main() {
     operadorDePrueba('a0000000-0000-4000-8000-000000000003', 'Sol (Cobros y Entradas)', '3333'),
     operadorDePrueba('a0000000-0000-4000-8000-000000000004', 'Leo (sin permisos)', '4444'),
     operadorDePrueba('a0000000-0000-4000-8000-000000000005', 'Tati (los tres)', '5555'),
+    operadorDePrueba('a0000000-0000-4000-8000-000000000007', 'Romi (Encargada de barra)', '7777'),
+    operadorDePrueba('a0000000-0000-4000-8000-000000000008', 'Vero (Cobros y Encargada)', '8888'),
   ]);
   prueba.permisos
     ..poner('a0000000-0000-4000-8000-000000000002', const PermisosEfectivos(entradas: true))
@@ -43,6 +45,11 @@ void main() {
     ..poner(
       'a0000000-0000-4000-8000-000000000005',
       const PermisosEfectivos(cobros: true, entradas: true, barra: true),
+    )
+    ..poner('a0000000-0000-4000-8000-000000000007', const PermisosEfectivos(encargadaBarra: true))
+    ..poner(
+      'a0000000-0000-4000-8000-000000000008',
+      const PermisosEfectivos(cobros: true, encargadaBarra: true),
     );
 
   runApp(ProviderScope(
@@ -90,7 +97,7 @@ class _Arriba extends ConsumerWidget {
               width: double.infinity,
               child: Text(
                 'Ventana de prueba: nada se guarda de verdad.   PIN: jefe 2026 · '
-                'Maxi 1111 · Ana 2222 · Sol 3333 · Leo 4444 · Tati 5555',
+                'Maxi 1111 · Ana 2222 · Sol 3333 · Leo 4444 · Tati 5555 · Romi 7777 · Vero 8888',
               ),
             ),
           ),

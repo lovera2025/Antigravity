@@ -2,10 +2,13 @@
 
 ## Para retomar en otro chat (8-nov, noche): la 6.4.0 está completa, falta publicarla
 
-> **Todo lo del plan general está programado y probado en la rama: 25 de 26 partes, 96 %.** La parte 26 es publicar, **con el
-> usuario presente** (su regla: el OK es suyo). La suite entera, en verde (unos 4.000 tests); `flutter analyze` sin errores en
-> `lib/` y `test/`. Frase para retomar: "Publicamos la 6.4.0: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.4.0_2026-11-06.md
-> y vamos paso a paso."
+> **Todo lo del plan general está programado y probado en la rama: 27 de 28 partes, 96 %.** El 8-nov a la noche, con el usuario
+> en casa, se sumaron dos partes que estaban decididas desde el 5-nov y habían quedado afuera (la **Encargada de barra** y el
+> **cierre de caja por sector**), más lo que pidió al ver la maqueta (**probar la impresora sin vender y el nombre de cada
+> impresora**), y se hicieron las dos pruebas que eran opcionales (el aviso entre PCs contra la nube y PAPEL con la TP-POS58).
+> La parte 28 es publicar, **con el usuario presente** (su regla: el OK es suyo). La suite entera, en verde; `flutter analyze` sin
+> errores en `lib/` y `test/`. Frase para retomar: "Publicamos la 6.4.0: leé 'Para retomar en otro chat' de
+> docs/CONTEXTO_v6.4.0_2026-11-06.md y vamos paso a paso."
 
 **Lo que lleva la 6.4.0** (respecto de la 6.3.3 instalada):
 
@@ -17,6 +20,9 @@
 | Entradas 4 y 5: la entrega según los permisos, "En caja" y "pagó: ya podés entregar", anular solo el jefe | `docs/CONTEXTO_OPERADORES_2026-11-02.md` |
 | Cambiar la fecha de un cobro lo saca de su caja abierta (ENRIQUE, MAXIMO) | `docs/CONTEXTO_v6.3.4_2026-11-07.md` |
 | El aviso entre PCs que llegaba por el socket ya no se tira: la otra PC se pone al día sola, también minimizada; el tótem de la web saluda al instante | `docs/SPEC_pulso_por_el_socket_2026-11-07.md` |
+| **La Encargada de barra** (8-nov): una casilla en OPERADORES; vende con su caja y además ve LAS CAJAS y anula o reimprime cualquier venta | `docs/CONTEXTO_BARRA_2026-11-02.md`, "La Encargada de barra" |
+| **El cierre de caja por sector** (8-nov): COBROS · BARRA · ENTRADAS arriba del cierre de hoy, en modo jefe | `docs/CONTEXTO_BARRA_2026-11-02.md`, "El cierre por sector" |
+| **Probar la impresora y su nombre** (8-nov): IMPRIMIR UNA PRUEBA sin vender nada; cada impresora con su nombre | `docs/CONTEXTO_BARRA_2026-11-02.md`, "Probar la impresora" |
 
 **La revisión de bugs del 8-nov (noche)**, sobre todo lo que cambió desde la 6.3.3 (`git diff v6.3.3 HEAD`), arregló tres cosas, con
 sus tests:
@@ -32,15 +38,13 @@ sus tests:
 También se arreglaron dos ventanas de prueba de `tool/` que no compilaban, y **el script del release ahora sube también el APK de la
 tablet** (`tool/publish_windows_release.ps1`): sin el APK en el release, la tablet no tiene qué bajar desde la pantalla del PIN.
 
-**Antes de publicar (con el usuario):**
-1. **Repetir la migración v78 sobre una copia de la base real, con la app cerrada**: la última prueba (7-nov) fue antes de que se
-   sumara `barra_recargos`. `flutter test tool/verificar_migracion_v78_test.dart`: tienen que aparecer `sillas_puerta`,
-   `barra_vales` y `barra_recargos`, vacías, todo lo demás igual y la base real con el mismo SHA-256.
-2. **La impresora (diez minutos, opcional antes de publicar):** el botón PAPEL de `tool/impresora_prueba.dart` con la TP-POS58, con y
-   sin rollo. Si no contesta, VENDER imprime como hasta hoy; no hace falta cambiar nada.
-3. **La prueba del aviso entre PCs contra la nube, solo con su OK:** `flutter test tool/pulso_prueba_test.dart --dart-define=nube=si`
-   (un canal aparte, `sync_pulse_prueba`; no toca ninguna tabla). Si no la quiere, se comprueba con los registros de la nube después de
-   instalar (sección 9 del SPEC).
+**Antes de publicar: hecho el 8-nov a la noche.**
+1. **La migración v78 sobre una copia de la base real, con la app cerrada:** aparecen `sillas_puerta`, `barra_vales` y
+   `barra_recargos`, vacías; todo lo demás igual (643 contratos, 4.907 pagos); la vuelta a la 6.3.1 igual; la base real con el mismo
+   SHA-256 (`8f3b1520…`). Si pasan días antes de publicar, repetirla.
+2. **PAPEL con la TP-POS58:** contesta. Con rollo `hay (0x12)`, sin rollo `noHay (0x72)`: el aviso de VENDER va a salir de verdad.
+3. **El aviso entre PCs contra la nube** (con su OK, "opcionales hay que hacer"): pasó; por el socket llega suelto y por REST
+   envuelto, y la app saca lo mismo de los dos (SPEC, 7.9). Queda mirar los registros con las PCs instaladas (SPEC, sección 9).
 
 **Publicar, paso a paso (cada paso con su OK):**
 1. Foto de la mora "antes de 6.4.0" (`supabase/mora_fotos.sql`).
@@ -55,13 +59,11 @@ tablet** (`tool/publish_windows_release.ps1`): sin el APK en el release, la tabl
 6. Instalar las tres PCs el mismo día (el operario antes de abrir la caja; el jefe después) y abrirlas: la revisión de la mora corre al
    arrancar. La tablet, con el APK.
 7. Foto "después de 6.4.0" y la comparación: tiene que dar vacía.
-8. Recién ahí: dar Entradas a alguien y crear operadores sin Cobros; la prueba de Entradas en dos PCs; el pulso con los registros de la
-   nube; la tablet con el TP-Link del salón.
+8. Recién ahí: dar Entradas a alguien, **tildar a la Encargada de barra** y crear operadores sin Cobros; la prueba de Entradas en dos
+   PCs; el pulso con los registros de la nube; la tablet con el TP-Link del salón; ponerle nombre a cada impresora (y una etiqueta).
 
-**Pendiente fuera del plan, para que el usuario decida:** el rol **"Encargada de barra"** y el **selector COBROS · BARRA · ENTRADAS en
-el cierre de caja**, decididos el 5-nov (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`, sección de la barra), no entraron en el plan de
-la barra ni están en las 26 partes. Hoy el jefe ve todas las cajas en BARRA → CAJAS (PC y iPhone), y cualquier cajera vende "Silla
-extra". También sigue pendiente la comparación de la oficina, sillas vendidas contra sumadas (`docs/pendientes/sillas-barra-vs-puerta.md`).
+**Sigue pendiente** la comparación de la oficina, vale por vale, entre las sillas vendidas en la barra y las sumadas en la puerta
+(`docs/pendientes/sillas-barra-vs-puerta.md`). El cierre por sector ya dice cuántas sillas vendió la barra.
 
 ---
 

@@ -76,9 +76,20 @@ PCs el 7-nov**; la foto "después" muestra solo a los 4 del simulacro, y en repo
   reposo", en Arquitectura.
 
 **La 6.3.0 lleva también, dormidos, operadores con permisos** (etapas 1 a 3 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`, `docs/CONTEXTO_OPERADORES_2026-11-02.md`)
-**y la barra, etapas 1 a 4.** Entradas 4 y 5 están hechas en la rama (8-nov); **no darle Entradas a nadie ni crear operadores sin Cobros
-hasta que las tres PCs tengan la 6.4.0** (la 6.3.x deja anular una entrega y deja cobrar a quien no tiene Cobros). Para mirarlo:
+**y la barra, etapas 1 a 4.** Entradas 4 y 5 están hechas en la rama (8-nov); **no darle Entradas a nadie, ni tildar a nadie como
+Encargada de barra, ni crear operadores sin Cobros hasta que las tres PCs tengan la 6.4.0** (la 6.3.x deja anular una entrega, deja
+cobrar a quien no tiene Cobros y lee a la encargada como "sin Barra"). Para mirarlo:
 `flutter run -d windows -t tool/operadores_prueba.dart`.
+
+**8-nov (noche), en la rama para la 6.4.0: la Encargada de barra, el cierre por sector y probar la impresora** (detalle en el
+CONTEXTO de la barra). La encargada es Barra con un 2 en `permisos_operador.barra` (sin SQL): vende con su caja y ve LAS CAJAS
+(`widgets/las_cajas_screen.dart`, la vista de CAJAS del jefe), con la llave **`mandaEnLaBarraProvider`** (jefe en modo jefe o
+encargada), que solo usa `cajas_de_la_fiesta.dart`; el catálogo y los precios siguen con `esRolJefeProvider`. En una tablet no se
+prende la central (`centralSePrendeAcaProvider`). El cierre de caja de hoy, en modo jefe, tiene **COBROS · BARRA · ENTRADAS**
+(`cierre_caja/services/sector_del_cierre.dart`): BARRA va por fiesta y solo mira; los movimientos, REGISTRAR RETIRO y los papeles son de
+COBROS. "La impresora de este equipo" tiene **IMPRIMIR UNA PRUEBA** (`ModeloTicket.dePrueba`: no es una venta, no se anota) y el
+**nombre de cada impresora**, guardado en el equipo. Ventanas de prueba: `tool/cierre_sector_prueba.dart` y `tool/barra_prueba_web.dart`
+(la de la barra, para el navegador; Romi 7777 es la encargada).
 
 **En curso desde el 2-nov (noche): la barra** (`docs/PLAN_BARRA_2026-11-03.md`, 12 etapas, aprobado; estado en `docs/CONTEXTO_BARRA_2026-11-02.md`,
 que empieza con **"Para retomar en otro chat"**). Las etapas 1 (la impresora), 2 (los datos) y 3 (las cuentas, `lib/features/barra/cuentas/`, y lo que dice cada papel,
@@ -162,11 +173,11 @@ equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro
 (`FotoDeLaBarra.para`: primero lo que se toma, después la cerveza sin marca, al final lo sin alcohol). **Una foto nueva lleva su renglón en
 `docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
 **Después de la barra, Entradas 4 a 6, y se publica todo en una**, **sin apuro de fecha** (6-nov: "cuando salga nomás, ahora hay más
-tiempo"), preguntando. **Al 8-nov (noche) está todo programado y probado (25 de 26, 96 %): falta solo publicar la 6.4.0, con el
-usuario.** Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de `docs/CONTEXTO_v6.4.0_2026-11-06.md`.
-**Antes, repetir `tool/verificar_migracion_v78_test.dart` con la app cerrada** (la última fue antes de `barra_recargos`). El aviso de
-papel (`DLE EOT 4`, botón PAPEL en `tool/impresora_prueba.dart`) falta probarlo con la TP-POS58: si no contesta, VENDER imprime como
-siempre.
+tiempo"), preguntando. **Al 8-nov (noche) está todo programado y probado (27 de 28, 96 %, con la encargada y el cierre por sector):
+falta solo publicar la 6.4.0, con el usuario.** Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de
+`docs/CONTEXTO_v6.4.0_2026-11-06.md`. Lo de antes de publicar quedó hecho el 8-nov: la migración v78 sobre una copia de la base real
+(con `barra_recargos`, SHA-256 igual; repetirla si pasan días), el aviso entre PCs contra la nube y **PAPEL con la TP-POS58: contesta**
+(con rollo "hay", sin rollo "no hay"), así que el aviso de papel de VENDER sale de verdad.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
@@ -291,6 +302,10 @@ uso: una sola cuenta, sin entrar desde abril). Los permisos siguen en la nube (`
 - **`destinoDeEntrada` decide la pantalla, y con `AppRoleKind.entradas` nunca arma el panel:** va a `EntradasHomeScreen`, sin camino a cobrar ni a editar
   (`test/modo_entradas_cerrado_test.dart`). `sesionCajaIdParaCobro` lo rechaza.
 - **De la caja a Entradas, la caja queda abierta y latiendo.** Entrar directo a Entradas no abre ni mira ninguna caja.
+- **Encargada de barra (6.4.0) no es una puerta más:** es Barra con un 2 en la misma columna (`PermisosEfectivos.encargadaBarra`;
+  `PermisoOperador.deEntrada` son las tres de siempre). Entra por BARRA (`AppRoleState.esEncargadaDeBarra`), y el registro anota
+  `encargada_barra`. **Una pantalla nueva que deje anular o ver todas las cajas de la barra pregunta por `mandaEnLaBarraProvider`**,
+  nunca por el rol a mano (`test/solo_modo_jefe_test.dart`).
 
 **Ojo:** hay un segundo concepto de "admin" totalmente independiente, por PIN
 local (`admin_provider.dart`, PIN maestro `2026`, TTL 3 min), que gatea Mi

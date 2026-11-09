@@ -61,6 +61,7 @@ las etapas de la barra (`docs/pendientes/sillas-barra-vs-puerta.md`).
 | 5. Reimprimir y anular | **Hecha el 7-nov** (VENTAS de la cajera, el freno de la copia, IMPRIMIR LO QUE FALTA, el ticket con precios, ANULAR con motivo, la tabla `barra_vales`) | Lo del jefe (reimprimir cualquiera, anular desde la PC) va en la 7 |
 | La central de la barra | **Cerrada el 7-nov** (abajo, "La central de la barra"): la notebook la prende desde CAJAS, las tablets la encuentran solas por UDP, lo de cada caja va a todas por la red del salón sin internet, "Todo subido" en VENDER, en la notebook y en Recepción; tests y el recorrido con el mouse de `tool/central_barra_prueba.dart` | Con aparatos de verdad, en la 9 y la 10: que la tablet la encuentre por el wifi del TP-Link y el `ws://` desde el APK |
 | El aviso de papel | **Cerrado el 8-nov (noche)** (abajo, "El aviso de papel"): la pregunta `DLE EOT 4`, el botón PAPEL en `tool/impresora_prueba.dart` y "no tiene papel" en VENDER antes de cada vale. **Probado con la TP-POS58 de verdad: contesta** (con rollo "hay", sin rollo "noHay") | Nada |
+| La Encargada de barra y el cierre por sector | **Hechos el 8-nov (noche)** (abajo): LAS CAJAS para la encargada, COBROS · BARRA · ENTRADAS en el cierre, y probar la impresora con su nombre | Tildar a la encargada recién con la 6.4.0 en las tres PCs |
 | 6. Cerrar la caja | **Hecha el 7-nov** (contar a ciegas, el cierre como el papel con el historial, la térmica, el PDF de 58 mm y la nota), con el papel impreso y mirado en una foto | Nada |
 | 7. El jefe en la PC | **Cerrada el 7-nov** (abajo): el recargo por fiesta (`barra_recargos`), la tarjeta BARRA, la fiesta primero, CATÁLOGO, PRECIOS con la lista en 58 mm, CAJAS con anular y reimprimir, la impresora de la PC; 26 pruebas de pantalla, las muestras, el recorrido con el mouse y la foto de la lista impresa | Nada. Subir una foto propia de un producto queda para después: necesita el depósito `barra` de Storage y su SQL |
 | 8. El jefe en el iPhone | **Cerrada el 7-nov** (abajo, "Etapa 8"): la web lee y escribe por `BarraNube` (también las fiestas), CAJAS se relee cada 30 s y al deslizar, sin impresora; `tool/barra_web_prueba.dart` y su test; recorrida en el navegador a 375 px | Nada. La web se publica con todo en la 6.4.0 |
@@ -104,6 +105,70 @@ PAPEL con el rollo: `hay (0x12)` en 385 ms (la primera, que se suscribe) y 94 ms
 con el rollo de vuelta, `hay` otra vez. O sea que **en VENDER el aviso "La impresora no tiene papel" va a salir de verdad** con esta
 impresora, y cada papel espera unos 0,1 s más por la pregunta. Falta solo mirar, la próxima vez que se imprima un vale, que la pregunta
 no deje nada raro en el papel.
+
+### La Encargada de barra (8-nov, noche; decidida el 5-nov)
+
+La chica a cargo de la barra esa noche. **En OPERADORES, una casilla debajo de Barra** ("Encargada de barra"): tildarla tilda Barra, y
+destildar Barra la saca. Entra con su PIN por el mismo botón BARRA y:
+- **vende con su caja** como las demás (VENDER, al tocar la fiesta);
+- en cada fiesta tiene además **LAS CAJAS** (`widgets/las_cajas_screen.dart`): la misma vista que CAJAS del jefe
+  (`CajasDeLaFiestaVista`), con los totales, una tarjeta por caja y el stock, y **anula o reimprime cualquier venta**, con motivo y a
+  su nombre;
+- **no ve** el catálogo, los precios, el recargo ni nada del panel o del modo jefe (`test/modo_barra_cerrado_test.dart`).
+
+Por dentro:
+- **Va en la misma columna `permisos_operador.barra`, con un 2** (1 es la cajera): sin SQL, la columna es `integer` sin CHECK.
+  `PermisosEfectivos.encargadaBarra`, `PermisoOperador.encargadaBarra` (no es una puerta: `PermisoOperador.deEntrada` son las tres de
+  siempre), y el registro anota `encargada_barra` en `permisos_operador_cambios`.
+- **La llave es `mandaEnLaBarraProvider`** (`app_role_provider.dart`): el jefe en modo jefe o la encargada. La usa solo
+  `cajas_de_la_fiesta.dart` (en el botón y en la segunda llave, `_frenaSinModoJefe`); el catálogo y los precios siguen con
+  `esRolJefeProvider` (`test/solo_modo_jefe_test.dart` vigila las dos cosas).
+- **En una tablet no aparece PRENDER LA CENTRAL** (`centralSePrendeAcaProvider`: ni en la web ni en Android). La central es la
+  notebook; dos en la misma red se pisarían.
+- **El cambio inicial lo sigue poniendo cada cajera** en su tablet, con el chanchito de VENDER. La encargada lo ve (la tarjeta de cada
+  caja dice "Cambio"), pero no lo pone desde otro equipo: la caja es una fila de la tablet, y escribirla desde la notebook chocaría con
+  lo que la tablet todavía no subió.
+- Las tarjetas de CAJAS (del jefe y de la encargada) suman **"Cambio"** y **"Sillas extra"**.
+- **Nadie se tilda como encargada hasta que las tres PCs tengan la 6.4.0**: una PC con la 6.3 lee el 2 como "sin Barra", y si el jefe
+  guarda desde ahí, lo pisa con 0.
+
+Probado: `test/encargada_de_barra_test.dart` (la cajera no ve LAS CAJAS; la encargada sí, sin la central; anula y reimprime una venta de
+otra caja a su nombre) y los tests de permisos y de OPERADORES. **Rotura a propósito:** con la llave del jefe en vez de
+`mandaEnLaBarraProvider` (en la vista y en la segunda llave), la encargada no puede anular y los tests dan rojo. **Recorrido en el
+navegador** (`tool/barra_prueba_web.dart`, la ventana de la barra para el navegador): Marta vende dos Fernet y una silla; Romi (7777,
+encargada) entra derecho, ve LAS CAJAS con la caja de Marta (cambio, sillas extra), anula esa venta con motivo, y el jefe la ve anulada.
+
+### El cierre por sector (8-nov, noche; decidido el 5-nov)
+
+En modo jefe, arriba del cierre de caja de hoy: **COBROS · BARRA · ENTRADAS** (`cierre_caja/services/sector_del_cierre.dart`,
+`widgets/sector_barra.dart`). La plata de cada sector no se mezcla.
+- **COBROS**: el cierre de siempre. Los movimientos, REGISTRAR RETIRO y los papeles son solo de acá.
+- **BARRA**: **por fiesta, no por día** (la próxima, o la de anoche hasta el día siguiente: `FiestasDelJefe`), con CAMBIAR DE FIESTA
+  (`ElegirFiestaDelJefe`, la misma ventana que BARRA, y la misma fiesta elegida). Una línea por caja con el cambio, el efectivo, la
+  transferencia, los mixtos, las anuladas, lo contado y la diferencia en color; la línea de totales; lo vendido, **las sillas extra
+  vendidas** (`ResumenDeCajas.sillas`) y cuántas siguen abiertas. **Solo para mirar.** En la PC la tabla va a todo el ancho; en el
+  celular se desliza de costado.
+- **ENTRADAS**: "Todavía no hay ventas de entradas" (las del 50 % se venden a mano). Queda el lugar.
+- Sin modo jefe, el operario ve su cierre como siempre, sin las pestañas.
+
+Probado: `test/cierre_por_sector_test.dart`, con **la pantalla de verdad** montada con datos inventados
+(`test/helpers/cierre_en_memoria.dart`). **Rotura a propósito:** REGISTRAR RETIRO también en BARRA dio rojo. **Recorrido en el
+navegador** con `tool/cierre_sector_prueba.dart`: COBROS, BARRA, cambiar de fiesta, ENTRADAS, volver y apagar el modo jefe, en la PC y
+en un celular. Encontró que la tabla se pasaba de ancho en la PC: arreglado.
+
+### Probar la impresora y su nombre (8-nov, noche; pedido al ver la maqueta)
+
+- **IMPRIMIR UNA PRUEBA**, en "La impresora de este equipo" (`elegir_impresora_screen.dart`): un papel corto sin logo
+  (`ModeloTicket.dePrueba`) que dice PRUEBA, el nombre de la impresora en grande, "TP-POS58 - ...CA:9D", la hora, los acentos y una
+  regla de 32 cifras. **No es una venta**: no toca ninguna caja ni `barra_vales`. Pasa por la pregunta del papel: sin rollo, lo dice.
+- **El nombre de cada impresora** ("Impresora caja 1"), con el lápiz: se guarda **en el equipo** (`ImpresoraRecordada.claveApodos`,
+  por id, y queda aunque se elija otra). Sale en la tarjeta, en la lista al elegir ("ya la usaste en este equipo") y en grande en la
+  prueba. En la lista, cada una muestra **el final de su código** (`finDelId`), el de la etiqueta de abajo: las cuatro se llaman igual.
+- **El ícono de la impresora también en el inicio de la barra**: se prueba antes de abrir la caja.
+- De paso se arregló que el cuadro del nombre se rompía al cerrarse (el texto se soltaba antes de que terminara la animación) y que la
+  búsqueda esperaba al Bluetooth para apagar la ruedita.
+- `test/probar_impresora_test.dart`. La prueba con la TP-POS58 de verdad queda para cuando el usuario la tenga al lado (mirar el papel,
+  con foto).
 
 ### Etapa 10: de punta a punta, con su celular y su router (8-nov, tarde)
 
