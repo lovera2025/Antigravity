@@ -411,7 +411,11 @@ class PuertaEnMemoria {
   /// Dónde escucha la central si se prende: solo en esta PC, en un puerto
   /// libre, sin página del celular. El arnés `tool/central_puerta_prueba.dart`
   /// la abre al wifi de verdad.
-  InternetAddress escuchaCentral = InternetAddress.loopbackIPv4;
+  ///
+  /// `late`: se lee recién si alguien prende la central. Así el mismo mundo
+  /// corre en el navegador (`tool/totem_salon_prueba.dart`), donde no hay
+  /// direcciones de red.
+  late InternetAddress escuchaCentral = InternetAddress.loopbackIPv4;
   int puertoCentral = 0;
   Future<List<String>> Function()? leerDirecciones;
   Directory? paginaDelCelular;
@@ -471,7 +475,7 @@ class PuertaEnMemoria {
           codigoVigenteCentralProvider
               .overrideWithValue((_) async => codigoCentral),
           codigoCentralProvider.overrideWithValue((_) async => '4821'),
-          escuchaCentralProvider.overrideWithValue(escuchaCentral),
+          escuchaCentralProvider.overrideWith((ref) => escuchaCentral),
           puertoCentralProvider.overrideWithValue(puertoCentral),
           direccionesDeEstaPcProvider.overrideWithValue(
             leerDirecciones ?? () async => direcciones,

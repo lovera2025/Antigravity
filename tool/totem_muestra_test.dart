@@ -1033,7 +1033,9 @@ void main() {
   testWidgets('el camino a varias mesas, en grande', (tester) async {
     final armado = ArmadosPredefinidos.normal2aPagina3();
     const panel = Size(560, 470);
-    final mesas = ['12', '5', '31', '47', '64', '78'];
+    // Las de las familias de `tool/totem_salon_prueba.dart`: cerca del Ingreso,
+    // en las esquinas y al fondo.
+    final mesas = ['12', '3', '26', '47', '31', '74'];
     final color = _masivo.colorAcento;
     await _sacar(
       tester,

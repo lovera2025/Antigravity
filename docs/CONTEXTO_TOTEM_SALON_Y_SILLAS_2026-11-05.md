@@ -6,6 +6,15 @@ demás (o antes), preguntando. Lleva **dos SQL nuevos, sin correr**.
 
 ## Para retomar en otro chat
 
+**El recorrido en vivo (8-nov, noche), hecho:** `tool/totem_salon_prueba.dart` monta Recepción con el tótem al lado, una fiesta
+masiva sorteada con el salón de la Normal y la hora de verdad, sin la base ni la nube (`flutter run -d windows -t
+tool/totem_salon_prueba.dart`, o compilado para la web y servido con la configuración `totem-salon-prueba` de
+`.claude/launch.json`). Se marcaron cuatro familias, en vertical y en horizontal: la espera con el salón entero, el nombre
+en grande, a los 4 s se acomoda en la pista, la mesa se enciende y se dibuja el camino en escuadra desde el Ingreso (mesas 3, 26,
+47 y 74). Sin errores. El camino a cada una de esas mesas, en grande: la muestra "el camino a varias mesas" de
+`tool/totem_muestra_test.dart`. La vista de Recepción se pone horizontal con la orientación guardada del evento
+(`TotemOrientationStore`).
+
 **Estado al 6-nov: las dos partes están hechas en la rama.** La Parte 1 (el tótem), el 5-nov (6 commits, de `3f4b821` a
 `8ddfd6e`); la Parte 2 (las sillas de la noche) y el reloj de los segundos en el celular, el 6-nov (5 commits, de `c2836fe`
 a `e0c8de3`), contada en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**. Falta la prueba de punta a punta (la hace Claude, en un sandbox), y los dos SQL
