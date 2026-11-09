@@ -9,8 +9,11 @@ import '../../../models/silla_puerta.dart';
 import '../central/pedidos_de_la_puerta.dart' show DatosSilla, kPorMandar;
 import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
+import '../providers/salon_de_la_puerta_provider.dart';
+import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
 import '../services/sillas_de_la_puerta.dart';
+import 'hoja_plano_puerta.dart';
 import 'hoja_sumar_silla.dart';
 import 'linea_sin_internet.dart';
 
@@ -37,6 +40,10 @@ class PanelPuerta extends ConsumerStatefulWidget {
   final VoidCallback? onExportar;
   final VoidCallback? onVaciar;
 
+  /// False: el plano que abre VER EN EL PLANO va quieto (los tests: con el
+  /// borde latiendo, la pantalla nunca queda quieta).
+  final bool animarElPlano;
+
   const PanelPuerta({
     super.key,
     required this.eventoId,
@@ -45,6 +52,7 @@ class PanelPuerta extends ConsumerStatefulWidget {
     this.onImportar,
     this.onExportar,
     this.onVaciar,
+    this.animarElPlano = true,
   });
 
   @override
@@ -111,8 +119,13 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
         decoration: tachado ? TextDecoration.lineThrough : null,
       );
 
+  /// El salón para VER EN EL PLANO (6.5.0). Se lee en [build] y lo usan las
+  /// tarjetas, que se arman después (la lista es perezosa).
+  SalonParaLaPuerta? _salon;
+
   @override
   Widget build(BuildContext context) {
+    _salon = ref.watch(salonDeLaPuertaProvider(widget.eventoId));
     final puerta = ref.watch(puertaDelEventoProvider(widget.eventoId));
     return puerta.when(
       data: _contenido,
@@ -331,7 +344,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
                       ),
               ],
               const SizedBox(width: 4),
-              _menuMas(particular),
+              _menuMas(p),
             ],
           );
         },
@@ -339,7 +352,10 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
     );
   }
 
-  Widget _menuMas(bool particular) {
+  Widget _menuMas(PuertaDelEvento p) {
+    final particular = !p.masivo;
+    final salon = _salon;
+    final verPlano = p.masivo && p.sorteado && salon != null;
     PopupMenuItem<String> item(String valor, IconData icono, String texto,
             {Color? color}) =>
         PopupMenuItem<String>(
@@ -358,6 +374,16 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (v) {
         switch (v) {
+          case 'plano':
+            if (salon != null) {
+              unawaited(abrirPlanoEntero(
+                context,
+                eventoId: widget.eventoId,
+                puerta: p,
+                salon: salon,
+                animar: widget.animarElPlano,
+              ));
+            }
           case 'actualizar':
             widget.onActualizar();
           case 'importar':
@@ -369,6 +395,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
         }
       },
       itemBuilder: (_) => [
+        if (verPlano) item('plano', Icons.map_outlined, 'Ver el plano entero'),
         item('actualizar', Icons.refresh_rounded, 'Actualizar la lista'),
         if (particular) ...[
           if (widget.onImportar != null)
@@ -546,6 +573,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
         ],
       ),
       ..._sillas(g, p),
+      ..._botonesDeLaFamilia(g, p),
       if (g.musica != null)
         Padding(
           padding: const EdgeInsets.only(top: 2),
@@ -627,16 +655,52 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           style: _letra(size: 12, color: _ambar),
         ),
       for (final s in g.movimientos) _movimiento(g, p, s),
-      if (g.contratoId != null && g.sillasPorMesa.tieneMesa)
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _botonSumar(g, p),
-          ),
-        ),
     ];
   }
+
+  /// Los botones de la familia: SUMAR SILLA y VER EN EL PLANO (6.5.0), juntos y
+  /// a la izquierda; en un celular angosto bajan de renglón solos.
+  List<Widget> _botonesDeLaFamilia(GrupoPuerta g, PuertaDelEvento p) {
+    final salon = _salon;
+    final sumar = g.contratoId != null && g.sillasPorMesa.tieneMesa;
+    final verPlano = salon != null && salon.tieneMesaDe(g);
+    if (!sumar && !verPlano) return const [];
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            if (sumar) _botonSumar(g, p),
+            if (verPlano) _botonPlano(g, p, salon),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Widget _botonPlano(GrupoPuerta g, PuertaDelEvento p, SalonParaLaPuerta salon) =>
+      OutlinedButton.icon(
+        key: ValueKey('ver_en_el_plano_${g.titular.id}'),
+        onPressed: () => abrirPlanoDeLaFamilia(
+          context,
+          eventoId: widget.eventoId,
+          puerta: p,
+          grupo: g,
+          salon: salon,
+          animar: widget.animarElPlano,
+        ),
+        icon: const Icon(Icons.map_outlined, size: 16),
+        label: Text('VER EN EL PLANO', style: _letra(size: 12, negrita: true)),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _texto,
+          minimumSize: const Size(0, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          side: BorderSide(color: _borde),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
 
   /// "+1 silla · mesa 12 · vale 2-17 · Pato 23:05" con QUITAR. Una quitada queda
   /// tachada, con quién y por qué: nada desaparece.

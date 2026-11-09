@@ -10,6 +10,8 @@ import '../../../models/totem_config.dart';
 import '../../totem/providers/tiempos_a_mano_provider.dart';
 import '../../totem/services/tiempos_a_mano.dart';
 import '../providers/recepcion_provider.dart';
+import '../providers/salon_de_la_puerta_provider.dart';
+import '../services/plano_de_la_puerta.dart';
 import '../repositories/invitados_repository.dart';
 import '../repositories/sillas_puerta_repository.dart';
 import '../services/puerta_del_evento.dart';
@@ -195,6 +197,7 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   ProviderSubscription<AsyncValue<PuertaDelEvento>>? _lista;
   ProviderSubscription<AsyncValue<List<Evento>>>? _evento;
   ProviderSubscription<TotemConfig>? _tiempos;
+  ProviderSubscription<SalonParaLaPuerta?>? _salon;
   StreamSubscription<List<PuestoConectado>>? _puestos;
 
   /// La fila de los pedidos del evento: la de la central si está prendida, y
@@ -293,6 +296,16 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       (_, cfg) => central.ponerTiempos(TiemposAMano.de(cfg)),
       fireImmediately: true,
     );
+    // El salón, para VER EN EL PLANO del celular (6.5.0): sin la foto ni el
+    // fondo, que están en internet.
+    _salon = ref.container.listen<SalonParaLaPuerta?>(
+      salonDeLaPuertaProvider(eventoId),
+      (_, salon) => central.ponerSalon(
+        salon?.armado.toJson(),
+        salon == null ? null : SalonParaLaPuerta.cfgParaElCelular(salon.cfg),
+      ),
+      fireImmediately: true,
+    );
     _puestos = central.cambiosDePuestos.listen((puestos) {
       if (identical(_central, central)) state = state._con(puestos: puestos);
     });
@@ -346,6 +359,8 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     _evento = null;
     _tiempos?.close();
     _tiempos = null;
+    _salon?.close();
+    _salon = null;
     await _puestos?.cancel();
     _puestos = null;
     await central?.cerrar();

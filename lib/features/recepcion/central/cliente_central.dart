@@ -6,7 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../../models/totem_config.dart';
+import '../../plano/modelo/armado_salon.dart';
 import '../../totem/services/tiempos_a_mano.dart';
+import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
 
@@ -183,6 +186,30 @@ class ClienteCentral extends ChangeNotifier {
       _sucia = false;
     }
     return _puertaArmada;
+  }
+
+  /// El salón para VER EN EL PLANO (6.5.0), como lo mandó la central. Null:
+  /// sin salón, o una central de antes que no lo manda.
+  SalonParaLaPuerta? _salon;
+  SalonParaLaPuerta? get salon => _salon;
+
+  void _recibirSalon(Map<String, dynamic> m) {
+    final armado = m['armado'];
+    final cfg = m['cfg'];
+    SalonParaLaPuerta? nuevo;
+    try {
+      if (armado is Map<String, dynamic> && cfg is Map<String, dynamic>) {
+        nuevo = SalonParaLaPuerta.de(
+          ArmadoSalon.fromJson(armado),
+          TotemConfig.fromJson(cfg),
+        );
+      }
+    } catch (e) {
+      // Un salón que no se entiende es como no tenerlo: el botón no aparece.
+      debugPrint('El salón que mandó la central no se entiende: $e');
+    }
+    _salon = nuevo;
+    if (!_cerrado) notifyListeners();
   }
 
   /// Lo que se agrega a "ADENTRO · 22:41" de [personaId]: que todavía no se
@@ -388,6 +415,8 @@ class ClienteCentral extends ChangeNotifier {
         _poner(EstadoDelPuesto.conectado);
       case 'respuesta':
         unawaited(_recibirRespuesta(json));
+      case 'salon':
+        _recibirSalon(json);
       case 'codigo':
       case 'espera':
       case 'nombre':

@@ -154,24 +154,43 @@ celular (por la central en memoria). Un test afirma que ningún armado de `Armar
 **Dónde vive.** `lib/features/recepcion/chat/` (nuevo). Solo en la memoria de la central, como `MarcasDeLaNoche`:
 si la notebook se reinicia, el chat se vacía. Sin tabla, sin nube: anda sin internet, por el wifi del salón.
 
-- `MensajeDePuesto {id, de, texto, hora}` con `toJson`/`fromJson` (texto hasta 300 letras).
-- `ChatDeLaNoche`: la lista de la central (tope 200), `agregar`, `todos`.
-- `ChatDelPuesto` (`ChangeNotifier`): lo que ve cada puesto, PC o celular: `mensajes`, `sinLeer`, `mandar(texto)`,
-  `leido()`. En la PC lo arma `CentralDeLaPuerta` (su nombre, `quienOperaEnEstaPc`); en el celular, `ClienteCentral`.
-- Por la red: celular → central `{'t': 'chat', 'id', 'texto'}` (`CentralPuerta._mensaje`, `central_puerta.dart:339`);
-  central → todos `{'t': 'chat', 'm': {...}}`, y al conectarse `{'t': 'chat', 'todos': [...]}` después de la lista.
-  El `id` lo pone quien manda: si llega dos veces, es el mismo.
+**A quién le hablo (pedido del usuario, 9-nov).** El chat no es una sola sala: al abrirlo se elige **a quién**, una
+recepcionista (la PC o un celular, por su nombre) o **Todos**. Cada conversación es aparte, con su número sin leer; la
+lista de puestos sale de la central (`CentralPuerta.puestos`, los conectados primero), y la PC figura con el nombre de
+quien la opera.
+
+- `MensajeDePuesto {id, de, para, texto, hora}` con `toJson`/`fromJson` (texto hasta 300 letras). `para` null es
+  Todos; si no, el nombre del puesto. Cada puesto ve los de Todos, los que le mandaron y los que mandó.
+- `ChatDeLaNoche`: la lista de la central (tope 200), `agregar`, `paraElPuesto(nombre)`.
+- `ChatDelPuesto` (`ChangeNotifier`): lo que ve cada puesto, PC o celular: `conversaciones` (Todos y una por puesto,
+  con `sinLeer` cada una), `mandar(texto, para:)`, `leida(para)`. En la PC lo arma `CentralDeLaPuerta` (su nombre,
+  `quienOperaEnEstaPc`); en el celular, `ClienteCentral`.
+- Por la red: celular → central `{'t': 'chat', 'id', 'para', 'texto'}` (`CentralPuerta._mensaje`,
+  `central_puerta.dart:339`); la central lo guarda y se lo manda **solo a quien le toca** (`{'t': 'chat', 'm': {...}}`
+  a todos si es para Todos; al destinatario y al que lo mandó si es para uno); al conectarse,
+  `{'t': 'chat', 'todos': [...]}` con lo que le toca a ese puesto, después de la lista. El `id` lo pone quien manda:
+  si llega dos veces, es el mismo. La lista de puestos ya viaja (`PuestoConectado`); el celular la recibe en un
+  mensaje `{'t': 'puestos', ...}` para armar la lista de a quién hablarle.
+
+**Camino, clic por clic.** En la PC: Recepción → arriba a la derecha, CHAT (al lado de CELULARES), con un número
+rojo si hay mensajes sin leer. En el celular: arriba, al lado del reloj de los segundos. Tocarlo abre **la lista de
+a quién hablarle**: Todos, y cada recepcionista con un punto verde si está conectada y su número sin leer; tocar una
+abre esa conversación, se escribe y ENVIAR; atrás vuelve a la lista. Cuando llega un mensaje y esa conversación no
+está abierta: una línea arriba de la lista de la puerta ("**Juli, a vos:** ¿alguien vio a GÓMEZ?" o "**Juli, a
+todos:** …"), el número en el botón, sonido en la PC y **vibración en el celular Android** (`navigator.vibrate`, por
+`dart:js_interop`; en iPhone no hay, queda la línea). Tocar la línea abre esa conversación.
 
 **Pantalla.** `BotonChat` con el número sin leer, en el `AppBar` de Recepción (PC, solo con la central prendida:
-`centralDeLaPuertaProvider`) y en la cabeza del celular (`PantallaPuesto._cabeza`). Abre `HojaChat`: los mensajes
-(los propios a la derecha, con quién y la hora), el campo y ENVIAR. **El aviso:** cuando llega un mensaje de otro
-puesto y la hoja no está abierta, una línea arriba del panel ("**Juli:** ¿la 12 está libre?", 6 s, igual que
-`_lineaAviso`) y un sonido (`SystemSound.play(SystemSoundType.alert)`, el de "pagó: ya podés entregar"; en la web del
-celular el sonido depende del navegador: la línea sale siempre).
+`centralDeLaPuertaProvider`) y en la cabeza del celular (`PantallaPuesto._cabeza`). Abre `HojaChat`: la lista de
+conversaciones y, adentro de una, los mensajes (los propios a la derecha, con quién y la hora), el campo y ENVIAR.
+Se adapta sola: en la PC, lista a la izquierda y conversación a la derecha; en el celular, una pantalla y la otra.
+**El aviso** sale igual que `_lineaAviso`, 6 s, con `SystemSound.play(SystemSoundType.alert)` en la PC (el de
+"pagó: ya podés entregar"; en la web del celular el sonido depende del navegador, por eso la vibración).
 
 **Tests:** `test/chat_de_la_noche_test.dart` (central y dos clientes en memoria, como `central_puerta_test.dart`:
-el mensaje llega a los demás y no al que lo mandó dos veces; el que se conecta tarde recibe la historia; el contador
-sin leer baja al abrir). Widget: la hoja y el aviso con `PuertaEnMemoria`.
+un mensaje a Todos llega a todos; uno a Juli llega a Juli y a quien lo mandó, y Pato no lo ve; el que llega dos veces
+es uno; el que se conecta tarde recibe lo suyo; el contador sin leer baja al abrir esa conversación y no otra).
+Widget: la hoja con la lista, una conversación y el aviso, con `PuertaEnMemoria`.
 
 ## Etapa 4 · Dónde van las mesas lejos (y la que se compra después)
 

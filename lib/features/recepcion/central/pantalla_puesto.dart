@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../totem/widgets/segundos_de_la_llegada.dart';
 import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
+import '../providers/salon_de_la_puerta_provider.dart';
+import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
 import '../widgets/panel_puerta.dart';
 import 'cliente_central.dart';
@@ -258,6 +260,10 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
             accionesPuertaProvider.overrideWith(
               (ref) => AccionesDelCelular(ref.watch(clienteCentralProvider)),
             ),
+            // VER EN EL PLANO (6.5.0): el salón que manda la central.
+            salonDeLaPuertaProvider.overrideWith(
+              (ref, _) => ref.watch(salonDelCelularProvider),
+            ),
           ],
           child: Theme(
             data: ThemeData(brightness: Brightness.dark, useMaterial3: true),
@@ -478,4 +484,13 @@ final puertaDelCelularProvider = Provider<AsyncValue<PuertaDelEvento>>((ref) {
   return puerta == null
       ? const AsyncValue.loading()
       : AsyncValue.data(puerta);
+});
+
+/// El salón del celular, que cambia cada vez que el cliente avisa.
+final salonDelCelularProvider = Provider<SalonParaLaPuerta?>((ref) {
+  final cliente = ref.watch(clienteCentralProvider);
+  void cambio() => ref.invalidateSelf();
+  cliente.addListener(cambio);
+  ref.onDispose(() => cliente.removeListener(cambio));
+  return cliente.salon;
 });

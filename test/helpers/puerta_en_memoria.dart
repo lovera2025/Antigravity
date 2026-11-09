@@ -425,6 +425,7 @@ class PuertaEnMemoria {
     String eventoId, {
     ThemeData? tema,
     Map<String, TotemConfig> config = const {},
+    bool animarElPlano = true,
   }) =>
       recepcion(
         Scaffold(
@@ -435,6 +436,7 @@ class PuertaEnMemoria {
             onImportar: () {},
             onExportar: () {},
             onVaciar: () => vaciar++,
+            animarElPlano: animarElPlano,
           ),
         ),
         tema: tema,

@@ -236,10 +236,24 @@ class PuertaDelEvento {
   /// familia junta, y buscar a un acompañante tiene que mostrar con quién va.
   List<GrupoPuerta> buscar(String consulta, {FiltroPuerta filtro = FiltroPuerta.todos}) {
     final c = ConsultaPuerta(consulta);
-    return [
+    final lista = [
       for (final g in grupos)
         if (g.personas.any((p) => c.coincide(p) && filtro.deja(p))) g,
     ];
+    // ADENTRO va por hora, el último que entró arriba (6.5.0): es a quien está
+    // saludando la tele. A la misma hora, como estaban.
+    if (filtro == FiltroPuerta.adentro) {
+      DateTime ultima(GrupoPuerta g) => g.personas
+          .map((p) => p.horaIngreso)
+          .whereType<DateTime>()
+          .fold(DateTime.fromMillisecondsSinceEpoch(0), (a, b) => b.isAfter(a) ? b : a);
+      final orden = {for (var i = 0; i < lista.length; i++) lista[i]: i};
+      lista.sort((a, b) {
+        final c = ultima(b).compareTo(ultima(a));
+        return c != 0 ? c : orden[a]!.compareTo(orden[b]!);
+      });
+    }
+    return lista;
   }
 
   /// Qué hace Enter con lo que está escrito.

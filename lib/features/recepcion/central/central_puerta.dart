@@ -166,6 +166,28 @@ class CentralPuerta {
     if (_puerta != null) _mandarLista();
   }
 
+  /// El salón de la fiesta para VER EN EL PLANO del celular (6.5.0): el armado
+  /// y la config del tótem sin foto ni fondo (`SalonParaLaPuerta`). Va en un
+  /// mensaje aparte de la lista, que se manda muchas veces por noche: el armado
+  /// pesa. Null: sin salón.
+  String? _salon;
+
+  /// Pone el salón y se lo manda a todos. [armado] y [cfg] ya en JSON (el de
+  /// `ArmadoSalon.toJson` y `SalonParaLaPuerta.cfgParaElCelular`); null: sin
+  /// salón.
+  void ponerSalon(Map<String, dynamic>? armado, Map<String, dynamic>? cfg) {
+    final nuevo = jsonEncode({
+      't': 'salon',
+      'armado': armado,
+      'cfg': armado == null ? null : cfg,
+    });
+    if (nuevo == _salon) return;
+    _salon = nuevo;
+    for (final c in _conexiones) {
+      c.mandar(nuevo);
+    }
+  }
+
   void _mandarLista() {
     _version++;
     _lista = jsonEncode({
@@ -288,6 +310,7 @@ class CentralPuerta {
     _conexiones.add(conexion);
     _anotarPuesto(conexion, conectado: true);
     conexion.mandar(_lista ?? jsonEncode({'t': 'esperando'}));
+    if (_salon != null) conexion.mandar(_salon!);
 
     ws.listen(
       (mensaje) => _mensaje(conexion, mensaje),

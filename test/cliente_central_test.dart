@@ -5,7 +5,10 @@ import 'dart:io';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/central/cliente_central.dart';
 import 'package:arguello_events/features/recepcion/central/pedidos_de_la_puerta.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
+import 'package:arguello_events/features/recepcion/services/plano_de_la_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/models/totem_config.dart';
 import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -110,6 +113,33 @@ void main() {
     }
     clientes.clear();
     await central.cerrar();
+  });
+
+  group('el salón, para VER EN EL PLANO (6.5.0)', () {
+    test('llega al conectarse y cuando cambia; sin salón, se va', () async {
+      final salon = ArmadosPredefinidos.normal2aPagina3();
+      const cfg = TotemConfig(
+        eventoId: eventoDeLaCentral,
+        imagenUrl: 'https://nube/foto.jpg',
+      );
+      central.ponerSalon(
+        salon.toJson(),
+        SalonParaLaPuerta.cfgParaElCelular(cfg),
+      );
+      final c = await conectado(_NavegadorEnMemoria());
+      await _hasta(() => c.salon != null, 'el salón');
+      expect(c.salon!.armado.mesas.length, salon.mesas.length);
+      expect(c.salon!.cfg.imagenUrl, isNull);
+
+      central.ponerSalon(null, null);
+      await _hasta(() => c.salon == null, 'sin salón');
+    });
+
+    test('una central que no manda salón deja el celular sin el botón',
+        () async {
+      final c = await conectado(_NavegadorEnMemoria());
+      expect(c.salon, isNull);
+    });
   });
 
   group('la primera vez', () {
