@@ -173,8 +173,9 @@ equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro
 (`FotoDeLaBarra.para`: primero lo que se toma, después la cerveza sin marca, al final lo sin alcohol). **Una foto nueva lleva su renglón en
 `docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
 **Después de la barra, Entradas 4 a 6, y se publica todo en una**, **sin apuro de fecha** (6-nov: "cuando salga nomás, ahora hay más
-tiempo"), preguntando. **Al 8-nov (noche) está todo programado y probado (27 de 28, 96 %, con la encargada y el cierre por sector):
-falta solo publicar la 6.4.0, con el usuario.** Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de
+tiempo"), preguntando. **La 6.4.0 se publicó el 9-nov a la madrugada, con el usuario** (la foto de la mora "antes de 6.4.0", los
+cuatro SQL con los conteos iguales, el release `v6.4.0` con el Setup y el APK, y la web): **falta que instale las tres PCs y la foto
+"después"**. Antes de eso estaba todo programado y probado (27 de 28, 96 %, con la encargada y el cierre por sector). Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de
 `docs/CONTEXTO_v6.4.0_2026-11-06.md`. Lo de antes de publicar quedó hecho el 8-nov: la migración v78 sobre una copia de la base real
 (con `barra_recargos`, SHA-256 igual; repetirla si pasan días), el aviso entre PCs contra la nube y **PAPEL con la TP-POS58: contesta**
 (con rollo "hay", sin rollo "no hay"), así que el aviso de papel de VENDER sale de verdad.

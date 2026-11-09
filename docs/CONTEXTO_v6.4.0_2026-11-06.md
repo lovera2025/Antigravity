@@ -46,6 +46,15 @@ tablet** (`tool/publish_windows_release.ps1`): sin el APK en el release, la tabl
 3. **El aviso entre PCs contra la nube** (con su OK, "opcionales hay que hacer"): pasó; por el socket llega suelto y por REST
    envuelto, y la app saca lo mismo de los dos (SPEC, 7.9). Queda mirar los registros con las PCs instaladas (SPEC, sección 9).
 
+**Publicada el 9-nov a la madrugada, con el usuario (pasos 1 a 5 hechos):** la foto "antes de 6.4.0" (643 alumnos, `5176b94e…`);
+los cuatro SQL como migraciones (`totem_config_llegada`, `sillas_puerta`, `barra_vales`, `barra_recargos`), con los conteos iguales
+antes y después y las tres tablas con su RLS, su policy y sus dos disparadores, fuera de Realtime; la versión `6.4.0+66` (commit
+`c4f1202`, tag `v6.4.0`); el release con `Setup Junior Eventos v6.4.0.exe` y `Junior Eventos v6.4.0.apk` (firmado), novedades "La barra,
+la entrega de entradas y las sillas de la noche"; y la web (`version.json` en 6.4.0+66). El instalador se frenó la primera vez por
+correrlo con `*>&1` (el aviso de Wasm del compilador sale por stderr y el script tiene `Stop`): **se corre con
+`powershell -File installer\build_installer.ps1`**, sin redirigir el stderr. **Faltan los pasos 6 y 7**: que el usuario instale las tres
+PCs y la foto "después".
+
 **Publicar, paso a paso (cada paso con su OK):**
 1. Foto de la mora "antes de 6.4.0" (`supabase/mora_fotos.sql`).
 2. **Los cuatro SQL, que solo agregan:** `20261105100000_totem_config_llegada.sql`, `20261105120000_sillas_puerta.sql`,
