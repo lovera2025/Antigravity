@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../totem/services/tiempos_a_mano.dart';
+import '../chat/mensaje_de_puesto.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
 import 'resolvedor_de_pedidos.dart';
@@ -166,6 +167,55 @@ class CentralPuerta {
     if (_puerta != null) _mandarLista();
   }
 
+  // ── El chat de la puerta (6.5.0) ─────────────────────────────────────────
+
+  /// Los mensajes de la noche, solo en la memoria de la central.
+  final _chat = ChatDeLaNoche();
+
+  /// Lo que le llega a la PC (los de todos y los que le mandan).
+  void Function(MensajeDePuesto)? alLlegarALaPc;
+
+  /// Cómo se llama la PC en el chat: quien la opera.
+  String _nombreDeLaPc = 'PC';
+
+  set nombreDeLaPc(String nombre) {
+    final n = nombre.trim();
+    if (n.isEmpty || n == _nombreDeLaPc) return;
+    _nombreDeLaPc = n;
+    _mandarPuestos();
+  }
+
+  /// Los puestos con los que se puede hablar: la PC y los celulares.
+  List<PuestoDelChat> get puestosDelChat => [
+        PuestoDelChat(id: kPuestoDeLaPc, nombre: _nombreDeLaPc, conectado: true),
+        for (final p in puestos)
+          PuestoDelChat(id: p.celular, nombre: p.nombre, conectado: p.conectado),
+      ];
+
+  /// Lo que manda la PC.
+  void mandarDesdeLaPc(MensajeDePuesto m) => _repartir(m);
+
+  /// Lo guarda y se lo da solo a quien le toca: a todos, o al otro puesto y a
+  /// quien lo mandó. Si llega dos veces, la segunda no hace nada.
+  void _repartir(MensajeDePuesto m) {
+    if (!_chat.agregar(m)) return;
+    final texto = jsonEncode({'t': 'chat', 'm': m.toJson()});
+    for (final c in _conexiones) {
+      if (m.loVe(c.celular)) c.mandar(texto);
+    }
+    if (m.loVe(kPuestoDeLaPc)) alLlegarALaPc?.call(m);
+  }
+
+  void _mandarPuestos() {
+    final texto = jsonEncode({
+      't': 'puestos',
+      'lista': [for (final p in puestosDelChat) p.toJson()],
+    });
+    for (final c in _conexiones) {
+      c.mandar(texto);
+    }
+  }
+
   /// El salón de la fiesta para VER EN EL PLANO del celular (6.5.0): el armado
   /// y la config del tótem sin foto ni fondo (`SalonParaLaPuerta`). Va en un
   /// mensaje aparte de la lista, que se manda muchas veces por noche: el armado
@@ -311,6 +361,12 @@ class CentralPuerta {
     _anotarPuesto(conexion, conectado: true);
     conexion.mandar(_lista ?? jsonEncode({'t': 'esperando'}));
     if (_salon != null) conexion.mandar(_salon!);
+    // El chat: lo que ya hubo esta noche para ese celular, y con quién hablar.
+    conexion.mandar(jsonEncode({
+      't': 'chat',
+      'todos': [for (final m in _chat.paraElPuesto(celular)) m.toJson()],
+    }));
+    _mandarPuestos();
 
     ws.listen(
       (mensaje) => _mensaje(conexion, mensaje),
@@ -348,6 +404,7 @@ class CentralPuerta {
       );
     }
     if (!_cambiosDePuestos.isClosed) _cambiosDePuestos.add(puestos);
+    _mandarPuestos();
   }
 
   void _mensaje(_Conexion conexion, dynamic mensaje) {
@@ -366,6 +423,19 @@ class CentralPuerta {
         if (antes != null && _conexiones.contains(conexion)) {
           _anotarPuesto(conexion, conectado: true);
         }
+      case 'chat':
+        final m = MensajeDePuesto.fromJson(json['m']);
+        if (m == null) return;
+        // De quién es lo dice la conexión, no el mensaje: nadie escribe con el
+        // nombre de otro.
+        _repartir(MensajeDePuesto(
+          id: m.id,
+          de: conexion.celular,
+          deNombre: conexion.nombre,
+          para: m.para,
+          texto: m.texto,
+          hora: _ahora(),
+        ));
       case 'pedido':
         final pedido = PedidoPuerta.fromJson(json);
         if (pedido == null) return;

@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../totem/widgets/segundos_de_la_llegada.dart';
 import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
+import '../chat/chat_provider.dart';
+import '../chat/hoja_chat.dart' show BotonChat;
 import '../providers/salon_de_la_puerta_provider.dart';
 import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
@@ -89,6 +91,8 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
                   style: _titulo(),
                 ),
               ),
+              // El chat de la puerta (6.5.0): con la lista, ya conectado una vez.
+              if (conLista) BotonChat(chat: _c.chat),
               // Los segundos de la llegada en la tele, como el reloj de la PC:
               // solo en un masivo, y si la PC los manda.
               if (conLista && _c.puerta!.masivo && _c.tiempos != null)
@@ -263,6 +267,10 @@ class _PantallaPuestoState extends State<PantallaPuesto> {
             // VER EN EL PLANO (6.5.0): el salón que manda la central.
             salonDeLaPuertaProvider.overrideWith(
               (ref, _) => ref.watch(salonDelCelularProvider),
+            ),
+            // El chat (6.5.0): el de este celular, por el wifi.
+            chatDeLaPuertaProvider.overrideWith(
+              (ref) => ref.watch(clienteCentralProvider).chat,
             ),
           ],
           child: Theme(

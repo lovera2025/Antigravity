@@ -9,6 +9,8 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' hide Border;
 import '../common/utils/cortes_pantalla.dart';
 import 'central/central_provider.dart';
+import 'chat/chat_provider.dart';
+import 'chat/hoja_chat.dart' show BotonChat;
 import 'providers/recepcion_provider.dart';
 import 'repositories/invitados_repository.dart';
 import 'services/puerta_del_evento.dart';
@@ -48,6 +50,7 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ancho = MediaQuery.sizeOf(context).width;
     final selectedEventId = ref.watch(selectedEventProvider);
+    final chat = kIsWeb ? null : ref.watch(chatDeLaPuertaProvider);
     // En el celular no hay vista del tótem: la paleta va arriba.
     final paletaArriba = CortesPantalla.esCelular(ancho) &&
         selectedEventId != null &&
@@ -79,6 +82,9 @@ class _RecepcionUnifiedScreenState extends ConsumerState<RecepcionUnifiedScreen>
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // El chat de la puerta (6.5.0): con la central prendida, para hablar
+          // con los celulares.
+          if (!kIsWeb && chat != null) BotonChat(chat: chat),
           // La central de la puerta corre en el programa, no en la web.
           if (!kIsWeb && selectedEventId != null)
             BotonCelulares(eventoId: selectedEventId),

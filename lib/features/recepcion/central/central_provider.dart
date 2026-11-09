@@ -9,6 +9,9 @@ import '../../../models/silla_puerta.dart';
 import '../../../models/totem_config.dart';
 import '../../totem/providers/tiempos_a_mano_provider.dart';
 import '../../totem/services/tiempos_a_mano.dart';
+import '../chat/chat_del_puesto.dart';
+import '../chat/mensaje_de_puesto.dart';
+import '../providers/acciones_puerta_provider.dart' show quienOperaEnEstaPc;
 import '../providers/recepcion_provider.dart';
 import '../providers/salon_de_la_puerta_provider.dart';
 import '../services/plano_de_la_puerta.dart';
@@ -198,6 +201,10 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
   ProviderSubscription<AsyncValue<List<Evento>>>? _evento;
   ProviderSubscription<TotemConfig>? _tiempos;
   ProviderSubscription<SalonParaLaPuerta?>? _salon;
+
+  /// El chat de la puerta de esta PC (6.5.0): existe con la central prendida.
+  ChatDelPuesto? _chat;
+  ChatDelPuesto? get chat => _chat;
   StreamSubscription<List<PuestoConectado>>? _puestos;
 
   /// La fila de los pedidos del evento: la de la central si está prendida, y
@@ -306,7 +313,20 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
       ),
       fireImmediately: true,
     );
+    // El chat de la puerta: la PC habla con la central sin red de por medio.
+    final nombre = quienOperaEnEstaPc(ref);
+    final chat = ChatDelPuesto(
+      yo: kPuestoDeLaPc,
+      nombre: nombre,
+      enviar: central.mandarDesdeLaPc,
+    );
+    central
+      ..nombreDeLaPc = nombre
+      ..alLlegarALaPc = chat.recibir;
+    chat.ponerPuestos(central.puestosDelChat);
+    _chat = chat;
     _puestos = central.cambiosDePuestos.listen((puestos) {
+      _chat?.ponerPuestos(central.puestosDelChat);
       if (identical(_central, central)) state = state._con(puestos: puestos);
     });
     final direcciones = await ref.read(direccionesDeEstaPcProvider)();
@@ -361,6 +381,9 @@ class CentralDeLaPuerta extends Notifier<EstadoCentral> {
     _tiempos = null;
     _salon?.close();
     _salon = null;
+    final chat = _chat;
+    _chat = null;
+    chat?.dispose();
     await _puestos?.cancel();
     _puestos = null;
     await central?.cerrar();

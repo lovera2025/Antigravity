@@ -7,6 +7,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../models/silla_puerta.dart';
 import '../central/pedidos_de_la_puerta.dart' show DatosSilla, kPorMandar;
+import '../chat/chat_del_puesto.dart';
+import '../chat/chat_provider.dart';
+import '../chat/hoja_chat.dart' show AvisoDelChat;
 import '../providers/acciones_puerta_provider.dart';
 import '../providers/recepcion_provider.dart';
 import '../providers/salon_de_la_puerta_provider.dart';
@@ -123,9 +126,13 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
   /// tarjetas, que se arman después (la lista es perezosa).
   SalonParaLaPuerta? _salon;
 
+  /// El chat de la puerta (6.5.0): su aviso va arriba de la lista.
+  ChatDelPuesto? _chat;
+
   @override
   Widget build(BuildContext context) {
     _salon = ref.watch(salonDeLaPuertaProvider(widget.eventoId));
+    _chat = ref.watch(chatDeLaPuertaProvider);
     final puerta = ref.watch(puertaDelEventoProvider(widget.eventoId));
     return puerta.when(
       data: _contenido,
@@ -158,6 +165,7 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
           ),
         if (p.masivo && !p.sorteado) _avisoSinSortear(),
         _barra(p),
+        if (_chat != null) AvisoDelChat(chat: _chat!),
         if (_aviso != null) _lineaAviso(_aviso!),
         _filtros(p),
         if (p.conteoDeLaNoche.texto != null) _conteoDeLaNoche(p),

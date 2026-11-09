@@ -9,6 +9,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../../models/totem_config.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../totem/services/tiempos_a_mano.dart';
+import '../chat/chat_del_puesto.dart';
+import '../chat/mensaje_de_puesto.dart';
 import '../services/plano_de_la_puerta.dart';
 import '../services/puerta_del_evento.dart';
 import 'pedidos_de_la_puerta.dart';
@@ -155,6 +157,7 @@ class ClienteCentral extends ChangeNotifier {
   /// muestra la PC.
   Future<void> ponerDatos({required String nombre, String? codigo}) async {
     _nombre = nombre.trim();
+    _chat?.nombre = _nombre!;
     await _guardado.guardar(_kNombre, _nombre);
     if (codigo != null && _esCodigo(codigo)) {
       _codigo = codigo.trim();
@@ -186,6 +189,32 @@ class ClienteCentral extends ChangeNotifier {
       _sucia = false;
     }
     return _puertaArmada;
+  }
+
+  /// El chat de la puerta de este celular (6.5.0). Se arma cuando ya se sabe
+  /// quién es (después de [iniciar]); los mensajes van por el wifi.
+  ChatDelPuesto? _chat;
+  ChatDelPuesto get chat => _chat ??= ChatDelPuesto(
+        yo: _celular,
+        nombre: _nombre ?? '',
+        enviar: (m) => _mandar({'t': 'chat', 'm': m.toJson()}),
+      )..puedeMandar = _estado == EstadoDelPuesto.conectado;
+
+  void _recibirChat(Map<String, dynamic> m) {
+    final uno = MensajeDePuesto.fromJson(m['m']);
+    if (uno != null) chat.recibir(uno);
+    final todos = m['todos'];
+    if (todos is List) {
+      chat.ponerHistoria([
+        for (final j in todos) ?MensajeDePuesto.fromJson(j),
+      ]);
+    }
+  }
+
+  void _recibirPuestos(Map<String, dynamic> m) {
+    final lista = m['lista'];
+    if (lista is! List) return;
+    chat.ponerPuestos([for (final j in lista) ?PuestoDelChat.fromJson(j)]);
   }
 
   /// El salón para VER EN EL PLANO (6.5.0), como lo mandó la central. Null:
@@ -279,6 +308,7 @@ class ClienteCentral extends ChangeNotifier {
     unawaited(_canal?.sink.close());
     unawaited(_avisos.close());
     unawaited(_hechos.close());
+    _chat?.dispose();
     super.dispose();
   }
 
@@ -286,6 +316,7 @@ class ClienteCentral extends ChangeNotifier {
 
   void _poner(EstadoDelPuesto nuevo) {
     _estado = nuevo;
+    _chat?.puedeMandar = nuevo == EstadoDelPuesto.conectado;
     _sucia = true;
     if (!_cerrado) notifyListeners();
   }
@@ -417,6 +448,10 @@ class ClienteCentral extends ChangeNotifier {
         unawaited(_recibirRespuesta(json));
       case 'salon':
         _recibirSalon(json);
+      case 'chat':
+        _recibirChat(json);
+      case 'puestos':
+        _recibirPuestos(json);
       case 'codigo':
       case 'espera':
       case 'nombre':
