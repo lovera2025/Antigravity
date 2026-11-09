@@ -43,6 +43,7 @@ import 'services/baja_temporal.dart';
 import 'services/calculadora_financiera.dart';
 import 'services/cronograma_cuotas_utils.dart';
 import 'services/cobro_mora_resolver.dart';
+import 'services/despues_de_guardar_cobro.dart';
 import 'services/filtro_mesas_sillas.dart';
 import 'services/filtro_mora_masivos.dart';
 import 'services/mora_congelada.dart';
@@ -7694,6 +7695,13 @@ class _DetalleEventoMasivoScreenState
                           // duplicado medio segundo después).
                           setModalState(() => confirmandoCobro = true);
 
+                          // El modal del cobro, para cerrar ese y no otro
+                          // (`cerrarRuta`), y la subida, que corre después de
+                          // cerrarlo: se toman ahora, mientras el modal existe.
+                          final rutaDelCobro = ModalRoute.of(context);
+                          final autoSync = ref.read(cajaAutoSyncServiceProvider);
+                          var cobroGuardado = false;
+
                           // Jefe con caja cerrada: avisar antes de abrir sesión automática.
                           final appRoleCobro = ref.read(appRoleProvider);
                           if (appRoleCobro.esJefe &&
@@ -8014,6 +8022,12 @@ class _DetalleEventoMasivoScreenState
                                   : 0,
                             };
 
+                            final double pctDescuentoConfirm =
+                                double.tryParse(
+                                  descStrPersist.replaceAll(',', '.').trim(),
+                                ) ??
+                                0;
+
                             // Todo el cobro, en una transacción. El recálculo de
                             // progreso corre adentro y termina reconciliando las
                             // mesas, así que la llamada suelta que había acá
@@ -8025,103 +8039,157 @@ class _DetalleEventoMasivoScreenState
                               sesionCajaId: sesionCajaIdCobro,
                             );
 
-                            await ref
-                                .read(cajaAutoSyncServiceProvider)
-                                .afterMassiveMutation(
-                                  startedAt: autoSyncCheckpoint,
-                                  isPayment: true,
-                                );
+                            // El cobro ya está guardado en esta PC: el modal se
+                            // cierra en este mismo instante (6.5.0). Antes
+                            // esperaba la subida a la nube y, con internet
+                            // lento, quedaba en GUARDANDO con el pago hecho; y
+                            // si algo de lo de después fallaba decía
+                            // "Reintentá", y reintentar cobraba dos veces.
+                            // `test/cobro_cierra_al_guardar_test.dart` falla si
+                            // vuelve una espera entre el guardado y el cierre.
+                            cobroGuardado = true;
+                            cerrarRuta(rutaDelCobro, resultado: true);
 
-                            final fresco = await repo.getContratoById(
-                              alumno.id,
+                            // Lo de después, cada paso por su lado: uno que
+                            // falla o tarda no frena a los otros ni dice que el
+                            // cobro no se guardó. Lo que falla queda escrito en
+                            // `cobros_despues_de_guardar.txt`.
+                            //
+                            // La subida, aparte y sin esperarla: es la que
+                            // depende de internet.
+                            unawaited(
+                              DespuesDeGuardarCobro.correr(
+                                alumno: alumno.nombreAlumno,
+                                pasos: [
+                                  PasoDespuesDeGuardar(
+                                    'la subida a la nube',
+                                    () => autoSync.afterMassiveMutation(
+                                      startedAt: autoSyncCheckpoint,
+                                      isPayment: true,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             );
 
-                            await prefsMedio.setString(
-                              'medio_pago_cobro_masivo',
-                              modoMedioPago,
+                            ContratoAlumno? fresco;
+                            await DespuesDeGuardarCobro.correr(
+                              alumno: alumno.nombreAlumno,
+                              pasos: [
+                                PasoDespuesDeGuardar(
+                                  'releer la ficha',
+                                  () async => fresco = await repo
+                                      .getContratoById(alumno.id),
+                                ),
+                                PasoDespuesDeGuardar(
+                                  'recordar el medio de pago',
+                                  () async {
+                                    await prefsMedio.setString(
+                                      'medio_pago_cobro_masivo',
+                                      modoMedioPago,
+                                    );
+                                    await prefsMedio.setString(
+                                      'cobro_masivo_pct_transfer_info',
+                                      prefsPctStr,
+                                    );
+                                    await prefsMedio.setString(
+                                      'cobro_masivo_transfer_cargo_modo',
+                                      transferCargoModo,
+                                    );
+                                    await prefsMedio.setString(
+                                      'cobro_masivo_transfer_cargo_monto',
+                                      prefsCargoMontoStr,
+                                    );
+                                    await prefsMedio.setBool(
+                                      'cobro_masivo_informar_pct_transfer',
+                                      informarPctTransferExterno,
+                                    );
+                                  },
+                                ),
+                                PasoDespuesDeGuardar('la ficha en pantalla', () {
+                                  if (!mounted) return;
+                                  _patchAlumnoLocal(
+                                    alumno.id,
+                                    fresco ?? alumnoPatchLocal,
+                                    moraCobradaExtra: moraEsteCobro,
+                                  );
+                                }),
+                                // PDF solo tras lote OK; mismos conceptos que se
+                                // persistieron.
+                                PasoDespuesDeGuardar('el recibo', () async {
+                                  if (!mounted) return;
+                                  await _imprimirReciboAlumno(
+                                    fresco ?? alumnoFresco,
+                                    montoPagado: montoIngresado,
+                                    saldoPendiente:
+                                        fresco?.saldoDeudor ?? saldoRestante,
+                                    conceptosPagados: conceptosFinales,
+                                    fechaManual: DateTime.now(),
+                                    // Es el cobro original, no una
+                                    // reimpresión: el recibo tiene que afirmar
+                                    // la mora de hoy.
+                                    esReimpresion: false,
+                                    moraPendientePost: moraRestantePost,
+                                    moraPendienteOrigenPost: moraOrigenPost,
+                                    porcentajeDescuentoLiquidacion:
+                                        pctDescuentoConfirm,
+                                    medioPago: modoMedioPago == 'Mixto'
+                                        ? 'Mixto'
+                                        : modoMedioPago,
+                                    montoEfectivoDetalle:
+                                        modoMedioPago == 'Mixto'
+                                        ? parteEfectivo
+                                        : null,
+                                    montoTransferenciaDetalle:
+                                        modoMedioPago == 'Mixto'
+                                        ? transferCanalMixtoPdf
+                                        : null,
+                                    informarCargoTransferenciaExterno:
+                                        informarPctTransferExterno,
+                                    porcentajeCargoTransferenciaExterno:
+                                        informarPctTransferExterno &&
+                                            transferCargoModo == 'pct' &&
+                                            pctCargoInforme > 0.01
+                                        ? pctCargoInforme
+                                        : null,
+                                    montoCargoTransferenciaInformado:
+                                        informarPctTransferExterno &&
+                                            transferCargoModo == 'pesos' &&
+                                            montoCargoInformeParsed > 0.01
+                                        ? montoCargoInformeParsed
+                                        : null,
+                                    skipDbRefresh: true,
+                                  );
+                                }),
+                                PasoDespuesDeGuardar('refrescar la lista', () {
+                                  if (!mounted) return;
+                                  ref
+                                      .read(
+                                        contratosMutationTickProvider.notifier,
+                                      )
+                                      .bump();
+                                }),
+                              ],
                             );
-                            await prefsMedio.setString(
-                              'cobro_masivo_pct_transfer_info',
-                              prefsPctStr,
-                            );
-                            await prefsMedio.setString(
-                              'cobro_masivo_transfer_cargo_modo',
-                              transferCargoModo,
-                            );
-                            await prefsMedio.setString(
-                              'cobro_masivo_transfer_cargo_monto',
-                              prefsCargoMontoStr,
-                            );
-                            await prefsMedio.setBool(
-                              'cobro_masivo_informar_pct_transfer',
-                              informarPctTransferExterno,
-                            );
-
-                            final double pctDescuentoConfirm =
-                                double.tryParse(
-                                  descStrPersist.replaceAll(',', '.').trim(),
-                                ) ??
-                                0;
-
-                            if (context.mounted) {
-                              Navigator.pop(context, true);
-                            }
-
-                            if (!mounted) return;
-
-                            final paraUi = fresco ?? alumnoPatchLocal;
-                            _patchAlumnoLocal(
-                              alumno.id,
-                              paraUi,
-                              moraCobradaExtra: moraEsteCobro,
-                            );
-
-                            // PDF solo tras lote OK; mismos conceptos que se persistieron.
-                            _imprimirReciboAlumno(
-                              fresco ?? alumnoFresco,
-                              montoPagado: montoIngresado,
-                              saldoPendiente:
-                                  fresco?.saldoDeudor ?? saldoRestante,
-                              conceptosPagados: conceptosFinales,
-                              fechaManual: DateTime.now(),
-                              // Es el cobro original, no una reimpresión: el
-                              // recibo tiene que afirmar la mora de hoy.
-                              esReimpresion: false,
-                              moraPendientePost: moraRestantePost,
-                              moraPendienteOrigenPost: moraOrigenPost,
-                              porcentajeDescuentoLiquidacion:
-                                  pctDescuentoConfirm,
-                              medioPago: modoMedioPago == 'Mixto'
-                                  ? 'Mixto'
-                                  : modoMedioPago,
-                              montoEfectivoDetalle: modoMedioPago == 'Mixto'
-                                  ? parteEfectivo
-                                  : null,
-                              montoTransferenciaDetalle:
-                                  modoMedioPago == 'Mixto'
-                                  ? transferCanalMixtoPdf
-                                  : null,
-                              informarCargoTransferenciaExterno:
-                                  informarPctTransferExterno,
-                              porcentajeCargoTransferenciaExterno:
-                                  informarPctTransferExterno &&
-                                      transferCargoModo == 'pct' &&
-                                      pctCargoInforme > 0.01
-                                  ? pctCargoInforme
-                                  : null,
-                              montoCargoTransferenciaInformado:
-                                  informarPctTransferExterno &&
-                                      transferCargoModo == 'pesos' &&
-                                      montoCargoInformeParsed > 0.01
-                                  ? montoCargoInformeParsed
-                                  : null,
-                              skipDbRefresh: true,
-                            );
-
-                            ref
-                                .read(contratosMutationTickProvider.notifier)
-                                .bump();
                           } catch (e) {
+                            if (cobroGuardado) {
+                              // No debería pasar: lo de después va por su lado.
+                              // Si pasa, el cobro está guardado: nunca decir
+                              // "Reintentá", que lo cobraría dos veces.
+                              unawaited(
+                                DespuesDeGuardarCobro.correr(
+                                  alumno: alumno.nombreAlumno,
+                                  pasos: [
+                                    PasoDespuesDeGuardar(
+                                      'después del guardado',
+                                      () => throw e,
+                                    ),
+                                  ],
+                                ),
+                              );
+                              cerrarRuta(rutaDelCobro, resultado: true);
+                              return;
+                            }
                             debugPrint('Error al registrar cobro masivo: $e');
                             if (context.mounted) {
                               setModalState(() => confirmandoCobro = false);
