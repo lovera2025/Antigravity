@@ -71,10 +71,10 @@ class CentralPuerta {
     ResolvedorDePedidos? resolvedor,
     this.paginaDelCelular,
     DateTime Function()? ahora,
-  })  : _codigo = codigo,
-        _resolvedor =
-            resolvedor ?? ResolvedorDePedidos(eventoId: eventoId, pc: pc),
-        _ahora = ahora ?? DateTime.now;
+  }) : _codigo = codigo,
+       _resolvedor =
+           resolvedor ?? ResolvedorDePedidos(eventoId: eventoId, pc: pc),
+       _ahora = ahora ?? DateTime.now;
 
   final String eventoId;
 
@@ -95,8 +95,7 @@ class CentralPuerta {
   final _conexiones = <_Conexion>{};
   final _puestos = <String, PuestoConectado>{};
   final _errores = <String, List<DateTime>>{};
-  final _cambiosDePuestos =
-      StreamController<List<PuestoConectado>>.broadcast();
+  final _cambiosDePuestos = StreamController<List<PuestoConectado>>.broadcast();
 
   String get codigo => _codigo;
   int? get puerto => _servidor?.port;
@@ -187,10 +186,10 @@ class CentralPuerta {
 
   /// Los puestos con los que se puede hablar: la PC y los celulares.
   List<PuestoDelChat> get puestosDelChat => [
-        PuestoDelChat(id: kPuestoDeLaPc, nombre: _nombreDeLaPc, conectado: true),
-        for (final p in puestos)
-          PuestoDelChat(id: p.celular, nombre: p.nombre, conectado: p.conectado),
-      ];
+    PuestoDelChat(id: kPuestoDeLaPc, nombre: _nombreDeLaPc, conectado: true),
+    for (final p in puestos)
+      PuestoDelChat(id: p.celular, nombre: p.nombre, conectado: p.conectado),
+  ];
 
   /// Lo que manda la PC.
   void mandarDesdeLaPc(MensajeDePuesto m) => _repartir(m);
@@ -206,12 +205,22 @@ class CentralPuerta {
     if (m.loVe(kPuestoDeLaPc)) alLlegarALaPc?.call(m);
   }
 
-  void _mandarPuestos() {
-    final texto = jsonEncode({
-      't': 'puestos',
-      'lista': [for (final p in puestosDelChat) p.toJson()],
-    });
+  /// La última lista de puestos que se mandó: el latido de cada celular avisa
+  /// los puestos cada 5 s, y la lista se manda solo si cambió.
+  String? _ultimosPuestos;
+
+  String _textoDePuestos() => jsonEncode({
+    't': 'puestos',
+    'lista': [for (final p in puestosDelChat) p.toJson()],
+  });
+
+  /// A [salvo] no: es el que recién llega, y a ese se le manda aparte.
+  void _mandarPuestos({_Conexion? salvo}) {
+    final texto = _textoDePuestos();
+    if (texto == _ultimosPuestos) return;
+    _ultimosPuestos = texto;
     for (final c in _conexiones) {
+      if (identical(c, salvo)) continue;
       c.mandar(texto);
     }
   }
@@ -358,15 +367,19 @@ class CentralPuerta {
     ws.pingInterval = const Duration(seconds: 5);
     final conexion = _Conexion(ws, celular, nombre);
     _conexiones.add(conexion);
-    _anotarPuesto(conexion, conectado: true);
+    _anotarPuesto(conexion, conectado: true, salvo: conexion);
     conexion.mandar(_lista ?? jsonEncode({'t': 'esperando'}));
     if (_salon != null) conexion.mandar(_salon!);
     // El chat: lo que ya hubo esta noche para ese celular, y con quién hablar.
-    conexion.mandar(jsonEncode({
-      't': 'chat',
-      'todos': [for (final m in _chat.paraElPuesto(celular)) m.toJson()],
-    }));
-    _mandarPuestos();
+    conexion.mandar(
+      jsonEncode({
+        't': 'chat',
+        'todos': [for (final m in _chat.paraElPuesto(celular)) m.toJson()],
+      }),
+    );
+    // Al que llega, siempre (aunque la lista no haya cambiado: vuelve el
+    // mismo celular).
+    conexion.mandar(_textoDePuestos());
 
     ws.listen(
       (mensaje) => _mensaje(conexion, mensaje),
@@ -381,7 +394,7 @@ class CentralPuerta {
     _anotarPuesto(conexion, conectado: false);
   }
 
-  void _anotarPuesto(_Conexion c, {required bool conectado}) {
+  void _anotarPuesto(_Conexion c, {required bool conectado, _Conexion? salvo}) {
     _puestos[c.celular] = PuestoConectado(
       celular: c.celular,
       nombre: c.nombre,
@@ -389,10 +402,10 @@ class CentralPuerta {
       ultimaVez: _ahora(),
       marcados: _resolvedor.marcas.cuantos(c.nombre),
     );
-    _avisarPuestos();
+    _avisarPuestos(salvo: salvo);
   }
 
-  void _avisarPuestos() {
+  void _avisarPuestos({_Conexion? salvo}) {
     for (final entrada in _puestos.entries.toList()) {
       final p = entrada.value;
       _puestos[entrada.key] = PuestoConectado(
@@ -404,7 +417,7 @@ class CentralPuerta {
       );
     }
     if (!_cambiosDePuestos.isClosed) _cambiosDePuestos.add(puestos);
-    _mandarPuestos();
+    _mandarPuestos(salvo: salvo);
   }
 
   void _mensaje(_Conexion conexion, dynamic mensaje) {
@@ -428,14 +441,16 @@ class CentralPuerta {
         if (m == null) return;
         // De quién es lo dice la conexión, no el mensaje: nadie escribe con el
         // nombre de otro.
-        _repartir(MensajeDePuesto(
-          id: m.id,
-          de: conexion.celular,
-          deNombre: conexion.nombre,
-          para: m.para,
-          texto: m.texto,
-          hora: _ahora(),
-        ));
+        _repartir(
+          MensajeDePuesto(
+            id: m.id,
+            de: conexion.celular,
+            deNombre: conexion.nombre,
+            para: m.para,
+            texto: m.texto,
+            hora: _ahora(),
+          ),
+        );
       case 'pedido':
         final pedido = PedidoPuerta.fromJson(json);
         if (pedido == null) return;

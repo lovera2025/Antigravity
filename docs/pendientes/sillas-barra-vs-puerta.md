@@ -32,3 +32,6 @@ miraría. Sin eso no hay con qué comparar.
 - Una línea en la oficina que cruce los vales: vendidos en la barra contra anotados en la puerta, cuando las dos notebooks suben.
   En vivo entre las dos notebooks, un paso más: no por ahora. **Esto sigue pendiente**: el número total ya está, el cruce vale por vale
   no.
+- **Las sillas sueltas también se cruzan** (6.5.0, 9-nov). La barra las vende como "Silla suelta" y las cuenta aparte
+  (`sillasSueltas`); la puerta las anota en `sillas_puerta` con la mesa en 0. El cruce tiene que comparar cada clase con la suya: una
+  "Silla suelta" vendida y anotada como silla de mesa (o al revés) es una diferencia para mirar.

@@ -7,9 +7,18 @@
 // Se abre http://127.0.0.1:8799/?c=4821. Con --dart-define=red=si escucha en
 // todas las conexiones de la PC (para un celular en el mismo wifi; Windows
 // pregunta por el cortafuegos) y escribe las direcciones.
+//
+// 6.5.0: la central manda el salón (VER EN EL PLANO, VER LA LLEGADA), y la PC
+// está en el chat como "Pato": a los 30 s escribe a todos, y contesta "recibido"
+// a quien le escriba. Dos celulares en el mismo navegador: uno en 127.0.0.1 y
+// otro en localhost (cada dirección guarda lo suyo).
 import 'dart:io';
 
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
+import 'package:arguello_events/features/recepcion/chat/mensaje_de_puesto.dart';
+import 'package:arguello_events/features/recepcion/services/plano_de_la_puerta.dart';
+import 'package:arguello_events/models/totem_config.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
@@ -181,6 +190,34 @@ void main() {
       en: _red ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
     );
     central.ponerPuerta(pc.lista());
+    // El salón, para VER EN EL PLANO del celular.
+    central.ponerSalon(
+      ArmadosPredefinidos.normal2aPagina3().toJson(),
+      SalonParaLaPuerta.cfgParaElCelular(TotemConfig.defaults(eventoMasivo)),
+    );
+    // La PC en el chat: escribe a todos y contesta a quien le escriba.
+    var n = 0;
+    MensajeDePuesto dePc(String texto, {String? para}) => MensajeDePuesto(
+          id: 'pc-${n++}',
+          de: kPuestoDeLaPc,
+          deNombre: 'Pato',
+          para: para,
+          texto: texto,
+          hora: DateTime.now(),
+        );
+    central
+      ..nombreDeLaPc = 'Pato'
+      ..alLlegarALaPc = (m) {
+        // ignore: avoid_print
+        print('CHAT a la PC: ${m.deNombre}${m.aTodos ? ' (a todos)' : ''}: '
+            '${m.texto}');
+        if (m.de != kPuestoDeLaPc && !m.aTodos) {
+          central.mandarDesdeLaPc(dePc('recibido: ${m.texto}', para: m.de));
+        }
+      };
+    Future<void>.delayed(const Duration(seconds: 30), () {
+      central.mandarDesdeLaPc(dePc('Arrancamos: la puerta abre en 5 minutos'));
+    });
     central.cambiosDePuestos.listen((p) {
       // ignore: avoid_print
       print('PUESTOS: ${[for (final x in p) '${x.nombre}${x.conectado ? '' : ' (sin señal)'} ${x.marcados}']}');

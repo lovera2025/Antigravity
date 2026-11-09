@@ -65,17 +65,18 @@ class CelularDePrueba {
     Duration hace = Duration.zero,
     DatosSilla? silla,
     TiemposAMano? tiempos,
-  }) =>
-      ws.add(jsonEncode(
-        PedidoPuerta(
-          id: id,
-          que: que,
-          personaId: persona,
-          hace: hace,
-          silla: silla,
-          tiempos: tiempos,
-        ).toJson(),
-      ));
+  }) => ws.add(
+    jsonEncode(
+      PedidoPuerta(
+        id: id,
+        que: que,
+        personaId: persona,
+        hace: hace,
+        silla: silla,
+        tiempos: tiempos,
+      ).toJson(),
+    ),
+  );
 
   Future<Map<String, dynamic>> pedirYEsperar(
     String id,
@@ -88,6 +89,9 @@ class CelularDePrueba {
     pedir(id, que, persona, hace: hace, silla: silla, tiempos: tiempos);
     return espera('respuesta', cumple: (m) => m['id'] == id);
   }
+
+  /// Cuántos mensajes de tipo [tipo] llegaron hasta ahora.
+  int cuantos(String tipo) => _llegados.where((m) => m['t'] == tipo).length;
 
   Future<int?> cerro() => _cerro.future.timeout(const Duration(seconds: 5));
 

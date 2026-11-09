@@ -42,16 +42,17 @@ class BotonChat extends StatelessWidget {
         listenable: chat,
         builder: (context, _) {
           final sinLeer = chat.sinLeer;
-          return Badge(
-            isLabelVisible: sinLeer > 0,
-            label: Text('$sinLeer', key: const ValueKey('chat_sin_leer')),
-            backgroundColor: Colors.redAccent,
-            offset: const Offset(-4, 4),
-            child: IconButton(
-              key: const ValueKey('boton_chat'),
-              tooltip: ayuda,
-              onPressed: () => abrirChat(context, chat),
-              icon: Icon(Icons.forum_outlined, color: color),
+          // El número va adentro del botón: afuera, encima, se comía el toque
+          // (visto en el sandbox, 9-nov).
+          return IconButton(
+            key: const ValueKey('boton_chat'),
+            tooltip: ayuda,
+            onPressed: () => abrirChat(context, chat),
+            icon: Badge(
+              isLabelVisible: sinLeer > 0,
+              label: Text('$sinLeer', key: const ValueKey('chat_sin_leer')),
+              backgroundColor: Colors.redAccent,
+              child: Icon(Icons.forum_outlined, color: color),
             ),
           );
         },

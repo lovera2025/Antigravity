@@ -180,6 +180,18 @@ cuatro SQL con los conteos iguales, el release `v6.4.0` con el Setup y el APK, y
 (con `barra_recargos`, SHA-256 igual; repetirla si pasan días), el aviso entre PCs contra la nube y **PAPEL con la TP-POS58: contesta**
 (con rollo "hay", sin rollo "no hay"), así que el aviso de papel de VENDER sale de verdad.
 
+**La 6.5.0, programada y probada el 9-nov, sin publicar** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
+chat"; el plan, `docs/PLAN_PUERTA_PLANO_Y_SORTEO_2026-11-09.md`). Sin SQL. **La versión sigue en `6.4.0+66`: el número nuevo se pone al
+publicar, cuando el usuario diga** ("Aún no publiques hasta que yo diga", 9-nov). Lleva:
+- **el modal del cobro se cierra apenas el pago queda guardado** (`DespuesDeGuardarCobro`, `cerrarRuta`): lo de después no lo frena ni
+  dice "Reintentá", y lo que falla queda en `cobros_despues_de_guardar.txt`;
+- **la recepcionista ve el plano** en su pantalla (VER EN EL PLANO, VER LA LLEGADA, "Ver el plano entero"; `SalonParaLaPuerta`), sin
+  que la tele se entere; el celular lo recibe de la notebook;
+- **sillas sueltas** (`sillas_puerta.mesa = 0`, ver "Las sillas de la noche");
+- **el chat de la puerta** (ver "Los celulares de la puerta");
+- **las mesas de más van lejos y el jefe elige dónde** (ver "El sorteo sobre el plano").
+**No crear "Silla suelta" en el catálogo ni usar SILLA SUELTA hasta que las PCs y las tablets tengan la 6.5.0.**
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
@@ -378,6 +390,14 @@ ninguna. Por eso lo que entra no depende de esa opción.
     `pegadas`).
   - `validar` lo revisa, y `preparar` dice que no entra si en ese salón no hay manera.
   - `test/sorteo_lejos_en_el_salon_test.dart` lo prueba con 60 sorteos por salón y modo.
+- **Las mesas de más van lejos, y el jefe elige dónde** (6.5.0). En el cartel del sorteo, una familia con más de
+  `kMesasJuntasEnElSorteo` (3) mesas viene tildada sola, con las de más separadas. **"Donde yo elija"**
+  (`DistanciaLejos.enLaZona`) abre `ElegirZonaDialog` encima del cartel para tocar mesas libres.
+  - Con zona, sus candidatas van primero (`_ordenLejos`), aunque estén fuera de "hasta qué mesa" (`fueraDelRango` en el motor).
+    Si la zona se llena o toca a la familia, va lo más lejos que se pueda, con aviso.
+  - La mesa comprada después del sorteo también se puede pedir lejos: `completar` la saltea y va como suelta.
+  - Con dos familias con lejos en un salón justo, `_minimaConLejos` busca unas mesas más en vez de decir que no entra.
+  - La zona va en el registro con la clave `_zonas` (`test/sorteo_zona_elegida_test.dart`).
 
 **El salón primero** (6.1.0, en curso; `docs/PLAN_SALON_PRIMERO_2026-10-16.md`): el jefe arma primero el espacio
 vacío y después pone las mesas con un botón.
@@ -564,6 +584,10 @@ del vale (`SillaPuerta`, tabla `sillas_puerta`). La recepcionista se queda el pa
 - **`sillas_puerta` está en `tablasDeLaPuerta`**: sin su SQL en la nube, "Lista para trabajar sin internet" no queda lista.
 - **En la oficina, con la fiesta ya sorteada, no se suman sillas extra al contrato** (`puedeSumarSillasAlContrato`; segunda llave
   `sillasExtraTrabadas` al guardar en Editar alumno); en modo jefe sí. Lo eligió el usuario el 6-nov: por fiesta sorteada, no por fecha.
+- **La silla suelta** (6.5.0): no va a una mesa ni cuenta para el tope. **Es una fila de `sillas_puerta` con la mesa en 0**
+  (`SillaPuerta.mesaSuelta`, `esSuelta`), sin columnas nuevas: ningún armado numera una mesa 0. La barra la vende como "Silla suelta"
+  (`esSillaSuelta`), una por vale; la puerta la anota con SILLA SUELTA, por el mismo candado (`DatosSilla.suelta`). Una PC con la 6.4.0
+  la muestra "fuera de sus mesas: revisar".
 
 **Escondido, el tótem se pausa.** `KioskLauncher.close()` manda `pausar` antes de esconder la ventana: suelta
 streams, canal y relectura. `launch`/`focus` mandan `reanudar`. Todo lo que se agregue al tótem y hable con la
@@ -624,6 +648,10 @@ que le piden por el wifi, con o sin internet. Recepción → CELULARES ("Sumar u
   internet: Edge sin ventana con `--host-resolver-rules` (ver el CONTEXTO de la 6.2.1).
 - **En la web de un celular, `TextField` suelta el teclado al apoyar el dedo afuera y eso se come el toque.** El
   buscador de `PanelPuerta` lo suelta al levantarlo (`onTapUpOutside`, solo en la web).
+- **El chat de la puerta** (6.5.0, `lib/features/recepcion/chat/`): **vive solo en la memoria de la notebook** (`ChatDeLaNoche`), sin
+  tabla ni nube, y se elige a quién (Todos o una recepcionista). **Quién lo mandó lo dice la conexión, no el mensaje**, y cada uno llega
+  solo a quien le toca. La lista de puestos se manda al que llega y a los demás solo si cambió: antes salía con cada latido, cada
+  5 s. **Un `Badge` va adentro del `IconButton`**: encima, se comía el toque.
 - **Las pruebas escuchan solo en esta PC** (`escuchaCentralProvider` en `loopbackIPv4`): en todas las conexiones,
   Windows abre el cartel del cortafuegos. Para mirar el celular en un navegador: `tool/central_prueba_test.dart`
   (central con un evento inventado); para probar con un celular de verdad: `tool/central_puerta_prueba.dart`

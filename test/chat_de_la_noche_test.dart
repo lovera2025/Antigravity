@@ -72,8 +72,10 @@ void main() {
     tearDown(() => chat.dispose());
 
     test('la lista: Todos y cada otro puesto, los conectados primero', () {
-      expect([for (final c in chat.conversaciones) c.nombre],
-          ['Todos', 'Pato', 'Vero']);
+      expect(
+        [for (final c in chat.conversaciones) c.nombre],
+        ['Todos', 'Pato', 'Vero'],
+      );
       expect(chat.conversaciones[2].conectado, isFalse);
     });
 
@@ -89,26 +91,28 @@ void main() {
       expect(chat.de(kPuestoDeLaPc), hasLength(1));
     });
 
-    test('lo que llega con la conversación cerrada avisa y queda sin leer',
-        () async {
-      final nuevos = <MensajeNuevo>[];
-      final sub = chat.nuevos.listen(nuevos.add);
-      chat.recibir(_msj('1', kPuestoDeLaPc, 'juli', '¿alguien vio a GÓMEZ?'));
-      chat.recibir(_msj('2', 'vero', null, 'Llegó el micro'));
-      await Future<void>.delayed(Duration.zero);
-      expect(nuevos.map((n) => n.quien), ['PC, a vos', 'vero, a todos']);
-      expect(nuevos.first.conversacion, kPuestoDeLaPc);
-      expect(chat.sinLeer, 2);
+    test(
+      'lo que llega con la conversación cerrada avisa y queda sin leer',
+      () async {
+        final nuevos = <MensajeNuevo>[];
+        final sub = chat.nuevos.listen(nuevos.add);
+        chat.recibir(_msj('1', kPuestoDeLaPc, 'juli', '¿alguien vio a GÓMEZ?'));
+        chat.recibir(_msj('2', 'vero', null, 'Llegó el micro'));
+        await Future<void>.delayed(Duration.zero);
+        expect(nuevos.map((n) => n.quien), ['PC, a vos', 'vero, a todos']);
+        expect(nuevos.first.conversacion, kPuestoDeLaPc);
+        expect(chat.sinLeer, 2);
 
-      chat.abrir(kPuestoDeLaPc);
-      expect(chat.sinLeer, 1, reason: 'solo se leyó esa conversación');
-      // Con la conversación abierta, lo que llega no avisa.
-      chat.recibir(_msj('3', kPuestoDeLaPc, 'juli', 'ya está'));
-      await Future<void>.delayed(Duration.zero);
-      expect(nuevos, hasLength(2));
-      expect(chat.sinLeer, 1);
-      await sub.cancel();
-    });
+        chat.abrir(kPuestoDeLaPc);
+        expect(chat.sinLeer, 1, reason: 'solo se leyó esa conversación');
+        // Con la conversación abierta, lo que llega no avisa.
+        chat.recibir(_msj('3', kPuestoDeLaPc, 'juli', 'ya está'));
+        await Future<void>.delayed(Duration.zero);
+        expect(nuevos, hasLength(2));
+        expect(chat.sinLeer, 1);
+        await sub.cancel();
+      },
+    );
 
     test('un puesto que se fue sigue con su nombre', () {
       chat.mandar('¿seguís?', 'vero');
@@ -168,8 +172,15 @@ void main() {
       llegaronALaPc.clear();
       final base = PcEnMemoria()
         ..filas['p1'] = filaDePrueba('p1', 'PÉREZ, JUAN');
-      central = CentralPuerta(eventoId: eventoDeLaCentral, codigo: _codigo, pc: base);
-      puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+      central = CentralPuerta(
+        eventoId: eventoDeLaCentral,
+        codigo: _codigo,
+        pc: base,
+      );
+      puerto = await central.arrancar(
+        desde: 0,
+        en: InternetAddress.loopbackIPv4,
+      );
       central.ponerPuerta(base.lista());
       // Como la PC (`CentralDeLaPuerta`): su chat va directo a la central.
       pc = ChatDelPuesto(
@@ -194,18 +205,22 @@ void main() {
       await central.cerrar();
     });
 
-    test('cada celular sabe con quién puede hablar: la PC y los otros',
-        () async {
-      final juli = await celular('Juli');
-      final vero = await celular('Vero');
-      await _hasta(
-        () => juli.chat.conversaciones.length == 3,
-        'los puestos en Juli',
-      );
-      expect([for (final c in juli.chat.conversaciones) c.nombre],
-          ['Todos', 'Pato', 'Vero']);
-      expect(vero.chat.conversaciones.map((c) => c.nombre), contains('Juli'));
-    });
+    test(
+      'cada celular sabe con quién puede hablar: la PC y los otros',
+      () async {
+        final juli = await celular('Juli');
+        final vero = await celular('Vero');
+        await _hasta(
+          () => juli.chat.conversaciones.length == 3,
+          'los puestos en Juli',
+        );
+        expect(
+          [for (final c in juli.chat.conversaciones) c.nombre],
+          ['Todos', 'Pato', 'Vero'],
+        );
+        expect(vero.chat.conversaciones.map((c) => c.nombre), contains('Juli'));
+      },
+    );
 
     test('a Todos le llega a todos; a una, solo a esa', () async {
       final juli = await celular('Juli');
@@ -221,10 +236,17 @@ void main() {
       await _hasta(() => vero.chat.de(idDe(juli)).isNotEmpty, 'Vero, a ella');
       expect(vero.chat.sinLeer, 2);
       await Future<void>.delayed(const Duration(milliseconds: 100));
-      expect(llegaronALaPc, hasLength(1), reason: 'la PC no ve lo de Juli a Vero');
+      expect(
+        llegaronALaPc,
+        hasLength(1),
+        reason: 'la PC no ve lo de Juli a Vero',
+      );
 
       pc.mandar('Juli, vení a la puerta', idDe(juli));
-      await _hasta(() => juli.chat.de(kPuestoDeLaPc).isNotEmpty, 'Juli, de la PC');
+      await _hasta(
+        () => juli.chat.de(kPuestoDeLaPc).isNotEmpty,
+        'Juli, de la PC',
+      );
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(vero.chat.de(kPuestoDeLaPc), isEmpty);
     });
@@ -241,15 +263,44 @@ void main() {
       );
       addTearDown(crudo.irse);
       await crudo.espera('puerta');
-      crudo.ws.add(jsonEncode({
-        't': 'chat',
-        'm': _msj('falso', kPuestoDeLaPc, null, 'soy la PC').toJson(),
-      }));
+      crudo.ws.add(
+        jsonEncode({
+          't': 'chat',
+          'm': _msj('falso', kPuestoDeLaPc, null, 'soy la PC').toJson(),
+        }),
+      );
       await _hasta(() => vero.chat.de(kTodos).isNotEmpty, 'llega');
       expect(vero.chat.de(kTodos).single.de, 'cel-juli');
       expect(vero.chat.de(kTodos).single.deNombre, 'Juli');
       expect(llegaronALaPc.single.deNombre, 'Juli');
     });
+
+    test(
+      'la lista de puestos se manda al llegar y cuando cambia, no en cada latido',
+      () async {
+        final crudo = await CelularDePrueba.conectar(
+          puerto,
+          codigo: _codigo,
+          id: 'cel-juli',
+          nombre: 'Juli',
+        );
+        addTearDown(crudo.irse);
+        await crudo.espera('puestos');
+        final alLlegar = crudo.cuantos('puestos');
+        for (var i = 0; i < 5; i++) {
+          crudo.ws.add(jsonEncode({'t': 'hola'}));
+          await crudo.espera('hola');
+        }
+        expect(
+          crudo.cuantos('puestos'),
+          alLlegar,
+          reason: 'el latido no la vuelve a mandar',
+        );
+
+        await celular('Vero');
+        await _hasta(() => crudo.cuantos('puestos') > alLlegar, 'llegó Vero');
+      },
+    );
 
     test('el que se conecta tarde recibe lo suyo, ya leído', () async {
       final juli = await celular('Juli');
@@ -278,57 +329,68 @@ void main() {
           PuestoDelChat(id: 'vero', nombre: 'Vero', conectado: true),
         ]);
       addTearDown(chat.dispose);
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
-        home: Scaffold(
-          appBar: AppBar(actions: [BotonChat(chat: chat)]),
-          body: Column(children: [AvisoDelChat(chat: chat)]),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
+          home: Scaffold(
+            appBar: AppBar(actions: [BotonChat(chat: chat)]),
+            body: Column(children: [AvisoDelChat(chat: chat)]),
+          ),
         ),
-      ));
+      );
       return chat;
     }
 
-    testWidgets('en el celular: el aviso, el número y la conversación de a uno',
-        (tester) async {
-      final chat = await montar(tester, const Size(390, 844));
-      chat.recibir(_msj('1', kPuestoDeLaPc, 'juli', '¿alguien vio a GÓMEZ?'));
-      await tester.pump();
-      expect(find.text('PC, a vos: '), findsNothing);
-      expect(find.textContaining('a vos'), findsOneWidget);
-      expect(find.byKey(const ValueKey('chat_sin_leer')), findsOneWidget);
+    testWidgets(
+      'en el celular: el aviso, el número y la conversación de a uno',
+      (tester) async {
+        final chat = await montar(tester, const Size(390, 844));
+        chat.recibir(_msj('1', kPuestoDeLaPc, 'juli', '¿alguien vio a GÓMEZ?'));
+        await tester.pump();
+        expect(find.text('PC, a vos: '), findsNothing);
+        expect(find.textContaining('a vos'), findsOneWidget);
+        expect(find.byKey(const ValueKey('chat_sin_leer')), findsOneWidget);
 
-      // Tocar el aviso abre esa conversación.
-      await tester.tap(find.byKey(const ValueKey('aviso_del_chat')));
-      await tester.pumpAndSettle();
-      expect(find.text('¿alguien vio a GÓMEZ?'), findsOneWidget);
-      expect(chat.sinLeer, 0);
+        // Tocar el aviso abre esa conversación.
+        await tester.tap(find.byKey(const ValueKey('aviso_del_chat')));
+        await tester.pumpAndSettle();
+        expect(find.text('¿alguien vio a GÓMEZ?'), findsOneWidget);
+        expect(chat.sinLeer, 0);
 
-      // Atrás, la lista de a quién hablarle.
-      await tester.tap(find.byKey(const ValueKey('volver_a_la_lista')));
-      await tester.pumpAndSettle();
-      expect(find.text(HojaChat.titulo), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('conversacion_vero')));
-      await tester.pumpAndSettle();
-      FilledButton enviar() => tester
-          .widget<FilledButton>(find.byKey(const ValueKey('enviar_chat')));
-      expect(enviar().onPressed, isNull, reason: 'vacío no se manda');
-      await tester.enterText(find.byKey(const ValueKey('texto_del_chat')), 'voy');
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('enviar_chat')));
-      await tester.pump();
-      expect(chat.de('vero').single.texto, 'voy');
-      expect(find.text('voy'), findsOneWidget);
-    });
+        // Atrás, la lista de a quién hablarle.
+        await tester.tap(find.byKey(const ValueKey('volver_a_la_lista')));
+        await tester.pumpAndSettle();
+        expect(find.text(HojaChat.titulo), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('conversacion_vero')));
+        await tester.pumpAndSettle();
+        FilledButton enviar() => tester.widget<FilledButton>(
+          find.byKey(const ValueKey('enviar_chat')),
+        );
+        expect(enviar().onPressed, isNull, reason: 'vacío no se manda');
+        await tester.enterText(
+          find.byKey(const ValueKey('texto_del_chat')),
+          'voy',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('enviar_chat')));
+        await tester.pump();
+        expect(chat.de('vero').single.texto, 'voy');
+        expect(find.text('voy'), findsOneWidget);
+      },
+    );
 
-    testWidgets('en la PC: la lista y la conversación lado a lado',
-        (tester) async {
+    testWidgets('en la PC: la lista y la conversación lado a lado', (
+      tester,
+    ) async {
       final chat = await montar(tester, const Size(1366, 900));
       await tester.tap(find.byKey(const ValueKey('boton_chat')));
       await tester.pumpAndSettle();
       expect(find.text(HojaChat.titulo), findsOneWidget);
       expect(find.text('Lo ven todos los puestos'), findsOneWidget);
       expect(chat.abierta, kTodos);
-      await tester.tap(find.byKey(const ValueKey('conversacion_${kPuestoDeLaPc}')));
+      await tester.tap(
+        find.byKey(const ValueKey('conversacion_$kPuestoDeLaPc')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Escribile a Pato.'), findsOneWidget);
     });
