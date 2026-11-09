@@ -167,8 +167,8 @@ en un celular. Encontró que la tabla se pasaba de ancho en la PC: arreglado.
 - **El ícono de la impresora también en el inicio de la barra**: se prueba antes de abrir la caja.
 - De paso se arregló que el cuadro del nombre se rompía al cerrarse (el texto se soltaba antes de que terminara la animación) y que la
   búsqueda esperaba al Bluetooth para apagar la ruedita.
-- `test/probar_impresora_test.dart`. La prueba con la TP-POS58 de verdad queda para cuando el usuario la tenga al lado (mirar el papel,
-  con foto).
+- `test/probar_impresora_test.dart`. **Probado con la TP-POS58 de verdad el 9-nov**, en la PC de la casa ya con la 6.4.0 instalada
+  (BARRA del jefe, ícono de la impresora, IMPRIMIR UNA PRUEBA): "listo, perfecto anda".
 
 ### Etapa 10: de punta a punta, con su celular y su router (8-nov, tarde)
 
