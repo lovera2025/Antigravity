@@ -11,6 +11,7 @@ import '../modelo/armado_salon.dart';
 import '../modelo/armados_predefinidos.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../modelo/reserva_de_mesa.dart';
 import 'armar_a_medida.dart';
 import 'divisiones.dart';
 import 'editar_armado.dart';
@@ -231,6 +232,13 @@ class PlanoDeLaFiesta {
       armado: armado,
       ocupantes: ocupantes(alumnos, repartos),
       libres: config.libres.keys.toSet(),
+      // La que se reservó para alguien ("Reservada para Profes") lleva ese
+      // nombre en el plano; la que no se usa ("Columna") sigue tachada.
+      reservadas: {
+        for (final e in config.libres.entries)
+          if (ReservaDeMesa.deMotivo(e.value.motivo) case final r?)
+            e.key: r.para,
+      },
       fijadas: fijadas,
       ordenDivisiones:
           config.ordenDivisiones.isEmpty ? null : config.ordenDivisiones,

@@ -374,6 +374,34 @@ class CambiosDeMesa {
     );
   }
 
+  /// Cambia por qué está libre una mesa que ya lo está: para quién se reservó
+  /// y quiénes se sientan (`ReservaDeMesa`, 6.5.0), o el motivo de que no se
+  /// use. Sigue libre: el sorteo no la da.
+  static CambioDeConfig cambiarMotivoDeLibre({
+    required ConfigPlano config,
+    required int mesa,
+    required String? motivo,
+    required String? por,
+    required DateTime ahora,
+  }) {
+    if (!config.libres.containsKey(mesa)) {
+      return CambioDeConfig.noSePuede('La mesa $mesa ya no está libre.');
+    }
+    final texto = motivo?.trim() ?? '';
+    return CambioDeConfig.ok(
+      config.copyWith(libres: {
+        for (final e in config.libres.entries)
+          if (e.key != mesa) e.key: e.value,
+        mesa: MesaLibre(
+          motivo: texto.isEmpty ? null : texto,
+          por: por,
+          cuando: ahora,
+        ),
+      }),
+      [mesa],
+    );
+  }
+
   /// La mesa vuelve a entrar en el sorteo.
   static CambioDeConfig volverAUsar(ConfigPlano config, int mesa) {
     if (!config.libres.containsKey(mesa)) {

@@ -543,9 +543,12 @@ class PintorPlano extends CustomPainter {
     // Las marcas salen del dato y no del estado: una mesa fijada que ya tiene
     // familia sigue mostrando el candado, y una libre que quedó ocupada, la
     // raya.
+    // La que se dejó libre para alguien ("Profes", 6.5.0) lleva ese nombre y
+    // no la raya de "no se usa".
+    final reservada = info.nombreDeReservada;
     if (nivel.adornos) {
       if (m.pasto) _marcaPasto(canvas, c, r);
-      if (info.libre) _marcaLibre(canvas, c, r);
+      if (info.libre && reservada == null) _marcaLibre(canvas, c, r);
       if (info.fijadaPara != null) _candado(canvas, c, r);
     }
 
@@ -558,6 +561,7 @@ class PintorPlano extends CustomPainter {
     final franja = franjaApellido(c, r, caja, conSillas: conSillas)
         .shift(Offset(0, marca != null && !conSillas ? 4 : 0));
     final apellido = familia?.apellido ??
+        (nivel.apellidos ? reservada?.toUpperCase() : null) ??
         (nivel.adornos && nivel.apellidos
             ? marca?.apellidoQueFalta(yaLoLleva: false)
             : null);

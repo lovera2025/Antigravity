@@ -10,6 +10,7 @@ import '../../../models/plano_evento.dart';
 import '../../plano/estilos/estilo_plano.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../plano/modelo/estado_plano.dart';
+import '../../plano/modelo/reserva_de_mesa.dart';
 import '../../plano/services/medir_salon.dart';
 import '../../plano/services/familias_en_el_plano.dart';
 import '../../plano/services/plano_de_la_fiesta.dart';
@@ -259,6 +260,16 @@ class PlanoPdf {
     final divisiones = PlanoPapel.divisiones(estado);
     final marcas = familias ? plano.familias : null;
     final hojas = armado.hojas;
+    // Las mesas reservadas para quien no es alumno (los profes, 6.5.0), con
+    // quiénes se sientan: debajo de una mesa entra el nombre, no ocho personas,
+    // así que la lista va al pie de su hoja.
+    final reservas = <({int mesa, ReservaDeMesa reserva})>[
+      for (final e in plano.config.libres.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key)))
+        if (estado.info(e.key).nombreDeReservada != null)
+          if (ReservaDeMesa.deMotivo(e.value.motivo) case final r?)
+            (mesa: e.key, reserva: r),
+    ];
     final ancho = _formato.width - 2 * PlanillaTema.margen;
 
     pw.Widget encabezado(HojaPlano hoja, RectPlano? marco) {
@@ -300,6 +311,7 @@ class PlanoPdf {
         bool fijada = false,
         bool pasto = false,
         bool conflicto = false,
+        bool reservada = false,
         int sillasExtra = 0,
       }) =>
           pw.CustomPaint(
@@ -316,6 +328,7 @@ class PlanoPdf {
               division: null,
               conflicto: conflicto,
               libre: libre,
+              reservada: reservada,
               fijada: fijada,
               pasto: pasto,
               sillasExtra: sillasExtra,
@@ -360,8 +373,17 @@ class PlanoPdf {
                     ),
                   if (resumen.pasto > 0)
                     item(mesa(pasto: true), 'Pasto: avisar a la familia'),
-                  if (resumen.libres > 0)
+                  // Las que no se usan y, aparte, las que son para alguien
+                  // que no es alumno (los profes): esas llevan su nombre.
+                  if (estado.mesas.any(
+                    (i) => i.libre && i.nombreDeReservada == null,
+                  ))
                     item(mesa(libre: true), 'Libre: no se usa'),
+                  if (estado.mesas.any((i) => i.nombreDeReservada != null))
+                    item(
+                      mesa(libre: true, reservada: true),
+                      'Reservada: no es de un alumno',
+                    ),
                   if (estado.mesas.any((i) => i.fijadaPara != null))
                     item(mesa(fijada: true), 'Fijada antes del sorteo'),
                   if (resumen.sillasExtra > 0)
@@ -405,6 +427,14 @@ class PlanoPdf {
                       'planilla del sorteo.',
                       style: letra,
                     ),
+                  // Quiénes se sientan en cada reservada de esta hoja.
+                  for (final r in reservas)
+                    if (armado.mesa(r.mesa)?.hoja == hojas[numero - 1].id)
+                      pw.Text(
+                        'Mesa ${r.mesa} · ${r.reserva.para.toUpperCase()}'
+                        '${r.reserva.quienes.isEmpty ? '' : ': ${r.reserva.quienes.join(' · ')}'}',
+                        style: tema.estilo(size: 7.5, negrita: true),
+                      ),
                 ],
               ),
             ),
@@ -637,6 +667,10 @@ class PlanoPdf {
     required int sillasExtra,
     required bool conSillas,
     double? grosor,
+
+    /// Libre para alguien ("Profes"): punteada como una libre, sin la raya de
+    /// "no se usa". El nombre lo escribe quien llama.
+    bool reservada = false,
   }) {
     // Los trazos acompañan al tamaño de la mesa, sin pasarse.
     final k = grosor ?? (r / 12).clamp(0.55, 1.3);
@@ -731,7 +765,7 @@ class PlanoPdf {
         ..strokePath();
     }
 
-    if (libre) {
+    if (libre && !reservada) {
       g
         ..setStrokeColor(tinta.trazoVacia)
         ..setLineWidth(0.8 * k)
@@ -975,6 +1009,7 @@ class _DibujoPlano extends pw.Widget {
         division: info.division,
         conflicto: info.estado == EstadoMesa.conflicto,
         libre: info.libre,
+        reservada: info.nombreDeReservada != null,
         fijada: info.fijadaPara != null,
         pasto: m.pasto,
         sillasExtra: info.sillasExtra,
@@ -1001,11 +1036,13 @@ class _DibujoPlano extends pw.Widget {
       // El apellido de esta mesa: el de la principal o, en una familia separada, el
       // de cualquiera de sus mesas. A este tamaño puede no entrar ninguno.
       final conApellido = llevaApellido(m.numero);
+      // Y la que se dejó libre para alguien ("Profes") lleva ese nombre.
       final apellidoDeLaMesa = tamApellido == 0
           ? null
           : conApellido
               ? (info.ocupante ?? info.fijadaPara!).apellido
-              : marca?.apellidoQueFalta(yaLoLleva: false);
+              : info.nombreDeReservada?.toUpperCase() ??
+                  marca?.apellidoQueFalta(yaLoLleva: false);
       if (marca != null) {
         if (marca.separada) {
           g

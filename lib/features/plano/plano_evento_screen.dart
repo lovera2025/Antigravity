@@ -28,6 +28,7 @@ import '../recepcion/services/puerta_al_dia.dart';
 import 'estilos/estilo_plano.dart';
 import 'modelo/armado_salon.dart';
 import 'modelo/medidas_salon.dart';
+import 'modelo/reserva_de_mesa.dart';
 import 'repositories/mesas_movimientos_repository.dart';
 import 'repositories/planos_evento_repository.dart';
 import 'repositories/predios_repository.dart';
@@ -44,6 +45,7 @@ import 'widgets/elegir_plano_dialog.dart';
 import 'widgets/imprimir_plano_dialog.dart';
 import 'widgets/nombre_predio_dialog.dart';
 import 'widgets/plano_evento_cuerpo.dart';
+import 'widgets/reserva_de_mesa_dialog.dart';
 
 /// El plano del salón de una fiesta: el armado con sus medidas, las familias
 /// en sus mesas y lo que hay que revisar.
@@ -919,18 +921,46 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       await _avisar('No se puede dejar libre', previa.problema!);
       return;
     }
-    final motivo = await confirmarCambioDeMesa(
-      context: context,
-      titulo: 'Dejar libre la mesa $mesa',
-      renglones: const ['El sorteo no la va a dar a ninguna familia.'],
-      motivoObligatorio: false,
-      sugerencias: motivosParaLibre,
-      textoConfirmar: 'DEJAR LIBRE',
-    );
+    // Porque no se usa, o porque es para alguien que no es alumno (los
+    // profes), con quiénes se sientan (`ReservaDeMesa`, 6.5.0).
+    final motivo = await pedirReservaDeMesa(context: context, mesa: mesa);
     if (motivo == null || !mounted) return;
+    final reserva = ReservaDeMesa.deMotivo(motivo);
     await _cambiarConfig(
       (p, alumnos) => calcular(p, alumnos, motivo),
-      hecho: (_) => 'La mesa $mesa quedó libre.',
+      hecho: (_) => reserva == null
+          ? 'La mesa $mesa quedó libre.'
+          : 'La mesa $mesa quedó reservada para ${reserva.para}.',
+    );
+  }
+
+  /// Cambia para quién es una mesa libre y quiénes se sientan, o por qué no se
+  /// usa. Sigue libre.
+  Future<void> _editarLibre(int mesa) async {
+    final plano = _plano;
+    if (_ocupado || plano == null || plano.armadoONull == null) return;
+    final actual = plano.config.libres[mesa];
+    if (actual == null) return;
+    final quien = quienOpera(ref);
+    final motivo = await pedirReservaDeMesa(
+      context: context,
+      mesa: mesa,
+      motivoActual: actual.motivo,
+      yaEstaLibre: true,
+    );
+    if (motivo == null || !mounted) return;
+    final reserva = ReservaDeMesa.deMotivo(motivo);
+    await _cambiarConfig(
+      (p, _) => CambiosDeMesa.cambiarMotivoDeLibre(
+        config: p.config,
+        mesa: mesa,
+        motivo: motivo,
+        por: quien,
+        ahora: DateTime.now().toUtc(),
+      ),
+      hecho: (_) => reserva == null
+          ? 'La mesa $mesa sigue libre.'
+          : 'La mesa $mesa quedó reservada para ${reserva.para}.',
     );
   }
 
@@ -1353,6 +1383,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
               onQuitarFijadas: _quitarFijadas,
               onQuitarFijadaDeMesa: _quitarFijadaDeMesa,
               onDejarLibre: _dejarLibre,
+              onEditarLibre: _editarLibre,
               onVolverAUsar: _volverAUsar,
               onCambiar: _cambiar,
               onMover: _mover,

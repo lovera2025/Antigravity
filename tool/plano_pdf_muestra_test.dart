@@ -203,7 +203,9 @@ void main() {
   test('a medida del playón, sorteado por división', () async {
     final alumnos = _familias(['5° A', '5° B', '5° C'], 130);
     final mesas = alumnos.fold(0, (s, a) => s + SalonMesas.mesas(a));
-    // Dos mesas de más: una se deja libre y la otra queda sin usar.
+    // Dos mesas de más: una se deja libre porque no se usa, y la última es
+    // para los profes (6.5.0), con quiénes se sientan: lleva su nombre debajo y
+    // la lista va al pie.
     final armado = ArmarAMedida.armar(OpcionesAMedida(
       playon: PlayonReal.costaSurubi,
       cantidad: mesas + 2,
@@ -212,7 +214,13 @@ void main() {
       fijadas: {
         1: MesaFijada(alumnoId: alumnos.first.id, motivo: 'Silla de ruedas'),
       },
-      libres: const {66: MesaLibre(motivo: 'Columna de sonido')},
+      libres: {
+        66: const MesaLibre(motivo: 'Columna de sonido'),
+        mesas + 2: const MesaLibre(
+          motivo: 'Reservada para Profes: GARCÍA, ANA; LÓPEZ, LUIS; '
+              'PÉREZ, MARÍA; DÍAZ, JUAN; ROMERO, EVA',
+        ),
+      },
     );
     final plano = _sorteada(armado, alumnos, config: config);
     for (final estilo in EstiloPlano.values) {

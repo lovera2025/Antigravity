@@ -14,6 +14,7 @@ import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../modelo/reserva_de_mesa.dart';
 import '../services/armar_a_medida.dart';
 import '../services/cambios_de_mesa.dart';
 import '../services/colores_y_textos.dart';
@@ -51,6 +52,10 @@ class AccionesPlano {
   /// La fijada de una mesa cuya familia ya no está en la fiesta.
   final void Function(int mesa) onQuitarFijadaDeMesa;
   final void Function(int mesa) onDejarLibre;
+
+  /// Cambiar para quién es una mesa libre y quiénes se sientan
+  /// (`ReservaDeMesa`, 6.5.0). Null: sin el botón.
+  final void Function(int mesa)? onEditarLibre;
   final void Function(int mesa) onVolverAUsar;
   final void Function(String alumnoId, String otroId) onCambiar;
   final void Function(String alumnoId, int desdeMesa) onMover;
@@ -93,6 +98,7 @@ class AccionesPlano {
     required this.onQuitarFijadas,
     required this.onQuitarFijadaDeMesa,
     required this.onDejarLibre,
+    this.onEditarLibre,
     required this.onVolverAUsar,
     required this.onCambiar,
     required this.onMover,
@@ -1225,6 +1231,15 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       final info = _plano.estado.info(mesa);
       final para = info.fijadaPara;
       if (info.libre) {
+        final editar = acciones.onEditarLibre;
+        if (editar != null) {
+          botones.add(boton(
+            'accion_editar_libre',
+            info.reservada == null ? 'Es para alguien' : 'Para quién es',
+            Icons.event_seat_outlined,
+            () => editar(mesa),
+          ));
+        }
         botones.add(boton('accion_volver_a_usar', 'Volver a usarla',
             Icons.check_circle_outline, () => acciones.onVolverAUsar(mesa)));
       } else if (para != null) {
@@ -2144,7 +2159,9 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
     final base = switch (info.estado) {
       EstadoMesa.vacia => 'Vacía',
       EstadoMesa.ocupada => info.ocupante?.nombre ?? 'Ocupada',
-      EstadoMesa.libre => 'Se dejó libre: el sorteo no la da',
+      EstadoMesa.libre => info.reservada == null
+          ? 'Se dejó libre: el sorteo no la da'
+          : 'Reservada para ${info.reservada}: el sorteo no la da',
       EstadoMesa.fijada => 'Fijada para ${info.fijadaPara?.nombre ?? ''}',
       EstadoMesa.conflicto => 'Hay que revisarla',
     };
@@ -2214,9 +2231,29 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
       final motivo = info.libre
           ? _plano.config.libres[mesa]?.motivo
           : _plano.config.fijadas[mesa]?.motivo;
+      // Una reservada ("Reservada para Profes: …") dice quiénes se sientan, no
+      // el motivo: para quién es ya lo dice el renglón de arriba.
+      final reserva = info.libre ? ReservaDeMesa.deMotivo(motivo) : null;
       renglones = [
         Text(_estadoDeMesa(mesa)),
-        if (motivo != null && motivo.trim().isNotEmpty)
+        if (reserva != null) ...[
+          if (reserva.quienes.isEmpty)
+            Text(
+              'Todavía sin los nombres de quienes se sientan.',
+              style: TextStyle(color: Colors.grey.shade700),
+            )
+          else ...[
+            const SizedBox(height: 4),
+            Text(
+              reserva.quienes.length == 1
+                  ? 'Se sienta:'
+                  : 'Se sientan (${reserva.quienes.length}):',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            for (final n in reserva.quienes)
+              Text(n, key: Key('reservada_quien_$n')),
+          ],
+        ] else if (motivo != null && motivo.trim().isNotEmpty)
           Text('Motivo: ${motivo.trim()}'),
       ];
     }

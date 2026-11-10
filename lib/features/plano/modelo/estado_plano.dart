@@ -56,6 +56,10 @@ class OcupantePlano {
   }
 }
 
+/// Hasta cuántas letras del motivo de "Dejar libre" van como nombre de la mesa
+/// ([InfoMesa.reservada]).
+const kLargoDeReservada = 24;
+
 enum EstadoMesa {
   /// Nadie la tiene.
   vacia,
@@ -98,6 +102,13 @@ class InfoMesa {
   /// es un conflicto).
   final bool libre;
 
+  /// Para quién se reservó, si se dejó libre para alguien ("Profes", 6.5.0;
+  /// `ReservaDeMesa`). El jefe le da una mesa a quien no es alumno (los
+  /// profesores, sin contrato ni pago): el sorteo no la usa, y en el plano
+  /// lleva ese nombre en vez de la tachadura de "no se usa". Null si se dejó
+  /// libre porque no se usa (una columna, el paso de los mozos).
+  final String? reservada;
+
   const InfoMesa({
     required this.numero,
     this.estado = EstadoMesa.vacia,
@@ -107,9 +118,15 @@ class InfoMesa {
     this.sillasExtra = 0,
     this.fijadaPara,
     this.libre = false,
+    this.reservada,
   });
 
   OcupantePlano? get ocupante => ocupantes.isEmpty ? null : ocupantes.first;
+
+  /// El nombre que lleva una mesa reservada ([reservada]), si de verdad está
+  /// libre: una que quedó ocupada o fijada es un conflicto y se muestra así.
+  String? get nombreDeReservada =>
+      estado == EstadoMesa.libre ? reservada : null;
 }
 
 /// Cómo está el salón: qué hay en cada mesa. Es lo que dibuja el plano.
@@ -174,6 +191,7 @@ class EstadoPlano {
   /// Arma el estado de un armado con sus ocupantes.
   ///
   /// - [libres]: mesas que no se usan.
+  /// - [reservadas]: de las libres, las que son para alguien (mesa → "Profes").
   /// - [fijadas]: mesa → familia, reservadas antes del sorteo.
   /// - [ordenDivisiones]: el orden de la leyenda, en claves de
   ///   [Divisiones.clave] (como se guarda en el plano de la fiesta); las que no
@@ -183,6 +201,7 @@ class EstadoPlano {
     required ArmadoSalon armado,
     List<OcupantePlano> ocupantes = const [],
     Set<int> libres = const {},
+    Map<int, String> reservadas = const {},
     Map<int, OcupantePlano> fijadas = const {},
     List<String>? ordenDivisiones,
   }) {
@@ -282,6 +301,7 @@ class EstadoPlano {
             lista.length == 1 ? lista.first.sillasExtraPorMesa[n] ?? 0 : 0,
         fijadaPara: fijada,
         libre: libre,
+        reservada: libre ? _nombreDe(reservadas[n]) : null,
       );
     }
     return EstadoPlano._(
@@ -293,6 +313,16 @@ class EstadoPlano {
       fijadasFuera,
       libresFuera,
     );
+  }
+
+  /// El nombre de una mesa reservada, limpio: sin espacios de más y, si es
+  /// largo, cortado (va escrito debajo de una mesa). Null si no dice nada.
+  static String? _nombreDe(String? motivo) {
+    final t = (motivo ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (t.isEmpty) return null;
+    return t.length <= kLargoDeReservada
+        ? t
+        : '${t.substring(0, kLargoDeReservada - 1).trimRight()}…';
   }
 
   /// Las claves de división que tienen familias, en el orden de la leyenda.
