@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/services/instalacion_id.dart';
+import '../../barra/providers/barra_del_jefe_provider.dart' show enLaWebProvider;
 import '../../common/providers/admin_provider.dart';
 import '../models/modo_jefe_caja.dart';
 import '../models/operador_caja.dart';
@@ -13,6 +14,7 @@ import '../repositories/operadores_caja_repository.dart';
 import '../repositories/permisos_operador_repository.dart';
 import '../repositories/sesiones_caja_repository.dart';
 import '../services/caja_auto_sync_service.dart';
+import '../services/operador_por_la_nube.dart';
 
 /// Cómo se entró. `entradas` no abre caja y no pasa por el panel: va a
 /// `EntradasHomeScreen`. `barra` tampoco: va a `BarraHomeScreen`, con su propia caja
@@ -271,7 +273,19 @@ class AppRoleNotifier extends Notifier<AppRoleState> {
   /// **Si no está en esta PC y hay internet, baja los operadores y prueba otra
   /// vez** antes de decir que es incorrecto: un PIN recién creado en otra PC tiene
   /// que andar acá sin que entre el jefe. Sin internet no espera nada.
+  ///
+  /// **En la web no hay base del equipo:** el PIN se le pregunta a la nube
+  /// ([operadorPorLaNube]). Si la nube no contesta, [SinNubeParaElPin]: no es lo
+  /// mismo que un PIN incorrecto.
   Future<OperadorYPermisos?> buscarOperador(String pin) async {
+    if (ref.read(enLaWebProvider)) {
+      try {
+        return await operadorPorLaNube(ref.read(operadoresDeLaNubeProvider), pin)
+            .timeout(kEsperaDelPinEnLaNube);
+      } catch (_) {
+        throw const SinNubeParaElPin();
+      }
+    }
     var op = await _operadorDelPin(pin);
     if (op == null &&
         ref.read(connectivityServiceProvider).currentStatus !=

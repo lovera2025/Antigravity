@@ -24,6 +24,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-I", "-m", "http.server", "8793", "--directory", "build/barra_prueba_web"],
       "port": 8793
+    },
+    {
+      "name": "encargada-web-prueba",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-I", "-m", "http.server", "8794", "--directory", "build/encargada_web_prueba"],
+      "port": 8794
     }
   ]
 }

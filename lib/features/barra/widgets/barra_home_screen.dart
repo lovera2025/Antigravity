@@ -8,6 +8,7 @@ import '../../eventos/utils/evento_presentacion.dart';
 import '../datos/barra_repositorio.dart';
 import '../providers/barra_providers.dart';
 import 'abrir_caja_barra_dialog.dart';
+import 'barra_home_web.dart';
 import 'elegir_impresora_screen.dart';
 import 'las_cajas_screen.dart';
 import 'linea_sin_internet_barra.dart';
@@ -19,6 +20,9 @@ import 'vender_screen.dart';
 ///
 /// **La Encargada de barra** (6.4.0) ve además LAS CAJAS en cada fiesta. Arriba, el
 /// ícono de la impresora: se prueba antes de abrir la caja.
+///
+/// **En la web es [BarraHomeEnLaWeb]** (6.5.0): la encargada, desde un iPhone, ve LAS
+/// CAJAS y anula; no vende ni imprime.
 class BarraHomeScreen extends ConsumerStatefulWidget {
   /// Para los tests y la ventana de prueba. Sin esto, abre VENDER.
   final void Function(BuildContext context, Evento fiesta, CajaBarra caja)? onCajaLista;
@@ -78,6 +82,10 @@ class _BarraHomeScreenState extends ConsumerState<BarraHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // En la web (el iPhone de la encargada, 6.5.0) no hay base del equipo, caja ni
+    // impresora: va otra pantalla, antes de mirar nada de este equipo.
+    if (ref.watch(enLaWebProvider)) return const BarraHomeEnLaWeb();
+
     const gold = Color(0xFFD4AF37);
     final app = ref.watch(appRoleProvider);
     final fiestas = ref.watch(fiestasDeLaBarraProvider);

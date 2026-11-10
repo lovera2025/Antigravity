@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_update_checker.dart';
+import '../../barra/providers/barra_del_jefe_provider.dart' show enLaWebProvider;
 import '../../dashboard/widgets/actualizar_app.dart';
 import '../models/permisos_operador.dart';
 import '../providers/app_role_provider.dart';
 import '../services/entrada_de_operador.dart';
+import '../services/operador_por_la_nube.dart';
 import '../services/pin_de_operador.dart';
 import 'abrir_caja_dialog.dart';
 
@@ -65,8 +67,19 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
     });
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-    final encontrado =
-        await ref.read(appRoleProvider.notifier).buscarOperador(pin);
+    final OperadorYPermisos? encontrado;
+    try {
+      encontrado = await ref.read(appRoleProvider.notifier).buscarOperador(pin);
+    } on SinNubeParaElPin {
+      // En la web el PIN se le pregunta a la nube: que no conteste no es un PIN malo.
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = kSinNubeParaElPin;
+        });
+      }
+      return;
+    }
     if (!mounted) return;
     if (encontrado == null) {
       setState(() {
@@ -75,7 +88,10 @@ class _RoleGateScreenState extends ConsumerState<RoleGateScreen> {
       });
       return;
     }
-    final opciones = OpcionesDeEntrada.de(encontrado.permisos);
+    final opciones = OpcionesDeEntrada.de(
+      encontrado.permisos,
+      enLaWeb: ref.read(enLaWebProvider),
+    );
     if (opciones.aviso != null) {
       setState(() {
         _busy = false;
