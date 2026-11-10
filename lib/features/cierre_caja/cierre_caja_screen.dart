@@ -1117,8 +1117,10 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
+                // El monto no se parte: en un celular el "$" quedaba al final de un
+                // renglón y el número en el siguiente.
                 'TOTAL NETO · ${state.alcanceLabel.toUpperCase()}: '
-                '${state.totalNeto.toCurrency()}',
+                '${state.totalNeto.toCurrency().replaceAll(' ', ' ')}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,

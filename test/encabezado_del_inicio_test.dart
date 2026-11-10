@@ -239,6 +239,13 @@ void main() {
     await foto(tester, 'inicio_pc');
   });
 
+  test('en el cierre de caja, el total neto no parte el monto entre dos renglones', () {
+    final c = File('lib/features/cierre_caja/cierre_caja_screen.dart')
+        .readAsStringSync()
+        .replaceAll('\r\n', '\n');
+    expect(c, contains(r"state.totalNeto.toCurrency().replaceAll(' ', ' ')"));
+  });
+
   test('la pantalla del inicio usa este encabezado, con el corte del celular', () {
     final d = File('lib/features/dashboard/dashboard_screen.dart')
         .readAsStringSync()
