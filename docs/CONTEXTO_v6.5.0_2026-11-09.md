@@ -11,6 +11,12 @@ de una charla con el usuario desde el celular y no tiene plan aparte: está todo
 en la web del iPhone** (etapa 10) y **el inicio y el cierre de caja en un celular** (etapa 11). **Las pruebas que faltaban están
 hechas** (abajo, "Las pruebas del 10-nov a la noche"). 4.209 tests en verde; el análisis, sin errores ni avisos nuevos en la app.
 
+**PUBLICADA el 10-nov a la tarde-noche, con el usuario** ("sacá la foto y publicá nomás"): foto "después de 6.4.0" y "antes de 6.5.0"
+(643 alumnos cada una), **sin SQL**, tag `v6.5.0` en `5096dee`, release con el Setup y el APK firmado (novedades: "La puerta ve el
+plano, chat entre recepcionistas, la planilla parada y la mesa de los profes") y la web en Vercel (`dpl_H544LDGtEjttRgRJt3Qu3ACN9KCL`;
+`version.json` da 6.5.0/67). **Falta:** que el usuario instale las tres PCs y la tablet; con la app cerrada en las tres, la corrección
+de la etapa 12 (`build/corregir_mora_10nov_6.5.0.sql`); abrirlas y la foto "después de 6.5.0". Ver los pasos 8 a 10, abajo.
+
 **El 10-nov a la noche el usuario pidió que el chat sume a todo el personal de la barra** (cajeras y encargada, con solapas TODOS ·
 RECEPCIÓN · BARRA, y un puente entre las dos notebooks) **y después decidió publicar la 6.5.0 sin eso**: "publicamos con lo ya
 verificado y listo, el chat lo dejaremos para después". El plan quedó en `docs/pendientes/chat-con-la-barra.md`. **Lo que sigue es

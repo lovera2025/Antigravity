@@ -180,9 +180,11 @@ usuario el 10-nov); falta la foto de la mora "después de 6.4.0"**, que es el pa
 (con `barra_recargos`, SHA-256 igual; repetirla si pasan días), el aviso entre PCs contra la nube y **PAPEL con la TP-POS58: contesta**
 (con rollo "hay", sin rollo "no hay"), así que el aviso de papel de VENDER sale de verdad.
 
-**La 6.5.0, programada el 9 y el 10-nov, sin publicar** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
+**La 6.5.0, programada el 9 y el 10-nov, publicada el 10-nov** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
 chat": ahí está lo hecho, **lo que quedó sin probar** y el paso a paso; el plan del 9-nov, `docs/PLAN_PUERTA_PLANO_Y_SORTEO_2026-11-09.md`).
-Sin SQL. **Todo programado y probado el 10-nov a la noche; el usuario dijo "publicamos"** ese día, con lo verificado. El chat con la
+Sin SQL. **PUBLICADA el 10-nov** (tag `v6.5.0`, release con el Setup y el APK, web en Vercel), con las fotos de la mora "después de
+6.4.0" y "antes de 6.5.0". **Falta que el usuario instale las tres PCs y la tablet; después, con la app cerrada en las tres, la
+corrección de una ficha (etapa 12 del CONTEXTO, `build/corregir_mora_10nov_6.5.0.sql`) y la foto "después de 6.5.0".** El chat con la
 barra (cajeras y encargada con solapas, un puente entre las dos notebooks) lo pidió y **lo dejó para después**:
 `docs/pendientes/chat-con-la-barra.md`. Lleva:
 - **la Encargada de barra entra con su PIN desde la web del iPhone** (etapa 10): en la web el PIN se le pregunta a la nube
