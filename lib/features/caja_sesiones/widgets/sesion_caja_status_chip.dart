@@ -8,8 +8,13 @@ import '../models/sesion_caja.dart';
 import '../repositories/sesiones_caja_repository.dart';
 
 /// Chip de estado de cajas abiertas para el dashboard del jefe.
+///
+/// [compacto] es para el celular: "Cerrada" o el nombre de quien tiene la caja, sin
+/// "desde cuándo" (no entra al lado del título). El detalle queda al mantener apretado.
 class SesionCajaStatusChip extends ConsumerStatefulWidget {
-  const SesionCajaStatusChip({super.key});
+  final bool compacto;
+
+  const SesionCajaStatusChip({super.key, this.compacto = false});
 
   @override
   ConsumerState<SesionCajaStatusChip> createState() =>
@@ -72,14 +77,14 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.grey.withValues(alpha: 0.35)),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.circle, size: 10, color: Colors.grey),
-            SizedBox(width: 6),
+            const Icon(Icons.circle, size: 10, color: Colors.grey),
+            const SizedBox(width: 6),
             Text(
-              'Caja cerrada',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              widget.compacto ? 'Cerrada' : 'Caja cerrada',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -94,10 +99,14 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
       'desde ${ArTime.formatFechaHora(s.abiertaAt)}',
     ].join(' · ');
 
+    final compacto = widget.compacto;
     return Tooltip(
-      message: vivas.length > 1 ? '${vivas.length} cajas abiertas' : 'Sesión activa',
+      message: compacto
+          ? 'Caja activa · $label'
+              '${vivas.length > 1 ? ' · ${vivas.length} cajas abiertas' : ''}'
+          : (vivas.length > 1 ? '${vivas.length} cajas abiertas' : 'Sesión activa'),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: compacto ? 8 : 10, vertical: 6),
         decoration: BoxDecoration(
           color: colors.text.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
@@ -109,9 +118,9 @@ class _SesionCajaStatusChipState extends ConsumerState<SesionCajaStatusChip> {
             Icon(Icons.circle, size: 10, color: colors.dot),
             const SizedBox(width: 6),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
+              constraints: BoxConstraints(maxWidth: compacto ? 60 : 280),
               child: Text(
-                'Caja activa · $label',
+                compacto ? (s.operadorNombre ?? 'Caja') : 'Caja activa · $label',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,

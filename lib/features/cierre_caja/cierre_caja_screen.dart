@@ -1008,14 +1008,22 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                         child: Icon(icon, color: accent, size: 18),
                       ),
                       const SizedBox(width: 8),
+                      // En un celular "TRANSFERENCIA" no entra a lo ancho: se achica
+                      // apenas, en vez de partirse en "TRANSFERE / NCIA".
                       Expanded(
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.2,
-                            color: accent,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
+                              color: accent,
+                            ),
                           ),
                         ),
                       ),
@@ -1031,8 +1039,13 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
+                    // Un solo renglón, siempre: el monto se achica para entrar. Sin
+                    // esto, la tarjeta (que mide su alto antes de achicarlo) guardaba
+                    // lugar para dos renglones y en el celular quedaba medio vacía.
                     child: Text(
                       neto.toCurrency(),
+                      maxLines: 1,
+                      softWrap: false,
                       style: GoogleFonts.oswald(
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
@@ -1042,24 +1055,36 @@ class _CierreCajaScreenState extends ConsumerState<CierreCajaScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    'Ingresos: ${ingresoBruto.toCurrency()}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: (isDark ? Colors.white : Colors.black).withValues(
-                        alpha: 0.55,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Ingresos: ${ingresoBruto.toCurrency()}',
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: (isDark ? Colors.white : Colors.black).withValues(
+                          alpha: 0.55,
+                        ),
                       ),
                     ),
                   ),
                   if (egresosBruto > 0)
-                    Text(
-                      'Egresos: −${egresosBruto.toCurrency()}'
-                      '${cantEgresos > 1 ? '  ($cantEgresos egresos)' : ''}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: _redAccent,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Egresos: −${egresosBruto.toCurrency()}'
+                        '${cantEgresos > 1 ? '  ($cantEgresos egresos)' : ''}',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _redAccent,
+                        ),
                       ),
                     )
                   else

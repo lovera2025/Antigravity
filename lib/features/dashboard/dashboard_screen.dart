@@ -28,6 +28,8 @@ import '../../core/services/kiosk_launcher.dart';
 import '../../core/services/user_role_cache.dart';
 import '../../core/services/app_update_checker.dart';
 import 'widgets/actualizar_app.dart';
+import 'widgets/encabezado_del_inicio.dart';
+import '../common/utils/cortes_pantalla.dart';
 import '../recepcion/providers/recepcion_provider.dart';
 import '../common/widgets/admin_gate.dart';
 import '../common/providers/admin_provider.dart';
@@ -192,67 +194,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final appRole = ref.watch(appRoleProvider);
     final modoJefe = appRole.esJefe || ref.watch(adminAuthProvider).esModoJefe;
     final modoCaja = appRole.esCaja;
+    final enCelular = CortesPantalla.esCelular(MediaQuery.sizeOf(context).width);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const AnimatedBrandLogo(height: 28),
-            const SizedBox(width: 10),
-            const Text(
-              'JUNIOR EVENTOS',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.5,
-              ),
-            ),
-            if (modoJefe) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: primaryGold.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: primaryGold.withValues(alpha: 0.45),
-                  ),
-                ),
-                child: const Text(
-                  'MODO JEFE',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
-                    color: Color(0xFFD4AF37),
-                  ),
-                ),
-              ),
-            ] else if (modoCaja) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.teal.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.teal.withValues(alpha: 0.45),
-                  ),
-                ),
-                child: Text(
-                  'CAJA · ${(appRole.operador?.nombre ?? '').toUpperCase()}',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
-                    color: isDark ? Colors.tealAccent : Colors.teal.shade800,
-                  ),
-                ),
-              ),
-            ],
-          ],
+        // En un celular el título y los botones no entran sueltos (se pisaban): el
+        // título va sin el nombre, el estado de la caja va corto y los tres botones
+        // de la derecha, en un menú (`encabezado_del_inicio.dart`).
+        titleSpacing: enCelular ? 4 : null,
+        title: TituloDelInicio(
+          enCelular: enCelular,
+          modoJefe: modoJefe,
+          cajaDe: modoCaja ? (appRole.operador?.nombre ?? '') : null,
         ),
         backgroundColor: Colors.transparent,
         actions: [
@@ -265,32 +219,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     context,
                     MaterialPageRoute(builder: (_) => const CierreCajaScreen()),
                   ),
-                  child: const SesionCajaStatusChip(),
+                  child: SesionCajaStatusChip(compacto: enCelular),
                 ),
               ),
             ),
           // ── Indicador offline/sync ─────────────────────────────
           if (!kIsWeb) const SyncCloudIndicator(),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: () => ref.refresh(dashboardStatsProvider),
-            tooltip: 'Actualizar',
-          ),
-          IconButton(
-            icon: Icon(
-              isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              color: primaryGold,
-              size: 20,
+          if (enCelular)
+            MasDelInicio(
+              temaOscuro: isDark,
+              onActualizar: () => ref.refresh(dashboardStatsProvider),
+              onCambiarTema: () =>
+                  ref.read(themeModeProvider.notifier).toggleTheme(),
+              onCerrarSesion: _signOut,
+            )
+          else ...[
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: () => ref.refresh(dashboardStatsProvider),
+              tooltip: 'Actualizar',
             ),
-            onPressed: () => ref.read(themeModeProvider.notifier).toggleTheme(),
-            tooltip: 'Cambiar tema',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, size: 20),
-            onPressed: _signOut,
-            tooltip: 'Cerrar Sesión',
-          ),
-          const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                color: primaryGold,
+                size: 20,
+              ),
+              onPressed: () =>
+                  ref.read(themeModeProvider.notifier).toggleTheme(),
+              tooltip: 'Cambiar tema',
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, size: 20),
+              onPressed: _signOut,
+              tooltip: 'Cerrar Sesión',
+            ),
+            const SizedBox(width: 8),
+          ],
         ],
       ),
       drawer: _buildEliteDrawer(context, modoJefe: modoJefe),
