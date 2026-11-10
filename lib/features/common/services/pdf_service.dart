@@ -1341,51 +1341,91 @@ class PdfService {
               ),
             ],
           ),
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: const pw.BoxDecoration(
-                  color: _gold,
-                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
-                ),
-                child: pw.Text(
-                  titulo,
-                  style: pw.TextStyle(
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.white,
+          pw.SizedBox(width: 16),
+          // Con tope de ancho ([pw.Expanded]), como el del recibo
+          // ([_buildHeader]): sin él, un título largo no baja de renglón y se
+          // sale de la hoja por la derecha, llevándose la etiqueta y la fecha.
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: const pw.BoxDecoration(
+                    color: _gold,
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Text(
+                    titulo,
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
                   ),
                 ),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text(
-                'EMISIÓN: $fechaEmision',
-                style: pw.TextStyle(color: _greyText, fontSize: 8),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                cliente,
-                style: pw.TextStyle(
-                  color: _darkText,
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              if (tipoEvento.trim().isNotEmpty)
+                pw.SizedBox(height: 8),
                 pw.Text(
-                  tipoEvento,
+                  'EMISIÓN: $fechaEmision',
+                  textAlign: pw.TextAlign.right,
                   style: pw.TextStyle(color: _greyText, fontSize: 8),
                 ),
-            ],
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  cliente,
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(
+                    color: _darkText,
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                if (tipoEvento.trim().isNotEmpty)
+                  pw.Text(
+                    tipoEvento,
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(color: _greyText, fontSize: 8),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  /// El recibo de un evento particular ("RECIBO DE CUENTA"): arma el PDF y
+  /// devuelve los bytes, sin mostrarlo. Lo usan [generarReciboCompacto],
+  /// [compartirRecibo], los tests y la muestra de `tool/`.
+  static Future<Uint8List> construirReciboParticularPdf({
+    required Evento evento,
+    required double saldoActual,
+    List<Transaccion> transacciones = const [],
+    List<EventosServicios> servicios = const [],
+    required String titulo,
+    String? transaccionDestacadaId,
+
+    /// Cuándo se emite. Los tests y la muestra lo fijan; la app, ahora.
+    DateTime? emitido,
+
+    /// `false` lo arma con la letra de fábrica del paquete: así un test puede
+    /// leer lo que quedó escrito (con una TTF el texto va en códigos de glifo).
+    bool letrasDeLaApp = true,
+  }) async {
+    final pdf = await _buildDocument(
+      evento: evento,
+      saldoActual: saldoActual,
+      transacciones: transacciones,
+      servicios: servicios,
+      titulo: titulo,
+      transaccionDestacadaId: transaccionDestacadaId,
+      emitido: emitido,
+      letrasDeLaApp: letrasDeLaApp,
+    );
+    return pdf.save();
   }
 
   // ── Recibo completo (imprimir) ─────────────────────────────────────────────
@@ -8219,19 +8259,24 @@ class PdfService {
     required List<EventosServicios> servicios,
     required String titulo,
     String? transaccionDestacadaId,
+    DateTime? emitido,
+    bool letrasDeLaApp = true,
   }) async {
-    // Cargar fuente TrueType con soporte Unicode completo (elimina warnings de Helvetica)
-    final fontRegular = await PdfGoogleFonts.outfitRegular();
-    final fontBold = await PdfGoogleFonts.outfitBold();
-    final fontItalic = await PdfGoogleFonts.outfitLight();
+    // Las letras de la app, desde los assets ([_fuentesOutfit]): con
+    // `PdfGoogleFonts` se bajaban de internet y, sin red, el recibo salía con
+    // otra letra y otro alto.
+    final fuentes = letrasDeLaApp ? await _fuentesOutfit() : null;
 
-    final pdf = pw.Document(
-      theme: pw.ThemeData.withFont(
-        base: fontRegular,
-        bold: fontBold,
-        italic: fontItalic,
-      ),
-    );
+    final theme = fuentes == null
+        ? null
+        : pw.ThemeData.withFont(
+            base: fuentes.$1,
+            bold: fuentes.$2,
+            // Outfit no tiene cursiva: lo que la pide sale en la regular.
+            italic: fuentes.$1,
+            boldItalic: fuentes.$2,
+          );
+    final pdf = pw.Document(theme: theme);
 
     pw.ImageProvider? logoImage;
     try {
@@ -8272,96 +8317,89 @@ class PdfService {
     pagoDestacado ??= transOrdenadas.isNotEmpty ? transOrdenadas.first : null;
 
     // Sello temporal estricto en huso America/Argentina/Buenos_Aires (GMT-3).
-    final now = ArTime.nowUtc();
+    final now = emitido ?? ArTime.nowUtc();
     final fechaEmision = ArTime.formatFechaHora(now);
     final fechaEvento = ArTime.formatFechaCorta(evento.fechaEvento);
     final operacionGestionadaStr = ArTime.operacionGestionada(now);
 
+    // Con margen de verdad: lo que cae en el borde del papel la impresora no lo
+    // imprime (hasta la 6.4.0 la hoja iba sin margen).
+    const margen = pw.EdgeInsets.fromLTRB(28, 24, 28, 24);
+
+    // El encabezado, las tablas y el pie son hijos directos de la hoja: así una
+    // tabla larga se parte por filas y sigue en la hoja siguiente con sus
+    // títulos. Hasta la 6.4.0 todo el cuerpo era un solo bloque: con unas 13
+    // filas entre pagos y servicios el encabezado quedaba solo en la hoja 1, y
+    // con unas 21 el recibo no se podía armar (el paquete no terminaba nunca).
+    // `test/recibo_particular_test.dart`.
+    List<pw.Widget> cuerpo(AjustePdf a) => [
+          _buildHeader(logoImage, titulo, fechaEmision, evento, fechaEvento, a),
+          pw.SizedBox(height: a.sp(12)),
+          // Sello temporal estricto — blindaje legal/administrativo.
+          pw.Container(
+            width: double.infinity,
+            padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: a.sp(6)),
+            decoration: pw.BoxDecoration(
+              color: _cardBg,
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              border: pw.Border.all(color: _greyLight, width: 0.5),
+            ),
+            child: pw.Text(
+              operacionGestionadaStr,
+              style: pw.TextStyle(fontSize: a.fs(8.5), color: _greyText),
+            ),
+          ),
+          pw.SizedBox(height: a.sp(10)),
+          // ── ESTADO DE CUENTA (Unificado) ────────────────────────────────
+          _buildEstadoCuenta(
+            pagado: totalPagado,
+            totalBonificaciones: totalBonificaciones,
+            saldo: saldoActual,
+            fechaEvento: evento.fechaEvento,
+            ultimoPago: pagoDestacado,
+            etiquetaPago: etiquetaPago,
+            a: a,
+          ),
+          // ── Historial de pagos ──────────────────────────────────────────
+          if (transOrdenadas.isNotEmpty) ...[
+            pw.SizedBox(height: a.sp(22)),
+            // El título de una tabla no queda solo al pie de la hoja.
+            pw.NewPage(freeSpace: 70),
+            _buildSectionTitle('HISTORIAL DE PAGOS'),
+            pw.SizedBox(height: a.sp(8)),
+            _buildPagosTable(transOrdenadas, a),
+          ],
+          // ── Detalle de servicios ────────────────────────────────────────
+          if (servicios.isNotEmpty) ...[
+            pw.SizedBox(height: a.sp(22)),
+            pw.NewPage(freeSpace: 70),
+            _buildSectionTitle('SERVICIOS CONTRATADOS'),
+            pw.SizedBox(height: a.sp(8)),
+            _buildServiciosTable(servicios, a),
+            _buildTotalServicios(totalPresupuesto, a),
+          ],
+          // ── Footer ──────────────────────────────────────────────────────
+          pw.SizedBox(height: a.sp(26)),
+          _buildFooter(),
+        ];
+
+    // Que entre en una hoja siempre que pueda (regla del usuario: los papeles
+    // van compactos, en una sola hoja): primero se junta el aire y recién al
+    // final se achica la letra, con piso ([AjustePdf]). Si ni así entra, sigue
+    // en otra hoja sin cortar nada.
+    final ajuste = await _ajustarParaPaginas(
+      maxPaginas: 1,
+      theme: theme,
+      construir: cuerpo,
+      margin: margen,
+    );
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(0),
-        build: (context) => [
-          // ── Página completa ──────────────────────────────────────────────
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // ── Header oscuro ──────────────────────────────────────────
-              _buildHeader(
-                logoImage,
-                titulo,
-                fechaEmision,
-                evento,
-                fechaEvento,
-              ),
-
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 20,
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    // Sello temporal estricto — blindaje legal/administrativo.
-                    pw.Container(
-                      width: double.infinity,
-                      padding: const pw.EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      margin: const pw.EdgeInsets.only(bottom: 10),
-                      decoration: pw.BoxDecoration(
-                        color: _cardBg,
-                        borderRadius: const pw.BorderRadius.all(
-                          pw.Radius.circular(6),
-                        ),
-                        border: pw.Border.all(color: _greyLight, width: 0.5),
-                      ),
-                      child: pw.Text(
-                        operacionGestionadaStr,
-                        style: pw.TextStyle(
-                          fontSize: 8.5,
-                          fontStyle: pw.FontStyle.italic,
-                          color: _greyText,
-                        ),
-                      ),
-                    ),
-                    // ── ESTADO DE CUENTA (Unificado) ──────────────────────
-                    _buildEstadoCuenta(
-                      pagado: totalPagado,
-                      totalBonificaciones: totalBonificaciones,
-                      saldo: saldoActual,
-                      fechaEvento: evento.fechaEvento,
-                      ultimoPago: pagoDestacado,
-                      etiquetaPago: etiquetaPago,
-                    ),
-                    pw.SizedBox(height: 24),
-
-                    // ── Historial de pagos ───────────────────────────────
-                    if (transOrdenadas.isNotEmpty) ...[
-                      _buildSectionTitle('HISTORIAL DE PAGOS'),
-                      pw.SizedBox(height: 8),
-                      _buildPagosTable(transOrdenadas),
-                      pw.SizedBox(height: 24),
-                    ],
-
-                    // ── Detalle de servicios ─────────────────────────────
-                    if (servicios.isNotEmpty) ...[
-                      _buildSectionTitle('SERVICIOS CONTRATADOS'),
-                      pw.SizedBox(height: 8),
-                      _buildServiciosTable(servicios, totalPresupuesto),
-                    ],
-                  ],
-                ),
-              ),
-
-              // ── Footer ──────────────────────────────────────────────────
-              pw.SizedBox(height: 32),
-              _buildFooter(),
-            ],
-          ),
-        ],
+        margin: margen,
+        maxPages: 200,
+        build: (_) => cuerpo(ajuste),
       ),
     );
 
@@ -8375,16 +8413,20 @@ class PdfService {
     String fecha,
     Evento evento,
     String fechaEvento,
+    AjustePdf a,
   ) {
     return pw.Container(
-      color: _headerBg,
-      padding: const pw.EdgeInsets.fromLTRB(32, 28, 32, 28),
+      padding: pw.EdgeInsets.fromLTRB(20, a.sp(18), 20, a.sp(18)),
+      decoration: const pw.BoxDecoration(
+        color: _headerBg,
+        borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+      ),
       child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           // Logo + marca
           pw.Row(
+            mainAxisSize: pw.MainAxisSize.min,
             children: [
               if (logo != null)
                 pw.Container(
@@ -8441,63 +8483,72 @@ class PdfService {
               ),
             ],
           ),
-          // Título + fecha
-          pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Container(
-                padding: const pw.EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 5,
-                ),
-                decoration: pw.BoxDecoration(
-                  color: _gold,
-                  borderRadius: const pw.BorderRadius.all(
-                    pw.Radius.circular(6),
+          pw.SizedBox(width: 16),
+          // Título + fecha. **Con tope de ancho** ([pw.Expanded]): en una fila
+          // del paquete, un hijo sin `flex` no tiene tope y el texto no baja de
+          // renglón. Hasta la 6.4.0 la frase "Este evento fue diseñado para …,
+          // a solicitud de …" se salía de la hoja por la derecha y, como la
+          // columna se alinea a su renglón más ancho, se llevaba afuera la
+          // etiqueta del título y "Emitido" (lo contó el usuario el 10-nov:
+          // "el encabezado es como que no sale bien").
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: pw.BoxDecoration(
+                    color: _gold,
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(6),
+                    ),
+                  ),
+                  child: pw.Text(
+                    titulo,
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
-                child: pw.Text(
-                  titulo,
-                  style: pw.TextStyle(
-                    fontSize: 11,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.white,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text(
-                'Emitido: $fecha',
-                style: pw.TextStyle(fontSize: 9, color: _greyText),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(
-                EventoPresentacion.tituloPrincipal(evento),
-                style: pw.TextStyle(
-                  fontSize: 13,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _darkText,
-                ),
-              ),
-              pw.SizedBox(height: 3),
-              pw.Text(
-                EventoPresentacion.subtituloEvento(evento),
-                style: pw.TextStyle(fontSize: 9, color: _greyText),
-              ),
-              if (EventoPresentacion.nombreFestejadoEfectivoEvento(evento) !=
-                  null) ...[
-                pw.SizedBox(height: 6),
+                pw.SizedBox(height: a.sp(8)),
                 pw.Text(
-                  EventoPresentacion.fraseIntroEvento(evento),
+                  'Emitido: $fecha',
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(fontSize: 9, color: _greyText),
+                ),
+                pw.SizedBox(height: a.sp(6)),
+                pw.Text(
+                  EventoPresentacion.tituloPrincipal(evento),
+                  textAlign: pw.TextAlign.right,
                   style: pw.TextStyle(
-                    fontSize: 8.5,
-                    fontStyle: pw.FontStyle.italic,
-                    color: _greyText,
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _darkText,
                   ),
                 ),
+                pw.SizedBox(height: 3),
+                pw.Text(
+                  EventoPresentacion.subtituloEvento(evento),
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(fontSize: 9, color: _greyText),
+                ),
+                if (EventoPresentacion.nombreFestejadoEfectivoEvento(evento) !=
+                    null) ...[
+                  pw.SizedBox(height: a.sp(6)),
+                  pw.Text(
+                    EventoPresentacion.fraseIntroEvento(evento),
+                    textAlign: pw.TextAlign.right,
+                    style: pw.TextStyle(fontSize: 8.5, color: _greyText),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ],
       ),
@@ -8512,13 +8563,14 @@ class PdfService {
     required DateTime fechaEvento,
     Transaccion? ultimoPago,
     String? etiquetaPago,
+    AjustePdf a = AjustePdf.intacto,
   }) {
     final bool esVencido = DateTime.now().isAfter(fechaEvento);
     final PdfColor statusColor = (saldo > 0.01 && esVencido)
         ? _redAccent
         : (saldo > 0.01 ? _gold : _greenAccent);
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: a.sp(10)),
       decoration: pw.BoxDecoration(
         color: _cardBg,
         borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
@@ -8558,9 +8610,9 @@ class PdfService {
             ],
           ),
           if (ultimoPago != null) ...[
-            pw.SizedBox(height: 6),
+            pw.SizedBox(height: a.sp(6)),
             pw.Divider(color: _greyLight, height: 1),
-            pw.SizedBox(height: 4),
+            pw.SizedBox(height: a.sp(4)),
             pw.Text(
               '${etiquetaPago ?? 'Último registro'}: ${ultimoPago.concepto ?? 'Pago'} · '
               '${ultimoPago.fechaPago != null ? ArTime.formatFechaHora(ultimoPago.fechaPago!) : '—'} · '
@@ -8569,7 +8621,7 @@ class PdfService {
               textAlign: pw.TextAlign.center,
             ),
           ],
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: a.sp(4)),
           pw.Text(
             'El monto abonado suma lo pagado en mano más beneficios registrados.',
             style: pw.TextStyle(
@@ -8634,7 +8686,11 @@ class PdfService {
   }
 
   // ── Tabla de pagos ─────────────────────────────────────────────────────────
-  static pw.Widget _buildPagosTable(List<Transaccion> transacciones) {
+  /// Va como hija directa de la hoja: se parte por filas y repite los títulos.
+  static pw.Widget _buildPagosTable(
+    List<Transaccion> transacciones,
+    AjustePdf a,
+  ) {
     return pw.Table(
       border: pw.TableBorder.all(color: _greyLight, width: 0.5),
       columnWidths: {
@@ -8647,13 +8703,14 @@ class PdfService {
       children: [
         // Encabezado
         pw.TableRow(
+          repeat: true,
           decoration: const pw.BoxDecoration(color: _headerBg),
           children: [
-            _tableHeader('#'),
-            _tableHeader('FECHA'),
-            _tableHeader('CONCEPTO'),
-            _tableHeader('TIPO'),
-            _tableHeader('MONTO'),
+            _tableHeader('#', a: a),
+            _tableHeader('FECHA', a: a),
+            _tableHeader('CONCEPTO', a: a),
+            _tableHeader('TIPO', a: a),
+            _tableHeader('MONTO', a: a),
           ],
         ),
         // Filas
@@ -8681,19 +8738,22 @@ class PdfService {
                 '${transacciones.length - i}',
                 bold: isFirst,
                 color: rowAccent,
+                a: a,
               ),
-              _tableCell(fecha, bold: isFirst),
-              _tableCell(tr.concepto ?? 'Pago', bold: isFirst),
+              _tableCell(fecha, bold: isFirst, a: a),
+              _tableCell(tr.concepto ?? 'Pago', bold: isFirst, a: a),
               _tableCell(
                 esBonif ? 'Bonificación' : (tr.medioPago ?? 'Efectivo'),
                 bold: isFirst,
                 color: esBonif ? _gold : _greyText,
+                a: a,
               ),
               _tableCell(
                 tr.monto.toCurrency(),
                 bold: isFirst,
                 color: rowAccent,
                 align: pw.TextAlign.right,
+                a: a,
               ),
             ],
           );
@@ -8703,84 +8763,89 @@ class PdfService {
   }
 
   // ── Tabla de servicios ─────────────────────────────────────────────────────
+  /// Va como hija directa de la hoja: se parte por filas y repite los títulos.
+  /// El total va aparte ([_buildTotalServicios]).
   static pw.Widget _buildServiciosTable(
     List<EventosServicios> servicios,
-    double total,
+    AjustePdf a,
   ) {
-    return pw.Column(
+    return pw.Table(
+      border: pw.TableBorder.all(color: _greyLight, width: 0.5),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(3),
+        1: const pw.FlexColumnWidth(1),
+        2: const pw.FlexColumnWidth(1.5),
+        3: const pw.FlexColumnWidth(1.5),
+      },
       children: [
-        pw.Table(
-          border: pw.TableBorder.all(color: _greyLight, width: 0.5),
-          columnWidths: {
-            0: const pw.FlexColumnWidth(3),
-            1: const pw.FlexColumnWidth(1),
-            2: const pw.FlexColumnWidth(1.5),
-            3: const pw.FlexColumnWidth(1.5),
-          },
+        pw.TableRow(
+          repeat: true,
+          decoration: const pw.BoxDecoration(color: _headerBg),
           children: [
-            pw.TableRow(
-              decoration: const pw.BoxDecoration(color: _headerBg),
-              children: [
-                _tableHeader('SERVICIO'),
-                _tableHeader('CANT.'),
-                _tableHeader('PRECIO'),
-                _tableHeader('SUBTOTAL'),
-              ],
-            ),
-            ...servicios.asMap().entries.map((entry) {
-              final i = entry.key;
-              final srv = entry.value;
-              return pw.TableRow(
-                decoration: pw.BoxDecoration(
-                  color: i.isEven ? PdfColors.white : _cardBg,
-                ),
-                children: [
-                  _tableCell(srv.servicio?.nombre ?? 'Servicio'),
-                  _tableCell(
-                    srv.cantidad.toStringAsFixed(0),
-                    align: pw.TextAlign.center,
-                  ),
-                  _tableCell(
-                    srv.precioFinalAcordado.toCurrency(),
-                    align: pw.TextAlign.right,
-                  ),
-                  _tableCell(
-                    (srv.precioFinalAcordado * srv.cantidad).toCurrency(),
-                    align: pw.TextAlign.right,
-                  ),
-                ],
-              );
-            }),
+            _tableHeader('SERVICIO', a: a),
+            _tableHeader('CANT.', a: a),
+            _tableHeader('PRECIO', a: a),
+            _tableHeader('SUBTOTAL', a: a),
           ],
         ),
-        // Total
-        pw.Container(
-          color: _headerBg,
-          padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        ...servicios.asMap().entries.map((entry) {
+          final i = entry.key;
+          final srv = entry.value;
+          return pw.TableRow(
+            decoration: pw.BoxDecoration(
+              color: i.isEven ? PdfColors.white : _cardBg,
+            ),
             children: [
-              pw.Text(
-                'TOTAL PRESUPUESTADO',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _darkText,
-                  letterSpacing: 1,
-                ),
+              _tableCell(srv.servicio?.nombre ?? 'Servicio', a: a),
+              _tableCell(
+                srv.cantidad.toStringAsFixed(0),
+                align: pw.TextAlign.center,
+                a: a,
               ),
-              pw.Text(
-                total.toCurrency(),
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _gold,
-                ),
+              _tableCell(
+                srv.precioFinalAcordado.toCurrency(),
+                align: pw.TextAlign.right,
+                a: a,
+              ),
+              _tableCell(
+                (srv.precioFinalAcordado * srv.cantidad).toCurrency(),
+                align: pw.TextAlign.right,
+                a: a,
               ),
             ],
-          ),
-        ),
+          );
+        }),
       ],
+    );
+  }
+
+  /// El total de los servicios, pegado debajo de su tabla.
+  static pw.Widget _buildTotalServicios(double total, AjustePdf a) {
+    return pw.Container(
+      color: _headerBg,
+      padding: pw.EdgeInsets.symmetric(horizontal: 12, vertical: a.sp(8)),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'TOTAL PRESUPUESTADO',
+            style: pw.TextStyle(
+              fontSize: 10,
+              fontWeight: pw.FontWeight.bold,
+              color: _darkText,
+              letterSpacing: 1,
+            ),
+          ),
+          pw.Text(
+            total.toCurrency(),
+            style: pw.TextStyle(
+              fontSize: 14,
+              fontWeight: pw.FontWeight.bold,
+              color: _gold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -8833,13 +8898,16 @@ class PdfService {
     );
   }
 
-  static pw.Widget _tableHeader(String text) {
+  static pw.Widget _tableHeader(
+    String text, {
+    AjustePdf a = AjustePdf.intacto,
+  }) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: a.sp(7)),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 8,
+          fontSize: a.fs(8),
           fontWeight: pw.FontWeight.bold,
           color: _darkText,
           letterSpacing: 0.8,
@@ -8853,14 +8921,15 @@ class PdfService {
     bool bold = false,
     PdfColor? color,
     pw.TextAlign align = pw.TextAlign.left,
+    AjustePdf a = AjustePdf.intacto,
   }) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: a.sp(7)),
       child: pw.Text(
         text,
         textAlign: align,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: a.fs(9),
           fontWeight: bold ? pw.FontWeight.bold : null,
           color: color ?? _darkText,
         ),
