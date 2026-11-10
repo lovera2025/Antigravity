@@ -4229,10 +4229,12 @@ class PdfService {
     bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
+    bool vertical = false,
     DateTime? generada,
   }) async {
     final fuentes = await _fuentesOutfit();
     return PlanillaSorteoPdf.construir(
+      vertical: vertical,
       evento: evento,
       alumnos: alumnos,
       pagos: pagos,
@@ -4317,6 +4319,9 @@ class PdfService {
     bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
+
+    /// La hoja parada en vez de acostada (`PlanillaSorteoPdf`).
+    bool vertical = false,
   }) async {
     final bytes = await construirPlanillaSorteoPdf(
       evento,
@@ -4331,6 +4336,7 @@ class PdfService {
       soloUltimos: soloUltimos,
       version: version,
       blancoYNegro: blancoYNegro,
+      vertical: vertical,
     );
 
     final safeName = (evento.cliente?.nombreCompleto ?? 'Evento').replaceAll(

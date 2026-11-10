@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -564,6 +567,155 @@ void main() {
         repartir.take(5),
         ['Egresado', 'Acompañantes', 'Mesa principal', 'Adicional', 'Sillas'],
       );
+    });
+
+    group('la hoja parada', () {
+      // 10-nov-2026: la hoja acostada, en una impresora puesta en vertical,
+      // salía a media hoja (la letra al 70 %) o cortada a la derecha.
+      final evento = Evento(
+        id: 'e',
+        clienteId: 'c',
+        tipo: 'Recepción',
+        fechaEvento: DateTime(2026, 12, 5),
+        estado: EstadoEvento.planificacion,
+        modalidad: 'masivo',
+        cliente: Cliente(id: 'c', nombreCompleto: 'ESCUELA DE PRUEBA'),
+      );
+
+      /// El ancho y el alto de cada hoja, en puntos.
+      List<(double, double)> hojas(Uint8List bytes) => [
+            for (final m in RegExp(
+              r'/MediaBox\s*\[\s*[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s*\]',
+            ).allMatches(latin1.decode(bytes)))
+              (double.parse(m.group(1)!), double.parse(m.group(2)!)),
+          ];
+
+      test('es A4 parada, y acostada sigue siendo acostada', () async {
+        final alumnos = [_alumno('a', nombre: 'ACOSTA, LUCÍA', mesas: [3])];
+        final parada = hojas(await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: alumnos,
+          vertical: true,
+        ));
+        expect(parada, isNotEmpty);
+        for (final (ancho, alto) in parada) {
+          expect(ancho, closeTo(595.28, 0.5));
+          expect(alto, closeTo(841.89, 0.5));
+        }
+        final acostada = hojas(await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: alumnos,
+        ));
+        for (final (ancho, alto) in acostada) {
+          expect(ancho, closeTo(841.89, 0.5));
+          expect(alto, closeTo(595.28, 0.5));
+        }
+      });
+
+      test('lleva lo mismo: el pasto, el bloque, todos los acompañantes, el '
+          'reparto y las observaciones', () async {
+        final alumnos = [
+          _alumno('a', nombre: 'ACOSTA, LUCÍA', mesas: [133]),
+          _alumno('b', nombre: 'LÓPEZ, IVÁN', mesas: [130, 131, 132], extras: 2),
+          _alumno(
+            'c',
+            nombre: 'MEDINA, SOFÍA',
+            mesas: [5],
+            sillas: 2,
+            acompanantes: ['PRIMERA', 'SEGUNDA', 'TERCERA', 'CUARTA', 'QUINTA'],
+          ),
+        ];
+        for (final version in VersionPlanillaSorteo.values) {
+          final texto = contenidoDelPdf(await PlanillaSorteoPdf.construir(
+            evento: evento,
+            alumnos: alumnos,
+            pasto: {131, 132, 133},
+            bloques: const [BloqueDivision('5A', 1, 132)],
+            version: version,
+            vertical: true,
+            generada: DateTime(2026, 11, 12, 21, 30),
+          ));
+          for (final palabra in [
+            '(avisar)',
+            r'[(\(pasto\))]',
+            '(BLOQUE)',
+            '(1-132)',
+            '(PRIMERA)',
+            '(SEGUNDA)',
+            '(TERCERA)',
+            '(CUARTA)',
+            '(QUINTA)',
+            // El reparto de sillas, debajo de las sillas.
+            '(Confirmado)',
+            // Ningún título de columna partido por la mitad.
+            '(EGRESADOS)',
+            '(ACOMPAÑANTES)',
+          ]) {
+            expect(texto.contains(palabra), isTrue, reason: '$version: $palabra');
+          }
+          final interna = version == VersionPlanillaSorteo.interna;
+          expect(texto.contains('(TELÉFONO)'), interna, reason: '$version');
+          expect(texto.contains('(OBSERVACIONES)'), interna, reason: '$version');
+        }
+      });
+
+      test('para repartir no lleva teléfonos ni observaciones', () {
+        final repartir =
+            PlanillaSorteoPdf.columnasVertical(VersionPlanillaSorteo.paraRepartir);
+        expect(repartir.join(' '), isNot(contains('Teléfono')));
+        expect(repartir, isNot(contains('Observaciones')));
+        expect(
+          PlanillaSorteoPdf.columnasVertical(VersionPlanillaSorteo.interna)
+              .join(' '),
+          allOf(contains('Teléfono'), contains('Observaciones')),
+        );
+      });
+
+      test('una división larga sigue en otra hoja con los títulos repetidos',
+          () async {
+        final muchos = [
+          for (var i = 0; i < 70; i++)
+            _alumno(
+              'm$i',
+              nombre: 'ALUMNO $i',
+              mesas: [i + 1],
+              acompanantes: const ['MAMÁ', 'PAPÁ'],
+            ),
+        ];
+        final bytes = await PlanillaSorteoPdf.construir(
+          evento: evento,
+          alumnos: muchos,
+          vertical: true,
+          generada: DateTime(2026, 11, 12, 21, 30),
+        );
+        // El resumen y, por lo menos, dos hojas de la división.
+        expect(paginasDelPdf(bytes), greaterThanOrEqualTo(3));
+        final texto = contenidoDelPdf(bytes);
+        // "MESA PRINCIPAL" es título de columna solo en las hojas de división.
+        final titulos = '(PRINCIPAL)'.allMatches(texto).length;
+        expect(titulos, paginasDelPdf(bytes) - 1);
+        // Y nadie se pierde en el salto de hoja.
+        for (final i in [0, 20, 21, 22, 40, 41, 42, 69]) {
+          expect(texto.contains('($i)'), isTrue, reason: 'ALUMNO $i');
+        }
+      });
+
+      test('se arma con las fuentes de la app', () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        for (final version in VersionPlanillaSorteo.values) {
+          final bytes = await PdfService.construirPlanillaSorteoPdf(
+            evento,
+            [
+              for (var i = 0; i < 30; i++)
+                _alumno('a$i', nombre: 'ALUMNO $i', mesas: [i + 1]),
+            ],
+            version: version,
+            vertical: true,
+            generada: DateTime(2026, 11, 12, 21, 30),
+          );
+          expect(bytes.length, greaterThan(1000), reason: '$version');
+        }
+      });
     });
 
     test('se arma en las cuatro variantes con las fuentes de la app', () async {

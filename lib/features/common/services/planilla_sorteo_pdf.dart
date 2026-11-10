@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:pdf/pdf.dart';
@@ -48,7 +49,13 @@ typedef _Seccion = ({
 class PlanillaSorteoPdf {
   PlanillaSorteoPdf._();
 
-  static final PdfPageFormat _formato = PdfPageFormat.a4.landscape;
+  /// La hoja: A4 acostada, o **parada** ([vertical], 6.5.0). El 10-nov-2026 el
+  /// usuario contó que en papel no salía como en pantalla: en una impresora
+  /// puesta en vertical, la hoja acostada sale a media hoja (la letra al 70 %)
+  /// o cortada a la derecha. Parada lleva lo mismo, con los acompañantes
+  /// debajo del egresado y el reparto debajo de las sillas ([_filaVertical]).
+  static PdfPageFormat _formatoDe(bool vertical) =>
+      vertical ? PdfPageFormat.a4 : PdfPageFormat.a4.landscape;
 
   /// Hasta cuántos para llamar entran en dos columnas en la hoja de resumen.
   /// Con más, va una sola tabla que puede seguir en la hoja siguiente.
@@ -78,6 +85,27 @@ class PlanillaSorteoPdf {
           ? const [2.2, 2.1, 1.45, 1.3, 0.85, 1.2, 1.2, 1.1, 1.95]
           : const [2.6, 2.6, 1.55, 1.5, 1.0, 1.15, 1.6];
 
+  /// Las columnas de la hoja parada ([_formatoDe]): las mismas cosas en menos
+  /// columnas. Los acompañantes van debajo del egresado, el reparto debajo de
+  /// las sillas y, en la interna, la música debajo del teléfono.
+  static List<String> columnasVertical(VersionPlanillaSorteo version) {
+    final interna = version == VersionPlanillaSorteo.interna;
+    return [
+      'Egresado y acompañantes',
+      'Mesa principal',
+      'Adicional',
+      'Sillas',
+      interna ? 'Teléfono y música' : 'Música',
+      if (interna) 'Observaciones',
+    ];
+  }
+
+  /// "● A confirmar" necesita unos 65 pt: con menos de 1.25 se parte.
+  static List<double> _anchosVertical(VersionPlanillaSorteo version) =>
+      version == VersionPlanillaSorteo.interna
+          ? const [2.6, 1.45, 1.0, 1.25, 1.3, 1.6]
+          : const [3.2, 1.55, 1.3, 1.35, 1.6];
+
   static String _dos(int n) => n.toString().padLeft(2, '0');
 
   static Future<Uint8List> construir({
@@ -100,11 +128,15 @@ class PlanillaSorteoPdf {
     bool soloUltimos = false,
     VersionPlanillaSorteo version = VersionPlanillaSorteo.interna,
     bool blancoYNegro = false,
+
+    /// La hoja parada en vez de acostada ([_formatoDe]).
+    bool vertical = false,
     pw.Font? regular,
     pw.Font? negrita,
     DateTime? generada,
   }) async {
     final tema = PlanillaTema(blancoYNegro: blancoYNegro);
+    final formato = _formatoDe(vertical);
     final interna = version == VersionPlanillaSorteo.interna;
     final theme = regular != null && negrita != null
         ? pw.ThemeData.withFont(base: regular, bold: negrita)
@@ -169,7 +201,12 @@ class PlanillaSorteoPdf {
                           style: tema.estilo(size: 11, negrita: true),
                         ),
                       ),
-                      _tablaDivision(tema, entrada.value, version),
+                      _tablaDivision(
+                        tema,
+                        entrada.value,
+                        version,
+                        vertical: vertical,
+                      ),
                     ],
                   ],
             ),
@@ -184,7 +221,8 @@ class PlanillaSorteoPdf {
                     generada: textoGenerada,
                     extra: lineaSorteo,
                   ),
-              contenido: () => _resumen(tema, resumen, interna),
+              contenido: () =>
+                  _resumen(tema, resumen, interna, vertical: vertical),
             ),
             for (final entrada in divisiones.entries)
               (
@@ -200,13 +238,20 @@ class PlanillaSorteoPdf {
                             .firstWhere((d) => d.division == entrada.key),
                       ),
                     ),
-                contenido: () => [_tablaDivision(tema, entrada.value, version)],
+                contenido: () => [
+                  _tablaDivision(
+                    tema,
+                    entrada.value,
+                    version,
+                    vertical: vertical,
+                  ),
+                ],
               ),
           ];
 
     pw.MultiPage pagina(_Seccion s, {required int inicio, int? total}) =>
         pw.MultiPage(
-          pageFormat: _formato,
+          pageFormat: formato,
           margin: const pw.EdgeInsets.all(PlanillaTema.margen),
           maxPages: 200,
           header: (_) => s.encabezado(),
@@ -284,8 +329,9 @@ class PlanillaSorteoPdf {
   static List<pw.Widget> _resumen(
     PlanillaTema t,
     ResumenPlanillaSorteo r,
-    bool interna,
-  ) {
+    bool interna, {
+    bool vertical = false,
+  }) {
     final tarjetas = <pw.Widget>[
       t.tarjeta('Egresados', '${r.egresados}'),
       t.tarjeta(
@@ -326,16 +372,32 @@ class PlanillaSorteoPdf {
     // Con bloques, la tabla de divisiones lleva una columna más.
     final conBloque = r.hayBloques;
 
-    return [
-      pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < tarjetas.length; i++) ...[
-            if (i > 0) pw.SizedBox(width: 6),
-            pw.Expanded(child: tarjetas[i]),
+    // Parada no entran las ocho en un renglón: van en dos, de a cuatro (el
+    // lugar que sobra en el segundo queda vacío, así todas miden lo mismo).
+    const porRenglon = 4;
+    pw.Widget renglon(List<pw.Widget> lista, {int huecos = 0}) => pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < lista.length + huecos; i++) ...[
+              if (i > 0) pw.SizedBox(width: 6),
+              pw.Expanded(child: i < lista.length ? lista[i] : pw.SizedBox()),
+            ],
           ],
+        );
+    // En dos columnas, solo acostada: parada, cada tabla usa todo el ancho.
+    final enDosColumnas = !vertical;
+
+    return [
+      if (!vertical)
+        renglon(tarjetas)
+      else
+        for (var i = 0; i < tarjetas.length; i += porRenglon) ...[
+          if (i > 0) pw.SizedBox(height: 6),
+          renglon(
+            tarjetas.sublist(i, min(i + porRenglon, tarjetas.length)),
+            huecos: max(0, i + porRenglon - tarjetas.length),
+          ),
         ],
-      ),
       pw.SizedBox(height: 14),
       pw.Text('Divisiones', style: t.estilo(size: 11, negrita: true)),
       pw.SizedBox(height: 5),
@@ -346,14 +408,15 @@ class PlanillaSorteoPdf {
           border: t.bordeTabla,
           columnWidths: {
             for (final (i, ancho) in [
-              2.2,
-              1.0,
+              // Parada hay menos ancho: "EGRESADOS" no puede partirse.
+              vertical ? 1.6 : 2.2,
+              vertical ? 1.3 : 1.0,
               0.9,
               if (conBloque) 1.1,
-              conBloque ? 2.3 : 2.6,
+              conBloque ? (vertical ? 2.0 : 2.3) : 2.6,
               1.0,
               1.0,
-              1.2,
+              vertical ? 1.3 : 1.2,
               0.9,
             ].indexed)
               i: pw.FlexColumnWidth(ancho),
@@ -396,7 +459,7 @@ class PlanillaSorteoPdf {
         // En dos columnas va todo junto (título, aclaración y tablas), así el
         // título nunca queda solo al pie de una hoja. Si son muchos, una sola
         // tabla que puede seguir en la hoja siguiente.
-        if (r.aLlamar.length <= _maxLlamarEnDosColumnas)
+        if (enDosColumnas && r.aLlamar.length <= _maxLlamarEnDosColumnas)
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
@@ -429,7 +492,7 @@ class PlanillaSorteoPdf {
         pw.SizedBox(height: 14),
         // Igual que arriba: en dos columnas va todo junto, para que el título
         // no quede solo al pie de la hoja.
-        if (r.aAvisarPasto.length <= _maxLlamarEnDosColumnas)
+        if (enDosColumnas && r.aAvisarPasto.length <= _maxLlamarEnDosColumnas)
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
@@ -579,10 +642,11 @@ class PlanillaSorteoPdf {
   static pw.Widget _tablaDivision(
     PlanillaTema t,
     List<FilaPlanillaSorteo> filas,
-    VersionPlanillaSorteo version,
-  ) {
-    final anchos = _anchos(version);
-    final titulos = columnas(version);
+    VersionPlanillaSorteo version, {
+    bool vertical = false,
+  }) {
+    final anchos = vertical ? _anchosVertical(version) : _anchos(version);
+    final titulos = vertical ? columnasVertical(version) : columnas(version);
     final interna = version == VersionPlanillaSorteo.interna;
     return pw.Table(
       border: t.bordeTabla,
@@ -597,13 +661,17 @@ class PlanillaSorteoPdf {
             for (final c in titulos)
               t.celdaTitulo(
                 c,
-                align: c == 'Mesa principal' || c == 'Sillas'
+                // Parada, las sillas llevan el reparto debajo, a la izquierda.
+                align: c == 'Mesa principal' || (c == 'Sillas' && !vertical)
                     ? pw.TextAlign.center
                     : pw.TextAlign.left,
               ),
           ],
         ),
-        for (var i = 0; i < filas.length; i++) _fila(t, filas[i], i, interna),
+        for (var i = 0; i < filas.length; i++)
+          vertical
+              ? _filaVertical(t, filas[i], i, interna)
+              : _fila(t, filas[i], i, interna),
       ],
     );
   }
@@ -765,9 +833,124 @@ class PlanillaSorteoPdf {
     );
   }
 
+  /// La fila de la hoja parada: lo mismo que [_fila], en menos columnas. Los
+  /// acompañantes van debajo del egresado; el reparto, debajo de las sillas; y
+  /// en la interna, la música debajo del teléfono.
+  static pw.TableRow _filaVertical(
+    PlanillaTema t,
+    FilaPlanillaSorteo f,
+    int indice,
+    bool interna,
+  ) {
+    final fondo = f.sinMesa
+        ? t.rojoSinMesa
+        : indice.isOdd
+            ? t.filaAlterna
+            : null;
+
+    pw.Widget celda(
+      pw.Widget child, {
+      PdfColor? color,
+      pw.Alignment alineacion = pw.Alignment.topLeft,
+    }) =>
+        pw.Container(
+          color: color,
+          alignment: alineacion,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          // Sin tope de alto, como en [_fila] (ver [AltoLibre]).
+          child: AltoLibre(child: child),
+        );
+
+    final chico = t.estilo(size: PlanillaTema.secundario, color: t.textoSuave);
+
+    return pw.TableRow(
+      verticalAlignment: pw.TableCellVerticalAlignment.full,
+      decoration: fondo == null ? null : pw.BoxDecoration(color: fondo),
+      children: [
+        celda(
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(f.egresado, style: t.estilo(negrita: true)),
+              if (f.acompanantes.isEmpty)
+                pw.Text('sin acompañantes cargados', style: chico)
+              else
+                for (final n in f.acompanantes)
+                  pw.Text(
+                    n,
+                    style: t.estilo(size: PlanillaTema.secundario),
+                  ),
+            ],
+          ),
+        ),
+        celda(
+          _celdaMesa(t, f),
+          color: int.tryParse(f.mesaPrincipal) != null ? t.verdeMesa : null,
+          alineacion: pw.Alignment.center,
+        ),
+        celda(
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(f.adicional, style: t.estilo()),
+              if (f.alertaMesas != null)
+                pw.Text(
+                  f.alertaMesas!,
+                  style: t.estilo(
+                    size: PlanillaTema.secundario,
+                    negrita: true,
+                    color: t.naranja,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        celda(
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(f.sillas, style: t.estilo(negrita: f.sillas != '-')),
+              switch (f.reparto) {
+                RepartoSillas.noAplica => pw.SizedBox(),
+                RepartoSillas.pendiente =>
+                  _marca(t, 'A confirmar', t.naranja, size: 8),
+                RepartoSillas.confirmado =>
+                  _marca(t, 'Confirmado', t.verde, size: 8),
+              },
+            ],
+          ),
+        ),
+        celda(
+          interna
+              ? pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(f.telefono, style: t.estilo()),
+                    if (f.musica != '-' && f.musica.isNotEmpty)
+                      pw.Text(f.musica, style: chico),
+                  ],
+                )
+              : pw.Text(f.musica, style: t.estilo()),
+        ),
+        if (interna)
+          celda(
+            f.observaciones.isNotEmpty
+                ? pw.Text(f.observaciones, style: t.estilo())
+                : pw.Text('-', style: t.estilo(color: t.textoSuave)),
+          ),
+      ],
+    );
+  }
+
   /// Un estado con su punto de color y su palabra: en blanco y negro manda la
   /// palabra.
-  static pw.Widget _marca(PlanillaTema t, String texto, PdfColor color) => pw.Row(
+  static pw.Widget _marca(
+    PlanillaTema t,
+    String texto,
+    PdfColor color, {
+    double size = PlanillaTema.cuerpo,
+  }) =>
+      pw.Row(
         mainAxisSize: pw.MainAxisSize.min,
         children: [
           pw.Container(
@@ -776,7 +959,10 @@ class PlanillaSorteoPdf {
             decoration: pw.BoxDecoration(color: color, shape: pw.BoxShape.circle),
           ),
           pw.SizedBox(width: 4),
-          pw.Text(texto, style: t.estilo(negrita: true, color: color)),
+          pw.Text(
+            texto,
+            style: t.estilo(size: size, negrita: true, color: color),
+          ),
         ],
       );
 }

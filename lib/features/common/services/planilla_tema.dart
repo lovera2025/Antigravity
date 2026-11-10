@@ -70,28 +70,32 @@ class PlanillaTema {
 
   PdfColor get texto => const PdfColor.fromInt(0xFF1F2328);
 
+  // Los grises y los fondos van un paso más oscuros que en pantalla (6.5.0):
+  // una impresora de tinta en papel común casi no marca un gris muy claro, y
+  // las líneas entre renglones y la mesa en verde desaparecían en el papel
+  // (prueba del 10-nov, pensando en la Epson L495 de la oficina).
   PdfColor get textoSuave => blancoYNegro
       ? const PdfColor.fromInt(0xFF3A3A3A)
-      : const PdfColor.fromInt(0xFF5C6370);
+      : const PdfColor.fromInt(0xFF4A505B);
 
   PdfColor get linea => blancoYNegro
       ? const PdfColor.fromInt(0xFF8C8C8C)
-      : const PdfColor.fromInt(0xFFD6DAE0);
+      : const PdfColor.fromInt(0xFFAEB5C0);
 
   PdfColor get fondoEncabezadoTabla => blancoYNegro
       ? const PdfColor.fromInt(0xFFE4E4E4)
-      : const PdfColor.fromInt(0xFFEEF0F3);
+      : const PdfColor.fromInt(0xFFE1E5EA);
 
   PdfColor? get filaAlterna =>
-      blancoYNegro ? null : const PdfColor.fromInt(0xFFF8F9FB);
+      blancoYNegro ? null : const PdfColor.fromInt(0xFFF2F4F7);
 
   /// La mesa principal, como en el Excel del jefe.
   PdfColor? get verdeMesa =>
-      blancoYNegro ? null : const PdfColor.fromInt(0xFFDDF2E3);
+      blancoYNegro ? null : const PdfColor.fromInt(0xFFC9EBD4);
 
   /// No tiene mesa.
   PdfColor? get rojoSinMesa =>
-      blancoYNegro ? null : const PdfColor.fromInt(0xFFFBE1E1);
+      blancoYNegro ? null : const PdfColor.fromInt(0xFFF7CFCF);
 
   PdfColor get naranja =>
       blancoYNegro ? PdfColors.black : const PdfColor.fromInt(0xFFC8741F);
@@ -254,11 +258,12 @@ class PlanillaTema {
         ),
       );
 
-  /// Bordes de las tablas: solo líneas horizontales finas.
+  /// Bordes de las tablas: solo líneas horizontales finas. De 0,6 pt entre
+  /// renglones: con 0,4 una impresora de tinta las saltea.
   pw.TableBorder get bordeTabla => pw.TableBorder(
-        top: pw.BorderSide(color: linea, width: 0.6),
-        bottom: pw.BorderSide(color: linea, width: 0.6),
-        horizontalInside: pw.BorderSide(color: linea, width: 0.4),
+        top: pw.BorderSide(color: linea, width: 0.8),
+        bottom: pw.BorderSide(color: linea, width: 0.8),
+        horizontalInside: pw.BorderSide(color: linea, width: 0.6),
       );
 
   /// Un número grande con su rótulo, para la hoja de resumen.

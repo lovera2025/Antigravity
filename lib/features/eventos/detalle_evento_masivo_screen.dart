@@ -3609,6 +3609,7 @@ class _DetalleEventoMasivoScreenState
         soloUltimos: opciones.soloUltimos,
         version: opciones.version,
         blancoYNegro: opciones.blancoYNegro,
+        vertical: opciones.vertical,
       );
     } catch (e) {
       if (!mounted) return;

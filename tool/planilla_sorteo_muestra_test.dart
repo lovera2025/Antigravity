@@ -244,6 +244,30 @@ void main() {
         expect(archivo.lengthSync(), greaterThan(1000));
       }
     }
+    // La hoja parada (6.5.0): lo mismo, para una impresora puesta en vertical.
+    for (final version in VersionPlanillaSorteo.values) {
+      final bytes = await PdfService.construirPlanillaSorteoPdf(
+        evento,
+        sorteados,
+        pagos: pagos,
+        notas: notas,
+        repartos: repartos,
+        pasto: armado.pasto,
+        bloques: sorteo.bloques,
+        lineaSorteo:
+            'Sorteo del 12/11/2026 21:40 hs · Jefe · 1 cambio a mano después',
+        version: version,
+        vertical: true,
+        generada: DateTime(2026, 11, 12, 21, 30),
+      );
+      final nombre = 'Planilla_Sorteo_MUESTRA_'
+          '${version == VersionPlanillaSorteo.interna ? 'interna' : 'para_repartir'}'
+          '_parada.pdf';
+      final archivo = File('$destino${Platform.pathSeparator}$nombre')
+        ..writeAsBytesSync(bytes);
+      stdout.writeln('── PDF en: ${archivo.path}');
+      expect(archivo.lengthSync(), greaterThan(1000));
+    }
     stdout.writeln(
       '── bloques: ${[
         for (final b in sorteo.bloques) '${b.division} ${b.desde}-${b.hasta}',

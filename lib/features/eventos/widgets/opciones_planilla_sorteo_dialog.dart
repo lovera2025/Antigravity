@@ -11,6 +11,11 @@ typedef OpcionesPlanillaSorteo = ({
 
   /// Solo las familias del último sorteo, en una hoja corrida.
   bool soloUltimos,
+
+  /// La hoja parada (vertical) en vez de acostada (6.5.0). Viene elegida: es
+  /// como está puesta casi cualquier impresora, y acostada salía a media hoja
+  /// o cortada (lo contó el usuario el 10-nov).
+  bool vertical,
 });
 
 /// Pregunta qué planilla se imprime: la interna (con teléfonos y
@@ -29,6 +34,7 @@ Future<OpcionesPlanillaSorteo?> elegirOpcionesPlanillaSorteo({
   final hayUltimos = ultimos != null && ultimos.planillaSolaCambiaAlgo;
   var version = VersionPlanillaSorteo.interna;
   var blancoYNegro = false;
+  var vertical = true;
   var soloUltimos = hayUltimos && sugerirUltimos && ultimos.enPie.length > 1;
   return showDialog<OpcionesPlanillaSorteo>(
     context: context,
@@ -122,6 +128,35 @@ Future<OpcionesPlanillaSorteo?> elegirOpcionesPlanillaSorteo({
                 onSelectionChanged: (s) =>
                     setDialog(() => blancoYNegro = s.first),
               ),
+              const SizedBox(height: 16),
+              const Text('La hoja'),
+              const SizedBox(height: 8),
+              SegmentedButton<bool>(
+                key: const Key('planilla_hoja'),
+                segments: const [
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.crop_portrait_rounded),
+                    label: Text('Parada'),
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.crop_landscape_rounded),
+                    label: Text('Acostada'),
+                  ),
+                ],
+                selected: {vertical},
+                onSelectionChanged: (s) => setDialog(() => vertical = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                vertical
+                    ? 'Como sale de cualquier impresora: los acompañantes van '
+                        'debajo del egresado.'
+                    : 'Una columna para cada cosa. Al imprimir hay que elegir '
+                        'orientación Horizontal.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
           ),
         ),
@@ -138,6 +173,7 @@ Future<OpcionesPlanillaSorteo?> elegirOpcionesPlanillaSorteo({
                 version: version,
                 blancoYNegro: blancoYNegro,
                 soloUltimos: soloUltimos,
+                vertical: vertical,
               ),
             ),
             child: const Text('GENERAR'),

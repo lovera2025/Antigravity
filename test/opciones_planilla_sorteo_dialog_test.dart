@@ -96,7 +96,31 @@ void main() {
       version: VersionPlanillaSorteo.interna,
       blancoYNegro: false,
       soloUltimos: false,
+      vertical: true,
     ));
+  });
+
+  testWidgets('la hoja viene parada, y se puede pedir acostada', (tester) async {
+    // 10-nov-2026: acostada, en una impresora puesta en vertical, salía a
+    // media hoja o cortada a la derecha.
+    final elegido = await abrir(tester);
+    expect(find.text('La hoja'), findsOneWidget);
+    expect(
+      tester
+          .widget<SegmentedButton<bool>>(find.byKey(const Key('planilla_hoja')))
+          .selected,
+      {true},
+    );
+
+    await tester.ensureVisible(find.text('Acostada'));
+    await tester.tap(find.text('Acostada'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('hay que elegir orientación Horizontal'),
+      findsOneWidget,
+    );
+    await generar(tester);
+    expect(elegido.single!.vertical, isFalse);
   });
 
   testWidgets('si el único sorteo es de todos, tampoco', (tester) async {
@@ -141,6 +165,7 @@ void main() {
       version: VersionPlanillaSorteo.paraRepartir,
       blancoYNegro: true,
       soloUltimos: true,
+      vertical: true,
     ));
   });
 
