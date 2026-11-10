@@ -174,23 +174,34 @@ equipo recuerda el suyo) **y las fotos de los tragos y las marcas vienen adentro
 `docs/FOTOS_DE_LA_BARRA.md`** (autor y licencia; un test lo exige), y solo de fuentes libres: nunca de páginas de marcas ni de supermercados.
 **Después de la barra, Entradas 4 a 6, y se publica todo en una**, **sin apuro de fecha** (6-nov: "cuando salga nomás, ahora hay más
 tiempo"), preguntando. **La 6.4.0 se publicó el 9-nov a la madrugada, con el usuario** (la foto de la mora "antes de 6.4.0", los
-cuatro SQL con los conteos iguales, el release `v6.4.0` con el Setup y el APK, y la web): **falta que instale las tres PCs y la foto
-"después"**. Antes de eso estaba todo programado y probado (27 de 28, 96 %, con la encargada y el cierre por sector). Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de
+cuatro SQL con los conteos iguales, el release `v6.4.0` con el Setup y el APK, y la web). **Instalada en las tres PCs (lo confirmó el
+usuario el 10-nov); falta la foto de la mora "después de 6.4.0"**, que es el paso 0 de publicar la 6.5.0. Antes de eso estaba todo programado y probado (27 de 28, 96 %, con la encargada y el cierre por sector). Lo que lleva, la revisión de bugs y el paso a paso: "Para retomar en otro chat" de
 `docs/CONTEXTO_v6.4.0_2026-11-06.md`. Lo de antes de publicar quedó hecho el 8-nov: la migración v78 sobre una copia de la base real
 (con `barra_recargos`, SHA-256 igual; repetirla si pasan días), el aviso entre PCs contra la nube y **PAPEL con la TP-POS58: contesta**
 (con rollo "hay", sin rollo "no hay"), así que el aviso de papel de VENDER sale de verdad.
 
-**La 6.5.0, programada y probada el 9-nov, sin publicar** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
-chat"; el plan, `docs/PLAN_PUERTA_PLANO_Y_SORTEO_2026-11-09.md`). Sin SQL. **La versión sigue en `6.4.0+66`: el número nuevo se pone al
-publicar, cuando el usuario diga** ("Aún no publiques hasta que yo diga", 9-nov). Lleva:
+**La 6.5.0, programada el 9 y el 10-nov, sin publicar** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
+chat": ahí está lo hecho, **lo que quedó sin probar** y el paso a paso; el plan del 9-nov, `docs/PLAN_PUERTA_PLANO_Y_SORTEO_2026-11-09.md`).
+Sin SQL. **La versión sigue en `6.4.0+66`: el número nuevo se pone al publicar, cuando el usuario diga** ("Aún no publiques hasta que yo
+diga", 9-nov; el 10-nov: publica al llegar a su casa). **Falta programar una sola cosa: la Encargada de barra con su PIN en la web del
+iPhone** (pensada en el CONTEXTO, sin empezar; hoy en un iPhone no entra, en Android y en la PC sí). Lleva:
 - **el modal del cobro se cierra apenas el pago queda guardado** (`DespuesDeGuardarCobro`, `cerrarRuta`): lo de después no lo frena ni
   dice "Reintentá", y lo que falla queda en `cobros_despues_de_guardar.txt`;
 - **la recepcionista ve el plano** en su pantalla (VER EN EL PLANO, VER LA LLEGADA, "Ver el plano entero"; `SalonParaLaPuerta`), sin
   que la tele se entere; el celular lo recibe de la notebook;
 - **sillas sueltas** (`sillas_puerta.mesa = 0`, ver "Las sillas de la noche");
 - **el chat de la puerta** (ver "Los celulares de la puerta");
-- **las mesas de más van lejos y el jefe elige dónde** (ver "El sorteo sobre el plano").
-**No crear "Silla suelta" en el catálogo ni usar SILLA SUELTA hasta que las PCs y las tablets tengan la 6.5.0.**
+- **las mesas de más van lejos y el jefe elige dónde** (ver "El sorteo sobre el plano");
+- **la planilla del sorteo sale parada** (10-nov): el cartel pregunta "La hoja: Parada · Acostada", con Parada elegida
+  (`PlanillaSorteoPdf.construir(vertical:)`). Acostada, en una impresora puesta en vertical, salía a media hoja o cortada. Los grises y
+  las líneas de `PlanillaTema` van más oscuros. La de entrega y el plano siguen acostados. La impresora de la oficina es una Epson L495;
+- **el recibo de un evento particular sale entero** (10-nov, `PdfService._buildDocument`, `construirReciboParticularPdf`): ver la trampa
+  "En una fila de un PDF…", abajo;
+- **una mesa del plano se reserva para quien no es alumno** (los profes, 10-nov): ver "La mesa reservada", en El salón;
+- **los profes aparecen en Recepción y el tótem los saluda con su mesa** (10-nov): ver "Los que se sientan en una mesa reservada", en El
+  tótem.
+**No crear "Silla suelta" en el catálogo, ni usar SILLA SUELTA, ni reservar una mesa con "Es para alguien" hasta que las PCs y las
+tablets tengan la 6.5.0.**
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
@@ -440,6 +451,18 @@ vacío y después pone las mesas con un botón.
   - Las medidas del predio pasan a Medidas al elegirlo (`aplicarEleccionAlPlano(playon:)`); la distancia entre mesas
     es de cada fiesta.
 
+**La mesa reservada** (6.5.0, sin publicar; `docs/CONTEXTO_v6.5.0_2026-11-09.md`, etapa 8). El jefe le da una mesa a quien no es alumno
+(los profes: se la regala la empresa, sin contrato ni pago). **Es una mesa libre que dice para quién es**, y va entera en el motivo de la
+mesa libre: `Reservada para Profes: GARCÍA, ANA; LÓPEZ, LUIS` (`ReservaDeMesa`, `plano/modelo/reserva_de_mesa.dart`).
+- **Sin claves nuevas en el plano de la fiesta:** una PC con una versión anterior la ve como una libre con su motivo.
+- **Tiene que empezar con "Reservada para".** Una libre con otro motivo ("Columna") no es una reserva: no se usa y sigue tachada.
+  **La coma no separa los nombres** ("GARCÍA, ANA"): separan el punto y coma y el renglón.
+- "Dejar libre" pregunta **No se usa · Es para alguien** (`reserva_de_mesa_dialog.dart`), y una libre tiene "Para quién es"
+  (`CambiosDeMesa.cambiarMotivoDeLibre`). Todo por `_cambiarConfig`: en modo jefe.
+- **En la pantalla, debajo de la mesa van los nombres** en un renglón ("GARCÍA +3", `rotuloEnPantalla`) y la lista se despliega al tocarla;
+  **en el papel, "PROFES"** sin la tachadura, con la lista al pie de su hoja (`InfoMesa.rotuloDeReservada` y `nombreDeReservada`).
+- Para el sorteo es una libre más: no se la da a nadie.
+
 **En la pantalla del plano no se usa el SnackBar.** Lo que pasó se dice con `AvisoDelPlano`, al lado de los
 botones del pie: el SnackBar los tapaba varios segundos después de cada cambio. Un error se dice en palabras, sin
 el texto de la excepción.
@@ -567,6 +590,17 @@ oficina, antes de la fiesta. Se guarda en `entradas_retiro` y no toca `invitados
   extra pagan el lugar, no la entrada: esas se compran aparte, **al 50 %** de su valor, y no se entregan en el retiro
   (`EntradasDeAlumno.alCincuenta`). El precio de la entrada todavía no se sabe: nada lleva un precio fijo. Cobrarlas es la venta de
   entradas (sección 8 de `docs/PLAN_MODO_ENTRADAS_2026-10-30.md`), sin programar. Detalle: `docs/CONTEXTO_v6.3.1_2026-11-04.md`.
+
+**Los que se sientan en una mesa reservada** (los profes; 6.5.0, sin publicar; etapa 9 del CONTEXTO de la 6.5.0) **aparecen en Recepción
+y el tótem los saluda con su mesa, como a un alumno.**
+- **Salen del plano** (`reservadosDeLaPuerta`, `recepcion/services/reservados_de_la_puerta.dart`): uno por nombre de cada mesa
+  reservada. **Una reserva sin nombres no pone a nadie en la puerta.**
+- **Su fila tiene un id fijo** (`idInvitadoReserva`: la fiesta, la mesa y el nombre) **y se crea al marcar el ingreso**, como la de un
+  alumno antes del sorteo: `PuertaAlDia` no los arma ni los limpia. Corregir una letra del nombre es otra persona.
+- **Un grupo por mesa** en `PuertaDelEvento.masivo(reservados:)`, con `GrupoPuerta.reservadaPara` ("PROFES", la distinción). **Sin
+  `contratoId`: ni sillas de la noche ni nada de cobros.** Quien arme algo para "la familia" tiene que aguantar un grupo sin contrato.
+- En la ficha del tótem, `PersonaFicha.grupo` (clave `g`); los de una mesa comparten `familia` y se saludan juntos. `armarFichaTotem`
+  los lee con `leerReservados`. El tótem de la web no tiene ficha: ahí van sin mesa.
 
 **Las sillas de la noche** (6.4.0, en la rama; `docs/CONTEXTO_v6.4.0_2026-11-06.md`). La noche de la fiesta, la familia paga la silla en la
 caja de la Encargada de barra, lleva el vale a la recepcionista, y Recepción suma la silla a esa familia de un masivo sorteado con el número
@@ -999,6 +1033,13 @@ históricos y la pantalla se ve como siempre.
   modo jefe como liquidación (queda en verde). El repaso de los cobros usa el saldo de hoy, y sin saldo da siempre
   $0: le borraba la mora a ALTAMIRANO, CELESTE ABIGAIL (15-oct). No rehacerla con el saldo de cada cobro: los
   perdones de esos alumnos se anotaron con la cuenta vieja (ajuste 0) y se revivirían.
+- **En una fila de un PDF, un hijo sin `flex` no tiene tope de ancho: el texto no baja de renglón y se sale de la hoja, sin error.** Así
+  salía recortado el encabezado del recibo de los eventos particulares (10-nov-2026): la columna de la derecha, sin `pw.Expanded`, se
+  estiraba con la frase "Este evento fue diseñado para …" y se llevaba afuera la etiqueta y la fecha. Lo que va al lado de otra cosa en un
+  `pw.Row` y puede ser largo va en `pw.Expanded`. **Y un cuerpo entero metido en un solo `pw.Column` no se parte entre hojas:** con
+  pocas filas deja el encabezado solo en la hoja 1, y si no entra en una hoja el paquete no termina nunca (su freno es un `assert`, que
+  en la app instalada no corre). Las tablas van como hijas directas del `pw.MultiPage`. Para comprobar que nada se salga,
+  `palabrasDelPdf` (`test/helpers/leer_pdf.dart`) dice dónde cae cada palabra; modelo: `test/recibo_particular_test.dart`.
 - **En un PDF, una columna de renglones dentro de una celda de tabla puede perder el último, sin avisar.** El
   paquete arma cada fila dos veces y, en la segunda, le da a la celda como tope exactamente lo que mide; si la suma
   de los renglones lo pasa por un redondeo, deja el último "para la hoja siguiente" y no lo dibuja. Así no salía
