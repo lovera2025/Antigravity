@@ -19,6 +19,9 @@ import '../repositories/invitados_repository.dart';
 import '../repositories/sillas_puerta_repository.dart';
 import '../repositories/supabase_invitados_repository.dart';
 import '../services/puerta_del_evento.dart';
+import '../services/reservados_de_la_puerta.dart';
+import '../../plano/repositories/planos_evento_repository.dart'
+    show leerPlanoDeLaFiestaProvider;
 import '../../../main.dart';
 
 // ── Eventos Activos Provider ───────────────────────────────────────────────
@@ -154,6 +157,63 @@ final alumnosDeLaPuertaProvider = StreamProvider.autoDispose
     },
   );
   ref.onDispose(() => controller.close());
+  return controller.stream;
+});
+
+/// Quienes se sientan en las mesas reservadas del plano para quien no es alumno
+/// (los profes, 6.5.0), de la base de esta PC ([reservadosDeLaPuerta]). Se
+/// vuelven a leer cuando baja un cambio del plano de otra PC y cada minuto (lo
+/// que el jefe cargó en esta misma PC), y solo avisan si cambiaron. Sin plano,
+/// nadie. Mismo molde que [alumnosDeLaPuertaProvider].
+final reservadosDeLaPuertaProvider = StreamProvider.autoDispose
+    .family<List<ReservadoPuerta>, String>((ref, eventoId) {
+  final leerPlano = ref.watch(leerPlanoDeLaFiestaProvider);
+  final motor = ref.watch(syncEngineProvider);
+
+  late final StreamController<List<ReservadoPuerta>> controller;
+  StreamSubscription<Set<String>>? cambios;
+  Timer? cadaMinuto;
+  var cadena = Future<void>.value();
+  String? ultimo;
+
+  void leer() {
+    cadena = cadena.then((_) async {
+      if (controller.isClosed) return;
+      try {
+        final leidos = reservadosDeLaPuerta(eventoId, await leerPlano(eventoId));
+        final firma = [for (final r in leidos) '${r.id}|${r.nombre}|${r.para}']
+            .join('\n');
+        if (controller.isClosed || firma == ultimo) return;
+        ultimo = firma;
+        controller.add(leidos);
+      } catch (e) {
+        // Sin poder leer el plano, la puerta sigue con los alumnos.
+        debugPrint('Recepción: no se pudieron leer las mesas reservadas: $e');
+        if (!controller.isClosed && ultimo == null) {
+          ultimo = '';
+          controller.add(const []);
+        }
+      }
+    });
+  }
+
+  controller = StreamController<List<ReservadoPuerta>>(
+    onListen: () {
+      cambios = motor.cambiosBajadosStream.listen((tablas) {
+        if (tablas.contains('planos_evento')) leer();
+      });
+      cadaMinuto = Timer.periodic(const Duration(minutes: 1), (_) => leer());
+      leer();
+    },
+    onCancel: () async {
+      cadaMinuto?.cancel();
+      await cambios?.cancel();
+    },
+  );
+  ref.onDispose(() {
+    cadaMinuto?.cancel();
+    controller.close();
+  });
   return controller.stream;
 });
 
@@ -297,6 +357,9 @@ final puertaDelEventoProvider = Provider.autoDispose
       invitados: i,
       sillasPuerta: sillas.value ?? const [],
       valesAnulados: anulados,
+      // Las mesas reservadas no frenan la lista: mientras se leen, sin ellas.
+      reservados:
+          ref.watch(reservadosDeLaPuertaProvider(eventoId)).value ?? const [],
     ),
   );
 });

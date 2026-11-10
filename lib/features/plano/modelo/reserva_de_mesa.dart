@@ -52,6 +52,24 @@ class ReservaDeMesa {
 
   static String _limpio(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
 
+  /// El apellido de "GARCÍA, ANA"; un nombre sin coma va entero.
+  static String apellidoDe(String nombre) {
+    final coma = nombre.indexOf(',');
+    return _limpio(coma < 0 ? nombre : nombre.substring(0, coma));
+  }
+
+  /// Lo que va escrito debajo de la mesa **en la pantalla** (pedido del usuario,
+  /// 10-nov: "en vez de decir profe, que digan los nombres de cada uno, con
+  /// posibilidad de desplegar si son muchos"). Debajo de una mesa entra un
+  /// renglón: con un nombre, su apellido; con varios, el primero y cuántos más
+  /// ("GARCÍA +4"), y la lista entera se despliega al tocar la mesa. Sin
+  /// nombres todavía, para quién es.
+  String get rotuloEnPantalla => switch (quienes.length) {
+        0 => para,
+        1 => apellidoDe(quienes.single),
+        final n => '${apellidoDe(quienes.first)} +${n - 1}',
+      };
+
   /// Cómo se guarda en el motivo de la mesa libre. Los dos puntos de [para] y
   /// los punto y coma de los nombres se sacan: ahí se corta al leer.
   String get motivo {

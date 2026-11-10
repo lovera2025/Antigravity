@@ -560,8 +560,10 @@ class PintorPlano extends CustomPainter {
     // Con sillas, la línea queda justo arriba de la franja.
     final franja = franjaApellido(c, r, caja, conSillas: conSillas)
         .shift(Offset(0, marca != null && !conSillas ? 4 : 0));
+    // Debajo de una reservada, quiénes se sientan ("GARCÍA +4"); la lista
+    // entera se despliega al tocar la mesa.
     final apellido = familia?.apellido ??
-        (nivel.apellidos ? reservada?.toUpperCase() : null) ??
+        (nivel.apellidos ? info.rotuloDeReservada?.toUpperCase() : null) ??
         (nivel.adornos && nivel.apellidos
             ? marca?.apellidoQueFalta(yaLoLleva: false)
             : null);

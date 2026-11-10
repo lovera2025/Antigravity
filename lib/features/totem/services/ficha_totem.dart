@@ -80,6 +80,23 @@ class FichaTotem {
     for (final g in puerta.grupos) {
       if (g.cargadoAMano) continue;
       final titular = g.titular;
+      // Una mesa reservada para quien no es alumno (los profes, 6.5.0): se
+      // saludan juntos si llegan juntos, con su mesa y su distinción, y
+      // ninguno acompaña a otro.
+      final para = g.reservadaPara;
+      if (para != null) {
+        for (final p in g.personas) {
+          personas[p.id] = PersonaFicha(
+            id: p.id,
+            nombre: p.nombre,
+            familia: titular.id,
+            esAlumno: false,
+            mesa: p.mesa,
+            grupo: para,
+          );
+        }
+        continue;
+      }
       personas[titular.id] = PersonaFicha(
         id: titular.id,
         nombre: titular.nombre,
@@ -212,6 +229,11 @@ class PersonaFicha {
   /// En un acompañante, el nombre del alumno al que acompaña.
   final String? titular;
 
+  /// En quien se sienta en una mesa reservada para quien no es alumno (6.5.0),
+  /// para quién es ("Profes"): va en la tarjeta, donde un acompañante dice a
+  /// quién acompaña.
+  final String? grupo;
+
   const PersonaFicha({
     required this.id,
     required this.nombre,
@@ -221,6 +243,7 @@ class PersonaFicha {
     this.sillas,
     this.musica,
     this.titular,
+    this.grupo,
   });
 
   // Claves cortas: con 1.100 personas, el puente lleva unos 120 KB.
@@ -233,6 +256,7 @@ class PersonaFicha {
         's': ?sillas,
         'mu': ?musica,
         't': ?titular,
+        'g': ?grupo,
       };
 
   static PersonaFicha? fromJson(Object? json) {
@@ -254,6 +278,7 @@ class PersonaFicha {
       sillas: texto('s'),
       musica: texto('mu'),
       titular: texto('t'),
+      grupo: texto('g'),
     );
   }
 }

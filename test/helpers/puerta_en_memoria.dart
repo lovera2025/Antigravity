@@ -331,6 +331,10 @@ class SillasPuertaEnMemoria extends SillasPuertaRepository {
 class PlanosEnMemoria implements PlanosEventoRepository {
   PlanosEnMemoria([this.armado]);
   ArmadoSalon? armado;
+
+  /// Lo configurado del plano: las mesas libres y las reservadas para quien no
+  /// es alumno (los profes).
+  ConfigPlano config = ConfigPlano.vacia;
   var lecturas = 0;
 
   @override
@@ -344,7 +348,7 @@ class PlanosEnMemoria implements PlanosEventoRepository {
       estilo: EstiloPlano.gala,
       modo: ModoSorteo.entera,
       ahora: DateTime(2026, 11, 1),
-    );
+    ).copyWith(config: config, ahora: DateTime(2026, 11, 1));
   }
 
   @override

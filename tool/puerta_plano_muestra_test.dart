@@ -18,9 +18,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:arguello_events/features/plano/estilos/fuentes_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
+import 'package:arguello_events/features/recepcion/services/reservados_de_la_puerta.dart';
 import 'package:arguello_events/features/totem/estilos/fondo_totem.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
 
@@ -81,6 +83,15 @@ void main() {
       alumnos: alumnos,
       filas: filas,
       plano: ArmadosPredefinidos.normal2aPagina3(),
+    );
+    // La mesa que la empresa les regala a los profes (6.5.0): salen del plano.
+    mundo.planos.config = ConfigPlano.vacia.copyWith(
+      libres: const {
+        40: MesaLibre(
+          motivo: 'Reservada para Profes: GARCÍA, ANA; LÓPEZ, LUIS; '
+              'PÉREZ, MARÍA; DÍAZ, JUAN',
+        ),
+      },
     );
     final clave = GlobalKey();
     tester.view.physicalSize = tam * 2;
@@ -157,6 +168,56 @@ void main() {
       tam: const Size(1366, 860),
       tocar: () async {
         await tester.tap(boton('acosta'));
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(milliseconds: 30));
+        }
+        await tester.tap(find.byKey(const ValueKey('ver_la_llegada')));
+      },
+    );
+  });
+
+  // ── Los profes (6.5.0): la mesa reservada, en la puerta ──────────────────
+  final profe = find.byKey(ValueKey(
+    'ver_en_el_plano_${idInvitadoReserva(eventoMasivo, 40, 'GARCÍA, ANA')}',
+  ));
+
+  testWidgets('los profes en el buscador', (tester) async {
+    await sacar(
+      tester,
+      archivo: '6_profes_lista_PC.png',
+      tam: const Size(1100, 760),
+      tocar: () async {
+        await tester.enterText(find.byType(TextField).first, 'lopez');
+      },
+    );
+  });
+
+  testWidgets('los profes en el plano', (tester) async {
+    await sacar(
+      tester,
+      archivo: '7_profes_plano_PC.png',
+      tam: const Size(1366, 860),
+      tocar: () async {
+        await tester.enterText(find.byType(TextField).first, 'garcia');
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 30));
+        }
+        await tester.tap(profe);
+      },
+    );
+  });
+
+  testWidgets('la llegada de un profe, como en la tele', (tester) async {
+    await sacar(
+      tester,
+      archivo: '8_profes_llegada_PC.png',
+      tam: const Size(1366, 860),
+      tocar: () async {
+        await tester.enterText(find.byType(TextField).first, 'garcia');
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 30));
+        }
+        await tester.tap(profe);
         for (var i = 0; i < 8; i++) {
           await tester.pump(const Duration(milliseconds: 30));
         }

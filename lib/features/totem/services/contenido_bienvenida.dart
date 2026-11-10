@@ -83,6 +83,13 @@ class ContenidoBienvenida {
         acompanaA = personas.length > 1
             ? 'acompañan a ${aQuien.single}'
             : 'acompaña a ${aQuien.single}';
+      } else if (aQuien.isEmpty && personas.isNotEmpty) {
+        // Los de una mesa reservada para quien no es alumno (los profes,
+        // 6.5.0): debajo del nombre va su distinción, "Profes".
+        final grupos = {for (final i in personas) deFicha(i)?.grupo};
+        if (grupos.length == 1 && grupos.single != null) {
+          acompanaA = grupos.single;
+        }
       }
     }
 

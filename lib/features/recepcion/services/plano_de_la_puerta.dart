@@ -3,6 +3,7 @@ import '../../../models/totem_config.dart';
 import '../../eventos/services/mesas_extra_utils.dart';
 import '../../plano/modelo/armado_salon.dart';
 import '../../plano/modelo/estado_plano.dart';
+import '../../plano/modelo/reserva_de_mesa.dart';
 import '../../totem/services/bienvenidas_totem.dart';
 import '../../totem/services/cuadro_del_salon.dart';
 import '../../totem/services/plano_de_la_llegada.dart';
@@ -118,7 +119,14 @@ class SalonEntero {
       if (numeros.isEmpty) continue;
       ocupantes.add(OcupantePlano(
         id: g.titular.id,
-        nombre: g.titular.nombre,
+        // Una mesa reservada (los profes, 6.5.0) lleva debajo quiénes se
+        // sientan, en un renglón; tocarla abre el grupo con todos.
+        nombre: g.reservadaPara == null
+            ? g.titular.nombre
+            : ReservaDeMesa(
+                g.reservadaPara!,
+                [for (final p in g.personas) p.nombre],
+              ).rotuloEnPantalla,
         numeros: numeros,
         division: g.division,
       ));

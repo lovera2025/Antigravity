@@ -35,6 +35,8 @@ import 'features/eventos/repositories/sillas_reparto_repository.dart';
 import 'features/plano/repositories/planos_evento_repository.dart';
 import 'features/recepcion/providers/recepcion_provider.dart'
     show leerAlumnosDeLaPuerta;
+import 'features/recepcion/services/reservados_de_la_puerta.dart'
+    show reservadosDeLaPuerta;
 import 'features/asesor/asesor_home_screen.dart';
 import 'features/common/providers/user_role_provider.dart';
 import 'features/common/widgets/operational_sync_coordinator.dart';
@@ -556,6 +558,11 @@ class _AuthWrapperState extends ConsumerState<AuthWrapper> {
           ),
           leerPlano: (id) async =>
               (await ref.read(leerPlanoDeLaFiestaProvider)(id))?.armadoONull,
+          // Los que se sientan en una mesa reservada (los profes).
+          leerReservados: (id) async => reservadosDeLaPuerta(
+            id,
+            await ref.read(leerPlanoDeLaFiestaProvider)(id),
+          ),
           // Los segundos de la llegada cambiados a mano esa noche.
           leerTiempos: (id) => ref.read(tiemposAManoProvider(id)),
         ),

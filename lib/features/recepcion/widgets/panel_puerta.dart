@@ -540,7 +540,12 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
                 a,
                 chico: true,
                 detalle: [
-                  Text('acompañante', style: _letra(size: 12, color: _suave)),
+                  // En una mesa reservada (los profes) nadie acompaña a nadie:
+                  // cada uno lleva la distinción de la mesa.
+                  Text(
+                    g.reservadaPara ?? 'acompañante',
+                    style: _letra(size: 12, color: _suave),
+                  ),
                 ],
               ),
             ),
@@ -568,6 +573,24 @@ class _PanelPuertaState extends ConsumerState<PanelPuerta> {
         runSpacing: 2,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          // La distinción de quien no es alumno ("PROFES", 6.5.0), marcada:
+          // la recepcionista tiene que verla de un vistazo.
+          if (g.reservadaPara != null) ...[
+            Container(
+              key: ValueKey('distincion_${t.id}'),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: _ambar.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: _ambar.withValues(alpha: 0.55)),
+              ),
+              child: Text(
+                g.reservadaPara!.toUpperCase(),
+                style: _letra(size: 11, negrita: true, color: _ambar),
+              ),
+            ),
+            if (t.mesa != null) _punto(),
+          ],
           if (g.division != null)
             Text(g.division!, style: _letra(size: 12, color: _suave)),
           if (t.mesa != null) ...[

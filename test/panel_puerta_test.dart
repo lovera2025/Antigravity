@@ -11,9 +11,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
+import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
+import 'package:arguello_events/features/recepcion/services/reservados_de_la_puerta.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/silla_puerta.dart';
 
 import 'helpers/puerta_en_memoria.dart';
@@ -121,6 +124,76 @@ void main() {
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         isEmpty,
       );
+    });
+  });
+
+  group('una mesa reservada para quien no es alumno (los profes)', () {
+    // 10-nov-2026: la empresa les regala una mesa a los profes; el usuario
+    // pidió que aparezcan en el buscador y se les marque el ingreso "igual que
+    // los alumnos". Salen del plano de la fiesta.
+    void conProfes(PuertaEnMemoria mundo) {
+      mundo.planos
+        ..armado = ArmadosPredefinidos.normal2aPaginas45()
+        ..config = ConfigPlano.vacia.copyWith(
+          libres: const {
+            20: MesaLibre(
+              motivo: 'Reservada para Profes: GARCÍA, ANA; LÓPEZ, LUIS',
+            ),
+            21: MesaLibre(motivo: 'Columna'),
+          },
+        );
+    }
+
+    testWidgets('aparecen con su distinción y su mesa, sin sillas ni cobros',
+        (tester) async {
+      await _abrir(tester, preparar: conProfes);
+
+      await _buscar(tester, 'garcia');
+      // El grupo entero: los dos de la mesa, cada uno con su botón.
+      expect(find.text('GARCÍA, ANA'), findsOneWidget);
+      expect(find.text('LÓPEZ, LUIS'), findsOneWidget);
+      expect(find.text('INGRESAR'), findsNWidgets(2));
+      expect(find.text('PROFES'), findsOneWidget);
+      expect(find.text('Mesa 20'), findsOneWidget);
+      // El segundo lleva la distinción, no "acompañante".
+      expect(find.text('Profes'), findsOneWidget);
+      expect(find.text('acompañante'), findsNothing);
+      // Ni sillas de la noche ni "cargado a mano".
+      expect(find.textContaining('SUMAR SILLA'), findsNothing);
+      expect(find.text('SILLA SUELTA'), findsNothing);
+      expect(find.textContaining('cargado a mano'), findsNothing);
+      // Con el plano de la fiesta, VER EN EL PLANO.
+      expect(find.text('VER EN EL PLANO'), findsOneWidget);
+    });
+
+    testWidgets('cuentan en la noche, y la mesa que no se usa no pone a nadie',
+        (tester) async {
+      await _abrir(tester, preparar: conProfes);
+      // Seis de las familias y los dos profes.
+      expect(find.text('0 de 8 adentro'), findsOneWidget);
+      await _buscar(tester, '21');
+      expect(find.text('INGRESAR'), findsNothing);
+    });
+
+    testWidgets('Enter lo ingresa, creando su fila con su id fijo',
+        (tester) async {
+      final mundo = await _abrir(tester, preparar: conProfes);
+
+      await _buscar(tester, 'luis lopez', enter: true);
+
+      expect(
+        mundo.invitados.creados,
+        [idInvitadoReserva(_masivo, 20, 'LÓPEZ, LUIS')],
+      );
+      expect(find.text('LÓPEZ, LUIS ingresó.'), findsOneWidget);
+      expect(find.text('1 de 8 adentro'), findsOneWidget);
+    });
+
+    testWidgets('sin plano, o sin mesas reservadas, Recepción es la de siempre',
+        (tester) async {
+      await _abrir(tester);
+      expect(find.text('0 de 6 adentro'), findsOneWidget);
+      expect(find.text('PROFES'), findsNothing);
     });
   });
 

@@ -7,6 +7,7 @@ import '../../plano/modelo/armado_salon.dart';
 import '../../recepcion/providers/recepcion_provider.dart'
     show AlumnosDeLaPuerta;
 import '../../recepcion/services/puerta_del_evento.dart';
+import '../../recepcion/services/reservados_de_la_puerta.dart';
 import 'ficha_totem.dart';
 import 'lista_de_la_pc.dart';
 import 'tiempos_a_mano.dart';
@@ -170,6 +171,10 @@ Future<FichaTotem> armarFichaTotem(
   required Future<AlumnosDeLaPuerta> Function(String eventoId) leerAlumnos,
   Future<ArmadoSalon?> Function(String eventoId)? leerPlano,
   TiemposAMano? Function(String eventoId)? leerTiempos,
+
+  /// Quienes se sientan en las mesas reservadas para quien no es alumno (los
+  /// profes, 6.5.0): el tótem los saluda con su mesa, como a un alumno.
+  Future<List<ReservadoPuerta>> Function(String eventoId)? leerReservados,
 }) async {
   final evento = await leerEvento(eventoId);
   if (evento?.modalidad != 'masivo') return FichaTotem.particular(eventoId);
@@ -180,12 +185,19 @@ Future<FichaTotem> armarFichaTotem(
   } catch (e) {
     debugPrint('La ficha del tótem va sin plano: $e');
   }
+  var reservados = const <ReservadoPuerta>[];
+  try {
+    reservados = await leerReservados?.call(eventoId) ?? const [];
+  } catch (e) {
+    debugPrint('La ficha del tótem va sin las mesas reservadas: $e');
+  }
   return FichaTotem.desdePuerta(
     eventoId,
     PuertaDelEvento.masivo(
       alumnos: a.alumnos,
       repartos: a.repartos,
       invitados: const [],
+      reservados: reservados,
     ),
     plano: plano,
   ).conTiempos(leerTiempos?.call(eventoId));

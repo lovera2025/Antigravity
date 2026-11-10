@@ -239,6 +239,12 @@ class PlanoDeLaFiesta {
           if (ReservaDeMesa.deMotivo(e.value.motivo) case final r?)
             e.key: r.para,
       },
+      // En la pantalla, debajo de la mesa van quiénes se sientan.
+      quienesEnUnRenglon: {
+        for (final e in config.libres.entries)
+          if (ReservaDeMesa.deMotivo(e.value.motivo) case final r?)
+            if (r.quienes.isNotEmpty) e.key: r.rotuloEnPantalla,
+      },
       fijadas: fijadas,
       ordenDivisiones:
           config.ordenDivisiones.isEmpty ? null : config.ordenDivisiones,

@@ -7,6 +7,7 @@ import '../../eventos/services/mesas_extra_utils.dart';
 import '../../eventos/services/reparto_de_sillas.dart';
 import '../../eventos/services/salon_mesas.dart';
 import 'lista_puerta.dart';
+import 'reservados_de_la_puerta.dart';
 import 'sillas_de_la_puerta.dart';
 import 'vales_anulados.dart';
 
@@ -84,12 +85,18 @@ class PuertaDelEvento {
   /// [sillasPuerta] son las sillas que se sumaron esa noche en la puerta, vigentes
   /// y quitadas, de todo el evento: cada familia muestra las suyas por mesa.
   /// [valesAnulados], los de las ventas que anuló la barra: esas sillas se marcan.
+  ///
+  /// [reservados] son quienes se sientan en las mesas reservadas del plano para
+  /// quien no es alumno (los profes, 6.5.0; [reservadosDeLaPuerta]): van como
+  /// un grupo por mesa, con su distinción, y se les marca el ingreso como a
+  /// cualquiera. No tienen contrato: ni sillas de la noche ni nada de cobros.
   factory PuertaDelEvento.masivo({
     required List<ContratoAlumno> alumnos,
     Map<String, SillasReparto> repartos = const {},
     required List<Invitado> invitados,
     List<SillaPuerta> sillasPuerta = const [],
     ValesAnulados valesAnulados = ValesAnulados.ninguno,
+    List<ReservadoPuerta> reservados = const [],
   }) {
     final filaPorId = {for (final i in invitados) i.id: i};
     final activos = alumnos.where((a) => !a.esBajaTemporal).toList();
@@ -151,14 +158,36 @@ class PuertaDelEvento {
         ),
       );
     }
+    // Las mesas reservadas para quien no es alumno: un grupo por mesa, con
+    // todos los que se sientan. Quien las busca ve con quién va, como en una
+    // familia; ninguno "acompaña" a otro.
+    final porMesa = <int, List<ReservadoPuerta>>{};
+    for (final r in reservados) {
+      porMesa.putIfAbsent(r.mesa, () => []).add(r);
+    }
+    for (final mesa in porMesa.keys.toList()..sort()) {
+      final personas = [
+        for (final r in porMesa[mesa]!)
+          PersonaPuerta._deReserva(r, filaPorId[r.id]),
+      ];
+      grupos.add(
+        GrupoPuerta._(
+          titular: personas.first,
+          acompanantes: personas.sublist(1),
+          reservadaPara: porMesa[mesa]!.first.para,
+        ),
+      );
+    }
     grupos.sort(_porNombre);
 
     // Los ids que pudieron salir de algún alumno del evento, también de los de
-    // baja: esas filas siguen a los alumnos y no son "cargadas a mano".
+    // baja: esas filas siguen a los alumnos y no son "cargadas a mano". Y los
+    // de quienes hoy se sientan en una mesa reservada.
     final deAlumnos = {
       for (final a in alumnos)
         for (var lugar = 0; lugar < kMaxLugaresPorAlumno; lugar++)
           idInvitadoPuerta(a.id, lugar),
+      for (final r in reservados) r.id,
     };
     final aMano = [
       for (final i in invitados)
@@ -361,6 +390,11 @@ class GrupoPuerta {
   /// revisar y quitar con motivo.
   final Set<String> conValeAnulado;
 
+  /// Si es una mesa reservada para quien no es alumno (6.5.0), para quién
+  /// ("Profes"): la distinción que llevan al lado. Todos los del grupo se
+  /// sientan en esa mesa y ninguno acompaña a otro. Null en una familia.
+  final String? reservadaPara;
+
   const GrupoPuerta._({
     required this.titular,
     this.acompanantes = const [],
@@ -375,6 +409,7 @@ class GrupoPuerta {
     this.sillasPorMesa = SillasDeLaFamilia.nada,
     this.movimientos = const [],
     this.conValeAnulado = const {},
+    this.reservadaPara,
   });
 
   /// Si [silla] tiene el vale anulado en la barra.
@@ -402,6 +437,7 @@ class GrupoPuerta {
         if (movimientos.isNotEmpty)
           'movimientos': [for (final s in movimientos) s.toMap()],
         if (conValeAnulado.isNotEmpty) 'anuladas': [...conValeAnulado],
+        if (reservadaPara != null) 'reservada': reservadaPara,
       };
 
   factory GrupoPuerta._fromJson(Map<String, dynamic> json, String eventoId) {
@@ -438,6 +474,10 @@ class GrupoPuerta {
         if (anuladas is List)
           for (final a in anuladas)
             if (a is String) a,
+      },
+      reservadaPara: switch (json['reservada']) {
+        final String s when s.trim().isNotEmpty => s,
+        _ => null,
       },
     );
   }
@@ -504,6 +544,18 @@ class PersonaPuerta {
         esAlumno: f.esAlumno,
         fila: fila,
         acompanaA: acompanaA,
+      );
+
+  /// Quien se sienta en una mesa reservada del plano (un profe): su mesa es
+  /// esa, y su fila se crea al marcar el ingreso.
+  factory PersonaPuerta._deReserva(ReservadoPuerta r, Invitado? fila) =>
+      PersonaPuerta._(
+        id: r.id,
+        nombre: r.nombre,
+        dni: '',
+        mesa: '${r.mesa}',
+        esAlumno: false,
+        fila: fila,
       );
 
   /// De la fila va solo si existe, si entró y cuándo se tocó.

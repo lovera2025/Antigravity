@@ -109,6 +109,11 @@ class InfoMesa {
   /// libre porque no se usa (una columna, el paso de los mozos).
   final String? reservada;
 
+  /// Lo que lleva escrito debajo en la pantalla una reservada: quiénes se
+  /// sientan, en un renglón ("GARCÍA +4", `ReservaDeMesa.rotuloEnPantalla`).
+  /// Null: lleva [reservada].
+  final String? quienesEnUnRenglon;
+
   const InfoMesa({
     required this.numero,
     this.estado = EstadoMesa.vacia,
@@ -119,6 +124,7 @@ class InfoMesa {
     this.fijadaPara,
     this.libre = false,
     this.reservada,
+    this.quienesEnUnRenglon,
   });
 
   OcupantePlano? get ocupante => ocupantes.isEmpty ? null : ocupantes.first;
@@ -127,6 +133,13 @@ class InfoMesa {
   /// libre: una que quedó ocupada o fijada es un conflicto y se muestra así.
   String? get nombreDeReservada =>
       estado == EstadoMesa.libre ? reservada : null;
+
+  /// Lo que lleva debajo en la pantalla ([quienesEnUnRenglon], o para quién es
+  /// si todavía no tiene nombres). En el papel va [nombreDeReservada]: ahí no
+  /// se puede tocar la mesa para ver la lista, que sale al pie.
+  String? get rotuloDeReservada => estado == EstadoMesa.libre
+      ? (quienesEnUnRenglon ?? reservada)
+      : null;
 }
 
 /// Cómo está el salón: qué hay en cada mesa. Es lo que dibuja el plano.
@@ -202,6 +215,9 @@ class EstadoPlano {
     List<OcupantePlano> ocupantes = const [],
     Set<int> libres = const {},
     Map<int, String> reservadas = const {},
+
+    /// De las reservadas con nombres, lo que va debajo en la pantalla.
+    Map<int, String> quienesEnUnRenglon = const {},
     Map<int, OcupantePlano> fijadas = const {},
     List<String>? ordenDivisiones,
   }) {
@@ -302,6 +318,9 @@ class EstadoPlano {
         fijadaPara: fijada,
         libre: libre,
         reservada: libre ? _nombreDe(reservadas[n]) : null,
+        quienesEnUnRenglon: libre && reservadas.containsKey(n)
+            ? _nombreDe(quienesEnUnRenglon[n])
+            : null,
       );
     }
     return EstadoPlano._(
