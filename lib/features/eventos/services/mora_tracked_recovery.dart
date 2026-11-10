@@ -476,6 +476,41 @@ class MoraTrackedRecovery {
   static bool _mismoDia(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  /// Lo que dice `revision_mora.txt` de un alumno con perdón al que la revisión
+  /// le habría subido la mora (6.5.0).
+  static const queNoHizoUnPerdon =
+      'tiene un perdón y la revisión no le sube la mora';
+
+  /// Si el jefe le perdonó mora: dejó un ajuste de ficha, o tiene una eximición
+  /// que **ningún cobro del historial da** (ni la de un cobro anulado, que la
+  /// revisión deshace: ver [exencionDeCobroAnulado]). Es la misma idea de "un
+  /// perdón" que usa [resolverExencion] para no tocarle la eximición.
+  static bool tienePerdon({
+    required ContratoAlumno contrato,
+    required List<Map<String, dynamic>> pagos,
+    CuentaPostCobro cuenta = MoraCuotaCalculator.postCobroTrackedOffset,
+  }) {
+    if (contrato.moraTrackedAjuste.abs() > 0.01) return true;
+    final local = contrato.moraExentaHasta;
+    if (local == null) return false;
+    if (exencionDeCobroAnulado(contrato: contrato, pagos: pagos, cuenta: cuenta) !=
+        null) {
+      return false;
+    }
+    final otorgadas = <({DateTime hasta, bool reinicia})>[];
+    _calcularExencionDesdeHistorial(
+      contratoBase: contrato,
+      pagos: pagos,
+      otorgadas: otorgadas,
+      cuenta: cuenta,
+    );
+    return !otorgadas.any(
+      (e) =>
+          _mismoDia(e.hasta, local) &&
+          e.reinicia == contrato.moraExencionReinicia,
+    );
+  }
+
   /// La eximición que tiene que quedar. Una sola regla para la revisión y la
   /// reparación:
   ///
@@ -727,6 +762,43 @@ class MoraTrackedRecovery {
         continue;
       }
 
+      final cobrada = moraCobradaDelHistorial(pagos);
+      final despues = contrato.copyWith(
+        moraPendienteTracked: trackedFinal,
+        moraCobradaOffset: objetivo.offset,
+        moraExentaHasta: hastaFinal,
+        moraExencionReinicia: reiniciaFinal,
+      );
+      final moraAntes = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: contrato,
+        moraCobradaHistorial: cobrada,
+        ahoraAr: ahoraAr,
+      );
+      final moraDespues = MoraCuotaCalculator.moraPendienteOperativa(
+        contrato: despues,
+        moraCobradaHistorial: cobrada,
+        ahoraAr: ahoraAr,
+      );
+      String f(double v) => '\$${v.toStringAsFixed(0)}';
+
+      // **A quien tiene un perdón, la revisión no le sube la mora** (6.5.0). El
+      // repaso rehace la ficha desde los pagos con las eximiciones que dieron
+      // los cobros, no con la del perdón: para él, las cuotas que el perdón
+      // dejó sin mora la generan. Una alumna tenía un perdón con "sin mora
+      // hasta 30/09" permanente y sus cuotas 2 y 3 vencían antes: la ventana de
+      // cobro le mostraba $0, el 10-nov las pagó sin mora, y la revisión le
+      // dejó $372.368 en la ficha (la mora de esas cuotas desde mayo y junio,
+      // menos el perdón viejo). Bajarla sí: eso no revive nada.
+      if (moraDespues > moraAntes + 0.01 &&
+          tienePerdon(contrato: contrato, pagos: pagos)) {
+        renglones.add(
+          '${contrato.nombreAlumno}: $queNoHizoUnPerdon: mora ${f(moraAntes)}'
+          ' -> ${f(moraDespues)} · de ficha ${f(trackedActual)} -> '
+          '${f(trackedFinal)}; queda como está',
+        );
+        continue;
+      }
+
       final hastaIso = hastaFinal == null ? null : _exentaHastaIso(hastaFinal);
       final updates = <String, Object?>{
         'mora_pendiente_tracked': trackedFinal,
@@ -767,24 +839,6 @@ class MoraTrackedRecovery {
       }
 
       if (constancia != null) {
-        final cobrada = moraCobradaDelHistorial(pagos);
-        final despues = contrato.copyWith(
-          moraPendienteTracked: trackedFinal,
-          moraCobradaOffset: objetivo.offset,
-          moraExentaHasta: hastaFinal,
-          moraExencionReinicia: reiniciaFinal,
-        );
-        final moraAntes = MoraCuotaCalculator.moraPendienteOperativa(
-          contrato: contrato,
-          moraCobradaHistorial: cobrada,
-          ahoraAr: ahoraAr,
-        );
-        final moraDespues = MoraCuotaCalculator.moraPendienteOperativa(
-          contrato: despues,
-          moraCobradaHistorial: cobrada,
-          ahoraAr: ahoraAr,
-        );
-        String f(double v) => '\$${v.toStringAsFixed(0)}';
         String ex(DateTime? d, bool r) =>
             d == null ? 'sin' : '${_exentaHastaIso(d)}${r ? '' : ' permanente'}';
         renglones.add(

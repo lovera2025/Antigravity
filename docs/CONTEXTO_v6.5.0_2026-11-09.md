@@ -40,6 +40,8 @@ Del 10-nov a la noche:
 - **La Encargada de barra entra con su PIN desde la web del iPhone** y ve LAS CAJAS; anula con motivo, a su nombre (etapa 10, `1303bba`).
 - **En un celular, el inicio no se encima y el cierre de caja no queda medio vacío** (etapa 11, `b0aa6b3`, `9cc7f1d`).
 - En la web de un celular, el cartel del motivo de anular ya no se come el primer toque (`52a7051`).
+- **A quien tiene un perdón, la revisión de la mora no le sube la mora** (etapa 12): la foto de la mora encontró a una alumna con
+  $372.368 que no debía. Su ficha se corrige a mano después de instalar.
 
 **La revisión del 10-nov, antes de tocar nada:** `flutter analyze` sin errores en la app (los 3 que da son de `tool/_tmp_espindola_audit.dart`,
 un script viejo que no está en git) y **4.108 tests en verde** sobre `cf991ae`. Leídos enteros, sin encontrar fallas: el cobro
@@ -95,7 +97,10 @@ la app.
 **Publicar, paso a paso (cada paso con su OK y con el usuario presente; él dijo el 10-nov que publica al llegar a su casa):**
 0. Con él en la PC, **el sonido y la vibración del chat** (5 minutos): `flutter run -d windows -t tool/central_puerta_prueba.dart` y su
    Android por el wifi de su casa. Si fallan, el cartel sale igual; se arregla antes de armar el instalador.
-1. **Cerrar la 6.4.0:** foto de la mora "después de 6.4.0" (`supabase/mora_fotos.sql`) y la comparación con "antes de 6.4.0": vacía.
+1. **Cerrar la 6.4.0:** foto de la mora "después de 6.4.0" (`supabase/mora_fotos.sql`) y la comparación con "antes de 6.4.0". **Hecho el
+   10-nov a la tarde** (643 alumnos, "después de 6.4.0 (las tres PCs)"): dio dos alumnos, uno con un perdón que hizo el usuario y una
+   a la que la mora le revivió (etapa 12). Las fotos se sacan por el SQL Editor en el navegador de la app: el acceso a Supabase de esta PC (el MCP)
+   está en otra cuenta y no ve ArguelloApp.
 2. Foto de la mora **"antes de 6.5.0"**.
 3. **Sin SQL.** La silla suelta es la mesa 0, el chat vive en la memoria de la notebook, la zona va en el registro del sorteo (`_zonas`),
    y la mesa reservada y sus nombres, en el motivo de la mesa libre.
@@ -106,8 +111,9 @@ la app.
 6. `powershell -File installer\build_installer.ps1`, sin redirigir el stderr (necesita `android\key.properties`): Setup y APK firmado en
    `installer\dist`, con la página del celular (`{app}\puesto`) adentro.
 7. Tag `v6.5.0` y push. Release: `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build/novedades_6.5.0.md`. La web a Vercel.
-8. Instalar las tres PCs y la tablet, y abrirlas.
-9. Foto "después de 6.5.0" y la comparación: vacía.
+8. Instalar las tres PCs y la tablet. **Con la app cerrada en las tres**, `build/corregir_mora_10nov_6.5.0.sql` (la ficha de la alumna de
+   la etapa 12 en 0; el archivo está en la PC de la casa, fuera de git). Después, abrirlas.
+9. Foto "después de 6.5.0" y la comparación: tiene que dar solo a esa alumna (mora $372.368 → 0, la corrección).
 10. Recién ahí: el producto "Silla suelta" en el catálogo, reservar la mesa de los profes con "Es para alguien" y que la Encargada de
     barra use el iPhone (con la web nueva ya alcanza).
 
@@ -366,6 +372,37 @@ El usuario abrió la app en su Android y mandó dos fotos: "los responsives en e
   `build/muestras_celular`. El cierre se miró a 393 con `tool/cierre_sector_prueba.dart`.
 - **Lo que preguntó de paso:** si para ver en el celular lo que hay en las PCs hacía falta un pull forzado. Lo resolvió solo antes de
   la respuesta ("ya solucioné lo de los datos").
+
+## Etapa 12 · A quien tiene un perdón, la revisión no le sube la mora (10-nov, noche)
+
+**Lo encontró la foto de la mora** "después de 6.4.0" (paso 1 de publicar; comparada con "antes de 6.4.0", 643 alumnos). Dos alumnos
+(**los nombres no van en el repositorio, que es público**: están en `build/mora_10nov_nombres.md`, en la PC de la casa, fuera de git):
+- **Uno con un perdón del jefe**, el 10-nov a las 11:01 (mora $39.300 → 0, sin mora hasta el 30-nov). Lo hizo el usuario: está bien.
+- **Una alumna a la que la mora le revivió.** Tenía un perdón viejo (ajuste −$167.314, "sin mora hasta 30/09" permanente) y sus cuotas
+  2 y 3 vencían el 31/05 y el 30/06: **la ventana de cobro le mostraba $0**. El 10-nov a las 10:12 y 10:20 pagó las dos sin mora (le
+  queda la mesa extra). A las 10:59, la **revisión de la mora** (`MoraTrackedRecovery.reconciliarTodos`, la que corre al abrir el
+  programa) le dejó **$372.368** en la ficha. En `mora_cambios`: una sola escritura, sin otras columnas.
+
+**Por qué:** la revisión rehace la ficha repasando los cobros (`recomputarDesdeHistorial`) con las eximiciones **que dieron los cobros**,
+nunca con la de un perdón. Al repasar el cobro del 10-nov, las cuotas 2 y 3 generaban mora desde mayo y junio (296 días al 1 % de
+$125.800 = $539.682); menos el perdón viejo, $372.368. Para quien no tiene perdón, el repaso y la ventana de cobro usan las mismas
+eximiciones y dan lo mismo. **Se probó corriendo la revisión de la app sobre una copia de la base de la PC de la casa**: da exactamente
+ese número, y es la única alumna que toca.
+
+**Ahora:** **a quien tiene un perdón, la revisión no le sube la mora** (`reconciliarTodos`, con `MoraTrackedRecovery.tienePerdon`: un
+ajuste de ficha, o una eximición que ningún cobro da y que no es de un cobro anulado; la misma idea de perdón que usa `resolverExencion`).
+Si la cuenta se la subiría, la ficha queda como está y lo dice `revision_mora.txt` ("tiene un perdón y la revisión no le sube la
+mora", `queNoHizoUnPerdon`). Bajarla sí. Para los demás, nada cambia.
+- **Otros 4 estaban en riesgo**, con perdón: si pagaban, la revisión les subía la mora. Simulado sobre la copia (pagan hoy lo que les
+  falta de la base, sin mora): $213.300 → $392.850, $30.800 → $84.350, $17.850 → $92.750 y $0 → $15.300. Con el arreglo, los cuatro
+  quedan con lo que mostraba la ventana.
+- El simulacro de la revisión sobre la copia (`tool/simulacro_revision_mora_test.dart`): con la base como está, **no cambia a nadie**.
+- Tests: `test/revision_mora_test.dart`, grupo 8 (sus datos con nombre de prueba: con el perdón no se la pone; lo que hacía antes; sin
+  perdón hace lo de siempre; bajarla sí; la eximición de un cobro anulado no cuenta como perdón).
+
+**Su ficha se corrige a mano, después de instalar**: el arreglo no se la baja (no sabe que los $372.368 están de más). Con la 6.5.0 en
+las tres PCs y **la app cerrada en las tres**, `build/corregir_mora_10nov_6.5.0.sql` le pone la ficha en 0 (solo a ella, solo ese
+campo). Antes de eso, **que no le cobren mora**: si viene a pagar la mesa extra, la app le muestra $372.368.
 
 ## Visto el 10-nov, sin tocar
 

@@ -676,6 +676,139 @@ void main() {
     });
   });
 
+  group('8. a quien tiene un perdón, la revisión no le sube la mora (6.5.0)', () {
+    // La alumna del 10-nov: 3 cuotas de $125.800 y una mesa extra de
+    // $70.000. Un perdón de $167.314 con "sin mora hasta 30/09" permanente: sus
+    // cuotas 2 y 3 vencían el 31/05 y el 30/06, así que la ventana de cobro le
+    // mostraba $0. El 10-nov las pagó sin mora, y a las 10:59 la revisión le dejó
+    // $372.368 en la ficha: rehízo los cobros sin la eximición del perdón.
+    final elDia = DateTime(2026, 11, 10, 12);
+
+    Future<void> sembrarLaDelPerdon(
+      String a, {
+      bool conPerdon = true,
+      double ficha = 0,
+    }) async {
+      final db = await LocalDatabase.instance;
+      await db.insert('contratos_alumnos', {
+        'id': uid(a),
+        'evento_id': uid('evento'),
+        'nombre_alumno': a,
+        'monto_total_pactado': 447400,
+        'saldo_deudor': 70000,
+        'cuotas_pagadas': 3,
+        'total_cuotas': 3,
+        'dia_vencimiento_mensual': 10,
+        'mesa_extra_precio': 70000,
+        'mesa_extra_cuotas': 1,
+        'mesa_extra_cantidad': 1,
+        'created_at': '2026-03-30T12:08:46.016188+00:00',
+        'mora_pendiente_tracked': ficha,
+        'mora_cobrada_offset': 0,
+        'mora_exenta_hasta': conPerdon ? '2026-09-30' : null,
+        'mora_exencion_reinicia': conPerdon ? 0 : 1,
+        'mora_tracked_ajuste': conPerdon ? -167314 : 0,
+      });
+      for (final p in [
+        _pago(a, 1, '2026-09-10T13:51:52.275655+00:00', 'Cuota Base (1/3)', 125800),
+        _pago(a, 2, '2026-09-10T13:51:52.286305+00:00',
+            'Entrega parcial — Cuota Base (2/3)', 26200),
+        _pago(a, 3, '2026-11-10T13:12:33.484549+00:00',
+            'Cuota Base (2/3) — Completada', 99600),
+        _pago(a, 4, '2026-11-10T13:12:33.493541+00:00',
+            'Entrega parcial — Cuota Base (3/3)', 400),
+        _pago(a, 5, '2026-11-10T13:20:05.663319+00:00',
+            'Cuota Base (3/3) — Completada', 125400),
+      ]) {
+        await db.insert('pagos_contrato_alumno', p);
+      }
+    }
+
+    Future<int> revisarElDia(List<String> renglones) async =>
+        MoraTrackedRecovery.reconciliarTodos(
+          db: await LocalDatabase.instance,
+          encolarSync: true,
+          ahoraAr: elDia,
+          constancia: (r) async => renglones.addAll(r),
+        );
+
+    test('con el perdón no debía mora, y la revisión no se la pone',
+        () async {
+      const a = 'PRUEBA PERDON VIEJO';
+      await sembrarLaDelPerdon(a);
+      expect(await _moraDe(a, el: elDia), closeTo(0, 0.01),
+          reason: 'La ventana de cobro le mostraba \$0.');
+      expect(
+        MoraTrackedRecovery.tienePerdon(contrato: await _contrato(a), pagos: await _pagos(a)),
+        isTrue,
+      );
+
+      final renglones = <String>[];
+      expect(await revisarElDia(renglones), 0);
+
+      final c = await _contrato(a);
+      expect(c.moraPendienteTracked, closeTo(0, 0.01));
+      expect(c.moraTrackedAjuste, closeTo(-167314, 0.01));
+      expect(c.moraExentaHasta, DateTime(2026, 9, 30));
+      expect(c.moraExencionReinicia, isFalse);
+      expect(await _moraDe(a, el: elDia), closeTo(0, 0.01));
+      expect(await _colaDe(a), isNull, reason: 'No sube nada a la nube.');
+      // Queda escrito en revision_mora.txt, con lo que le habría puesto.
+      expect(renglones.single, contains(MoraTrackedRecovery.queNoHizoUnPerdon));
+      expect(renglones.single, contains('mora \$0 -> \$372368'));
+    });
+
+    test('lo que hacía antes: sin el arreglo, la revisión le ponía \$372.368',
+        () async {
+      // La cuenta de la revisión, sin el freno: así quedó en la nube el 10-nov.
+      const a = 'PRUEBA PERDON VIEJO';
+      await sembrarLaDelPerdon(a);
+      final objetivo = MoraTrackedRecovery.objetivoDesdeHistorial(
+        contrato: await _contrato(a),
+        pagos: await _pagos(a),
+      );
+      expect(
+        MoraTrackedRecovery.trackedEfectivo(objetivo: objetivo.tracked, ajuste: -167314),
+        closeTo(372368, 0.01),
+      );
+    });
+
+    test('sin perdón, la revisión hace lo de siempre: las cuotas pagadas sin '
+        'mora la dejan en la ficha', () async {
+      const a = 'PRUEBA SIN PERDON';
+      await sembrarLaDelPerdon(a, conPerdon: false);
+      expect(
+        MoraTrackedRecovery.tienePerdon(contrato: await _contrato(a), pagos: await _pagos(a)),
+        isFalse,
+      );
+      final renglones = <String>[];
+      expect(await revisarElDia(renglones), 1);
+      expect((await _contrato(a)).moraPendienteTracked, greaterThan(0));
+      expect(renglones.single, isNot(contains(MoraTrackedRecovery.queNoHizoUnPerdon)));
+    });
+
+    test('con perdón, si la revisión le baja la mora, se la baja', () async {
+      // Si la ficha tuviera de más, la revisión se la baja: hasta lo que da la
+      // cuenta, nunca más arriba de lo que tenía.
+      const a = 'PRUEBA PERDON VIEJO';
+      await sembrarLaDelPerdon(a, ficha: 900000);
+      final renglones = <String>[];
+      expect(await revisarElDia(renglones), 1);
+      expect((await _contrato(a)).moraPendienteTracked, closeTo(372368, 0.01));
+      expect(renglones.single, isNot(contains(MoraTrackedRecovery.queNoHizoUnPerdon)));
+    });
+
+    test('la eximición que dejó un cobro anulado no cuenta como perdón: '
+        'se deshace igual', () async {
+      const a = 'PRUEBA MONTENEGRO';
+      await _sembrarMontenegro(a);
+      expect(
+        MoraTrackedRecovery.tienePerdon(contrato: await _contrato(a), pagos: await _pagos(a)),
+        isFalse,
+      );
+    });
+  });
+
   group('7. cuánto de una ficha queda sin explicar (6.1.0)', () {
     MoraPendientePreviaDetalle de(int cuota, double monto) =>
         MoraPendientePreviaDetalle(

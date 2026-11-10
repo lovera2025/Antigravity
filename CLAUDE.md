@@ -1034,6 +1034,11 @@ históricos y la pantalla se ve como siempre.
   `test/revision_mora_test.dart` cuida las tres cosas; `tool/simulacro_revision_mora_test.dart` muestra qué cambia
   con una copia de la base real.
 
+  **A quien tiene un perdón, la revisión no le sube la mora** (6.5.0, `MoraTrackedRecovery.tienePerdon`). El repaso de los cobros usa
+  las eximiciones que dieron los cobros, nunca la de un perdón: a una alumna (perdón con "sin mora hasta 30/09" permanente, la
+  ventana le mostraba $0) le dejó $372.368 el 10-nov después de pagar sus cuotas. Si la cuenta se la subiría, la ficha
+  queda y lo dice `revision_mora.txt`; bajarla, sí. Lo encontró la foto de la mora "después de 6.4.0".
+
   **La revisión no toca a quien ya terminó de pagar** (saldo 0). Su ficha la dejó el cobro, y el jefe la perdona en
   modo jefe como liquidación (queda en verde). El repaso de los cobros usa el saldo de hoy, y sin saldo da siempre
   $0: le borraba la mora a ALTAMIRANO, CELESTE ABIGAIL (15-oct). No rehacerla con el saldo de cada cobro: los
