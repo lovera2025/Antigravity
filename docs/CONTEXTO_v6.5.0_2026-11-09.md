@@ -7,9 +7,14 @@ de una charla con el usuario desde el celular y no tiene plan aparte: está todo
 
 ## Para retomar en otro chat
 
-**Dónde estamos (10-nov, tarde):** las etapas 0 a 9 están programadas, con sus tests y guardadas en la rama. **Falta una sola cosa por
-programar: la Encargada de barra con su PIN en la web del iPhone** (abajo, "Pendiente · La Encargada en la web": está pensada, no
-empezada). Después, publicar, cuando el usuario esté en su casa y diga "publicá".
+**Dónde estamos (10-nov, noche):** programado, con sus tests, guardado y subido: las etapas 0 a 9, **la Encargada de barra con su PIN
+en la web del iPhone** (etapa 10) y **el inicio y el cierre de caja en un celular** (etapa 11). **Las pruebas que faltaban están
+hechas** (abajo, "Las pruebas del 10-nov a la noche"). 4.209 tests en verde; el análisis, sin errores ni avisos nuevos en la app.
+
+**El 10-nov a la noche el usuario pidió que el chat sume a todo el personal de la barra** (cajeras y encargada, con solapas TODOS ·
+RECEPCIÓN · BARRA, y un puente entre las dos notebooks) **y después decidió publicar la 6.5.0 sin eso**: "publicamos con lo ya
+verificado y listo, el chat lo dejaremos para después". El plan quedó en `docs/pendientes/chat-con-la-barra.md`. **Lo que sigue es
+publicar**, paso a paso con él.
 
 **La 6.4.0 ya está instalada en las tres PCs** (lo confirmó el usuario el 10-nov) y en su celular Android (Redmi Note 14 Pro, con el APK
 del release). **La foto de la mora "después de 6.4.0" no se sacó todavía:** es el paso 0 de publicar.
@@ -31,6 +36,11 @@ Del 10-nov (cada uno con su muestra mirada y sus tests; **sin recorrido con el m
 - **Una mesa del plano se reserva para quien no es alumno (los profes)**, con los nombres de quienes se sientan (etapa 8, `75a3307`).
 - **Los profes aparecen en Recepción y el tótem los saluda con su mesa**, igual que a un alumno (etapa 9, `c1df048`).
 
+Del 10-nov a la noche:
+- **La Encargada de barra entra con su PIN desde la web del iPhone** y ve LAS CAJAS; anula con motivo, a su nombre (etapa 10, `1303bba`).
+- **En un celular, el inicio no se encima y el cierre de caja no queda medio vacío** (etapa 11, `b0aa6b3`, `9cc7f1d`).
+- En la web de un celular, el cartel del motivo de anular ya no se come el primer toque (`52a7051`).
+
 **La revisión del 10-nov, antes de tocar nada:** `flutter analyze` sin errores en la app (los 3 que da son de `tool/_tmp_espindola_audit.dart`,
 un script viejo que no está en git) y **4.108 tests en verde** sobre `cf991ae`. Leídos enteros, sin encontrar fallas: el cobro
 (`a5458f6`), el sorteo (`e654fb0`: sin tildar nada da lo mismo que la 6.4.0), las sillas sueltas (`84a9361`: la nube no tiene CHECK en
@@ -47,20 +57,37 @@ la app.
 - **No reservar una mesa para alguien ("Es para alguien") hasta que las tres PCs tengan la 6.5.0.** Una PC con la 6.4.0 la ve como una
   mesa libre con el motivo "Reservada para Profes: …" (no rompe nada), pero no pone a los profes en Recepción ni en el tótem. La mesa
   para los profes **sí se puede dejar hoy** con la 6.4.0: Agregar mesa y Dejar libre con el motivo "Profes"; en el papel sale tachada.
-- **La Encargada de barra, en un iPhone, hoy no entra con su PIN** (ver el pendiente). En un Android o en una PC, sí, completo.
+- **No tildar a nadie como Encargada de barra para usar el iPhone hasta publicar la web de la 6.5.0:** la web de hoy (6.4.0) no la deja
+  entrar con su PIN. En un Android o en una PC entra desde la 6.4.0.
 - **Los commits del 10-nov están subidos a GitHub** (rama feature), sin release.
 
-**Lo que NO se probó y hay que mirar** (regla del usuario: las pruebas de punta a punta las hace Claude, en un sandbox):
-- **El recorrido con el mouse** de la mesa reservada en `tool/plano_prueba.dart`: agregar una mesa después de un sorteo, "Dejar libre" →
-  "Es para alguien", ver "GARCÍA +3" debajo de la mesa y la lista al tocarla, "Para quién es", y que SORTEO no se la dé a nadie. Los
-  tests lo cubren pieza por pieza y el papel se miró; **la pantalla del plano con la reservada no se vio**.
-- **Los profes con celulares:** `tool/central_prueba_test.dart` con un plano que tenga una mesa reservada, y dos pestañas de celular:
-  buscar a un profe, INGRESAR, VER EN EL PLANO. La lista del celular sale de la misma `PuertaDelEvento`, y el test de ida y vuelta por
-  JSON pasa; con la central de verdad no se corrió.
-- **El tótem del salón (la ventana) saludando a un profe:** se vio VER LA LLEGADA en la muestra (`tool/puerta_plano_muestra_test.dart`,
-  `8_profes_llegada_PC.png`), que usa la misma escena; la ventana de verdad, no.
-- **La página del celular compilada** (`flutter build web -t lib/puesto_main.dart`): ahora importa `reservados_de_la_puerta.dart`. No
-  tiene nada que el navegador no pueda (ni `dart:io` ni la base), pero no se compiló.
+**Las pruebas del 10-nov a la noche** (las hizo Claude, con el mouse, en el navegador de la app y **sobre lo compilado de verdad**,
+`flutter build web -t …`, sin la base ni la nube):
+- **La mesa reservada en la pantalla del plano** (`tool/plano_prueba.dart`, compilada para el navegador): SORTEAR, Acomodar → Agregar
+  mesa (la 36) → GUARDAR EL SALÓN, "Dejar libre" → **No se usa · Es para alguien** → Profes y cuatro nombres; queda "GARCÍA +3" debajo de
+  la mesa, la lista en el panel al tocarla, "Para quién es" abre con lo cargado, y con DESHACER y SORTEAR de nuevo nadie recibe la 36.
+  **Para poder recorrerla, la ventana de prueba ahora hace "Dejar libre" y "Para quién es"** con la misma pregunta y la misma cuenta
+  que la app (`pedirReservaDeMesa`, `CambiosDeMesa`): antes esos botones ahí no hacían nada.
+- **Los profes con dos celulares** (`tool/central_prueba_test.dart`, con una mesa de profes; la página compilada de `lib/puesto_main.dart`
+  servida por la central de verdad, una pestaña en `127.0.0.1` y otra en `localhost`): buscar "garcia" los trae con PROFES y Mesa 22;
+  INGRESAR de Juli lo ve Caro ("ADENTRO · Juli") y al revés; VER EN EL PLANO enciende la mesa con el camino; VER LA LLEGADA muestra
+  "¡Bienvenido! GARCÍA, ANA · Profes · MESA 22"; "Ver el plano entero" abre.
+- **El tótem de la PC saludando a un profe** (`tool/totem_salon_prueba.dart`, con una mesa de profes): INGRESAR y la vista del tótem hace
+  lo de la noche (el nombre salta, "Profes", MESA 22, y se acomoda con la mesa encendida y el camino). Dos que entran seguidos:
+  "¡Bienvenidos!" con los dos nombres.
+- **La página del celular compila** con los profes adentro.
+- **La Encargada en la web** (`tool/encargada_web_prueba.dart`, a 375 px): ver la etapa 10.
+- **El cierre de caja a 393 de ancho** (`tool/cierre_sector_prueba.dart`): ver la etapa 11.
+
+**Lo que NO se probó:**
+- **La ventana de Windows.** Los recorridos fueron en el navegador (la misma pantalla, el mismo motor de dibujo), no en la ventana de la
+  app de Windows. En el navegador, **con el cursor en un campo de texto, el primer clic en un botón del cartel a veces se pierde**
+  (pasó en "Dejar libre"; es el defecto de la web que tenía el motivo de anular). El plano se usa solo en la PC; ahí no se comprobó con la mano.
+- **La ventana aparte del tótem (la del proyector) saludando a un profe.** Se vio el tótem de la PC (`TotemLocal`), que dibuja con la
+  misma escena y la misma cola; la ficha que viaja por el puente a la otra ventana la cubren los tests de ida y vuelta.
+- **La Encargada contra la nube de verdad:** el PIN se lee de `operadores_caja` y `permisos_operador` con la cuenta del jefe. Se probó
+  con una nube en memoria; con la de verdad se prueba al publicar la web, con una encargada creada para eso.
+- **El inicio y el cierre de caja en un Android de verdad** después del arreglo: se vieron en imagen. Los confirma el usuario con el APK nuevo.
 - **En papel de verdad, nada:** la planilla parada, el recibo y el plano se miraron pasados a imagen. Cómo salen en la Epson L495 de la
   oficina lo dice una foto del usuario.
 - El sonido del aviso del chat en la notebook, la vibración en un Android y el chat por el router del salón (del 9-nov).
@@ -74,17 +101,18 @@ la app.
    y la mesa reservada y sus nombres, en el motivo de la mesa libre.
 4. `flutter analyze` y `flutter test` enteros.
 5. Versión **`6.5.0+67`** en `pubspec.yaml` y `#define MyAppVersion "6.5.0"` en `installer/junior_eventos_setup.iss`. Novedades
-   (propuesta, elige el usuario): **"La puerta ve el plano, chat entre puestos, la planilla parada y la mesa de los profes"**, en
-   `build/novedades_6.5.0.md`.
+   (propuesta, elige el usuario): **"La puerta ve el plano, chat entre recepcionistas, la planilla parada y la mesa de los profes"**,
+   en `build/novedades_6.5.0.md`.
 6. `powershell -File installer\build_installer.ps1`, sin redirigir el stderr (necesita `android\key.properties`): Setup y APK firmado en
    `installer\dist`, con la página del celular (`{app}\puesto`) adentro.
 7. Tag `v6.5.0` y push. Release: `tool/publish_windows_release.ps1 -SoloNotas -NotesFile build/novedades_6.5.0.md`. La web a Vercel.
 8. Instalar las tres PCs y la tablet, y abrirlas.
 9. Foto "después de 6.5.0" y la comparación: vacía.
-10. Recién ahí: el producto "Silla suelta" en el catálogo, y reservar la mesa de los profes con "Es para alguien".
+10. Recién ahí: el producto "Silla suelta" en el catálogo, reservar la mesa de los profes con "Es para alguien" y que la Encargada de
+    barra use el iPhone (con la web nueva ya alcanza).
 
-> Frase para retomar: "Seguimos con la 6.5.0: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.5.0_2026-11-09.md. Falta la Encargada
-> de barra en la web del iPhone y las pruebas que quedaron sin hacer; después, publicar."
+> Frase para retomar: "Seguimos con la 6.5.0: leé 'Para retomar en otro chat' de docs/CONTEXTO_v6.5.0_2026-11-09.md. Está todo
+> programado y probado; falta publicar, paso a paso conmigo. El chat con la barra quedó para después."
 
 ## Etapa 0 · El modal del cobro
 
@@ -274,9 +302,25 @@ Tests: `test/reserva_de_mesa_test.dart` (19). Muestra del papel: `tool/plano_pdf
 Tests: `test/reservados_de_la_puerta_test.dart` (19) y `test/panel_puerta_test.dart` (grupo "una mesa reservada…": se monta Recepción
 de verdad, se busca a un profe y Enter lo ingresa con su id fijo). Muestras: `tool/puerta_plano_muestra_test.dart` (6 a 8).
 
-## Pendiente · La Encargada de barra con su PIN en la web del iPhone
+## Etapa 10 · La Encargada de barra con su PIN en la web del iPhone (10-nov, noche)
 
-**Decidido con el usuario el 10-nov, sin empezar.** La chica a cargo de la barra puede terminar usando un iPhone: "que el iPhone se
+**Hecha y probada el 10-nov a la noche (`1303bba`).** Cómo quedó, en corto:
+- En la web, `AppRoleNotifier.buscarOperador` le pregunta el PIN a la nube (`operadorPorLaNube`,
+  `caja_sesiones/services/operador_por_la_nube.dart`, por `supabaseProvider`; **en la nube `activo` es booleano**). Si la nube no
+  contesta en 8 s, `SinNubeParaElPin`: la pantalla dice "No se pudo comprobar el PIN: revisá internet y probá de nuevo", que no es
+  "PIN incorrecto".
+- En la web entra solo la encargada: `OpcionesDeEntrada.de(p, enLaWeb: true)`; a los demás, "Desde el navegador no se cobra ni se vende:
+  usá la app".
+- `BarraHomeScreen` en la web devuelve `BarraHomeEnLaWeb` (`barra/widgets/barra_home_web.dart`) antes de mirar nada del equipo: las
+  fiestas (las que vienen y las últimas, como BARRA del jefe) y, al tocar una, `LasCajasScreen`. Sin impresora, sin VENDER, sin "Todo
+  subido". Segunda llave: si no es encargada, solo el aviso y SALIR.
+- Anula a su nombre (`quienEsElJefe` ya tomaba el nombre del operador).
+- Tests: `test/encargada_en_la_web_test.dart` (29), con `test/helpers/operadores_de_la_nube_en_memoria.dart`. Recorrido a 375 px con la
+  web compilada: `tool/encargada_web_prueba.dart` (Romi 7777 entra; Marta 2222, Maxi 1234 y Ana 5555, no; SIN INTERNET arriba).
+
+Lo que sigue es como se pensó antes de programarla:
+
+**Decidido con el usuario el 10-nov.** La chica a cargo de la barra puede terminar usando un iPhone: "que el iPhone se
 pueda loguear con su PIN de encargada desde la web… y de última, si quiere vales de sillas, que use una tablet".
 
 **Por qué hoy no anda:** el PIN de operador se busca en la base del equipo (`OperadoresCajaRepository.findByPin`, SQLite), que en la web
@@ -307,6 +351,21 @@ navegador. No hay app para iPhone (haría falta una Mac y la cuenta de Apple pag
    arma el panel (`test/modo_barra_cerrado_test.dart` tiene que seguir en verde). **Recorrido en el navegador a 375 px con la web
    compilada de verdad** (`flutter build web -t …` y un servidor estático, como en la etapa 8 de la barra: el compilador de desarrollo se
    cae con este proyecto).
+
+## Etapa 11 · El inicio y el cierre de caja en un celular (10-nov, noche)
+
+El usuario abrió la app en su Android y mandó dos fotos: "los responsives en el celu parecen raros".
+- **El inicio** (`b0aa6b3`): el logo, "JUNIOR EVENTOS", MODO JEFE, "Caja cerrada", la nube y tres botones salían uno arriba del otro. En
+  un celular (`CortesPantalla.esCelular`) va el logo y cómo se entró (MODO JEFE, o JEFE si no entra; CAJA · el nombre, acortado), el
+  estado de la caja corto (`SesionCajaStatusChip(compacto:)`: "Cerrada" o el nombre; el detalle al mantener apretado) y Actualizar, el
+  tema y Cerrar sesión en un menú de tres puntos (`dashboard/widgets/encabezado_del_inicio.dart`). En la PC, como estaba.
+- **El cierre de caja** (`b0aa6b3`, `9cc7f1d`): "TRANSFERENCIA" se partía y las tarjetas guardaban lugar para un renglón de más (el
+  `IntrinsicHeight` mide antes de que el `FittedBox` achique). Ahora título, monto e ingresos van en un renglón; el total neto no parte
+  el monto (espacio duro).
+- Tests: `test/encabezado_del_inicio_test.dart` (13: 360, 393 y 412 de ancho, nada se pisa ni se sale). Imágenes en
+  `build/muestras_celular`. El cierre se miró a 393 con `tool/cierre_sector_prueba.dart`.
+- **Lo que preguntó de paso:** si para ver en el celular lo que hay en las PCs hacía falta un pull forzado. Lo resolvió solo antes de
+  la respuesta ("ya solucioné lo de los datos").
 
 ## Visto el 10-nov, sin tocar
 

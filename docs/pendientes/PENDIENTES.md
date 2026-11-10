@@ -109,6 +109,9 @@ priorizó el sorteo de noviembre. El contexto está en
 - [Comparar las sillas vendidas en la barra con las sumadas en la puerta](sillas-barra-vs-puerta.md)
   — la puerta ya anota cada silla con el vale (6.4.0); falta el lado de la
   barra ("Silla extra" en el catálogo y en el cierre por sector).
+- [El chat del salón con el personal de la barra](chat-con-la-barra.md) — pedido
+  el 10-nov: cajeras y encargada en el chat, con solapas TODOS · RECEPCIÓN ·
+  BARRA, y un puente entre las dos notebooks. Postergado por él: la 6.5.0 sale sin esto.
 
 ## Hechos
 

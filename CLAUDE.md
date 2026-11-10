@@ -182,9 +182,14 @@ usuario el 10-nov); falta la foto de la mora "después de 6.4.0"**, que es el pa
 
 **La 6.5.0, programada el 9 y el 10-nov, sin publicar** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
 chat": ahí está lo hecho, **lo que quedó sin probar** y el paso a paso; el plan del 9-nov, `docs/PLAN_PUERTA_PLANO_Y_SORTEO_2026-11-09.md`).
-Sin SQL. **La versión sigue en `6.4.0+66`: el número nuevo se pone al publicar, cuando el usuario diga** ("Aún no publiques hasta que yo
-diga", 9-nov; el 10-nov: publica al llegar a su casa). **Falta programar una sola cosa: la Encargada de barra con su PIN en la web del
-iPhone** (pensada en el CONTEXTO, sin empezar; hoy en un iPhone no entra, en Android y en la PC sí). Lleva:
+Sin SQL. **Todo programado y probado el 10-nov a la noche; el usuario dijo "publicamos"** ese día, con lo verificado. El chat con la
+barra (cajeras y encargada con solapas, un puente entre las dos notebooks) lo pidió y **lo dejó para después**:
+`docs/pendientes/chat-con-la-barra.md`. Lleva:
+- **la Encargada de barra entra con su PIN desde la web del iPhone** (etapa 10): en la web el PIN se le pregunta a la nube
+  (`operadorPorLaNube`; **en la nube `operadores_caja.activo` es booleano**), entra solo la encargada (`OpcionesDeEntrada.de(enLaWeb:)`)
+  y ve las fiestas y LAS CAJAS (`BarraHomeEnLaWeb`). No vende ni imprime;
+- **el inicio y el cierre de caja en un celular** (etapa 11): en el inicio, el título corto y los botones en un menú
+  (`encabezado_del_inicio.dart`); en el cierre, un renglón por cosa;
 - **el modal del cobro se cierra apenas el pago queda guardado** (`DespuesDeGuardarCobro`, `cerrarRuta`): lo de después no lo frena ni
   dice "Reintentá", y lo que falla queda en `cobros_despues_de_guardar.txt`;
 - **la recepcionista ve el plano** en su pantalla (VER EN EL PLANO, VER LA LLEGADA, "Ver el plano entero"; `SalonParaLaPuerta`), sin
