@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -404,10 +405,12 @@ class _MotivoDialog extends StatefulWidget {
 
 class _MotivoDialogState extends State<_MotivoDialog> {
   final _ctrl = TextEditingController();
+  final _foco = FocusNode();
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _foco.dispose();
     super.dispose();
   }
 
@@ -428,10 +431,16 @@ class _MotivoDialogState extends State<_MotivoDialog> {
             TextField(
               key: const Key('motivo_texto'),
               controller: _ctrl,
+              focusNode: _foco,
               autofocus: true,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(labelText: 'Motivo', helperText: widget.ayuda),
               onChanged: (_) => setState(() {}),
+              // En la web de un celular (el iPhone del jefe y de la encargada), soltar el
+              // teclado al apoyar el dedo afuera se come el toque: ANULAR pedía dos. Se
+              // suelta al levantarlo, como el buscador de la puerta.
+              onTapOutside: kIsWeb ? (_) {} : null,
+              onTapUpOutside: kIsWeb ? (_) => _foco.unfocus() : null,
             ),
           ],
         ),

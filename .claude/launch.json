@@ -30,6 +30,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-I", "-m", "http.server", "8794", "--directory", "build/encargada_web_prueba"],
       "port": 8794
+    },
+    {
+      "name": "plano-prueba-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-I", "-m", "http.server", "8795", "--directory", "build/plano_prueba_web"],
+      "port": 8795
     }
   ]
 }

@@ -14,6 +14,7 @@
 // otro en localhost (cada dirección guarda lo suyo).
 import 'dart:io';
 
+import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/central/central_puerta.dart';
 import 'package:arguello_events/features/recepcion/chat/mensaje_de_puesto.dart';
@@ -22,9 +23,11 @@ import 'package:arguello_events/models/totem_config.dart';
 import 'package:arguello_events/features/recepcion/central/direcciones_red.dart';
 import 'package:arguello_events/features/recepcion/services/lista_puerta.dart';
 import 'package:arguello_events/features/recepcion/services/puerta_del_evento.dart';
+import 'package:arguello_events/features/recepcion/services/reservados_de_la_puerta.dart';
 import 'package:arguello_events/features/totem/services/tiempos_a_mano.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/invitado.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/silla_puerta.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -58,10 +61,14 @@ class _PcDePrueba implements PuertaDeEstaPc {
   /// Las sillas de la noche que se sumaron desde los celulares.
   final sillas = <SillaPuerta>[];
 
+  /// Los que se sientan en la mesa reservada del plano (los profes, 6.5.0).
+  List<ReservadoPuerta> reservados = const [];
+
   PuertaDelEvento lista() => PuertaDelEvento.masivo(
         alumnos: alumnos,
         invitados: filas.values.toList(),
         sillasPuerta: sillas,
+        reservados: reservados,
       );
 
   @override
@@ -164,6 +171,33 @@ void main() {
         ),
     ];
     final pc = _PcDePrueba(alumnos);
+    // La mesa de los profes (6.5.0): una mesa del plano que no es de ningún alumno,
+    // reservada con cuatro nombres. Salen por el camino de la app (`reservadosDeLaPuerta`).
+    final armado = ArmadosPredefinidos.normal2aPagina3();
+    final mesaDeLosProfes = [
+      for (var n = 22; n < 400; n++) if (armado.existe(n)) n,
+    ].first;
+    final plano = PlanoEvento.nuevo(
+      eventoId: eventoMasivo,
+      armado: armado,
+      estilo: EstiloPlano.gala,
+      modo: ModoSorteo.entera,
+      ahora: DateTime(2026, 11, 1),
+    ).copyWith(
+      config: ConfigPlano.vacia.copyWith(
+        libres: {
+          mesaDeLosProfes: MesaLibre(
+            motivo: 'Reservada para Profes: GARCÍA, ANA; LÓPEZ, LUIS; '
+                'MÉNDEZ, CARLA; RUIZ, PABLO',
+          ),
+        },
+      ),
+      ahora: DateTime(2026, 11, 1),
+    );
+    pc.reservados = reservadosDeLaPuerta(eventoMasivo, plano);
+    // ignore: avoid_print
+    print('PROFES en la mesa $mesaDeLosProfes: '
+        '${[for (final r in pc.reservados) r.nombre]}');
     // Dos ya adentro.
     for (final a in alumnos.take(2)) {
       final id = idInvitadoPuerta(a.id, 0);
@@ -192,7 +226,7 @@ void main() {
     central.ponerPuerta(pc.lista());
     // El salón, para VER EN EL PLANO del celular.
     central.ponerSalon(
-      ArmadosPredefinidos.normal2aPagina3().toJson(),
+      armado.toJson(),
       SalonParaLaPuerta.cfgParaElCelular(TotemConfig.defaults(eventoMasivo)),
     );
     // La PC en el chat: escribe a todos y contesta a quien le escriba.

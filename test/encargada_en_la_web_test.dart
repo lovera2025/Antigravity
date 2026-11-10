@@ -458,6 +458,16 @@ void main() {
       }
     });
 
+    test('el motivo de anular no se come el toque en la web del celular', () {
+      // En la web de un celular, soltar el teclado al apoyar el dedo afuera se come el
+      // toque (ANULAR pedía dos): se suelta al levantarlo, como el buscador de la puerta.
+      final f = leer('lib/features/barra/widgets/ventas_de_la_caja_screen.dart');
+      final i = f.indexOf("key: const Key('motivo_texto')");
+      final campo = f.substring(i, f.indexOf('actions: [', i));
+      expect(campo, contains('onTapOutside: kIsWeb ? (_) {} : null'));
+      expect(campo, contains('onTapUpOutside: kIsWeb ? (_) => _foco.unfocus() : null'));
+    });
+
     test('la barra de la web no tiene nada del equipo: ni caja, ni impresora, ni vender', () {
       final web = leer('lib/features/barra/widgets/barra_home_web.dart');
       for (final prohibido in [

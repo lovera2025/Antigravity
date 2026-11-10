@@ -20,6 +20,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:arguello_events/features/plano/modelo/armados_predefinidos.dart';
 import 'package:arguello_events/features/recepcion/recepcion_unified_screen.dart';
 import 'package:arguello_events/features/totem/estilos/fuentes_totem.dart';
+import 'package:arguello_events/models/plano_evento.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import '../test/helpers/puerta_en_memoria.dart';
@@ -58,6 +59,15 @@ Future<void> main() async {
     SupabaseClient('http://127.0.0.1:9', 'anon-de-prueba'),
     alumnos: alumnos,
     plano: ArmadosPredefinidos.normal2aPagina3(),
+  );
+  // La mesa de los profes (6.5.0): una mesa del plano que no es de ningún alumno,
+  // reservada con quiénes se sientan. Salen en Recepción y el tótem los saluda.
+  mundo.planos.config = ConfigPlano.vacia.copyWith(
+    libres: {
+      22: MesaLibre(
+        motivo: 'Reservada para Profes: GARCÍA, ANA; LÓPEZ, LUIS; MÉNDEZ, CARLA',
+      ),
+    },
   );
   mundo.invitados.hora = () => DateTime.now().toUtc();
   mundo.sillasPuerta.hora = () => DateTime.now().toUtc();

@@ -10,6 +10,12 @@
 // adicional y el resto con una. Arriba, una barra para sortear con el sorteo de verdad
 // (y ver que con sorteo ningún número cambia), deshacerlo, y volver al plano mezclado.
 // IMPRIMIR deja el PDF en `build/plano_prueba`, sin abrir el diálogo de la impresora.
+//
+// 6.5.0: "Dejar libre" pregunta **No se usa · Es para alguien** y una mesa libre tiene
+// "Para quién es", con la misma cuenta que la pantalla de la app (la mesa de los profes).
+// Para recorrerla en el navegador de la app (IMPRIMIR ahí no deja el PDF):
+//   flutter build web -t tool/plano_prueba.dart --no-web-resources-cdn --output build/plano_prueba_web
+//   python -I -m http.server 8795 --directory build/plano_prueba_web
 
 import 'dart:io';
 
@@ -19,11 +25,14 @@ import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/reserva_de_mesa.dart';
+import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/features/plano/widgets/imprimir_plano_dialog.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
+import 'package:arguello_events/features/plano/widgets/reserva_de_mesa_dialog.dart';
 import 'package:arguello_events/models/cliente.dart';
 import 'package:arguello_events/models/contrato_alumno.dart';
 import 'package:arguello_events/models/evento.dart';
@@ -207,6 +216,73 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     });
   }
 
+  /// Un cambio de lo que se configura del plano, como lo deja la pantalla de la app:
+  /// acá se queda en esta ventana.
+  void _aplicar(CambioDeConfig cambio, String hecho) => setState(() {
+        final config = cambio.config;
+        if (config == null) {
+          _aviso = AvisoDelPlano(cambio.problema ?? 'No se puede.', esError: true);
+          return;
+        }
+        _config = config;
+        _armado = cambio.armado ?? _armado;
+        _aviso = AvisoDelPlano(hecho);
+      });
+
+  /// "Dejar libre", con la misma pregunta de la app: **No se usa · Es para alguien**
+  /// (la mesa reservada para los profes, 6.5.0) y la misma cuenta (`CambiosDeMesa`).
+  Future<void> _dejarLibre(int mesa) async {
+    CambioDeConfig calcular(String? motivo) => CambiosDeMesa.dejarLibre(
+          armado: _armado,
+          config: _config,
+          alumnos: _alumnos,
+          mesa: mesa,
+          motivo: motivo,
+          por: 'Prueba',
+          ahora: DateTime.now().toUtc(),
+        );
+    final previa = calcular(null);
+    if (!previa.sePuede) {
+      setState(() => _aviso = AvisoDelPlano(previa.problema!, esError: true));
+      return;
+    }
+    final motivo = await pedirReservaDeMesa(context: context, mesa: mesa);
+    if (motivo == null || !mounted) return;
+    final reserva = ReservaDeMesa.deMotivo(motivo);
+    _aplicar(
+      calcular(motivo),
+      reserva == null
+          ? 'La mesa $mesa quedó libre.'
+          : 'La mesa $mesa quedó reservada para ${reserva.para}.',
+    );
+  }
+
+  /// "Para quién es", sobre una mesa que ya está libre.
+  Future<void> _editarLibre(int mesa) async {
+    final actual = _config.libres[mesa];
+    if (actual == null) return;
+    final motivo = await pedirReservaDeMesa(
+      context: context,
+      mesa: mesa,
+      motivoActual: actual.motivo,
+      yaEstaLibre: true,
+    );
+    if (motivo == null || !mounted) return;
+    final reserva = ReservaDeMesa.deMotivo(motivo);
+    _aplicar(
+      CambiosDeMesa.cambiarMotivoDeLibre(
+        config: _config,
+        mesa: mesa,
+        motivo: motivo,
+        por: 'Prueba',
+        ahora: DateTime.now().toUtc(),
+      ),
+      reserva == null
+          ? 'La mesa $mesa sigue libre.'
+          : 'La mesa $mesa quedó reservada para ${reserva.para}.',
+    );
+  }
+
   /// El mismo diálogo de la app, pero el PDF queda en una carpeta en vez de ir a la
   /// impresora: en esta ventana se lo quiere mirar, no gastar papel.
   Future<void> _imprimir() async {
@@ -315,8 +391,12 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
           onFijar: (_, _) {},
           onQuitarFijadas: (_) {},
           onQuitarFijadaDeMesa: (_) {},
-          onDejarLibre: (_) {},
-          onVolverAUsar: (_) {},
+          onDejarLibre: _dejarLibre,
+          onEditarLibre: _editarLibre,
+          onVolverAUsar: (mesa) => _aplicar(
+            CambiosDeMesa.volverAUsar(_config, mesa),
+            'La mesa $mesa vuelve a entrar en el sorteo.',
+          ),
           onCambiar: (_, _) {},
           onMover: (_, _) {},
           onGuardarArmado: _guardarSalon,
