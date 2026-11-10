@@ -37,6 +37,9 @@ un script viejo que no está en git) y **4.108 tests en verde** sobre `cf991ae`.
 `sillas_puerta.mesa`) y la central del chat. **No se leyeron línea por línea** las pantallas nuevas (`hoja_plano_puerta.dart`,
 `hoja_chat.dart`): las cubren sus tests y la prueba del sandbox del 9-nov.
 
+**Al cerrar el 10-nov, con las etapas 6 a 9 adentro: 4.165 tests en verde** (57 nuevos) y el análisis sin errores ni avisos nuevos en
+la app.
+
 **Lo que hay que saber antes de publicar:**
 - **Los sorteos empezaron el 10-nov con la 6.4.0:** nadie viene tildado y no hay "Donde yo elija"; las familias con más de 3 mesas se
   tildan a mano. La planilla de la 6.4.0 es la acostada: se imprime eligiendo orientación **Horizontal**.

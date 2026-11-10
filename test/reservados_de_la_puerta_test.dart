@@ -25,7 +25,6 @@ import 'package:arguello_events/features/recepcion/providers/recepcion_provider.
 import 'package:arguello_events/models/evento.dart';
 import 'package:arguello_events/models/invitado.dart';
 import 'package:arguello_events/models/plano_evento.dart';
-import 'package:arguello_events/models/sorteo_mesas_registro.dart';
 import 'package:arguello_events/models/totem_config.dart';
 
 import 'helpers/puerta_en_memoria.dart';
