@@ -11,6 +11,7 @@ import '../modelo/armado_salon.dart';
 import '../modelo/armados_predefinidos.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../modelo/numeracion.dart';
 import '../modelo/reserva_de_mesa.dart';
 import 'armar_a_medida.dart';
 import 'divisiones.dart';
@@ -185,12 +186,13 @@ class PlanoDeLaFiesta {
   static AvisoPlano? _avisoDeSaltos(
     ArmadoSalon armado, {
     required bool hayFamilias,
+    FinNumeracion fin = FinNumeracion.escenario,
   }) {
     final hay = armado.cortes.length;
     if (hay == 0) return null;
     final conBorde = EditarArmado.conBordeDelPlayon(armado);
     final esperados = conBorde
-        ? ArmarAMedida.ordenarNumeros(armado).armado.cortes.length
+        ? ArmarAMedida.ordenarNumeros(armado, fin: fin).armado.cortes.length
         : ArmadosPredefinidos.porClave(armado.clave)?.cortes.length;
     if (esperados == null || hay <= esperados) return null;
     final saltos = hay == 1 ? '1 salto' : '$hay saltos';
@@ -371,6 +373,7 @@ class PlanoDeLaFiesta {
     final saltos = _avisoDeSaltos(
       armado,
       hayFamilias: alumnos.any(SalonMesas.tieneNumeros),
+      fin: config.numeracion,
     );
     if (saltos != null) avisos.add(saltos);
 

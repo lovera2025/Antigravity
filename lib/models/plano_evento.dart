@@ -4,6 +4,7 @@ import '../core/utils/uuid_utils.dart';
 import '../features/plano/estilos/estilo_plano.dart';
 import '../features/plano/modelo/armado_salon.dart';
 import '../features/plano/modelo/medidas_salon.dart';
+import '../features/plano/modelo/numeracion.dart';
 
 /// Cómo se sortea la fiesta sobre su plano.
 enum ModoSorteo {
@@ -181,6 +182,12 @@ class ConfigPlano {
   /// fábrica, y así no se guardan: si se corrige la medida del playón en el
   /// programa, las fiestas que no la cambiaron la toman.
   final MedidasPlano medidas;
+
+  /// Dónde termina la numeración del salón (6.5.1). Una PC con una versión
+  /// anterior no conoce la clave y la conserva al guardar (va en [otras]); lo
+  /// que no hace es numerar así: si guarda el salón antes del sorteo, lo
+  /// vuelve a la serpentina de siempre.
+  final FinNumeracion numeracion;
   final Map<String, dynamic> otras;
 
   const ConfigPlano({
@@ -192,6 +199,7 @@ class ConfigPlano {
     this.titulo,
     this.subtitulo,
     this.medidas = const MedidasPlano(),
+    this.numeracion = FinNumeracion.escenario,
     this.otras = const {},
   });
 
@@ -206,6 +214,7 @@ class ConfigPlano {
     'titulo',
     'subtitulo',
     'medidas',
+    'numeracion',
   };
 
   /// Las mesas fijadas, agrupadas por familia.
@@ -270,6 +279,7 @@ class ConfigPlano {
       titulo: _texto(m['titulo']),
       subtitulo: _texto(m['subtitulo']),
       medidas: MedidasPlano.fromMap(m['medidas']),
+      numeracion: FinNumeracion.deClave(m['numeracion']),
       otras: {
         for (final e in m.entries)
           if (!_conocidas.contains(e.key)) e.key: e.value,
@@ -291,6 +301,7 @@ class ConfigPlano {
         if (titulo != null) 'titulo': titulo,
         if (subtitulo != null) 'subtitulo': subtitulo,
         if (medidas != const MedidasPlano()) 'medidas': medidas.toMap(),
+        if (numeracion.clave != null) 'numeracion': numeracion.clave,
       });
 
   ConfigPlano copyWith({
@@ -302,6 +313,7 @@ class ConfigPlano {
     String? titulo,
     String? subtitulo,
     MedidasPlano? medidas,
+    FinNumeracion? numeracion,
     bool borrarTitulo = false,
     bool borrarSubtitulo = false,
   }) =>
@@ -314,6 +326,7 @@ class ConfigPlano {
         titulo: borrarTitulo ? null : (titulo ?? this.titulo),
         subtitulo: borrarSubtitulo ? null : (subtitulo ?? this.subtitulo),
         medidas: medidas ?? this.medidas,
+        numeracion: numeracion ?? this.numeracion,
         otras: otras,
       );
 }

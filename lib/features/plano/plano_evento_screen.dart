@@ -28,6 +28,7 @@ import '../recepcion/services/puerta_al_dia.dart';
 import 'estilos/estilo_plano.dart';
 import 'modelo/armado_salon.dart';
 import 'modelo/medidas_salon.dart';
+import 'modelo/numeracion.dart';
 import 'modelo/reserva_de_mesa.dart';
 import 'repositories/mesas_movimientos_repository.dart';
 import 'repositories/planos_evento_repository.dart';
@@ -1001,6 +1002,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     Map<int, String> enUso,
     bool rehecho,
     double? lugarBarraM,
+    FinNumeracion fin,
   ) {
     final fijadasOLibres = (_plano?.config.fijadas.length ?? 0) +
         (_plano?.config.libres.length ?? 0);
@@ -1015,6 +1017,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         rehecho: rehecho,
         leidoDeLaNube: _leidoDeLaNube,
         lugarBarraM: lugarBarraM,
+        fin: fin,
       ),
       // Con la escuela ya sorteada, las mesas que se suman son para quien
       // todavía no tiene: se dice cómo sigue.
@@ -1038,7 +1041,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
                 !_hayFamiliasConMesa &&
                 !ordenado &&
                 EditarArmado.conBordeDelPlayon(nuevo) &&
-                ArmarAMedida.ordenarNumeros(nuevo).cambio.isNotEmpty
+                ArmarAMedida.ordenarNumeros(nuevo, fin: fin).cambio.isNotEmpty
             ? ' Los números se ordenan la próxima vez que lo guardes con '
                 'internet.'
             : '';

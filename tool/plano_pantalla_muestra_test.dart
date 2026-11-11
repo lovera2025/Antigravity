@@ -222,7 +222,7 @@ final _sinHacer = AccionesPlano(
   onMover: (_, _) {},
   onGuardarMedidas: (_, _) {},
   onGuardarColoresYTextos: (_, _) {},
-  onGuardarArmado: (_, _, _, _, _) {},
+  onGuardarArmado: (_, _, _, _, _, _) {},
   onGuardarComoPredio: (_, _) {},
 );
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../modelo/armado_salon.dart';
 import '../../modelo/medidas_salon.dart';
+import '../../modelo/numeracion.dart';
 import '../../services/editar_armado.dart';
 import '../../services/medir_salon.dart';
 import '../../services/sesion_acomodo.dart';
@@ -43,6 +44,16 @@ class PanelAcomodar extends StatefulWidget {
   final String? motivoSinAcomodar;
   final VoidCallback? onVaciar;
   final String? motivoSinVaciar;
+
+  // ── Dónde termina la numeración (6.5.1) ──
+  final FinNumeracion fin;
+
+  /// Null: la sección no se muestra.
+  final ValueChanged<FinNumeracion>? onFin;
+
+  /// Por qué no se puede elegir (ya hay familias con mesa, es un armado del
+  /// Canva). Se ve apagado, con el motivo. Null: se puede.
+  final String? motivoSinFin;
 
   // ── El espacio: el playón y los sectores (6.1.0) ──
   /// El playón y cada sector de la hoja a la vista, para elegirlos sin
@@ -144,6 +155,9 @@ class PanelAcomodar extends StatefulWidget {
     this.motivoSinAcomodar,
     this.onVaciar,
     this.motivoSinVaciar,
+    this.fin = FinNumeracion.escenario,
+    this.onFin,
+    this.motivoSinFin,
     this.espacio = const [],
     required this.onElegirEspacio,
     required this.onAgregarSector,
@@ -407,6 +421,38 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   key: const Key('motivo_sin_vaciar'),
                   style: gris,
                 ),
+              if (widget.onFin != null) ...[
+                titulo('LA NUMERACIÓN TERMINA'),
+                SegmentedButton<FinNumeracion>(
+                  key: const Key('numeracion_fin'),
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  segments: [
+                    for (final f in FinNumeracion.values)
+                      ButtonSegment(value: f, label: Text(f.texto)),
+                  ],
+                  selected: {widget.fin},
+                  onSelectionChanged:
+                      ocupado || probando || widget.motivoSinFin != null
+                          ? null
+                          : (s) => widget.onFin!(s.first),
+                ),
+                Text(
+                  widget.motivoSinFin ??
+                      (widget.fin == FinNumeracion.fondo
+                          ? 'El último número queda al fondo, a la derecha, y '
+                              'las mesas que se agreguen siguen ahí. Los '
+                              'números cambian al guardar.'
+                          : 'La izquierda va del escenario al fondo y la '
+                              'derecha vuelve: el último número queda junto '
+                              'al escenario.'),
+                  key: const Key('numeracion_explica'),
+                  style: gris,
+                ),
+              ],
               if (widget.barraReacomoda) ...[
                 titulo('DISTANCIA ENTRE MESAS'),
                 Row(

@@ -14,6 +14,7 @@ import '../estilos/estilo_plano.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../modelo/numeracion.dart';
 import '../modelo/reserva_de_mesa.dart';
 import '../services/armar_a_medida.dart';
 import '../services/cambios_de_mesa.dart';
@@ -75,14 +76,15 @@ class AccionesPlano {
   /// empezar, [nuevo] el que quedó y [enUso] las mesas que tenían familia o
   /// estaban fijadas al empezar. [rehecho]: salió de ACOMODAR LAS MESAS o de
   /// VACIAR EL SALÓN, y al guardar se quitan las fijadas y las libres.
-  /// [lugarBarraM]: la distancia elegida con la barra, si se tocó. Null: no hay
-  /// pestaña Acomodar.
+  /// [lugarBarraM]: la distancia elegida con la barra, si se tocó. [fin]: dónde
+  /// termina la numeración (6.5.1). Null: no hay pestaña Acomodar.
   final void Function(
     ArmadoSalon base,
     ArmadoSalon nuevo,
     Map<int, String> enUso,
     bool rehecho,
     double? lugarBarraM,
+    FinNumeracion fin,
   )? onGuardarArmado;
 
   /// GUARDAR COMO PREDIO… (6.1.0): el espacio que se ve en Acomodar ([actual],
@@ -402,6 +404,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                 sesion.actual,
                 sesion.base,
                 ordenar: ordenar,
+                fin: sesion.fin,
               ),
             );
         if (!sesion.hayCambios || seGuardo(true) || seGuardo(false)) {
@@ -695,6 +698,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         // También las bajas que conservan mesa: los números ya están dados.
         haySorteo: widget.alumnos.any(SalonMesas.tieneNumeros),
         predios: widget.predios,
+        fin: _plano.config.numeracion,
       );
 
   /// El último aviso de Acomodar que se tocó, y por cuál de sus mesas va: si
@@ -1880,6 +1884,16 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                   '${habia ? ' de nuevo: lo corrido a mano vuelve con Deshacer' : ''}. '
                   'Todavía no se guardó.');
         }),
+        fin: s.fin,
+        motivoSinFin: s.motivoSinFin,
+        onFin: (f) => setState(() {
+          s.elegirFin(f);
+          _confirmarDescartar = false;
+          hecho(s.faltaOrdenar
+              ? 'La numeración termina ${f == FinNumeracion.fondo ? 'al fondo' : 'junto al escenario'}: '
+                  'los números cambian al guardar. Ninguna mesa se mueve.'
+              : null);
+        }),
         motivoSinVaciar: s.motivoSinVaciar,
         onVaciar: () => setState(() {
           final problema = s.vaciar();
@@ -2031,6 +2045,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                 s.enUsoAlEmpezar,
                 s.rehecho,
                 s.lugarDeLaBarra,
+                s.fin,
               );
         },
         // Descartar se lleva todo lo acomodado: se pide dos veces, y aun así

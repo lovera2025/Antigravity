@@ -2,6 +2,7 @@ import '../../../models/predio.dart';
 import '../modelo/armado_salon.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../modelo/numeracion.dart';
 import 'armar_a_medida.dart';
 import 'editar_armado.dart';
 import 'medir_salon.dart';
@@ -35,6 +36,9 @@ class SesionAcomodo {
   /// como está guardado hoy. Se pone al día si la otra PC lo cambia.
   List<Predio> predios;
 
+  /// Dónde termina la numeración **como está guardada** (6.5.1).
+  final FinNumeracion finAlEmpezar;
+
   SesionAcomodo({
     required this.base,
     this.medidas = const MedidasPlano(),
@@ -42,8 +46,39 @@ class SesionAcomodo {
     this.ocupantes = const [],
     this.haySorteo = false,
     this.predios = const [],
+    FinNumeracion fin = FinNumeracion.escenario,
   })  : _actual = base,
+        _fin = fin,
+        finAlEmpezar = fin,
         enUsoAlEmpezar = Map.unmodifiable(enUso);
+
+  FinNumeracion _fin;
+
+  /// Dónde termina la numeración de lo que se está acomodando. Los números
+  /// cambian al guardar ([faltaOrdenar]), no mientras se acomoda: lo que
+  /// apunta a un número (una mesa fijada, una libre, un bloque) sigue a su
+  /// mesa en ese momento.
+  FinNumeracion get fin => _fin;
+
+  /// Se eligió otra cosa que la guardada.
+  bool get cambioElFin => _fin != finAlEmpezar;
+
+  /// Por qué no se puede elegir dónde termina la numeración, o null si se
+  /// puede: lo mismo que pide ordenar los números.
+  String? get motivoSinFin {
+    if (haySorteo) {
+      return 'Ya hay familias con mesa: los números no cambian.';
+    }
+    if (!_conBorde) return 'Este armado del Canva trae su numeración.';
+    return null;
+  }
+
+  /// Elige dónde termina la numeración. No cambia nada si no se puede
+  /// ([motivoSinFin]).
+  void elegirFin(FinNumeracion fin) {
+    if (motivoSinFin != null) return;
+    _fin = fin;
+  }
 
   /// Lo que bajó de la otra PC mientras se acomodaba: quién tiene cada mesa.
   /// Lo acomodado queda; los avisos y lo que se puede sacar pasan a salir de
@@ -120,7 +155,7 @@ class SesionAcomodo {
   List<String> get bloqueos => [for (final b in bloqueosConMesas) b.texto];
 
   bool get puedeGuardar =>
-      (hayCambios || faltaOrdenar) &&
+      (hayCambios || faltaOrdenar || (cambioElFin && motivoSinFin == null)) &&
       bloqueos.isEmpty &&
       !arrastrando &&
       !moviendoLaBarra &&
@@ -128,6 +163,7 @@ class SesionAcomodo {
 
   ArmadoSalon? _revisadoParaOrdenar;
   bool? _haySorteoAlRevisar;
+  FinNumeracion? _finAlRevisar;
   bool _faltaOrdenar = false;
 
   /// Al guardar, los números cambiarían: no están en orden, no hay familias con
@@ -135,12 +171,14 @@ class SesionAcomodo {
   /// tocado nada: es lo que deja arreglar un salón que ya quedó mezclado.
   bool get faltaOrdenar {
     if (!identical(_revisadoParaOrdenar, _actual) ||
-        _haySorteoAlRevisar != haySorteo) {
+        _haySorteoAlRevisar != haySorteo ||
+        _finAlRevisar != _fin) {
       _revisadoParaOrdenar = _actual;
       _haySorteoAlRevisar = haySorteo;
+      _finAlRevisar = _fin;
       _faltaOrdenar = !haySorteo &&
           EditarArmado.conBordeDelPlayon(_actual) &&
-          ArmarAMedida.ordenarNumeros(_actual).cambio.isNotEmpty;
+          ArmarAMedida.ordenarNumeros(_actual, fin: _fin).cambio.isNotEmpty;
     }
     return _faltaOrdenar;
   }
@@ -382,6 +420,7 @@ class SesionAcomodo {
       _antesDeLaBarra!,
       cantidad: cantidad,
       lugarM: lugarM,
+      fin: _fin,
     );
     _actual = r.armado;
     _lugarEnVivo = lugarM;
@@ -450,6 +489,7 @@ class SesionAcomodo {
     _antesDeLaBarra = null;
     _poner(base, rehecho: false);
     _lugarDeLaBarra = null;
+    _fin = finAlEmpezar;
   }
 
   // ── Acomodar y vaciar (6.1.0, "el salón primero") ───────────────────────
@@ -487,7 +527,12 @@ class SesionAcomodo {
   /// ([motivoSinAcomodar]).
   ArmadoAMedida? acomodar(int cantidad, {double? lugarM}) {
     if (motivoSinAcomodar(cantidad) != null) return null;
-    final r = ArmarAMedida.acomodar(_actual, cantidad: cantidad, lugarM: lugarM);
+    final r = ArmarAMedida.acomodar(
+      _actual,
+      cantidad: cantidad,
+      lugarM: lugarM,
+      fin: _fin,
+    );
     _poner(r.armado, rehecho: true);
     return r;
   }
@@ -595,7 +640,9 @@ class SesionAcomodo {
     if (faltaOrdenar) {
       r.add(AvisoAcomodo(
         'Los números se ordenan al guardar: quedan del 1 al '
-        '${_actual.mesas.length}. Ninguna mesa se mueve.',
+        '${_actual.mesas.length}'
+        '${_fin == FinNumeracion.fondo ? ', con el último al fondo' : ''}. '
+        'Ninguna mesa se mueve.',
       ));
     }
     return r;

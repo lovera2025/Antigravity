@@ -25,6 +25,7 @@ import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
+import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/modelo/reserva_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
@@ -144,6 +145,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     Map<int, String> enUso,
     bool rehecho,
     double? lugarBarraM,
+    FinNumeracion fin,
   ) {
     final cambio = EditarArmado.paraGuardar(
       base: base,
@@ -155,6 +157,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       rehecho: rehecho,
       leidoDeLaNube: _conInternet,
       lugarBarraM: lugarBarraM,
+      fin: fin,
     );
     setState(() {
       final config = cambio.config;

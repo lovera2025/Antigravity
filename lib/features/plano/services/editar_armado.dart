@@ -9,6 +9,7 @@ import '../modelo/armado_salon.dart';
 import '../modelo/armados_predefinidos.dart';
 import '../modelo/estado_plano.dart';
 import '../modelo/medidas_salon.dart';
+import '../modelo/numeracion.dart';
 import 'armar_a_medida.dart';
 import 'cambios_de_mesa.dart';
 import 'medir_salon.dart';
@@ -1049,6 +1050,9 @@ class EditarArmado {
   ///   si la otra ya sorteó. Se ordena la próxima vez que se guarde con internet.
   /// - [lugarBarraM]: la distancia elegida con la barra de Acomodar pasa a Medidas,
   ///   así el casillero y la barra dicen lo mismo y ACOMODAR OTRA VEZ la respeta.
+  /// - [fin]: dónde termina la numeración, si se eligió en Acomodar (6.5.1).
+  ///   Null: la que el plano ya tiene guardada. Queda en la config aunque esta
+  ///   vez no se ordene (sin internet): se ordena así la próxima.
   static CambioDeConfig paraGuardar({
     required ArmadoSalon base,
     required ArmadoSalon nuevo,
@@ -1059,7 +1063,9 @@ class EditarArmado {
     bool rehecho = false,
     bool leidoDeLaNube = true,
     double? lugarBarraM,
+    FinNumeracion? fin,
   }) {
+    final numeracion = fin ?? config.numeracion;
     if (firma(fresco) != firma(base)) {
       return const CambioDeConfig.noSePuede(
         'El salón guardado cambió mientras lo acomodabas. No se guardó nada, '
@@ -1105,19 +1111,22 @@ class EditarArmado {
     final ordenar = leidoDeLaNube &&
         enUso(alumnos, config.copyWith(fijadas: const {})).isEmpty;
     final cambio = _seOrdena(nuevo, ordenar)
-        ? ArmarAMedida.ordenarNumeros(nuevo).cambio
+        ? ArmarAMedida.ordenarNumeros(nuevo, fin: numeracion).cambio
         : const <int, int>{};
-    return CambioDeConfig.ok(
-      conNumerosNuevos(
-        _conLugarDeLaBarra(
-          conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
-          lugarBarraM,
-        ),
-        cambio,
-        nuevo,
+    final conNumeros = conNumerosNuevos(
+      _conLugarDeLaBarra(
+        conMedidasDelPlayon(sinLasSacadas, base: base, nuevo: nuevo),
+        lugarBarraM,
       ),
+      cambio,
+      nuevo,
+    );
+    return CambioDeConfig.ok(
+      conNumeros.numeracion == numeracion
+          ? conNumeros
+          : conNumeros.copyWith(numeracion: numeracion),
       sacadas,
-      armado: comoSeGuarda(nuevo, base, ordenar: ordenar),
+      armado: comoSeGuarda(nuevo, base, ordenar: ordenar, fin: numeracion),
     );
   }
 
@@ -1187,10 +1196,11 @@ class EditarArmado {
     ArmadoSalon nuevo,
     ArmadoSalon base, {
     required bool ordenar,
+    FinNumeracion fin = FinNumeracion.escenario,
   }) =>
       ArmarAMedida.conNombreSegunMesas(
         _seOrdena(nuevo, ordenar)
-            ? ArmarAMedida.ordenarNumeros(nuevo).armado
+            ? ArmarAMedida.ordenarNumeros(nuevo, fin: fin).armado
             : recordandoNumeros(nuevo, base),
       );
 
