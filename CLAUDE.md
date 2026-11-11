@@ -233,9 +233,12 @@ descartó al escucharlo), y lo que pidió fue que el último número quede al fo
 - **El plano se toca desde una PC con la 6.5.1:** una con la 6.5.0 que guarde el salón antes del sorteo lo vuelve a la numeración
   de siempre.
 
-**En la rama desde el 11-nov, programado y probado, SIN PUBLICAR (6.6.0, número propuesto):** una sola mesa, el papel corto y el
-cierre con el OK. Entrada: `docs/CONTEXTO_v6.6.0_2026-11-11.md`, que empieza con "Para retomar en otro chat" (ahí está el paso a
-paso para publicar y **lo que no se probó**). El usuario propuso publicarla ese día; cada paso se le pregunta.
+**La 6.6.0: una sola mesa, el papel corto y el cierre con el OK** (programada el 11-nov, versión `6.6.0+69`). **PUBLICADA el
+11-nov a las 15 hs, con el usuario**: la migración v79 probada sobre una copia de la base real, la foto de la mora "después de
+6.5.1 · antes de 6.6.0" (642 alumnos, sin nada sospechoso), el SQL de `barra_cierres` corrido con los conteos iguales, el tag
+`v6.6.0`, el release con el Setup y el APK, y la web. **Falta que instale las tres PCs y las tablets, y la foto "después de
+6.6.0".** La 6.5.1 quedó instalada en las tres PCs (lo confirmó ese día). Entrada: `docs/CONTEXTO_v6.6.0_2026-11-11.md`, que
+empieza con "Para retomar en otro chat" (ahí está **lo que no se probó**).
 - **Mover una sola mesa** (sin SQL): con una familia de varias mesas, Mover y Cambiar preguntan "¿Cuál mesa querés mover?"
   (`elegirCualMesa`). Con una sola, el toque decide: una vacía (`CambiosDeMesa.moverUna`) o la de otra familia
   (`intercambiarUna`, sin pedir la misma cantidad). **Las fijadas van mesa por mesa**, y `deshacer` igual si la familia conservó
@@ -246,7 +249,7 @@ paso para publicar y **lo que no se probó**). El usuario propuso publicarla ese
   Pago) y **LO VENDIDO DE LA FIESTA**. IMPRIMIR pregunta qué papel (`elegir_papel.dart`).
 - **La caja de barra se cierra cuando la encargada acepta** (pedido del usuario, que eligió el aviso en el aparato de ella y no
   el PIN en la tablet de la cajera). Tabla nueva **`barra_cierres` (v79)**, con su SQL
-  `supabase/migrations/20261111120000_barra_cierres.sql` **sin correr**. Una fila por paso (`PasoDelCierre`: pedido, ok,
+  `supabase/migrations/20261111120000_barra_cierres.sql` (**corrido el 11-nov**). Una fila por paso (`PasoDelCierre`: pedido, ok,
   recontar, cancelado, sin_ok); **solo se agregan filas**, y **`barra_cajas` no cambia: la caja la cierra siempre su propio
   equipo** cuando le llega el ok. Cruza por la central (`tablasDeLaRed`, ahora cinco) y por la nube.
   - La regla, sin pantalla: `PedidoDeCierre` (`cuentas/pedido_de_cierre.dart`). **No compara la hora de un equipo con la de
@@ -258,7 +261,10 @@ paso para publicar y **lo que no se probó**). El usuario propuso publicarla ese
   - La tablet que espera y el equipo de la encargada **miran su propia base cada 3 s**: no le piden nada a la nube. En la web,
     con la relectura de 30 s de LAS CAJAS.
   - **No usarlo hasta que las PCs y las tablets tengan la versión.**
-- **La base del equipo va por la v79 en la rama: no correr la app desde esta carpeta contra la base de verdad.**
+- **La base del equipo va por la v79: no correr la app desde esta carpeta contra la base de verdad** (las PCs tienen la 78
+  hasta que instalen la 6.6.0).
+- **`installer\build_installer.ps1` tarda más que el tope de 10 minutos de la herramienta de Claude** y se corta a mitad: se
+  hace por pasos, con las mismas comprobaciones (está en el CONTEXTO de la 6.6.0).
 - `tool/barra_prueba_web.dart` no dejaba entrar con PIN desde la 6.5.0 (se lo preguntaba a la nube): arreglado en `armarLados`.
 
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;

@@ -1,4 +1,4 @@
-# Contexto: la 6.6.0 (número propuesto) — una sola mesa, el papel corto y el cierre con el OK
+# Contexto: la 6.6.0 — una sola mesa, el papel corto y el cierre con el OK
 
 11-nov-2026. Rama `feature/v4.6-cierre-por-sesiones`. Plan aprobado por el usuario ese día
 (mover una sola mesa, y en la barra el papel corto, el detalle en la app y el cierre con el OK
@@ -6,8 +6,25 @@ de la encargada).
 
 ## Para retomar en otro chat
 
-**Estado: programado y probado en la rama. Sin publicar.** La versión de `pubspec.yaml` sigue
-en `6.5.1+68`; el número 6.6.0 es una propuesta, no lo eligió el usuario.
+**Estado: PUBLICADA el 11-nov a las 15 hs, con el usuario ("publicá la nueva versión").
+Falta que instale las tres PCs y las tablets, y la foto de la mora "después de 6.6.0".**
+
+### Publicada
+
+- **Tag `v6.6.0`** en `fdb4dfd` y **release** "Junior Eventos 6.6.0" con
+  `Setup.Junior.Eventos.v6.6.0.exe` (39 MB) y `Junior.Eventos.v6.6.0.apk` (51 MB, firmado con
+  "CN=Junior Eventos", comprobado con `apksigner`). Novedades: "Mover una sola mesa en el plano.
+  En la barra: el papel corto y el cierre con el OK de la encargada". Desde ese momento las PCs
+  y las tablets avisan que hay versión nueva.
+- **Web** en Vercel: `arguello-events-qj0b8gfpx`, producción; `version.json` da 6.6.0/69. La
+  anterior, para volver atrás: `arguello-events-8usv530pr` (la 6.5.1).
+- La suite entera con la 6.6.0: 4.425 pruebas en verde.
+- **`installer\build_installer.ps1` no entra en el tope de 10 minutos de la herramienta de
+  Claude**: se corta a mitad y parece una falla. Se hizo por pasos, con las mismas
+  comprobaciones (la clave de firma, `apksigner`): `flutter build windows --release`, la página
+  del celular (`flutter build web --release -t lib/puesto_main.dart --no-web-resources-cdn -o
+  build\puesto`), `ISCC.exe installer\junior_eventos_setup.iss`, `flutter build apk --release
+  --split-per-abi`, y copiar el arm64 a `installer\dist`.
 
 Lleva tres cosas, cada una con su commit:
 
@@ -15,10 +32,10 @@ Lleva tres cosas, cada una con su commit:
 |---|---|---|
 | En el plano, mover **una sola mesa** de una familia que tiene varias | `a7267d5` | No |
 | En la barra, **el papel del cierre corto** y el detalle en la app | `d4b07aa` | No |
-| En la barra, **la caja se cierra cuando la encargada acepta** | `6b44440` | **Sí**: `supabase/migrations/20261111120000_barra_cierres.sql`, **sin correr** |
+| En la barra, **la caja se cierra cuando la encargada acepta** | `6b44440` | **Sí**: `supabase/migrations/20261111120000_barra_cierres.sql`, **corrido el 11-nov** |
 
-**La base del equipo va por la v79 en la rama** (las PCs y las tablets tienen la 78). No correr
-la app desde esta carpeta contra la base de verdad: la migraría.
+**La base del equipo va por la v79** (las PCs y las tablets tienen la 78 hasta que instalen).
+No correr la app desde esta carpeta contra la base de verdad: la migraría.
 
 **No usar el cierre con el OK hasta que las PCs y las tablets tengan la versión.** Una tablet
 con la versión anterior cierra sola como siempre, y una encargada con la versión anterior no ve
@@ -30,21 +47,30 @@ Lo avisó ese día, sin acordarse de los nombres. **Al comparar las fotos de la 
 perdones nuevos y moras que bajaron: es eso, no un problema.** Lo que sí sería raro es una mora
 que sube o un perdón que se va.
 
-### Lo que falta para publicar (con el usuario, paso por paso)
+### Publicar: lo hecho el 11-nov a la tarde, con el usuario ("publicá la nueva versión")
 
-Lo propuso él ("después de esto le lanzás la app, con su versión y demás"). Cada paso se le
-pregunta en el momento.
+1. **La migración v79 sobre una copia de la base real: pasó.** La app de esta PC estaba cerrada.
+   Las 45 tablas iguales (642 alumnos, 5.025 pagos), aparece `barra_cierres` vacía, se puede
+   volver a la 6.5.1 y de nuevo a la nueva, y la base de verdad quedó con el mismo SHA-256.
+2. **La versión pasó a `6.6.0+69`** (`pubspec.yaml` y el instalador), commit `fdb4dfd`.
+3. **La foto de la mora** (por el conector de Supabase): "después de 6.5.1 (las tres PCs) ·
+   antes de 6.6.0", 642 alumnos, `foto_id da6aec8c-0eef-4f2e-816c-6950c15e2ca0`. El usuario
+   confirmó ese día que **la 6.5.1 estaba instalada en las tres PCs**. Comparada con la de
+   después de la 6.5.0 (la de las 7:44): **nada sospechoso** (ninguna mora subió, ninguna
+   eximición se fue ni se acortó, ningún "ya usado" bajó, nada se descongeló). Un perdón nuevo
+   y una mora que bajó: los perdones de ese día.
+4. **El SQL de `barra_cierres`, corrido con su OK.** Conteos de antes y de después, iguales
+   (642 contratos, 5.050 pagos, 2 cajas de barra, 1 venta, 31 eventos). La tabla quedó con RLS,
+   un disparador de insert y uno de update, su policy, y fuera de Realtime.
 
-0. Preguntarle si ya instaló la 6.5.1 en las otras dos PCs. Si sí, la foto de la mora "después
-   de 6.5.1". Después, la foto "antes de 6.6.0" (`supabase/mora_fotos.sql`).
-1. La migración v79 sobre una copia de la base real, **con la app cerrada** (se le pide, no se
-   cierra desde acá): `flutter test tool/verificar_migracion_v79_test.dart`. Abre la base de
-   verdad solo lectura y trabaja sobre la copia.
-2. El SQL `20261111120000_barra_cierres.sql`, con su OK: los conteos de antes y de después
-   tienen que dar igual. Solo crea una tabla; se puede correr a cualquier hora antes de instalar.
-3. La versión en `pubspec.yaml` y en `installer/junior_eventos_setup.iss`, el instalador, el APK
-   firmado, el tag, el release y la web.
-4. Instalar las tres PCs y las tablets (avisa él). La foto "después de 6.6.0".
+El instalador, el tag, el release y la web: arriba, en "Publicada".
+
+### Lo que queda después de publicar
+
+- **Instalar las tres PCs y las tablets** (lo hace el usuario y avisa). Al abrir, cada equipo
+  pasa su base de la v78 a la v79 (deja antes la copia `antes_de_v79.db`).
+- **La foto de la mora "después de 6.6.0"**, con las tres PCs instaladas y abiertas, y la
+  comparación con `da6aec8c…`.
 
 ### Lo que no se probó
 
