@@ -483,6 +483,51 @@ void main() {
       expect(o.nube.mesasDe('x'), [9]);
     });
 
+    test('ya le tocaba la mesa antes del sorteo y no la tiene: que pague otra '
+        'cuota no se la da sola', () async {
+      final o = _Oficina();
+      // El jefe deshizo el sorteo de una familia que tenía todo en regla, para
+      // volver a sortearla: quedó sin mesa, con su cuota paga de antes.
+      o.nube.alumnos['f30'] = _familia('f30');
+      o.nube.registros['deshacer-f30'] = SorteoMesasRegistro(
+        id: 'deshacer-f30',
+        eventoId: _evento,
+        tipo: TipoRegistroSorteo.deshacer,
+        resultado: const {'f30': '30'},
+        quedan: const {},
+        hechoPor: 'Jefe',
+        createdAt: o.reloj.ahora(),
+      );
+      o.sincronizar();
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      // Paga otra cuota: sigue sin ser "llegó después".
+      o.a.cobrar('f30', 'Cuota Base (2/9)', 35000);
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      expect(o.nube.alumnos['f30']!.numeroMesa, isNull);
+      expect(o.nube.plano!.armado.mesas, hasLength(101));
+    });
+
+    test('pagó parte de la adicional antes del sorteo: ya le tocaba, no es sola',
+        () async {
+      final o = _Oficina();
+      // Con algo pagado de la adicional desde antes, el sorteo ya se la daba.
+      // Si quedó con una sola, lo decidió el jefe.
+      o.nube.pagos['mesa-vieja'] = {
+        'id': 'mesa-vieja',
+        'contrato_alumno_id': 'x',
+        'concepto': 'Mesa Extra 1 (1/7)',
+        'monto': 10000.0,
+        'monto_gross': 10000.0,
+        'anulado': 0,
+        'created_at': DateTime.utc(2026, 11, 9, 16).toIso8601String(),
+        'fecha_pago': DateTime.utc(2026, 11, 9, 16).toIso8601String(),
+      };
+      o.sincronizar();
+      o.a.cobrar('x', 'Mesa Extra 1 (2/7)', 10000);
+      expect((await o.a.sola.revisar(_evento)).estado, EstadoMesaNueva.nada);
+      expect(o.nube.mesasDe('x'), [9]);
+    });
+
     test('si el jefe deshace la mesa que se dio sola, no se la vuelve a dar',
         () async {
       final o = _Oficina();

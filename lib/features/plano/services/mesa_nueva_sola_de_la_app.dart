@@ -111,6 +111,20 @@ final mesaNuevaSolaProvider = Provider<MesaNuevaSola>(
   (ref) => MesaNuevaSola(_PuertosDeLaApp(ref)),
 );
 
+/// Mira un evento con [sola] y deja escrito lo que pasó. **En la web no hace
+/// nada**: ahí no hay base en el equipo, y la mesa la da una PC cuando abre.
+Future<ResultadoMesaNueva> mirarMesaNueva(
+  MesaNuevaSola sola,
+  String eventoId,
+) async {
+  if (kIsWeb) return ResultadoMesaNueva.nada;
+  final r = await sola.revisar(eventoId);
+  if (r.estado == EstadoMesaNueva.dio || r.estado == EstadoMesaNueva.fallo) {
+    await VigiaDeLaMesaNueva.anotar(r);
+  }
+  return r;
+}
+
 /// Cuándo se mira si a alguien le toca una mesa sola, además de justo después
 /// de cobrarle: **al abrir el programa** y **cuando baja algo de otra PC**. Es
 /// para lo que se cobró sin internet, en otra PC o con una versión anterior, y
@@ -165,11 +179,10 @@ class VigiaDeLaMesaNueva {
       final eventos =
           await _ref.read(planosEventoRepositoryProvider).eventosConPlano();
       for (final id in eventos) {
-        final r = await sola.revisar(id);
+        final r = await mirarMesaNueva(sola, id);
         if (r.estado == EstadoMesaNueva.dio ||
             r.estado == EstadoMesaNueva.fallo) {
           dieron.add(r);
-          await anotar(r);
         }
       }
     } catch (e) {
@@ -188,8 +201,12 @@ class VigiaDeLaMesaNueva {
   /// (como `revision_mora.txt`): si alguien pregunta de dónde salió la 102,
   /// está ahí, además de en el registro de sorteos.
   static Future<void> anotar(ResultadoMesaNueva r) async {
-    final texto = r.aviso;
-    if (texto == null) return;
+    final aviso = r.aviso;
+    final texto = [
+      ?aviso,
+      if (r.error != null) 'Lo que falló: ${r.error}',
+    ].join(' ');
+    if (texto.isEmpty) return;
     try {
       final base = File(await LocalDatabase.dbPath);
       final destino =

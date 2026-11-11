@@ -83,14 +83,18 @@ class ResultadoMesaNueva {
   /// Alumno → su apellido, para decirlo.
   final Map<String, String> apellidos;
 
-  /// Por qué no se pudo, o quién quedó esperando.
+  /// Quién quedó esperando su mesa (los apellidos), si se sabe.
   final String? detalle;
+
+  /// Qué falló, para dejarlo escrito. No se le muestra a nadie.
+  final String? error;
 
   const ResultadoMesaNueva(
     this.estado, {
     this.dadas = const {},
     this.apellidos = const {},
     this.detalle,
+    this.error,
   });
 
   static const nada = ResultadoMesaNueva(EstadoMesaNueva.nada);
@@ -111,8 +115,11 @@ class ResultadoMesaNueva {
         return 'A ${detalle ?? 'una familia'} le falta el número de su mesa: '
             'se le da solo cuando vuelva internet.';
       case EstadoMesaNueva.fallo:
-        return 'No se le pudo dar la mesa sola a ${detalle ?? 'una familia'}: '
-            'el jefe se la da con SORTEO.';
+        // Sin saber a quién le tocaba no hay nada útil que decir en pantalla.
+        return detalle == null
+            ? null
+            : 'No se le pudo dar la mesa sola a $detalle: el jefe se la da '
+                'con SORTEO.';
       case EstadoMesaNueva.nada:
       case EstadoMesaNueva.esperar:
         return null;
@@ -164,9 +171,10 @@ class CuentaMesaNueva {
 /// **Es lo único del salón que el programa hace sin modo jefe**, y por eso es
 /// angosto a propósito:
 /// - solo **agrega**: nunca mueve ni saca una mesa de nadie;
-/// - solo a quien pagó **después** del último sorteo, deshacer o restaurar que
-///   hizo el jefe: si el jefe deshace un sorteo, esas familias no vuelven a
-///   recibir mesa solas;
+/// - solo a quien **le tocó la mesa por un pago posterior** al último sorteo,
+///   deshacer o restaurar que hizo el jefe: con lo pagado hasta ahí no le
+///   tocaba, y ahora sí. Si el jefe deshace un sorteo, esas familias no
+///   vuelven a recibir mesa solas, aunque paguen otra cuota;
 /// - la mesa adicional sin pagar sigue con candado, y quien no pagó nada de su
 ///   contrato tampoco entra: es la misma cuenta del sorteo ("solo a lo que
 ///   tiene algo pagado"), sin excepciones tildadas;
@@ -222,9 +230,25 @@ class MesaNuevaSola {
       soloPagado: true,
     );
     final llegada = llegadaPorPago(loPagado);
-    bool llegoDespues(String id) =>
-        sinRepetidos.perdieron.contains(id) ||
-        (llegada[id]?.isAfter(desde) ?? false);
+    // "Llegó después" no es haber pagado algo después del sorteo: es que **con
+    // lo pagado hasta el sorteo no le tocaba esa mesa, y ahora sí**. Si ya le
+    // tocaba y no la tiene (el jefe deshizo su sorteo para rehacerlo, por
+    // ejemplo), que pague otra cuota no se la da sola: la decide el jefe.
+    final loPagadoEntonces = pagosPorAlumno(vistos, {
+      for (final e in pagos.entries)
+        e.key: [
+          for (final p in e.value)
+            if (!_esPosterior(p, desde)) p,
+        ],
+    });
+    int leTocan(ContratoAlumno a, Map<String, PagoAlumno> pagado) =>
+        ExtrasSegunPago.de(a, pagado[a.id] ?? PagoAlumno.nada)
+            .mesasConElSorteoDeHoy;
+    bool llegoDespues(String id) {
+      if (sinRepetidos.perdieron.contains(id)) return true;
+      final a = _alumno(vistos, id);
+      return a != null && leTocan(a, loPagado) > leTocan(a, loPagadoEntonces);
+    }
 
     final todos = SorteoMesasMotor.pedidos(
       vistos,
@@ -318,6 +342,17 @@ class MesaNuevaSola {
     );
   }
 
+  /// ¿El pago se cargó después de [desde]? Uno sin hora que se pueda leer
+  /// cuenta como de antes: ante la duda, no se da una mesa sola.
+  static bool _esPosterior(Map<String, dynamic> pago, DateTime desde) {
+    for (final clave in const ['created_at', 'fecha_pago']) {
+      final v = pago[clave];
+      final cuando = v is DateTime ? v : DateTime.tryParse('${v ?? ''}');
+      if (cuando != null) return cuando.isAfter(desde);
+    }
+    return false;
+  }
+
   /// Los números que tiene hoy, como están guardados (con el repetido, si lo
   /// tiene): es lo que el renglón anota como "antes".
   static List<int> _numerosDe(List<ContratoAlumno> alumnos, String id) =>
@@ -388,7 +423,7 @@ class MesaNuevaSola {
     try {
       return await _revisar(eventoId);
     } catch (e) {
-      return ResultadoMesaNueva(EstadoMesaNueva.fallo, detalle: '$e');
+      return ResultadoMesaNueva(EstadoMesaNueva.fallo, error: '$e');
     }
   }
 
@@ -409,10 +444,7 @@ class MesaNuevaSola {
         registros: registros,
       );
     } on StateError catch (e) {
-      return ResultadoMesaNueva(
-        EstadoMesaNueva.fallo,
-        detalle: e.message,
-      );
+      return ResultadoMesaNueva(EstadoMesaNueva.fallo, error: e.message);
     }
     if (previa == null) return ResultadoMesaNueva.nada;
     final esperan = _apellidos(alumnos, previa.asignaciones.keys);
@@ -456,7 +488,8 @@ class MesaNuevaSola {
     } on StateError catch (e) {
       return ResultadoMesaNueva(
         EstadoMesaNueva.fallo,
-        detalle: '${esperan.values.join(', ')} (${e.message})',
+        detalle: esperan.values.join(', '),
+        error: e.message,
       );
     }
     if (cuenta == null) return ResultadoMesaNueva.nada;

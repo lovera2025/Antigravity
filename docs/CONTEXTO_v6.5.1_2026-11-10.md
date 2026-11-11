@@ -88,8 +88,10 @@ mesa sin que nadie apriete nada: su fijada, si tenía una esperándola, o una me
   habla al programa por `PuertosDeLaMesaNueva`. En la app, `mesa_nueva_sola_de_la_app.dart`.
 - **Es angosta a propósito:**
   - solo **agrega**: nunca mueve ni saca una mesa de nadie, y nunca da una mesa libre del salón elegida al azar;
-  - solo a quien pagó **después** del último sorteo, deshacer o restaurar **que hizo el jefe** (`ultimoDelJefe`): si el jefe
-    deshace un sorteo, esas familias no vuelven a recibir mesa solas. Sin registro de sorteos, no hace nada;
+  - solo a quien **le tocó la mesa por un pago posterior** al último sorteo, deshacer o restaurar **que hizo el jefe**
+    (`ultimoDelJefe`): con lo pagado hasta ahí no le tocaba, y ahora sí. No alcanza con haber pagado algo después: si ya le
+    tocaba y no la tiene (el jefe deshizo su sorteo para rehacerlo, o tenía algo pagado de la adicional y quedó con una sola),
+    que pague otra cuota no se la da sola. Sin registro de sorteos, no hace nada;
   - **la cuenta del candado, sin excepciones tildadas:** la adicional sin pagar no entra, y quien no pagó nada tampoco;
   - **solo con internet**, sin mesas de otra PC por bajar y con el plano recién leído de la nube. Sin internet queda "le falta el
     número de su mesa" y se da al volver.

@@ -3802,10 +3802,7 @@ class _DetalleEventoMasivoScreenState
   /// lo angosto que es está en ese servicio. Corre detrás de la subida, sin
   /// frenar el cobro ni el recibo.
   Future<void> _darMesaNuevaSiToca(MesaNuevaSola sola) async {
-    final r = await sola.revisar(widget.evento.id);
-    if (r.estado == EstadoMesaNueva.dio || r.estado == EstadoMesaNueva.fallo) {
-      await VigiaDeLaMesaNueva.anotar(r);
-    }
+    final r = await mirarMesaNueva(sola, widget.evento.id);
     if (!mounted) return;
     if (r.estado == EstadoMesaNueva.dio) {
       await _fetchDatos(cargaSilenciosa: true);
