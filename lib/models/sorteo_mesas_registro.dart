@@ -57,6 +57,11 @@ class SorteoMesasRegistro {
   /// se agregó ninguna.
   final Map<String, String>? nuevas;
 
+  /// El renglón no lo hizo el jefe con SORTEO: el programa le dio sola la mesa
+  /// a quien pagó después del sorteo (`MesaNuevaSola`, 6.5.1). No cuenta como
+  /// "el último sorteo" para saber quién llegó después.
+  final bool automatico;
+
   final String? hechoPor;
   final DateTime createdAt;
 
@@ -70,6 +75,7 @@ class SorteoMesasRegistro {
     this.lejos,
     this.zonas,
     this.nuevas,
+    this.automatico = false,
     this.hechoPor,
     required this.createdAt,
   });
@@ -82,6 +88,7 @@ class SorteoMesasRegistro {
   static const claveLejos = '_lejos';
   static const claveZonas = '_zonas';
   static const claveNuevas = '_nuevas';
+  static const claveAutomatico = '_auto';
 
   int get alumnos => resultado.length;
 
@@ -104,6 +111,7 @@ class SorteoMesasRegistro {
     Map<String, String>? lejos;
     Map<String, String>? zonas;
     Map<String, String>? nuevas;
+    var automatico = false;
     try {
       final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
       if (decodificado is Map) {
@@ -119,6 +127,8 @@ class SorteoMesasRegistro {
             zonas = _mapa(e.value);
           } else if (clave == claveNuevas) {
             nuevas = _mapa(e.value);
+          } else if (clave == claveAutomatico) {
+            automatico = e.value == true || e.value == 1 || e.value == '1';
           } else if (!clave.startsWith('_')) {
             resultado[clave] = e.value?.toString() ?? '';
           }
@@ -139,6 +149,7 @@ class SorteoMesasRegistro {
       lejos: lejos,
       zonas: zonas,
       nuevas: nuevas,
+      automatico: automatico,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -160,6 +171,7 @@ class SorteoMesasRegistro {
         claveLejos: ?lejos,
         claveZonas: ?zonas,
         claveNuevas: ?nuevas,
+        if (automatico) claveAutomatico: 1,
       }),
       'alumnos': alumnos,
       'hecho_por': hechoPor,

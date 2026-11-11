@@ -28,6 +28,16 @@ class PlanosEventoRepository {
     return rows.isEmpty ? null : PlanoEvento.fromMap(rows.first);
   }
 
+  /// Las fiestas que tienen plano en esta PC. Solo lectura, sin red.
+  Future<List<String>> eventosConPlano() async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query('planos_evento', columns: ['evento_id']);
+    return [
+      for (final r in rows)
+        if (r['evento_id'] case final String id) id,
+    ];
+  }
+
   /// Guarda la fila completa y la encola como alta: en la nube es un upsert,
   /// que anda igual si la fila ya existía o si todavía no llegó.
   Future<void> guardar(PlanoEvento plano) async {

@@ -21,6 +21,8 @@ void main() {
 
   const pantallaFiesta = 'lib/features/eventos/detalle_evento_masivo_screen.dart';
   const pantallaPlano = 'lib/features/plano/plano_evento_screen.dart';
+  const mesaNuevaSolaDeLaApp =
+      'lib/features/plano/services/mesa_nueva_sola_de_la_app.dart';
 
   /// Las dos llamadas por las que se guarda el salón: los números de mesa (con
   /// su renglón y, si hace falta, el plano) y el plano solo.
@@ -281,15 +283,19 @@ void main() {
               f.path.replaceAll('\\', '/'),
         };
 
+    // La excepción, desde la 6.5.1: la mesa nueva que el programa le da sola a
+    // quien pagó después del sorteo. Tiene su test aparte, acá abajo.
     expect(archivosCon('asignarNumerosMesa('), {
       pantallaFiesta,
       pantallaPlano,
       'lib/features/eventos/repositories/contratos_repository.dart',
+      mesaNuevaSolaDeLaApp,
     });
     expect(archivosCon('planosEventoRepositoryProvider'), {
       pantallaFiesta,
       pantallaPlano,
       'lib/features/plano/repositories/planos_evento_repository.dart',
+      mesaNuevaSolaDeLaApp,
     });
     // El tótem lee el plano por una puerta que solo deja leer.
     expect(
@@ -306,6 +312,67 @@ void main() {
     // En la fiesta el plano solo se lee: guardarlo, lo guarda el sorteo junto
     // con los números, por `asignarNumerosMesa`.
     expect(leer(pantallaFiesta), isNot(contains('planos.guardar(')));
+  });
+
+  test('la mesa nueva sola (6.5.1) es lo único del salón que se guarda sin modo '
+      'jefe, y es angosta', () {
+    // Lo pidió el usuario el 10-nov-2026: a quien paga después del sorteo, el
+    // programa le da su mesa sin que el jefe apriete SORTEO. Cambia la regla
+    // de este archivo, y por eso queda escrito qué se le permite.
+    Set<String> archivosCon(String texto) => {
+          for (final f in Directory('lib').listSync(recursive: true))
+            if (f is File &&
+                f.path.endsWith('.dart') &&
+                f.readAsStringSync().contains(texto))
+              f.path.replaceAll('\\', '/'),
+        };
+    final adaptador = leer(mesaNuevaSolaDeLaApp);
+    final servicio = leer('lib/features/plano/services/mesa_nueva_sola.dart');
+
+    // El adaptador no decide nada: lee, y guarda una sola vez, por el mismo
+    // camino del sorteo (todo junto, en una transacción).
+    expect('asignarNumerosMesa('.allMatches(adaptador).length, 1);
+    expect(adaptador, isNot(contains('_planos.guardar(')));
+    expect(adaptador, isNot(contains('MesasNuevasAlFondo')));
+    expect(adaptador, isNot(contains('SorteoConPlano')));
+    expect(adaptador, isNot(contains('esRolJefeProvider')));
+
+    // Lo que decide está en el servicio, con sus frenos:
+    // se apaga en un solo lugar;
+    expect(
+      servicio,
+      contains('if (!kMesaNuevaSolaHabilitada) return ResultadoMesaNueva.nada;'),
+    );
+    // la misma cuenta del candado, sin excepciones tildadas;
+    expect(servicio, contains('soloPagado: true,'));
+    expect(servicio, isNot(contains('incluirBase')));
+    expect(servicio, isNot(contains('incluirExtras')));
+    // solo a quien pagó después del último sorteo que hizo el jefe;
+    expect(servicio, contains('final desde = ultimoDelJefe(registros);'));
+    expect(servicio, contains('if (desde == null) return null;'));
+    expect(servicio, contains('if (r.automatico) continue;'));
+    // solo con internet y sin mesas de otra PC por bajar;
+    expect(servicio, contains('if (distintos == null) {'));
+    expect(
+      servicio,
+      contains(
+        'if (distintos > 0) return const ResultadoMesaNueva(EstadoMesaNueva.esperar);',
+      ),
+    );
+    // y solo una mesa suya (una nueva, o una que el jefe le había fijado):
+    // nunca una mesa libre del salón.
+    expect(servicio, contains('if (!recibe.every(suyas.contains)) {'));
+
+    // Quién la llama: el cobro de la fiesta, y el que mira al abrir y cuando
+    // baja algo.
+    expect(archivosCon('mesaNuevaSolaProvider'), {
+      pantallaFiesta,
+      mesaNuevaSolaDeLaApp,
+    });
+    expect(archivosCon('vigiaDeLaMesaNuevaProvider'), {
+      mesaNuevaSolaDeLaApp,
+      'lib/features/common/widgets/operational_sync_coordinator.dart',
+    });
   });
 
   test('Editar alumno: acompañantes y música pasan por la llave', () {

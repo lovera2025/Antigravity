@@ -9,6 +9,7 @@ import '../../../core/services/sync_engine.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../dashboard/providers/dashboard_provider.dart';
 import '../../mi_empresa/providers/finanzas_provider.dart';
+import '../../plano/services/mesa_nueva_sola_de_la_app.dart';
 
 class OperationalSyncRevision extends Notifier<int> {
   @override
@@ -67,7 +68,12 @@ class _OperationalSyncCoordinatorState
     _cambiosBajados = ref
         .read(syncEngineProvider)
         .cambiosBajadosStream
-        .listen((_) => _refrescarPantallas());
+        .listen((tablas) {
+      _refrescarPantallas();
+      // Lo que bajó pudo dejar a alguien esperando su mesa (6.5.1): se mira
+      // dentro de un rato, primero sin pedirle nada a la nube.
+      if (_desktop) ref.read(vigiaDeLaMesaNuevaProvider).alBajar(tablas);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _alArrancar());
   }
 
@@ -95,6 +101,9 @@ class _OperationalSyncCoordinatorState
     unawaited(_autocierreCajas());
     if (!mounted) return;
     await ref.read(syncEngineProvider).bajarAlArrancar();
+    // Con lo del día ya bajado: si a alguien le toca una mesa sola (pagó
+    // después del sorteo, sin internet o en otra PC), se le da (6.5.1).
+    if (mounted && _desktop) ref.read(vigiaDeLaMesaNuevaProvider).alArrancar();
   }
 
   Future<void> _alMirar() async {

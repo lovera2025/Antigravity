@@ -20,6 +20,8 @@ import '../../models/plano_evento.dart';
 import '../plano/plano_evento_screen.dart';
 import '../plano/repositories/mesas_movimientos_repository.dart';
 import '../plano/services/historial_sorteo.dart';
+import '../plano/services/mesa_nueva_sola.dart';
+import '../plano/services/mesa_nueva_sola_de_la_app.dart';
 import '../plano/services/mesas_nuevas_al_fondo.dart';
 import '../plano/widgets/cambio_de_mesa_dialogs.dart';
 import '../plano/repositories/planos_evento_repository.dart';
@@ -3792,6 +3794,31 @@ class _DetalleEventoMasivoScreenState
       await _ejecutarSorteo(frescos, config, pagosFrescos, planoFresco);
       return;
     }
+  }
+
+  /// Después de un cobro: si con ese pago a la familia le toca una mesa y el
+  /// sorteo ya pasó, el programa se la da sola ([MesaNuevaSola], 6.5.1) y lo
+  /// dice. No es del jefe ni pregunta por el modo jefe: todo lo que decide y
+  /// lo angosto que es está en ese servicio. Corre detrás de la subida, sin
+  /// frenar el cobro ni el recibo.
+  Future<void> _darMesaNuevaSiToca(MesaNuevaSola sola) async {
+    final r = await sola.revisar(widget.evento.id);
+    if (r.estado == EstadoMesaNueva.dio || r.estado == EstadoMesaNueva.fallo) {
+      await VigiaDeLaMesaNueva.anotar(r);
+    }
+    if (!mounted) return;
+    if (r.estado == EstadoMesaNueva.dio) {
+      await _fetchDatos(cargaSilenciosa: true);
+      if (!mounted) return;
+    }
+    final aviso = r.aviso;
+    if (aviso == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Text(aviso),
+      ),
+    );
   }
 
   /// El plano de la fiesta para sortear, deshacer o restaurar (ver
@@ -8115,7 +8142,13 @@ class _DetalleEventoMasivoScreenState
                             // `cobros_despues_de_guardar.txt`.
                             //
                             // La subida, aparte y sin esperarla: es la que
-                            // depende de internet.
+                            // depende de internet. Detrás de ella, la mesa
+                            // nueva (6.5.1): si con este pago a la familia le
+                            // toca una mesa y el sorteo ya pasó, el programa
+                            // se la da sola. Se pide ahora, antes de cualquier
+                            // espera, para no usar `ref` con la pantalla ya
+                            // cerrada.
+                            final mesaSola = ref.read(mesaNuevaSolaProvider);
                             unawaited(
                               DespuesDeGuardarCobro.correr(
                                 alumno: alumno.nombreAlumno,
@@ -8126,6 +8159,10 @@ class _DetalleEventoMasivoScreenState
                                       startedAt: autoSyncCheckpoint,
                                       isPayment: true,
                                     ),
+                                  ),
+                                  PasoDespuesDeGuardar(
+                                    'la mesa nueva',
+                                    () => _darMesaNuevaSiToca(mesaSola),
                                   ),
                                 ],
                               ),
