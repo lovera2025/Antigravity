@@ -4,10 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arguello_events/features/barra/central/central_barra_provider.dart';
+import 'package:arguello_events/features/barra/cuentas/cierre_de_barra.dart';
+import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
+import 'package:arguello_events/features/barra/cuentas/pesos.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 import 'package:arguello_events/features/barra/providers/barra_del_jefe_provider.dart';
 import 'package:arguello_events/features/barra/widgets/barra_home_screen.dart';
 import 'package:arguello_events/features/barra/widgets/las_cajas_screen.dart';
+import 'package:arguello_events/features/barra/widgets/ok_del_cierre.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
 import 'package:arguello_events/features/caja_sesiones/services/entrada_de_operador.dart';
@@ -30,7 +34,11 @@ void main() {
   late CajaBarra marta;
   late VentaBarra fernetDeMarta, sillaDeMarta;
 
+  /// Cuántas veces sonó el aviso de "una caja pide cerrar".
+  var sonidos = 0;
+
   setUp(() async {
+    sonidos = 0;
     SharedPreferences.setMockInitialValues({});
     operadores = OperadoresEnPrueba();
     operadores.operadores.lista.add(operadorDePrueba(_romi, 'Romi', '7777'));
@@ -90,6 +98,7 @@ void main() {
         // En la tablet: la barra del equipo, sin modo jefe y sin la central.
         barraDelJefeProvider.overrideWithValue(prueba.barra),
         centralSePrendeAcaProvider.overrideWithValue(false),
+        sonarPedidoDeCierreProvider.overrideWithValue(() => sonidos++),
       ],
       child: MaterialApp(home: BarraHomeScreen(onCajaLista: (_, _, _) {})),
     ));
@@ -182,6 +191,126 @@ void main() {
     expect(prueba.papel.papeles.single, contains('*** COPIA ***'));
     final copia = prueba.barra.valesGuardados.where((v) => v.esCopia).single;
     expect(copia.hechoPor, 'Romi');
+  });
+
+  // ── El cierre con el OK de la encargada (11-nov-2026) ───────────────────────
+
+  /// Marta contó y pide cerrar: su pedido llegó a este aparato.
+  Future<PasoDelCierre> pideCerrar({double contado = 20500}) async {
+    final pedido = PasoDelCierre.pedir(
+      caja: marta,
+      efectivoContado: contado,
+      nota: 'faltó un billete',
+      hechoPor: 'Marta',
+      ahora: DateTime.utc(2026, 12, 5, 8),
+    ).conEquipo('tablet-de-marta');
+    expect(await prueba.barra.guardarDeOtroEquipo('barra_cierres', pedido.toMap()), isTrue);
+    return pedido;
+  }
+
+  Future<void> unaVuelta(WidgetTester tester) async {
+    await tester.pump(kMirarPedidosDeCierre + const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+  }
+
+  String texto(WidgetTester tester, String clave) => tester.widget<Text>(find.byKey(Key(clave))).data!;
+
+  testWidgets('a la encargada le salta "la Caja pide cerrar", ve los totales y acepta', (tester) async {
+    final pedido = await pideCerrar();
+    await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true));
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    expect(find.byKey(Key('aviso_cierre_${marta.id}')), findsOneWidget);
+    expect(find.text('La Caja ${marta.numeroCaja} (Marta) pide cerrar'), findsOneWidget);
+    expect(sonidos, 1);
+
+    await tocar(tester, find.byKey(Key('aviso_cierre_ver_${marta.id}')));
+    final cuentas = CierreDeBarra.de(marta, prueba.barra.ventasGuardadas, const []);
+    expect(texto(tester, 'ok_cierre_esperado'), pesos(cuentas.efectivoEsperado));
+    expect(texto(tester, 'ok_cierre_conto'), r'$ 20.500');
+    expect(texto(tester, 'ok_cierre_diferencia'), diferenciaEnPalabras(cuentas.diferenciaCon(20500)));
+    expect(texto(tester, 'ok_cierre_transferencia'), r'$ 8.000');
+    expect(texto(tester, 'ok_cierre_total'), pesos(cuentas.total));
+    expect(texto(tester, 'ok_cierre_nota'), 'Nota de la cajera: faltó un billete');
+
+    await tocar(tester, find.byKey(const Key('ok_cierre_aceptar')));
+    final ok = prueba.barra.pasosGuardados.last;
+    expect(ok.tipo, TipoPasoDelCierre.ok);
+    expect(ok.pedidoId, pedido.id);
+    expect(ok.hechoPor, 'Romi');
+    expect(prueba.subidasDeLaBarra, contains('barra_cierres ${ok.id}'));
+    // El aparato de la encargada no toca la caja de Marta: la cierra su tablet.
+    expect(prueba.barra.cajasGuardadas.firstWhere((c) => c.id == marta.id).abierta, isTrue);
+    // Ya contestado, el aviso se va.
+    expect(find.byKey(Key('aviso_cierre_${marta.id}')), findsNothing);
+    expect(texto(tester, 'aviso_cierre_dicho'), contains('Aceptaste el cierre de la Caja ${marta.numeroCaja}'));
+    await unaVuelta(tester);
+    expect(sonidos, 1, reason: 'suena una vez por pedido');
+  });
+
+  testWidgets('el pedido que llega con LAS CAJAS abierta aparece solo, y puede pedir que cuente de nuevo',
+      (tester) async {
+    await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true));
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    expect(find.byKey(const Key('aviso_cierres')), findsNothing);
+    final pedido = await pideCerrar();
+    await unaVuelta(tester);
+    expect(find.byKey(Key('aviso_cierre_${marta.id}')), findsOneWidget);
+    expect(sonidos, 1);
+    await unaVuelta(tester);
+    expect(sonidos, 1);
+
+    await tocar(tester, find.byKey(Key('aviso_cierre_ver_${marta.id}')));
+    await tocar(tester, find.byKey(const Key('ok_cierre_recontar')));
+    expect(prueba.barra.pasosGuardados.last.tipo, TipoPasoDelCierre.recontar);
+    expect(prueba.barra.pasosGuardados.last.pedidoId, pedido.id);
+    expect(find.byKey(Key('aviso_cierre_${marta.id}')), findsNothing);
+  });
+
+  testWidgets('DESPUÉS no contesta nada: el aviso sigue ahí', (tester) async {
+    await pideCerrar();
+    await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true));
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    await tocar(tester, find.byKey(Key('aviso_cierre_ver_${marta.id}')));
+    await tocar(tester, find.byKey(const Key('ok_cierre_despues')));
+    expect(prueba.barra.pasosGuardados, hasLength(1));
+    expect(find.byKey(Key('aviso_cierre_${marta.id}')), findsOneWidget);
+  });
+
+  testWidgets('una caja que cerró sin el OK de la encargada queda marcada en LAS CAJAS', (tester) async {
+    final pedido = await pideCerrar();
+    final sinOk = PasoDelCierre.responder(
+      pedido: pedido,
+      tipo: TipoPasoDelCierre.sinOk,
+      nota: 'no había encargada',
+      hechoPor: 'Marta',
+      ahora: DateTime.utc(2026, 12, 5, 8, 4),
+    ).conEquipo('tablet-de-marta');
+    await prueba.barra.guardarDeOtroEquipo('barra_cierres', sinOk.toMap());
+    await prueba.barra.cerrarCaja(
+      marta,
+      efectivoContado: 20500,
+      diferencia: -500,
+      nota: PedidoDeCierre.notaSinElOk(motivo: 'no había encargada'),
+      quien: 'Marta',
+    );
+    await abrir(tester, permisos: const PermisosEfectivos(encargadaBarra: true));
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    expect(find.byKey(Key('jefe_caja_sin_ok_${marta.id}')), findsOneWidget);
+    expect(find.byKey(const Key('aviso_cierres')), findsNothing, reason: 'cerrada, ya no pide nada');
+  });
+
+  testWidgets('en un celular, el aviso y los totales no se desbordan', (tester) async {
+    await pideCerrar();
+    await abrir(
+      tester,
+      permisos: const PermisosEfectivos(encargadaBarra: true),
+      tamano: const Size(360, 740),
+    );
+    await tocar(tester, find.byKey(Key('barra_las_cajas_${fiesta.id}')));
+    expect(tester.takeException(), isNull);
+    await tocar(tester, find.byKey(Key('aviso_cierre_ver_${marta.id}')));
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('ok_cierre_aceptar')), findsOneWidget);
   });
 
   testWidgets('en un celular, LAS CAJAS no se desborda', (tester) async {

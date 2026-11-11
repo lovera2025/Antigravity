@@ -502,6 +502,29 @@ class BarraLocal implements BarraDelJefe, BarraDeLaCaja, BarraDeLaRed {
           ValeBarra.fromMap(f),
       ];
 
+  // ── El cierre con el OK de la encargada (v79) ──────────────────────────────
+
+  @override
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
+    final db = await _abrir();
+    final conEquipo = paso.conEquipo(await _equipo());
+    await db.transaction(
+      (txn) => _guardar(txn, 'barra_cierres', conEquipo.id, conEquipo.toMap()),
+    );
+    return conEquipo;
+  }
+
+  @override
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) async => [
+        for (final f in await _leer(
+          'barra_cierres',
+          where: 'evento_id = ?',
+          whereArgs: [eventoId],
+          orderBy: 'created_at, id',
+        ))
+          PasoDelCierre.fromMap(f),
+      ];
+
   // ── La red del salón (la central de la barra) ─────────────────────────────
 
   /// Las columnas de cada tabla en esta base: una fila de un equipo con otra versión

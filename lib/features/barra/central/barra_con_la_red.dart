@@ -125,6 +125,14 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     return _avisar('barra_cajas', hecho.id, hecho);
   }
 
+  /// El pedido de cierre de la cajera y el OK de la encargada (v79): por la red del
+  /// salón llegan al otro equipo en el momento, haya internet o no.
+  @override
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
+    final hecho = await _caja.anotarPasoDelCierre(paso);
+    return _avisar('barra_cierres', hecho.id, hecho);
+  }
+
   @override
   Future<CajaBarra> cerrarCaja(
     CajaBarra caja, {
@@ -207,6 +215,9 @@ class BarraConLaRed implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
 
   @override
   Future<List<ValeBarra>> valesDeLaCaja(String cajaId) => _caja.valesDeLaCaja(cajaId);
+
+  @override
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) => _caja.pasosDelCierre(eventoId);
 
   // ── La red ─────────────────────────────────────────────────────────────────
 

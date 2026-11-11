@@ -302,6 +302,13 @@ class _LoQueSubio implements BarraDelJefe {
 
   @override
   Future<List<ValeBarra>> vales(String eventoId) => b.vales(eventoId);
+
+  // El pedido de cierre y el OK (v79): en esta ventana los dos lados comparten la barra.
+  @override
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) => b.pasosDelCierre(eventoId);
+
+  @override
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) => b.anotarPasoDelCierre(paso);
 }
 
 /// La ventana: la cajera a la izquierda y el jefe a la derecha. **Cada lado es su propia

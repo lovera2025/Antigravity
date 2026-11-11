@@ -88,6 +88,40 @@ void main() {
     }
   });
 
+  // 11-nov-2026: la caja se cierra cuando la encargada acepta. Mientras espera, la
+  // cajera sigue a ciegas: los totales los ve solo la encargada, con su PIN.
+  test('esperando el OK de la encargada, la pantalla tampoco muestra ninguna plata de la caja', () {
+    final c = leer('lib/features/barra/widgets/cerrar_caja_barra_screen.dart');
+    final i = c.indexOf('Widget _esperar(PasoDelCierre pedido) {');
+    expect(i, greaterThan(0));
+    final esperar = c.substring(i, c.indexOf('\n  }\n', i));
+    for (final prohibido in [
+      'efectivoEsperado',
+      'efectivoContado',
+      '_cuentas',
+      'pesos(',
+      '_ventas',
+      'PapelEnPantalla',
+    ]) {
+      expect(esperar, isNot(contains(prohibido)), reason: 'la espera muestra $prohibido');
+    }
+  });
+
+  test('los totales del cierre los ve solo quien manda en la barra, y la caja la cierra su equipo', () {
+    final ok = leer('lib/features/barra/widgets/ok_del_cierre.dart');
+    // El aviso no le aparece a una cajera común, y aceptar pregunta de nuevo.
+    expect('mandaEnLaBarraProvider'.allMatches(ok).length, greaterThanOrEqualTo(2));
+    // El aparato de la encargada solo agrega su respuesta: nunca cierra la caja de otra.
+    expect(ok, isNot(contains('cerrarCaja(')));
+    expect(ok, isNot(contains("'barra_cajas'")));
+    // En la tablet de la cajera, el PIN tiene que ser de una encargada.
+    final c = leer('lib/features/barra/widgets/cerrar_caja_barra_screen.dart');
+    final i = c.indexOf('Future<void> _laEncargadaEstaAca() async {');
+    final cuerpo = c.substring(i, c.indexOf('\n  }\n', i));
+    expect(cuerpo.indexOf('permisos.encargadaBarra'), greaterThan(0));
+    expect(cuerpo.indexOf('permisos.encargadaBarra'), lessThan(cuerpo.indexOf('mostrarOkDelCierre(')));
+  });
+
   test('VENTAS ve solo las ventas de su caja, y anula desde la caja (no con lo del jefe)', () {
     final v = leer('lib/features/barra/widgets/ventas_de_la_caja_screen.dart');
     expect(v, contains('ventasDeLaCaja(widget.caja.id)'));

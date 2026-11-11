@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../caja_sesiones/providers/app_role_provider.dart';
 import '../../common/widgets/operational_sync_coordinator.dart';
 import '../cuentas/cierre_de_barra.dart';
+import '../cuentas/pedido_de_cierre.dart';
 import '../cuentas/stock_de_la_barra.dart';
 import '../datos/barra_repositorio.dart';
 import '../impresion/impresora_bluetooth.dart';
@@ -102,12 +103,16 @@ class CajasDeLaFiesta {
   final List<AnulacionBarra> anulaciones;
   final List<ValeBarra> vales;
 
+  /// Las cajas que cerraron sin esperar el OK de la encargada (`barra_cierres`, v79).
+  final Set<String> sinOk;
+
   const CajasDeLaFiesta({
     required this.resumen,
     required this.stock,
     required this.ventas,
     required this.anulaciones,
     required this.vales,
+    this.sinOk = const {},
   });
 
   bool get sinCajas => resumen.cajas.isEmpty;
@@ -124,6 +129,11 @@ final cajasDelJefeProvider =
   final precios = await barra.precios(eventoId);
   final productos = await barra.productos(conBajas: true);
   final nombres = {for (final p in productos) p.id: p.nombre};
+  // Sin la tabla en la nube o en la base (una versión anterior), CAJAS se ve igual.
+  var sinOk = const <String>{};
+  try {
+    sinOk = PedidoDeCierre.cerraronSinOk(await barra.pasosDelCierre(eventoId));
+  } catch (_) {}
   final stock = StockDeLaBarra.de(
     eventoId: eventoId,
     precios: precios,
@@ -145,5 +155,6 @@ final cajasDelJefeProvider =
     ventas: ventas,
     anulaciones: anulaciones,
     vales: vales,
+    sinOk: sinOk,
   );
 });

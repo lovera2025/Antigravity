@@ -21,6 +21,7 @@ import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/papel_de_la_barra.dart';
 import '../widgets/elegir_papel.dart';
+import '../widgets/ok_del_cierre.dart';
 import '../widgets/vales_de_la_venta_screen.dart';
 import '../central/central_barra_provider.dart';
 import '../central/panel_central_barra.dart';
@@ -465,6 +466,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           final principal = <Widget>[
             if (conPanel) ...[PanelCentralDeLaBarra(eventoId: widget.fiesta.id), const SizedBox(height: 12)],
             _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
+            // "La Caja 2 pide cerrar": a la encargada y al jefe en modo jefe.
+            AvisoDePedidosDeCierre(eventoId: widget.fiesta.id),
             const SizedBox(height: 12),
             _Totales(resumen: datos.resumen),
             const SizedBox(height: 12),
@@ -482,6 +485,7 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
             if (elegida == null)
               _Tarjetas(
                 resumen: datos.resumen,
+                sinOk: datos.sinOk,
                 onElegir: (r) => setState(() {
                   _cajaElegida = r.caja.id;
                   _aviso = null;
@@ -893,7 +897,10 @@ class _Tarjetas extends StatelessWidget {
   final ResumenDeCajas resumen;
   final ValueChanged<ResumenDeCaja> onElegir;
 
-  const _Tarjetas({required this.resumen, required this.onElegir});
+  /// Las cajas que cerraron sin el OK de la encargada.
+  final Set<String> sinOk;
+
+  const _Tarjetas({required this.resumen, required this.onElegir, this.sinOk = const {}});
 
   @override
   Widget build(BuildContext context) {
@@ -904,7 +911,13 @@ class _Tarjetas extends StatelessWidget {
         spacing: 12,
         runSpacing: 12,
         children: [
-          for (final r in resumen.cajas) _TarjetaDeCaja(r: r, ancho: ancho, onTap: () => onElegir(r)),
+          for (final r in resumen.cajas)
+            _TarjetaDeCaja(
+              r: r,
+              ancho: ancho,
+              onTap: () => onElegir(r),
+              sinOk: sinOk.contains(r.caja.id),
+            ),
         ],
       );
     });
@@ -916,7 +929,15 @@ class _TarjetaDeCaja extends StatelessWidget {
   final double ancho;
   final VoidCallback onTap;
 
-  const _TarjetaDeCaja({required this.r, required this.ancho, required this.onTap});
+  /// Cerró sin esperar el OK de la encargada.
+  final bool sinOk;
+
+  const _TarjetaDeCaja({
+    required this.r,
+    required this.ancho,
+    required this.onTap,
+    this.sinOk = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1024,6 +1045,16 @@ class _TarjetaDeCaja extends StatelessWidget {
                   const Text(
                     'Lo contado y la diferencia aparecen cuando la cajera cierra.',
                     style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
+                  ),
+                // Cerró sin esperar el OK de la encargada (11-nov): para que el jefe la mire.
+                if (sinOk)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Cerró sin el OK de la encargada',
+                      key: Key('jefe_caja_sin_ok_${c.id}'),
+                      style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFF2B84B)),
+                    ),
                   ),
                 const SizedBox(height: 10),
                 const Text(

@@ -27,6 +27,9 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
   final anulacionesGuardadas = <AnulacionBarra>[];
   final valesGuardados = <ValeBarra>[];
   final recargosGuardados = <RecargoBarra>[];
+
+  /// Los pasos del cierre con el OK de la encargada (`barra_cierres`, v79).
+  final pasosGuardados = <PasoDelCierre>[];
   String equipo = 'tablet-1';
   DateTime Function() reloj = () => DateTime.utc(2026, 12, 5, 2);
 
@@ -240,6 +243,18 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
     return conEquipo;
   }
 
+  @override
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
+    final conEquipo = paso.conEquipo(equipo);
+    pasosGuardados.add(conEquipo);
+    otrosSinSubir.add(conEquipo.id);
+    return conEquipo;
+  }
+
+  @override
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) async =>
+      [for (final p in pasosGuardados) if (p.eventoId == eventoId) p];
+
   // ── La red del salón (`BarraDeLaRed`) ─────────────────────────────────────
 
   /// Cuántas filas llegaron de otro equipo y se guardaron.
@@ -258,6 +273,7 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
       'barra_ventas' => de(ventasGuardadas, (v) => v.id, (v) => v.toMap()),
       'barra_anulaciones' => de(anulacionesGuardadas, (a) => a.id, (a) => a.toMap()),
       'barra_vales' => de(valesGuardados, (v) => v.id, (v) => v.toMap()),
+      'barra_cierres' => de(pasosGuardados, (p) => p.id, (p) => p.toMap()),
       _ => null,
     };
   }
@@ -289,6 +305,8 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
         _ponerDeOtro(anulacionesGuardadas, AnulacionBarra.fromMap(m), (a) => a.id);
       case 'barra_vales':
         _ponerDeOtro(valesGuardados, ValeBarra.fromMap(m), (v) => v.id);
+      case 'barra_cierres':
+        _ponerDeOtro(pasosGuardados, PasoDelCierre.fromMap(m), (p) => p.id);
     }
     llegaronDeOtro++;
     return true;
@@ -302,6 +320,7 @@ class BarraEnMemoria implements BarraDeLaCaja, BarraDelJefe, BarraDeLaRed {
           for (final a in anulacionesGuardadas) if (a.eventoId == eventoId) a.toMap(),
         ],
         'barra_vales': [for (final v in valesGuardados) if (v.eventoId == eventoId) v.toMap()],
+        'barra_cierres': [for (final p in pasosGuardados) if (p.eventoId == eventoId) p.toMap()],
       };
 
   @override

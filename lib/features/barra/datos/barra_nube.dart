@@ -190,4 +190,26 @@ class BarraNube implements BarraDelJefe {
         .order('id', ascending: true));
     return [for (final f in filas) ValeBarra.fromMap(f)];
   }
+
+  // ── El cierre con el OK de la encargada (v79) ──────────────────────────────
+
+  @override
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId) async {
+    final filas = await _todas(() => _supabase
+        .from('barra_cierres')
+        .select()
+        .eq('evento_id', eventoId)
+        .order('created_at', ascending: true)
+        .order('id', ascending: true));
+    return [for (final f in filas) PasoDelCierre.fromMap(f)];
+  }
+
+  /// La respuesta de la encargada desde la web: va derecho a la nube, y la tablet de
+  /// la cajera la baja. Solo se agrega: si la fila ya está, queda como está.
+  @override
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso) async {
+    final conEquipo = paso.conEquipo(await _equipo());
+    await _supabase.from('barra_cierres').upsert(conEquipo.toMap(), ignoreDuplicates: true);
+    return conEquipo;
+  }
 }

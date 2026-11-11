@@ -25,6 +25,7 @@ import 'cerrar_caja_barra_screen.dart';
 import 'cobrar_hoja.dart';
 import 'elegir_disenio.dart';
 import 'elegir_impresora_screen.dart';
+import 'ok_del_cierre.dart';
 import 'pesos_enteros_formatter.dart';
 import 'tarjeta_producto.dart';
 import 'vales_de_la_venta_screen.dart';
@@ -386,6 +387,8 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
               ? Column(
                   children: [
                     const LineaDeLaCaja(),
+                    // A la encargada: "la Caja 2 pide cerrar" (a una cajera común, nada).
+                    AvisoDePedidosDeCierre(eventoId: _caja.eventoId, exceptoCajaId: _caja.id),
                     _filtros(),
                     Expanded(child: _grilla(2)),
                     _cuentaCelular(),
@@ -399,6 +402,7 @@ class _VenderState extends ConsumerState<_Vender> with WidgetsBindingObserver {
                         children: [
                           // Lo que espera subir ("Todo subido") y la central de la barra.
                           const LineaDeLaCaja(),
+                          AvisoDePedidosDeCierre(eventoId: _caja.eventoId, exceptoCajaId: _caja.id),
                           _filtros(),
                           Expanded(child: _grilla(pc ? 4 : 3)),
                         ],

@@ -446,6 +446,7 @@ class SyncEngine {
     'sillas_puerta': 'updated_at',
     'barra_vales': 'updated_at',
     'barra_recargos': 'updated_at',
+    'barra_cierres': 'updated_at',
   };
 
   /// Tablas con fecha calendario mínima para pull/probe (rollout cierre operativo).
@@ -1614,6 +1615,9 @@ class SyncEngine {
     // Los vales que salieron de cada venta, y sus copias (v78): el jefe mira en
     // vivo quién reimprimió qué.
     'barra_vales',
+    // El pedido de cierre de una caja de barra y el OK de la encargada (v79):
+    // mientras no cruza, la cajera espera con la caja abierta.
+    'barra_cierres',
   ];
 
   /// El resto. La red de seguridad lo baja cada 30 minutos (6.3.3).
@@ -2050,6 +2054,8 @@ class SyncEngine {
       if (table == 'barra_anulaciones') return 5;
       // Cuelga de la venta, como la anulación.
       if (table == 'barra_vales') return 5;
+      // Cuelga de la caja: después de ella y de sus ventas.
+      if (table == 'barra_cierres') return 5;
       // Cuelga de la fiesta, como el precio.
       if (table == 'barra_recargos') return 2;
       if (table == 'sesiones_caja') {
@@ -2410,6 +2416,7 @@ class SyncEngine {
       _pullTable(db, 'sillas_puerta', 'updated_at'),
       _pullTable(db, 'barra_vales', 'updated_at'),
       _pullTable(db, 'barra_recargos', 'updated_at'),
+      _pullTable(db, 'barra_cierres', 'updated_at'),
     ]);
 
     // Lo borrado en otra PC, antes de la mora: la mora se rehace desde los
@@ -3493,6 +3500,20 @@ class SyncEngine {
         'created_at',
         'updated_at',
       ],
+      // La v79: las 11 columnas de `PasoDelCierre.toMap()`.
+      'barra_cierres': [
+        'id',
+        'caja_barra_id',
+        'evento_id',
+        'tipo',
+        'pedido_id',
+        'efectivo_contado',
+        'nota',
+        'hecho_por',
+        'device_id',
+        'created_at',
+        'updated_at',
+      ],
       // La v78: las 7 columnas de `RecargoBarra.toMap()`.
       'barra_recargos': [
         'id',
@@ -3668,6 +3689,8 @@ class SyncEngine {
     'barra_vales': 'solo se agregan filas: cada papel que salió, y cada copia, es otra',
     'barra_recargos':
         'una fila por fiesta, con id fijo: cambiar el recargo la actualiza, no se borra',
+    'barra_cierres':
+        'solo se agregan filas: el pedido de cierre de la cajera y cada respuesta son otra',
   };
 
   /// Para los tests: las tablas que se revisan.

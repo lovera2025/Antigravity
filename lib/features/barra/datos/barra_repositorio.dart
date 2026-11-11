@@ -1,5 +1,6 @@
 import 'anulacion_barra.dart';
 import 'caja_barra.dart';
+import 'paso_del_cierre.dart';
 import 'precio_barra.dart';
 import 'producto_barra.dart';
 import 'recargo_barra.dart';
@@ -8,6 +9,7 @@ import 'venta_barra.dart';
 
 export 'anulacion_barra.dart';
 export 'caja_barra.dart';
+export 'paso_del_cierre.dart';
 export 'precio_barra.dart';
 export 'producto_barra.dart';
 export 'recargo_barra.dart';
@@ -54,6 +56,15 @@ abstract interface class BarraDelJefe {
 
   /// Los papeles de vale que salieron de la fiesta, originales y copias.
   Future<List<ValeBarra>> vales(String eventoId);
+
+  /// Los pasos del cierre con el OK de la encargada (`barra_cierres`, v79) de la
+  /// fiesta: los pedidos de las cajas y lo que se les contestó.
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId);
+
+  /// Anota la respuesta de la encargada o del jefe a un pedido (ok, o que cuente de
+  /// nuevo). **La caja de la cajera no se toca:** la cierra su tablet cuando le llega.
+  /// Solo se agregan filas.
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso);
 }
 
 /// Lo que hace la cajera, **solo en su equipo** (la tablet o la PC): abrir su caja,
@@ -146,6 +157,15 @@ abstract interface class BarraDeLaCaja {
   /// contar a ciegas. Lo contado y la diferencia no se tocan. Sobre una caja abierta no
   /// hace nada (la nota va al cerrar).
   Future<CajaBarra> anotarCierre(CajaBarra caja, {String? nota, required String quien});
+
+  /// Los pasos del cierre con el OK de la encargada que conoce este equipo, de todas
+  /// las cajas de la fiesta.
+  Future<List<PasoDelCierre>> pasosDelCierre(String eventoId);
+
+  /// Anota un paso del cierre (el pedido de la cajera, que volvió a vender, que cerró
+  /// sin esperar; o la respuesta de la encargada desde su equipo). Solo se agregan
+  /// filas.
+  Future<PasoDelCierre> anotarPasoDelCierre(PasoDelCierre paso);
 
   /// La cierra con lo que contó la cajera y la diferencia. Una caja ya cerrada queda
   /// como se cerró: no se vuelve a cerrar.

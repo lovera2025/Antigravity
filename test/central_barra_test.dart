@@ -8,6 +8,7 @@ import 'package:arguello_events/features/barra/central/buscar_central.dart';
 import 'package:arguello_events/features/barra/central/central_barra.dart';
 import 'package:arguello_events/features/barra/central/cliente_de_la_central.dart';
 import 'package:arguello_events/features/barra/central/filas_de_la_red.dart';
+import 'package:arguello_events/features/barra/cuentas/pedido_de_cierre.dart';
 import 'package:arguello_events/features/barra/datos/barra_repositorio.dart';
 
 import 'helpers/barra_en_memoria.dart';
@@ -176,6 +177,113 @@ void main() {
     await a.caja.cerrarCaja(caja, efectivoContado: 3000, diferencia: -500, quien: 'Cajera 1');
     await hasta(() => notebook.cajasGuardadas.single.abierta == false, que: 'la caja cerrada en la notebook');
     expect(notebook.cajasGuardadas.single.diferencia, -500);
+  });
+
+  // El cierre con el OK de la encargada (11-nov-2026), de punta a punta **sin internet**:
+  // el pedido y el OK cruzan por la central de verdad, y la caja la cierra su tablet.
+  test('el pedido de cierre le llega a la encargada y su OK vuelve, por la red del salón', () async {
+    final cajera = tablet('tablet-a', 'Caja 1 · Marta');
+    final encargada = tablet('tablet-b', 'Caja 2 · Romi');
+    await hasta(() => cajera.cliente.conectada && encargada.cliente.conectada);
+    final caja = await cajera.abrir(1);
+    await cajera.vender(caja, cantidad: 2);
+
+    final pedido = await cajera.caja.anotarPasoDelCierre(PasoDelCierre.pedir(
+      caja: caja,
+      efectivoContado: 7000,
+      hechoPor: 'Marta',
+      ahora: DateTime.now(),
+    ));
+    await hasta(
+      () => encargada.barra.pasosGuardados.any((p) => p.id == pedido.id),
+      que: 'el pedido en el aparato de la encargada',
+    );
+    // La encargada ve qué caja pide cerrar, con lo que contó.
+    await hasta(() => encargada.barra.cajasGuardadas.any((c) => c.id == caja.id));
+    var enPie = PedidoDeCierre.enPie(
+      await encargada.caja.cajas(_fiesta),
+      await encargada.caja.pasosDelCierre(_fiesta),
+    );
+    expect(enPie.single.caja.id, caja.id);
+    expect(enPie.single.pedido.efectivoContado, 7000);
+    expect(encargada.barra.otrosSinSubir, isNot(contains(pedido.id)),
+        reason: 'lo de otra caja no se encola: lo sube la que pidió');
+    expect(cajera.barra.otrosSinSubir, contains(pedido.id));
+
+    // Acepta: su fila vuelve a la tablet de la cajera.
+    final ok = await encargada.caja.anotarPasoDelCierre(PasoDelCierre.responder(
+      pedido: pedido,
+      tipo: TipoPasoDelCierre.ok,
+      hechoPor: 'Romi',
+      ahora: DateTime.now(),
+    ));
+    await hasta(
+      () => cajera.barra.pasosGuardados.any((p) => p.id == ok.id),
+      que: 'el ok en la tablet de la cajera',
+    );
+    final estado = PedidoDeCierre.de(caja.id, await cajera.caja.pasosDelCierre(_fiesta));
+    expect(estado.aceptado, isTrue);
+    expect(estado.respuesta!.hechoPor, 'Romi');
+
+    // La tablet de la cajera cierra su caja; la encargada la ve cerrada y ya no pide.
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await cajera.caja.cerrarCaja(
+      caja,
+      efectivoContado: 7000,
+      diferencia: 0,
+      nota: PedidoDeCierre.notaConElOk(acepto: 'Romi'),
+      quien: 'Marta',
+    );
+    await hasta(
+      () => encargada.barra.cajasGuardadas.any((c) => c.id == caja.id && !c.abierta),
+      que: 'la caja cerrada en el aparato de la encargada',
+    );
+    enPie = PedidoDeCierre.enPie(
+      await encargada.caja.cajas(_fiesta),
+      await encargada.caja.pasosDelCierre(_fiesta),
+    );
+    expect(enPie, isEmpty);
+    // La notebook (el jefe) tiene los dos pasos y la caja cerrada, con quién aceptó.
+    expect(notebook.pasosGuardados.map((p) => p.id).toSet(), {pedido.id, ok.id});
+    expect(notebook.cajasGuardadas.single.notaCierre, 'Aceptó: Romi');
+  });
+
+  test('si la red se cae mientras la cajera espera, el OK le llega cuando vuelve', () async {
+    final cajera = tablet('tablet-a', 'Caja 1 · Marta');
+    final encargada = tablet('tablet-b', 'Caja 2 · Romi');
+    await hasta(() => cajera.cliente.conectada && encargada.cliente.conectada);
+    final caja = await cajera.abrir(1);
+    final pedido = await cajera.caja.anotarPasoDelCierre(PasoDelCierre.pedir(
+      caja: caja,
+      efectivoContado: 0,
+      hechoPor: 'Marta',
+      ahora: DateTime.now(),
+    ));
+    await hasta(() => encargada.barra.pasosGuardados.any((p) => p.id == pedido.id));
+
+    // Se apaga la notebook: la encargada acepta igual, y queda por mandar.
+    await central.cerrar();
+    await hasta(() => encargada.cliente.estado == EstadoDeLaCentral.sinCentral);
+    final ok = await encargada.caja.anotarPasoDelCierre(PasoDelCierre.responder(
+      pedido: pedido,
+      tipo: TipoPasoDelCierre.ok,
+      hechoPor: 'Romi',
+      ahora: DateTime.now(),
+    ));
+    expect(cajera.barra.pasosGuardados.any((p) => p.id == ok.id), isFalse);
+    expect(PedidoDeCierre.de(caja.id, cajera.barra.pasosGuardados).esperando, isTrue);
+
+    // Vuelve la notebook: el OK cruza solo, sin que nadie toque nada.
+    central = CentralBarra(eventoId: _fiesta, barra: notebook, alGuardar: () => guardadas++);
+    final puerto = await central.arrancar(desde: 0, en: InternetAddress.loopbackIPv4);
+    final nueva = DondeEstaLaCentral('127.0.0.1', puerto);
+    cajera.cliente.ponerAMano(nueva);
+    encargada.cliente.ponerAMano(nueva);
+    await hasta(
+      () => cajera.barra.pasosGuardados.any((p) => p.id == ok.id),
+      que: 'el ok en la tablet de la cajera, al volver la red',
+    );
+    expect(PedidoDeCierre.de(caja.id, cajera.barra.pasosGuardados).aceptado, isTrue);
   });
 
   test('lo que anula el jefe en la notebook les llega a las cajas', () async {

@@ -1,12 +1,21 @@
 // Lo que viaja por la red del salón entre las cajas de la barra y su central: las filas
-// de las cuatro tablas que escribe cada caja, tal como las guarda la base del equipo
+// de las cinco tablas que escribe cada caja, tal como las guarda la base del equipo
 // (`toMap()`). La central es la bajada de la nube, pero por el wifi del salón: lo que
 // llega de otro equipo se guarda **sin encolarlo para subir** (ya lo sube el equipo que
 // lo hizo), así no hay duplicados y la nube sigue siendo la de siempre.
 
 /// Las tablas que se reparten por la red del salón: lo que escribe cada caja. El catálogo,
 /// los precios y el recargo no: los pone el jefe con internet, antes de la fiesta.
-const tablasDeLaRed = ['barra_cajas', 'barra_ventas', 'barra_anulaciones', 'barra_vales'];
+///
+/// `barra_cierres` (v79) es el pedido de cierre de la cajera y el OK de la encargada:
+/// tiene que cruzar sin internet, o una caja no cierra.
+const tablasDeLaRed = [
+  'barra_cajas',
+  'barra_ventas',
+  'barra_anulaciones',
+  'barra_vales',
+  'barra_cierres',
+];
 
 /// Lo que la central y las cajas necesitan de la base del equipo. La implementan
 /// `BarraLocal` (la base de la PC o la tablet) y, en las pruebas, la barra en memoria.

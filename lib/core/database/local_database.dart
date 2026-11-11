@@ -26,7 +26,7 @@ import 'sync_queue.dart';
 class LocalDatabase {
   static Database? _db;
   static const String _dbName = 'data.db';
-  static const int _version = 78;
+  static const int _version = 79;
 
   /// Singleton de acceso a la base de datos.
   static Future<Database> get instance async {
@@ -126,6 +126,11 @@ class LocalDatabase {
       await crearTablasV78(db);
     } catch (e) {
       debugPrint('⚠️ Tabla v78 sin crear: $e');
+    }
+    try {
+      await crearTablasV79(db);
+    } catch (e) {
+      debugPrint('⚠️ Tabla v79 sin crear: $e');
     }
     return db;
   }
@@ -713,6 +718,7 @@ class LocalDatabase {
     await crearTablasV76(db);
     await crearTablasV77(db);
     await crearTablasV78(db);
+    await crearTablasV79(db);
 
     debugPrint('✅ Esquema SQLite creado exitosamente');
   }
@@ -1103,6 +1109,39 @@ class LocalDatabase {
         updated_at TEXT NOT NULL
       )
     ''');
+  }
+
+  /// La tabla de la v79 (11-nov-2026): `barra_cierres`, los pasos del cierre de
+  /// una caja de barra con el OK de la encargada (`PasoDelCierre`). La cajera
+  /// anota su pedido con lo que contó; la encargada, su respuesta; y con el ok
+  /// la tablet de la cajera cierra la caja. **Solo se agregan filas**, y
+  /// `barra_cajas` no cambia.
+  ///
+  /// Mismo criterio que las de antes: **nueva y aparte**, solo `CREATE ... IF
+  /// NOT EXISTS`, sin tocar ninguna tabla que ya exista. Una versión anterior no
+  /// la conoce y sigue cerrando como siempre.
+  static Future<void> crearTablasV79(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS barra_cierres (
+        id TEXT PRIMARY KEY,
+        caja_barra_id TEXT NOT NULL,
+        evento_id TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        pedido_id TEXT,
+        efectivo_contado REAL,
+        nota TEXT,
+        hecho_por TEXT,
+        device_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_cierres_evento ON barra_cierres(evento_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_barra_cierres_caja ON barra_cierres(caja_barra_id)',
+    );
   }
 
   static Future<void> _onUpgrade(
@@ -3377,6 +3416,17 @@ class LocalDatabase {
         debugPrint('✅ Migración v78 completada');
       } catch (e) {
         debugPrint('  ❌ Error migración v78: $e');
+      }
+    }
+
+    // La misma guarda: pidiendo la 78, la tabla de la v79 no aparece.
+    if (oldVersion < 79 && newVersion >= 79) {
+      debugPrint('  🔧 v79: el cierre de la barra con el OK de la encargada');
+      try {
+        await crearTablasV79(db);
+        debugPrint('✅ Migración v79 completada');
+      } catch (e) {
+        debugPrint('  ❌ Error migración v79: $e');
       }
     }
   }
