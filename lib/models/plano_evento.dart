@@ -28,6 +28,11 @@ String? _iso(DateTime? d) => d?.toUtc().toIso8601String();
 /// número, y un solo dato mal escrito dejaría trabado el sorteo de la fiesta.
 String? _texto(Object? v) => v is String ? v : null;
 
+/// Un momento guardado como texto, en hora universal. Lo que no se entiende
+/// es null.
+DateTime? _momento(Object? v) =>
+    v is String ? DateTime.tryParse(v)?.toUtc() : null;
+
 /// Una mesa reservada para una familia antes del sorteo (por ejemplo, una
 /// silla de ruedas cerca del ingreso).
 class MesaFijada {
@@ -188,6 +193,13 @@ class ConfigPlano {
   /// que no hace es numerar así: si guarda el salón antes del sorteo, lo
   /// vuelve a la serpentina de siempre.
   final FinNumeracion numeracion;
+
+  /// Cuándo se eligió [numeracion] en Acomodar (6.5.1), en hora universal.
+  /// Null: nadie la eligió en esta fiesta, o se eligió antes de que se
+  /// anotara. Es lo que deja recordar la última elección para las fiestas que
+  /// vienen, en las tres PCs y sin tabla nueva (`NumeracionRecordada`): viaja
+  /// en la clave `numeracion_el`, con el plano.
+  final DateTime? numeracionEl;
   final Map<String, dynamic> otras;
 
   const ConfigPlano({
@@ -200,6 +212,7 @@ class ConfigPlano {
     this.subtitulo,
     this.medidas = const MedidasPlano(),
     this.numeracion = FinNumeracion.escenario,
+    this.numeracionEl,
     this.otras = const {},
   });
 
@@ -215,7 +228,13 @@ class ConfigPlano {
     'subtitulo',
     'medidas',
     'numeracion',
+    'numeracion_el',
   };
+
+  /// ¿Alguien eligió dónde termina la numeración de esta fiesta? Si nunca se
+  /// eligió, Acomodar arranca con la última elección de las otras fiestas.
+  bool get eligioNumeracion =>
+      numeracionEl != null || numeracion == FinNumeracion.fondo;
 
   /// Las mesas fijadas, agrupadas por familia.
   Map<String, List<int>> get fijadasPorAlumno {
@@ -280,6 +299,10 @@ class ConfigPlano {
       subtitulo: _texto(m['subtitulo']),
       medidas: MedidasPlano.fromMap(m['medidas']),
       numeracion: FinNumeracion.deClave(m['numeracion']),
+      // El momento solo vale junto a una elección que se entiende.
+      numeracionEl: FinNumeracion.values.any((f) => f.name == m['numeracion'])
+          ? _momento(m['numeracion_el'])
+          : null,
       otras: {
         for (final e in m.entries)
           if (!_conocidas.contains(e.key)) e.key: e.value,
@@ -301,7 +324,11 @@ class ConfigPlano {
         if (titulo != null) 'titulo': titulo,
         if (subtitulo != null) 'subtitulo': subtitulo,
         if (medidas != const MedidasPlano()) 'medidas': medidas.toMap(),
-        if (numeracion.clave != null) 'numeracion': numeracion.clave,
+        if (numeracionEl != null) ...{
+          'numeracion': numeracion.claveElegida,
+          'numeracion_el': numeracionEl!.toUtc().toIso8601String(),
+        } else if (numeracion.clave != null)
+          'numeracion': numeracion.clave,
       });
 
   ConfigPlano copyWith({
@@ -314,6 +341,7 @@ class ConfigPlano {
     String? subtitulo,
     MedidasPlano? medidas,
     FinNumeracion? numeracion,
+    DateTime? numeracionEl,
     bool borrarTitulo = false,
     bool borrarSubtitulo = false,
   }) =>
@@ -327,6 +355,7 @@ class ConfigPlano {
         subtitulo: borrarSubtitulo ? null : (subtitulo ?? this.subtitulo),
         medidas: medidas ?? this.medidas,
         numeracion: numeracion ?? this.numeracion,
+        numeracionEl: numeracionEl ?? this.numeracionEl,
         otras: otras,
       );
 }

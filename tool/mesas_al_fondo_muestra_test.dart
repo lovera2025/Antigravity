@@ -10,7 +10,9 @@
 //   • 3_acomodar_la_opcion.png: dónde se elige, en Personalizar → Acomodar;
 //   • 4_cartel_del_sorteo.png: "¿Dónde van las mesas que faltan?";
 //   • 5_plano_con_las_nuevas.png: la 102 y la 103 al fondo, a la derecha;
-//   • 6_plano_en_papel.pdf: el mismo salón, como sale impreso.
+//   • 6_plano_en_papel.pdf: el mismo salón, como sale impreso;
+//   • 7_otra_fiesta_viene_elegido.png: en otra fiesta, Acomodar ya viene con lo
+//     último que se eligió.
 
 // ignore_for_file: avoid_print
 
@@ -34,6 +36,7 @@ import 'package:arguello_events/features/plano/modelo/medidas_salon.dart';
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
+import 'package:arguello_events/features/plano/services/numeracion_recordada.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/widgets/plano_evento_cuerpo.dart';
 import 'package:arguello_events/models/cliente.dart';
@@ -88,7 +91,7 @@ final _acciones = AccionesPlano(
   onMover: (_, _) {},
   onGuardarMedidas: (_, _) {},
   onGuardarColoresYTextos: (_, _) {},
-  onGuardarArmado: (_, _, _, _, _, _) {},
+  onGuardarArmado: (_, _, _, _, _, _, _) {},
   onGuardarComoPredio: (_, _) {},
 );
 
@@ -98,6 +101,7 @@ Widget _pantalla(
   ConfigPlano config = ConfigPlano.vacia,
   String? resaltar,
   String subtitulo = 'Escuela de prueba (datos inventados)',
+  NumeracionRecordada? recordada,
 }) =>
     Scaffold(
       appBar: AppBar(
@@ -124,6 +128,7 @@ Widget _pantalla(
         acciones: _acciones,
         onImprimir: () {},
         onHistorial: () {},
+        numeracionRecordada: recordada,
       ),
     );
 
@@ -232,6 +237,35 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
         await tester.tap(find.text('Al fondo'));
         await tester.pump();
+      },
+    );
+  });
+
+  // Otra fiesta, sin sortear y que nunca eligió: como en una anterior se guardó
+  // "Al fondo", Acomodar ya viene así y solo falta GUARDAR. Nadie tocó la opción.
+  testWidgets('otra fiesta: Acomodar viene con lo último que se eligió',
+      (tester) async {
+    await _guardar(
+      tester,
+      _pantalla(
+        _salon(FinNumeracion.escenario),
+        sinMesa,
+        subtitulo: 'Otra fiesta, sin sortear: viene con lo último que se eligió',
+        recordada: NumeracionRecordada(
+          FinNumeracion.fondo,
+          DateTime.utc(2026, 11, 11, 15),
+        ),
+      ),
+      tam,
+      '7_otra_fiesta_viene_elegido.png',
+      antes: () async {
+        await tester.tap(find.text('PERSONALIZAR'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('Acomodar'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.byKey(const Key('numeracion_recordada')), findsOneWidget);
       },
     );
   });

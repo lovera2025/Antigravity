@@ -6,6 +6,7 @@ import '../modelo/numeracion.dart';
 import 'armar_a_medida.dart';
 import 'editar_armado.dart';
 import 'medir_salon.dart';
+import 'numeracion_recordada.dart';
 
 /// Una sesión de Personalizar → Acomodar: el salón como estaba al empezar
 /// ([base]), cómo va quedando, y lo que se puede deshacer.
@@ -39,6 +40,11 @@ class SesionAcomodo {
   /// Dónde termina la numeración **como está guardada** (6.5.1).
   final FinNumeracion finAlEmpezar;
 
+  /// [fin] y [finEl]: la numeración guardada en esta fiesta y cuándo se
+  /// eligió. [recordada]: la última elección de las otras fiestas
+  /// (`NumeracionRecordada`), **solo si esta nunca eligió**; quien arma la
+  /// sesión lo decide. Se toma si acá se puede elegir ([motivoSinFin]): con
+  /// familias con mesa o en un armado del Canva no cambia nada.
   SesionAcomodo({
     required this.base,
     this.medidas = const MedidasPlano(),
@@ -47,18 +53,47 @@ class SesionAcomodo {
     this.haySorteo = false,
     this.predios = const [],
     FinNumeracion fin = FinNumeracion.escenario,
+    DateTime? finEl,
+    NumeracionRecordada? recordada,
   })  : _actual = base,
         _fin = fin,
+        _finEl = finEl,
         finAlEmpezar = fin,
-        enUsoAlEmpezar = Map.unmodifiable(enUso);
+        enUsoAlEmpezar = Map.unmodifiable(enUso) {
+    if (recordada != null && motivoSinFin == null) {
+      _fin = recordada.fin;
+      _finEl = recordada.el;
+      _finDeLaMemoria = true;
+    }
+    _finInicial = _fin;
+    _finElInicial = _finEl;
+    _deLaMemoriaInicial = _finDeLaMemoria;
+  }
 
   FinNumeracion _fin;
+  DateTime? _finEl;
+  bool _finDeLaMemoria = false;
+
+  /// Como arrancó la sesión, con la recordada ya puesta: a eso vuelve
+  /// [descartar].
+  late final FinNumeracion _finInicial;
+  late final DateTime? _finElInicial;
+  late final bool _deLaMemoriaInicial;
 
   /// Dónde termina la numeración de lo que se está acomodando. Los números
   /// cambian al guardar ([faltaOrdenar]), no mientras se acomoda: lo que
   /// apunta a un número (una mesa fijada, una libre, un bloque) sigue a su
   /// mesa en ese momento.
   FinNumeracion get fin => _fin;
+
+  /// Cuándo se eligió [fin]: lo que se anota al guardar, para que quede
+  /// recordada. La que vino de la memoria conserva el momento de aquella
+  /// elección (no es una elección nueva); la que se toca acá lleva el de ahora.
+  /// Null: nadie la eligió.
+  DateTime? get finEl => _finEl;
+
+  /// [fin] vino de la última elección de otra fiesta y nadie la tocó acá.
+  bool get finDeLaMemoria => _finDeLaMemoria;
 
   /// Se eligió otra cosa que la guardada.
   bool get cambioElFin => _fin != finAlEmpezar;
@@ -74,10 +109,13 @@ class SesionAcomodo {
   }
 
   /// Elige dónde termina la numeración. No cambia nada si no se puede
-  /// ([motivoSinFin]).
-  void elegirFin(FinNumeracion fin) {
+  /// ([motivoSinFin]). Es una elección de alguien: lleva su momento ([ahora],
+  /// para las pruebas) y pasa a ser la recordada cuando se guarde.
+  void elegirFin(FinNumeracion fin, {DateTime? ahora}) {
     if (motivoSinFin != null) return;
     _fin = fin;
+    _finEl = (ahora ?? DateTime.now()).toUtc();
+    _finDeLaMemoria = false;
   }
 
   /// Lo que bajó de la otra PC mientras se acomodaba: quién tiene cada mesa.
@@ -489,7 +527,9 @@ class SesionAcomodo {
     _antesDeLaBarra = null;
     _poner(base, rehecho: false);
     _lugarDeLaBarra = null;
-    _fin = finAlEmpezar;
+    _fin = _finInicial;
+    _finEl = _finElInicial;
+    _finDeLaMemoria = _deLaMemoriaInicial;
   }
 
   // ── Acomodar y vaciar (6.1.0, "el salón primero") ───────────────────────

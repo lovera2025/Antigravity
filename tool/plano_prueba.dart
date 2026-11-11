@@ -33,6 +33,7 @@ import 'package:arguello_events/features/plano/modelo/reserva_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
 import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
+import 'package:arguello_events/features/plano/services/numeracion_recordada.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/features/plano/widgets/imprimir_plano_dialog.dart';
@@ -135,6 +136,12 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
   /// Cuántas familias llegaron después del sorteo (6.5.1). La primera es una que
   /// ya tenía mesa y compró una adicional; las demás son familias nuevas.
   int _llegaron = 0;
+
+  /// Lo guardado en las fiestas anteriores de esta ventana (OTRA FIESTA): de ahí
+  /// sale la última numeración elegida, como en la app sale de los planos de la
+  /// base (`NumeracionRecordada`).
+  final _otrasFiestas = <ConfigPlano>[];
+  int _fiesta = 1;
 
   List<ContratoAlumno> get _alumnos => [
         for (final a in alumnosDePrueba(asignaciones: _asignaciones))
@@ -253,6 +260,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     bool rehecho,
     double? lugarBarraM,
     FinNumeracion fin,
+    DateTime? finEl,
   ) {
     final cambio = EditarArmado.paraGuardar(
       base: base,
@@ -265,6 +273,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
       leidoDeLaNube: _conInternet,
       lugarBarraM: lugarBarraM,
       fin: fin,
+      finEl: finEl,
     );
     setState(() {
       final config = cambio.config;
@@ -433,7 +442,8 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
     final sinMesa = _asignaciones == null;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ventana de prueba: nada se guarda de verdad'),
+        // Corto: arriba van siete botones y tienen que entrar.
+        title: const Text('Prueba'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -493,12 +503,29 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
               _llegaron = 0;
               _aviso = null;
             }),
-            child: const Text('VOLVER AL MEZCLADO'),
+            child: const Text('MEZCLADO'),
+          ),
+          // Otra fiesta, sin sortear y que nunca eligió su numeración: Acomodar
+          // tiene que venir con la última que se guardó en las anteriores.
+          TextButton(
+            key: const Key('prueba_otra_fiesta'),
+            onPressed: () => setState(() {
+              _otrasFiestas.add(_config);
+              _fiesta++;
+              _armado = armadoDePuertoViejo();
+              _config = ConfigPlano.vacia;
+              _asignaciones = null;
+              _llegaron = 0;
+              _aviso = AvisoDelPlano('Fiesta $_fiesta: nueva, sin sortear.');
+            }),
+            child: const Text('OTRA'),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: PlanoEventoCuerpo(
+        key: ValueKey(_fiesta),
+        numeracionRecordada: NumeracionRecordada.de(_otrasFiestas),
         plano: _plano,
         estilo: EstiloPlano.arquitecto,
         alumnos: _alumnos,

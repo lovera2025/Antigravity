@@ -48,6 +48,10 @@ class PanelAcomodar extends StatefulWidget {
   // ── Dónde termina la numeración (6.5.1) ──
   final FinNumeracion fin;
 
+  /// [fin] viene de la última elección de otra fiesta y acá nadie la tocó:
+  /// se dice, para que no parezca que alguien la cambió.
+  final bool finDeLaMemoria;
+
   /// Null: la sección no se muestra.
   final ValueChanged<FinNumeracion>? onFin;
 
@@ -156,6 +160,7 @@ class PanelAcomodar extends StatefulWidget {
     this.onVaciar,
     this.motivoSinVaciar,
     this.fin = FinNumeracion.escenario,
+    this.finDeLaMemoria = false,
     this.onFin,
     this.motivoSinFin,
     this.espacio = const [],
@@ -452,6 +457,13 @@ class _PanelAcomodarState extends State<PanelAcomodar> {
                   key: const Key('numeracion_explica'),
                   style: gris,
                 ),
+                if (widget.finDeLaMemoria && widget.motivoSinFin == null)
+                  Text(
+                    'Viene elegido porque fue lo último que se eligió en otra '
+                    'fiesta. Queda al guardar.',
+                    key: const Key('numeracion_recordada'),
+                    style: gris,
+                  ),
               ],
               if (widget.barraReacomoda) ...[
                 titulo('DISTANCIA ENTRE MESAS'),

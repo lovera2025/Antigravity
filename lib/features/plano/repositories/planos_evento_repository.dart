@@ -38,6 +38,17 @@ class PlanosEventoRepository {
     ];
   }
 
+  /// La `config` del plano de cada fiesta que esta PC tiene en su base. Solo
+  /// lectura, sin red: de ahí sale la última numeración elegida
+  /// (`NumeracionRecordada`), que así vale en las tres PCs sin tabla nueva.
+  Future<List<ConfigPlano>> configsDeLasFiestas() async {
+    final db = await LocalDatabase.instance;
+    final rows = await db.query('planos_evento', columns: ['config']);
+    return [
+      for (final r in rows) ConfigPlano.fromJson(r['config'] as String?),
+    ];
+  }
+
   /// Guarda la fila completa y la encola como alta: en la nube es un upsert,
   /// que anda igual si la fila ya existía o si todavía no llegó.
   Future<void> guardar(PlanoEvento plano) async {

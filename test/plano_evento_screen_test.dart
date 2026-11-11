@@ -35,6 +35,7 @@ import 'package:arguello_events/features/plano/plano_evento_screen.dart';
 import 'package:arguello_events/features/plano/repositories/mesas_movimientos_repository.dart';
 import 'package:arguello_events/features/plano/repositories/planos_evento_repository.dart';
 import 'package:arguello_events/features/plano/repositories/predios_repository.dart';
+import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/services/armar_a_medida.dart';
 import 'package:arguello_events/features/plano/services/predios_del_salon.dart';
 import 'package:arguello_events/features/plano/widgets/vista_plano.dart';
@@ -130,6 +131,16 @@ class _Planos extends PlanosEventoRepository {
 
   @override
   Future<PlanoEvento?> obtener(String eventoId) async => aca;
+
+  /// Lo guardado en las otras fiestas que esta PC tiene en su base: de ahí
+  /// sale la última numeración elegida.
+  List<ConfigPlano> otrasFiestas = [];
+
+  @override
+  Future<List<ConfigPlano>> configsDeLasFiestas() async => [
+        if (aca != null) aca!.config,
+        ...otrasFiestas,
+      ];
 
   @override
   Future<void> guardar(PlanoEvento plano) async {
@@ -1073,6 +1084,128 @@ void main() {
         tester.widget<Text>(find.byKey(const Key('motivo_sin_predio'))).data,
         contains('es del Canva'),
       );
+    });
+  });
+
+  // 6.5.1: la última numeración que se eligió en Acomodar queda para las
+  // fiestas que vienen. Sale de los planos que la PC tiene en su base.
+  group('Acomodar: la última numeración elegida', () {
+    final elegidoEl = DateTime.utc(2026, 11, 11, 15);
+    final otraAlFondo = ConfigPlano(
+      numeracion: FinNumeracion.fondo,
+      numeracionEl: elegidoEl,
+    );
+
+    FinNumeracion elegida(WidgetTester tester) => tester
+        .widget<SegmentedButton<FinNumeracion>>(
+          find.byKey(const Key('numeracion_fin')),
+        )
+        .selected
+        .single;
+
+    Future<_Mundo> abrirAcomodar(
+      WidgetTester tester, {
+      ConfigPlano config = ConfigPlano.vacia,
+      List<ContratoAlumno>? alumnos,
+      List<ConfigPlano> otras = const [],
+    }) async {
+      final mundo = await _abrir(
+        tester,
+        config: config,
+        alumnos: alumnos ?? _sinSortear(),
+        antes: (m) => m.planos.otrasFiestas = otras,
+      );
+      await _personalizar(tester, 'acomodar');
+      await _bajarHasta(tester, 'numeracion_fin', panel: 'panel_acomodar');
+      return mundo;
+    }
+
+    testWidgets('otra fiesta eligió "Al fondo": esta, que nunca eligió, viene '
+        'así, y al guardar queda numerada al fondo', (tester) async {
+      final mundo = await abrirAcomodar(tester, otras: [otraAlFondo]);
+      expect(elegida(tester), FinNumeracion.fondo);
+      expect(find.byKey(const Key('numeracion_recordada')), findsOneWidget);
+      expect(mundo.planos.guardados, isEmpty, reason: 'abrir no guarda nada');
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(_prendido(tester, 'guardar_acomodo'), isTrue);
+
+      await _guardar(tester, 'guardar_acomodo');
+      final guardado = mundo.guardado;
+      expect(guardado.config.numeracion, FinNumeracion.fondo);
+      expect(
+        guardado.config.numeracionEl,
+        elegidoEl,
+        reason: 'es aquella elección, no una nueva',
+      );
+      final alFondo = ArmarAMedida.ordenarNumeros(
+        _armado(),
+        fin: FinNumeracion.fondo,
+      ).armado;
+      expect(
+        [for (final m in guardado.armado.mesas) '${m.numero} ${m.x} ${m.y}'],
+        [for (final m in alFondo.mesas) '${m.numero} ${m.x} ${m.y}'],
+      );
+
+      // Ya quedó: sigue elegido, ya no es "de otra fiesta" ni hay qué guardar.
+      await _bajarHasta(tester, 'numeracion_fin', panel: 'panel_acomodar');
+      expect(elegida(tester), FinNumeracion.fondo);
+      expect(find.byKey(const Key('numeracion_recordada')), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(_prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    testWidgets('si nadie eligió nada en ninguna fiesta, viene como siempre',
+        (tester) async {
+      await abrirAcomodar(tester, otras: [ConfigPlano.vacia]);
+      expect(elegida(tester), FinNumeracion.escenario);
+      expect(find.byKey(const Key('numeracion_recordada')), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(_prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    testWidgets('con la fiesta ya sorteada no cambia nada', (tester) async {
+      await abrirAcomodar(
+        tester,
+        alumnos: _sorteada(),
+        otras: [otraAlFondo],
+      );
+      expect(elegida(tester), FinNumeracion.escenario);
+      expect(find.byKey(const Key('numeracion_recordada')), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(_prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    testWidgets('la fiesta que ya eligió "Junto al escenario" se queda así',
+        (tester) async {
+      await abrirAcomodar(
+        tester,
+        config: ConfigPlano(
+          numeracion: FinNumeracion.escenario,
+          numeracionEl: DateTime.utc(2026, 11, 10),
+        ),
+        otras: [otraAlFondo],
+      );
+      expect(elegida(tester), FinNumeracion.escenario);
+      expect(find.byKey(const Key('numeracion_recordada')), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('guardar_acomodo')));
+      expect(_prendido(tester, 'guardar_acomodo'), isFalse);
+    });
+
+    testWidgets('elegir acá "Al fondo" lo deja anotado con su momento, para '
+        'las fiestas que vienen', (tester) async {
+      final antes = DateTime.now().toUtc();
+      final mundo = await abrirAcomodar(tester);
+      expect(elegida(tester), FinNumeracion.escenario);
+      await tester.tap(find.text('Al fondo'));
+      await tester.pump();
+      await _guardar(tester, 'guardar_acomodo');
+      final config = mundo.guardado.config;
+      expect(config.numeracion, FinNumeracion.fondo);
+      expect(config.numeracionEl, isNotNull);
+      expect(config.numeracionEl!.isBefore(antes), isFalse);
+      // Es lo que otra fiesta va a leer de la base.
+      final leido = await mundo.planos.configsDeLasFiestas();
+      expect(leido.single.eligioNumeracion, isTrue);
     });
   });
 

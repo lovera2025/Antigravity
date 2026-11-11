@@ -4,9 +4,26 @@ Las mesas que llegan después del sorteo van al fondo. Sin SQL ni migración.
 
 ## Para retomar en otro chat
 
-**Dónde estamos (11-nov, madrugada):** programado, con sus tests, guardado y subido a la rama: los tres tramos. **Sin publicar.**
-Falta, con el usuario: mirar las capturas, decidir si el tramo 3 sale ahora, la versión `6.5.1+68`, el Setup y el APK, la foto de la
-mora "antes de 6.5.1", el tag, el release y la web. Él instala la PC que sortea antes del próximo sorteo.
+**Dónde estamos (11-nov, mañana):** programado, con sus tests, guardado y subido a la rama: los tres tramos **y un cuarto, de esta
+mañana: la última numeración elegida queda para las fiestas que vienen, en las tres PCs** (abajo, "Tramo 4"). La versión ya es
+`6.5.1+68`. **Sin publicar.** El usuario aprobó el plan del 11-nov: publicar **esta mañana**, porque **a la tarde hay un sorteo** y la
+PC que sortea tiene que tener la 6.5.1 antes. Falta, con él y con su OK en cada paso: mirar las capturas (`build/muestras_6.5.1/`),
+la foto de la mora "antes de 6.5.1", el tag, el release (novedades propuestas en `build/novedades_6.5.1.md`: "Las mesas que llegan
+después del sorteo van al fondo") y la web. Él instala primero la PC que sortea.
+
+**La 6.5.0 quedó instalada en las tres PCs** (lo dijo el 10-nov a la noche). Su cierre no frena esta publicación: con la app cerrada
+en las tres, `build/corregir_mora_10nov_6.5.0.sql` y la foto "después de 6.5.0".
+
+**Las pruebas del 11-nov:** la corrida entera dio 4.332 de 4.333; el único que falló, `chat_de_la_noche_test` ("cada celular sabe con
+quién puede hablar", con sockets de verdad), pasa corrido solo (14 de 14) y había pasado en la corrida anterior del mismo día: es de
+tiempos con la PC cargada, no de lo de hoy. El análisis no nombra ningún archivo tocado (los 3 errores que da son de
+`tool/_tmp_espindola_audit.dart`, un archivo viejo fuera de git). **El simulacro se repitió sobre una copia fresca de la base** (la
+real, con el mismo SHA-256 antes y después): sigue dando **una sola familia**, la que recibe la 102 en la escuela ya sorteada.
+
+**Para la tarde del sorteo**, en la PC con la 6.5.1: PLANO → Personalizar → Acomodar → "La numeración termina: Al fondo" → GUARDAR
+EL SALÓN, **antes de sortear** (con familias sentadas queda apagado); de paso, poner el Ingreso (sin él la puerta no ve la flecha);
+y SORTEO. Con candado salen los que no pagaron nada de la cuota base; no hace falta destrabarlos: cuando pagan, reciben solos la
+que sigue, al fondo. A quien no pagó nada se le puede cargar una mesa igual; sola no se le da nunca.
 
 **De dónde salió.** El 10-nov se sorteó una escuela de 101 mesas con la 6.5.0. El usuario pidió primero cambiar la regla del sorteo
 (que la mesa adicional sin pagar se sortee igual); antes de programar hizo escuchar cuatro audios del jefe, y el jefe decía lo
@@ -121,6 +138,42 @@ mesa sin que nadie apriete nada: su fijada, si tenía una esperándola, o una me
   escrito en `Documentos\Junior Eventos\mesa_nueva_sola.txt`.
 - **La regla que cambia:** `test/solo_modo_jefe_test.dart` nombra el archivo y lo que se le permite.
 
+## Tramo 4 · La última numeración queda para las fiestas que vienen (11-nov, mañana)
+
+Lo pidió el usuario el 11-nov a la madrugada, mirando el sorteo de esa tarde: "que venga default como viene, el tema es que si yo
+configuro después que quiero al fondo, de ahí ya debe quedar guardado para cada fiesta, salvo que yo cambie después de vuelta, y así
+que quede guardado para fiestas futuras". Preguntó si hacía falta una tabla nueva: **no**. Y eligió que lo recuerden **las tres PCs**,
+no cada una por separado.
+
+- **Cómo queda:** todo arranca como hoy ("Junto al escenario"). La primera vez que se guarda un salón con "Al fondo", queda
+  recordado: en cada fiesta **sin sortear, a medida y que nunca eligió**, Acomodar abre con "Al fondo" ya elegido, lo dice ("Viene
+  elegido porque fue lo último que se eligió en otra fiesta. Queda al guardar.") y solo falta GUARDAR EL SALÓN. Si después alguien
+  elige "Junto al escenario", pasa a recordarse eso.
+- **Dónde vive:** en la `config` del plano de cada fiesta, que ya se sincroniza. Dos claves: `numeracion` (ahora también
+  `escenario`, cuando alguien lo eligió) y `numeracion_el` (el momento, en hora universal). **Sin la clave `numeracion`, la fiesta
+  nunca eligió.** La recordada es la más nueva de todos los planos que la PC tiene en su base (`NumeracionRecordada.de`, con
+  `PlanosEventoRepository.configsDeLasFiestas`, una lectura local sin red). Llega a las otras PCs cuando baja ese plano.
+- **Nada cambia solo:** la memoria se aplica al abrir Acomodar (`SesionAcomodo`, con `recordada`), deja GUARDAR prendido, y los
+  números se ordenan recién cuando el jefe guarda. Con familias con mesa o en un armado del Canva no se aplica, y la fiesta que ya
+  eligió se queda con la suya.
+- **La que viene de la memoria conserva el momento de aquella elección** (`SesionAcomodo.finEl`); solo tocar la opción lleva el de
+  ahora. Si heredar pusiera el momento de ahora, una PC que todavía no bajó una elección más nueva de la otra le ganaría al guardar
+  cualquier fiesta. Está probado con dos PCs (abajo).
+- **DESCARTAR** vuelve a como abrió la sesión, con la recordada puesta.
+- **Después de guardar la numeración sin que cambie ningún número** (un salón sin mesas), la sesión arranca de nuevo desde lo
+  guardado: antes seguía ofreciendo GUARDAR.
+- **La 6.5.0 conserva las dos claves** (las guarda entre las que no conoce; se miró su `ConfigPlano` en el tag) y no las usa.
+- **Lo que no hace:** "Estilo y armado" con mesas (A medida) sigue numerando como siempre; toma la recordada al abrir Acomodar. En
+  la web, si no hay base en el equipo, no recuerda nada y queda como hoy.
+- Tests: `test/numeracion_recordada_test.dart` (27: lo que se anota, la más nueva gana, Acomodar, al guardar, y **dos PCs** que se
+  pasan los planos: una elige y la otra lo ve al bajar; cambiar de nuevo; la PC atrasada que no le gana a la más nueva) y cinco
+  casos nuevos en `test/plano_evento_screen_test.dart`, con la pantalla entera.
+- **Con el mouse**, en `tool/plano_prueba.dart` compilada para el navegador (suma el botón OTRA, que pasa a otra fiesta nueva):
+  elegir "Al fondo" y guardar; otra fiesta abre con "Al fondo" y el aviso, y al guardar queda en orden y el aviso se va; con familias
+  sentadas dice "Ya hay familias con mesa: los números no cambian" y no hay nada que guardar.
+- La captura: `build/muestras_6.5.1/7_otra_fiesta_viene_elegido.png`.
+- **No se probó con dos PCs de verdad contra la nube:** viaja en la misma fila del plano que ya cruza hoy.
+
 ## Las pruebas
 
 - **Los tests:** los cinco archivos nuevos y los que ya cuidaban el salón (`solo_modo_jefe`, `puerta_sigue_al_salon`, el sorteo
@@ -157,7 +210,7 @@ mesa sin que nadie apriete nada: su fijada, si tenía una esperándola, o una me
 ## Para publicar
 
 1. Las capturas y lo que pasó las pruebas, con el usuario.
-2. `6.5.1+68` en `pubspec.yaml` y en `installer/junior_eventos_setup.iss`.
+2. `6.5.1+68` en `pubspec.yaml` y en `installer/junior_eventos_setup.iss`. **Hecho el 11-nov.**
 3. `installer\build_installer.ps1` (comprueba la firma del APK).
 4. Foto de la mora "antes de 6.5.1". Sin SQL.
 5. Tag `v6.5.1`, release con el Setup y el APK, y la web.

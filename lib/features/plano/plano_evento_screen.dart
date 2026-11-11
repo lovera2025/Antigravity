@@ -40,6 +40,7 @@ import 'services/colores_y_textos.dart';
 import 'services/editar_armado.dart';
 import 'services/historial_sorteo.dart';
 import 'services/plano_de_la_fiesta.dart';
+import 'services/numeracion_recordada.dart';
 import 'services/predios_del_salon.dart';
 import 'widgets/cambio_de_mesa_dialogs.dart';
 import 'widgets/elegir_plano_dialog.dart';
@@ -195,6 +196,21 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     return (plano: await planos.obtener(id), deLaNube: false);
   }
 
+  /// La última numeración que se eligió en Acomodar, en cualquier fiesta: sale
+  /// de los planos que esta PC tiene en su base, sin pedirle nada a la nube.
+  /// Si no se puede leer, no se recuerda nada y Acomodar arranca como siempre.
+  NumeracionRecordada? _numeracionRecordada;
+
+  Future<NumeracionRecordada?> _leerNumeracionRecordada() async {
+    try {
+      return NumeracionRecordada.de(
+        await ref.read(planosEventoRepositoryProvider).configsDeLasFiestas(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _cargar({bool nube = false, bool silencioso = false}) async {
     try {
       final alumnos = await ref
@@ -215,6 +231,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
           .delEvento(widget.evento.id);
       final plano = (await _leerPlano(nube: nube)).plano;
       final predios = (await _leerPredios(nube: nube)).predios;
+      final recordada = await _leerNumeracionRecordada();
       final armado = plano?.armadoONull;
       final vista = plano == null || armado == null
           ? null
@@ -236,6 +253,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         };
         _plano = plano;
         _predios = predios;
+        _numeracionRecordada = recordada;
         _vista = vista;
         _cargando = false;
         _errorCarga = null;
@@ -1003,6 +1021,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
     bool rehecho,
     double? lugarBarraM,
     FinNumeracion fin,
+    DateTime? finEl,
   ) {
     final fijadasOLibres = (_plano?.config.fijadas.length ?? 0) +
         (_plano?.config.libres.length ?? 0);
@@ -1018,6 +1037,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
         leidoDeLaNube: _leidoDeLaNube,
         lugarBarraM: lugarBarraM,
         fin: fin,
+        finEl: finEl,
       ),
       // Con la escuela ya sorteada, las mesas que se suman son para quien
       // todavía no tiene: se dice cómo sigue.
@@ -1402,6 +1422,7 @@ class _PlanoEventoScreenState extends ConsumerState<PlanoEventoScreen> {
       aviso: _aviso,
       pendiente: _pendiente,
       predios: _predios,
+      numeracionRecordada: _numeracionRecordada,
     );
   }
 }

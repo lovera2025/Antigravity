@@ -1053,6 +1053,9 @@ class EditarArmado {
   /// - [fin]: dónde termina la numeración, si se eligió en Acomodar (6.5.1).
   ///   Null: la que el plano ya tiene guardada. Queda en la config aunque esta
   ///   vez no se ordene (sin internet): se ordena así la próxima.
+  /// - [finEl]: cuándo se eligió [fin] (`SesionAcomodo.finEl`). Queda anotado
+  ///   en la config, y así la elección vale para las fiestas que vienen
+  ///   (`NumeracionRecordada`). Null: se conserva el que ya había.
   static CambioDeConfig paraGuardar({
     required ArmadoSalon base,
     required ArmadoSalon nuevo,
@@ -1064,8 +1067,10 @@ class EditarArmado {
     bool leidoDeLaNube = true,
     double? lugarBarraM,
     FinNumeracion? fin,
+    DateTime? finEl,
   }) {
     final numeracion = fin ?? config.numeracion;
+    final numeracionEl = (fin == null ? null : finEl) ?? config.numeracionEl;
     if (firma(fresco) != firma(base)) {
       return const CambioDeConfig.noSePuede(
         'El salón guardado cambió mientras lo acomodabas. No se guardó nada, '
@@ -1122,9 +1127,13 @@ class EditarArmado {
       nuevo,
     );
     return CambioDeConfig.ok(
-      conNumeros.numeracion == numeracion
+      conNumeros.numeracion == numeracion &&
+              conNumeros.numeracionEl == numeracionEl
           ? conNumeros
-          : conNumeros.copyWith(numeracion: numeracion),
+          : conNumeros.copyWith(
+              numeracion: numeracion,
+              numeracionEl: numeracionEl,
+            ),
       sacadas,
       armado: comoSeGuarda(nuevo, base, ordenar: ordenar, fin: numeracion),
     );

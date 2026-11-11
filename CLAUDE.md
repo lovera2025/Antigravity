@@ -183,8 +183,8 @@ usuario el 10-nov); falta la foto de la mora "después de 6.4.0"**, que es el pa
 **La 6.5.0, programada el 9 y el 10-nov, publicada el 10-nov** (`docs/CONTEXTO_v6.5.0_2026-11-09.md`, que empieza con "Para retomar en otro
 chat": ahí está lo hecho, **lo que quedó sin probar** y el paso a paso; el plan del 9-nov, `docs/PLAN_PUERTA_PLANO_Y_SORTEO_2026-11-09.md`).
 Sin SQL. **PUBLICADA el 10-nov** (tag `v6.5.0`, release con el Setup y el APK, web en Vercel), con las fotos de la mora "después de
-6.4.0" y "antes de 6.5.0". **Falta que el usuario instale las tres PCs y la tablet; después, con la app cerrada en las tres, la
-corrección de una ficha (etapa 12 del CONTEXTO, `build/corregir_mora_10nov_6.5.0.sql`) y la foto "después de 6.5.0".** El chat con la
+6.4.0" y "antes de 6.5.0". **Instalada en las tres PCs (lo dijo el usuario el 10-nov a la noche). Falta, con la app cerrada en las
+tres, la corrección de una ficha (etapa 12 del CONTEXTO, `build/corregir_mora_10nov_6.5.0.sql`) y la foto "después de 6.5.0".** El chat con la
 barra (cajeras y encargada con solapas, un puente entre las dos notebooks) lo pidió y **lo dejó para después**:
 `docs/pendientes/chat-con-la-barra.md`. Lleva:
 - **la Encargada de barra entra con su PIN desde la web del iPhone** (etapa 10): en la web el PIN se le pregunta a la nube
@@ -210,11 +210,14 @@ barra (cajeras y encargada con solapas, un puente entre las dos notebooks) lo pi
 **No crear "Silla suelta" en el catálogo, ni usar SILLA SUELTA, ni reservar una mesa con "Es para alguien" hasta que las PCs y las
 tablets tengan la 6.5.0.**
 
-**La 6.5.1: las mesas que llegan después del sorteo van al fondo** (programada el 10 y el 11-nov, **sin publicar**;
+**La 6.5.1: las mesas que llegan después del sorteo van al fondo** (programada el 10 y el 11-nov, versión `6.5.1+68`, **sin
+publicar**: se publica el 11-nov a la mañana con el usuario, antes del sorteo de esa tarde;
 `docs/CONTEXTO_v6.5.1_2026-11-10.md`, que empieza con "Para retomar en otro chat"). Sin SQL. Salió de los audios del jefe después del
 sorteo de una escuela de 101 mesas: el candado estuvo bien (**no se cambia la regla de lo pagado**: el usuario lo había pedido y se
 descartó al escucharlo), y lo que pidió fue que el último número quede al fondo y que quien llega tarde reciba el número que sigue.
 - **La numeración puede terminar al fondo** (Acomodar → "La numeración termina: Junto al escenario · Al fondo"; ver "El salón").
+- **La última numeración elegida queda para las fiestas que vienen, en las tres PCs** (11-nov, pedido del usuario; sin tabla ni
+  SQL: `NumeracionRecordada`, ver "El salón").
 - **Con el sorteo hecho, el cartel del SORTEO pregunta dónde van las mesas que faltan**, y viene elegido "en una mesa nueva, al
   fondo", con el número que sigue (`MesasNuevasAlFondo`).
 - **La mesa se da sola** a quien le tocó por un pago posterior al sorteo, **y a quien agrega una mesa después del sorteo con una
@@ -440,6 +443,17 @@ ninguna. Por eso lo que entra no depende de esa opción.
   de siempre). `armar`, `acomodar` y `ordenarNumeros` usan el mismo recorrido (`_enSerpentina`): un cambio va en los tres.
   **Los números cambian al guardar, no mientras se acomoda:** si se renumeraran en la sesión, las fijadas quedarían apuntando
   a otra mesa.
+- **La última numeración elegida queda para las fiestas que vienen** (6.5.1, `NumeracionRecordada`,
+  `plano/services/numeracion_recordada.dart`). **Sin tabla ni preferencia:** cada elección va en la `config` del plano de su
+  fiesta, con su momento (`numeracion_el`), y la recordada es **la más nueva de los planos que la PC tiene en su base**
+  (`configsDeLasFiestas`); por eso vale en las tres PCs.
+  - **Sin la clave `numeracion`, la fiesta nunca eligió**; quien eligió "Junto al escenario" lleva `escenario`
+    (`ConfigPlano.eligioNumeracion`). No confundir las dos: la memoria se le aplica solo a la que nunca eligió.
+  - La aplica `SesionAcomodo` al abrir Acomodar, solo si ahí se puede elegir (sin familias con mesa, salón a medida). **Nada
+    cambia solo:** queda GUARDAR prendido y los números se ordenan cuando el jefe guarda.
+  - **La que viene de la memoria conserva el momento de aquella elección; solo tocar la opción lleva el de ahora** (`finEl`).
+    Si heredar pusiera el momento de ahora, una PC atrasada le ganaría a una elección más nueva de la otra.
+  - "Estilo y armado" con mesas (A medida) sigue numerando como siempre: toma la recordada al abrir Acomodar.
 - **Quien llega después del sorteo recibe una mesa nueva al fondo** (6.5.1, `MesasNuevasAlFondo`): el número que sigue al más
   alto (nunca un hueco), a continuación de la última fila del lado derecho, **fijada para su familia** con el motivo "Mesa
   nueva: llegó después del sorteo". El sorteo de siempre se la entrega: el motor no se tocó. El cartel lo pregunta solo con

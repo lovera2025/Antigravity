@@ -14,9 +14,16 @@ enum FinNumeracion {
   /// después la derecha. El último número queda al fondo, a la derecha.
   fondo;
 
-  /// Lo que se guarda en la `config` del plano, en la clave `numeracion`. La
-  /// serpentina de siempre no se guarda: un plano sin la clave es ese.
+  /// Lo que se guarda en la `config` del plano, en la clave `numeracion`,
+  /// cuando **nadie la eligió**. La serpentina de siempre no se guarda: un
+  /// plano sin la clave es ese, y es además "esta fiesta nunca eligió".
   String? get clave => this == fondo ? 'fondo' : null;
+
+  /// Lo que se guarda cuando **alguien la eligió** en Acomodar: también la
+  /// serpentina de siempre lleva su clave (`escenario`), junto con el momento
+  /// (`numeracion_el`). Así se distingue "nunca eligió" de "eligió junto al
+  /// escenario", que es lo que necesita la memoria (`NumeracionRecordada`).
+  String get claveElegida => name;
 
   /// Una clave vacía o que esta versión no conoce es la serpentina de siempre.
   static FinNumeracion deClave(Object? clave) =>

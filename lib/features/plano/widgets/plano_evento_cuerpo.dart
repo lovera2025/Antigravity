@@ -23,6 +23,7 @@ import '../services/divisiones.dart';
 import '../services/editar_armado.dart';
 import '../services/manijas.dart';
 import '../services/medir_salon.dart';
+import '../services/numeracion_recordada.dart';
 import '../services/plano_de_la_fiesta.dart';
 import '../services/predios_del_salon.dart';
 import '../services/sesion_acomodo.dart';
@@ -77,7 +78,8 @@ class AccionesPlano {
   /// estaban fijadas al empezar. [rehecho]: salió de ACOMODAR LAS MESAS o de
   /// VACIAR EL SALÓN, y al guardar se quitan las fijadas y las libres.
   /// [lugarBarraM]: la distancia elegida con la barra, si se tocó. [fin]: dónde
-  /// termina la numeración (6.5.1). Null: no hay pestaña Acomodar.
+  /// termina la numeración (6.5.1), y [finEl]: cuándo se eligió (null: nadie
+  /// la eligió). Null: no hay pestaña Acomodar.
   final void Function(
     ArmadoSalon base,
     ArmadoSalon nuevo,
@@ -85,6 +87,7 @@ class AccionesPlano {
     bool rehecho,
     double? lugarBarraM,
     FinNumeracion fin,
+    DateTime? finEl,
   )? onGuardarArmado;
 
   /// GUARDAR COMO PREDIO… (6.1.0): el espacio que se ve en Acomodar ([actual],
@@ -227,6 +230,10 @@ class PlanoEventoCuerpo extends StatefulWidget {
   /// que salió de uno vuelve a él como está guardado hoy.
   final List<Predio> predios;
 
+  /// La última numeración que se eligió en otra fiesta (6.5.1). Si esta nunca
+  /// eligió, Acomodar arranca con esa. Null: nadie eligió nada todavía.
+  final NumeracionRecordada? numeracionRecordada;
+
   const PlanoEventoCuerpo({
     super.key,
     required this.plano,
@@ -245,6 +252,7 @@ class PlanoEventoCuerpo extends StatefulWidget {
     this.aviso,
     this.pendiente,
     this.predios = const [],
+    this.numeracionRecordada,
   });
 
   @override
@@ -455,6 +463,21 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
           }
         }
       }
+    }
+    // Se guardó la numeración elegida y ninguna mesa cambió de número (un
+    // salón sin mesas, o que ya estaba en ese orden): el salón guardado es el
+    // mismo y la sesión seguiría ofreciendo GUARDAR. Arranca de nuevo, desde
+    // lo guardado.
+    final conFin = _acomodo;
+    if (conFin != null &&
+        conFin.cambioElFin &&
+        !conFin.hayCambios &&
+        old.plano.config.numeracion != _plano.config.numeracion &&
+        _plano.config.numeracion == conFin.fin) {
+      final mesa = _mesaAcomodo;
+      _limpiarAcomodo();
+      _acomodo = _nuevaSesion();
+      if (mesa != null && _plano.armado.existe(mesa)) _mesaAcomodo = mesa;
     }
     final mesa = _mesaElegida;
     if (mesa != null && !_plano.armado.existe(mesa)) _mesaElegida = null;
@@ -699,6 +722,12 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
         haySorteo: widget.alumnos.any(SalonMesas.tieneNumeros),
         predios: widget.predios,
         fin: _plano.config.numeracion,
+        finEl: _plano.config.numeracionEl,
+        // Solo si esta fiesta nunca eligió: la que ya eligió se queda con la
+        // suya, aunque después se haya elegido otra cosa en otra fiesta.
+        recordada: _plano.config.eligioNumeracion
+            ? null
+            : widget.numeracionRecordada,
       );
 
   /// El último aviso de Acomodar que se tocó, y por cuál de sus mesas va: si
@@ -1885,6 +1914,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                   'Todavía no se guardó.');
         }),
         fin: s.fin,
+        finDeLaMemoria: s.finDeLaMemoria,
         motivoSinFin: s.motivoSinFin,
         onFin: (f) => setState(() {
           s.elegirFin(f);
@@ -2046,6 +2076,7 @@ class _PlanoEventoCuerpoState extends State<PlanoEventoCuerpo> {
                 s.rehecho,
                 s.lugarDeLaBarra,
                 s.fin,
+                s.finEl,
               );
         },
         // Descartar se lleva todo lo acomodado: se pide dos veces, y aun así
