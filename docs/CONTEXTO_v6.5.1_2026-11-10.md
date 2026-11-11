@@ -19,8 +19,10 @@ mañana: la última numeración elegida queda para las fiestas que vienen, en la
   instaladas y abiertas: la foto "después de 6.5.1" y mirar que la escuela ya sorteada quedó igual, salvo la familia que esperaba
   su mesa (recibe la 102 sola al abrir).
 
-**La 6.5.0 quedó instalada en las tres PCs** (lo dijo el 10-nov a la noche). Su cierre no frena esta publicación: con la app cerrada
-en las tres, `build/corregir_mora_10nov_6.5.0.sql` y la foto "después de 6.5.0".
+**La 6.5.0 quedó instalada en las tres PCs** (lo dijo el 10-nov a la noche) **y cerrada el 11-nov a las 7:44**: la ficha corregida
+y la foto "después de 6.5.0", sin nada sospechoso (el detalle, arriba de todo en su CONTEXTO). **La foto "antes de 6.5.1" es de las
+7:32, doce minutos antes de la corrección:** al compararla con la de "después de 6.5.1", esa ficha va a figurar bajando de
+$372.368 a 0. Es la corrección, no algo de la 6.5.1.
 
 **Las pruebas del 11-nov:** la corrida entera dio 4.332 de 4.333; el único que falló, `chat_de_la_noche_test` ("cada celular sabe con
 quién puede hablar", con sockets de verdad), pasa corrido solo (14 de 14) y había pasado en la corrida anterior del mismo día: es de

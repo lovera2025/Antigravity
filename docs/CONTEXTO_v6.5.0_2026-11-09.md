@@ -14,8 +14,19 @@ hechas** (abajo, "Las pruebas del 10-nov a la noche"). 4.209 tests en verde; el 
 **PUBLICADA el 10-nov a la tarde-noche, con el usuario** ("sacá la foto y publicá nomás"): foto "después de 6.4.0" y "antes de 6.5.0"
 (643 alumnos cada una), **sin SQL**, tag `v6.5.0` en `5096dee`, release con el Setup y el APK firmado (novedades: "La puerta ve el
 plano, chat entre recepcionistas, la planilla parada y la mesa de los profes") y la web en Vercel (`dpl_H544LDGtEjttRgRJt3Qu3ACN9KCL`;
-`version.json` da 6.5.0/67). **Falta:** que el usuario instale las tres PCs y la tablet; con la app cerrada en las tres, la corrección
-de la etapa 12 (`build/corregir_mora_10nov_6.5.0.sql`); abrirlas y la foto "después de 6.5.0". Ver los pasos 8 a 10, abajo.
+`version.json` da 6.5.0/67). **Instalada en las tres PCs** (lo dijo el usuario el 10-nov a la noche).
+
+**CERRADA el 11-nov a las 7:44, con el usuario** ("corregí la ficha"), después de publicar la 6.5.1 y antes de que la instalara:
+- **Antes de corregir se miró que nadie estuviera trabajando:** el último latido de una caja era del 10-nov a las 21:45, la última
+  ficha tocada de las 21:15, y en la PC de la casa la app estaba cerrada. La ficha estaba como se esperaba ($372.368, sin tocar desde
+  el 10-nov a las 10:59).
+- **La corrección de la etapa 12** (`build/corregir_mora_10nov_6.5.0.sql`): una fila, la mora de la ficha $372.368 → 0; el saldo, el
+  perdón y la eximición quedaron iguales. Se corrió por el conector de Supabase, que desde el 11-nov ve el proyecto de la app.
+- **La foto "después de 6.5.0 (las tres PCs, ficha corregida)"**: 642 alumnos (`foto_id` `e79e92d8-6cd8-4346-b455-d32dc8ff59d2`).
+  Comparada con "antes de 6.5.0": **nada sospechoso** (ninguna mora subió, ninguna eximición se fue, ningún perdón cambió, nada se
+  descongeló). Lo que cambió: esa ficha (la corrección), otra a la que la mora le bajó a 0 el 10-nov a las 18:36, y un alumno
+  que ya no está (se eliminó entre las dos fotos; se le avisó al usuario).
+- Queda de los pasos de abajo solo el 10: "Silla suelta", "Es para alguien" y la Encargada de barra en el iPhone.
 
 **El 10-nov a la noche el usuario pidió que el chat sume a todo el personal de la barra** (cajeras y encargada, con solapas TODOS ·
 RECEPCIÓN · BARRA, y un puente entre las dos notebooks) **y después decidió publicar la 6.5.0 sin eso**: "publicamos con lo ya
