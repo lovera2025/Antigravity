@@ -23,12 +23,16 @@ import 'package:flutter/material.dart';
 
 import 'package:arguello_events/features/common/services/pdf_service.dart';
 import 'package:arguello_events/features/eventos/services/mesas_extra_utils.dart';
+import 'package:arguello_events/features/eventos/services/pago_para_sorteo.dart';
+import 'package:arguello_events/features/eventos/services/sorteo_mesas_motor.dart';
+import 'package:arguello_events/features/eventos/widgets/sorteo_mesas_dialog.dart';
 import 'package:arguello_events/features/plano/estilos/estilo_plano.dart';
 import 'package:arguello_events/features/plano/modelo/armado_salon.dart';
 import 'package:arguello_events/features/plano/modelo/numeracion.dart';
 import 'package:arguello_events/features/plano/modelo/reserva_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/cambios_de_mesa.dart';
 import 'package:arguello_events/features/plano/services/editar_armado.dart';
+import 'package:arguello_events/features/plano/services/mesas_nuevas_al_fondo.dart';
 import 'package:arguello_events/features/plano/services/plano_de_la_fiesta.dart';
 import 'package:arguello_events/features/plano/services/sorteo_con_plano.dart';
 import 'package:arguello_events/features/plano/widgets/imprimir_plano_dialog.dart';
@@ -128,8 +132,111 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
   bool _conInternet = true;
   AvisoDelPlano? _aviso;
 
-  List<ContratoAlumno> get _alumnos =>
-      alumnosDePrueba(asignaciones: _asignaciones);
+  /// Cuántas familias llegaron después del sorteo (6.5.1). La primera es una que
+  /// ya tenía mesa y compró una adicional; las demás son familias nuevas.
+  int _llegaron = 0;
+
+  List<ContratoAlumno> get _alumnos => [
+        for (final a in alumnosDePrueba(asignaciones: _asignaciones))
+          a.id == 's1' && _llegaron >= 1
+              ? _familia(
+                  's1',
+                  a.nombreAlumno,
+                  extras: 1,
+                  mesas: _asignaciones?['s1'],
+                )
+              : a,
+        for (var i = 2; i <= _llegaron; i++)
+          _familia('t$i', 'TARDE $i, ALUMNO', mesas: _asignaciones?['t$i']),
+      ];
+
+  /// LLEGA UNA FAMILIA: con el sorteo ya hecho, abre **el cartel del SORTEO de la
+  /// app** y hace lo mismo que la pantalla de la fiesta al confirmar: las mesas
+  /// nuevas al fondo (si se eligió), el sorteo de verdad y el control final.
+  Future<void> _llegaUnaFamilia() async {
+    setState(() => _llegaron++);
+    final alumnos = _alumnos;
+    final ahora = DateTime.now().toUtc();
+    final pagos = {
+      for (final a in alumnos)
+        a.id: PagoAlumno(base: 1000, mesas: 1000, ultimo: ahora),
+    };
+    final elegido = await mostrarSorteoMesasDialog(
+      context: context,
+      tituloInstitucion: 'VENTANA DE PRUEBA',
+      alumnos: alumnos,
+      avisos: const [],
+      pagos: pagos,
+      plano: PlanoEvento.nuevo(
+        eventoId: 'prueba',
+        armado: _armado,
+        estilo: EstiloPlano.arquitecto,
+        modo: ModoSorteo.entera,
+        ahora: ahora,
+      ).copyWith(config: _config, ahora: ahora),
+    );
+    if (!mounted) return;
+    if (elegido == null) {
+      setState(() => _llegaron--);
+      return;
+    }
+    PlanMesasNuevas? nuevas;
+    if (elegido.mesasNuevasAlFondo &&
+        MesasNuevasAlFondo.motivoSinMesasNuevas(_armado, alumnos) == null) {
+      final plan = MesasNuevasAlFondo.planear(
+        armado: _armado,
+        config: _config,
+        alumnos: alumnos,
+        pedidos: SorteoMesasMotor.pedidos(
+          alumnos,
+          separaciones: elegido.separaciones,
+        ),
+        llegada: llegadaPorPago(pagos),
+        por: 'Prueba',
+        ahora: ahora,
+      );
+      if (!plan.vacio) nuevas = plan;
+    }
+    final entrada = EntradaSorteoPlano(
+      armado: nuevas?.armado ?? _armado,
+      config: nuevas?.config ?? _config,
+      alumnos: alumnos,
+      separaciones: elegido.separaciones,
+      distancias: elegido.distancias,
+      modo: elegido.modo ?? ModoSorteo.entera,
+      ordenDivisiones: elegido.ordenDivisiones,
+      usarPasto: elegido.usarPasto,
+      hastaMesa: elegido.hastaMesa,
+      zonas: elegido.zonas,
+    );
+    setState(() {
+      final ResultadoSorteoPlano resultado;
+      try {
+        resultado = SorteoConPlano.sortear(entrada);
+      } on StateError catch (e) {
+        _llegaron--;
+        _aviso = AvisoDelPlano('No entra: ${e.message}', esError: true);
+        return;
+      }
+      final problema = SorteoConPlano.validar(entrada, resultado);
+      if (problema != null) {
+        _llegaron--;
+        _aviso = AvisoDelPlano('El control final: $problema', esError: true);
+        return;
+      }
+      _armado = nuevas?.armado ?? _armado;
+      _config = nuevas?.config ?? _config;
+      _asignaciones = {...?_asignaciones, ...resultado.asignaciones};
+      _aviso = AvisoDelPlano(
+        nuevas == null
+            ? 'Quedó en una mesa libre del salón: '
+                '${resultado.asignaciones.values.map((l) => l.join(', ')).join(' · ')}.'
+            : 'Mesa nueva al fondo: '
+                '${nuevas.mesas.map((m) => m.numero).join(', ')}. Nadie más se '
+                'movió.',
+      );
+    });
+  }
 
   PlanoDeLaFiesta get _plano => PlanoDeLaFiesta.desde(
         armado: _armado,
@@ -349,11 +456,17 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
                 ? null
                 : () => setState(() {
                       _asignaciones = null;
+                      _llegaron = 0;
                       _aviso = const AvisoDelPlano(
                         'Sorteo deshecho: nadie tiene mesa.',
                       );
                     }),
             child: const Text('DESHACER'),
+          ),
+          TextButton(
+            key: const Key('prueba_llega'),
+            onPressed: sinMesa ? null : _llegaUnaFamilia,
+            child: const Text('LLEGA UNA FAMILIA'),
           ),
           const Text('Familias con mesa'),
           Switch(
@@ -361,6 +474,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
             value: !sinMesa,
             onChanged: (v) => setState(() {
               _asignaciones = v ? sentadasEnFila() : null;
+              _llegaron = 0;
               _aviso = null;
             }),
           ),
@@ -376,6 +490,7 @@ class _PruebaDelPlanoState extends State<PruebaDelPlano> {
               _armado = armadoDePuertoViejo();
               _config = ConfigPlano.vacia;
               _asignaciones = null;
+              _llegaron = 0;
               _aviso = null;
             }),
             child: const Text('VOLVER AL MEZCLADO'),

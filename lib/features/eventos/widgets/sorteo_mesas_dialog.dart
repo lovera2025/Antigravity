@@ -6,7 +6,10 @@ import 'package:flutter/services.dart';
 import '../../../models/contrato_alumno.dart';
 import '../../../models/plano_evento.dart';
 import '../../common/utils/currency_extensions.dart';
+import '../../plano/modelo/armado_salon.dart';
+import '../../plano/services/cambios_de_mesa.dart';
 import '../../plano/services/divisiones.dart';
+import '../../plano/services/mesas_nuevas_al_fondo.dart';
 import '../../plano/services/sorteo_con_plano.dart';
 import '../../plano/widgets/elegir_zona_dialog.dart';
 import '../services/mesas_extra_utils.dart';
@@ -123,9 +126,71 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   bool get _planoIlegible =>
       widget.plano != null && widget.plano!.armadoONull == null;
 
+  // ── Las mesas que faltan, con el sorteo ya hecho (6.5.1) ──
+
+  /// "En mesas nuevas, al fondo" (true) o "en las mesas libres del salón".
+  /// Viene elegido lo primero: es lo que pidió el jefe para quien llega
+  /// después del sorteo. Solo vale si se puede ([_motivoSinMesasNuevas]).
+  late bool _alFondo;
+  String? _claveNuevas;
+  PlanMesasNuevas? _nuevasMemo;
+
+  /// Por qué no se ofrecen mesas nuevas, o null si se puede: hace falta un
+  /// salón a medida y que alguna familia ya tenga mesa.
+  String? get _motivoSinMesasNuevas {
+    final plano = _plano;
+    if (plano == null) return 'La fiesta no tiene plano.';
+    return MesasNuevasAlFondo.motivoSinMesasNuevas(
+      plano.armado,
+      widget.alumnos,
+    );
+  }
+
+  /// A quiénes les falta mesa y cuántas mesas nuevas harían falta, se elija lo
+  /// que se elija: con esto se decide si se muestra la pregunta.
+  Map<String, int> get _faltantes {
+    final plano = _plano;
+    if (plano == null || _motivoSinMesasNuevas != null) return const {};
+    return MesasNuevasAlFondo.faltantes(
+      armado: plano.armado,
+      config: plano.config,
+      pedidos: _pedidos,
+    );
+  }
+
+  /// Las mesas nuevas que se agregarían al salón. Null si se eligió "en las
+  /// mesas libres", si no se puede o si no falta ninguna.
+  PlanMesasNuevas? get _nuevas {
+    final plano = _plano;
+    if (plano == null || !_alFondo || _motivoSinMesasNuevas != null) {
+      return null;
+    }
+    final ex = _exclusion;
+    final clave = [
+      (ex.sinMesa.toList()..sort()).join(','),
+      (ex.soloBase.toList()..sort()).join(','),
+    ].join('|');
+    if (clave != _claveNuevas) {
+      _claveNuevas = clave;
+      final plan = MesasNuevasAlFondo.planear(
+        armado: plano.armado,
+        config: plano.config,
+        alumnos: widget.alumnos,
+        pedidos: _pedidos,
+        llegada: llegadaPorPago(widget.pagos),
+      );
+      _nuevasMemo = plan.vacio ? null : plan;
+    }
+    return _nuevasMemo;
+  }
+
+  /// El salón sobre el que se sortea: el del plano, con las mesas nuevas si
+  /// las hay.
+  ArmadoSalon get _armado => _nuevas?.armado ?? _plano!.armado;
+
   EntradaSorteoPlano _entrada() => EntradaSorteoPlano(
-        armado: _plano!.armado,
-        config: _plano!.config,
+        armado: _armado,
+        config: _nuevas?.config ?? _plano!.config,
         alumnos: widget.alumnos,
         exclusion: _exclusion,
         separaciones: _separaciones,
@@ -143,6 +208,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     final ex = _exclusion;
     final clave = [
       _modo.name,
+      _alFondo,
       _orden.join(','),
       _usarPasto,
       _hastaCtrl.text.trim(),
@@ -210,6 +276,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
     _soloPagado = widget.inicial?.soloPagado ?? true;
     _incluirBase = {...?widget.inicial?.incluirBase};
     _incluirExtras = {...?widget.inicial?.incluirExtras};
+    _alFondo = widget.inicial?.mesasNuevasAlFondo ?? true;
     _zonas = {
       for (final e in (widget.inicial?.zonas ?? const <String, Set<int>>{})
           .entries)
@@ -471,6 +538,10 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                   ],
                 ),
               ),
+              if (_faltantes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _preguntaPorLasQueFaltan(),
+              ],
               if (hayAvisos) ...[
                 const SizedBox(height: 12),
                 _Recuadro(
@@ -672,6 +743,7 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
                       usarPasto: _usarPasto,
                       hastaMesa: plano == null ? null : hastaEscrita,
                       zonas: plano == null ? const {} : _zonasElegidas,
+                      mesasNuevasAlFondo: plano != null && _alFondo,
                     ),
                   )
               : null,
@@ -685,7 +757,8 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
   /// vale. Sin esto, una mesa que el salón no tiene se ignoraba en silencio y
   /// el sorteo usaba la mínima.
   String? _problemaDeHasta(PlanoEvento plano, int hasta) {
-    final armado = plano.armado;
+    // Con las mesas nuevas, si las hay: "hasta la mesa" puede ser una de ellas.
+    final armado = _armado;
     if (!armado.existe(hasta)) return 'La mesa $hasta no está en este salón.';
     if (!_usarPasto && armado.pasto.contains(hasta)) {
       return 'La mesa $hasta es del pasto.';
@@ -902,6 +975,89 @@ class _SorteoMesasDialogState extends State<SorteoMesasDialog> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// "¿Dónde van las mesas que faltan?" (6.5.1): con el sorteo ya hecho, quien
+  /// llega después recibe una mesa nueva al fondo, con el número que sigue, o
+  /// una de las que quedaron libres en el salón. Abajo dice qué número le toca
+  /// a cada uno, antes de sortear.
+  Widget _preguntaPorLasQueFaltan() {
+    final nuevas = _nuevas;
+    final nombres = {
+      for (final a in widget.alumnos) a.id: CambiosDeMesa.apellido(a),
+    };
+    final total = _faltantes.values.fold<int>(0, (s, n) => s + n);
+    return _Recuadro(
+      key: const Key('faltan_donde'),
+      color: Colors.deepPurple,
+      icono: Icons.add_location_alt_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            total == 1
+                ? '¿Dónde va la mesa que falta?'
+                : '¿Dónde van las $total mesas que faltan?',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              ChoiceChip(
+                key: const Key('faltan_al_fondo'),
+                label: Text(
+                  total == 1
+                      ? 'En una mesa nueva, al fondo'
+                      : 'En mesas nuevas, al fondo',
+                ),
+                selected: _alFondo,
+                onSelected: (_) => _cambiar(() => _alFondo = true),
+              ),
+              ChoiceChip(
+                key: const Key('faltan_en_libres'),
+                label: const Text('En las mesas libres del salón'),
+                selected: !_alFondo,
+                onSelected: (_) => _cambiar(() => _alFondo = false),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (nuevas != null) ...[
+            Text(
+              nuevas.mesas.length == 1
+                  ? 'Se agrega 1 mesa al plano, al fondo a la derecha, con el '
+                      'número que sigue:'
+                  : 'Se agregan ${nuevas.mesas.length} mesas al plano, al '
+                      'fondo a la derecha, con los números que siguen, por '
+                      'orden de llegada:',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              [
+                for (final e in nuevas.porAlumno.entries)
+                  '${e.value.join(', ')} → ${nombres[e.key] ?? 'una familia'}',
+              ].join('  ·  '),
+              key: const Key('faltan_numeros'),
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Nadie más cambia de mesa.',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+            ),
+          ] else
+            Text(
+              'Van en mesas que ya están en el salón y quedaron libres, sin '
+              'mover a nadie.',
+              key: const Key('faltan_en_libres_explica'),
+              style: TextStyle(fontSize: 12.5, color: Colors.grey.shade800),
+            ),
         ],
       ),
     );
@@ -1304,7 +1460,12 @@ class _Recuadro extends StatelessWidget {
   final IconData? icono;
   final Widget child;
 
-  const _Recuadro({required this.color, required this.child, this.icono});
+  const _Recuadro({
+    super.key,
+    required this.color,
+    required this.child,
+    this.icono,
+  });
 
   @override
   Widget build(BuildContext context) => Container(

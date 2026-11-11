@@ -14,16 +14,47 @@ class PagoAlumno {
   final double mesas;
   final double sillas;
 
-  const PagoAlumno({this.base = 0, this.mesas = 0, this.sillas = 0});
+  /// Cuándo se cargó su último pago que cuenta para alguna de las tres cosas
+  /// (6.5.1). Es su "hora de llegada": con el sorteo ya hecho, quien pagó
+  /// primero recibe la mesa nueva con el número más bajo
+  /// (`MesasNuevasAlFondo`). Null: no tiene ninguno, o no trae la hora.
+  final DateTime? ultimo;
+
+  const PagoAlumno({
+    this.base = 0,
+    this.mesas = 0,
+    this.sillas = 0,
+    this.ultimo,
+  });
 
   static const nada = PagoAlumno();
 
-  factory PagoAlumno.desdePagos(Iterable<Map<String, dynamic>> pagos) =>
-      PagoAlumno(
-        base: grossHistoricoClaseCobro(pagos, CobroConceptoClase.base),
-        mesas: grossHistoricoClaseCobro(pagos, CobroConceptoClase.mesa),
-        sillas: grossHistoricoClaseCobro(pagos, CobroConceptoClase.sillas),
-      );
+  factory PagoAlumno.desdePagos(Iterable<Map<String, dynamic>> pagos) {
+    DateTime? ultimo;
+    for (final p in pagos) {
+      if (!pagoCuentaParaClaseCobro(p, CobroConceptoClase.base) &&
+          !pagoCuentaParaClaseCobro(p, CobroConceptoClase.mesa) &&
+          !pagoCuentaParaClaseCobro(p, CobroConceptoClase.sillas)) {
+        continue;
+      }
+      final cuando = _hora(p['created_at']) ?? _hora(p['fecha_pago']);
+      if (cuando != null && (ultimo == null || cuando.isAfter(ultimo))) {
+        ultimo = cuando;
+      }
+    }
+    return PagoAlumno(
+      base: grossHistoricoClaseCobro(pagos, CobroConceptoClase.base),
+      mesas: grossHistoricoClaseCobro(pagos, CobroConceptoClase.mesa),
+      sillas: grossHistoricoClaseCobro(pagos, CobroConceptoClase.sillas),
+      ultimo: ultimo,
+    );
+  }
+
+  static DateTime? _hora(Object? v) => switch (v) {
+        final DateTime d => d,
+        final String s => DateTime.tryParse(s),
+        _ => null,
+      };
 
   bool get pagoBase => base > 0.01;
   bool get pagoMesas => mesas > 0.01;
@@ -39,6 +70,13 @@ Map<String, PagoAlumno> pagosPorAlumno(
   for (final a in alumnos)
     a.id: PagoAlumno.desdePagos(pagosPorContrato[a.id] ?? const []),
 };
+
+/// La hora de llegada de cada alumno, para ordenar las mesas nuevas: la de su
+/// último pago. Quien no tiene, no figura.
+Map<String, DateTime> llegadaPorPago(Map<String, PagoAlumno> pagos) => {
+      for (final e in pagos.entries)
+        if (e.value.ultimo != null) e.key: e.value.ultimo!,
+    };
 
 /// Cómo está pagado algo extra de un alumno: sus mesas agregadas o sus sillas.
 enum EstadoPagoExtra {

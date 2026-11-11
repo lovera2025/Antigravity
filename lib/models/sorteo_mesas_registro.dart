@@ -52,6 +52,11 @@ class SorteoMesasRegistro {
   /// "lejos" ("45, 46"), 6.5.0. `null` si nadie eligió.
   final Map<String, String>? zonas;
 
+  /// En un sorteo: alumno → las mesas que se agregaron al salón para él, al
+  /// fondo, porque llegó después del sorteo ("102, 103"), 6.5.1. `null` si no
+  /// se agregó ninguna.
+  final Map<String, String>? nuevas;
+
   final String? hechoPor;
   final DateTime createdAt;
 
@@ -64,6 +69,7 @@ class SorteoMesasRegistro {
     this.quedan,
     this.lejos,
     this.zonas,
+    this.nuevas,
     this.hechoPor,
     required this.createdAt,
   });
@@ -75,6 +81,7 @@ class SorteoMesasRegistro {
   static const claveQuedan = '_quedan';
   static const claveLejos = '_lejos';
   static const claveZonas = '_zonas';
+  static const claveNuevas = '_nuevas';
 
   int get alumnos => resultado.length;
 
@@ -96,6 +103,7 @@ class SorteoMesasRegistro {
     Map<String, String>? quedan;
     Map<String, String>? lejos;
     Map<String, String>? zonas;
+    Map<String, String>? nuevas;
     try {
       final decodificado = crudo is String ? jsonDecode(crudo) : crudo;
       if (decodificado is Map) {
@@ -109,6 +117,8 @@ class SorteoMesasRegistro {
             lejos = _mapa(e.value);
           } else if (clave == claveZonas) {
             zonas = _mapa(e.value);
+          } else if (clave == claveNuevas) {
+            nuevas = _mapa(e.value);
           } else if (!clave.startsWith('_')) {
             resultado[clave] = e.value?.toString() ?? '';
           }
@@ -128,6 +138,7 @@ class SorteoMesasRegistro {
       quedan: quedan,
       lejos: lejos,
       zonas: zonas,
+      nuevas: nuevas,
       hechoPor: map['hecho_por'] as String?,
       createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -148,6 +159,7 @@ class SorteoMesasRegistro {
         claveQuedan: ?quedan,
         claveLejos: ?lejos,
         claveZonas: ?zonas,
+        claveNuevas: ?nuevas,
       }),
       'alumnos': alumnos,
       'hecho_por': hechoPor,

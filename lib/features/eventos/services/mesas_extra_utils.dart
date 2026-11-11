@@ -72,6 +72,11 @@ class SorteoMesasDialogResult {
   /// ([DistanciaLejos.enLaZona], 6.5.0).
   final Map<String, Set<int>> zonas;
 
+  /// Con plano y el sorteo ya hecho: las mesas que faltan van en mesas nuevas,
+  /// al fondo, con el número que sigue (`MesasNuevasAlFondo`, 6.5.1). En false,
+  /// en las mesas libres del salón, como siempre.
+  final bool mesasNuevasAlFondo;
+
   const SorteoMesasDialogResult({
     required this.capacidadSalon,
     this.separaciones = const {},
@@ -84,6 +89,7 @@ class SorteoMesasDialogResult {
     this.usarPasto = false,
     this.hastaMesa,
     this.zonas = const {},
+    this.mesasNuevasAlFondo = false,
   });
 }
 

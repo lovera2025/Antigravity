@@ -20,6 +20,7 @@ import '../../models/plano_evento.dart';
 import '../plano/plano_evento_screen.dart';
 import '../plano/repositories/mesas_movimientos_repository.dart';
 import '../plano/services/historial_sorteo.dart';
+import '../plano/services/mesas_nuevas_al_fondo.dart';
 import '../plano/widgets/cambio_de_mesa_dialogs.dart';
 import '../plano/repositories/planos_evento_repository.dart';
 import '../plano/services/plano_para_sortear.dart';
@@ -3833,6 +3834,7 @@ class _DetalleEventoMasivoScreenState
           exclusion,
           plano,
           autoSyncCheckpoint,
+          pagos,
         );
         return;
       }
@@ -3945,12 +3947,38 @@ class _DetalleEventoMasivoScreenState
     ExclusionSorteo exclusion,
     PlanoEvento plano,
     DateTime checkpoint,
+    Map<String, PagoAlumno> pagos,
   ) async {
     if (_frenaSinModoJefe()) return;
     final repo = ref.read(contratosRepositoryProvider);
+    // Con el sorteo ya hecho, las mesas que faltan van en mesas nuevas, al
+    // fondo (6.5.1): se agregan al salón y quedan fijadas para su familia, y el
+    // sorteo de siempre se las entrega. Es la misma cuenta que mostró el
+    // cartel, con los datos recién leídos.
+    PlanMesasNuevas? nuevas;
+    if (config.mesasNuevasAlFondo &&
+        MesasNuevasAlFondo.motivoSinMesasNuevas(plano.armado, alumnos) ==
+            null) {
+      final plan = MesasNuevasAlFondo.planear(
+        armado: plano.armado,
+        config: plano.config,
+        alumnos: alumnos,
+        pedidos: SorteoMesasMotor.pedidos(
+          alumnos,
+          separaciones: config.separaciones,
+          sinMesa: exclusion.sinMesa,
+          soloBase: exclusion.soloBase,
+        ),
+        llegada: llegadaPorPago(pagos),
+        por: quienOpera(ref),
+        ahora: ArTime.nowUtc(),
+      );
+      if (!plan.vacio) nuevas = plan;
+    }
+    final configDelPlano = nuevas?.config ?? plano.config;
     final entrada = EntradaSorteoPlano(
-      armado: plano.armado,
-      config: plano.config,
+      armado: nuevas?.armado ?? plano.armado,
+      config: configDelPlano,
       alumnos: alumnos,
       exclusion: exclusion,
       separaciones: config.separaciones,
@@ -4012,13 +4040,22 @@ class _DetalleEventoMasivoScreenState
       antes: UltimosSorteados.antesDe(alumnos, numeros),
       lejos: _lejosParaElRegistro(config, numeros),
       zonas: _zonasParaElRegistro(config, numeros),
+      nuevas: nuevas == null
+          ? null
+          : {
+              for (final e in nuevas.porAlumno.entries)
+                if (numeros.containsKey(e.key)) e.key: e.value.join(', '),
+            },
     );
     final planoNuevo = plano.copyWith(
+      // Con mesas nuevas, el salón también cambia: viaja en la misma
+      // transacción que los números.
+      armado: nuevas?.armado,
       modoSorteo: config.modo,
-      config: plano.config.copyWith(
+      config: configDelPlano.copyWith(
         bloques: resultado.bloques.isNotEmpty
             ? resultado.bloques
-            : plano.config.bloques,
+            : configDelPlano.bloques,
         ordenDivisiones: config.ordenDivisiones,
       ),
       hechoPor: quienOpera(ref),
@@ -4071,6 +4108,7 @@ class _DetalleEventoMasivoScreenState
         content: Text(
           'Sorteo listo: ${resultado.asignaciones.length} familia(s) con mesa'
           '$bloques'
+          '${nuevas == null ? '' : ' · ${nuevas.mesas.length == 1 ? 'mesa nueva al fondo' : 'mesas nuevas al fondo'}: ${nuevas.mesas.map((m) => m.numero).join(', ')}'}'
           '${sinMesa > 0 ? ' · $sinMesa sin mesa por no tener nada pagado' : ''}'
           '${soloBase > 0 ? ' · $soloBase con mesas extra sin pagar: solo mesa base' : ''}'
           '${resultado.avisos.isEmpty ? '' : ' · ${resultado.avisos.length} aviso(s)'}'
@@ -4499,6 +4537,7 @@ class _DetalleEventoMasivoScreenState
     Map<String, String>? quedan,
     Map<String, String>? lejos,
     Map<String, String>? zonas,
+    Map<String, String>? nuevas,
   }) =>
       SorteoMesasRegistro(
         id: UuidUtils.generate(),
@@ -4509,6 +4548,7 @@ class _DetalleEventoMasivoScreenState
         quedan: quedan,
         lejos: lejos,
         zonas: zonas,
+        nuevas: nuevas == null || nuevas.isEmpty ? null : nuevas,
         hechoPor: quienOpera(ref),
         createdAt: ArTime.nowUtc(),
       );
