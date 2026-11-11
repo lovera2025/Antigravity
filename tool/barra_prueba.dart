@@ -204,6 +204,10 @@ LadosDeLaPrueba armarLados({bool papelEnPantalla = false, ImpresoraBluetooth? im
         // Sin la red del salón: acá los dos lados ya comparten la barra en memoria. La
         // central de verdad se prueba en `tool/central_barra_prueba.dart`.
         redDeLaBarraHabilitadaProvider.overrideWithValue(false),
+        // Los dos lados son equipos con su base (una tablet y la PC), también cuando esta
+        // ventana se compila para el navegador: si no, el PIN se le pregunta a la nube
+        // (6.5.0) y nadie puede entrar.
+        enLaWebProvider.overrideWithValue(false),
         ...operadores.reemplazos,
         barraDeLaCajaProvider.overrideWithValue(b),
         eventosDeLaBarraProvider.overrideWith((ref) async => prueba.eventos),

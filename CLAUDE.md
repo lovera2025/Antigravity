@@ -233,6 +233,34 @@ descartó al escucharlo), y lo que pidió fue que el último número quede al fo
 - **El plano se toca desde una PC con la 6.5.1:** una con la 6.5.0 que guarde el salón antes del sorteo lo vuelve a la numeración
   de siempre.
 
+**En la rama desde el 11-nov, programado y probado, SIN PUBLICAR (6.6.0, número propuesto):** una sola mesa, el papel corto y el
+cierre con el OK. Entrada: `docs/CONTEXTO_v6.6.0_2026-11-11.md`, que empieza con "Para retomar en otro chat" (ahí está el paso a
+paso para publicar y **lo que no se probó**). El usuario propuso publicarla ese día; cada paso se le pregunta.
+- **Mover una sola mesa** (sin SQL): con una familia de varias mesas, Mover y Cambiar preguntan "¿Cuál mesa querés mover?"
+  (`elegirCualMesa`). Con una sola, el toque decide: una vacía (`CambiosDeMesa.moverUna`) o la de otra familia
+  (`intercambiarUna`, sin pedir la misma cantidad). **Las fijadas van mesa por mesa**, y `deshacer` igual si la familia conservó
+  alguna mesa. El renglón de `mesas_movimientos` es el de siempre. Van por `_cambiarMesas`: ningún guardado nuevo del salón.
+- **El papel del cierre de la barra, corto** (sin SQL): por la impresora lo vendido va **por categoría**
+  (`ModeloTicket.deCierre(corto: true)`, `CierreDeBarra.porCategoria`), así mide lo mismo se venda lo que se venda. El detalle se
+  mira en la app: LAS CAJAS → una caja → **LO VENDIDO**, el filtro de ventas (con "Transferencia" queda la lista para Mercado
+  Pago) y **LO VENDIDO DE LA FIESTA**. IMPRIMIR pregunta qué papel (`elegir_papel.dart`).
+- **La caja de barra se cierra cuando la encargada acepta** (pedido del usuario, que eligió el aviso en el aparato de ella y no
+  el PIN en la tablet de la cajera). Tabla nueva **`barra_cierres` (v79)**, con su SQL
+  `supabase/migrations/20261111120000_barra_cierres.sql` **sin correr**. Una fila por paso (`PasoDelCierre`: pedido, ok,
+  recontar, cancelado, sin_ok); **solo se agregan filas**, y **`barra_cajas` no cambia: la caja la cierra siempre su propio
+  equipo** cuando le llega el ok. Cruza por la central (`tablasDeLaRed`, ahora cinco) y por la nube.
+  - La regla, sin pantalla: `PedidoDeCierre` (`cuentas/pedido_de_cierre.dart`). **No compara la hora de un equipo con la de
+    otro:** la respuesta se ata al pedido por el id.
+  - **La cajera sigue a ciegas también mientras espera** (`_esperar`, que `test/modo_barra_cerrado_test.dart` vigila). Los
+    totales los ve solo quien manda en la barra (`mostrarOkDelCierre`, `AvisoDePedidosDeCierre` en `widgets/ok_del_cierre.dart`).
+  - Para que ninguna caja quede trabada: LA ENCARGADA ESTÁ ACÁ (su PIN en esa tablet; **solo el de una encargada**, no el del
+    jefe), CERRAR SIN ESPERAR a los 3 minutos con motivo (queda marcada en LAS CAJAS) y VOLVER A VENDER.
+  - La tablet que espera y el equipo de la encargada **miran su propia base cada 3 s**: no le piden nada a la nube. En la web,
+    con la relectura de 30 s de LAS CAJAS.
+  - **No usarlo hasta que las PCs y las tablets tengan la versión.**
+- **La base del equipo va por la v79 en la rama: no correr la app desde esta carpeta contra la base de verdad.**
+- `tool/barra_prueba_web.dart` no dejaba entrar con PIN desde la 6.5.0 (se lo preguntaba a la nube): arreglado en `armarLados`.
+
 **Antes de la barra 5 (5 y 6-nov): el tótem con el salón y las sillas de la noche, hechos en la rama** (`docs/PLAN_TOTEM_SALON_Y_SILLAS_2026-11-05.md`;
 lo de las sillas en **`docs/CONTEXTO_v6.4.0_2026-11-06.md`**, el tótem en `docs/CONTEXTO_TOTEM_SALON_Y_SILLAS_2026-11-05.md`). **El tótem:** en
 un masivo sorteado la tele muestra el salón entero y claro (`CuadroDelSalon`, `temaPlanoDelTotem(claro: true)`); el nombre salta en grande y
@@ -269,7 +297,7 @@ técnico: "el perdón de mora ahora cruza entre las dos PCs", no "fix sync".
 ## Arquitectura
 
 **Offline-first.** SQLite local (`lib/core/database/local_database.dart`, va por
-la versión 78 en la rama, con `sillas_puerta` y `barra_vales`; las PCs tienen la 77) es la fuente de verdad del escritorio; los cambios se encolan en
+la versión 79 en la rama, con `barra_cierres`; las PCs tienen la 78) es la fuente de verdad del escritorio; los cambios se encolan en
 `_sync_queue` y suben a Supabase cuando hay red. La web va directo a Supabase.
 
 - Escritorio/móvil: `InvitadosRepository` (SQLite + cola de sync).
