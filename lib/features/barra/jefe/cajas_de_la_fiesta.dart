@@ -16,9 +16,11 @@ import '../datos/barra_repositorio.dart';
 import '../estilos/disenio_barra.dart';
 import '../impresion/modelo_ticket.dart';
 import '../impresion/papel_en_pantalla.dart';
+import '../impresion/ticket_esc_pos.dart' show LineaTicket;
 import '../providers/barra_del_jefe_provider.dart';
 import '../providers/barra_providers.dart';
 import '../services/papel_de_la_barra.dart';
+import '../widgets/elegir_papel.dart';
 import '../widgets/vales_de_la_venta_screen.dart';
 import '../central/central_barra_provider.dart';
 import '../central/panel_central_barra.dart';
@@ -46,9 +48,37 @@ class CajasDeLaFiestaVista extends ConsumerStatefulWidget {
   ConsumerState<CajasDeLaFiestaVista> createState() => _CajasDeLaFiestaVistaState();
 }
 
+/// Qué ventas de la caja se miran (11-nov-2026). "Transferencia" trae también las
+/// mixtas: es la lista para comparar con Mercado Pago.
+enum _FiltroDeVentas {
+  todas('Todas'),
+  efectivo('Efectivo'),
+  transferencia('Transferencia'),
+  mixto('Mixto'),
+  anuladas('Anuladas');
+
+  final String rotulo;
+  const _FiltroDeVentas(this.rotulo);
+
+  bool deja(VentaDeLaCaja x) {
+    final v = x.venta;
+    return switch (this) {
+      _FiltroDeVentas.todas => true,
+      _FiltroDeVentas.anuladas => x.anulada,
+      _FiltroDeVentas.efectivo => !x.anulada && v.medio == MedioBarra.efectivo,
+      _FiltroDeVentas.transferencia => !x.anulada && centavos(v.transferencia) > 0,
+      _FiltroDeVentas.mixto => !x.anulada && v.medio == MedioBarra.mixto,
+    };
+  }
+}
+
 class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
   String? _cajaElegida;
   bool _ocupado = false;
+
+  /// En una caja: la lista de ventas, o LO VENDIDO (cada bebida, por categoría).
+  bool _verLoVendido = false;
+  _FiltroDeVentas _filtro = _FiltroDeVentas.todas;
 
   /// Lo último que pasó con una venta, en palabras.
   ({String ventaId, String texto, bool error})? _aviso;
@@ -204,6 +234,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
       historial: ventas,
       anulaciones: anulaciones,
     );
+    // Por la impresora: el corto (por categoría, de largo fijo) o con cada bebida.
+    final corto = ModeloTicket.deCierre(caja, r.cuentas, fiesta: _titulo, corto: true);
     final sinHistorial = ModeloTicket.deCierre(caja, r.cuentas, fiesta: _titulo);
     await showDialog<void>(
       context: context,
@@ -220,11 +252,15 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           OutlinedButton(
             key: const Key('jefe_cierre_imprimir'),
             onPressed: () async {
+              final elegido = await elegirPapelDeLaBarra(dialogo);
+              if (elegido == null || !dialogo.mounted) return;
               final falta = await faltaLaImpresora(ref);
               bool salio = false;
               if (falta == null) {
                 try {
-                  salio = await ref.read(papelDeLaBarraProvider).imprimir(sinHistorial);
+                  salio = await ref
+                      .read(papelDeLaBarraProvider)
+                      .imprimir(elegido == PapelDeLaBarraElegido.corto ? corto : sinHistorial);
                 } catch (_) {
                   salio = false;
                 }
@@ -233,7 +269,9 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
               ScaffoldMessenger.of(dialogo).showSnackBar(SnackBar(
                 content: Text(falta ??
                     (salio
-                        ? 'Salió el cierre (sin el historial, para ahorrar papel).'
+                        ? (elegido == PapelDeLaBarraElegido.corto
+                            ? 'Salió el cierre corto. El detalle de cada bebida está en LO VENDIDO.'
+                            : 'Salió el cierre con cada bebida (sin el historial, para ahorrar papel).')
                         : siNoSalio(ref.read(papelDeLaBarraProvider),
                             'No salió. ¿La impresora está prendida y cerca de esta PC?'))),
               ));
@@ -252,6 +290,131 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
           ),
         ],
       ),
+    );
+  }
+
+  /// LO VENDIDO DE LA FIESTA: todas las cajas juntas, cada bebida por categoría. En la
+  /// pantalla y en el PDF va entero; por la impresora, se elige corto o con cada bebida.
+  Future<void> _verLoVendidoDeLaFiesta(CajasDeLaFiesta datos) async {
+    final cuentas = datos.resumen.deLaFiesta;
+    if (cuentas == null) return;
+    final ahora = DateTime.now();
+    final cajas = datos.resumen.cajas.length;
+    List<LineaTicket> papel({required bool corto}) => ModeloTicket.deLoVendido(
+          cuentas,
+          fiesta: _titulo,
+          cajas: cajas,
+          ahora: ahora,
+          corto: corto,
+        );
+    final entero = papel(corto: false);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogo) => AlertDialog(
+        title: const Text('Lo vendido de la fiesta'),
+        content: SizedBox(
+          width: 380,
+          child: SingleChildScrollView(
+            child: PapelEnPantalla(entero, key: const Key('jefe_vendido_fiesta_papel')),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogo), child: const Text('CERRAR')),
+          if (!ref.read(enLaWebProvider))
+            OutlinedButton(
+              key: const Key('jefe_vendido_fiesta_imprimir'),
+              onPressed: () async {
+                final elegido = await elegirPapelDeLaBarra(dialogo);
+                if (elegido == null || !dialogo.mounted) return;
+                final falta = await faltaLaImpresora(ref);
+                bool salio = false;
+                if (falta == null) {
+                  try {
+                    salio = await ref.read(papelDeLaBarraProvider).imprimir(
+                          elegido == PapelDeLaBarraElegido.corto ? papel(corto: true) : entero,
+                        );
+                  } catch (_) {
+                    salio = false;
+                  }
+                }
+                if (!dialogo.mounted) return;
+                ScaffoldMessenger.of(dialogo).showSnackBar(SnackBar(
+                  content: Text(falta ??
+                      (salio
+                          ? 'Salió lo vendido de la fiesta.'
+                          : siNoSalio(ref.read(papelDeLaBarraProvider),
+                              'No salió. ¿La impresora está prendida y cerca de esta PC?'))),
+                ));
+              },
+              child: const Text('IMPRIMIR'),
+            ),
+          FilledButton(
+            key: const Key('jefe_vendido_fiesta_pdf'),
+            onPressed: () => ref.read(guardarPdfDeLaBarraProvider)(
+              entero,
+              titulo: 'Lo vendido de la fiesta',
+              nombre: 'Lo vendido barra - $_titulo',
+              context: dialogo,
+            ),
+            child: const Text('PDF 58 mm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Cada bebida de una caja, con sus unidades y su plata, junta por categoría: el
+  /// detalle que el papel corto no trae.
+  Widget _loVendido(CierreDeBarra cuentas) {
+    if (cuentas.porProducto.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Text('Todavía no hay ventas en esta caja.', key: Key('jefe_vendido_vacio')),
+      );
+    }
+    Widget renglon(String a, String b, {bool fuerte = false, Key? key}) => Padding(
+          key: key,
+          padding: EdgeInsets.fromLTRB(fuerte ? 16 : 28, fuerte ? 10 : 3, 16, 3),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  a,
+                  style: TextStyle(
+                    fontWeight: fuerte ? FontWeight.w800 : FontWeight.w500,
+                    color: fuerte ? TemaBarra.dorado : null,
+                  ),
+                ),
+              ),
+              Text(b, style: TextStyle(fontWeight: fuerte ? FontWeight.w800 : FontWeight.w600)),
+            ],
+          ),
+        );
+    return Column(
+      key: const Key('jefe_vendido_lista'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final g in cuentas.porCategoria) ...[
+          renglon(
+            '${g.unidades} · ${g.nombre.toUpperCase()}',
+            pesos(g.plata),
+            fuerte: true,
+            key: Key('jefe_vendido_cat_${g.nombre}'),
+          ),
+          for (final p in g.productos)
+            renglon('${p.unidades} x ${p.nombre}', pesos(p.plata), key: Key('jefe_vendido_${p.productoId}')),
+        ],
+        const Divider(height: 20, color: Color(0xFF2A2830)),
+        renglon(
+          cuentas.unidades == 1 ? '1 unidad' : '${cuentas.unidades} unidades',
+          pesos(deCentavos(cuentas.porProducto.fold(0, (s, p) => s + centavos(p.plata)))),
+          fuerte: true,
+          key: const Key('jefe_vendido_total'),
+        ),
+        if (centavos(cuentas.recargos) > 0)
+          renglon('Recargos por transferencia (aparte)', pesos(cuentas.recargos)),
+        const SizedBox(height: 12),
+      ],
     );
   }
 
@@ -304,6 +467,17 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
             _EnVivo(enLaWeb: enLaWeb, eventoId: widget.fiesta.id),
             const SizedBox(height: 12),
             _Totales(resumen: datos.resumen),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('jefe_vendido_fiesta'),
+                onPressed: () => _verLoVendidoDeLaFiesta(datos),
+                icon: const Icon(Icons.local_bar_outlined),
+                label: const Text('LO VENDIDO DE LA FIESTA'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+              ),
+            ),
             const SizedBox(height: 16),
             if (elegida == null)
               _Tarjetas(
@@ -311,6 +485,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
                 onElegir: (r) => setState(() {
                   _cajaElegida = r.caja.id;
                   _aviso = null;
+                  _verLoVendido = false;
+                  _filtro = _FiltroDeVentas.todas;
                 }),
               )
             else
@@ -385,22 +561,93 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'Anular no borra la venta: queda marcada, con el motivo, y deja de contar.',
-              style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
+          // VENTAS (una por una) o LO VENDIDO (cada bebida, por categoría).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<bool>(
+                key: const Key('jefe_caja_pestanas'),
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: false, label: Text('VENTAS', key: Key('jefe_pestana_ventas'))),
+                  ButtonSegment(value: true, label: Text('LO VENDIDO', key: Key('jefe_pestana_vendido'))),
+                ],
+                selected: {_verLoVendido},
+                onSelectionChanged: (s) => setState(() => _verLoVendido = s.first),
+              ),
             ),
           ),
-          if (ventas.isEmpty)
+          if (_verLoVendido)
+            _loVendido(r.cuentas)
+          else ...[
             const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text('Todavía no hay ventas en esta caja.', key: Key('jefe_caja_sin_ventas')),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Anular no borra la venta: queda marcada, con el motivo, y deja de contar.',
+                style: TextStyle(fontSize: 12.5, color: Color(0xFFA7A29A)),
+              ),
             ),
-          for (final x in ventas) _venta(x, caja, esJefe, enLaWeb: enLaWeb),
+            if (ventas.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('Todavía no hay ventas en esta caja.', key: Key('jefe_caja_sin_ventas')),
+              )
+            else
+              ..._ventasFiltradas(ventas, r.cuentas, caja, esJefe, enLaWeb: enLaWeb),
+          ],
         ],
       ),
     );
+  }
+
+  /// Las ventas de la caja con el filtro de arriba. Con "Transferencia" dice cuántas
+  /// son y cuánto suman: es lo que se compara con Mercado Pago.
+  List<Widget> _ventasFiltradas(
+    List<VentaDeLaCaja> ventas,
+    CierreDeBarra cuentas,
+    CajaBarra caja,
+    bool esJefe, {
+    required bool enLaWeb,
+  }) {
+    final vistas = [for (final x in ventas) if (_filtro.deja(x)) x];
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            for (final f in _FiltroDeVentas.values)
+              ChoiceChip(
+                key: Key('jefe_filtro_${f.name}'),
+                label: Text(f.rotulo),
+                selected: _filtro == f,
+                onSelected: (_) => setState(() => _filtro = f),
+              ),
+          ],
+        ),
+      ),
+      if (_filtro == _FiltroDeVentas.transferencia)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            cuentas.conTransferencia == 0
+                ? 'Ninguna venta por transferencia.'
+                : 'Por transferencia: '
+                    '${cuentas.conTransferencia == 1 ? '1 venta' : '${cuentas.conTransferencia} ventas'}'
+                    ' · ${pesos(cuentas.transferencia)}. Comparalo con Mercado Pago.',
+            key: const Key('jefe_filtro_resumen'),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      if (vistas.isEmpty)
+        const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('Ninguna venta así en esta caja.', key: Key('jefe_filtro_vacio')),
+        ),
+      for (final x in vistas) _venta(x, caja, esJefe, enLaWeb: enLaWeb),
+    ];
   }
 
   Widget _venta(VentaDeLaCaja x, CajaBarra caja, bool esJefe, {required bool enLaWeb}) {
@@ -410,7 +657,8 @@ class _CajasDeLaFiestaVistaState extends ConsumerState<CajasDeLaFiestaVista> {
     final medio = switch (v.medio) {
       MedioBarra.efectivo => 'Efectivo',
       MedioBarra.transferencia => 'Transferencia',
-      MedioBarra.mixto => 'Mixto',
+      // Cuánto fue de cada cosa: lo transferido es lo que se busca en Mercado Pago.
+      MedioBarra.mixto => 'Mixto · E ${pesos(v.efectivo)} · T ${pesos(v.transferencia)}',
       MedioBarra.otro => 'Otro',
     };
     final bebidas = [for (final r in v.renglones) '${r.cantidad} ${r.nombre}'].join(' · ');

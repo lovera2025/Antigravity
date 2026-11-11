@@ -477,6 +477,97 @@ void main() {
       expect(prueba.pdfs.single.lineas.whereType<TextoTicket>().map((t) => t.texto), contains('HISTORIAL'));
     });
 
+    // El papel corto y el detalle en la app (11-nov-2026).
+    List<String> izquierdasDelUltimoPapel() =>
+        [for (final r in prueba.papel.enCrudo.last.whereType<RenglonTicket>()) r.izquierda];
+
+    testWidgets('IMPRIMIR el cierre pregunta qué papel: el corto va por categoría', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      await tocar(tester, find.byKey(const Key('jefe_ver_cierre')));
+      await tocar(tester, find.byKey(const Key('jefe_cierre_imprimir')));
+      expect(find.text('¿Qué papel imprimo?'), findsOneWidget);
+      await tocar(tester, find.byKey(const Key('papel_corto')));
+      expect(izquierdasDelUltimoPapel(), containsAll(['3 x Tragos', '2 x Cervezas']));
+      expect(izquierdasDelUltimoPapel(), isNot(contains('3 x Fernet con Coca')));
+
+      await tocar(tester, find.byKey(const Key('jefe_cierre_imprimir')));
+      await tocar(tester, find.byKey(const Key('papel_con_cada_bebida')));
+      expect(izquierdasDelUltimoPapel(), containsAll(['3 x Fernet con Coca', '2 x Cerveza tirada']));
+      expect(prueba.papel.papeles, hasLength(2));
+      await tester.pump(const Duration(seconds: 11));
+    });
+
+    testWidgets('en una caja, LO VENDIDO muestra cada bebida por categoría', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      // Abre en VENTAS, como siempre.
+      expect(find.byKey(Key('jefe_venta_${primera.id}')), findsOneWidget);
+      await tocar(tester, find.byKey(const Key('jefe_pestana_vendido')));
+      expect(find.byKey(Key('jefe_venta_${primera.id}')), findsNothing);
+      final lista = find.byKey(const Key('jefe_vendido_lista'));
+      for (final t in ['3 · TRAGOS', '3 x Fernet con Coca', '2 · CERVEZAS', '2 x Cerveza tirada', '5 unidades']) {
+        expect(find.descendant(of: lista, matching: find.text(t)), findsOneWidget, reason: t);
+      }
+      // El total de las bebidas va sin el recargo, que se dice aparte.
+      expect(find.descendant(of: lista, matching: find.text(r'$ 26.000')), findsOneWidget);
+      expect(find.text('Recargos por transferencia (aparte)'), findsOneWidget);
+      await tocar(tester, find.byKey(const Key('jefe_pestana_ventas')));
+      expect(find.byKey(Key('jefe_venta_${primera.id}')), findsOneWidget);
+    });
+
+    testWidgets('el filtro de ventas: con Transferencia queda la lista para Mercado Pago', (tester) async {
+      await armarLaNoche();
+      final mixta = await prueba.barra.vender(
+        caja: marta,
+        renglones: [renglon(fernet, 6000, 1)],
+        medio: MedioBarra.mixto,
+        efectivo: 4000,
+        transferencia: 2000,
+        quien: 'Marta',
+      );
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(Key('jefe_caja_${marta.id}')));
+      expect(find.textContaining(r'Mixto · E $ 4.000 · T $ 2.000'), findsOneWidget);
+
+      await tocar(tester, find.byKey(const Key('jefe_filtro_transferencia')));
+      expect(find.byKey(Key('jefe_venta_${primera.id}')), findsNothing, reason: 'la de efectivo no');
+      expect(find.byKey(Key('jefe_venta_${segunda.id}')), findsOneWidget);
+      expect(find.byKey(Key('jefe_venta_${mixta.id}')), findsOneWidget, reason: 'la mixta también transfirió');
+      expect(
+        texto(tester, 'jefe_filtro_resumen'),
+        r'Por transferencia: 2 ventas · $ 10.400. Comparalo con Mercado Pago.',
+      );
+
+      await tocar(tester, find.byKey(const Key('jefe_filtro_efectivo')));
+      expect(find.byKey(Key('jefe_venta_${primera.id}')), findsOneWidget);
+      expect(find.byKey(Key('jefe_venta_${segunda.id}')), findsNothing);
+      await tocar(tester, find.byKey(const Key('jefe_filtro_anuladas')));
+      expect(find.byKey(const Key('jefe_filtro_vacio')), findsOneWidget);
+      await tocar(tester, find.byKey(const Key('jefe_filtro_todas')));
+      expect(find.byKey(Key('jefe_venta_${primera.id}')), findsOneWidget);
+    });
+
+    testWidgets('LO VENDIDO DE LA FIESTA: todas las cajas juntas, con PDF y papel corto', (tester) async {
+      await armarLaNoche();
+      await abrir(tester, pestana: PestanaBarraJefe.cajas);
+      await tocar(tester, find.byKey(const Key('jefe_vendido_fiesta')));
+      final papel = find.byKey(const Key('jefe_vendido_fiesta_papel'));
+      expect(find.descendant(of: papel, matching: find.text('LO VENDIDO - BARRA')), findsOneWidget);
+      expect(find.descendant(of: papel, matching: find.text('Las 2 cajas juntas')), findsOneWidget);
+      // Fernet: 3 de Marta y 4 de Lucas.
+      expect(find.descendant(of: papel, matching: find.text('7 x Fernet con Coca')), findsOneWidget);
+      await tocar(tester, find.byKey(const Key('jefe_vendido_fiesta_pdf')));
+      expect(prueba.pdfs.single.titulo, 'Lo vendido de la fiesta');
+      await tocar(tester, find.byKey(const Key('jefe_vendido_fiesta_imprimir')));
+      await tocar(tester, find.byKey(const Key('papel_corto')));
+      expect(izquierdasDelUltimoPapel(), containsAll(['7 x Tragos', '2 x Cervezas']));
+      expect(izquierdasDelUltimoPapel(), isNot(contains('7 x Fernet con Coca')));
+      await tester.pump(const Duration(seconds: 11));
+    });
+
     testWidgets('una fiesta sin cajas lo dice', (tester) async {
       await abrir(tester, pestana: PestanaBarraJefe.cajas);
       expect(find.byKey(const Key('jefe_sin_cajas')), findsOneWidget);

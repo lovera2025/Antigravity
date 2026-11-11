@@ -37,9 +37,9 @@ void main() {
     fiesta = fiestaDePrueba(BarraEnPrueba.id(1), 'PUERTO VIEJO', DateTime.now().add(const Duration(days: 5)));
     prueba.eventos.add(fiesta);
     final b = prueba.barra;
-    final cerveza = b.producto('Cerveza lata');
-    final fer = b.producto('Fernet con coca');
-    final agua = b.producto('Agua sin gas');
+    final cerveza = b.producto('Cerveza lata', categoria: 'Cervezas');
+    final fer = b.producto('Fernet con coca', categoria: 'Tragos');
+    final agua = b.producto('Agua sin gas', categoria: 'Sin alcohol');
     b.precio(fiesta.id, cerveza, 3500);
     b.precio(fiesta.id, fer, 6000);
     b.precio(fiesta.id, agua, 1000);
@@ -139,13 +139,21 @@ void main() {
     expect(guardada().diferencia, -500);
     expect(prueba.subidasDeLaBarra, contains('barra_cajas ${caja.id}'));
 
-    // El papel de la térmica: el cierre, sin el historial.
+    // El papel de la térmica: el cierre CORTO, por categoría y sin el historial
+    // (11-nov): no lleva un renglón por bebida, así no crece con las ventas.
     final papel = prueba.papel.papeles.last;
     expect(papel, containsAllInOrder(['JUNIOR EVENTOS', 'CIERRE DE CAJA - BARRA', r'Faltan $ 500']));
     expect(papel, isNot(contains('HISTORIAL')));
+    final izquierdas = [
+      for (final r in prueba.papel.enCrudo.last.whereType<RenglonTicket>()) r.izquierda,
+    ];
+    expect(izquierdas, containsAllInOrder(['2 x Cervezas', '1 x Tragos', 'Ventas']));
+    expect(izquierdas, isNot(contains('2 x Cerveza lata')));
+    expect(izquierdas, isNot(contains('1 x Fernet con coca')));
+    // En la pantalla sí está cada bebida: el detalle se mira ahí.
     expect(
-      [for (final r in prueba.papel.enCrudo.last.whereType<RenglonTicket>()) r.izquierda],
-      containsAllInOrder(['2 x Cerveza lata', '1 x Fernet con coca', 'Ventas']),
+      find.descendant(of: porClave('cierre_papel'), matching: find.text('2 x Cerveza lata')),
+      findsOneWidget,
     );
     expect(prueba.papel.enCrudo.last.whereType<LogoTicket>(), isEmpty);
     expect(texto(tester, 'cierre_aviso'), 'Caja cerrada. Salió el papel del cierre.');

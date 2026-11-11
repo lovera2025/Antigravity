@@ -441,6 +441,71 @@ void main() {
       expect(cierre.unidades, 5);
     });
 
+    // El cierre corto y LO VENDIDO (11-nov-2026).
+    test('lo vendido por categoría: la que más salió primero, y lo sin categoría al final', () {
+      final c = caja(2);
+      const hielo = RenglonVenta(productoId: 'h', nombre: 'Hielo', precio: 500, cantidad: 9);
+      final cierre = CierreDeBarra.de(
+        c,
+        [
+          vender(c, [cervezas(2), aguas(1)]),
+          vender(c, [aguas(3), hielo]),
+        ],
+        const [],
+        // "bebidas" y "Bebidas" son la misma categoría: queda el nombre de la
+        // bebida que más salió.
+        categorias: const {_cerveza: 'bebidas', _agua: 'Bebidas '},
+      );
+      expect([for (final g in cierre.porCategoria) '${g.unidades} ${g.nombre} ${g.plata}'], [
+        '6 Bebidas 13000.0',
+        '9 Otros 4500.0',
+      ]);
+      expect([for (final p in cierre.porCategoria.first.productos) p.nombre], ['Agua', 'Cerveza']);
+      // Sin el catálogo, todo junto en "Otros": el papel corto dice las unidades.
+      final sin = CierreDeBarra.de(c, [vender(c, [cervezas(2)])], const []);
+      expect(sin.porCategoria.single.nombre, VendidoDeCategoria.sinCategoria);
+    });
+
+    test('cuántas ventas tuvieron transferencia: las mixtas también, las anuladas no', () {
+      final c = caja(2);
+      final anulada = vender(c, [aguas(2)], medio: MedioBarra.transferencia);
+      final cierre = CierreDeBarra.de(
+        c,
+        [
+          vender(c, [cervezas(2)]),
+          vender(c, [aguas(1)], medio: MedioBarra.transferencia),
+          vender(c, [cervezas(1), aguas(1)], medio: MedioBarra.mixto, efectivo: 3000, transferencia: 2000),
+          anulada,
+        ],
+        [AnulacionBarra.de(anulada, motivo: 'error', ahora: ahora)],
+      );
+      expect(cierre.conTransferencia, 2);
+      expect(cierre.transferencia, 3500);
+    });
+
+    test('todas las cajas de la fiesta juntas', () {
+      final dos = caja(2, cambio: 10000);
+      final tres = caja(3, cambio: 5000);
+      final otraFiesta = caja(9);
+      final r = ResumenDeCajas.de(
+        cajas: [dos, tres],
+        ventas: [
+          vender(dos, [cervezas(2)]),
+          vender(tres, [cervezas(1), aguas(4)], medio: MedioBarra.transferencia),
+          // De una caja que no es de esta lista: no entra.
+          vender(otraFiesta, [cervezas(50)]),
+        ],
+        anulaciones: const [],
+        categorias: const {_cerveza: 'Cervezas', _agua: 'Sin alcohol'},
+      );
+      final todo = r.deLaFiesta!;
+      expect(todo.ventas, 2);
+      expect([for (final p in todo.porProducto) '${p.unidades} ${p.nombre}'], ['4 Agua', '3 Cerveza']);
+      expect([for (final g in todo.porCategoria) '${g.unidades} ${g.nombre}'], ['4 Sin alcohol', '3 Cervezas']);
+      expect(todo.total, r.total);
+      expect(todo.cambioInicial, 15000);
+    });
+
     test('la diferencia en palabras', () {
       expect(diferenciaEnPalabras(0), 'Justo, sin diferencia');
       expect(diferenciaEnPalabras(500), r'Sobran $ 500');

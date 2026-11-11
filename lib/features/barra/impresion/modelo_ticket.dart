@@ -239,6 +239,61 @@ abstract final class ModeloTicket {
   static String _porcentaje(double pct) =>
       pct == pct.roundToDouble() ? pct.toInt().toString() : pct.toString().replaceAll('.', ',');
 
+  /// Lo vendido en un renglón por categoría. Si nada tiene categoría, un solo renglón
+  /// con las unidades: "Otros" solo no dice nada.
+  static List<LineaTicket> _porCategoria(CierreDeBarra cuentas) {
+    final grupos = cuentas.porCategoria;
+    final sinNinguna =
+        grupos.length == 1 && grupos.single.nombre == VendidoDeCategoria.sinCategoria;
+    if (grupos.isEmpty || sinNinguna) {
+      return [RenglonTicket('Unidades vendidas', '${cuentas.unidades}')];
+    }
+    return [
+      for (final g in grupos) RenglonTicket('${g.unidades} x ${g.nombre}', pesos(g.plata)),
+    ];
+  }
+
+  /// LO VENDIDO DE LA FIESTA (11-nov-2026): **todas las cajas juntas**, por categoría y,
+  /// sin [corto], con cada bebida debajo. [cuentas] sale de `CierreDeBarra.deLaFiesta`.
+  /// No es el cierre de ninguna caja: no lleva lo contado ni la diferencia.
+  static List<LineaTicket> deLoVendido(
+    CierreDeBarra cuentas, {
+    required String fiesta,
+    required int cajas,
+    required DateTime ahora,
+    bool corto = false,
+  }) =>
+      [
+        const TituloTicket('JUNIOR EVENTOS'),
+        const TextoTicket('LO VENDIDO - BARRA', negrita: true),
+        ..._centrado(fiesta),
+        TextoTicket(cajas == 1 ? 'La caja de la fiesta' : 'Las $cajas cajas juntas'),
+        TextoTicket(fechaYHora(ahora.toUtc().toIso8601String())),
+        const SeparadorTicket(),
+        if (cuentas.porProducto.isEmpty) const TextoTicket('Sin ventas'),
+        if (corto)
+          ...(cuentas.porProducto.isEmpty ? const <LineaTicket>[] : _porCategoria(cuentas))
+        else
+          for (final g in cuentas.porCategoria) ...[
+            RenglonTicket('${g.unidades} x ${g.nombre.toUpperCase()}', pesos(g.plata), negrita: true),
+            // Sin sangría: el renglón de 32 la pierde. La categoría va en negrita.
+            for (final p in g.productos) RenglonTicket('${p.unidades} x ${p.nombre}', pesos(p.plata)),
+          ],
+        if (cuentas.sillas > 0)
+          RenglonTicket('Sillas extra vendidas', '${cuentas.sillas}', negrita: true),
+        if (cuentas.sillasSueltas > 0)
+          RenglonTicket('Sillas sueltas vendidas', '${cuentas.sillasSueltas}', negrita: true),
+        const SeparadorTicket(),
+        RenglonTicket('Ventas', '${cuentas.ventas}'),
+        RenglonTicket('Efectivo', pesos(cuentas.efectivo)),
+        RenglonTicket('Transferencia', pesos(cuentas.transferencia)),
+        if (centavos(cuentas.recargos) > 0)
+          RenglonTicket('De ellos, recargos', pesos(cuentas.recargos)),
+        RenglonTicket('TOTAL VENDIDO', pesos(cuentas.total), negrita: true),
+        if (cuentas.anuladas > 0)
+          RenglonTicket('Anuladas (no cuentan)', '${cuentas.anuladas}'),
+      ];
+
   /// El papel del cierre de una caja: lo vendido por producto, las sillas de la noche,
   /// los totales, el efectivo esperado, lo contado y la diferencia **como se anotó al
   /// cerrar**. Una caja abierta sale sin lo contado.
@@ -246,6 +301,10 @@ abstract final class ModeloTicket {
   /// Con [historial] (las ventas de la caja), al final una línea por venta, la primera
   /// arriba, con las [anulaciones] marcadas: es lo que la cajera lee en la pantalla y
   /// guarda en el PDF. Por la impresora sale sin historial, para ahorrar papel.
+  ///
+  /// **[corto]** (11-nov-2026): lo vendido va **por categoría** y no por bebida, así el
+  /// papel mide lo mismo se venda lo que se venda. Es el que sale por la impresora; el
+  /// detalle de cada bebida se mira en la app.
   static List<LineaTicket> deCierre(
     CajaBarra caja,
     CierreDeBarra cuentas, {
@@ -253,6 +312,7 @@ abstract final class ModeloTicket {
     img.Image? logo,
     List<VentaBarra>? historial,
     Iterable<AnulacionBarra> anulaciones = const [],
+    bool corto = false,
   }) {
     final cerrada = !caja.abierta;
     final anuladas = ventasAnuladas(anulaciones);
@@ -272,8 +332,11 @@ abstract final class ModeloTicket {
       if (!cerrada) const TextoTicket('*** CAJA ABIERTA ***', negrita: true),
       if (cuentas.porProducto.isNotEmpty) ...[
         const SeparadorTicket(),
-        for (final p in cuentas.porProducto)
-          RenglonTicket('${p.unidades} x ${p.nombre}', pesos(p.plata)),
+        if (corto)
+          ..._porCategoria(cuentas)
+        else
+          for (final p in cuentas.porProducto)
+            RenglonTicket('${p.unidades} x ${p.nombre}', pesos(p.plata)),
         if (cuentas.sillas > 0)
           RenglonTicket('Sillas extra vendidas', '${cuentas.sillas}', negrita: true),
         if (cuentas.sillasSueltas > 0)

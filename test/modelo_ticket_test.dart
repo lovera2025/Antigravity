@@ -402,6 +402,114 @@ void main() {
       ]);
     });
 
+    // El cierre corto (11-nov-2026): por categoría, para que la tira no crezca con
+    // lo que se vende.
+    const categorias = {'a': 'Cervezas', 'b': 'Tragos', 'c': 'Sin alcohol'};
+
+    test('corto: lo vendido va por categoría, no por bebida', () {
+      final papel = _papel(ModeloTicket.deCierre(
+        caja,
+        CierreDeBarra.de(caja, ventas, const [], categorias: categorias),
+        fiesta: 'Puerto Viejo',
+        corto: true,
+      ));
+      expect(papel, containsAllInOrder([
+        '6 x Sin alcohol          \$ 6.000',
+        '4 x Cervezas            \$ 14.000',
+        '2 x Tragos              \$ 12.000',
+        '-' * 32,
+        'Ventas                         2',
+      ]));
+      expect(papel.where((r) => r.contains('Fernet') || r.contains('Agua')), isEmpty);
+    });
+
+    test('corto: mide lo mismo con 3 bebidas que con 60', () {
+      VentaBarra noche(int bebidas) => VentaBarra.nueva(
+            cajaBarraId: caja.id,
+            eventoId: _evento,
+            numero: 1,
+            renglones: [
+              for (var i = 0; i < bebidas; i++)
+                RenglonVenta(productoId: 'p$i', nombre: 'Trago $i', precio: 1000, cantidad: 1 + i),
+            ],
+            medio: MedioBarra.efectivo,
+            efectivo: [for (var i = 0; i < bebidas; i++) 1000.0 * (1 + i)].fold(0.0, (a, b) => a + b),
+            ahora: vendida,
+          );
+      Map<String, String> cats(int bebidas) =>
+          {for (var i = 0; i < bebidas; i++) 'p$i': i.isEven ? 'Tragos' : 'Cervezas'};
+      int renglones(int bebidas, {required bool corto}) => _papel(ModeloTicket.deCierre(
+            caja,
+            CierreDeBarra.de(caja, [noche(bebidas)], const [], categorias: cats(bebidas)),
+            fiesta: 'Puerto Viejo',
+            corto: corto,
+          )).length;
+      expect(renglones(60, corto: true), renglones(3, corto: true));
+      // El de cada bebida sí crece: por eso no es el que sale solo.
+      expect(renglones(60, corto: false), greaterThan(renglones(3, corto: false) + 50));
+    });
+
+    test('corto sin categorías cargadas: las unidades, en un renglón', () {
+      final papel = _papel(ModeloTicket.deCierre(
+        caja,
+        CierreDeBarra.de(caja, ventas, const []),
+        fiesta: 'Puerto Viejo',
+        corto: true,
+      ));
+      expect(papel, contains('Unidades vendidas             12'));
+      expect(papel.where((r) => r.contains('Otros')), isEmpty);
+    });
+
+    test('lo vendido de la fiesta: todas las cajas, por categoría y con cada bebida', () {
+      final otraCaja = CajaBarra.abrir(
+        eventoId: _evento,
+        operadorNombre: 'Romi',
+        numeroCaja: 3,
+        ahora: DateTime.utc(2026, 12, 5, 1),
+      );
+      final deLaOtra = VentaBarra.nueva(
+        cajaBarraId: otraCaja.id,
+        eventoId: _evento,
+        numero: 1,
+        renglones: const [
+          RenglonVenta(productoId: 'a', nombre: 'Cerveza lata', precio: 3500, cantidad: 1),
+        ],
+        medio: MedioBarra.transferencia,
+        transferencia: 3500,
+        ahora: vendida,
+      );
+      final cuentas = CierreDeBarra.deLaFiesta([...ventas, deLaOtra], const [], categorias: categorias);
+      final ahora = DateTime.utc(2026, 12, 5, 9);
+      final entero = _papel(ModeloTicket.deLoVendido(cuentas, fiesta: 'Puerto Viejo', cajas: 2, ahora: ahora));
+      expect(entero, containsAllInOrder([
+        '[TITULO] JUNIOR EVENTOS',
+        'LO VENDIDO - BARRA',
+        'Puerto Viejo',
+        'Las 2 cajas juntas',
+        '05/12/2026 - 06:00',
+        '-' * 32,
+        // La categoría en mayúsculas y negrita; debajo, sus bebidas.
+        '6 x SIN ALCOHOL          \$ 6.000',
+        '6 x Agua                 \$ 6.000',
+        '5 x CERVEZAS            \$ 17.500',
+        '5 x Cerveza lata        \$ 17.500',
+        '2 x TRAGOS              \$ 12.000',
+        '2 x Fernet con coca     \$ 12.000',
+        '-' * 32,
+        'Ventas                         3',
+        'Efectivo                \$ 16.000',
+        'Transferencia           \$ 19.500',
+        'TOTAL VENDIDO           \$ 35.500',
+      ]));
+      // No es el cierre de una caja: sin lo contado ni lo esperado.
+      expect(entero.where((r) => r.startsWith('Efectivo esperado')), isEmpty);
+      final corto = _papel(
+        ModeloTicket.deLoVendido(cuentas, fiesta: 'Puerto Viejo', cajas: 2, ahora: ahora, corto: true),
+      );
+      expect(corto, contains('5 x Cervezas            \$ 17.500'));
+      expect(corto.where((r) => r.contains('Cerveza lata')), isEmpty);
+    });
+
     test('abierta: lo dice, y sale sin lo contado', () {
       final papel = _papel(ModeloTicket.deCierre(
         caja,

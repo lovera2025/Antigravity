@@ -131,7 +131,13 @@ final cajasDelJefeProvider =
     anulaciones: anulaciones,
   );
   return CajasDeLaFiesta(
-    resumen: ResumenDeCajas.de(cajas: cajas, ventas: ventas, anulaciones: anulaciones),
+    resumen: ResumenDeCajas.de(
+      cajas: cajas,
+      ventas: ventas,
+      anulaciones: anulaciones,
+      // La categoría de cada bebida, para el papel corto y LO VENDIDO.
+      categorias: {for (final p in productos) p.id: p.categoria},
+    ),
     stock: [
       for (final s in StockDeLaBarra.paraElJefe(stock))
         (stock: s, nombre: nombres[s.productoId] ?? 'Producto'),

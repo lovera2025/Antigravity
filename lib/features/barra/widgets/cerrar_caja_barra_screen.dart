@@ -62,7 +62,15 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
 
   int? get _contadoEscrito => PesosEnterosFormatter.leer(_contado.text);
 
-  CierreDeBarra get _cuentas => CierreDeBarra.de(_cerrada ?? widget.caja, _ventas, _anulaciones);
+  /// La categoría de cada bebida del catálogo: el papel corto va por categoría.
+  Map<String, String> _categorias = const {};
+
+  CierreDeBarra get _cuentas => CierreDeBarra.de(
+        _cerrada ?? widget.caja,
+        _ventas,
+        _anulaciones,
+        categorias: _categorias,
+      );
 
   void _decir(String texto, {bool error = false}) {
     if (mounted) setState(() => _aviso = (texto: texto, error: error));
@@ -72,6 +80,13 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     final barra = ref.read(barraDeLaCajaProvider);
     _ventas = await barra.ventasDeLaCaja(caja.id);
     _anulaciones = await barra.anulacionesDeLaCaja(caja.id);
+    try {
+      _categorias = {
+        for (final p in await barra.productos(conBajas: true)) p.id: p.categoria,
+      };
+    } catch (_) {
+      // Sin el catálogo el papel corto dice las unidades: el cierre no se frena por eso.
+    }
   }
 
   Future<void> _mostrarCerrada(CajaBarra caja) async {
@@ -148,7 +163,9 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
 
   // ── 2. El cierre ──────────────────────────────────────────────────────────
 
-  /// El papel de la térmica: sin el historial, para ahorrar papel.
+  /// El papel de la térmica: **el corto** (por categoría y sin el historial), que mide lo
+  /// mismo se venda lo que se venda. El detalle de cada bebida queda en la pantalla, en
+  /// el PDF y en LAS CAJAS.
   Future<void> _imprimir({bool alCerrar = false}) async {
     final caja = _cerrada;
     if (caja == null || _ocupado) return;
@@ -156,7 +173,7 @@ class _CerrarCajaBarraScreenState extends ConsumerState<CerrarCajaBarraScreen> {
     bool salio;
     try {
       salio = await ref.read(papelDeLaBarraProvider).imprimir(
-            ModeloTicket.deCierre(caja, _cuentas, fiesta: widget.fiesta),
+            ModeloTicket.deCierre(caja, _cuentas, fiesta: widget.fiesta, corto: true),
           );
     } catch (_) {
       salio = false;

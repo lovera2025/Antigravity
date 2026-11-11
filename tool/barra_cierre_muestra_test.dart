@@ -30,6 +30,7 @@ import 'package:arguello_events/features/barra/estilos/disenio_barra.dart';
 import 'package:arguello_events/features/barra/impresion/modelo_ticket.dart';
 import 'package:arguello_events/features/barra/impresion/papel_en_pantalla.dart';
 import 'package:arguello_events/features/barra/impresion/papel_pdf.dart';
+import 'package:arguello_events/features/barra/impresion/ticket_esc_pos.dart' show LineaTicket;
 import 'package:arguello_events/features/barra/widgets/cerrar_caja_barra_screen.dart';
 import 'package:arguello_events/features/caja_sesiones/models/permisos_operador.dart';
 import 'package:arguello_events/features/caja_sesiones/providers/app_role_provider.dart';
@@ -220,5 +221,106 @@ void main() {
       final pdf = File('$carpeta${Platform.pathSeparator}Cierre_caja2.pdf')..writeAsBytesSync(bytes);
       print('── PDF en: ${pdf.path}');
     });
+  });
+
+  // 11-nov-2026: el papel que sale por la impresora, corto. Una noche de mucha venta
+  // (28 bebidas distintas, 240 ventas): a la izquierda el corto, por categoría; a la
+  // derecha el de antes, con un renglón por bebida.
+  testWidgets('el papel corto al lado del de cada bebida', (tester) async {
+    await letras();
+    final caja = CajaBarra.abrir(
+      eventoId: BarraEnPrueba.id(1),
+      operadorNombre: 'Marta',
+      numeroCaja: 2,
+      cambioInicial: 20000,
+      ahora: DateTime.utc(2026, 12, 5, 1),
+    );
+    const carta = {
+      'Tragos': ['Fernet con coca', 'Gin tonic', 'Campari naranja', 'Speed con vodka', 'Cuba libre',
+        'Daikiri frutilla', 'Mojito', 'Caipirinha', 'Aperol spritz', 'Destornillador'],
+      'Cervezas': ['Cerveza lata', 'Cerveza tirada', 'Cerveza sin alcohol', 'Porrón', 'Cerveza negra', 'Litro'],
+      'Sin alcohol': ['Agua sin gas', 'Agua con gas', 'Gaseosa', 'Jugo', 'Speed', 'Tónica'],
+      'Espumantes': ['Champagne', 'Sidra', 'Vino blanco', 'Vino tinto'],
+      'Sillas': ['Silla extra', 'Silla suelta'],
+    };
+    final productos = [
+      for (final e in carta.entries)
+        for (final n in e.value) (id: 'p_$n', nombre: n, categoria: e.key),
+    ];
+    final ventas = [
+      for (var i = 0; i < 240; i++)
+        () {
+          // 5 no divide a 28: así salen todas las bebidas de la carta.
+          final p = productos[(i * 5) % productos.length];
+          final n = 1 + i % 4;
+          final precio = 2000.0 + 500 * (p.nombre.length % 9);
+          final porTransferencia = i % 3 == 1;
+          return VentaBarra.nueva(
+            cajaBarraId: caja.id,
+            eventoId: caja.eventoId,
+            numero: i + 1,
+            renglones: [RenglonVenta(productoId: p.id, nombre: p.nombre, precio: precio, cantidad: n)],
+            medio: porTransferencia ? MedioBarra.transferencia : MedioBarra.efectivo,
+            efectivo: porTransferencia ? 0 : precio * n,
+            transferencia: porTransferencia ? precio * n : 0,
+            ahora: DateTime.utc(2026, 12, 5, 1, 10).add(Duration(minutes: i)),
+          );
+        }(),
+    ];
+    final cuentas = CierreDeBarra.de(
+      caja,
+      ventas,
+      const [],
+      categorias: {for (final p in productos) p.id: p.categoria},
+    );
+    final cerrada = caja.cerrada(
+      efectivoContado: cuentas.efectivoEsperado,
+      diferencia: 0,
+      ahora: DateTime.utc(2026, 12, 5, 8),
+    );
+    final corto = ModeloTicket.deCierre(cerrada, cuentas, fiesta: 'PUERTO VIEJO', corto: true);
+    final largo = ModeloTicket.deCierre(cerrada, cuentas, fiesta: 'PUERTO VIEJO');
+    print('── renglones: corto ${corto.length}, con cada bebida ${largo.length}');
+
+    final clave = GlobalKey();
+    tester.view.physicalSize = const Size(900, 1500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Widget columna(String titulo, List<LineaTicket> lineas) => Column(
+          children: [
+            Text(titulo, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            SizedBox(width: 380, child: PapelEnPantalla(lineas)),
+          ],
+        );
+    await tester.pumpWidget(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(fontFamily: FuentesPlano.linea),
+      home: Scaffold(
+        backgroundColor: const Color(0xFF2B2B2B),
+        body: SingleChildScrollView(
+          child: RepaintBoundary(
+            key: clave,
+            child: ColoredBox(
+              color: const Color(0xFF2B2B2B),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    columna('EL NUEVO: CORTO', corto),
+                    columna('EL DE ANTES: CADA BEBIDA', largo),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await guardar(tester, clave, 'Cierre_5_corto_y_de_antes.png');
   });
 }

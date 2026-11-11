@@ -14,12 +14,37 @@ class VendidoDeProducto {
   final int unidades;
   final double plata;
 
+  /// La categoría del catálogo ("Tragos"). Vacía si no tiene o si el producto ya no
+  /// está en el catálogo de este equipo.
+  final String categoria;
+
   const VendidoDeProducto({
     required this.productoId,
     required this.nombre,
     required this.unidades,
     required this.plata,
+    this.categoria = '',
   });
+}
+
+/// Lo vendido de una categoría del catálogo: el renglón del **cierre corto** (11-nov-2026),
+/// que no crece con las ventas. Lleva adentro sus productos, para el detalle en la app.
+class VendidoDeCategoria {
+  /// "Tragos"; [sinCategoria] para lo que no tiene.
+  final String nombre;
+  final int unidades;
+  final double plata;
+  final List<VendidoDeProducto> productos;
+
+  const VendidoDeCategoria({
+    required this.nombre,
+    required this.unidades,
+    required this.plata,
+    this.productos = const [],
+  });
+
+  /// Cómo se llama el grupo de lo que no tiene categoría.
+  static const sinCategoria = 'Otros';
 }
 
 /// Las cuentas de una caja de barra: qué se vendió, cómo se cobró y cuánto efectivo
@@ -46,6 +71,14 @@ class CierreDeBarra {
   /// Lo vendido que cuenta, por producto: el que más salió primero.
   final List<VendidoDeProducto> porProducto;
 
+  /// Lo mismo, junto por categoría del catálogo: la que más salió primero, y "Otros"
+  /// al final. Es lo que va al papel corto.
+  final List<VendidoDeCategoria> porCategoria;
+
+  /// Cuántas ventas que cuentan tuvieron algo por transferencia (las mixtas también):
+  /// las que hay que mirar en Mercado Pago.
+  final int conTransferencia;
+
   /// Cuántas unidades salieron, y de ellas cuántas sillas de la noche
   /// ([esSillaDeLaPuerta]): la puerta tiene que haber anotado esas mismas.
   /// [sillas] son las que van a una mesa; [sillasSueltas] ([esSillaSuelta],
@@ -65,19 +98,56 @@ class CierreDeBarra {
     required this.transferenciaAnulada,
     this.recargos = 0,
     this.porProducto = const [],
+    this.porCategoria = const [],
+    this.conTransferencia = 0,
     this.unidades = 0,
     this.sillas = 0,
     this.sillasSueltas = 0,
   });
 
-  /// Las de [caja] entre [ventas]; las de otra caja no se cuentan.
+  /// Las de [caja] entre [ventas]; las de otra caja no se cuentan. [categorias] es la
+  /// categoría de cada producto del catálogo (id → "Tragos"): sin ella todo va a "Otros".
   factory CierreDeBarra.de(
     CajaBarra caja,
     Iterable<VentaBarra> ventas,
-    Iterable<AnulacionBarra> anulaciones,
-  ) {
+    Iterable<AnulacionBarra> anulaciones, {
+    Map<String, String> categorias = const {},
+  }) =>
+      CierreDeBarra._contar(
+        cajaId: caja.id,
+        cambioInicial: caja.cambioInicial,
+        ventas: ventas,
+        anulaciones: anulaciones,
+        categorias: categorias,
+      );
+
+  /// **Todas las cajas de la fiesta juntas** (LO VENDIDO DE LA FIESTA): las mismas
+  /// cuentas, sin mirar de qué caja es cada venta. [cambioInicial] es la suma del cambio
+  /// con que abrieron.
+  factory CierreDeBarra.deLaFiesta(
+    Iterable<VentaBarra> ventas,
+    Iterable<AnulacionBarra> anulaciones, {
+    double cambioInicial = 0,
+    Map<String, String> categorias = const {},
+  }) =>
+      CierreDeBarra._contar(
+        cajaId: null,
+        cambioInicial: cambioInicial,
+        ventas: ventas,
+        anulaciones: anulaciones,
+        categorias: categorias,
+      );
+
+  /// [cajaId] null: las de todas las cajas.
+  factory CierreDeBarra._contar({
+    required String? cajaId,
+    required double cambioInicial,
+    required Iterable<VentaBarra> ventas,
+    required Iterable<AnulacionBarra> anulaciones,
+    required Map<String, String> categorias,
+  }) {
     final anuladasIds = ventasAnuladas(anulaciones);
-    var cuentan = 0, anuladas = 0, mixtos = 0;
+    var cuentan = 0, anuladas = 0, mixtos = 0, conTransferencia = 0;
     var efectivo = 0, transferencia = 0, efectivoAnulado = 0, transferenciaAnulada = 0;
     var recargos = 0;
     var unidades = 0, sillas = 0, sueltas = 0;
@@ -85,9 +155,16 @@ class CierreDeBarra {
     final nombres = <String, String>{};
     final cantidades = <String, int>{};
     final plata = <String, int>{};
-    final orden = [...ventas]..sort((a, b) => a.numero.compareTo(b.numero));
+    // Con todas las cajas juntas el número de ticket se repite: ahí manda la hora.
+    final orden = [...ventas]..sort((a, b) {
+        if (cajaId == null) {
+          final n = a.createdAt.compareTo(b.createdAt);
+          if (n != 0) return n;
+        }
+        return a.numero.compareTo(b.numero);
+      });
     for (final v in orden) {
-      if (v.cajaBarraId != caja.id) continue;
+      if (cajaId != null && v.cajaBarraId != cajaId) continue;
       if (anuladasIds.contains(v.id)) {
         anuladas++;
         efectivoAnulado += centavos(v.efectivo);
@@ -96,6 +173,7 @@ class CierreDeBarra {
       }
       cuentan++;
       if (v.medio == MedioBarra.mixto) mixtos++;
+      if (centavos(v.transferencia) > 0) conTransferencia++;
       efectivo += centavos(v.efectivo);
       transferencia += centavos(v.transferencia);
       recargos += centavos(v.recargo);
@@ -118,13 +196,41 @@ class CierreDeBarra {
           nombre: nombres[id]!,
           unidades: cantidades[id]!,
           plata: deCentavos(plata[id]!),
+          categoria: (categorias[id] ?? '').trim(),
         ),
     ]..sort((a, b) {
         final n = b.unidades.compareTo(a.unidades);
         return n != 0 ? n : a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
       });
+    // Por categoría: "Tragos" y "tragos" son la misma, con el nombre de la primera.
+    final grupos = <String, List<VendidoDeProducto>>{};
+    final rotulos = <String, String>{};
+    for (final p in porProducto) {
+      final clave = p.categoria.toLowerCase();
+      grupos.putIfAbsent(clave, () => []).add(p);
+      rotulos.putIfAbsent(
+        clave,
+        () => p.categoria.isEmpty ? VendidoDeCategoria.sinCategoria : p.categoria,
+      );
+    }
+    final porCategoria = [
+      for (final e in grupos.entries)
+        VendidoDeCategoria(
+          nombre: rotulos[e.key]!,
+          unidades: e.value.fold(0, (s, p) => s + p.unidades),
+          plata: deCentavos(e.value.fold(0, (s, p) => s + centavos(p.plata))),
+          productos: List.unmodifiable(e.value),
+        ),
+    ]..sort((a, b) {
+        // Lo que no tiene categoría, al final.
+        final sinA = a.nombre == VendidoDeCategoria.sinCategoria ? 1 : 0;
+        final sinB = b.nombre == VendidoDeCategoria.sinCategoria ? 1 : 0;
+        if (sinA != sinB) return sinA - sinB;
+        final n = b.unidades.compareTo(a.unidades);
+        return n != 0 ? n : a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase());
+      });
     return CierreDeBarra(
-      cambioInicial: caja.cambioInicial,
+      cambioInicial: cambioInicial,
       ventas: cuentan,
       anuladas: anuladas,
       mixtos: mixtos,
@@ -134,6 +240,8 @@ class CierreDeBarra {
       transferenciaAnulada: deCentavos(transferenciaAnulada),
       recargos: deCentavos(recargos),
       porProducto: List.unmodifiable(porProducto),
+      porCategoria: List.unmodifiable(porCategoria),
+      conTransferencia: conTransferencia,
       unidades: unidades,
       sillas: sillas,
       sillasSueltas: sueltas,
@@ -194,6 +302,10 @@ class ResumenDeCajas {
   /// El cambio con que abrieron todas las cajas.
   final double cambio;
 
+  /// Las cuentas de **toda la fiesta**, con las cajas juntas: lo vendido por producto y
+  /// por categoría (LO VENDIDO DE LA FIESTA, 11-nov-2026).
+  final CierreDeBarra? deLaFiesta;
+
   const ResumenDeCajas({
     required this.cajas,
     required this.ventas,
@@ -207,12 +319,14 @@ class ResumenDeCajas {
     this.sillas = 0,
     this.sillasSueltas = 0,
     this.cambio = 0,
+    this.deLaFiesta,
   });
 
   factory ResumenDeCajas.de({
     required Iterable<CajaBarra> cajas,
     required Iterable<VentaBarra> ventas,
     required Iterable<AnulacionBarra> anulaciones,
+    Map<String, String> categorias = const {},
   }) {
     final listaVentas = ventas.toList();
     final listaAnulaciones = anulaciones.toList();
@@ -223,8 +337,13 @@ class ResumenDeCajas {
       });
     final resumenes = [
       for (final c in ordenadas)
-        ResumenDeCaja(c, CierreDeBarra.de(c, listaVentas, listaAnulaciones)),
+        ResumenDeCaja(
+          c,
+          CierreDeBarra.de(c, listaVentas, listaAnulaciones, categorias: categorias),
+        ),
     ];
+    // Solo lo de las cajas de esta lista: una venta de otra fiesta no entra.
+    final idsDeCajas = {for (final c in ordenadas) c.id};
     var v = 0, an = 0, mx = 0, si = 0, su = 0;
     var ef = 0, tr = 0, rec = 0, cont = 0, dif = 0, cam = 0;
     for (final r in resumenes) {
@@ -255,6 +374,12 @@ class ResumenDeCajas {
       sillas: si,
       sillasSueltas: su,
       cambio: deCentavos(cam),
+      deLaFiesta: CierreDeBarra.deLaFiesta(
+        [for (final x in listaVentas) if (idsDeCajas.contains(x.cajaBarraId)) x],
+        listaAnulaciones,
+        cambioInicial: deCentavos(cam),
+        categorias: categorias,
+      ),
     );
   }
 
